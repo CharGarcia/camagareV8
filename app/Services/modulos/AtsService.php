@@ -133,9 +133,26 @@ class AtsService
         $pagoComprasIdx = $this->indexarPagos($this->repo->getFormasPago('compras_pagos', 'id_compra', $idsCompra));
         $pagoLiqIdx     = $this->indexarPagos($this->repo->getFormasPago('liquidaciones_pagos', 'id_cabecera', $idsLiq));
 
+        // Facturas de Reembolso RECIBIDAS (codDoc=01, codDocReembolso=41): el bloque
+        // *Reemb del ATS-Compras (tipoComprobanteReemb, establecimientoReemb, etc.)
+        // no tiene XSD disponible en este proyecto para confirmar su cardinalidad;
+        // se emite UNA fila "compra" por cada tercero reembolsado (misma compra base,
+        // sub-bloque *Reemb distinto en cada una). Sin validar contra el XSD real del
+        // ATS — revisar con el contador antes de presentar el anexo.
+        $reembolsoIdx = $this->indexarReembolsoTerceros($this->repo->getReembolsoTercerosCompras($idEmpresa, $idsCompra));
+
         $documentos = [];
         foreach ($compras as $c) {
-            $documentos[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? []);
+            $terceros = ((string) ($c['cod_doc_reembolso'] ?? '')) === '41'
+                ? ($reembolsoIdx[(int) $c['id']] ?? [])
+                : [];
+            if ($terceros !== []) {
+                foreach ($terceros as $i => $t) {
+                    $documentos[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? [], $t, $i === 0);
+                }
+            } else {
+                $documentos[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? []);
+            }
         }
         foreach ($liquidaciones as $l) {
             $documentos[] = $this->mapearDocumento($l, $retLiqIdx[$l['id']] ?? null, $pagoLiqIdx[$l['id']] ?? []);
@@ -227,6 +244,47 @@ class AtsService
             // Solo la emisión FÍSICA (F) suma al talón resumen (totalVentas / ventasEstab).
             // Las electrónicas se listan en el detalle pero el SRI las cruza con los
             // comprobantes electrónicos; no se suman al talón (ficha técnica, 2.3).
+            if ($tipoEm === 'F') {
+                $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_exe'] + (float) $v['base_imponible_grav'];
+                $totalVentas += $baseVenta;
+                $estab = str_pad(substr((string) $v['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT);
+                $ventasPorEstab[$estab] = ($ventasPorEstab[$estab] ?? 0.0) + $baseVenta;
+            }
+        }
+
+        // ── VENTAS: Facturas de Reembolso emitidas (tipoComprobante ATS = 41) ────
+        // Se reportan aparte (fila propia por cliente), nunca mezcladas con el 18.
+        $reembolsoRaw = $this->repo->getVentasReembolso($idEmpresa, $desde, $hasta);
+        foreach ($reembolsoRaw as $v) {
+            $tpId = str_pad((string) $v['cli_tipo_id'], 2, '0', STR_PAD_LEFT);
+            $idCli = $tpId === '07' ? '9999999999999' : (string) $v['cli_identificacion'];
+            $tipoEm = !empty($v['clave_acceso']) ? 'E' : 'F';
+            $key = $tpId . '|' . $idCli . '|41|' . $tipoEm;
+
+            if (!isset($grupos[$key])) {
+                $grupos[$key] = [
+                    'tpIdCliente' => $tpId,
+                    'idCliente'   => $idCli,
+                    'cliente'     => (string) $v['cli_nombre'],
+                    'parteRel'    => 'NO',
+                    'tipoComprobante' => '41',
+                    'tipoEm'      => $tipoEm,
+                    'numeroComprobantes' => 0,
+                    'baseNoGraIva' => 0.0, 'baseImponible' => 0.0, 'baseImpGrav' => 0.0,
+                    'montoIva' => 0.0, 'montoIce' => 0.0,
+                    'valorRetIva' => 0.0, 'valorRetRenta' => 0.0,
+                    'formasPago' => [],
+                ];
+            }
+            $g = &$grupos[$key];
+            $g['numeroComprobantes']++;
+            $g['baseNoGraIva'] += (float) $v['base_no_gra_iva'];
+            $g['baseImponible'] += (float) $v['base_imponible_0'] + (float) $v['base_imponible_exe'];
+            $g['baseImpGrav']  += (float) $v['base_imponible_grav'];
+            $g['montoIva']     += (float) $v['monto_iva'];
+            $g['montoIce']     += (float) $v['monto_ice'];
+            unset($g);
+
             if ($tipoEm === 'F') {
                 $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_exe'] + (float) $v['base_imponible_grav'];
                 $totalVentas += $baseVenta;
@@ -356,7 +414,15 @@ class AtsService
 
     // ── normalización de un documento al formato SRI ─────────────────────────
 
-    private function mapearDocumento(array $doc, ?array $ret, array $pagos): array
+    /**
+     * @param ?array $reemb Fila de getReembolsoTercerosCompras() cuando la compra es
+     *                      codDocReembolso=41 (una llamada por tercero reembolsado).
+     * @param bool $incluirBasePropia Solo la PRIMERA fila de una compra con varios
+     *                      terceros lleva las bases/IVA propias de la compra; las
+     *                      siguientes van en 0 para no duplicar el total al sumar
+     *                      todas las filas del mismo comprobante.
+     */
+    private function mapearDocumento(array $doc, ?array $ret, array $pagos, ?array $reemb = null, bool $incluirBasePropia = true): array
     {
         $tipoComp = (string) $doc['tipo_comprobante'];
         $tpIdProv = self::MAP_TP_ID_PROV[(string) $doc['tipo_id_proveedor']] ?? (string) $doc['tipo_id_proveedor'];
@@ -365,10 +431,12 @@ class AtsService
         $pto   = str_pad(substr((string) $doc['punto_emision_prov'], 0, 3), 3, '0', STR_PAD_LEFT);
         $sec   = str_pad((string) (int) $doc['secuencial_prov'], 9, '0', STR_PAD_LEFT);
 
-        $baseGrav = (float) $doc['base_imponible_grav'];
-        $base0    = (float) $doc['base_imponible_0'];
-        $baseNoG  = (float) $doc['base_no_gra_iva'];
-        $baseExe  = (float) $doc['base_imponible_exe'];
+        $baseGrav = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_imponible_grav'] : 0.0;
+        $base0    = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_imponible_0']    : 0.0;
+        $baseNoG  = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_no_gra_iva']      : 0.0;
+        $baseExe  = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_imponible_exe']   : 0.0;
+        $montoIceDoc = ($reemb === null || $incluirBasePropia) ? (float) $doc['monto_ice'] : 0.0;
+        $montoIvaDoc = ($reemb === null || $incluirBasePropia) ? (float) $doc['monto_iva'] : 0.0;
 
         // Retenciones IVA por porcentaje + líneas AIR (Renta)
         $iva = ['10' => 0.0, '20' => 0.0, '30' => 0.0, '50' => 0.0, '70' => 0.0, '100' => 0.0];
@@ -448,8 +516,8 @@ class AtsService
             'baseImponible'    => $this->money($base0),
             'baseImpGrav'      => $this->money($baseGrav),
             'baseImpExe'       => $this->money($baseExe),
-            'montoIce'         => $this->money($doc['monto_ice']),
-            'montoIva'         => $this->money($doc['monto_iva']),
+            'montoIce'         => $this->money($montoIceDoc),
+            'montoIva'         => $this->money($montoIvaDoc),
             'valRetBien10'     => $this->money($iva['10']),
             'valRetServ20'     => $this->money($iva['20']),
             'valorRetBienes'   => $this->money($iva['30']),
@@ -460,7 +528,47 @@ class AtsService
             'air'              => $air,
             'retencionDoc'     => $retDoc,
             'docModificado'    => $this->docModificado($doc, $tipoComp),
+            'reembolso'        => $reemb === null ? null : $this->mapearReembolso($reemb),
         ];
+    }
+
+    /**
+     * Sub-bloque *Reemb del ATS-Compras (sustento 08, codDocReembolso=41).
+     * SIN VALIDAR contra el XSD real del ATS (no está disponible en este proyecto):
+     * revisar con el contador antes de presentar el anexo.
+     */
+    private function mapearReembolso(array $t): array
+    {
+        return [
+            'tipoComprobanteReemb' => str_pad((string) ($t['cod_doc_reembolso'] ?? '01'), 2, '0', STR_PAD_LEFT),
+            'tpIdProvReemb'        => self::MAP_TP_ID_PROV[(string) $t['tipo_identificacion_proveedor_reembolso']] ?? (string) $t['tipo_identificacion_proveedor_reembolso'],
+            'idProvReemb'          => (string) $t['identificacion_proveedor_reembolso'],
+            'establecimientoReemb' => str_pad(substr((string) $t['estab_doc_reembolso'], 0, 3), 3, '0', STR_PAD_LEFT),
+            'puntoEmisionReemb'    => str_pad(substr((string) $t['pto_emi_doc_reembolso'], 0, 3), 3, '0', STR_PAD_LEFT),
+            'secuencialReemb'      => str_pad((string) (int) $t['secuencial_doc_reembolso'], 9, '0', STR_PAD_LEFT),
+            'fechaEmisionReemb'    => $this->fecha($t['fecha_emision_doc_reembolso']),
+            'autorizacionReemb'    => (string) ($t['numero_autorizacion_doc_reemb'] ?: '9999999999'),
+            'baseImponibleReemb'   => $this->money($t['base_imponible_reemb']),
+            'baseImpGravReemb'     => $this->money($t['base_imp_grav_reemb']),
+            'baseNoGraIvaReemb'    => $this->money($t['base_no_gra_iva_reemb']),
+            'baseImpExeReemb'      => $this->money($t['base_imp_exe_reemb']),
+            'totbasesImpReemb'     => $this->money(
+                (float) $t['base_imponible_reemb'] + (float) $t['base_imp_grav_reemb']
+                + (float) $t['base_no_gra_iva_reemb'] + (float) $t['base_imp_exe_reemb']
+            ),
+            'montoIceReemb'        => '0.00',
+            'montoIvaRemb'         => $this->money($t['monto_iva_reemb']),
+        ];
+    }
+
+    /** Agrupa las filas de getReembolsoTercerosCompras() por id_compra. */
+    private function indexarReembolsoTerceros(array $filas): array
+    {
+        $idx = [];
+        foreach ($filas as $f) {
+            $idx[(int) $f['id_compra']][] = $f;
+        }
+        return $idx;
     }
 
     private function parteRel(array $doc): string

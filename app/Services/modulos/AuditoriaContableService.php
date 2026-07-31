@@ -229,9 +229,14 @@ class AuditoriaContableService
         }
 
         $ok = 0;
-        $fallos = [];
+        $fallos = [];          // motivo => [id_asiento, ...]
+        $infoPorAsiento = [];  // id_asiento => ['id_documento'=>int, 'modulo_origen'=>string]
         foreach ($huerfanos as $h) {
             $idAsiento = (int) $h['id_asiento'];
+            $infoPorAsiento[$idAsiento] = [
+                'id_documento'  => (int) ($h['id_documento'] ?? 0),
+                'modulo_origen' => (string) ($h['modulo_origen'] ?? ''),
+            ];
             try {
                 $this->repo->beginTransaction();
                 $this->repo->anularAsiento($idAsiento, $idEmpresa, $idUsuario);
@@ -244,11 +249,35 @@ class AuditoriaContableService
             }
         }
 
+        // El documento de origen de un huérfano ya no existe o fue eliminado (por eso el asiento
+        // quedó huérfano), pero puede seguir teniendo su número (soft-delete) — se resuelve por
+        // origen para mostrar "001-001-000000123" en vez del id interno del asiento en el aviso.
+        $idsDocPorOrigen = [];
+        foreach ($infoPorAsiento as $info) {
+            if ($info['id_documento'] > 0 && $info['modulo_origen'] !== '') {
+                $idsDocPorOrigen[$info['modulo_origen']][] = $info['id_documento'];
+            }
+        }
+        $numerosPorOrigen = [];
+        foreach ($idsDocPorOrigen as $origenH => $idsDoc) {
+            $numerosPorOrigen[$origenH] = $this->repo->getDatosDocumentos($origenH, array_unique($idsDoc));
+        }
+
         $mensajes = [];
         $errores = 0;
         foreach ($fallos as $motivo => $ids) {
             $errores += count($ids);
-            $mensajes[] = count($ids) . " asiento(s) — «{$motivo}» — #" . implode(', #', array_slice($ids, 0, 5));
+            $muestra = array_slice($ids, 0, 5);
+            $etiquetas = array_map(function ($idAsiento) use ($infoPorAsiento, $numerosPorOrigen) {
+                $info = $infoPorAsiento[$idAsiento] ?? null;
+                $num  = $info !== null
+                    ? trim((string) ($numerosPorOrigen[$info['modulo_origen']][$info['id_documento']]['numero'] ?? ''))
+                    : '';
+                return $num !== '' ? $num : ('asiento #' . $idAsiento);
+            }, $muestra);
+            $resto = count($ids) - count($muestra);
+            $lista = implode(', ', $etiquetas) . ($resto > 0 ? ' y ' . $resto . ' más' : '');
+            $mensajes[] = count($ids) . " asiento(s) — «{$motivo}» — {$lista}";
         }
 
         $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_eliminar_huerfanos_masivo',
@@ -387,11 +416,28 @@ class AuditoriaContableService
             }
         }
 
+        // Número de documento (serie-secuencial) de los que fallaron, para el aviso — mismo
+        // origen para todo el lote, así que basta una sola resolución en bloque.
+        $idsFallidos = [];
+        foreach ($fallos as $ids) {
+            $idsFallidos = array_merge($idsFallidos, $ids);
+        }
+        $numeros = !empty($idsFallidos)
+            ? $this->repo->getDatosDocumentos($origen, array_unique($idsFallidos))
+            : [];
+
         $mensajes = [];
         $errores  = 0;
         foreach ($fallos as $motivo => $ids) {
             $errores += count($ids);
-            $mensajes[] = count($ids) . " documento(s) con error — «{$motivo}» — #" . implode(', #', array_slice($ids, 0, 5));
+            $muestra = array_slice($ids, 0, 5);
+            $etiquetas = array_map(function ($idDoc) use ($numeros) {
+                $num = trim((string) ($numeros[$idDoc]['numero'] ?? ''));
+                return $num !== '' ? $num : ('#' . $idDoc);
+            }, $muestra);
+            $resto = count($ids) - count($muestra);
+            $lista = implode(', ', $etiquetas) . ($resto > 0 ? ' y ' . $resto . ' más' : '');
+            $mensajes[] = count($ids) . " documento(s) con error — «{$motivo}» — {$lista}";
         }
 
         return [

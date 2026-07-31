@@ -42,6 +42,7 @@
             <li class="nav-item"><a class="nav-link" id="tab-inventario-tab" data-bs-toggle="tab" href="#tabInventario" role="tab"><i class="bi bi-box-seam me-1"></i>Inventario</a></li>
             <li class="nav-item"><a class="nav-link" id="tab-retenciones-tab" data-bs-toggle="tab" href="#tabRetenciones" role="tab"><i class="bi bi-file-earmark-text me-1"></i>Retenciones</a></li>
             <li class="nav-item d-none" id="tab-relacionados-li"><a class="nav-link" id="tab-relacionados-tab" data-bs-toggle="tab" href="#tabRelacionados" role="tab"><i class="bi bi-link-45deg me-1"></i><span id="tab-relacionados-label">Documento Relacionado</span></a></li>
+            <li class="nav-item d-none" id="tab-reembolso-li"><a class="nav-link" id="tab-reembolso-tab" data-bs-toggle="tab" href="#tabReembolso" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Detalle de Reembolso</a></li>
           </ul>
           <div class="ms-auto pb-1">
             <?php
@@ -122,6 +123,9 @@
                 <select id="mcSustento" class="form-select form-select-sm">
                   <option value="">-- Seleccione Tipo de Comprobante --</option>
                 </select>
+                <div id="mcSustentoReembolsoHelp" class="form-text small text-muted d-none">
+                  <i class="bi bi-lock-fill"></i> Bloqueado: código 08 obligatorio por ser Factura de Reembolso recibida.
+                </div>
               </div>
 
               <!-- Autorización -->
@@ -708,6 +712,64 @@
               <div id="mc-relacionados-cont">
                 <div class="text-center py-4 text-muted">
                   <i class="spinner-border spinner-border-sm me-2"></i>Cargando documentos relacionados...
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════════════════════════════════════════
+               TAB: DETALLE DE REEMBOLSO (recibido)
+               Solo visible cuando la compra es codDoc=01 con codDocReembolso=41
+               (bloque <reembolsos> del XML: proveedores terceros que el emisor
+               pagó a nombre de esta empresa — sustento ATS 08).
+          ════════════════════════════════════════ -->
+          <div class="tab-pane fade" id="tabReembolso" role="tabpanel">
+            <div class="p-3">
+              <div class="alert alert-light border py-2 px-3 mb-3" style="font-size:0.75rem;">
+                <i class="bi bi-info-circle me-1"></i> Esta factura es un <strong>comprobante de venta emitido por reembolso</strong> (Anexo ATS código 41).
+                El emisor pagó estos gastos a nombre de esta empresa; el sustento tributario se fija automáticamente en <strong>08 - Valor pagado para solicitar Reembolso de Gasto (intermediario)</strong>.
+              </div>
+
+              <div class="row g-2 mb-3">
+                <div class="col-md-4">
+                  <div class="bg-white border rounded p-2 shadow-sm text-center">
+                    <div class="x-small text-muted">Total Base Reembolso</div>
+                    <div class="fw-bold" id="mc-reembolso-total-base">0.00</div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="bg-white border rounded p-2 shadow-sm text-center">
+                    <div class="x-small text-muted">Total Impuesto Reembolso</div>
+                    <div class="fw-bold" id="mc-reembolso-total-impuesto">0.00</div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="bg-white border rounded p-2 shadow-sm text-center">
+                    <div class="x-small text-muted">Comprobantes Reembolso</div>
+                    <div class="fw-bold" id="mc-reembolso-total-comprobantes">0.00</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="border rounded-2 overflow-hidden bg-white">
+                <div class="table-responsive" style="max-height: 320px;">
+                  <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th class="ps-2 py-1 small fw-bold text-muted">Identificación</th>
+                        <th class="py-1 small fw-bold text-muted">Tipo doc.</th>
+                        <th class="py-1 small fw-bold text-muted">Número</th>
+                        <th class="py-1 small fw-bold text-muted">Fecha</th>
+                        <th class="py-1 small fw-bold text-muted text-end">Base</th>
+                        <th class="py-1 small fw-bold text-muted text-end pe-2">Impuesto</th>
+                      </tr>
+                    </thead>
+                    <tbody id="mc-reembolso-tbody">
+                      <tr id="mc-reembolso-vacio">
+                        <td colspan="6" class="text-center text-muted small py-3">Sin terceros reembolsados.</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>

@@ -82,7 +82,7 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                                             </div>
                                             <!-- 4. Tarifa IVA -->
                                             <div class="col-md-3">
-                                                <label class="x-small fw-bold text-muted mb-1">Tarifa IVA</label>
+                                                <label class="x-small fw-bold text-muted mb-1 d-flex align-items-center">Tarifa IVA <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('nota_debito', 'nd_tarifa_iva', 'id_tarifa_iva') ?></label>
                                                 <select id="nd_tarifa_iva" class="form-select form-select-sm border-primary border-opacity-10" style="height: 31px;" onchange="window.ND_calcTotales()"></select>
                                             </div>
                                         </div>
@@ -100,6 +100,19 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                                                         <input type="hidden" name="id_cliente" id="nd_id_cliente">
                                                     </div>
                                                     <div id="nd_cliente_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 55px;"></div>
+                                                </div>
+
+                                                <!-- Info Detallada Cliente: igual diseño que Factura de Venta (debajo del buscador, misma caja) -->
+                                                <div class="col-12 px-3 mt-1 d-none" id="nd_info_cliente">
+                                                    <div class="d-flex flex-wrap align-items-center gap-x-3 gap-y-1" style="font-size:0.72rem; text-transform:lowercase; color:#6c757d;">
+                                                        <span class="border-end pe-2 me-1 fw-bold text-dark" id="nd_lbl_cliente_ruc"></span>
+                                                        <div class="d-flex align-items-center gap-1">
+                                                            <i class="bi bi-geo-alt"></i><span id="nd_lbl_cliente_direccion"></span>
+                                                        </div>
+                                                        <div class="d-flex align-items-center gap-1 border-start ps-2">
+                                                            <i class="bi bi-envelope"></i><span id="nd_lbl_cliente_correo"></span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -131,31 +144,6 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                                         </div>
                                     </div>
 
-                                    <!-- Info Detallada Cliente -->
-                                    <div id="nd_info_cliente" class="col-12 mt-2 d-none">
-                                        <div class="p-2 border rounded-3 bg-light bg-opacity-50 border-primary border-opacity-10">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-4">
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <i class="bi bi-card-text text-muted"></i>
-                                                        <span id="nd_lbl_cliente_ruc" class="fw-bold small text-dark"></span>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <i class="bi bi-geo-alt text-muted"></i>
-                                                        <span id="nd_lbl_cliente_direccion" class="small text-muted text-truncate d-inline-block" style="max-width: 200px;"></span>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <i class="bi bi-envelope text-muted"></i>
-                                                        <span id="nd_lbl_cliente_correo" class="small text-muted text-truncate d-inline-block" style="max-width: 200px;"></span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
 
@@ -186,57 +174,64 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                                 </div>
                             </div>
 
-                            <!-- Tabla de Pagos (opcional) -->
-                            <div class="px-3 pb-3">
-                                <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                    <div class="px-2 py-1 bg-light border-bottom">
-                                        <span class="x-small fw-bold text-muted"><i class="bi bi-credit-card me-1"></i>Formas de pago (opcional)</span>
-                                    </div>
-                                    <div class="table-responsive" style="max-height: 180px;">
-                                        <table class="table table-sm mb-0">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th class="ps-2 py-1 small fw-bold text-muted" style="width: 40%;">Forma de pago</th>
-                                                    <th class="py-1 small fw-bold text-muted text-end" style="width: 20%;">Total</th>
-                                                    <th class="py-1 small fw-bold text-muted text-center" style="width: 15%;">Plazo</th>
-                                                    <th class="py-1 small fw-bold text-muted" style="width: 15%;">Unidad</th>
-                                                    <th style="width: 40px;"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="nd_pagos_body"></tbody>
-                                        </table>
-                                    </div>
-                                    <div class="p-1 border-top bg-light nd-edit-only">
-                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.ND_agregarPago()">
-                                            <i class="bi bi-plus-circle me-1"></i> Agregar pago
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Pie: Información Adicional (izquierda) + Totales (derecha) -->
+                            <!-- Pie: Info. Adicional / Formas de pago (izquierda, en pestañas) + Totales (derecha) -->
                             <div class="p-3 border-top bg-light">
                                 <div class="row g-3">
                                     <div class="col-md-8">
-                                        <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                            <div class="px-2 py-1 bg-light border-bottom">
-                                                <span class="x-small fw-bold text-muted"><i class="bi bi-info-circle me-1"></i>Información Adicional</span>
+                                        <ul class="nav nav-tabs nav-tabs-sm mb-2" id="nd-subtabs" role="tablist">
+                                            <li class="nav-item">
+                                                <button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#nd-subtab-info" type="button">Info. Adicional</button>
+                                            </li>
+                                            <li class="nav-item">
+                                                <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#nd-subtab-pagos" type="button">Formas de pago SRI</button>
+                                            </li>
+                                        </ul>
+                                        <div class="tab-content bg-white border rounded-bottom">
+                                            <!-- Info Adicional -->
+                                            <div class="tab-pane fade show active" id="nd-subtab-info" role="tabpanel">
+                                                <div class="table-responsive" style="max-height: 160px;">
+                                                    <table class="table table-sm mb-0">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th class="ps-2 py-0 small fw-bold text-muted" style="width: 40%;">Concepto</th>
+                                                                <th class="py-0 small fw-bold text-muted" style="width: 50%;">Detalle</th>
+                                                                <th class="py-0" style="width: 10%;"></th>
+                                                            </tr>
+                                                        </thead>
+                                                        <?php $rucProveedorSriND = \App\Helpers\SriProveedorHelper::rucProveedor(); ?>
+                                                        <?php if ($rucProveedorSriND !== ''): ?>
+                                                        <!-- Campo normativo fijo (Res. NAC-DGERCGC26-00000027 / Ficha v2.34 Anexo 26):
+                                                             lo agrega el sistema al CREAR el documento (NotaDebitoService::crear);
+                                                             esta fila es solo la vista previa para una ND NUEVA — se oculta al editar
+                                                             una ND ya existente porque esa, si es anterior a hoy, no lo tiene. -->
+                                                        <tbody id="nd-tbody-ruc-proveedor-preview">
+                                                            <tr class="table-light">
+                                                                <td class="ps-2 p-0 align-middle">
+                                                                    <span class="small text-muted fst-italic"><i class="bi bi-lock-fill me-1" style="font-size:0.65rem;"></i><?= htmlspecialchars(\App\Helpers\SriProveedorHelper::CAMPO_NOMBRE) ?></span>
+                                                                </td>
+                                                                <td class="p-0 align-middle">
+                                                                    <span class="small text-muted fst-italic"><?= htmlspecialchars($rucProveedorSriND) ?></span>
+                                                                </td>
+                                                                <td class="p-0 align-middle text-center">
+                                                                    <i class="bi bi-shield-check text-success" style="font-size:0.75rem;" title="Campo obligatorio del SRI: lo agrega el sistema automáticamente en el XML y el PDF"></i>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                        <?php endif; ?>
+                                                        <tbody id="nd-tbody-info-adicional"></tbody>
+                                                    </table>
+                                                </div>
+                                                <div class="p-1 border-top bg-light nd-edit-only">
+                                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.ND_agregarInfoAdicional()">
+                                                        <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div class="table-responsive" style="max-height: 160px;">
-                                                <table class="table table-sm mb-0">
-                                                    <thead class="table-light">
-                                                        <tr>
-                                                            <th class="ps-2 py-0 small fw-bold text-muted" style="width: 40%;">Concepto</th>
-                                                            <th class="py-0 small fw-bold text-muted" style="width: 50%;">Detalle</th>
-                                                            <th class="py-0" style="width: 10%;"></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="nd-tbody-info-adicional"></tbody>
-                                                </table>
-                                            </div>
-                                            <div class="p-1 border-top bg-light nd-edit-only">
-                                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.ND_agregarInfoAdicional()">
-                                                    <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                            <!-- Formas de Pago -->
+                                            <div class="tab-pane fade p-2" id="nd-subtab-pagos" role="tabpanel">
+                                                <div id="nd_pagos_body"></div>
+                                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none small mt-1 nd-edit-only" onclick="window.ND_agregarPago()">
+                                                    <i class="bi bi-plus-circle me-1"></i>Añadir pago
                                                 </button>
                                             </div>
                                         </div>

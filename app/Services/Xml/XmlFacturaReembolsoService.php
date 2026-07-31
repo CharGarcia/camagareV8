@@ -126,6 +126,9 @@ class XmlFacturaReembolsoService
         $this->txt($dom, $el, 'tipoIdentificacionComprador', (string) $tipoId);
         $this->txt($dom, $el, 'razonSocialComprador',        $cab['cliente_nombre'] ?? '');
         $this->txt($dom, $el, 'identificacionComprador',     $cab['cliente_ruc'] ?? '');
+        if (!empty($cab['cliente_direccion'])) {
+            $this->txt($dom, $el, 'direccionComprador', (string) $cab['cliente_direccion']);
+        }
 
         $this->txt($dom, $el, 'totalSinImpuestos', $this->dec2($cab['total_sin_impuestos'] ?? 0));
         $this->txt($dom, $el, 'totalDescuento',    $this->dec2($cab['total_descuento']    ?? 0));

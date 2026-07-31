@@ -44,10 +44,12 @@ class EmpresaController extends BaseModuloController
         $secRepo = new \App\repositories\SecuencialRepository();
         $tiposSecuencialAgrupados = $secRepo->getTiposDocumentoAgrupados();
         $tiposSecuencialSoportados = $secRepo->getTiposDocumentoSoportados();
+        $tiposSecuencialConflictos = $secRepo->getMapaConflictosCodDoc();
 
         $this->viewWithLayout('layouts.main', 'modulos.empresa.index', [
             'tiposSecuencialAgrupados' => $tiposSecuencialAgrupados,
             'tiposSecuencialSoportados' => $tiposSecuencialSoportados,
+            'tiposSecuencialConflictos' => $tiposSecuencialConflictos,
             'titulo' => 'Configuración de Empresa',
             'id_empresa' => $idEmpresa,
             'empresa' => $data['empresa'],

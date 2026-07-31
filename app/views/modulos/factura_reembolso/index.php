@@ -65,12 +65,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <?php endif; ?>
 </div>
 
-<div class="alert alert-light border py-2 px-3 mb-3" style="font-size:0.8rem;">
-    <i class="bi bi-info-circle me-1"></i> Documento SRI para reembolso de gastos pagados a nombre del cliente
-    (Anexo ATS código 41 "Comprobante de venta emitido por reembolso"). Es un tipo de comprobante independiente
-    de las Facturas de Venta, con su propia numeración.
-</div>
-
 <?php if (empty($puntos)): ?>
     <div class="alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-3">
         <i class="bi bi-exclamation-triangle-fill"></i>
@@ -215,9 +209,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <script>
     window.fr_dec_p = <?= (int) ($empresa['decimales_precio'] ?? 2) ?>;
+    window.FR_ID_FORMA_PAGO_SRI_DEF = <?= isset($empresa['id_forma_pago_sri_def']) && $empresa['id_forma_pago_sri_def'] !== null ? (int) $empresa['id_forma_pago_sri_def'] : 'null' ?>;
     window.FR_STORAGE_KEY = 'fr_borrador_' + <?= (int) ($_SESSION['id_empresa'] ?? 0) ?> + '_' + <?= (int) ($_SESSION['id_usuario'] ?? 0) ?>;
     window.FR_ORDEN_COL = <?= json_encode($ordenCol ?? 'fecha_emision') ?>;
     window.FR_ORDEN_DIR = <?= json_encode($ordenDir ?? 'DESC') ?>;
+    // Catálogo de tarifas IVA para el selector por línea (honorarios) del detalle.
+    window.FR_TARIFAS_IVA = <?= json_encode(array_map(fn($t) => [
+        'porcentaje' => (string) $t['porcentaje_iva'],
+        'codigo'     => (string) $t['codigo'],
+        'label'      => (string) $t['tarifa'],
+    ], $tarifasIva ?? [])) ?>;
 </script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>" defer></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/factura_reembolso.js?v=<?= time() ?>" defer></script>

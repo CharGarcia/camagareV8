@@ -233,7 +233,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
-                            $tipoLabels = ['FACTURA_VENTA' => 'Facturas de Venta', 'RECIBO_VENTA' => 'Recibo de Venta', 'OTRO' => 'Otro Ingreso'];
+                            $tipoLabels = ['FACTURA_VENTA' => 'Facturas de Venta', 'FACTURA_REEMBOLSO' => 'Factura de Reembolso', 'RECIBO_VENTA' => 'Recibo de Venta', 'OTRO' => 'Otro Ingreso'];
                             $tipoLabel = $tipoLabels[$r['tipo_ingreso']] ?? $r['tipo_ingreso'];
                             $estado  = $r['estado'] ?? 'registrado';
                             $estadoClass = match ($estado) {
@@ -765,7 +765,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         renderPagos();
         recalcularTotales();
 
-        if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(comp)) {
+        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
             document.getElementById('m-block-facturas').classList.remove('d-none');
             document.getElementById('m-block-otros').classList.add('d-none');
             abrirModalDocsPendientes();
@@ -894,7 +894,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Buscando...</td></tr>';
 
         const tipoIng = document.getElementById('m-input-tipo-ingreso').value;
-        const tipoDoc = (tipoIng === 'RECIBO_VENTA') ? 'RECIBO' : 'FACTURA';
+        const tipoDoc = (tipoIng === 'RECIBO_VENTA') ? 'RECIBO' : (tipoIng === 'FACTURA_REEMBOLSO') ? 'FACTURA_REEMBOLSO' : 'FACTURA';
         let uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDocumentosPendientesAjax?q=${encodeURIComponent(q)}&tipo=${tipoDoc}`;
         if (excluirId) uri += `&excluir_ingreso_id=${excluirId}`;
 
@@ -1329,7 +1329,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const esHistorico = !!document.getElementById('m-input-id').value;
         const isObsReadOnly = document.getElementById('m-input-observaciones').disabled;
 
-        if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(tipo)) {
+        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
             const tbody = document.getElementById('m-tbody-docs-pendientes');
             tbody.innerHTML = '';
 
@@ -1345,7 +1345,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const disChk   = esHistorico ? 'disabled' : '';
                 const cliLabel = f.cliente_nombre ? `<span class="badge bg-light text-dark border" style="font-size:0.7rem;">${f.cliente_nombre}</span>` : '';
                 const esSaldoIni = (f.tipo_documento === 'SALDO_INICIAL');
-                const previewTipo = (f.tipo_documento === 'RECIBO') ? 'RECIBO_VENTA' : 'FACTURA_VENTA';
+                const previewTipo = (f.tipo_documento === 'RECIBO') ? 'RECIBO_VENTA'
+                                  : (f.tipo_documento === 'FACTURA_REEMBOLSO') ? 'FACTURA_REEMBOLSO'
+                                  : 'FACTURA_VENTA';
                 const numeroCell = esSaldoIni
                     ? `<code class="text-secondary fw-bold">${f.numero}</code> <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.62rem;">Saldo inicial</span>`
                     : (f.id
@@ -1674,7 +1676,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const tipo = document.getElementById('m-input-tipo-ingreso').value;
         let total = 0;
 
-        if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(tipo)) {
+        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
             docPendientes.filter(f => f.seleccionado).forEach(f => {
                 total += f.cobrado;
             });
@@ -1840,7 +1842,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         // Armar Detalles
-        if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(tipo)) {
+        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
             const sel = docPendientes.filter(f => f.seleccionado && f.cobrado > 0);
             if (sel.length === 0) {
                 Swal.fire('Sin Selección', 'Debe seleccionar al menos un documento y definir monto.', 'warning');
@@ -1915,7 +1917,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         // ── Validar fecha de emisión vs fechas de documentos ──────────────────
-        if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(tipo)) {
+        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
             for (const d of data.detalles) {
                 if (d.fecha_documento && data.fecha_emision < d.fecha_documento) {
                     const fEmision  = data.fecha_emision.split('-').reverse().join('/');
@@ -2069,7 +2071,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 sincronizarBotonesConcepto(ing.id_ingreso_concepto);
                 document.getElementById('m-input-observaciones').value = ing.observaciones || '';
 
-                const isModuloLinked = ['FACTURA_VENTA', 'RECIBO_VENTA'].includes(comp);
+                const isModuloLinked = ['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp);
 
                 if (esAnulado) {
                     // Modo estrictamente solo lectura si ya fue anulado
@@ -2121,7 +2123,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     fecha_cobro: p.fecha_cobro
                 }));
 
-                if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(comp)) {
+                if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
                     document.getElementById('m-input-id-cliente').value = ing.id_cliente || '';
                     document.getElementById('m-block-facturas').classList.remove('d-none');
                     document.getElementById('m-block-otros').classList.add('d-none');
@@ -2443,6 +2445,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             url = `<?= BASE_URL ?>/modulos/recibo-venta/getFacturaAjax?id=${id}`;
         } else if (tipo === 'FACTURA_VENTA' || tipo === 'VENTA') {
             url = `<?= BASE_URL ?>/modulos/factura-venta/getFacturaAjax?id=${id}`;
+        } else if (tipo === 'FACTURA_REEMBOLSO') {
+            url = `<?= BASE_URL ?>/modulos/factura-reembolso/getFacturaReembolsoAjax?id=${id}`;
         } else if (tipo === 'COMPRA') {
             url = `<?= BASE_URL ?>/modulos/compras/getCompraAjax?id=${id}`;
         } else if (tipo === 'LIQUIDACION') {
@@ -2473,6 +2477,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     lblSujeto = 'Cliente';
                     valSujeto = cab.cliente_nombre || 'CONSUMIDOR FINAL';
                     badgeTipo = 'FACTURA DE VENTA';
+                } else if (tipo === 'FACTURA_REEMBOLSO') {
+                    cab = res; // getFacturaReembolsoAjax devuelve la cabecera en el nivel raíz
+                    dets = res.detalles || [];
+                    lblSujeto = 'Cliente';
+                    valSujeto = cab.cliente_nombre || '';
+                    badgeTipo = 'FACTURA DE REEMBOLSO';
                 } else if (tipo === 'COMPRA') {
                     cab = res.data;
                     dets = cab.detalles || [];

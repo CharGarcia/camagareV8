@@ -306,6 +306,9 @@ function CMG_poblarModal(d) {
     // Pestaña de documentos relacionados (NC ↔ factura)
     mcActualizarPestanaRelacionados(d);
 
+    // Pestaña de detalle de reembolso (factura recibida codDocReembolso=41)
+    mcActualizarPestanaReembolso(d);
+
     // Solo lectura total: compra migrada o período contable cerrado
     // (se aplica al final para que prevalezca sobre el bloqueo de electrónica).
     mcAplicarSoloLectura(d);
@@ -523,7 +526,11 @@ function CMG_resetModal() {
 
     // Ocultar pestaña de documentos relacionados
     document.getElementById('tab-relacionados-li')?.classList.add('d-none');
-    
+
+    // Ocultar pestaña de detalle de reembolso (compra nueva) y su bloqueo de sustento
+    document.getElementById('tab-reembolso-li')?.classList.add('d-none');
+    mcAplicarBloqueoSustento(false);
+
     // Ir a primera pestaña
     const tabDetalle = document.getElementById('tab-detalle-tab') || document.getElementById('tab_compra');
     if (tabDetalle) {
@@ -2401,6 +2408,72 @@ function mcActualizarPestanaRelacionados(d) {
     } else {
         li.classList.add('d-none');
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DETALLE DE REEMBOLSO (factura recibida, codDoc=01 con codDocReembolso=41)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Bloquea/desbloquea el selector de Sustento Tributario. Una Factura de
+ * Reembolso recibida siempre debe declararse con sustento código 08 (Tabla 5
+ * SRI); se deja fijo para que el usuario no pueda cambiarlo por error al
+ * editar manualmente la compra (el servidor también lo re-fuerza al guardar).
+ */
+function mcAplicarBloqueoSustento(esReembolso) {
+    const sel  = document.getElementById('mcSustento');
+    const help = document.getElementById('mcSustentoReembolsoHelp');
+    if (!sel) return;
+    if (esReembolso) {
+        sel.disabled = true;
+        sel.classList.add('mc-lock-reembolso');
+        help?.classList.remove('d-none');
+    } else if (sel.classList.contains('mc-lock-reembolso')) {
+        sel.disabled = false;
+        sel.classList.remove('mc-lock-reembolso');
+        help?.classList.add('d-none');
+    }
+}
+
+/** Muestra u oculta la pestaña "Detalle de Reembolso" y llena su tabla. */
+function mcActualizarPestanaReembolso(d) {
+    const li = document.getElementById('tab-reembolso-li');
+    if (!li) return;
+
+    const terceros = d.terceros_reembolso || [];
+    const esReembolso = String(d.cod_doc_reembolso || '') === '41';
+    mcAplicarBloqueoSustento(esReembolso);
+
+    if (!esReembolso && !terceros.length) {
+        li.classList.add('d-none');
+        return;
+    }
+    li.classList.remove('d-none');
+
+    const fmt = (v) => (parseFloat(v) || 0).toFixed(2);
+    document.getElementById('mc-reembolso-total-base').textContent = fmt(d.total_base_imponible_reembolso);
+    document.getElementById('mc-reembolso-total-impuesto').textContent = fmt(d.total_impuesto_reembolso);
+    document.getElementById('mc-reembolso-total-comprobantes').textContent = fmt(d.total_comprobantes_reembolso);
+
+    const tbody = document.getElementById('mc-reembolso-tbody');
+    if (!tbody) return;
+    if (!terceros.length) {
+        tbody.innerHTML = '<tr id="mc-reembolso-vacio"><td colspan="6" class="text-center text-muted small py-3">Sin terceros reembolsados.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = terceros.map(t => {
+        const numero = `${t.estab_doc_reembolso || ''}-${t.pto_emi_doc_reembolso || ''}-${t.secuencial_doc_reembolso || ''}`;
+        const fecha = t.fecha_emision_doc_reembolso ? String(t.fecha_emision_doc_reembolso).slice(0, 10) : '';
+        return `<tr>
+            <td class="ps-2">${t.identificacion_proveedor_reembolso || ''}</td>
+            <td>${t.cod_doc_reembolso || ''}</td>
+            <td>${numero}</td>
+            <td>${fecha}</td>
+            <td class="text-end">${fmt(t.base_imponible_total)}</td>
+            <td class="text-end pe-2">${fmt(t.impuesto_total)}</td>
+        </tr>`;
+    }).join('');
 }
 
 window.mcCargarDocumentosRelacionados = async function () {

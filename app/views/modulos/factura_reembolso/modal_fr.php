@@ -30,7 +30,6 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                         <button id="fr-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="window.FR_exportarPdf()" title="Exportar PDF" disabled><i class="bi bi-file-earmark-pdf"></i></button>
                         <button id="fr-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.FR_exportarXml()" title="Exportar XML" disabled><i class="bi bi-file-earmark-code"></i></button>
                         <button id="fr-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="window.FR_enviarPorCorreo()" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
-                        <button id="fr-btn-whatsapp" type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.FR_enviarWhatsapp()" title="Enviar por WhatsApp" disabled><i class="bi bi-whatsapp"></i></button>
                         <button id="btnAnularFR" type="button" class="btn btn-outline-warning btn-sm px-2 d-none" onclick="window.FR_anular()" title="Anular"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                     </div>
 
@@ -38,14 +37,12 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="frTabs" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" id="tab-fr-principal-btn" data-bs-toggle="tab" href="#tab-fr-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Factura de reembolso</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-fr-terceros-btn" data-bs-toggle="tab" href="#tab-fr-terceros" role="tab" style="white-space: nowrap;"><i class="bi bi-people me-1"></i> Terceros reembolsados<span id="fr-badge-terceros" class="badge bg-secondary ms-1 x-small d-none">0</span></a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fr-contable-btn" data-bs-toggle="tab" href="#tab-fr-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fr-sri-btn" data-bs-toggle="tab" href="#tab-fr-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
                             $pestanasConfigFR = [
-                                'tab-fr-terceros' => 'Terceros reembolsados',
                                 'tab-fr-contable' => 'Asiento contable',
                                 'tab-fr-sri'      => 'SRI',
                             ];
@@ -61,11 +58,11 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                 <div class="row g-2">
                                     <div class="col-12">
                                         <div class="row g-2 align-items-end">
-                                            <div class="col-md-3">
+                                            <div class="col-md-2">
                                                 <label class="x-small fw-bold text-muted mb-1">Fecha Emisión</label>
                                                 <input type="date" name="fecha_emision" id="fr_fecha_emision" class="form-control form-control-sm border-primary border-opacity-10 py-0" style="height: 31px;" value="<?= date('Y-m-d') ?>">
                                             </div>
-                                            <div class="col-md-3">
+                                            <div class="col-md-2">
                                                 <label class="x-small fw-bold text-muted mb-1 d-flex align-items-center">Serie <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('modulos/factura-reembolso', 'fr_id_punto_emision', 'id_punto_emision') ?></label>
                                                 <select name="id_punto_emision" id="fr_id_punto_emision" class="form-select form-select-sm border-primary border-opacity-25" onchange="window.FR_cargarSecuencial()" style="height: 31px;">
                                                     <?php foreach ($puntos as $p): ?>
@@ -75,68 +72,34 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
-                                            <div class="col-md-3">
+                                            <div class="col-md-2">
                                                 <label class="x-small fw-bold text-muted mb-1">Secuencial</label>
                                                 <input type="text" name="secuencial" id="fr_secuencial" class="form-control form-control-sm border-primary border-opacity-25 text-center py-0 bg-light" style="height: 31px;" placeholder="000000001" readonly>
                                             </div>
-                                            <div class="col-md-3">
-                                                <label class="x-small fw-bold text-muted mb-1">Tarifa IVA (honorarios)</label>
-                                                <select id="fr_tarifa_iva" class="form-select form-select-sm border-primary border-opacity-10" style="height: 31px;">
-                                                    <?php foreach ($tarifasIva as $t): ?>
-                                                        <option value="<?= htmlspecialchars((string) $t['porcentaje_iva']) ?>" data-codigo="<?= htmlspecialchars((string) $t['codigo']) ?>"><?= htmlspecialchars((string) $t['tarifa']) ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
+                                            <div class="col-md-6 position-relative">
+                                                <label class="x-small fw-bold text-muted mb-1">Cliente</label>
+                                                <div class="input-group input-group-sm flex-grow-1 elevation-1 rounded-pill overflow-hidden border">
+                                                    <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
+                                                    <input type="text" class="form-control border-0 px-1" id="fr_cliente_search" placeholder="Buscar cliente por RUC o Razón Social..." autocomplete="off">
+                                                    <input type="hidden" name="id_cliente" id="fr_id_cliente">
+                                                </div>
+                                                <div id="fr_cliente_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 55px;"></div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div class="col-12 mt-2">
-                                        <div class="p-2 border rounded-3 bg-light bg-opacity-10">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-12 position-relative">
-                                                    <label class="x-small fw-bold text-muted mb-1">Cliente</label>
-                                                    <div class="input-group input-group-sm flex-grow-1 elevation-1 rounded-pill overflow-hidden border">
-                                                        <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
-                                                        <input type="text" class="form-control border-0 px-1" id="fr_cliente_search" placeholder="Buscar cliente por RUC o Razón Social..." autocomplete="off">
-                                                        <input type="hidden" name="id_cliente" id="fr_id_cliente">
-                                                    </div>
-                                                    <div id="fr_cliente_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 55px;"></div>
-                                                </div>
+                                    <div class="col-12 px-1 mt-1 d-none" id="fr_info_cliente">
+                                        <div class="d-flex flex-wrap align-items-center gap-x-3 gap-y-1" style="font-size:0.72rem; text-transform:lowercase; color:#6c757d;">
+                                            <span class="border-end pe-2 me-1 fw-bold text-dark" id="fr_lbl_cliente_ruc"></span>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <i class="bi bi-geo-alt"></i><span id="fr_lbl_cliente_direccion"></span>
                                             </div>
-                                        </div>
-                                    </div>
-
-                                    <div id="fr_info_cliente" class="col-12 mt-2 d-none">
-                                        <div class="p-2 border rounded-3 bg-light bg-opacity-50 border-primary border-opacity-10">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-4">
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <i class="bi bi-card-text text-muted"></i>
-                                                        <span id="fr_lbl_cliente_ruc" class="fw-bold small text-dark"></span>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <i class="bi bi-geo-alt text-muted"></i>
-                                                        <span id="fr_lbl_cliente_direccion" class="small text-muted text-truncate d-inline-block" style="max-width: 200px;"></span>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <i class="bi bi-envelope text-muted"></i>
-                                                        <span id="fr_lbl_cliente_correo" class="small text-muted text-truncate d-inline-block" style="max-width: 200px;"></span>
-                                                    </div>
-                                                </div>
+                                            <div class="d-flex align-items-center gap-1 border-start ps-2">
+                                                <i class="bi bi-envelope"></i><span id="fr_lbl_cliente_correo"></span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div class="alert alert-light border mx-3 mt-3 mb-0 py-2 px-3" style="font-size:0.75rem;">
-                                <i class="bi bi-info-circle me-1"></i> Agregue una línea por cada gasto reembolsado (marcada "Reembolso", sin IVA propio — código 6 "No objeto de impuesto")
-                                y, si cobra honorarios propios por la gestión, una línea adicional sin marcar (con IVA normal). Los datos del comprobante del proveedor van en la pestaña
-                                <strong>Terceros reembolsados</strong>.
                             </div>
 
                             <!-- Tabla de Detalle -->
@@ -146,17 +109,19 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                         <table class="table table-sm fr-table-detalle mb-0">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 40%;">Descripción</th>
-                                                    <th class="py-2 small fw-bold text-muted text-center" style="width: 10%;">Reembolso</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 12%;">Cantidad</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 14%;">P. Unitario</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 15%;">Subtotal</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 26%;">Descripción</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width: 13%;">Tipo</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width: 12%;">Tarifa IVA</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Cantidad</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 12%;">P. Unitario</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 13%;">Subtotal</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width: 70px;" title="Terceros reembolsados">Det. gastos</th>
                                                     <th style="width: 40px;"></th>
                                                 </tr>
                                             </thead>
                                             <tbody id="fr_detalle_body">
                                                 <tr id="fr-tr-detalle-vacio">
-                                                    <td colspan="6" class="text-center py-4 text-muted">Agregue al menos un ítem.</td>
+                                                    <td colspan="8" class="text-center py-4 text-muted">Agregue al menos un ítem.</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -169,82 +134,114 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                 </div>
                             </div>
 
-                            <!-- Tabla de Pagos -->
-                            <div class="px-3 pb-3">
-                                <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                    <div class="px-2 py-1 bg-light border-bottom">
-                                        <span class="x-small fw-bold text-muted"><i class="bi bi-credit-card me-1"></i>Formas de pago</span>
-                                    </div>
-                                    <div class="table-responsive" style="max-height: 180px;">
-                                        <table class="table table-sm mb-0">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th class="ps-2 py-1 small fw-bold text-muted" style="width: 40%;">Forma de pago</th>
-                                                    <th class="py-1 small fw-bold text-muted text-end" style="width: 20%;">Total</th>
-                                                    <th class="py-1 small fw-bold text-muted text-center" style="width: 15%;">Plazo</th>
-                                                    <th class="py-1 small fw-bold text-muted" style="width: 15%;">Unidad</th>
-                                                    <th style="width: 40px;"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="fr_pagos_body">
-                                                <tr class="row-fr-pago">
-                                                    <td class="ps-2">
-                                                        <select class="form-select form-select-sm border-0 bg-light" name="fp_forma_pago[]">
-                                                            <option value="">-- Seleccione --</option>
-                                                            <?php foreach ($formasPago as $fp): ?>
-                                                                <option value="<?= htmlspecialchars($fp['codigo']) ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
-                                                            <?php endforeach; ?>
-                                                        </select>
-                                                    </td>
-                                                    <td><input type="number" step="0.01" class="form-control form-control-sm border-0 bg-light text-end" name="fp_total[]" value="0.00"></td>
-                                                    <td><input type="number" class="form-control form-control-sm border-0 bg-light text-center" name="fp_plazo[]" value="0"></td>
-                                                    <td>
-                                                        <select class="form-select form-select-sm border-0 bg-light" name="fp_unidad[]">
-                                                            <option value="dias">Días</option>
-                                                            <option value="meses">Meses</option>
-                                                        </select>
-                                                    </td>
-                                                    <td></td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div class="p-1 border-top bg-light">
-                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.FR_agregarPago()">
-                                            <i class="bi bi-plus-circle me-1"></i> Agregar pago
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Pie: Información Adicional (izquierda) + Totales (derecha) -->
+                            <!-- Pie de Factura: Pestañas secundarias (Info. Adicional / Formas de pago) y Totales -->
                             <div class="p-3 border-top bg-light">
                                 <div class="row g-3">
+                                    <!-- Izquierda: Pestañas secundarias -->
                                     <div class="col-md-8">
-                                        <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                            <div class="px-2 py-1 bg-light border-bottom">
-                                                <span class="x-small fw-bold text-muted"><i class="bi bi-info-circle me-1"></i>Información Adicional</span>
+                                        <ul class="nav nav-tabs nav-tabs-sm mb-2" id="fr-subtabs-factura" role="tablist">
+                                            <li class="nav-item">
+                                                <button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#fr-subtab-info" type="button">Info. Adicional</button>
+                                            </li>
+                                            <li class="nav-item">
+                                                <button class="nav-link py-1 small" id="fr-subtab-pagos-btn" data-bs-toggle="tab" data-bs-target="#fr-subtab-pagos" type="button">Formas de pago</button>
+                                            </li>
+                                            <li class="nav-item">
+                                                <button class="nav-link py-1 small" id="fr-subtab-credito-btn" data-bs-toggle="tab" data-bs-target="#fr-subtab-credito" type="button">Crédito</button>
+                                            </li>
+                                        </ul>
+                                        <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height: 120px;">
+                                            <!-- Info Adicional -->
+                                            <div class="tab-pane fade show active" id="fr-subtab-info" role="tabpanel">
+                                                <div class="border rounded-2 overflow-hidden bg-white mt-1">
+                                                    <div class="table-responsive" style="max-height: 200px;">
+                                                        <table class="table table-sm mb-0">
+                                                            <thead class="table-light">
+                                                                <tr>
+                                                                    <th class="ps-2 py-0 small fw-bold text-muted" style="width: 40%;">Concepto</th>
+                                                                    <th class="py-0 small fw-bold text-muted" style="width: 50%;">Detalle</th>
+                                                                    <th class="py-0" style="width: 10%;"></th>
+                                                                </tr>
+                                                            </thead>
+                                                            <?php $rucProveedorSri = \App\Helpers\SriProveedorHelper::rucProveedor(); ?>
+                                                            <?php if ($rucProveedorSri !== ''): ?>
+                                                            <!-- Campo normativo fijo (Res. NAC-DGERCGC26-00000027 / Ficha v2.34 Anexo 26):
+                                                                 lo agrega el sistema al CREAR/ACTUALIZAR el documento (FacturaReembolsoService);
+                                                                 esta fila es solo la vista previa. -->
+                                                            <tbody id="fr-tbody-ruc-proveedor-preview">
+                                                                <tr class="table-light">
+                                                                    <td class="ps-2 p-0 align-middle">
+                                                                        <span class="small text-muted fst-italic"><i class="bi bi-lock-fill me-1" style="font-size:0.65rem;"></i><?= htmlspecialchars(\App\Helpers\SriProveedorHelper::CAMPO_NOMBRE) ?></span>
+                                                                    </td>
+                                                                    <td class="p-0 align-middle">
+                                                                        <span class="small text-muted fst-italic"><?= htmlspecialchars($rucProveedorSri) ?></span>
+                                                                    </td>
+                                                                    <td class="p-0 align-middle text-center">
+                                                                        <i class="bi bi-shield-check text-success" style="font-size:0.75rem;" title="Campo obligatorio del SRI: lo agrega el sistema automáticamente en el XML y el PDF"></i>
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                            <?php endif; ?>
+                                                            <tbody id="fr-tbody-info-adicional"></tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div class="p-1 border-top bg-light">
+                                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.FR_agregarInfoAdicional()">
+                                                            <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div class="table-responsive" style="max-height: 160px;">
-                                                <table class="table table-sm mb-0">
-                                                    <thead class="table-light">
-                                                        <tr>
-                                                            <th class="ps-2 py-0 small fw-bold text-muted" style="width: 40%;">Concepto</th>
-                                                            <th class="py-0 small fw-bold text-muted" style="width: 50%;">Detalle</th>
-                                                            <th class="py-0" style="width: 10%;"></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="fr-tbody-info-adicional"></tbody>
-                                                </table>
+                                            <!-- Formas de Pago -->
+                                            <div class="tab-pane fade" id="fr-subtab-pagos" role="tabpanel">
+                                                <div id="fr_pagos_body">
+                                                    <div class="row g-2 align-items-center mb-1 row-fr-pago">
+                                                        <div class="col-7">
+                                                            <div class="d-flex align-items-center gap-1">
+                                                                <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'fr-select-pago-sri', 'id_forma_pago_sri') ?>
+                                                                <select class="form-select form-select-sm border-0 bg-light" name="fp_forma_pago[]" id="fr-select-pago-sri">
+                                                                    <option value="" data-id="">-- Seleccione forma de pago --</option>
+                                                                    <?php foreach ($formasPago as $fp): ?>
+                                                                        <option value="<?= htmlspecialchars($fp['codigo']) ?>" data-id="<?= htmlspecialchars((string) $fp['id']) ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
+                                                                    <?php endforeach; ?>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-4">
+                                                            <input type="number" class="form-control form-control-sm text-end border-0 bg-light fw-bold" name="fp_total[]" step="0.01" value="0.00">
+                                                        </div>
+                                                        <div class="col-1 text-center">
+                                                            <span></span>
+                                                        </div>
+                                                        <input type="hidden" name="fp_plazo[]" value="0">
+                                                        <input type="hidden" name="fp_unidad[]" value="dias">
+                                                    </div>
+                                                </div>
+                                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none small mt-1" onclick="window.FR_agregarPago()"><i class="bi bi-plus-circle me-1"></i>Añadir pago</button>
                                             </div>
-                                            <div class="p-1 border-top bg-light">
-                                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.FR_agregarInfoAdicional()">
-                                                    <i class="bi bi-plus-circle me-1"></i> Agregar línea
-                                                </button>
+                                            <!-- Crédito SRI -->
+                                            <div class="tab-pane fade" id="fr-subtab-credito" role="tabpanel">
+                                                <div class="p-2">
+                                                    <div class="row g-2">
+                                                        <div class="col-md-6">
+                                                            <label class="x-small text-muted mb-1">Días de crédito</label>
+                                                            <input type="number" class="form-control form-control-sm" id="fr-input-dias-credito" value="0" min="0">
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="x-small text-muted mb-1">Plazo</label>
+                                                            <select class="form-select form-select-sm" id="fr-select-plazo-credito">
+                                                                <option value="dias">Días</option>
+                                                                <option value="meses">Meses</option>
+                                                                <option value="anios">Años</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
+                                    <!-- Derecha: Totales -->
                                     <div class="col-md-4">
                                         <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
@@ -268,123 +265,6 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Pestaña: Terceros reembolsados (bloque SRI <reembolsos>) -->
-                        <div class="tab-pane fade p-3" id="tab-fr-terceros" role="tabpanel">
-                            <div class="alert alert-light border py-1 px-2 mb-2" style="font-size:0.7rem;">
-                                <i class="bi bi-info-circle me-1"></i> Cada línea es un comprobante de un proveedor tercero que la empresa pagó a nombre del cliente
-                                (obligatorio para el Anexo ATS código 41). Vincule una compra ya registrada o agréguela manualmente.
-                            </div>
-                            <div class="position-relative mb-2">
-                                <input type="text" id="fr_search_tercero_compra" class="form-control form-control-sm" autocomplete="off" placeholder="Buscar compra registrada por proveedor, RUC o número...">
-                                <div id="fr_dropdown_tercero_compras" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1060; max-height:220px; overflow-y:auto;"></div>
-                            </div>
-                            <div class="border rounded-2 overflow-hidden bg-white">
-                                <div class="table-responsive" style="max-height: 240px;">
-                                    <table class="table table-sm mb-0">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th class="ps-2 py-0 small fw-bold text-muted">Proveedor</th>
-                                                <th class="py-0 small fw-bold text-muted">Documento</th>
-                                                <th class="py-0 small fw-bold text-muted text-end">Base</th>
-                                                <th class="py-0 small fw-bold text-muted text-end">Impuesto</th>
-                                                <th class="py-0" style="width: 10%;"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="fr_terceros_body">
-                                            <tr id="fr-tr-terceros-vacio">
-                                                <td colspan="5" class="text-center text-muted small py-3">Sin terceros agregados.</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div class="p-1 border-top bg-light">
-                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.FR_toggleTerceroManual()">
-                                        <i class="bi bi-pencil-square me-1"></i> Agregar manual (proveedor no registrado en Compras)
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="fr_form_tercero_manual" class="border rounded-2 p-2 mt-2 bg-light d-none">
-                                <div class="row g-1">
-                                    <div class="col-md-3">
-                                        <label class="x-small text-muted mb-0">Tipo ID proveedor</label>
-                                        <select id="fr_tercero_tipo_id" class="form-select form-select-sm">
-                                            <?php foreach ($tiposIdentificacion as $ti): ?>
-                                                <option value="<?= htmlspecialchars($ti['codigo']) ?>"><?= htmlspecialchars($ti['codigo'] . ' - ' . $ti['nombre']) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="x-small text-muted mb-0">Identificación</label>
-                                        <input type="text" id="fr_tercero_identificacion" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-5">
-                                        <label class="x-small text-muted mb-0">Razón social (referencia)</label>
-                                        <input type="text" id="fr_tercero_razon_social" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="x-small text-muted mb-0">Tipo proveedor</label>
-                                        <select id="fr_tercero_tipo_proveedor" class="form-select form-select-sm">
-                                            <option value="02">02 - Gasto</option>
-                                            <option value="01">01 - Servicios profesionales</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="x-small text-muted mb-0">Tipo comprobante</label>
-                                        <select id="fr_tercero_cod_doc" class="form-select form-select-sm">
-                                            <option value="01">01 - Factura</option>
-                                            <option value="03">03 - Liquidación de compra</option>
-                                            <option value="04">04 - Nota de crédito</option>
-                                            <option value="05">05 - Nota de débito</option>
-                                            <option value="06">06 - Guía de remisión</option>
-                                            <option value="07">07 - Comprobante de retención</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="x-small text-muted mb-0">Estab.</label>
-                                        <input type="text" id="fr_tercero_estab" maxlength="3" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="x-small text-muted mb-0">Pto. emi.</label>
-                                        <input type="text" id="fr_tercero_ptoemi" maxlength="3" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="x-small text-muted mb-0">Secuencial</label>
-                                        <input type="text" id="fr_tercero_secuencial" maxlength="9" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="x-small text-muted mb-0">Fecha emisión</label>
-                                        <input type="date" id="fr_tercero_fecha" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="x-small text-muted mb-0">Núm. autorización</label>
-                                        <input type="text" id="fr_tercero_autorizacion" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="x-small text-muted mb-0">Base imponible</label>
-                                        <input type="number" step="0.01" id="fr_tercero_base" class="form-control form-control-sm" value="0.00" oninput="window.FR_calcularIvaTerceroManual()">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="x-small text-muted mb-0">Tarifa IVA</label>
-                                        <select id="fr_tercero_tarifa_iva" class="form-select form-select-sm" onchange="window.FR_calcularIvaTerceroManual()">
-                                            <?php foreach ($tarifasIva as $t): ?>
-                                                <option value="<?= htmlspecialchars((string) $t['porcentaje_iva']) ?>" data-codigo="<?= htmlspecialchars((string) $t['codigo']) ?>"><?= htmlspecialchars((string) $t['tarifa']) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="x-small text-muted mb-0">Valor IVA (calculado)</label>
-                                        <input type="number" step="0.01" id="fr_tercero_impuesto" class="form-control form-control-sm" value="0.00" readonly>
-                                    </div>
-                                </div>
-                                <div class="mt-2">
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="window.FR_confirmarTerceroManual()">
-                                        <i class="bi bi-plus-circle me-1"></i>Agregar
-                                    </button>
-                                    <button type="button" class="btn btn-link btn-sm text-muted" onclick="window.FR_toggleTerceroManual()">Cancelar</button>
                                 </div>
                             </div>
                         </div>
@@ -513,6 +393,146 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
     </div>
 </div>
 
+<!-- ════════════════════════════════════════
+     MODAL SECUNDARIO: Terceros reembolsados (bloque SRI <reembolsos>)
+     Se abre desde el botón "Terceros" de una línea "Gasto" en el detalle.
+════════════════════════════════════════ -->
+<div class="modal fade" id="modalFRTerceros" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fs-6 fw-bold mb-0"><i class="bi bi-people-fill text-primary me-2"></i>Terceros reembolsados</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="alert alert-light border py-1 px-2 mb-2" style="font-size:0.7rem;">
+                    <i class="bi bi-info-circle me-1"></i> Cada línea es un comprobante de un proveedor tercero que la empresa pagó a nombre del cliente
+                    (obligatorio para el Anexo ATS código 41). Vincule una compra ya registrada o agréguela manualmente.
+                </div>
+                <div class="position-relative mb-2">
+                    <input type="text" id="fr_search_tercero_compra" class="form-control form-control-sm" autocomplete="off" placeholder="Buscar compra registrada por proveedor, RUC o número...">
+                    <div id="fr_dropdown_tercero_compras" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1060; max-height:220px; overflow-y:auto;"></div>
+                </div>
+                <div class="border rounded-2 overflow-hidden bg-white">
+                    <div class="table-responsive" style="max-height: 240px;">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-2 py-0 small fw-bold text-muted">Proveedor</th>
+                                    <th class="py-0 small fw-bold text-muted">Documento</th>
+                                    <th class="py-0 small fw-bold text-muted text-end">Base</th>
+                                    <th class="py-0 small fw-bold text-muted text-end">Impuesto</th>
+                                    <th class="py-0" style="width: 10%;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="fr_terceros_body">
+                                <tr id="fr-tr-terceros-vacio">
+                                    <td colspan="5" class="text-center text-muted small py-3">Sin terceros agregados.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-1 border-top bg-light">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.FR_toggleTerceroManual()">
+                            <i class="bi bi-pencil-square me-1"></i> Agregar manual (proveedor no registrado en Compras)
+                        </button>
+                    </div>
+                </div>
+                <div id="fr_form_tercero_manual" class="border rounded-2 p-2 mt-2 bg-light d-none">
+                    <div class="row g-1">
+                        <!-- Fila 1: Fecha emisión, Tipo ID, Identificación, Tipo proveedor -->
+                        <div class="col-md-3">
+                            <label class="x-small text-muted mb-0">Fecha emisión</label>
+                            <input type="date" id="fr_tercero_fecha" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="x-small text-muted mb-0">Tipo ID proveedor</label>
+                            <select id="fr_tercero_tipo_id" class="form-select form-select-sm">
+                                <?php foreach ($tiposIdentificacion as $ti): ?>
+                                    <option value="<?= htmlspecialchars($ti['codigo']) ?>"><?= htmlspecialchars($ti['codigo'] . ' - ' . $ti['nombre']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="x-small text-muted mb-0">Identificación</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="fr_tercero_identificacion" class="form-control form-control-sm">
+                                <span class="input-group-text bg-white p-1 border-start-0" id="fr_tercero_sriSpinnerWrap" style="display:none;">
+                                    <span class="spinner-border spinner-border-sm text-secondary" style="width:0.8rem;height:0.8rem;"></span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="x-small text-muted mb-0">Tipo proveedor</label>
+                            <select id="fr_tercero_tipo_proveedor" class="form-select form-select-sm">
+                                <option value="02">02 - Gasto</option>
+                                <option value="01">01 - Servicios profesionales</option>
+                            </select>
+                        </div>
+
+                        <!-- Razón social (referencia, no viene del XSD) -->
+                        <div class="col-12">
+                            <label class="x-small text-muted mb-0">Razón social (referencia) <span id="fr_tercero_sriBadge" class="badge d-none"></span></label>
+                            <input type="text" id="fr_tercero_razon_social" class="form-control form-control-sm">
+                        </div>
+
+                        <!-- Fila 2: Tipo comprobante, No. documento, Núm. autorización -->
+                        <div class="col-md-3">
+                            <label class="x-small text-muted mb-0">Tipo comprobante</label>
+                            <select id="fr_tercero_cod_doc" class="form-select form-select-sm">
+                                <option value="01">01 - Factura</option>
+                                <option value="02">02 - Nota de venta</option>
+                                <option value="03">03 - Liquidación de compra</option>
+                                <option value="04">04 - Nota de crédito</option>
+                                <option value="05">05 - Nota de débito</option>
+                                <option value="06">06 - Guía de remisión</option>
+                                <option value="07">07 - Comprobante de retención</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="x-small text-muted mb-0">No. documento</label>
+                            <input type="text" id="fr_tercero_numero_doc" maxlength="17" placeholder="000-000-000000000" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="x-small text-muted mb-0">Núm. autorización</label>
+                            <input type="text" id="fr_tercero_autorizacion" class="form-control form-control-sm">
+                        </div>
+
+                        <!-- Fila 3: Tarifa IVA, Base imponible, Valor IVA -->
+                        <div class="col-md-4">
+                            <label class="x-small text-muted mb-0">Tarifa IVA</label>
+                            <select id="fr_tercero_tarifa_iva" class="form-select form-select-sm" onchange="window.FR_calcularIvaTerceroManual()">
+                                <?php foreach ($tarifasIva as $t): ?>
+                                    <option value="<?= htmlspecialchars((string) $t['porcentaje_iva']) ?>" data-codigo="<?= htmlspecialchars((string) $t['codigo']) ?>"><?= htmlspecialchars((string) $t['tarifa']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="x-small text-muted mb-0">Base imponible</label>
+                            <input type="number" step="0.01" id="fr_tercero_base" class="form-control form-control-sm" value="0.00" oninput="window.FR_calcularIvaTerceroManual()">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="x-small text-muted mb-0">Valor IVA (calculado)</label>
+                            <input type="number" step="0.01" id="fr_tercero_impuesto" class="form-control form-control-sm" value="0.00" readonly>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="window.FR_confirmarTerceroManual()">
+                            <i class="bi bi-plus-circle me-1"></i>Agregar
+                        </button>
+                        <button type="button" class="btn btn-link btn-sm text-muted" onclick="window.FR_toggleTerceroManual()">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-primary px-4" data-bs-dismiss="modal">
+                    <i class="bi bi-check2-circle me-1"></i> Listo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .modal-fr .x-small { font-size: 0.72rem; }
     .modal-fr .dropdown-predictivo { z-index: 2000 !important; }
@@ -521,3 +541,30 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
     .modal-fr label { font-size: 0.85rem; font-weight: 600; color: #495057; margin-bottom: 3px !important; }
     #modalFR.fr-lectura .fr-edit-only { display: none !important; }
 </style>
+
+<script>
+(function () {
+    // app.css fuerza globalmente `.modal { z-index:5060 !important }` y
+    // `.modal-backdrop { z-index:5055 !important }`. Para que "Terceros reembolsados"
+    // se abra ENCIMA de la Factura de Reembolso hay que subirlo por encima de 5060
+    // (mismo patrón que app/views/modulos/proformas/modal_proforma.php).
+    var Z_SUBMODAL = 5080;
+    var Z_BACKDROP = 5075;
+    var SUBMODALES = ['modalFRTerceros'];
+
+    document.addEventListener('show.bs.modal', function (ev) {
+        if (SUBMODALES.indexOf(ev.target.id) === -1) return;
+        ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
+        setTimeout(function () {
+            var bds = document.querySelectorAll('.modal-backdrop');
+            if (bds.length) bds[bds.length - 1].style.setProperty('z-index', String(Z_BACKDROP), 'important');
+        }, 0);
+    });
+
+    document.addEventListener('hidden.bs.modal', function (ev) {
+        if (SUBMODALES.indexOf(ev.target.id) !== -1 && document.querySelectorAll('.modal.show').length > 0) {
+            document.body.classList.add('modal-open');
+        }
+    });
+})();
+</script>

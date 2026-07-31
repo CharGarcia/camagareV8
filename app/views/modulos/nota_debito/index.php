@@ -273,6 +273,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
     window.nd_dec_p = <?= (int)($empresa['decimales_precio'] ?? 2) ?>;
     window.ND_STORAGE_KEY = 'nd_borrador_' + <?= (int)($_SESSION['id_empresa'] ?? 0) ?> + '_' + <?= (int)($_SESSION['id_usuario'] ?? 0) ?>;
+    // Config de empresa que necesita nota_debito.js (forma de pago por defecto).
+    // Si la página ya declaró EMPRESA_CONFIG (ej. embebida en Factura de Venta), no se pisa.
+    window.EMPRESA_CONFIG = window.EMPRESA_CONFIG || {
+        id_forma_pago_sri_def: <?= isset($empresa['id_forma_pago_sri_def']) && $empresa['id_forma_pago_sri_def'] !== null ? (int)$empresa['id_forma_pago_sri_def'] : 'null' ?>
+    };
     window.ND_ORDEN_COL = <?= json_encode($ordenCol ?? 'fecha_emision') ?>;
     window.ND_ORDEN_DIR = <?= json_encode($ordenDir ?? 'DESC') ?>;
     window.currentSort  = window.ND_ORDEN_COL;

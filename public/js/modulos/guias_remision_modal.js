@@ -466,7 +466,7 @@
                     if (!d.ok || !d.data.length) { dd.style.display = 'none'; return; }
                     dd.innerHTML = d.data.map(c =>
                         `<div class="p-2 border-bottom" style="cursor:pointer"
-                              onmousedown="GR_seleccionarCliente(${c.id},'${GR_esc(c.nombre)}','${GR_esc(c.identificacion||'')}','${GR_esc(c.direccion||'')}')">
+                              onmousedown="GR_seleccionarCliente(${c.id},'${GR_esc(c.nombre)}','${GR_esc(c.identificacion||'')}','${GR_esc(c.direccion||'')}','${GR_esc(c.email||'')}')">
                             <strong>${c.nombre}</strong> <small class="text-muted ms-2">${c.identificacion||''}</small>
                         </div>`
                     ).join('');
@@ -475,7 +475,7 @@
         }, 250);
     };
 
-    window.GR_seleccionarCliente = function (id, nombre, identificacion, direccion) {
+    window.GR_seleccionarCliente = function (id, nombre, identificacion, direccion, email) {
         document.getElementById('gr-id-cliente').value    = id;
         document.getElementById('gr-search-cliente').value = nombre;
         document.getElementById('gr-lbl-cliente-ruc').textContent = identificacion;
@@ -483,6 +483,14 @@
         document.getElementById('gr-info-cliente').classList.remove('d-none');
         if (!document.getElementById('gr-destino').value) document.getElementById('gr-destino').value = direccion || '';
         document.getElementById('gr-dropdown-cliente').style.display = 'none';
+
+        // Campos de la pestaña SRI (usados como default al "Enviar por correo"): solo se
+        // llenaban al cargar el documento; si se cambiaba el cliente en la misma edición
+        // quedaban con los datos del cliente anterior.
+        const elCorreoSri = document.getElementById('gr-sri-correo-cliente');
+        if (elCorreoSri) elCorreoSri.value = email || '';
+        const elIdentifSri = document.getElementById('gr-sri-identificacion-cliente');
+        if (elIdentifSri) elIdentifSri.value = identificacion || '';
     };
 
     window.GR_agregarLinea = function (data) {

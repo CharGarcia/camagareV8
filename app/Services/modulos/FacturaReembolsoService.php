@@ -199,7 +199,9 @@ class FacturaReembolsoService
             }
 
             $this->repository->deleteInfoAdicional($id);
-            foreach ($data['info_adicional'] ?? [] as $ia) {
+            $infoAdicional = is_array($data['info_adicional'] ?? null) ? $data['info_adicional'] : [];
+            $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+            foreach ($infoAdicional as $ia) {
                 $this->repository->insertInfoAdicional([
                     'id_factura_reembolso' => $id,
                     'nombre'               => $ia['nombre'] ?? '',

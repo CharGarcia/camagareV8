@@ -49,6 +49,18 @@ class FacturaReembolsoController extends BaseModuloController
         $empresaData  = $empresaModel->getPorId($idEmpresa);
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
 
+        // Fusionar config del establecimiento principal (incluye id_forma_pago_sri_def,
+        // usado para preseleccionar la forma de pago por defecto en la pestaña de pagos).
+        if (!empty($establecimientos)) {
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                if ($estConfig) {
+                    $empresaData = array_merge($empresaData ?? [], $estConfig);
+                }
+            } catch (\Throwable $e) {}
+        }
+
         // Solo se ofrecen como Serie los puntos de emisión que ya tienen
         // configurado el secuencial inicial para "Facturas de reembolso"
         // (Empresa → Secuenciales); sin eso no se puede emitir válidamente.
@@ -465,6 +477,32 @@ class FacturaReembolsoController extends BaseModuloController
     }
 
     /**
+     * Consulta RUC/Cédula al servicio de identificación SRI (reutilizable, mismo
+     * patrón que Proveedores/Clientes), para autocompletar la razón social del
+     * tercero reembolsado al darlo de alta manualmente.
+     */
+    public function consultarSriAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+        $identificacion = trim($_POST['identificacion'] ?? $_GET['identificacion'] ?? '');
+        if ($identificacion === '') {
+            echo json_encode(['ok' => false, 'error' => 'Identificación vacía.']);
+            exit;
+        }
+        try {
+            $svc    = new \App\Services\SriIdentificationService();
+            $result = $svc->consultar($identificacion, (int) $_SESSION['id_empresa']);
+            echo json_encode($result);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Typeahead de compras ya registradas, para autocompletar un tercero
      * reembolsado: trae el documento del proveedor + el detalle de impuestos
      * agregado, listo para guardarse como reembolsoDetalle.
@@ -534,9 +572,22 @@ class FacturaReembolsoController extends BaseModuloController
                 exit;
             }
 
-            $builder = new \App\Services\modulos\AsientoBuilderService();
-            $detalles = $builder->generarAsientoFacturaReembolso($idEmpresa, $id);
-            echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
+            // Vista previa del asiento (documento aún no autorizado, sin guardar todavía):
+            // si no cuadra (p. ej. los terceros no coinciden con las líneas de "Gasto" del
+            // detalle), no se muestra como error — el asiento real se genera recién al
+            // autorizar en el SRI (con reintentos silenciosos, ver SriEnvioService) y
+            // puede corregirse/generarse manualmente después desde Contabilidad una vez
+            // revisado el balance.
+            try {
+                $builder = new \App\Services\modulos\AsientoBuilderService();
+                $detalles = $builder->generarAsientoFacturaReembolso($idEmpresa, $id);
+                echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
+            } catch (\Throwable $ePreview) {
+                echo json_encode([
+                    'ok' => true, 'detalles' => [], 'es_guardado' => false, 'pendiente' => true,
+                    'mensaje' => 'El asiento se generará al autorizar el documento en el SRI.',
+                ]);
+            }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -582,6 +633,200 @@ class FacturaReembolsoController extends BaseModuloController
 
         $logs = (new \App\models\SriEnvioLog())->getPorComprobante('factura_reembolso', $id, $idEmpresa);
         echo json_encode(['ok' => true, 'data' => $logs]);
+        exit;
+    }
+
+    /**
+     * Arma el arreglo de empresa enriquecido con la configuración del
+     * establecimiento (igual patrón que Nota de Débito) y devuelve también
+     * la dirección del establecimiento para el XML/PDF.
+     *
+     * @return array{0: array, 1: ?string} [empresa, dirEstablecimiento]
+     */
+    private function construirEmpresaComprobante(int $idEmpresa, array $fr): array
+    {
+        $empresaModel = new Empresa();
+        $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
+        $dirEstablecimiento = null;
+
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+
+        $est = null;
+        if (!empty($fr['id_establecimiento'])) {
+            foreach ($establecimientos as $e) {
+                if ((int) $e['id'] === (int) $fr['id_establecimiento']) { $est = $e; break; }
+            }
+        }
+        if (!$est && !empty($establecimientos)) $est = $establecimientos[0];
+
+        if ($est) {
+            $dirEstablecimiento = $est['direccion'] ?? null;
+            if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+            if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+            if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+            if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int) $est['id']);
+                if ($estConfig) {
+                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
+                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+                    $empresa = array_merge($empresa, $estConfig);
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return [$empresa, $dirEstablecimiento];
+    }
+
+    /** Detalles+impuestos, terceros+impuestos, pagos e info adicional de una factura de reembolso. */
+    private function cargarDatosCompletos(int $id): array
+    {
+        $detalles = $this->repository->getDetalles($id);
+        foreach ($detalles as &$d) {
+            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+        }
+        unset($d);
+
+        $terceros = $this->repository->getTerceros($id);
+        foreach ($terceros as &$t) {
+            $t['impuestos'] = $this->repository->getImpuestosTercero((int) $t['id']);
+        }
+        unset($t);
+
+        return [
+            $detalles,
+            $terceros,
+            $this->repository->getPagos($id),
+            $this->repository->getInfoAdicional($id),
+        ];
+    }
+
+    public function exportPdfDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $fr = $this->repository->getPorId($id);
+            if (!$fr || (int) $fr['id_empresa'] !== $idEmpresa) {
+                die('Factura de reembolso no encontrada');
+            }
+
+            [$detalles, $terceros, $pagos, $infoAdicional] = $this->cargarDatosCompletos($id);
+            [$empresa] = $this->construirEmpresaComprobante($idEmpresa, $fr);
+
+            $pdfService = new \App\Services\modulos\FacturaReembolsoPdfService();
+            $pdfService->generar($fr, $detalles, $terceros, $pagos, $infoAdicional, $empresa, 'D');
+        } catch (\Throwable $e) {
+            die('Error al generar PDF: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    public function exportXmlDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $fr = $this->repository->getPorId($id);
+            if (!$fr || (int) $fr['id_empresa'] !== $idEmpresa) {
+                die('Factura de reembolso no encontrada');
+            }
+
+            $numero = ($fr['establecimiento'] ?? '001') . '-' . ($fr['punto_emision'] ?? '001') . '-' . str_pad((string) $fr['secuencial'], 9, '0', STR_PAD_LEFT);
+
+            if (!empty($fr['detalle_xml'])) {
+                header('Content-Type: application/xml; charset=UTF-8');
+                header('Content-Disposition: attachment; filename="factura_reembolso_' . $numero . '.xml"');
+                echo $fr['detalle_xml'];
+                exit;
+            }
+
+            [$detalles, $terceros, $pagos, $infoAdicional] = $this->cargarDatosCompletos($id);
+            [$empresa, $dirEstablecimiento] = $this->construirEmpresaComprobante($idEmpresa, $fr);
+
+            $xmlService = new \App\Services\Xml\XmlFacturaReembolsoService();
+            $xmlString  = $xmlService->generar($fr, $detalles, $terceros, $pagos, $infoAdicional, $empresa, $dirEstablecimiento);
+
+            try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
+
+            header('Content-Type: application/xml; charset=UTF-8');
+            header('Content-Disposition: attachment; filename="factura_reembolso_' . $numero . '.xml"');
+            echo $xmlString;
+        } catch (\Throwable $e) {
+            die('Error al generar XML: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    public function enviarCorreoAjax(): void
+    {
+        ob_start();
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) {
+            ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $fr = $this->repository->getPorId($id);
+            if (!$fr || (int) ($fr['id_empresa'] ?? 0) !== $idEmpresa) {
+                ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'Factura de reembolso no encontrada.']);
+                exit;
+            }
+            if (($fr['estado'] ?? '') !== 'autorizado') {
+                ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'La factura de reembolso debe estar autorizada para enviar el correo.']);
+                exit;
+            }
+
+            [$detalles, $terceros, $pagos, $infoAdicional] = $this->cargarDatosCompletos($id);
+            [$empresa, $dirEstablecimiento] = $this->construirEmpresaComprobante($idEmpresa, $fr);
+
+            $pdfService = new \App\Services\modulos\FacturaReembolsoPdfService();
+            $pdfString  = $pdfService->generarBytes($fr, $detalles, $terceros, $pagos, $infoAdicional, $empresa);
+
+            $xmlString = $fr['detalle_xml'] ?? '';
+            if (empty($xmlString)) {
+                $xmlService = new \App\Services\Xml\XmlFacturaReembolsoService();
+                $xmlString  = $xmlService->generar($fr, $detalles, $terceros, $pagos, $infoAdicional, $empresa, $dirEstablecimiento);
+                try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
+            }
+
+            $numAut         = $fr['numero_autorizacion'] ?? $fr['clave_acceso'] ?? '';
+            $correosDestino = trim($_POST['correos'] ?? '');
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'factura_reembolso', $fr, $xmlString, $pdfString, $numAut, true, $correosDestino);
+
+            ob_end_clean();
+            if ($enviado) {
+                $db = \App\core\Database::getConnection();
+                $db->prepare("UPDATE factura_reembolso_cabecera SET estado_correo = 'enviado' WHERE id = ?")->execute([$id]);
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración o el correo del destinatario.']);
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
         exit;
     }
 

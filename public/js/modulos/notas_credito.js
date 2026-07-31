@@ -591,6 +591,14 @@
         // Correo del cliente como información adicional (fila fija)
         NC_actualizarCorreoCliente(c.email || '');
 
+        // Campos de la pestaña SRI (usados como default al "Enviar por correo"): solo se
+        // llenaban al cargar el documento; si se cambiaba el cliente en la misma edición
+        // quedaban con los datos del cliente anterior.
+        const elCorreoSri = document.getElementById('nc-sri-correo-cliente');
+        if (elCorreoSri) elCorreoSri.value = c.email || '';
+        const elIdentifSri = document.getElementById('nc-sri-identificacion-cliente');
+        if (elIdentifSri) elIdentifSri.value = c.identificacion || '';
+
         // Habilitar el documento a modificar
         NC_setFacturaHabilitada(true);
 

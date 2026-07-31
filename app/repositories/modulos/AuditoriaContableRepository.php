@@ -359,15 +359,34 @@ class AuditoriaContableRepository extends BaseRepository
      */
     private function sqlDocumentoInfo(string $origen): array
     {
+        // Serie SRI estándar (3 columnas: establecimiento-punto_emision-secuencial).
         $serie   = "CONCAT(d.establecimiento,'-',d.punto_emision,'-',d.secuencial)";
+        // Serie interna de Consignaciones en Venta y sus documentos derivados (2 columnas:
+        // serie-secuencial; NO tienen establecimiento/punto_emision como número real, aunque
+        // algunas de sus tablas conserven esas columnas sin usar — ver ConsignacionVentaService,
+        // RetornoCvService y CambioProductoCvService, que arman el número así).
+        $serieCv = "CONCAT(d.serie,'-',d.secuencial)";
         $joinCli = 'LEFT JOIN clientes e ON e.id = d.id_cliente';
         $joinPrv = 'LEFT JOIN proveedores e ON e.id = d.id_proveedor';
 
         return match ($origen) {
             // Documentos de cliente con serie estándar
-            'factura_venta', 'nota_credito', 'retencion_venta', 'consignacion_venta',
-            'recibo_venta', 'retorno_cv', 'cambio_producto_cv', 'FACTURACION_CV' => [
+            'factura_venta', 'nota_credito', 'retencion_venta', 'recibo_venta' => [
                 'numero' => $serie, 'entidad_join' => $joinCli, 'entidad' => 'e.nombre',
+            ],
+            // Consignaciones en Venta y sus documentos derivados: serie interna (2 columnas).
+            'consignacion_venta', 'retorno_cv', 'cambio_producto_cv' => [
+                'numero' => $serieCv, 'entidad_join' => $joinCli, 'entidad' => 'e.nombre',
+            ],
+            // Facturación de Consignaciones: la tabla puente (consignaciones_facturas) NO tiene
+            // columnas de serie SRI propias ni id_cliente directo; el número visible es el texto
+            // numero_factura (de la factura de venta ya generada) y el cliente se resuelve vía la
+            // consignación de origen (id_consignacion → consignaciones_ventas.id_cliente).
+            'FACTURACION_CV' => [
+                'numero' => "NULLIF(d.numero_factura,'')",
+                'entidad_join' => 'LEFT JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion '
+                                . 'LEFT JOIN clientes e ON e.id = cv.id_cliente',
+                'entidad' => 'e.nombre',
             ],
             // Compras guarda la serie del proveedor en columnas *_prov
             'compra' => [
@@ -377,14 +396,15 @@ class AuditoriaContableRepository extends BaseRepository
             'liquidacion_compra', 'retencion_compra' => [
                 'numero' => $serie, 'entidad_join' => $joinPrv, 'entidad' => 'e.razon_social',
             ],
-            // Ingresos: cliente o, si no hay, el texto libre "recibo de"
+            // Ingresos: número propio del módulo (editable, no es serie SRI), con respaldo a la
+            // serie SRI si viniera vacío. Entidad: cliente o, si no hay, el texto libre "recibo de".
             'ingreso' => [
-                'numero' => $serie, 'entidad_join' => $joinCli,
+                'numero' => "COALESCE(NULLIF(d.numero_ingreso,''), $serie)", 'entidad_join' => $joinCli,
                 'entidad' => 'COALESCE(e.nombre, d.recibo_de)',
             ],
-            // Egresos: puede ser a proveedor o a empleado
+            // Egresos: número propio del módulo, con el mismo respaldo. Puede ser a proveedor o a empleado.
             'egreso' => [
-                'numero' => $serie,
+                'numero' => "COALESCE(NULLIF(d.numero_egreso,''), $serie)",
                 'entidad_join' => 'LEFT JOIN proveedores e ON e.id = d.id_proveedor '
                                 . 'LEFT JOIN empleados em ON em.id = d.id_empleado',
                 'entidad' => 'COALESCE(e.razon_social, em.nombres_apellidos)',
@@ -431,8 +451,13 @@ class AuditoriaContableRepository extends BaseRepository
         return $hallazgos;
     }
 
-    /** @return array<int,array{numero:?string,entidad:?string}> indexado por id de documento */
-    private function getDatosDocumentos(string $origen, array $ids): array
+    /**
+     * @return array<int,array{numero:?string,entidad:?string}> indexado por id de documento
+     * Pública: la usa también AuditoriaContableService para resolver el número de documento
+     * (serie-secuencial) en los mensajes de las acciones masivas (eliminar huérfanos, regenerar
+     * lote), en vez de mostrar el id interno crudo.
+     */
+    public function getDatosDocumentos(string $origen, array $ids): array
     {
         $ids = array_values(array_filter(array_map('intval', $ids)));
         if (empty($ids) || !$this->esOrigenValido($origen)) {

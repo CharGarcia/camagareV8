@@ -29,7 +29,8 @@ class SincronizadorAsientosService
                 $t['nombre'],
                 $t['dondeConfigurar'],
                 $t['tablaVerif'],
-                $t['colAsiento']
+                $t['colAsiento'],
+                $t['colsDoc'] ?? []
             );
         }
 
@@ -181,6 +182,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'ventas_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
         // 1b. Recibos de Venta (espejo de la factura, reusa el concepto 'ventas_factura').
@@ -202,6 +204,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'recibos_venta_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
         // 2. Liquidaciones de Compra
@@ -219,6 +222,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'liquidaciones_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
         // 3. Compras (no tiene columna estado)
@@ -232,6 +236,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'compras_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento_prov', 'punto_emision_prov', 'secuencial_prov'],
         ];
 
         // 4. Notas de Crédito
@@ -249,6 +254,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'notas_credito_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
         // 5. Retenciones en Ventas (no se autorizan en SRI: solo se filtra por asiento faltante)
@@ -266,6 +272,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'retencion_venta_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
         // 5b. Retenciones en Compras: mismo criterio que facturas/NC/liquidaciones, solo se
@@ -284,6 +291,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'retencion_compra_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
         // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro
@@ -301,6 +309,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
             'tablaVerif' => 'ingresos_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['numero_ingreso'],
         ];
 
         // 7. Egresos (pagos): contrapartida del concepto + formas de pago
@@ -318,6 +327,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
             'tablaVerif' => 'egresos_cabecera',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['numero_egreso'],
         ];
 
         // 7b. Consignaciones en Ventas (reclasificación de inventario a costo).
@@ -336,6 +346,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Configuración Contable (Consignaciones en Ventas)',
             'tablaVerif' => 'consignaciones_ventas',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['serie', 'secuencial'],
         ];
 
         // 7c. Retornos de Consignaciones en Ventas (devolución del cliente: entrada de inventario).
@@ -354,6 +365,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Configuración Contable (Retornos de Consignaciones)',
             'tablaVerif' => 'retornos_cv',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['serie', 'secuencial'],
         ];
 
         // 7c-bis. Cambios de productos (devuelve/entrega): asiento a costo del inventario movido.
@@ -372,6 +384,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Configuración Contable (Cambios de productos)',
             'tablaVerif' => 'cambios_producto_cv',
             'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['serie', 'secuencial'],
         ];
 
         // 7d. Facturación de Consignaciones (asiento INVERSO del reingreso de inventario).
@@ -390,6 +403,7 @@ class SincronizadorAsientosService
             'dondeConfigurar' => 'Configuración Contable (Consignaciones en Ventas)',
             'tablaVerif' => 'consignaciones_facturas',
             'colAsiento' => 'id_asiento_reingreso',
+            'colsDoc' => ['numero_factura'],
         ];
 
         return $trabajos;
@@ -560,8 +574,12 @@ class SincronizadorAsientosService
      *                                esto se contarían como generados.
      * @param string $colAsiento      Columna que enlaza el documento con su asiento. Casi todos usan
      *                                'id_asiento_contable'; Facturación CV usa 'id_asiento_reingreso'.
+     * @param array  $colsDoc         Columna(s) de $tablaVerif que forman el número de documento visible
+     *                                al usuario (ej. ['establecimiento','punto_emision','secuencial']),
+     *                                para mostrar "001-001-000000123" en los avisos en vez del id interno.
+     *                                Vacío = se muestra "#id" (no hay columna de número conocida).
      */
-    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados', ?string $tablaVerif = null, string $colAsiento = 'id_asiento_contable'): void
+    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados', ?string $tablaVerif = null, string $colAsiento = 'id_asiento_contable', array $colsDoc = []): void
     {
         try {
             $st = $db->prepare($sql);
@@ -620,10 +638,21 @@ class SincronizadorAsientosService
 
         $this->generados += count($intentados) - count($sinAsiento);
 
+        // Resuelve el número de documento (serie-secuencial) de todos los ids que van a aparecer
+        // en algún aviso, para mostrar "001-001-000000123" en vez de un id interno sin significado.
+        $idsParaNumero = $sinAsiento;
+        foreach ($errores as $idsFallidos) {
+            $idsParaNumero = array_merge($idsParaNumero, $idsFallidos);
+        }
+        $idsParaNumero = array_unique($idsParaNumero);
+        $numeros = ($tablaVerif !== null && !empty($colsDoc))
+            ? $this->resolverNumerosDocumento($db, $tablaVerif, $colsDoc, $idsParaNumero)
+            : [];
+
         foreach ($errores as $motivo => $idsFallidos) {
             $n = count($idsFallidos);
             $this->warnings[] = "No se pudieron generar {$n} asiento(s) contable(s) en {$nombreModulo}. "
-                . "Motivo: «{$motivo}». Documento(s): " . $this->listarIds($idsFallidos) . ". "
+                . "Motivo: «{$motivo}». Documento(s): " . $this->listarDocumentos($idsFallidos, $numeros) . ". "
                 . "Si es por cuentas sin configurar, revise {$dondeConfigurar}; "
                 . "puede reintentar desde Auditoría Contable (Regenerar) o al volver a abrir Estados Financieros.";
 
@@ -633,7 +662,7 @@ class SincronizadorAsientosService
         if (!empty($sinAsiento)) {
             $n = count($sinAsiento);
             $this->warnings[] = "Quedaron {$n} documento(s) SIN asiento contable en {$nombreModulo}: "
-                . $this->listarIds($sinAsiento) . ". No se generó ninguna línea contable "
+                . $this->listarDocumentos($sinAsiento, $numeros) . ". No se generó ninguna línea contable "
                 . "(normalmente porque faltan cuentas por configurar): revise {$dondeConfigurar}. "
                 . "Al volver a abrir Estados Financieros se reintentará automáticamente.";
 
@@ -641,12 +670,47 @@ class SincronizadorAsientosService
         }
     }
 
-    /** Formatea una lista de ids para los avisos: "#3, #5, #8 y 9 más". */
-    private function listarIds(array $ids, int $max = 5): string
+    /**
+     * Lee, para un lote de ids, el número de documento visible al usuario (serie-secuencial),
+     * concatenando las columnas indicadas (ej. establecimiento-punto_emision-secuencial). Las
+     * partes vacías se omiten; si ninguna columna tiene valor, el id se resuelve como "" (el
+     * llamador cae a "#id"). Falla en silencio (devuelve []) si la tabla/columna no existe.
+     */
+    private function resolverNumerosDocumento(\PDO $db, string $tabla, array $cols, array $ids): array
+    {
+        if (empty($ids)) return [];
+        // $tabla y $cols son literales del propio código (no entrada de usuario) → seguros de interpolar.
+        $colsSql = implode(', ', $cols);
+        $in = implode(',', array_map('intval', $ids));
+        try {
+            $st = $db->query("SELECT id, {$colsSql} FROM {$tabla} WHERE id IN ({$in})");
+            $out = [];
+            foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                $partes = [];
+                foreach ($cols as $c) {
+                    $v = trim((string)($row[$c] ?? ''));
+                    if ($v !== '') $partes[] = $v;
+                }
+                $out[(int)$row['id']] = implode('-', $partes);
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            // Columna inexistente (migración pendiente) u otro error: se omite sin romper el aviso.
+            return [];
+        }
+    }
+
+    /** Formatea una lista de ids para los avisos, mostrando el número de documento si se conoce
+     *  (ej. "001-001-000000123, 001-001-000000456 y 9 más") y cayendo a "#id" si no. */
+    private function listarDocumentos(array $ids, array $numeros, int $max = 5): string
     {
         $muestra = array_slice($ids, 0, $max);
-        $txt     = '#' . implode(', #', $muestra);
-        $resto   = count($ids) - count($muestra);
+        $etiquetas = array_map(function ($id) use ($numeros) {
+            $num = trim((string)($numeros[$id] ?? ''));
+            return $num !== '' ? $num : ('#' . $id);
+        }, $muestra);
+        $txt   = implode(', ', $etiquetas);
+        $resto = count($ids) - count($muestra);
         return $resto > 0 ? $txt . ' y ' . $resto . ' más' : $txt;
     }
 

@@ -96,6 +96,14 @@ class ComprasService
 
         $compra['egresos_vinculados'] = $this->repository->getEgresosVinculados($id);
 
+        // Detalle de "Factura de Reembolso" recibida (bloque <reembolsos> del XML, solo si aplica).
+        $terceros = $this->repository->getReembolsoTerceros($id);
+        foreach ($terceros as &$t) {
+            $t['impuestos'] = $this->repository->getImpuestosReembolsoTercero((int) $t['id']);
+        }
+        unset($t);
+        $compra['terceros_reembolso'] = $terceros;
+
         return $compra;
     }
 
@@ -390,6 +398,16 @@ class ComprasService
             throw new \Exception('Esta compra proviene de una migración y no puede editarse.');
         }
 
+        // Factura de Reembolso recibida (codDocReembolso=41): el sustento tributario
+        // SIEMPRE es código 08, sin importar lo que el usuario intente cambiar en el
+        // formulario (el JS ya bloquea el selector; esto es el refuerzo del servidor).
+        if ((string) ($cabecera['cod_doc_reembolso'] ?? '') === '41') {
+            $idSustento08 = $this->getSustentoIdByCodigo('08');
+            if ($idSustento08) {
+                $data['id_sustento_tributario'] = $idSustento08;
+            }
+        }
+
         $this->rules->validar($data);
         $this->verificarSecuencialDuplicado($data, $id);
         
@@ -498,6 +516,15 @@ class ComprasService
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
+    }
+
+    private function getSustentoIdByCodigo(string $codigo): ?int
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT id FROM sustento_tributario WHERE codigo = ? AND status = 1 LIMIT 1");
+        $st->execute([$codigo]);
+        $res = $st->fetch();
+        return $res ? (int) $res['id'] : null;
     }
 
     private function guardarDetalles(int $idCompra, array $detalles, int $idEmpresa, int $idProveedor, int $idUsuario): void

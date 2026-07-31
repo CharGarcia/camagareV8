@@ -4,14 +4,17 @@ namespace App\services\modulos;
 
 use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\SuscripcionesRepository;
+use App\repositories\SecuencialRepository;
 
 class EmpresaService
 {
     private $repository;
+    private SecuencialRepository $secuencialRepository;
 
     public function __construct()
     {
         $this->repository = new EmpresaRepository();
+        $this->secuencialRepository = new SecuencialRepository();
     }
 
     public function getData(int $idEmpresa): array
@@ -651,6 +654,17 @@ class EmpresaService
             if (is_numeric($key) && (int) $key > 0) {
                 $this->repository->updateSecuencialById((int) $key, $nombre, $valor, $idEmpresa);
             } else {
+                // Tipo nuevo en este punto: bloquear si comparte codDoc SRI con un tipo
+                // ya configurado aquí (ej. Facturas de venta / Facturas de reembolso son
+                // ambas codDoc=01 — compartir punto duplicaría el número de documento).
+                $conflicto = $this->secuencialRepository->getConflictoCodDoc($idPunto, $nombre, $idEmpresa);
+                if ($conflicto !== null) {
+                    throw new \Exception(
+                        "No se puede configurar \"{$nombre}\" en este punto de emisión: ya tiene configurado " .
+                        "\"{$conflicto}\", que ante el SRI es el mismo tipo de comprobante (mismo codDoc). " .
+                        "Compartir el punto duplicaría el número de documento entre ambos. Use una serie distinta."
+                    );
+                }
                 $this->repository->updateSecuencial($idPunto, $nombre, $valor, $idEmpresa);
             }
         }

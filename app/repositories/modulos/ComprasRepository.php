@@ -365,6 +365,26 @@ class ComprasRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // FACTURA DE REEMBOLSO RECIBIDA (bloque <reembolsos> del XML, codDocReembolso=41)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function getReembolsoTerceros(int $idCompra): array
+    {
+        return $this->query(
+            "SELECT * FROM compras_reembolso_terceros WHERE id_compra = ? AND eliminado = false ORDER BY id ASC",
+            [$idCompra]
+        )->fetchAll();
+    }
+
+    public function getImpuestosReembolsoTercero(int $idCompraTercero): array
+    {
+        return $this->query(
+            "SELECT * FROM compras_reembolso_terceros_impuestos WHERE id_compra_tercero = ?",
+            [$idCompraTercero]
+        )->fetchAll();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // RETENCIONES
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -584,6 +604,70 @@ class ComprasRepository extends BaseRepository
     public function deleteInfoAdicional(int $idCompra): void
     {
         $this->query("DELETE FROM compras_adicional WHERE id_compra = ?", [$idCompra]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // INSERTS — FACTURA DE REEMBOLSO RECIBIDA
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Totales agregados del bloque &lt;reembolsos&gt; (codDocReembolso=41), en la propia cabecera. */
+    public function updateReembolsoTotales(int $idCompra, array $t): void
+    {
+        $sql = "UPDATE compras_cabecera
+                   SET cod_doc_reembolso              = ?,
+                       total_comprobantes_reembolso   = ?,
+                       total_base_imponible_reembolso = ?,
+                       total_impuesto_reembolso        = ?
+                 WHERE id = ?";
+        $this->query($sql, [
+            (string) ($t['cod_doc_reembolso'] ?? '41'),
+            (float)  ($t['total_comprobantes_reembolso'] ?? 0),
+            (float)  ($t['total_base_imponible_reembolso'] ?? 0),
+            (float)  ($t['total_impuesto_reembolso'] ?? 0),
+            $idCompra,
+        ]);
+    }
+
+    public function insertReembolsoTercero(array $data): int
+    {
+        $sql = "INSERT INTO compras_reembolso_terceros (
+                    id_compra, tipo_identificacion_proveedor_reembolso, identificacion_proveedor_reembolso,
+                    razon_social_proveedor_reembolso, cod_pais_pago_proveedor_reembolso, tipo_proveedor_reembolso,
+                    cod_doc_reembolso, estab_doc_reembolso, pto_emi_doc_reembolso, secuencial_doc_reembolso,
+                    fecha_emision_doc_reembolso, numero_autorizacion_doc_reemb, base_imponible_total, impuesto_total
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                RETURNING id";
+        return (int) $this->query($sql, [
+            (int)    $data['id_compra'],
+            (string) $data['tipo_identificacion_proveedor_reembolso'],
+            (string) $data['identificacion_proveedor_reembolso'],
+            $data['razon_social_proveedor_reembolso'] ?? null,
+            $data['cod_pais_pago_proveedor_reembolso'] ?? null,
+            (string) ($data['tipo_proveedor_reembolso'] ?? '02'),
+            (string) ($data['cod_doc_reembolso'] ?? '01'),
+            $data['estab_doc_reembolso'] ?? null,
+            $data['pto_emi_doc_reembolso'] ?? null,
+            $data['secuencial_doc_reembolso'] ?? null,
+            $data['fecha_emision_doc_reembolso'] ?? null,
+            $data['numero_autorizacion_doc_reemb'] ?? null,
+            (float)  ($data['base_imponible_total'] ?? 0),
+            (float)  ($data['impuesto_total'] ?? 0),
+        ])->fetchColumn();
+    }
+
+    public function insertImpuestoReembolsoTercero(array $data): void
+    {
+        $sql = "INSERT INTO compras_reembolso_terceros_impuestos
+                    (id_compra_tercero, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor)
+                VALUES (?,?,?,?,?,?)";
+        $this->query($sql, [
+            (int)   $data['id_compra_tercero'],
+            (string)$data['codigo_impuesto'],
+            (string)$data['codigo_porcentaje'],
+            (float) ($data['tarifa'] ?? 0),
+            (float) ($data['base_imponible'] ?? 0),
+            (float) ($data['valor'] ?? 0),
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

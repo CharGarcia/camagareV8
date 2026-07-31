@@ -1219,6 +1219,16 @@ class AsientoBuilderService
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
 
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            // Antes se descartaba $reglasSinCuenta (ya calculada arriba) y se lanzaba un mensaje
+            // genérico. Se reutiliza aquí para que el aviso diga qué cuenta(s) configurar, igual
+            // que hace aplicarAjusteRedondeo() en el caso de descuadre.
+            if (!empty($reglasSinCuenta)) {
+                throw new \Exception(
+                    "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
+                    implode(', ', array_unique($reglasSinCuenta)) .
+                    ". Configúrela en Contabilidad → Configuración contable, concepto «ventas»."
+                );
+            }
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
 
@@ -1534,6 +1544,13 @@ class AsientoBuilderService
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
 
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            if (!empty($reglasSinCuenta)) {
+                throw new \Exception(
+                    "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
+                    implode(', ', array_unique($reglasSinCuenta)) .
+                    ". Configúrela en Contabilidad → Configuración contable, concepto «recibos de venta»."
+                );
+            }
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
 
@@ -1659,10 +1676,12 @@ class AsientoBuilderService
                               SUM(i.valor)  AS total_valor,
                               COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
                               pc.codigo     AS cuenta_codigo,
-                              pc.nombre     AS cuenta_nombre
+                              pc.nombre     AS cuenta_nombre,
+                              t.tarifa      AS tarifa_nombre
                        FROM compras_detalle_impuestos i
                        JOIN compras_detalle d ON i.id_compra_detalle = d.id
                        LEFT JOIN productos p ON p.id = d.id_producto
+                       LEFT JOIN tarifa_iva t ON CAST(t.codigo AS INTEGER) = CAST(i.codigo_porcentaje AS INTEGER)
                        LEFT JOIN asientos_programados ap_prov
                               ON ap_prov.id_referencia = :id_proveedor AND ap_prov.tipo_referencia = 'proveedor'
                              AND ap_prov.id_asiento_tipo = 0 AND ap_prov.codigo_tarifa_iva = i.codigo_porcentaje::text
@@ -1686,15 +1705,17 @@ class AsientoBuilderService
                              AND ap_gen.eliminado       = false
                        LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
                        WHERE d.id_compra = :id AND i.codigo_impuesto = '2'
-                       GROUP BY i.codigo_porcentaje, COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
+                       GROUP BY i.codigo_porcentaje, COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre, t.tarifa";
             $stIva = $db->prepare($sqlIva);
             $stIva->execute([':emp' => $idEmpresa, ':id' => $idCompra, ':id_proveedor' => $idProveedor]);
             while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
                 $ivaRows[] = [
-                    'id_cuenta'     => $row['id_cuenta'],
-                    'cuenta_codigo' => $row['cuenta_codigo'],
-                    'cuenta_nombre' => $row['cuenta_nombre'],
-                    'valor'         => $row['total_valor'],
+                    'id_cuenta'         => $row['id_cuenta'],
+                    'cuenta_codigo'     => $row['cuenta_codigo'],
+                    'cuenta_nombre'     => $row['cuenta_nombre'],
+                    'valor'             => $row['total_valor'],
+                    'codigo_porcentaje' => $row['codigo_porcentaje'],
+                    'tarifa_nombre'     => $row['tarifa_nombre'],
                 ];
             }
         }
@@ -1735,6 +1756,10 @@ class AsientoBuilderService
     private function ensamblarAdquisicion(array $reglas, float $importeTotal, float $subInventario, float $subGasto, float $propina, array $ivaRows, bool $reversa, ?array $gastoLineas = null): array
     {
         $detalles = [];
+        // Reglas/tarifas activas sin cuenta configurada: se saltan, pero se recuerdan para poder
+        // decir QUÉ falta si el asiento termina sin líneas o descuadrado (antes se descartaban
+        // en silencio y solo se veía "Debe: $0" o un mensaje genérico).
+        $reglasSinCuenta = [];
 
         // helper local: agrega una línea respetando la dirección (normal/reversa)
         $push = function (array $r, float $valor, string $ladoNatural, string $refDefault) use (&$detalles, $reversa) {
@@ -1753,7 +1778,11 @@ class AsientoBuilderService
         // IVA crédito tributario (lado natural Debe; se invierte en notas de crédito)
         foreach ($ivaRows as $iva) {
             $valorIva = round((float)($iva['valor'] ?? 0), 2);
-            if ($valorIva <= 0 || empty($iva['id_cuenta'])) continue;
+            if ($valorIva <= 0) continue;
+            if (empty($iva['id_cuenta'])) {
+                $reglasSinCuenta[] = 'IVA compras tarifa ' . ($iva['tarifa_nombre'] ?: $iva['codigo_porcentaje']);
+                continue;
+            }
             $push(
                 ['id_cuenta' => (int)$iva['id_cuenta'], 'cuenta_codigo' => $iva['cuenta_codigo'] ?? '', 'cuenta_nombre' => $iva['cuenta_nombre'] ?? ''],
                 $valorIva,
@@ -1765,7 +1794,14 @@ class AsientoBuilderService
         // Reglas base (cuerpo del asiento). La eventual diferencia de redondeo del documento se
         // cuadra al final con la cuenta de Ajuste por redondeo (aplicarAjusteRedondeo).
         foreach ($reglas as $r) {
-            if (empty($r['id_cuenta'])) continue;
+            if (empty($r['id_cuenta'])) {
+                $codigoR = strtoupper($r['asiento_tipo_codigo'] ?? $r['codigo'] ?? '');
+                if (!str_contains($codigoR, 'REDONDEO')) {
+                    $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
+                                      ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
+                }
+                continue;
+            }
 
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
@@ -1809,10 +1845,17 @@ class AsientoBuilderService
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            if (!empty($reglasSinCuenta)) {
+                throw new \Exception(
+                    "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
+                    implode(', ', array_unique($reglasSinCuenta)) .
+                    ". Configúrela en Contabilidad → Configuración contable, concepto «compras»."
+                );
+            }
             throw new \Exception("No se ha configurado ninguna cuenta para el asiento de adquisición o los montos son cero.");
         }
 
-        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'compras');
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'compras', $reglasSinCuenta);
 
         return $detalles;
     }
@@ -1874,10 +1917,12 @@ class AsientoBuilderService
                           SUM(i.valor)  AS total_valor,
                           COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
                           pc.codigo     AS cuenta_codigo,
-                          pc.nombre     AS cuenta_nombre
+                          pc.nombre     AS cuenta_nombre,
+                          t.tarifa      AS tarifa_nombre
                    FROM liquidaciones_detalle_impuestos i
                    JOIN liquidaciones_detalle d ON i.id_detalle = d.id
                    LEFT JOIN productos p ON p.id = d.id_producto
+                   LEFT JOIN tarifa_iva t ON CAST(t.codigo AS INTEGER) = CAST(i.codigo_porcentaje AS INTEGER)
                    LEFT JOIN asientos_programados ap_prov
                           ON ap_prov.id_referencia = :id_proveedor AND ap_prov.tipo_referencia = 'proveedor'
                          AND ap_prov.id_asiento_tipo = 0 AND ap_prov.codigo_tarifa_iva = i.codigo_porcentaje::text
@@ -1901,15 +1946,17 @@ class AsientoBuilderService
                          AND ap_gen.eliminado       = false
                    LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
                    WHERE d.id_cabecera = :id AND i.codigo_impuesto = '2'
-                   GROUP BY i.codigo_porcentaje, COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
+                   GROUP BY i.codigo_porcentaje, COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre, t.tarifa";
         $stIva = $db->prepare($sqlIva);
         $stIva->execute([':emp' => $idEmpresa, ':id' => $idLiquidacion, ':id_proveedor' => $idProveedor]);
         while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
             $ivaRows[] = [
-                'id_cuenta'     => $row['id_cuenta'],
-                'cuenta_codigo' => $row['cuenta_codigo'],
-                'cuenta_nombre' => $row['cuenta_nombre'],
-                'valor'         => $row['total_valor'],
+                'id_cuenta'         => $row['id_cuenta'],
+                'cuenta_codigo'     => $row['cuenta_codigo'],
+                'cuenta_nombre'     => $row['cuenta_nombre'],
+                'valor'             => $row['total_valor'],
+                'codigo_porcentaje' => $row['codigo_porcentaje'],
+                'tarifa_nombre'     => $row['tarifa_nombre'],
             ];
         }
 
@@ -2165,19 +2212,26 @@ class AsientoBuilderService
         $totalIvaTotal = round((float)($data['total_iva'] ?? max(0.0, $importeTotal - $subtotal - $totalIce - $propina)), 2);
 
         $detalles = [];
+        // Reglas activas sin cuenta configurada: se saltan, pero se recuerdan para poder decir
+        // QUÉ falta si el asiento termina vacío o descuadrado (antes se descartaban en silencio).
+        $reglasSinCuenta = [];
 
         foreach ($reglas as $r) {
-            if (empty($r['id_cuenta'])) continue;
-
-            $debe  = 0.00;
-            $haber = 0.00;
-            $valorMapeado = 0.00;
-
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
 
             // La cuenta de Ajuste por redondeo no se mapea aquí: se aplica al final para cuadrar.
             if (str_contains($codigo, 'REDONDEO')) continue;
+
+            if (empty($r['id_cuenta'])) {
+                $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
+                                  ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
+                continue;
+            }
+
+            $debe  = 0.00;
+            $haber = 0.00;
+            $valorMapeado = 0.00;
 
             if (str_contains($codigo, 'PORPAGAR') || str_contains($concepto, 'pagar') || str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
                 $valorMapeado = $importeTotal;
@@ -2218,11 +2272,18 @@ class AsientoBuilderService
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
 
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            if (!empty($reglasSinCuenta)) {
+                throw new \Exception(
+                    "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
+                    implode(', ', array_unique($reglasSinCuenta)) .
+                    ". Configúrela en Contabilidad → Configuración contable."
+                );
+            }
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
 
         // Cuadre exacto vía la cuenta de Ajuste por redondeo; descuadre > 3 centavos → excepción.
-        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'el documento');
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'el documento', $reglasSinCuenta);
 
         return $detalles;
     }

@@ -144,9 +144,10 @@ class IngresosController extends BaseModuloController
                 $fecha   = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
                 
                 $tipoLabels = [
-                    'FACTURA_VENTA' => 'Facturas de Venta',
-                    'RECIBO_VENTA'  => 'Recibo de Venta',
-                    'OTRO'          => 'Otro Ingreso'
+                    'FACTURA_VENTA'     => 'Facturas de Venta',
+                    'FACTURA_REEMBOLSO' => 'Factura de Reembolso',
+                    'RECIBO_VENTA'      => 'Recibo de Venta',
+                    'OTRO'              => 'Otro Ingreso'
                 ];
                 $tipoLabel = $tipoLabels[$r['tipo_ingreso']] ?? $r['tipo_ingreso'];
                 
@@ -270,8 +271,9 @@ class IngresosController extends BaseModuloController
         $q         = trim($_GET['q'] ?? '');
         $excluirId = isset($_GET['excluir_ingreso_id']) && $_GET['excluir_ingreso_id'] !== ''
                      ? (int) $_GET['excluir_ingreso_id'] : null;
-        // 'RECIBO' cuando el ingreso es de tipo Recibo de Venta; 'FACTURA' por defecto.
-        $tipoDoc   = strtoupper(trim($_GET['tipo'] ?? '')) === 'RECIBO' ? 'RECIBO' : 'FACTURA';
+        // 'RECIBO' para Recibo de Venta, 'FACTURA_REEMBOLSO' para Factura de Reembolso, 'FACTURA' por defecto.
+        $tipoDocRaw = strtoupper(trim($_GET['tipo'] ?? ''));
+        $tipoDoc    = in_array($tipoDocRaw, ['RECIBO', 'FACTURA_REEMBOLSO'], true) ? $tipoDocRaw : 'FACTURA';
 
         $result = $this->repository->buscarDocumentosPendientes($idEmpresa, $q, $excluirId, $tipoDoc);
         echo json_encode(['ok' => true, 'data' => $result['data'], 'has_more' => $result['has_more']]);

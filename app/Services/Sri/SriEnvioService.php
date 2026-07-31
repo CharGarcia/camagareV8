@@ -500,8 +500,20 @@ class SriEnvioService
                 $cabecera['clave_acceso'] = $claveAcceso;
             }
 
-            // El envío automático de correo/PDF se habilita en la fase de PDF de este
-            // módulo (FacturaReembolsoPdfService todavía no existe).
+            // --- ENVÍO AUTOMÁTICO DE CORREO ---
+            try {
+                $pdfService = new \App\Services\modulos\FacturaReembolsoPdfService();
+                $pdfString  = $pdfService->generarBytes($cabecera, $detalles, $terceros, $pagos, $infoAdicional, $empresa);
+
+                $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+                $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'factura_reembolso', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                if ($enviado) {
+                    $db->prepare("UPDATE factura_reembolso_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$idFR]);
+                }
+            } catch (\Throwable $eEmail) {
+                error_log('[SRI] Error al procesar envío automático de correo (factura de reembolso #' . $idFR . '): ' . $eEmail->getMessage());
+            }
         }
 
         return [
@@ -1109,6 +1121,11 @@ class SriEnvioService
         }
     }
 
+    /** Estados con resolución definitiva del SRI: dejar de reintentar. Cualquier otra
+     *  respuesta (EN PROCESAMIENTO/PPR, vacía, o ERROR "Sin autorizaciones en respuesta" —
+     *  el ambiente de pruebas del SRI todavía no publicó el resultado) sigue reintentando. */
+    private const ESTADOS_DEFINITIVOS = ['AUTORIZADO', 'NO AUTORIZADO', 'RECHAZADO'];
+
     private function consultarConReintentos(string $claveAcceso, string $tipoAmbiente): array
     {
         sleep($this->esperaInicial);
@@ -1117,8 +1134,7 @@ class SriEnvioService
             $resultado = $this->ws->consultarAutorizacion($claveAcceso, $tipoAmbiente);
             $estado    = strtoupper($resultado['estado'] ?? '');
 
-            // Si ya tiene resolución definitiva, no reintentar
-            if ($estado !== 'EN PROCESAMIENTO' && $estado !== 'PPR' && $estado !== '') {
+            if (in_array($estado, self::ESTADOS_DEFINITIVOS, true)) {
                 return $resultado;
             }
 
@@ -1219,15 +1235,147 @@ class SriEnvioService
             return null;
         }
 
-        if (strtoupper($consulta['estado'] ?? '') !== 'AUTORIZADO') {
-            return null; // No está autorizado aún — continuar con envío normal
+        $estado = strtoupper($consulta['estado'] ?? '');
+
+        if ($estado === 'AUTORIZADO') {
+            return $this->finalizarPreVerificacionAutorizada(
+                $tabla, $id, $claveAcceso, $tipoAmbiente, $tipoComprobante, $idEmpresa, $idUsuario,
+                $estadoAutorizado, $onAutorizado, $consulta,
+                'Comprobante ya autorizado en el SRI (verificación previa al envío).'
+            );
         }
 
-        $numAut  = $consulta['numero_autorizacion'] ?: $claveAcceso;
+        // Si el SRI ya tiene un registro de esta clave de acceso -en procesamiento por un
+        // envío anterior, o PPR- reenviarla al WS de recepción es rechazado con el error
+        // 70 "CLAVE DE ACCESO EN PROCESAMIENTO". En ese caso NO se debe reenviar: hay que
+        // esperar la resolución (o devolver el resultado si ya es definitivo).
+        //
+        // El estado "EN PROCESAMIENTO"/"PPR" no cubre todos los casos: el ambiente de
+        // pruebas del SRI a veces responde "Sin autorizaciones en respuesta" (estado
+        // ERROR, sin nodo <autorizacion>) para un comprobante que en realidad SÍ está en
+        // cola, simplemente porque el SRI todavía no publicó la resolución. Esa respuesta
+        // es indistinguible de "nunca se envió". Por eso se complementa con el historial
+        // propio (sri_envio_log): si ya hay un "recibida" registrado para esta clave sin
+        // una resolución definitiva posterior, se trata igual que "en procesamiento".
+        if (in_array($estado, ['EN PROCESAMIENTO', 'PPR'], true) || $this->claveYaRecibidaSinResolver($claveAcceso)) {
+            $autResult   = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
+            $estadoFinal = strtoupper($autResult['estado'] ?? '');
+
+            if ($estadoFinal === 'AUTORIZADO') {
+                return $this->finalizarPreVerificacionAutorizada(
+                    $tabla, $id, $claveAcceso, $tipoAmbiente, $tipoComprobante, $idEmpresa, $idUsuario,
+                    $estadoAutorizado, $onAutorizado, $autResult,
+                    'Comprobante ya autorizado en el SRI (venía en procesamiento de un envío anterior).'
+                );
+            }
+
+            // Solo un rechazo EXPLÍCITO del SRI es definitivo. Cualquier otra cosa (ERROR
+            // "Sin autorizaciones en respuesta", vacío, EN PROCESAMIENTO/PPR) es ambigua —
+            // significa que el SRI todavía no publica una resolución, no que haya rechazado
+            // el comprobante — y debe tratarse como "sigue en procesamiento", nunca como un
+            // "no autorizado" definitivo (evita reportar un rechazo falso).
+            if (in_array($estadoFinal, ['NO AUTORIZADO', 'RECHAZADO'], true)) {
+                // Resolución definitiva de un envío anterior (rechazo): no reenviar, es la misma clave.
+                $erroresJson = json_encode($autResult['errores'] ?? [], JSON_UNESCAPED_UNICODE);
+                $this->actualizarEstadoDocumento($tabla, $id, 'no_autorizado', null, null, $erroresJson, $idUsuario);
+                $this->log([
+                    'id_empresa'   => $idEmpresa,
+                    'tipo_comprobante' => $tipoComprobante,
+                    'id_comprobante'   => $id,
+                    'clave_acceso'     => $claveAcceso,
+                    'tipo_ambiente'    => $tipoAmbiente,
+                    'created_by'       => $idUsuario,
+                    'accion'           => 'no_autorizado',
+                    'estado_sri'       => $estadoFinal,
+                    'mensaje'          => 'El SRI no autorizó el comprobante (ya había sido enviado antes; no se reenvía).',
+                    'detalle_json'     => $erroresJson,
+                ]);
+                return [
+                    'ok'      => false,
+                    'estado'  => 'no_autorizado',
+                    'mensaje' => 'El SRI no autorizó el comprobante.',
+                    'errores' => $autResult['errores'] ?? [],
+                ];
+            }
+
+            // Sigue en procesamiento tras los reintentos: no reenviar (duplicaría el envío y
+            // el SRI lo rechazaría con error 70); pedir que se consulte de nuevo más tarde.
+            $this->actualizarEstadoDocumento($tabla, $id, 'en_procesamiento', null, null, null, $idUsuario);
+            $this->log([
+                'id_empresa'   => $idEmpresa,
+                'tipo_comprobante' => $tipoComprobante,
+                'id_comprobante'   => $id,
+                'clave_acceso'     => $claveAcceso,
+                'tipo_ambiente'    => $tipoAmbiente,
+                'created_by'       => $idUsuario,
+                'accion'           => 'en_procesamiento',
+                'estado_sri'       => $estadoFinal !== '' ? $estadoFinal : 'EN PROCESAMIENTO',
+                'mensaje'          => 'El comprobante ya fue enviado al SRI antes y sigue en procesamiento; no se reenvía.',
+            ]);
+            return [
+                'ok'      => false,
+                'estado'  => 'en_procesamiento',
+                'mensaje' => 'Este comprobante ya fue enviado al SRI anteriormente y sigue en procesamiento. '
+                    . 'Espere unos minutos e intente consultar de nuevo (no se puede reenviar mientras el SRI lo procesa).',
+                'errores' => [],
+            ];
+        }
+
+        return null; // Sin registro previo en el SRI — continuar con el envío normal
+    }
+
+    /**
+     * ¿Esta clave de acceso ya fue recibida por el SRI en un intento anterior, sin una
+     * resolución definitiva (autorizado/no_autorizado) desde entonces? sri_envio_log es
+     * la única fuente confiable de que ya se llamó a enviarRecepcion() con éxito para esta
+     * clave — la consulta en vivo al SRI puede responder "sin autorizaciones" tanto para
+     * una clave nunca enviada como para una que sigue en cola.
+     */
+    private function claveYaRecibidaSinResolver(string $claveAcceso): bool
+    {
+        if ($claveAcceso === '') {
+            return false;
+        }
+        try {
+            $db = Database::getConnection();
+            $st = $db->prepare("SELECT accion FROM sri_envio_log WHERE clave_acceso = ? ORDER BY id DESC");
+            $st->execute([$claveAcceso]);
+            $acciones = $st->fetchAll(\PDO::FETCH_COLUMN);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        foreach ($acciones as $accion) {
+            $accion = strtolower((string) $accion);
+            if (str_starts_with($accion, 'autoriz') || $accion === 'no_autorizado') {
+                return false; // Ya hay una resolución definitiva registrada.
+            }
+            if ($accion === 'recibida') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Marca localmente como autorizado un documento que el SRI ya tenía resuelto, sin reenviarlo. */
+    private function finalizarPreVerificacionAutorizada(
+        string   $tabla,
+        int      $id,
+        string   $claveAcceso,
+        string   $tipoAmbiente,
+        string   $tipoComprobante,
+        int      $idEmpresa,
+        int      $idUsuario,
+        string   $estadoAutorizado,
+        callable $onAutorizado,
+        array    $consulta,
+        string   $mensajeLog
+    ): array {
+        $numAut   = $consulta['numero_autorizacion'] ?: $claveAcceso;
         $fechaAut = $consulta['fecha_autorizacion'] ?: null;
         $xmlComp  = $consulta['xml_autorizado'] ?: '';
 
-        $xmlDetalle = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $xmlComp);
+        $xmlDetalle = $this->buildXmlDetalleCompleto($numAut, (string) $fechaAut, $tipoAmbiente, $xmlComp);
 
         $this->actualizarEstadoDocumento($tabla, $id, $estadoAutorizado, $fechaAut, $xmlComp ?: null, null, $idUsuario);
 
@@ -1240,7 +1388,7 @@ class SriEnvioService
             'created_by'          => $idUsuario,
             'accion'              => $estadoAutorizado,
             'estado_sri'          => 'AUTORIZADO',
-            'mensaje'             => 'Comprobante ya autorizado en el SRI (verificación previa al envío).',
+            'mensaje'             => $mensajeLog,
             'numero_autorizacion' => $numAut,
             'fecha_autorizacion'  => $fechaAut,
         ]);

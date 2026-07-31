@@ -1964,6 +1964,8 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
     // Tipos de documento soportados por el motor de numeración (fuente: SecuencialRepository::DOCUMENT_MAP).
     const APP_SEC_TIPOS = <?= json_encode(array_values($tiposSecuencialSoportados ?? []), JSON_UNESCAPED_UNICODE) ?>;
+    // Tipos que comparten codDoc SRI (no pueden coexistir en el mismo punto de emisión — ej. Facturas de venta / Facturas de reembolso).
+    const APP_SEC_CONFLICTOS_CODDOC = <?= json_encode($tiposSecuencialConflictos ?? [], JSON_UNESCAPED_UNICODE) ?>;
 
     function _secEscape(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1980,13 +1982,21 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
     // Repuebla el selector con los tipos soportados que aún NO existen en el punto + opción "Otro".
+    // Excluye también los tipos que comparten codDoc SRI con uno ya presente (ver
+    // APP_SEC_CONFLICTOS_CODDOC): compartir punto de emisión duplicaría el número
+    // de documento ante el SRI (ej. Facturas de venta / Facturas de reembolso).
     function refrescarSelectorTipos() {
         const sel = document.getElementById('sec-add-tipo');
         if (!sel) return;
         const presentes = _secNombresPresentes();
+        const enConflicto = new Set();
+        presentes.forEach(p => {
+            const original = APP_SEC_TIPOS.find(t => t.toLowerCase() === p);
+            (APP_SEC_CONFLICTOS_CODDOC[original] || []).forEach(c => enConflicto.add(c.toLowerCase()));
+        });
         let html = '<option value="">Agregar Tipo Documento…</option>';
         APP_SEC_TIPOS.forEach(t => {
-            if (!presentes.includes(t.toLowerCase())) {
+            if (!presentes.includes(t.toLowerCase()) && !enConflicto.has(t.toLowerCase())) {
                 html += `<option value="${_secEscape(t)}">${_secEscape(t)}</option>`;
             }
         });

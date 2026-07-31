@@ -48,6 +48,21 @@ class SecuencialRepository
     ];
 
     /**
+     * Tipos de documento que, ante el SRI, comparten el MISMO codDoc (Tabla 3) y
+     * por tanto NO PUEDEN compartir el mismo punto de emisión: la numeración
+     * estab-ptoEmi-secuencial debe ser única por (establecimiento, punto, codDoc),
+     * y cada tipo de este listado lleva su propio contador independiente en
+     * `empresa_secuencial` — si dos tipos de la misma familia comparten punto,
+     * se generarían dos comprobantes distintos con el mismo número de documento.
+     * Ej.: "Facturas de venta" y "Facturas de reembolso" son ambas codDoc=01
+     * (el "reembolso" código 41 del ATS es solo un sub-campo del mismo XML de
+     * Factura, ver XmlFacturaReembolsoService — no cambia el codDoc).
+     */
+    private const FAMILIAS_CODDOC = [
+        '01' => ['Facturas de venta', 'Facturas de reembolso'],
+    ];
+
+    /**
      * Agrupación por área de los tipos de documento soportados (solo para mostrar
      * en la ayuda de la pestaña Secuenciales). Los nombres deben coincidir EXACTO
      * con las claves de DOCUMENT_MAP.
@@ -80,6 +95,67 @@ class SecuencialRepository
             $grupos['Otros'] = $otros;
         }
         return $grupos;
+    }
+
+    /**
+     * Mapa tipoDocumento => [otros tipos en conflicto de codDoc], solo para los
+     * tipos que SÍ tienen algún conflicto (para pintar la ayuda/validación en el
+     * frontend de Empresa → Secuenciales sin duplicar la lista en la vista).
+     */
+    public function getMapaConflictosCodDoc(): array
+    {
+        $mapa = [];
+        foreach (self::FAMILIAS_CODDOC as $familia) {
+            foreach ($familia as $tipo) {
+                $mapa[$tipo] = array_values(array_diff($familia, [$tipo]));
+            }
+        }
+        return $mapa;
+    }
+
+    /** Otros tipos de DOCUMENT_MAP que comparten codDoc SRI con $tipoDocumento (ver FAMILIAS_CODDOC). */
+    public function tiposEnConflictoCodDoc(string $tipoDocumento): array
+    {
+        foreach (self::FAMILIAS_CODDOC as $familia) {
+            if (in_array($tipoDocumento, $familia, true)) {
+                return array_values(array_diff($familia, [$tipoDocumento]));
+            }
+        }
+        return [];
+    }
+
+    /**
+     * ¿El punto de emisión ya tiene configurado (activo) algún tipo de documento
+     * que comparta codDoc SRI con $tipoDocumento? Si es así, devuelve el nombre
+     * del tipo en conflicto; si no, null. Usar antes de crear una nueva
+     * configuración de secuencial para no duplicar numeración ante el SRI.
+     */
+    public function getConflictoCodDoc(int $idPuntoEmision, string $tipoDocumento, int $idEmpresa): ?string
+    {
+        $conflictivos = $this->tiposEnConflictoCodDoc($tipoDocumento);
+        if ($conflictivos === []) {
+            return null;
+        }
+
+        $placeholders = [];
+        $params = [':id_punto' => $idPuntoEmision, ':id_empresa' => $idEmpresa];
+        foreach ($conflictivos as $i => $tipo) {
+            $ph = ":t{$i}";
+            $placeholders[] = $ph;
+            $params[$ph] = $tipo;
+        }
+
+        $sql = "SELECT tipo_documento FROM empresa_secuencial
+                WHERE id_punto_emision = :id_punto
+                  AND id_empresa = :id_empresa
+                  AND eliminado = false
+                  AND tipo_documento IN (" . implode(',', $placeholders) . ")
+                LIMIT 1";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ? (string) $row['tipo_documento'] : null;
     }
 
     /**

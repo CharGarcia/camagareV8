@@ -3651,6 +3651,14 @@ $totalPages = $totalPagesOriginal;
         // Insertar o actualizar fila de correo en info adicional
         actualizarInfoCorreoCliente(c.email || '');
 
+        // Campos de la pestaña SRI (usados como default al "Enviar por correo" y en la
+        // consulta de comprobantes): solo se llenaban al cargar el documento; si se
+        // cambiaba el cliente en la misma edición quedaban con los datos del anterior.
+        const elCorreoSri = document.getElementById('sri-correo-cliente');
+        if (elCorreoSri) elCorreoSri.value = c.email || '';
+        const elIdentifSri = document.getElementById('sri-identificacion-cliente');
+        if (elIdentifSri) elIdentifSri.value = c.identificacion || '';
+
         // Autocompletar datos del cliente
         const selVendedor = document.getElementById('m-select-vendedor');
         const inDiasCredito = document.getElementById('m-input-dias-credito');

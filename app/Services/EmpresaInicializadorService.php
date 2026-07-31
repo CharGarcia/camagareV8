@@ -37,6 +37,15 @@ class EmpresaInicializadorService
             if ($idPunto > 0) {
                 $this->crearSecuencialesIniciales($idPunto, $idEmpresa, $idUsuario);
             }
+            // Punto de emisión DEDICADO para Facturas de Reembolso: ante el SRI comparte
+            // codDoc=01 con Facturas de venta (ver SecuencialRepository::FAMILIAS_CODDOC),
+            // así que no puede vivir en el mismo punto 001 sin duplicar numeración.
+            // Se deja listo desde la creación de la empresa para que el módulo esté
+            // disponible de inmediato si la empresa lo necesita (no obliga a usarlo).
+            $idPuntoReembolso = $this->obtenerOCrearPuntoEmisionReembolso($idEmpresa, $idEst, $idUsuario);
+            if ($idPuntoReembolso > 0) {
+                $this->crearSecuencialReembolso($idPuntoReembolso, $idEmpresa, $idUsuario);
+            }
             $this->configurarFacturacion($idEst, $idUsuario);
         }
         $this->cargarCasilleros104($idEmpresa);
@@ -538,6 +547,69 @@ class EmpresaInicializadorService
         return (int) $stmt->fetchColumn();
     }
 
+    /**
+     * Devuelve el id del punto de emisión dedicado a "Facturas de reembolso" de la
+     * empresa. Si ya existe uno (tiene un secuencial activo de ese tipo), lo reutiliza;
+     * si no, crea un punto nuevo con el siguiente código libre del establecimiento
+     * (nunca el 001, que es el de Facturas de venta — mismo codDoc SRI, no pueden
+     * compartir punto).
+     */
+    private function obtenerOCrearPuntoEmisionReembolso(int $idEmpresa, int $idEstablecimiento, int $idUsuario): int
+    {
+        $res = $this->db->prepare(
+            "SELECT es.id_punto_emision
+             FROM empresa_secuencial es
+             INNER JOIN empresa_punto_emision pe ON pe.id = es.id_punto_emision
+             WHERE es.id_empresa = :id_empresa AND es.tipo_documento = 'Facturas de reembolso'
+               AND es.eliminado = false AND pe.eliminado = false
+             ORDER BY es.id ASC LIMIT 1"
+        );
+        $res->execute([':id_empresa' => $idEmpresa]);
+        $id = $res->fetchColumn();
+
+        if ($id !== false) {
+            return (int) $id;
+        }
+
+        $codigo = $this->siguienteCodigoPuntoLibre($idEmpresa, $idEstablecimiento);
+
+        $stmt = $this->db->prepare(
+            "INSERT INTO empresa_punto_emision (
+                id_empresa, id_establecimiento, nombre, codigo_punto,
+                logo_ruta, estado, created_by, updated_by
+             ) VALUES (
+                :id_empresa, :id_est, 'Reembolso', :codigo,
+                '', 'activo', :usuario, :usuario
+             ) RETURNING id"
+        );
+        $stmt->execute([
+            ':id_empresa' => $idEmpresa,
+            ':id_est'     => $idEstablecimiento,
+            ':codigo'     => $codigo,
+            ':usuario'    => $idUsuario,
+        ]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** Primer código de punto de emisión (a partir de "002") no usado todavía en el establecimiento. */
+    private function siguienteCodigoPuntoLibre(int $idEmpresa, int $idEstablecimiento): string
+    {
+        $res = $this->db->prepare(
+            "SELECT codigo_punto FROM empresa_punto_emision
+             WHERE id_empresa = :id_empresa AND id_establecimiento = :id_est AND eliminado = false"
+        );
+        $res->execute([':id_empresa' => $idEmpresa, ':id_est' => $idEstablecimiento]);
+        $usados = array_map('strval', $res->fetchAll(\PDO::FETCH_COLUMN));
+
+        for ($n = 2; $n <= 999; $n++) {
+            $codigo = str_pad((string) $n, 3, '0', STR_PAD_LEFT);
+            if (!in_array($codigo, $usados, true)) {
+                return $codigo;
+            }
+        }
+        return '999'; // fallback extremo — no debería alcanzarse en la práctica
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // Secuenciales
     // ─────────────────────────────────────────────────────────────────
@@ -588,6 +660,34 @@ class EmpresaInicializadorService
                 ':usuario'    => $idUsuario,
             ]);
         }
+    }
+
+    /** Secuencial de "Facturas de reembolso" en su punto dedicado, solo si aún no existe. */
+    private function crearSecuencialReembolso(int $idPunto, int $idEmpresa, int $idUsuario): void
+    {
+        $existe = $this->db->prepare(
+            "SELECT 1 FROM empresa_secuencial
+             WHERE id_punto_emision = :id_punto AND id_empresa = :id_empresa
+               AND tipo_documento = 'Facturas de reembolso' AND eliminado = false
+             LIMIT 1"
+        );
+        $existe->execute([':id_punto' => $idPunto, ':id_empresa' => $idEmpresa]);
+        if ($existe->fetchColumn()) {
+            return;
+        }
+
+        $stmt = $this->db->prepare(
+            "INSERT INTO empresa_secuencial (
+                id_punto_emision, id_empresa, tipo_documento, secuencial_inicial, created_by, updated_by
+             ) VALUES (
+                :id_punto, :id_empresa, 'Facturas de reembolso', 1, :usuario, :usuario
+             )"
+        );
+        $stmt->execute([
+            ':id_punto'   => $idPunto,
+            ':id_empresa' => $idEmpresa,
+            ':usuario'    => $idUsuario,
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────────────

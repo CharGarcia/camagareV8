@@ -67,6 +67,7 @@ class AtsRepository extends BaseRepository
                        c.importe_total,
                        c.parte_relacionada,
                        c.documento_modificado,
+                       c.cod_doc_reembolso,
                        p.tipo_id_proveedor,
                        p.identificacion AS prov_identificacion,
                        p.razon_social   AS prov_razon_social,
@@ -264,6 +265,91 @@ class AtsRepository extends BaseRepository
                   AND COALESCE(v.tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND v.fecha_emision BETWEEN :desde AND :hasta
                 ORDER BY v.id";
+        return $this->query($sql, [
+            ':id_empresa' => $idEmpresa,
+            ':desde'      => $desde,
+            ':hasta'      => $hasta,
+        ])->fetchAll();
+    }
+
+    /**
+     * Terceros reembolsados (bloque <reembolsos> recibido) de un lote de compras,
+     * con sus bases agregadas por tarifa — para el bloque *Reemb del ATS-Compras
+     * cuando cod_doc_reembolso = 41. Una fila por tercero.
+     * @param int[] $idsCompra
+     */
+    public function getReembolsoTercerosCompras(int $idEmpresa, array $idsCompra): array
+    {
+        $idsCompra = array_values(array_unique(array_map('intval', $idsCompra)));
+        if ($idsCompra === []) {
+            return [];
+        }
+        $place = [];
+        $params = [];
+        foreach ($idsCompra as $i => $idc) {
+            $ph = ":c{$i}";
+            $place[] = $ph;
+            $params[$ph] = $idc;
+        }
+        $inList = implode(',', $place);
+
+        $sql = "SELECT rt.id, rt.id_compra,
+                       rt.tipo_identificacion_proveedor_reembolso,
+                       rt.identificacion_proveedor_reembolso,
+                       rt.cod_doc_reembolso,
+                       rt.estab_doc_reembolso, rt.pto_emi_doc_reembolso, rt.secuencial_doc_reembolso,
+                       rt.fecha_emision_doc_reembolso, rt.numero_autorizacion_doc_reemb,
+                       COALESCE(SUM(CASE WHEN ti.codigo_porcentaje = '0' THEN ti.base_imponible END), 0) AS base_imponible_reemb,
+                       COALESCE(SUM(CASE WHEN ti.codigo_porcentaje NOT IN ('0','6','7') THEN ti.base_imponible END), 0) AS base_imp_grav_reemb,
+                       COALESCE(SUM(CASE WHEN ti.codigo_porcentaje = '6' THEN ti.base_imponible END), 0) AS base_no_gra_iva_reemb,
+                       COALESCE(SUM(CASE WHEN ti.codigo_porcentaje = '7' THEN ti.base_imponible END), 0) AS base_imp_exe_reemb,
+                       COALESCE(SUM(ti.valor), 0) AS monto_iva_reemb
+                FROM compras_reembolso_terceros rt
+                LEFT JOIN compras_reembolso_terceros_impuestos ti ON ti.id_compra_tercero = rt.id
+                WHERE rt.id_compra IN ($inList) AND rt.eliminado = false
+                GROUP BY rt.id
+                ORDER BY rt.id_compra, rt.id";
+        return $this->query($sql, $params)->fetchAll();
+    }
+
+    /**
+     * Facturas de Reembolso emitidas del período (tipoComprobante ATS = 41,
+     * "Comprobante de venta emitido por reembolso" — Tabla 4 SRI). Se reportan
+     * aparte de las ventas normales (que van con tipoComprobante 18): mismo
+     * patrón que getVentas(), agregando bases por tarifa desde
+     * factura_reembolso_detalle_impuestos. El código 6 "No objeto de impuesto"
+     * (líneas de reembolso puro) cae en base_no_gra_iva, tal como en Compras.
+     */
+    public function getVentasReembolso(int $idEmpresa, string $desde, string $hasta): array
+    {
+        $sql = "SELECT fr.id,
+                       fr.establecimiento, fr.punto_emision, fr.secuencial,
+                       fr.clave_acceso, fr.importe_total,
+                       c.tipo_id       AS cli_tipo_id,
+                       c.identificacion AS cli_identificacion,
+                       c.nombre        AS cli_nombre,
+                       imp.base_no_gra_iva, imp.base_imponible_0, imp.base_imponible_grav,
+                       imp.base_imponible_exe, imp.monto_iva, imp.monto_ice
+                FROM factura_reembolso_cabecera fr
+                INNER JOIN clientes c ON c.id = fr.id_cliente
+                LEFT  JOIN LATERAL (
+                    SELECT
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '6' THEN di.base_imponible END), 0) AS base_no_gra_iva,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '0' THEN di.base_imponible END), 0) AS base_imponible_0,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje NOT IN ('0','6','7') THEN di.base_imponible END), 0) AS base_imponible_grav,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '7' THEN di.base_imponible END), 0) AS base_imponible_exe,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje NOT IN ('0','6','7') THEN di.valor END), 0) AS monto_iva,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '3' THEN di.valor END), 0) AS monto_ice
+                    FROM factura_reembolso_detalle d
+                    INNER JOIN factura_reembolso_detalle_impuestos di ON di.id_factura_reembolso_detalle = d.id
+                    WHERE d.id_factura_reembolso = fr.id
+                ) imp ON true
+                WHERE fr.id_empresa = :id_empresa
+                  AND fr.eliminado = false
+                  AND fr.estado = 'autorizado'
+                  AND COALESCE(fr.tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND fr.fecha_emision BETWEEN :desde AND :hasta
+                ORDER BY fr.id";
         return $this->query($sql, [
             ':id_empresa' => $idEmpresa,
             ':desde'      => $desde,

@@ -120,14 +120,16 @@ class IngresoRepository extends BaseRepository
     public function getDetalles(int $idIngreso): array
     {
         $sql = "SELECT d.*,
-                       COALESCE(cv.id, cr.id, cs.id, s.id_cliente)                 AS id_cliente,
-                       COALESCE(cv.nombre, cr.nombre, cs.nombre, s.nombre_cliente)  AS cliente_nombre,
-                       COALESCE(v.fecha_emision, rv.fecha_emision, s.fecha_emision) AS fecha_documento
+                       COALESCE(cv.id, cr.id, cs.id, cfr.id, s.id_cliente)                 AS id_cliente,
+                       COALESCE(cv.nombre, cr.nombre, cs.nombre, cfr.nombre, s.nombre_cliente)  AS cliente_nombre,
+                       COALESCE(v.fecha_emision, rv.fecha_emision, fr.fecha_emision, s.fecha_emision) AS fecha_documento
                 FROM ingresos_detalle d
                 LEFT JOIN ventas_cabecera v        ON d.id_referencia_documento = v.id  AND d.tipo_documento = 'FACTURA'
                 LEFT JOIN clientes cv              ON v.id_cliente = cv.id
                 LEFT JOIN recibos_venta_cabecera rv ON d.id_referencia_documento = rv.id AND d.tipo_documento = 'RECIBO'
                 LEFT JOIN clientes cr              ON rv.id_cliente = cr.id
+                LEFT JOIN factura_reembolso_cabecera fr ON d.id_referencia_documento = fr.id AND d.tipo_documento = 'FACTURA_REEMBOLSO'
+                LEFT JOIN clientes cfr             ON fr.id_cliente = cfr.id
                 LEFT JOIN saldos_iniciales_cxc s   ON d.id_referencia_documento = s.id  AND d.tipo_documento = 'SALDO_INICIAL'
                 LEFT JOIN clientes cs              ON s.id_cliente = cs.id
                 WHERE d.id_ingreso = ?
@@ -533,13 +535,19 @@ class IngresoRepository extends BaseRepository
     public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA'): array
     {
         // Según el concepto del ingreso: 'RECIBO' muestra solo recibos de venta;
-        // cualquier otro ('FACTURA') muestra facturas de venta + saldos iniciales CXC.
-        $tiposPermitidos = strtoupper($tipo) === 'RECIBO' ? '{RECIBO}' : '{FACTURA,SALDO_INICIAL}';
+        // 'FACTURA_REEMBOLSO' muestra solo facturas de reembolso; cualquier otro
+        // ('FACTURA') muestra facturas de venta + saldos iniciales CXC.
+        $tiposPermitidos = match (strtoupper($tipo)) {
+            'RECIBO'            => '{RECIBO}',
+            'FACTURA_REEMBOLSO' => '{FACTURA_REEMBOLSO}',
+            default             => '{FACTURA,SALDO_INICIAL}',
+        };
 
         $params     = [':id_empresa' => $idEmpresa, ':tipos' => $tiposPermitidos];
         $excluirSql = '';
         $filtroBusq = '';
         $filtroBusqRec = '';
+        $filtroBusqFr = '';
 
         if ($excluirIngresoId !== null) {
             $excluirSql = " AND i.id <> :excluir";
@@ -554,6 +562,11 @@ class IngresoRepository extends BaseRepository
             )";
             $filtroBusqRec = " AND (
                 CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial) ILIKE :q
+                OR c.nombre          ILIKE :q
+                OR c.identificacion  ILIKE :q
+            )";
+            $filtroBusqFr = " AND (
+                CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial) ILIKE :q
                 OR c.nombre          ILIKE :q
                 OR c.identificacion  ILIKE :q
             )";
@@ -588,6 +601,16 @@ class IngresoRepository extends BaseRepository
                     FROM ingresos_detalle d
                     INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
                     WHERE d.tipo_documento = 'RECIBO'
+                      AND i.estado != 'anulado'
+                      AND i.eliminado = FALSE
+                      $excluirSql
+                    GROUP BY id_referencia_documento
+                ),
+                cobrado_fr AS (
+                    SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
+                    FROM ingresos_detalle d
+                    INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
+                    WHERE d.tipo_documento = 'FACTURA_REEMBOLSO'
                       AND i.estado != 'anulado'
                       AND i.eliminado = FALSE
                       $excluirSql
@@ -727,6 +750,31 @@ class IngresoRepository extends BaseRepository
                       AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0.01
                       $filtroBusqRec
+
+                    UNION ALL
+
+                    -- Facturas de reembolso pendientes (saldo = total - cobros; sin NC/ND/retención propias)
+                    SELECT 'FACTURA_REEMBOLSO'::varchar AS tipo_documento,
+                           fr.id,
+                           CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial) AS numero_documento,
+                           fr.fecha_emision,
+                           0 AS dias_credito,
+                           fr.importe_total,
+                           COALESCE(cfr.total_cobrado, 0) AS monto_cobrado,
+                           0 AS monto_retenido,
+                           (fr.importe_total - COALESCE(cfr.total_cobrado, 0)) AS saldo_pendiente,
+                           c.id             AS id_cliente,
+                           c.nombre         AS cliente_nombre,
+                           c.identificacion AS cliente_ruc
+                    FROM factura_reembolso_cabecera fr
+                    INNER JOIN clientes c ON fr.id_cliente = c.id
+                    LEFT  JOIN cobrado_fr cfr ON fr.id = cfr.id_referencia_documento
+                    WHERE fr.id_empresa = :id_empresa
+                      AND fr.estado = 'autorizado'
+                      AND fr.eliminado = FALSE
+                      AND fr.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                      AND (fr.importe_total - COALESCE(cfr.total_cobrado, 0)) > 0.01
+                      $filtroBusqFr
                 ) docs
                 WHERE docs.tipo_documento = ANY(:tipos::text[])
                 ORDER BY cliente_nombre ASC, fecha_emision ASC, id ASC

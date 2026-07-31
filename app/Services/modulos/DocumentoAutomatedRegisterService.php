@@ -316,6 +316,12 @@ class DocumentoAutomatedRegisterService
             } elseif ($tipoId === '04') { // RUC
                 $idSustento = $this->getSustentoIdByCodigo('01');
             }
+            // Factura de Reembolso recibida (codDocReembolso=41): el sustento tributario
+            // correcto es siempre "08 - Valor pagado para solicitar Reembolso de Gasto
+            // (intermediario)" (Tabla 5 SRI), sin importar el tipo de identificación.
+            if ((string) ($info->codDocReembolso ?? '') === '41') {
+                $idSustento = $this->getSustentoIdByCodigo('08') ?? $idSustento;
+            }
 
             $idCompra = $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal, $idSustento);
 
@@ -476,16 +482,26 @@ class DocumentoAutomatedRegisterService
 
         $db = Database::getConnection();
 
-        // Determinar sustento tributario preferido del proveedor
-        $stProv = $db->prepare("SELECT id_sustento_tributario FROM proveedores WHERE id = ? LIMIT 1");
-        $stProv->execute([$idProv]);
-        $rowProv = $stProv->fetch(PDO::FETCH_ASSOC);
-        if (!empty($rowProv['id_sustento_tributario'])) {
-            $idSustento = (int)$rowProv['id_sustento_tributario'];
-        }
-        // Si no tiene el proveedor Y no fue pasado por parámetro (null), fallback a defecto total 1 (01)
-        if (!$idSustento) {
-            $idSustento = 1; 
+        // Factura de Reembolso recibida (codDoc=01 con codDocReembolso=41): el sustento
+        // SIEMPRE es "08 - Valor pagado para solicitar Reembolso de Gasto (intermediario)",
+        // sin importar la preferencia guardada en el proveedor.
+        $codDocReembolso = $codDoc === '01' ? (string) ($info->codDocReembolso ?? '') : '';
+        $esReembolso = $codDocReembolso === '41';
+
+        if (!$esReembolso) {
+            // Determinar sustento tributario preferido del proveedor
+            $stProv = $db->prepare("SELECT id_sustento_tributario FROM proveedores WHERE id = ? LIMIT 1");
+            $stProv->execute([$idProv]);
+            $rowProv = $stProv->fetch(PDO::FETCH_ASSOC);
+            if (!empty($rowProv['id_sustento_tributario'])) {
+                $idSustento = (int)$rowProv['id_sustento_tributario'];
+            }
+            // Si no tiene el proveedor Y no fue pasado por parámetro (null), fallback a defecto total 1 (01)
+            if (!$idSustento) {
+                $idSustento = 1;
+            }
+        } elseif (!$idSustento) {
+            $idSustento = $this->getSustentoIdByCodigo('08') ?? 1;
         }
 
         $db->beginTransaction();
@@ -580,6 +596,55 @@ class DocumentoAutomatedRegisterService
                         'plazo'         => (int)($p->plazo ?? 0),
                         'unidad_tiempo' => $this->normalizarUnidadTiempo($p->unidadTiempo ?? 'Días')
                     ]);
+                }
+            }
+
+            // 4.5 Factura de Reembolso recibida: guardar el bloque <reembolsos>
+            // (proveedores terceros que el emisor pagó a nombre nuestro), sustento ATS 08.
+            if ($esReembolso) {
+                $this->compraRepo->updateReembolsoTotales($idCompra, [
+                    'cod_doc_reembolso'              => '41',
+                    'total_comprobantes_reembolso'   => (float) ($info->totalComprobantesReembolso ?? 0),
+                    'total_base_imponible_reembolso' => (float) ($info->totalBaseImponibleReembolso ?? 0),
+                    'total_impuesto_reembolso'       => (float) ($info->totalImpuestoReembolso ?? 0),
+                ]);
+
+                if (isset($xml->reembolsos->reembolsoDetalle)) {
+                    foreach ($xml->reembolsos->reembolsoDetalle as $rd) {
+                        $baseTotal = 0.0;
+                        $impuestoTotal = 0.0;
+                        foreach (($rd->detalleImpuestos->detalleImpuesto ?? []) as $di) {
+                            $baseTotal     += (float) $di->baseImponibleReembolso;
+                            $impuestoTotal += (float) $di->impuestoReembolso;
+                        }
+
+                        $idTercero = $this->compraRepo->insertReembolsoTercero([
+                            'id_compra'                               => $idCompra,
+                            'tipo_identificacion_proveedor_reembolso' => (string) $rd->tipoIdentificacionProveedorReembolso,
+                            'identificacion_proveedor_reembolso'      => (string) $rd->identificacionProveedorReembolso,
+                            'cod_pais_pago_proveedor_reembolso'       => (string) ($rd->codPaisPagoProveedorReembolso ?? ''),
+                            'tipo_proveedor_reembolso'                => (string) $rd->tipoProveedorReembolso,
+                            'cod_doc_reembolso'                       => (string) $rd->codDocReembolso,
+                            'estab_doc_reembolso'                     => (string) $rd->estabDocReembolso,
+                            'pto_emi_doc_reembolso'                   => (string) $rd->ptoEmiDocReembolso,
+                            'secuencial_doc_reembolso'                => (string) $rd->secuencialDocReembolso,
+                            'fecha_emision_doc_reembolso'             => $this->formatearFecha((string) $rd->fechaEmisionDocReembolso),
+                            'numero_autorizacion_doc_reemb'           => (string) $rd->numeroautorizacionDocReemb,
+                            'base_imponible_total'                    => $baseTotal,
+                            'impuesto_total'                          => $impuestoTotal,
+                        ]);
+
+                        foreach (($rd->detalleImpuestos->detalleImpuesto ?? []) as $di) {
+                            $this->compraRepo->insertImpuestoReembolsoTercero([
+                                'id_compra_tercero' => $idTercero,
+                                'codigo_impuesto'   => (string) $di->codigo,
+                                'codigo_porcentaje' => (string) $di->codigoPorcentaje,
+                                'tarifa'            => (float) $di->tarifa,
+                                'base_imponible'    => (float) $di->baseImponibleReembolso,
+                                'valor'             => (float) $di->impuestoReembolso,
+                            ]);
+                        }
+                    }
                 }
             }
 

@@ -51,6 +51,18 @@ class NotaDebitoController extends BaseModuloController
         $empresaData  = $empresaModel->getPorId($idEmpresa);
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
 
+        // Fusionar config del establecimiento principal (incluye id_forma_pago_sri_def,
+        // usado para preseleccionar la forma de pago por defecto en la pestaña de pagos).
+        if (!empty($establecimientos)) {
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                if ($estConfig) {
+                    $empresaData = array_merge($empresaData ?? [], $estConfig);
+                }
+            } catch (\Throwable $e) {}
+        }
+
         // Solo se ofrecen como Serie los puntos de emisión que ya tienen
         // configurado el secuencial inicial para "Nota de débito"
         // (Empresa → Secuenciales); sin eso no se puede emitir válidamente.

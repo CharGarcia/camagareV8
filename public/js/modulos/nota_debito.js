@@ -8,11 +8,12 @@
 
     let listadoTarifasIva = [];
     let listadoFormasPago = [];
+    let formasPagoListas = null; // Promise: resuelve cuando listadoFormasPago ya tiene datos.
 
     document.addEventListener('DOMContentLoaded', () => {
         initModal();
         cargarTarifasIva();
-        cargarFormasPago();
+        formasPagoListas = cargarFormasPago();
 
         if (!window.currentSort) window.currentSort = window.ND_ORDEN_COL || 'fecha_emision';
         if (!window.currentDir)  window.currentDir  = window.ND_ORDEN_DIR || 'DESC';
@@ -160,6 +161,22 @@
             if (pagosBody) pagosBody.innerHTML = '';
             ND_agregarMotivo();
 
+            // ND nueva: agregar una fila de pago por defecto (igual que Factura de
+            // Venta, que siempre muestra una), ya preseleccionada con la forma de
+            // pago del cliente o de la empresa. Se espera a que el catálogo de
+            // formas de pago haya cargado para no perder el default por una
+            // condición de carrera. Si se va a restaurar un borrador, se omite:
+            // ND_restaurarRespaldo() reconstruye sus propias filas de pago.
+            if (!borrador) {
+                Promise.resolve(formasPagoListas).then(() => {
+                    if (!document.getElementById('nd_id').value) window.ND_agregarPago();
+                });
+            }
+
+            // ND nueva: mostrar la vista previa del RUC Proveedor (se agrega solo
+            // a documentos nuevos, ver comentario en el <tbody> del modal).
+            document.getElementById('nd-tbody-ruc-proveedor-preview')?.classList.remove('d-none');
+
             setEl('nd_info_factura_modificada', 'innerHTML', '');
             setEl('nd_lbl_cliente_ruc', 'textContent', '');
             setEl('nd_lbl_cliente_direccion', 'textContent', '');
@@ -218,6 +235,10 @@
 
             document.getElementById('modalNDTitulo').innerHTML = `<i class="bi bi-file-earmark-plus text-primary me-2"></i>Nota de Débito ${num}${cliente}`;
             setEl('nd_id', 'value', data.id);
+
+            // ND existente: ocultar la vista previa del RUC Proveedor — ese campo
+            // solo se guarda en documentos nuevos.
+            document.getElementById('nd-tbody-ruc-proveedor-preview')?.classList.add('d-none');
 
             document.getElementById('nd_fecha_emision').value = (data.fecha_emision || '').split(' ')[0].split('T')[0];
             document.getElementById('nd_id_punto_emision').value = data.id_punto_emision || '';
@@ -530,8 +551,21 @@
         const infoCli = document.getElementById('nd_info_cliente');
         if (infoCli) infoCli.classList.remove('d-none');
         window.ND_CLIENTE_RUC = (c.identificacion || '').trim();
+        // Forma de pago SRI del cliente (si tiene una configurada): manda sobre el
+        // default de empresa al agregar un pago nuevo.
+        window.ND_CLIENTE_FORMA_PAGO_SRI = c.id_forma_pago_sri || null;
+        // Si ya hay una única fila de pago sin usar (el default agregado al abrir
+        // el modal), se re-resuelve con la forma de pago del cliente recién elegido.
+        ND_reaplicarFormaPagoDefaultSiVacia();
 
         ND_actualizarCorreoCliente(c.email || '');
+        // El campo de la pestaña SRI (usado como default al "Enviar por correo") solo se
+        // llenaba al cargar el documento; si se cambiaba el cliente en la misma edición
+        // quedaba con el correo del cliente anterior.
+        const elCorreoSri = document.getElementById('nd-sri-correo-cliente');
+        if (elCorreoSri) elCorreoSri.value = c.email || '';
+        const elIdentifSri = document.getElementById('nd-sri-identificacion-cliente');
+        if (elIdentifSri) elIdentifSri.value = c.identificacion || '';
         ND_setFacturaHabilitada(true);
 
         if (!opciones.conservarDoc) {
@@ -694,21 +728,64 @@
         return listadoFormasPago.map(fp => `<option value="${fp.codigo}" ${fp.codigo === selected ? 'selected' : ''}>${fp.nombre}</option>`).join('');
     }
 
+    // Resuelve la forma de pago SRI por defecto para una fila nueva.
+    // Precedencia: forma del CLIENTE → default configurado en EMPRESA.
+    // Devuelve el "codigo" SRI (ej. "01"), no el id, porque el <select> de
+    // pagos usa codigo como value.
+    function ND_resolverFormaPagoDefault() {
+        if (!listadoFormasPago.length) return '';
+
+        const idCliente  = window.ND_CLIENTE_FORMA_PAGO_SRI || null;
+        const idEmpresa  = (typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.id_forma_pago_sri_def) ? EMPRESA_CONFIG.id_forma_pago_sri_def : null;
+        const idResuelto = idCliente || idEmpresa;
+        if (!idResuelto) return '';
+
+        const fp = listadoFormasPago.find(f => String(f.id) === String(idResuelto));
+        return fp ? fp.codigo : '';
+    }
+
+    // Si hay exactamente una fila de pago y todavía no se le puso un total (es
+    // decir, sigue siendo la fila por defecto sin tocar), se le vuelve a aplicar
+    // la forma de pago resuelta — útil cuando el cliente se elige DESPUÉS de que
+    // la fila por defecto ya se agregó (con solo el default de empresa).
+    function ND_reaplicarFormaPagoDefaultSiVacia() {
+        if (!pagosBody) return;
+        const filas = pagosBody.querySelectorAll('.row-pago-nd');
+        if (filas.length !== 1) return;
+        const fila = filas[0];
+        const total = parseFloat(fila.querySelector('input[name="pago_total[]"]')?.value) || 0;
+        if (total > 0) return;
+        const sel = fila.querySelector('select[name="pago_forma[]"]');
+        const codigo = ND_resolverFormaPagoDefault();
+        if (sel && codigo) sel.value = codigo;
+    }
+
+    // Filas tipo "row-pago" (divs, no <tr>), mismo diseño que la pestaña
+    // "Formas de pago SRI" de Factura de Venta.
     window.ND_agregarPago = (formaPago = '', total = '', plazo = '', unidad = 'dias') => {
         if (!pagosBody) return;
-        const tr = document.createElement('tr');
-        tr.className = 'row-pago-nd';
-        tr.innerHTML = `
-            <td class="p-0"><select class="form-select form-select-sm border-0 bg-transparent" name="pago_forma[]" style="height:30px;font-size:0.8rem;">${ND_formasPagoOptions(formaPago)}</select></td>
-            <td class="p-0"><input type="number" step="0.01" min="0" class="input-detalle text-end" name="pago_total[]" value="${total}"></td>
-            <td class="p-0"><input type="number" step="1" min="0" class="input-detalle text-center" name="pago_plazo[]" value="${plazo}"></td>
-            <td class="p-0"><input type="text" class="input-detalle" name="pago_unidad[]" value="${unidad}"></td>
-            <td class="text-center">
-                <button type="button" class="btn btn-link btn-sm p-0 text-danger shadow-none nd-edit-only" onclick="this.closest('tr').remove();">
+        if (!formaPago) formaPago = ND_resolverFormaPagoDefault();
+        const row = document.createElement('div');
+        row.className = 'row g-2 align-items-center mb-1 row-pago-nd';
+        row.innerHTML = `
+            <div class="col-5">
+                <select class="form-select form-select-sm border-0 bg-light" name="pago_forma[]">${ND_formasPagoOptions(formaPago)}</select>
+            </div>
+            <div class="col-2">
+                <input type="number" step="0.01" min="0" class="form-control form-control-sm text-end border-0 bg-light fw-bold" name="pago_total[]" placeholder="0.00" value="${total}">
+            </div>
+            <div class="col-2">
+                <input type="number" step="1" min="0" class="form-control form-control-sm text-center border-0 bg-light" name="pago_plazo[]" placeholder="Plazo" value="${plazo}">
+            </div>
+            <div class="col-2">
+                <input type="text" class="form-control form-control-sm border-0 bg-light" name="pago_unidad[]" placeholder="Unidad" value="${unidad}">
+            </div>
+            <div class="col-1 text-center nd-edit-only">
+                <button type="button" class="btn btn-link btn-sm p-0 text-danger shadow-none" onclick="this.closest('.row-pago-nd').remove();">
                     <i class="bi bi-x-circle-fill"></i>
                 </button>
-            </td>`;
-        pagosBody.appendChild(tr);
+            </div>`;
+        pagosBody.appendChild(row);
     };
 
     function ND_renderPagos(pagos) {
@@ -719,14 +796,14 @@
 
     function ND_capturarPagos() {
         const pagos = [];
-        document.querySelectorAll('#nd_pagos_body tr.row-pago-nd').forEach(tr => {
-            const total = parseFloat(tr.querySelector('input[name="pago_total[]"]').value) || 0;
+        document.querySelectorAll('#nd_pagos_body .row-pago-nd').forEach(row => {
+            const total = parseFloat(row.querySelector('input[name="pago_total[]"]').value) || 0;
             if (total <= 0) return;
             pagos.push({
-                forma_pago: tr.querySelector('select[name="pago_forma[]"]').value,
+                forma_pago: row.querySelector('select[name="pago_forma[]"]').value,
                 total: total,
-                plazo: parseInt(tr.querySelector('input[name="pago_plazo[]"]').value) || 0,
-                unidad_tiempo: tr.querySelector('input[name="pago_unidad[]"]').value || 'dias',
+                plazo: parseInt(row.querySelector('input[name="pago_plazo[]"]').value) || 0,
+                unidad_tiempo: row.querySelector('input[name="pago_unidad[]"]').value || 'dias',
             });
         });
         return pagos;
@@ -817,8 +894,16 @@
                 if (!listadoTarifasIva.length) listadoTarifasIva = data.data || [];
                 const sel = document.getElementById('nd_tarifa_iva');
                 if (sel) {
+                    // Favorito del usuario para esta serie (estrella junto a "Tarifa IVA").
+                    // El <select> se puebla recién ahora (AJAX), así que se marca "selected"
+                    // directamente en la opción en vez de depender de aplicarFavoritosModal,
+                    // que solo funciona sobre opciones ya presentes en el DOM.
+                    const estrellaIva = document.querySelector('.btn-favorito[data-target="#nd_tarifa_iva"]');
+                    const favIva = (estrellaIva && typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS[estrellaIva.dataset.campo] != null)
+                        ? String(APP_FAVORITOS[estrellaIva.dataset.campo]) : null;
+
                     sel.innerHTML = listadoTarifasIva.map(t =>
-                        `<option value="${t.id}" data-codigo="${t.codigo}" data-porcentaje="${t.porcentaje_iva}">${t.tarifa}</option>`
+                        `<option value="${t.id}" data-codigo="${t.codigo}" data-porcentaje="${t.porcentaje_iva}" ${favIva === String(t.id) ? 'selected' : ''}>${t.tarifa}</option>`
                     ).join('');
                     window.ND_calcTotales();
                 }
