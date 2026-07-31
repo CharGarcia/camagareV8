@@ -810,12 +810,61 @@
     }
 
     /**
+     * Indicador proactivo: al elegir una entidad/ítem en una regla específica, consulta qué
+     * cuentas quedarían SIN asignar (ni en esta regla ni en la General) si esa entidad usa esta
+     * configuración — para avisarle al usuario ANTES de que falle un asiento real (Opción 2:
+     * "la entidad manda", ver AsientoBuilderService). Incluye el IVA por tarifa, que tiene su
+     * propia cascada independiente de los demás conceptos.
+     */
+    window.ASIENTOPROG_mostrarFaltantesEntidad = async function (tipo) {
+        const cont = document.getElementById(`dim_faltantes_${tipo}`);
+        if (!cont) return;
+
+        const tipoAsiento = (document.getElementById('tipoAsientoSelector') || {}).value || '';
+        const refType = ASIENTOPROG_esItemCompra(tipo) ? 'item_compra' : tipo;
+        const valor = (document.getElementById(`dim_id_${tipo}`) || {}).value || '';
+        if (!tipoAsiento || !valor) { cont.innerHTML = ''; return; }
+
+        cont.innerHTML = '<div class="small text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Verificando cuentas...</div>';
+
+        try {
+            let url = `${API_PROG}/getFaltantesDimensionAjax?tipo_asiento=${encodeURIComponent(tipoAsiento)}&tipo_referencia=${encodeURIComponent(refType)}`;
+            url += (refType === 'item_compra')
+                ? `&referencia_texto=${encodeURIComponent(valor)}`
+                : `&id_referencia=${encodeURIComponent(valor)}`;
+
+            const r = await fetch(url);
+            const res = await r.json();
+            if (!res.ok || !res.data) { cont.innerHTML = ''; return; }
+
+            const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const faltan = [...(res.data.conceptos || []), ...(res.data.iva || [])];
+
+            if (faltan.length === 0) {
+                cont.innerHTML = '<div class="alert alert-success py-2 px-3 small mb-0"><i class="bi bi-check-circle me-1"></i> '
+                    + 'Con esta regla, todos los conceptos quedan cubiertos (por esta regla o por la Configuración General).</div>';
+            } else {
+                cont.innerHTML = '<div class="alert alert-warning py-2 px-3 small mb-0"><i class="bi bi-exclamation-triangle me-1"></i> '
+                    + 'Si esta entidad usa esta regla, el asiento quedaría INCOMPLETO — falta cuenta (ni aquí ni en la General) para: '
+                    + `<strong>${faltan.map(esc).join(', ')}</strong>. `
+                    + 'Puede asignarlas aquí mismo, o en la Configuración General para que apliquen a todos.</div>';
+            }
+        } catch (e) {
+            console.error(e);
+            cont.innerHTML = '';
+        }
+    };
+
+    /**
      * Carga dinámicamente las reglas correspondientes a una dimensión contable.
      */
     window.ASIENTOPROG_cargarDim = async function (tipo) {
         const selector = document.getElementById('tipoAsientoSelector');
         const tipoAsiento = selector.value;
         if (!tipoAsiento) return;
+
+        const contFaltantes = document.getElementById(`dim_faltantes_${tipo}`);
+        if (contFaltantes) contFaltantes.innerHTML = '';
 
         // Filtro de años (movimientos de la empresa) para las dimensiones con filtro de año.
         if (tipo === 'proveedor' || tipo === 'cliente' || tipo === 'producto') {
@@ -936,6 +985,8 @@
                 if (q === '') {
                     hiddenInput.value = '';
                     sugDiv.style.display = 'none';
+                    const cont = document.getElementById(`dim_faltantes_${tipo}`);
+                    if (cont) cont.innerHTML = '';
                     return;
                 }
                 if (q.length < 2) {
@@ -966,6 +1017,7 @@
                                         searchInput.value = it.descripcion;
                                         hiddenInput.value = it.descripcion; // clave = nombre del ítem
                                         sugDiv.style.display = 'none';
+                                        ASIENTOPROG_mostrarFaltantesEntidad(tipo);
                                     });
                                     sugDiv.appendChild(btn);
                                 });
@@ -991,6 +1043,7 @@
                                     searchInput.value = item.text;
                                     hiddenInput.value = item.id;
                                     sugDiv.style.display = 'none';
+                                    ASIENTOPROG_mostrarFaltantesEntidad(tipo);
                                 });
                                 sugDiv.appendChild(btn);
                             });
@@ -1181,6 +1234,7 @@
                         if (s) { s.value = it.descripcion; s.classList.remove('is-invalid', 'border-danger'); }
                         if (h) h.value = it.descripcion; // clave de la regla = nombre del ítem
                         bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                        ASIENTOPROG_mostrarFaltantesEntidad('producto');
                     });
                     lista.appendChild(row);
                 });
@@ -1219,6 +1273,7 @@
                     if (s) { s.value = p.nombre; s.classList.remove('is-invalid', 'border-danger'); }
                     if (h) h.value = p.id;
                     bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                    ASIENTOPROG_mostrarFaltantesEntidad(tipo);
                 });
                 lista.appendChild(a);
             });

@@ -1357,6 +1357,42 @@ class ConfiguracionContableController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Indicador proactivo: para la entidad/ítem que se está configurando en una regla específica
+     * (Opción 2: "la entidad manda"), devuelve qué conceptos y qué tarifas de IVA quedarían SIN
+     * cuenta si esa entidad usa esta regla — es decir, ni la entidad los cubre ni la regla GENERAL
+     * los cubre. Se llama antes de guardar, para avisar sin esperar a que falle un asiento real.
+     */
+    public function getFaltantesDimensionAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $tipoAsiento = trim($_GET['tipo_asiento'] ?? '');
+        $tipoReferencia = trim($_GET['tipo_referencia'] ?? '');
+        $idReferencia = (int) ($_GET['id_referencia'] ?? 0);
+        $referenciaTexto = trim($_GET['referencia_texto'] ?? '');
+        $esItem = ($tipoReferencia === 'item_compra');
+
+        if ($tipoAsiento === '' || $tipoReferencia === '' || ($esItem ? $referenciaTexto === '' : $idReferencia <= 0)) {
+            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos.']);
+            exit;
+        }
+
+        try {
+            $resultado = $this->repository->getConceptosFaltantesEntidad(
+                $idEmpresa, $tipoAsiento, $tipoReferencia, $idReferencia,
+                $esItem ? $referenciaTexto : null
+            );
+            echo json_encode(['ok' => true, 'data' => $resultado]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getMetodoPreferenciaAjax(): void
     {
         $this->requireVer();

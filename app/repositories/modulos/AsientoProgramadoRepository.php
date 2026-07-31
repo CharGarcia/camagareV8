@@ -633,6 +633,119 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Reglas de CONCEPTO (no IVA) ya guardadas para una entidad/ítem puntual de una dimensión
+     * (cliente/proveedor/producto/categoria/marca, o 'item_compra' por texto). Espejo de
+     * getReglasEmpleado() para el resto de dimensiones. @return array<int,int> [id_asiento_tipo => id_cuenta]
+     */
+    private function getReglasPorEntidad(int $idEmpresa, string $tipoReferencia, int $idReferencia, ?string $referenciaTexto): array
+    {
+        if ($referenciaTexto !== null) {
+            $st = $this->db->prepare("SELECT id_asiento_tipo, id_cuenta FROM {$this->table}
+                                      WHERE id_empresa = :e AND tipo_referencia = :tr AND TRIM(referencia_texto) = :rt
+                                        AND id_asiento_tipo <> 0 AND eliminado = false AND id_cuenta IS NOT NULL");
+            $st->execute([':e' => $idEmpresa, ':tr' => $tipoReferencia, ':rt' => trim($referenciaTexto)]);
+        } else {
+            $st = $this->db->prepare("SELECT id_asiento_tipo, id_cuenta FROM {$this->table}
+                                      WHERE id_empresa = :e AND tipo_referencia = :tr AND id_referencia = :id
+                                        AND id_asiento_tipo <> 0 AND eliminado = false AND id_cuenta IS NOT NULL");
+            $st->execute([':e' => $idEmpresa, ':tr' => $tipoReferencia, ':id' => $idReferencia]);
+        }
+        $map = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(int) $r['id_asiento_tipo']] = (int) $r['id_cuenta'];
+        }
+        return $map;
+    }
+
+    /**
+     * Para una entidad/ítem puntual de una dimensión, calcula qué le faltaría configurar para que
+     * el asiento quede completo SI esa entidad usa esta regla (Opción 2: "la entidad manda" —
+     * ver AsientoBuilderService::generarAsientoSugerido()). Un concepto NO falta si lo cubre la
+     * entidad O la regla GENERAL (lo no cubierto por la entidad cae a General); solo se reporta lo
+     * que ninguna de las dos resuelve.
+     *
+     * El IVA por tarifa tiene su PROPIA cascada de 5 niveles (cliente/proveedor > producto >
+     * categoría > marca > general), independiente de los demás conceptos — por eso se evalúa
+     * aparte y no como un concepto más de asientos_tipo.
+     *
+     * @return array{conceptos: string[], iva: string[]}
+     */
+    public function getConceptosFaltantesEntidad(
+        int $idEmpresa,
+        string $tipoAsiento,
+        string $tipoReferencia,
+        int $idReferencia,
+        ?string $referenciaTexto = null
+    ): array {
+        // 1. Conceptos normales: general (LEFT JOIN ya trae si tiene o no cuenta) + reglas propias.
+        $generales = $this->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento);
+        $reglasEntidad = $this->getReglasPorEntidad($idEmpresa, $tipoReferencia, $idReferencia, $referenciaTexto);
+
+        $conceptosFaltantes = [];
+        foreach ($generales as $g) {
+            $codigo = strtoupper($g['codigo'] ?? '');
+            // El Ajuste por redondeo no se reporta: su ausencia solo importa en descuadres de
+            // centavos y ya tiene su propio aviso en AsientoBuilderService::aplicarAjusteRedondeo().
+            if (str_contains($codigo, 'REDONDEO')) continue;
+
+            $idTipo = (int) $g['id_asiento_tipo'];
+            $tieneGeneral = !empty($g['id_cuenta']);
+            $tieneEntidad = isset($reglasEntidad[$idTipo]);
+            if (!$tieneGeneral && !$tieneEntidad) {
+                $conceptosFaltantes[] = $g['concepto'] ?? $g['codigo'] ?? 'sin nombre';
+            }
+        }
+
+        // 2. IVA por tarifa: solo para los tipos de asiento que tienen cascada de IVA implementada.
+        $mapaIvaGeneral = match ($tipoAsiento) {
+            'adquisiciones_compras' => 'iva_compras_factura',
+            'recibos_venta'         => 'iva_recibos_venta',
+            'ventas_factura'        => 'iva_ventas_factura',
+            default                 => null,
+        };
+        $ivaFaltantes = [];
+        if ($mapaIvaGeneral !== null) {
+            $direccionIva = match ($tipoAsiento) {
+                'adquisiciones_compras' => 'compra',
+                'recibos_venta'         => 'recibo',
+                default                 => 'venta',
+            };
+            $condicionEntidad = $referenciaTexto !== null
+                ? "TRIM(ap_ent.referencia_texto) = :ref_val"
+                : "ap_ent.id_referencia = :ref_val";
+            $sql = "SELECT t.codigo, t.tarifa,
+                           ap_gen.id_cuenta AS id_cuenta_general,
+                           ap_ent.id_cuenta AS id_cuenta_entidad
+                    FROM tarifa_iva t
+                    LEFT JOIN {$this->table} ap_gen
+                           ON ap_gen.id_referencia = CAST(t.codigo AS INTEGER) AND ap_gen.tipo_referencia = :tref_gen
+                          AND ap_gen.id_empresa = :emp1 AND ap_gen.eliminado = false
+                    LEFT JOIN {$this->table} ap_ent
+                           ON ap_ent.id_asiento_tipo = 0 AND ap_ent.tipo_referencia = :tref_ent
+                          AND ap_ent.codigo_tarifa_iva = t.codigo::text AND ap_ent.direccion_iva = :dir
+                          AND ap_ent.id_empresa = :emp2 AND ap_ent.eliminado = false AND {$condicionEntidad}
+                    WHERE t.porcentaje_iva > 0
+                    ORDER BY t.tarifa ASC";
+            $st = $this->db->prepare($sql);
+            $st->execute([
+                ':tref_gen' => $mapaIvaGeneral,
+                ':emp1'     => $idEmpresa,
+                ':tref_ent' => $tipoReferencia,
+                ':dir'      => $direccionIva,
+                ':emp2'     => $idEmpresa,
+                ':ref_val'  => $referenciaTexto !== null ? trim($referenciaTexto) : $idReferencia,
+            ]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                if (empty($row['id_cuenta_general']) && empty($row['id_cuenta_entidad'])) {
+                    $ivaFaltantes[] = 'IVA tarifa ' . $row['tarifa'];
+                }
+            }
+        }
+
+        return ['conceptos' => $conceptosFaltantes, 'iva' => $ivaFaltantes];
+    }
+
+    /**
      * Obtiene el listado de retenciones SRI aplicadas en ventas que le hayan hecho a la empresa,
      * cruzando con su homóloga programada en asientos_programados (Debe) y con la cuenta de cobrar facturas
      * de venta (Haber - PORCOBRARFACTURAVENTA).

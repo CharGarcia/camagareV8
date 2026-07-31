@@ -223,6 +223,7 @@ $base = BASE_URL;
                                 </button>
                             </div>
                         </div>
+                        <div class="col-12" id="dim_faltantes_cliente"></div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_cliente"></div></div>
                         <div class="col-12 mt-4 text-end">
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
@@ -312,6 +313,7 @@ $base = BASE_URL;
                                 </button>
                             </div>
                         </div>
+                        <div class="col-12" id="dim_faltantes_proveedor"></div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_proveedor"></div></div>
                         <div class="col-12 mt-4 text-end">
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
@@ -354,6 +356,7 @@ $base = BASE_URL;
                                 </button>
                             </div>
                         </div>
+                        <div class="col-12" id="dim_faltantes_producto"></div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_producto"></div></div>
                         <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
                     </form>
@@ -391,6 +394,7 @@ $base = BASE_URL;
                                 </button>
                             </div>
                         </div>
+                        <div class="col-12" id="dim_faltantes_categoria"></div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_categoria"></div></div>
                         <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
                     </form>
@@ -428,6 +432,7 @@ $base = BASE_URL;
                                 </button>
                             </div>
                         </div>
+                        <div class="col-12" id="dim_faltantes_marca"></div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_marca"></div></div>
                         <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
                     </form>
