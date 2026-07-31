@@ -107,12 +107,6 @@ class SriEnvioService
         $pagos         = $repo->getPagos($idVenta);
         $infoAdicional = $repo->getInfoAdicional($idVenta);
 
-        $reembolsos = $repo->getReembolsos($idVenta);
-        foreach ($reembolsos as &$r) {
-            $r['impuestos'] = $repo->getImpuestosReembolso((int)$r['id']);
-        }
-        unset($r);
-
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
@@ -157,7 +151,7 @@ class SriEnvioService
 
         // 1. Generar XML
         $xmlService = new XmlFacturaVentaService();
-        $xmlLimpio  = $xmlService->generar($cabecera, $detalles, $pagos, $infoAdicional, $empresa, $dirEstablecimiento, $reembolsos);
+        $xmlLimpio  = $xmlService->generar($cabecera, $detalles, $pagos, $infoAdicional, $empresa, $dirEstablecimiento);
 
         // 2. Obtener configuración de firma de la empresa
         $firmaConfig = $this->getFirmaConfig($idEmpresa);
@@ -302,6 +296,241 @@ class SriEnvioService
                 : 'El SRI no autorizó el comprobante.',
             'errores'             => $autResult['errores'] ?? [],
         ];
+    }
+
+    /**
+     * Procesa el envío completo de una Factura de Reembolso al SRI. Sigue
+     * siendo codDoc=01 (Factura) — el ATS 41 es solo la clasificación del
+     * campo codDocReembolso, no un tipo de comprobante SRI distinto.
+     *
+     * @param  int $idFR       ID en factura_reembolso_cabecera
+     * @param  int $idEmpresa  ID de la empresa
+     * @param  int $idUsuario  ID del usuario que dispara el envío
+     * @return array Resultado con estado, mensajes y datos de autorización
+     */
+    public function enviarFacturaReembolso(int $idFR, int $idEmpresa, int $idUsuario): array
+    {
+        $repo = new \App\repositories\modulos\FacturaReembolsoRepository();
+
+        $cabecera = $repo->getPorId($idFR);
+        if (!$cabecera || (int) $cabecera['id_empresa'] !== $idEmpresa) {
+            throw new \RuntimeException("Factura de reembolso #{$idFR} no encontrada.");
+        }
+        if (empty($cabecera['clave_acceso'])) {
+            throw new \RuntimeException("La factura de reembolso no tiene clave de acceso generada.");
+        }
+
+        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
+        $claveAcceso  = $cabecera['clave_acceso'];
+
+        $preCheck = $this->preVerificarAutorizacion(
+            'factura_reembolso_cabecera', $idFR, $claveAcceso, $tipoAmbiente,
+            'factura_reembolso', $idEmpresa, $idUsuario, 'autorizado',
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idFR, $idEmpresa, $idUsuario): void {
+                $db = Database::getConnection();
+                $db->prepare("UPDATE factura_reembolso_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
+                   ->execute([$idUsuario, $idFR]);
+                try { $repo->updateDetalleXml($idFR, $xmlDetalle); } catch (\Throwable) {}
+                $this->procesarAsientoFacturaReembolso($idFR, $idEmpresa, $idUsuario);
+            }
+        );
+        if ($preCheck !== null) {
+            return $preCheck;
+        }
+
+        // El SRI exige que la fecha de emisión sea la fecha actual del día del envío.
+        $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
+        $hoy          = (new \DateTime())->format('Y-m-d');
+        if ($fechaEmision !== $hoy) {
+            $fechaFmt = (new \DateTime($cabecera['fecha_emision']))->format('d-m-Y');
+            throw new \RuntimeException(
+                "No se puede enviar al SRI: la fecha de emisión del comprobante ({$fechaFmt}) " .
+                "debe ser la fecha actual ({$hoy}). " .
+                "Edite el comprobante y actualice la fecha de emisión a hoy antes de enviar."
+            );
+        }
+
+        $detalles = $repo->getDetalles($idFR);
+        foreach ($detalles as &$d) {
+            $d['impuestos'] = $repo->getImpuestosDetalle((int) $d['id']);
+        }
+        unset($d);
+
+        $terceros = $repo->getTerceros($idFR);
+        foreach ($terceros as &$t) {
+            $t['impuestos'] = $repo->getImpuestosTercero((int) $t['id']);
+        }
+        unset($t);
+
+        $pagos         = $repo->getPagos($idFR);
+        $infoAdicional = $repo->getInfoAdicional($idFR);
+
+        $empresaModel = new \App\models\Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+        $dirEstablecimiento = null;
+        try {
+            $estRepo = new \App\repositories\modulos\EmpresaRepository();
+            foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
+                $esElEstablecimiento = !empty($cabecera['id_establecimiento'])
+                    ? (int) $est['id'] === (int) $cabecera['id_establecimiento']
+                    : true;
+                if ($esElEstablecimiento) {
+                    $dirEstablecimiento = $est['direccion'] ?? null;
+                    if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+                    $estConfig = $estRepo->getEstablecimientoConfig((int) $est['id']);
+                    if ($estConfig) {
+                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
+                        $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                        if (!empty($est['logo_ruta'])) $estConfig['logo_ruta'] = $est['logo_ruta'];
+                        $empresa = array_merge($empresa, $estConfig);
+                    }
+                    break;
+                }
+            }
+        } catch (\Throwable) {}
+
+        // 1. Generar XML
+        $xmlService = new \App\Services\Xml\XmlFacturaReembolsoService();
+        $xmlLimpio  = $xmlService->generar($cabecera, $detalles, $terceros, $pagos, $infoAdicional, $empresa, $dirEstablecimiento);
+
+        // 2. Obtener configuración de firma de la empresa
+        $firmaConfig = $this->getFirmaConfig($idEmpresa);
+        if (!$firmaConfig) {
+            throw new \RuntimeException(
+                "La empresa no tiene un certificado de firma electrónica configurado. " .
+                "Configure el certificado .p12 en Configuración → Firma Electrónica."
+            );
+        }
+
+        // 3. Firmar XML
+        $xmlFirmado = $this->firmador->firmar($xmlLimpio, $firmaConfig['archivo_path'], $firmaConfig['p12_password']);
+
+        // 4. Registrar inicio de envío
+        $logBase = [
+            'id_empresa'       => $idEmpresa,
+            'tipo_comprobante' => 'factura_reembolso',
+            'id_comprobante'   => $idFR,
+            'clave_acceso'     => $claveAcceso,
+            'tipo_ambiente'    => $tipoAmbiente,
+            'created_by'       => $idUsuario,
+        ];
+
+        $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, 'enviando', null, null, null, $idUsuario);
+        $this->log($logBase + ['accion' => 'enviando', 'mensaje' => 'Comprobante enviado al WS de recepción del SRI.']);
+
+        // 5. Enviar al WS de recepción
+        $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
+
+        if ($recepcion['estado'] !== 'RECIBIDA') {
+            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, 'devuelta', null, null, $erroresJson, $idUsuario);
+            $this->log($logBase + [
+                'accion'       => 'devuelta',
+                'estado_sri'   => 'DEVUELTA',
+                'mensaje'      => 'El SRI devolvió el comprobante con errores.',
+                'detalle_json' => $erroresJson,
+            ]);
+            return [
+                'ok'      => false,
+                'estado'  => 'devuelta',
+                'mensaje' => 'El SRI devolvió el comprobante con errores.',
+                'errores' => $recepcion['errores'],
+            ];
+        }
+
+        $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, 'recibida', null, null, null, $idUsuario);
+        $this->log($logBase + ['accion' => 'recibida', 'estado_sri' => 'RECIBIDA', 'mensaje' => 'Comprobante recibido por el SRI. Consultando autorización…']);
+
+        // 6. Consultar autorización (con reintentos)
+        $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
+
+        $erroresJson   = !empty($autResult['errores']) ? json_encode($autResult['errores'], JSON_UNESCAPED_UNICODE) : null;
+        $fechaAut      = $autResult['fecha_autorizacion']  ?: null;
+        $xmlAutorizado = $autResult['xml_autorizado']      ?: null;
+        $numAut        = $autResult['numero_autorizacion'] ?? $claveAcceso;
+
+        $estadoInterno = match (strtoupper($autResult['estado'] ?? '')) {
+            'AUTORIZADO'         => 'autorizado',
+            'NO AUTORIZADO',
+            'RECHAZADO'          => 'no_autorizado',
+            'EN PROCESAMIENTO'   => 'en_procesamiento',
+            default              => 'error',
+        };
+
+        $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, $estadoInterno, $fechaAut, $xmlAutorizado, $erroresJson, $idUsuario);
+        $this->log($logBase + [
+            'accion'              => $estadoInterno,
+            'estado_sri'          => strtoupper($autResult['estado'] ?? ''),
+            'mensaje'             => $estadoInterno === 'autorizado'
+                                        ? 'Comprobante autorizado por el SRI.'
+                                        : 'El SRI no autorizó el comprobante.',
+            'detalle_json'        => $erroresJson,
+            'numero_autorizacion' => $numAut,
+            'fecha_autorizacion'  => $fechaAut,
+        ]);
+
+        if ($estadoInterno === 'autorizado') {
+            $db = Database::getConnection();
+            $db->prepare("UPDATE factura_reembolso_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
+               ->execute([$idUsuario, $idFR]);
+
+            $comprobante = !empty($xmlAutorizado) ? $xmlAutorizado : $xmlFirmado;
+            $xmlDetalleCompleto = $this->buildXmlDetalleCompleto($numAut, (string) $fechaAut, $tipoAmbiente, $comprobante);
+
+            try {
+                $repo->updateDetalleXml($idFR, $xmlDetalleCompleto);
+            } catch (\Throwable $eXml) {
+                error_log('[SRI] Error guardando detalle_xml en factura de reembolso #' . $idFR . ': ' . $eXml->getMessage());
+            }
+
+            // Asiento contable "cuenta puente" — recién ahora que está autorizado
+            // (no al guardar el borrador, para no generar asientos de documentos
+            // que se anulan antes de llegar a enviarse).
+            $this->procesarAsientoFacturaReembolso($idFR, $idEmpresa, $idUsuario);
+
+            $cabecera['estado']              = 'autorizado';
+            $cabecera['numero_autorizacion'] = $numAut;
+            $cabecera['fecha_autorizacion']  = $fechaAut;
+            if (empty($cabecera['clave_acceso'])) {
+                $cabecera['clave_acceso'] = $claveAcceso;
+            }
+
+            // El envío automático de correo/PDF se habilita en la fase de PDF de este
+            // módulo (FacturaReembolsoPdfService todavía no existe).
+        }
+
+        return [
+            'ok'                  => $estadoInterno === 'autorizado',
+            'estado'              => $estadoInterno,
+            'numero_autorizacion' => $numAut,
+            'fecha_autorizacion'  => $fechaAut,
+            'mensaje'             => $estadoInterno === 'autorizado'
+                ? 'Comprobante autorizado por el SRI.'
+                : 'El SRI no autorizó el comprobante.',
+            'errores'             => $autResult['errores'] ?? [],
+        ];
+    }
+
+    /** Arma y persiste el asiento "cuenta puente" de una factura de reembolso; nunca revierte el envío SRI si falla. */
+    private function procesarAsientoFacturaReembolso(int $idFR, int $idEmpresa, int $idUsuario): void
+    {
+        try {
+            $repo    = new \App\repositories\modulos\FacturaReembolsoRepository();
+            $rules   = new \App\Rules\modulos\FacturaReembolsoRules();
+            $service = new \App\Services\modulos\FacturaReembolsoService($repo, $rules, new \App\Services\LogSistemaService());
+            $cab     = $repo->getPorId($idFR);
+            if ($cab) {
+                $cab['id_usuario'] = $idUsuario;
+                $service->procesarAsientoContable($idFR, $cab);
+            }
+        } catch (\Throwable $e) {
+            error_log('[SRI] Asiento no generado para factura de reembolso #' . $idFR . ': ' . $e->getMessage());
+        }
     }
 
     public function enviarNotaCredito(int $idNC, int $idEmpresa, int $idUsuario): array

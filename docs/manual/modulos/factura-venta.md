@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, reembolso, reembolsos, factura de reembolso, gastos por cuenta de terceros
-version: 1.3
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, anular, nota de credito, whatsapp, link de pago, payphone, nuvei
+version: 1.1
 orden: 20
 estado: activo
 ---
@@ -91,31 +91,6 @@ y asiento contable) según la configuración de la empresa.
   establecimiento y punto de emisión.
 - **El cliente no recibe el correo**: verifique la dirección registrada en su ficha.
 
-## Reembolsos (gastos pagados a nombre del cliente)
-
-Cuando la empresa paga un gasto a un tercero **en nombre del cliente** (por
-ejemplo una agencia de viajes, una gestoría o un servicio profesional que
-adelanta pasajes, trámites u otros gastos) y luego lo re-factura sin que sea
-ingreso propio ni lleve IVA propio, ese comprobante del tercero se declara en
-la pestaña **Reembolsos**, dentro de la pestaña "Factura de venta" del modal.
-
-- **Es informativo/tributario**: declara ante el SRI el sustento del reembolso.
-  Si el valor reembolsado forma parte del total que paga el cliente, agréguelo
-  también como un **ítem normal en el detalle** de la factura (la pestaña
-  Reembolsos no suma al subtotal ni al IVA de la factura).
-- **Vincular una compra registrada** (recomendado): use el buscador para
-  encontrar la compra ya registrada en el módulo de **Compras** (por
-  proveedor, RUC o número de documento). Al seleccionarla se autocompletan el
-  proveedor, el tipo y número del comprobante, la fecha, la autorización y el
-  detalle de impuestos — son los mismos datos que ya se reportan en el Anexo
-  ATS de compras, así que no se digitan dos veces.
-- **Agregar manual**: solo para cuando el comprobante del proveedor no está
-  registrado en Compras. Pide los mismos datos (identificación del proveedor,
-  tipo de proveedor, tipo/serie/secuencial/fecha/autorización del documento y
-  la base e IVA reembolsado).
-- Cada línea se puede quitar con el botón de la fila mientras la factura esté
-  en borrador.
-
 ## Normativa SRI 2026: RUC del proveedor y placa de transporte
 
 - **RUC Proveedor (todas las empresas)**: por la Resolución NAC-DGERCGC26-00000027,
@@ -132,10 +107,6 @@ la pestaña **Reembolsos**, dentro de la pestaña "Factura de venta" del modal.
 
 ## Historial de cambios
 
-- **1.3** — Nueva pestaña **Reembolsos** (SRI): declara comprobantes de
-  terceros pagados a nombre del cliente, vinculando compras ya registradas o
-  ingresándolos manualmente. Requiere aplicar la migración
-  `20260730_create_ventas_reembolso.sql`.
 - **1.2** — Normativa SRI 2026: campo fijo "RUC Proveedor" en info adicional (no
   editable) y placa del vehículo obligatoria para operadoras de transporte
   comercial. Columnas "Precios" y "Medida" del detalle ahora solo aparecen cuando

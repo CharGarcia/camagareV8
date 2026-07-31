@@ -359,7 +359,7 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
         if (!fila) return;
         f = { numero_factura: fila.numero_factura, cliente_nombre: fila.cliente_nombre,
               importe_total: fila.total, total_cobrado: fila.total_cobrado,
-              total_retenido: fila.total_retenido || 0, total_nc: 0, saldo: fila.saldo };
+              total_retenido: fila.total_retenido || 0, total_nc: 0, total_nd: 0, saldo: fila.saldo };
     } else {
         // Factura o recibo: obtener datos en tiempo real del servidor
         const infoUrl = origen === 'RECIBO'
@@ -375,7 +375,8 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
             if (!fila) return;
             f = { numero_factura: fila.numero_factura, cliente_nombre: fila.cliente_nombre,
                   importe_total: fila.total, total_cobrado: fila.total_cobrado,
-                  total_retenido: fila.total_retenido || 0, total_nc: fila.total_nc || 0, saldo: fila.saldo };
+                  total_retenido: fila.total_retenido || 0, total_nc: fila.total_nc || 0,
+                  total_nd: fila.total_nd || 0, saldo: fila.saldo };
         }
     }
 
@@ -393,6 +394,7 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
     document.getElementById('cobro-ya-cobrado').textContent  = CXC_fmt(f.total_cobrado);
     document.getElementById('cobro-retenido').textContent    = CXC_fmt(f.total_retenido || 0);
     document.getElementById('cobro-nc').textContent          = CXC_fmt(f.total_nc || 0);
+    document.getElementById('cobro-nd').textContent          = CXC_fmt(f.total_nd || 0);
     document.getElementById('cobro-saldo-pend').textContent  = CXC_fmt(saldo);
 
     // Monto y fecha

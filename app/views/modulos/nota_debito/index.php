@@ -86,11 +86,28 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="nd-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-plus me-2 text-primary"></i><?= htmlspecialchars($titulo) ?></h5>
     <?php if ($perm['crear']): ?>
-        <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="window.ND_abrirModalNuevo()">
-            <i class="bi bi-plus-lg me-1"></i> Nueva
-        </button>
+        <?php if (empty($puntos)): ?>
+            <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" disabled
+                title="No hay ningún punto de emisión con el secuencial de &quot;Nota de débito&quot; configurado.">
+                <i class="bi bi-plus-lg me-1"></i> Nueva
+            </button>
+        <?php else: ?>
+            <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="window.ND_abrirModalNuevo()">
+                <i class="bi bi-plus-lg me-1"></i> Nueva
+            </button>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
+
+<?php if (empty($puntos)): ?>
+    <div class="alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-3">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <div class="small">
+            Ningún punto de emisión tiene configurado el secuencial para <strong>Nota de débito</strong>.
+            Configúralo en <strong>Empresa → Secuenciales</strong> para poder emitir.
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">

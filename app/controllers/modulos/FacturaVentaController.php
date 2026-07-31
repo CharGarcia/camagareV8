@@ -76,14 +76,29 @@ class FacturaVentaController extends BaseModuloController
 
         $total = $result['total'];
         $permNC = $this->permisosModuloPorRuta('modulos/notas_credito');
+        $permND = $this->permisosModuloPorRuta('modulos/nota_debito');
         $permGR = $this->permisosModuloPorRuta('modulos/guias_remision');
         $permClientes  = $this->permisosModuloPorRuta('modulos/clientes');
         $permProductos = $this->permisosModuloPorRuta('modulos/productos');
+
+        // Igual que en NotaDebitoController::index(): solo se ofrecen como Serie
+        // de la ND los puntos de emisión con el secuencial de "Nota de débito"
+        // ya configurado (Empresa → Secuenciales).
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntosND = [];
+        foreach ($puntos as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Nota de débito');
+            if (!empty($config['id'])) {
+                $puntosND[] = $p;
+            }
+        }
 
         $this->viewWithLayout('layouts.main', 'modulos/factura_venta/index', [
             'titulo'      => 'Facturas de Venta',
             'perm'        => $perm,
             'permNC'      => $permNC,
+            'permND'      => $permND,
+            'puntosND'    => $puntosND,
             'permGR'      => $permGR,
             'permClientes'  => $permClientes,
             'permProductos' => $permProductos,
@@ -194,19 +209,12 @@ class FacturaVentaController extends BaseModuloController
         }
         unset($d);
 
-        $reembolsos = $this->repository->getReembolsos($id);
-        foreach ($reembolsos as &$r) {
-            $r['impuestos'] = $this->repository->getImpuestosReembolso((int) $r['id']);
-        }
-        unset($r);
-
         echo json_encode([
             'ok'             => true,
             'cabecera'       => $cabecera,
             'detalles'       => $detalles,
             'pagos'          => $this->repository->getPagos($id),
             'info_adicional' => $this->repository->getInfoAdicional($id),
-            'reembolsos'     => $reembolsos,
         ]);
         exit;
     }
@@ -1561,29 +1569,6 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
-    /**
-     * Typeahead de compras ya registradas, para autocompletar una línea de
-     * "Reembolso" (SRI): trae el documento del proveedor + el detalle de
-     * impuestos agregado, listo para guardarse como reembolsoDetalle.
-     */
-    public function buscarComprasReembolsoAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $buscar    = trim($_GET['q'] ?? '');
-
-        $compras = $this->repository->buscarComprasParaReembolso($idEmpresa, $buscar);
-        $rows = array_map(function ($c) {
-            $c['impuestos'] = $this->repository->getImpuestosAgregadosCompra((int) $c['id']);
-            return $c;
-        }, $compras);
-
-        echo json_encode(['ok' => true, 'data' => $rows]);
-        exit;
-    }
-
     public function eliminarAjax(): void
     {
         $this->requireEliminar();
@@ -1871,6 +1856,26 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    public function getNotasDebitoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $numero    = $_GET['numero'] ?? '';
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (empty($numero)) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Número de factura requerido']);
+            exit;
+        }
+
+        $repoND = new \App\repositories\modulos\NotaDebitoRepository();
+        $notas  = $repoND->getPorDocumentoModificado($numero, $idEmpresa);
+
+        echo json_encode(['ok' => true, 'data' => $notas]);
+        exit;
+    }
+
     public function getGuiasAjax(): void
     {
         $this->requireLeer();
@@ -2028,6 +2033,17 @@ class FacturaVentaController extends BaseModuloController
             $stNC->execute([$numeroFactura, $idEmpresa]);
             $totalNC = (float) $stNC->fetchColumn();
 
+            // ── Total Notas de Débito (suman al saldo, al contrario de la NC) ──────
+            $sqlND = "SELECT COALESCE(SUM(nd.importe_total), 0)
+                      FROM nota_debito_cabecera nd
+                      WHERE nd.num_doc_modificado = ?
+                        AND nd.id_empresa         = ?
+                        AND nd.eliminado          = false
+                        AND nd.estado            != 'anulado'";
+            $stND = $db->prepare($sqlND);
+            $stND->execute([$numeroFactura, $idEmpresa]);
+            $totalND = (float) $stND->fetchColumn();
+
             // ── Transacciones Payphone vinculadas ─────────────────────────────────
             $stPP = $db->prepare(
                 "SELECT client_transaction_id, payment_id, monto, estado,
@@ -2063,6 +2079,7 @@ class FacturaVentaController extends BaseModuloController
                 'total_retenciones' => round($totalRetenciones, 2),
                 'retenciones'       => $retencionesArray,
                 'total_nc'          => round($totalNC, 2),
+                'total_nd'          => round($totalND, 2),
                 'pagos_tarjeta'     => $pagosTarjeta,
                 'pagos_nuvei'       => $pagosNuvei,
             ]);

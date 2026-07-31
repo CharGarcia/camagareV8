@@ -484,6 +484,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-pagos-btn" data-bs-toggle="tab" href="#m-tab-pagos-historial" role="tab" style="white-space: nowrap;"><i class="bi bi-cash-coin me-1"></i> Pagos</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-retenciones-btn" data-bs-toggle="tab" href="#m-tab-retenciones" role="tab" style="white-space: nowrap;"><i class="bi bi-percent me-1"></i> Retenciones</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-notas-btn" data-bs-toggle="tab" href="#m-tab-notas" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-minus me-1"></i> Notas de crédito</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-notas-debito-btn" data-bs-toggle="tab" href="#m-tab-notas-debito" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-plus me-1"></i> Notas de débito</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-guias-btn" data-bs-toggle="tab" href="#m-tab-guias" role="tab" style="white-space: nowrap;"><i class="bi bi-truck me-1"></i> Guías de remisión</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-sri-btn" data-bs-toggle="tab" href="#m-tab-respuestas-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
@@ -686,9 +687,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <li class="nav-item">
                                                 <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#m-subtab-sri" type="button">Crédito</button>
                                             </li>
-                                            <li class="nav-item">
-                                                <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#m-subtab-reembolsos" type="button">Reembolsos<span id="m-badge-reembolsos" class="badge bg-secondary ms-1 x-small d-none">0</span></button>
-                                            </li>
                                         </ul>
                                         <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height: 120px;">
                                             <!-- Info Adicional -->
@@ -774,118 +772,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                 <option value="anios">Años</option>
                                                             </select>
                                                         </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <!-- Reembolsos (SRI) -->
-                                            <div class="tab-pane fade" id="m-subtab-reembolsos" role="tabpanel">
-                                                <div class="alert alert-light border py-1 px-2 mb-2" style="font-size:0.7rem;">
-                                                    <i class="bi bi-info-circle me-1"></i> Comprobantes de terceros que la empresa pagó a nombre del cliente (Anexo/XML SRI). Es informativo: si el valor reembolsado forma parte del total de la factura, agréguelo también como un ítem en el detalle.
-                                                </div>
-                                                <div class="position-relative mb-2">
-                                                    <input type="text" id="m-search-reembolso-compra" class="form-control form-control-sm" autocomplete="off" placeholder="Buscar compra registrada por proveedor, RUC o número...">
-                                                    <div id="m-dropdown-reembolso-compras" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1060; max-height:220px; overflow-y:auto;"></div>
-                                                </div>
-                                                <div class="border rounded-2 overflow-hidden bg-white">
-                                                    <div class="table-responsive" style="max-height: 200px;">
-                                                        <table class="table table-sm mb-0">
-                                                            <thead class="table-light">
-                                                                <tr>
-                                                                    <th class="ps-2 py-0 small fw-bold text-muted">Proveedor</th>
-                                                                    <th class="py-0 small fw-bold text-muted">Documento</th>
-                                                                    <th class="py-0 small fw-bold text-muted text-end">Base</th>
-                                                                    <th class="py-0 small fw-bold text-muted text-end">Impuesto</th>
-                                                                    <th class="py-0" style="width: 10%;"></th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody id="m-tbody-reembolsos">
-                                                                <tr id="m-tr-reembolsos-vacio">
-                                                                    <td colspan="5" class="text-center text-muted small py-2">Sin reembolsos agregados.</td>
-                                                                </tr>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                    <div class="p-1 border-top bg-light">
-                                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="fvToggleReembolsoManual()">
-                                                            <i class="bi bi-pencil-square me-1"></i> Agregar manual (proveedor no registrado en Compras)
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div id="m-form-reembolso-manual" class="border rounded-2 p-2 mt-2 bg-light d-none">
-                                                    <div class="row g-1">
-                                                        <div class="col-md-3">
-                                                            <label class="x-small text-muted mb-0">Tipo ID proveedor</label>
-                                                            <select id="m-reemb-tipo-id" class="form-select form-select-sm">
-                                                                <option value="04">04 - RUC</option>
-                                                                <option value="05">05 - Cédula</option>
-                                                                <option value="06">06 - Pasaporte</option>
-                                                                <option value="08">08 - Identificación del exterior</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="col-md-4">
-                                                            <label class="x-small text-muted mb-0">Identificación</label>
-                                                            <input type="text" id="m-reemb-identificacion" class="form-control form-control-sm">
-                                                        </div>
-                                                        <div class="col-md-5">
-                                                            <label class="x-small text-muted mb-0">Razón social (referencia)</label>
-                                                            <input type="text" id="m-reemb-razon-social" class="form-control form-control-sm">
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <label class="x-small text-muted mb-0">Tipo proveedor</label>
-                                                            <select id="m-reemb-tipo-proveedor" class="form-select form-select-sm">
-                                                                <option value="02">02 - Gasto</option>
-                                                                <option value="01">01 - Servicios profesionales</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <label class="x-small text-muted mb-0">Tipo comprobante</label>
-                                                            <select id="m-reemb-cod-doc" class="form-select form-select-sm">
-                                                                <option value="01">01 - Factura</option>
-                                                                <option value="03">03 - Liquidación de compra</option>
-                                                                <option value="04">04 - Nota de crédito</option>
-                                                                <option value="05">05 - Nota de débito</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="col-md-2">
-                                                            <label class="x-small text-muted mb-0">Estab.</label>
-                                                            <input type="text" id="m-reemb-estab" maxlength="3" class="form-control form-control-sm">
-                                                        </div>
-                                                        <div class="col-md-2">
-                                                            <label class="x-small text-muted mb-0">Pto. emi.</label>
-                                                            <input type="text" id="m-reemb-ptoemi" maxlength="3" class="form-control form-control-sm">
-                                                        </div>
-                                                        <div class="col-md-2">
-                                                            <label class="x-small text-muted mb-0">Secuencial</label>
-                                                            <input type="text" id="m-reemb-secuencial" maxlength="9" class="form-control form-control-sm">
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <label class="x-small text-muted mb-0">Fecha emisión</label>
-                                                            <input type="date" id="m-reemb-fecha" class="form-control form-control-sm">
-                                                        </div>
-                                                        <div class="col-md-4">
-                                                            <label class="x-small text-muted mb-0">Núm. autorización</label>
-                                                            <input type="text" id="m-reemb-autorizacion" class="form-control form-control-sm">
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <label class="x-small text-muted mb-0">Base imponible</label>
-                                                            <input type="number" step="0.01" id="m-reemb-base" class="form-control form-control-sm" value="0.00" oninput="fvCalcularIvaReembolsoManual()">
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <label class="x-small text-muted mb-0">Tarifa IVA</label>
-                                                            <select id="m-reemb-tarifa-iva" class="form-select form-select-sm" onchange="fvCalcularIvaReembolsoManual()">
-                                                                <?= implode('', array_map(fn($t) => '<option value="' . htmlspecialchars((string)$t['porcentaje_iva']) . '" data-codigo="' . htmlspecialchars((string)$t['codigo']) . '">' . htmlspecialchars((string)$t['tarifa']) . '</option>', $tarifasIva)) ?>
-                                                            </select>
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <label class="x-small text-muted mb-0">Valor IVA (calculado)</label>
-                                                            <input type="number" step="0.01" id="m-reemb-impuesto" class="form-control form-control-sm" value="0.00" readonly>
-                                                        </div>
-                                                    </div>
-                                                    <div class="mt-2">
-                                                        <button type="button" class="btn btn-primary btn-sm" onclick="fvConfirmarReembolsoManual()">
-                                                            <i class="bi bi-plus-circle me-1"></i>Agregar
-                                                        </button>
-                                                        <button type="button" class="btn btn-link btn-sm text-muted" onclick="fvToggleReembolsoManual()">Cancelar</button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1025,6 +911,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <div class="border rounded-3 p-2 bg-info bg-opacity-10 border-info border-opacity-25 text-center shadow-sm">
                                             <div class="text-info mb-0 fw-semibold text-nowrap" style="font-size: 0.72rem;">Notas de Crédito</div>
                                             <div class="fw-bold text-info mb-0" style="font-size: 1.1rem;">$ <span id="fvPagoTotalNC">0.00</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <div class="border rounded-3 p-2 bg-dark bg-opacity-10 border-dark border-opacity-25 text-center shadow-sm">
+                                            <div class="text-dark mb-0 fw-semibold text-nowrap" style="font-size: 0.72rem;">Notas de Débito</div>
+                                            <div class="fw-bold text-dark mb-0" style="font-size: 1.1rem;">$ <span id="fvPagoTotalND">0.00</span></div>
                                         </div>
                                     </div>
                                     <div class="col">
@@ -1271,6 +1163,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             </div>
                         </div>
 
+                        <!-- Pestaña: Notas de Débito -->
+                        <div class="tab-pane fade p-3" id="m-tab-notas-debito" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-file-earmark-plus me-1"></i> Notas de débito asociadas</h6>
+                                <?php if ($permND['crear']): ?>
+                                    <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-none border-0" style="font-size: 0.75rem;" id="btnNuevaNDDesdeFactura" onclick="abrirModalNuevaNDDesdeFV()"><i class="bi bi-plus-lg me-1"></i> Crear nota de débito</button>
+                                <?php endif; ?>
+                            </div>
+                            <div class="table-responsive border rounded">
+                                <table class="table table-sm small mb-0 table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-3 py-2">Fecha</th>
+                                            <th>Nº Nota de Débito</th>
+                                            <th>Estado</th>
+                                            <th class="text-end pe-3">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="m-tbody-notas-debito">
+                                        <tr>
+                                            <td colspan="4" class="text-center py-5 text-muted">
+                                                <i class="bi bi-info-circle me-1"></i> No se han encontrado notas de débito para esta factura.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
                         <!-- Pestaña: Guías de Remisión -->
                         <div class="tab-pane fade p-3" id="m-tab-guias" role="tabpanel">
                             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1504,8 +1425,6 @@ $totalPages = $totalPagesOriginal;
     let FV_CLIENTE_RUC  = '';   // RUC/cédula del cliente activo (9999999999999 = Consumidor Final)
     // Cuando es true, cargarSecuencial no sobreescribe el campo (modo edición de factura existente)
     let FV_BLOQUEAR_SECUENCIAL = false;
-    // Líneas de "Reembolso" (SRI) de la factura activa en el modal
-    let fvReembolsosActivos = [];
     const TARIFAS_IVA = <?= json_encode($tarifasIva) ?>;
     const UNIDADES = <?= json_encode($unidades) ?>;
     const EMPRESA_CONFIG = {
@@ -1718,202 +1637,6 @@ $totalPages = $totalPagesOriginal;
     }
 
     function copiarClaveAcceso() { copiarCampoSri('sri-clave-acceso'); }
-
-    // =====================================================================
-    // REEMBOLSOS (SRI) — pestaña "Reembolsos" dentro de "Factura de venta"
-    // =====================================================================
-    function fvRenderReembolsos() {
-        const tbody = document.getElementById('m-tbody-reembolsos');
-        const vacio = document.getElementById('m-tr-reembolsos-vacio');
-        const badge = document.getElementById('m-badge-reembolsos');
-        if (!tbody) return;
-
-        tbody.querySelectorAll('tr:not(#m-tr-reembolsos-vacio)').forEach(tr => tr.remove());
-
-        if (fvReembolsosActivos.length === 0) {
-            if (vacio) vacio.classList.remove('d-none');
-        } else {
-            if (vacio) vacio.classList.add('d-none');
-            fvReembolsosActivos.forEach((r, idx) => {
-                const baseTotal = (r.impuestos || []).reduce((s, i) => s + (parseFloat(i.base_imponible) || 0), 0);
-                const impTotal = (r.impuestos || []).reduce((s, i) => s + (parseFloat(i.valor) || 0), 0);
-                const doc = `${r.estab_doc_reembolso}-${r.pto_emi_doc_reembolso}-${r.secuencial_doc_reembolso}`;
-                const nombre = (r.razon_social_proveedor || r.identificacion_proveedor || '').toString().replace(/</g, '&lt;');
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="ps-2 py-1 small">${nombre}<div class="x-small text-muted">${r.identificacion_proveedor || ''}</div></td>
-                    <td class="py-1 small">${doc}<div class="x-small text-muted">Aut: ...${(r.numero_autorizacion_doc_reemb || '').slice(-10)}</div></td>
-                    <td class="py-1 small text-end">${baseTotal.toFixed(2)}</td>
-                    <td class="py-1 small text-end">${impTotal.toFixed(2)}</td>
-                    <td class="py-1 text-center">
-                        <button type="button" class="btn btn-link btn-sm p-0 text-danger shadow-none" onclick="fvQuitarReembolso(${idx})" title="Quitar"><i class="bi bi-x-circle-fill"></i></button>
-                    </td>`;
-                tbody.appendChild(tr);
-            });
-        }
-
-        if (badge) {
-            if (fvReembolsosActivos.length > 0) {
-                badge.textContent = fvReembolsosActivos.length;
-                badge.classList.remove('d-none');
-            } else {
-                badge.classList.add('d-none');
-            }
-        }
-    }
-
-    function fvQuitarReembolso(idx) {
-        fvReembolsosActivos.splice(idx, 1);
-        fvRenderReembolsos();
-    }
-
-    function fvToggleReembolsoManual() {
-        document.getElementById('m-form-reembolso-manual')?.classList.toggle('d-none');
-    }
-
-    function fvAgregarReembolsoDesdeCompra(c) {
-        if (fvReembolsosActivos.some(r => r.id_compra && parseInt(r.id_compra) === parseInt(c.id))) {
-            Swal.fire({ icon: 'info', title: 'Ya agregado', text: 'Esta compra ya está en la lista de reembolsos.' });
-            return;
-        }
-        const impuestos = (c.impuestos || []).map(i => ({
-            codigo_impuesto: i.codigo_impuesto,
-            codigo_porcentaje: i.codigo_porcentaje,
-            tarifa: i.tarifa,
-            base_imponible: parseFloat(i.base_imponible || 0).toFixed(2),
-            valor: parseFloat(i.valor || 0).toFixed(2),
-        }));
-        fvReembolsosActivos.push({
-            id_compra: c.id,
-            tipo_identificacion_proveedor: c.tipo_id_proveedor || '04',
-            identificacion_proveedor: c.proveedor_identificacion,
-            razon_social_proveedor: c.proveedor_nombre,
-            cod_pais_pago_proveedor: '',
-            tipo_proveedor: '02',
-            cod_doc_reembolso: c.tipo_comprobante || '01',
-            estab_doc_reembolso: c.establecimiento_prov,
-            pto_emi_doc_reembolso: c.punto_emision_prov,
-            secuencial_doc_reembolso: c.secuencial_prov,
-            fecha_emision_doc_reembolso: (c.fecha_emision || '').split(' ')[0].split('T')[0],
-            numero_autorizacion_doc_reemb: c.numero_autorizacion || '',
-            impuestos,
-        });
-        const inputSearch = document.getElementById('m-search-reembolso-compra');
-        const dropdown = document.getElementById('m-dropdown-reembolso-compras');
-        if (inputSearch) inputSearch.value = '';
-        if (dropdown) dropdown.classList.add('d-none');
-        fvRenderReembolsos();
-    }
-
-    function fvCalcularIvaReembolsoManual() {
-        const base = parseFloat(document.getElementById('m-reemb-base').value) || 0;
-        const selTarifa = document.getElementById('m-reemb-tarifa-iva');
-        const pct = parseFloat(selTarifa?.value) || 0;
-        document.getElementById('m-reemb-impuesto').value = r2(base * pct / 100).toFixed(2);
-    }
-
-    function fvConfirmarReembolsoManual() {
-        const identificacion = document.getElementById('m-reemb-identificacion').value.trim();
-        const estab = document.getElementById('m-reemb-estab').value.trim().padStart(3, '0');
-        const ptoEmi = document.getElementById('m-reemb-ptoemi').value.trim().padStart(3, '0');
-        const secuencial = document.getElementById('m-reemb-secuencial').value.trim().padStart(9, '0');
-        const fecha = document.getElementById('m-reemb-fecha').value;
-        const autorizacion = document.getElementById('m-reemb-autorizacion').value.trim();
-        const base = r2(parseFloat(document.getElementById('m-reemb-base').value) || 0);
-        const selTarifa = document.getElementById('m-reemb-tarifa-iva');
-        const tarifaPct = parseFloat(selTarifa?.value) || 0;
-        const codigoPorcentaje = selTarifa?.selectedOptions[0]?.dataset.codigo || '0';
-        const impuesto = r2(base * tarifaPct / 100);
-
-        if (!identificacion || !estab.trim() || !ptoEmi.trim() || !secuencial.trim() || !fecha || !autorizacion) {
-            return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Complete los datos del comprobante del proveedor (identificación, serie, fecha y autorización).' });
-        }
-        if (base <= 0) {
-            return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingrese la base imponible reembolsada.' });
-        }
-
-        fvReembolsosActivos.push({
-            id_compra: null,
-            tipo_identificacion_proveedor: document.getElementById('m-reemb-tipo-id').value,
-            identificacion_proveedor: identificacion,
-            razon_social_proveedor: document.getElementById('m-reemb-razon-social').value.trim(),
-            cod_pais_pago_proveedor: '',
-            tipo_proveedor: document.getElementById('m-reemb-tipo-proveedor').value,
-            cod_doc_reembolso: document.getElementById('m-reemb-cod-doc').value,
-            estab_doc_reembolso: estab,
-            pto_emi_doc_reembolso: ptoEmi,
-            secuencial_doc_reembolso: secuencial,
-            fecha_emision_doc_reembolso: fecha,
-            numero_autorizacion_doc_reemb: autorizacion,
-            impuestos: [{
-                codigo_impuesto: '2',
-                codigo_porcentaje: codigoPorcentaje,
-                tarifa: tarifaPct,
-                base_imponible: base.toFixed(2),
-                valor: impuesto.toFixed(2),
-            }],
-        });
-
-        ['m-reemb-identificacion', 'm-reemb-razon-social', 'm-reemb-estab', 'm-reemb-ptoemi', 'm-reemb-secuencial', 'm-reemb-fecha', 'm-reemb-autorizacion'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        document.getElementById('m-reemb-base').value = '0.00';
-        document.getElementById('m-reemb-impuesto').value = '0.00';
-        fvToggleReembolsoManual();
-        fvRenderReembolsos();
-    }
-
-    // Typeahead de compras registradas (autocompleta la línea de reembolso)
-    (function () {
-        const inputSearchReembolso = document.getElementById('m-search-reembolso-compra');
-        const dropdownReembolso = document.getElementById('m-dropdown-reembolso-compras');
-        if (!inputSearchReembolso || !dropdownReembolso) return;
-
-        inputSearchReembolso.addEventListener('input', debounce(async (e) => {
-            const q = e.target.value.trim();
-            if (q.length < 2) {
-                dropdownReembolso.classList.add('d-none');
-                return;
-            }
-            try {
-                const resp = await fetch(`${B_URL}/${RUTA_MODULO}/buscarComprasReembolsoAjax?q=${encodeURIComponent(q)}`);
-                const json = await resp.json();
-                dropdownReembolso.innerHTML = '';
-                if (json.data && json.data.length > 0) {
-                    json.data.forEach(c => {
-                        const doc = `${c.establecimiento_prov}-${c.punto_emision_prov}-${c.secuencial_prov}`;
-                        const btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'list-group-item list-group-item-action py-2 border-start-0 border-end-0';
-                        btn.innerHTML = `
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="fw-bold small text-primary">${c.proveedor_nombre}</span>
-                                <span class="badge bg-light text-dark border x-small">${c.proveedor_identificacion}</span>
-                            </div>
-                            <div class="x-small text-muted">Doc. ${doc} · $${parseFloat(c.importe_total || 0).toFixed(2)} · ${c.fecha_emision}</div>`;
-                        btn.onmousedown = (evt) => {
-                            evt.preventDefault();
-                            fvAgregarReembolsoDesdeCompra(c);
-                        };
-                        dropdownReembolso.appendChild(btn);
-                    });
-                    dropdownReembolso.classList.remove('d-none');
-                } else {
-                    dropdownReembolso.innerHTML = '<div class="list-group-item small text-muted">No se encontraron compras registradas</div>';
-                    dropdownReembolso.classList.remove('d-none');
-                }
-            } catch (err) {
-                console.error('Error al buscar compras para reembolso', err);
-            }
-        }, 300));
-
-        document.addEventListener('click', (e) => {
-            if (!dropdownReembolso.contains(e.target) && e.target !== inputSearchReembolso) {
-                dropdownReembolso.classList.add('d-none');
-            }
-        });
-    })();
 
     async function guardarFactura() {
         const btn = document.getElementById('btnGuardarFacturaModal');
@@ -2217,7 +1940,6 @@ $totalPages = $totalPagesOriginal;
             detalles,
             pagos,
             info_adicional: infoAdicional,
-            reembolsos: fvReembolsosActivos,
         };
         // Nota: no se envía 'asiento_detalles'. El asiento lo regenera siempre el backend
         // desde la factura (procesarAsientoContable); el que se ve en la pestaña es de solo
@@ -2807,6 +2529,8 @@ $totalPages = $totalPagesOriginal;
         if (elTotalRet) elTotalRet.textContent = '0.00';
         const elTotalNC = document.getElementById('fvPagoTotalNC');
         if (elTotalNC) elTotalNC.textContent = '0.00';
+        const elTotalND = document.getElementById('fvPagoTotalND');
+        if (elTotalND) elTotalND.textContent = '0.00';
         const elSaldo = document.getElementById('fvPagoSaldoPendiente');
         if (elSaldo) elSaldo.textContent = '0.00';
 
@@ -2936,8 +2660,6 @@ $totalPages = $totalPagesOriginal;
         FV_FECHA_EMISION = null;
         FV_CLIENTE_RUC   = '';
         FV_BLOQUEAR_SECUENCIAL = false;
-        fvReembolsosActivos = [];
-        fvRenderReembolsos();
 
         // Verificar si hay un borrador guardado
         let borrador = null;
@@ -5574,30 +5296,6 @@ $totalPages = $totalPagesOriginal;
                 if (correoGuardado) actualizarInfoCorreoCliente(correoGuardado.valor || '');
             }
 
-            // ── Reembolsos (SRI) ──────────────────────────────────────────
-            fvReembolsosActivos = (json.reembolsos || []).map(r => ({
-                id_compra: r.id_compra || null,
-                tipo_identificacion_proveedor: r.tipo_identificacion_proveedor,
-                identificacion_proveedor: r.identificacion_proveedor,
-                razon_social_proveedor: r.razon_social_proveedor || '',
-                cod_pais_pago_proveedor: r.cod_pais_pago_proveedor || '',
-                tipo_proveedor: r.tipo_proveedor,
-                cod_doc_reembolso: r.cod_doc_reembolso,
-                estab_doc_reembolso: r.estab_doc_reembolso,
-                pto_emi_doc_reembolso: r.pto_emi_doc_reembolso,
-                secuencial_doc_reembolso: r.secuencial_doc_reembolso,
-                fecha_emision_doc_reembolso: (r.fecha_emision_doc_reembolso || '').split(' ')[0].split('T')[0],
-                numero_autorizacion_doc_reemb: r.numero_autorizacion_doc_reemb,
-                impuestos: (r.impuestos || []).map(i => ({
-                    codigo_impuesto: i.codigo_impuesto,
-                    codigo_porcentaje: i.codigo_porcentaje,
-                    tarifa: i.tarifa,
-                    base_imponible: i.base_imponible,
-                    valor: i.valor,
-                })),
-            }));
-            fvRenderReembolsos();
-
             // â”€â”€ Propina â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const inputPropina = document.getElementById('m-input-propina');
             if (inputPropina) inputPropina.value = parseFloat(cab.propina || 0).toFixed(2);
@@ -5616,6 +5314,7 @@ $totalPages = $totalPagesOriginal;
             const nSec = (cab.secuencial || '').toString().padStart(9, '0');
             const numCompleto = nEst + '-' + nPunto + '-' + nSec;
             fvCargarNotasCredito(numCompleto);
+            fvCargarNotasDebito(numCompleto);
             fvCargarGuiasRemision(numCompleto);
 
             // â”€â”€ Actualizar estado de botones segÃºn el estado de la factura â”€â”€
@@ -5714,6 +5413,44 @@ $totalPages = $totalPagesOriginal;
         } catch (e) {
             console.error('Error al cargar notas de crédito:', e);
             tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error al cargar datos.</td></tr>';
+        }
+    }
+
+    async function fvCargarNotasDebito(numeroFactura) {
+        const tbody = document.getElementById('m-tbody-notas-debito');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span> Cargando notas de débito...</td></tr>';
+
+        try {
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getNotasDebitoAjax?numero=${numeroFactura}`);
+            const json = await resp.json();
+
+            if (json.ok && json.data && json.data.length > 0) {
+                let html = '';
+                json.data.forEach(nd => {
+                    const estado = (nd.estado || 'borrador').toLowerCase();
+                    const estadoClass = (estado === 'autorizado' || estado === 'aprobado') ? 'bg-success' :
+                        (estado === 'anulado') ? 'bg-danger' : 'bg-secondary';
+
+                    html += `
+                        <tr class="nd-row-fv" role="button"
+                            data-nd='${JSON.stringify(nd).replace(/'/g, "&apos;")}'
+                            onclick='abrirModalEditarNDDesdeFV(JSON.parse(this.dataset.nd))'>
+                            <td class="ps-3">${nd.fecha_emision ? nd.fecha_emision.split(' ')[0] : '—'}</td>
+                            <td><code class="text-primary">${nd.establecimiento}-${nd.punto_emision}-${nd.secuencial}</code></td>
+                            <td><span class="badge ${estadoClass} bg-opacity-10 text-${estadoClass.replace('bg-', '')} border border-${estadoClass.replace('bg-', '')} border-opacity-25">${estado.toUpperCase()}</span></td>
+                            <td class="text-end pe-3 fw-bold">$${parseFloat(nd.importe_total || 0).toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado notas de débito para esta factura.</td></tr>';
+            }
+        } catch (e) {
+            console.error('Error al cargar notas de débito:', e);
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar datos.</td></tr>';
         }
     }
 
@@ -6188,6 +5925,60 @@ $totalPages = $totalPagesOriginal;
         });
     }
 
+    async function abrirModalNuevaNDDesdeFV() {
+        if (!FV_ID_ACTIVO) return;
+
+        const idCliente = document.getElementById('m-id-cliente').value;
+        const nombreCliente = document.getElementById('m-search-cliente').value;
+        const rucCliente = document.getElementById('m-lbl-cliente-ruc').textContent;
+        const establecimiento = (document.getElementById('m-select-puntos').options[document.getElementById('m-select-puntos').selectedIndex].dataset.codEst || '').toString().padStart(3, '0');
+        const puntoEmision = (document.getElementById('m-select-puntos').options[document.getElementById('m-select-puntos').selectedIndex].dataset.codPunto || '').toString().padStart(3, '0');
+        const secuencial = (document.getElementById('m-input-secuencial').value || '').toString().padStart(9, '0');
+        const fechaEmision = document.getElementsByName('fecha_emision')[0].value;
+        const importeTotal = parseFloat(document.getElementById('m-lbl-total').textContent.replace(/[^0-9.]/g, '')) || 0;
+        const estadoFactura = document.getElementById('sri-badge-estado').textContent.toLowerCase();
+
+        // Solo permitir si la factura está autorizada. A diferencia de la NC, la
+        // ND no tiene tope contra el total de la factura (es un cargo adicional).
+        if (estadoFactura !== 'autorizado') {
+            return Swal.fire('Atención', 'Solo se pueden generar notas de débito para facturas en estado "autorizado".', 'warning');
+        }
+
+        if (typeof window.ND_abrirModalNuevo === 'function') {
+            window.ND_abrirModalNuevo();
+
+            setTimeout(() => {
+                window.ND_seleccionarCliente({ id: idCliente, nombre: nombreCliente, identificacion: rucCliente });
+                window.ND_seleccionarFactura({
+                    id: FV_ID_ACTIVO,
+                    establecimiento: establecimiento,
+                    punto_emision: puntoEmision,
+                    secuencial: secuencial,
+                    fecha_emision: fechaEmision,
+                    importe_total: importeTotal,
+                    cliente_nombre: nombreCliente,
+                    cliente_ruc: rucCliente,
+                    estado: estadoFactura
+                });
+            }, 500);
+        }
+    }
+
+    function abrirModalEditarNDDesdeFV(nd) {
+        if (typeof window.ND_abrirModalND === 'function') {
+            const rowMock = { dataset: { row: JSON.stringify(nd) } };
+            window.ND_abrirModalND(rowMock);
+        }
+    }
+
+    // Sobrescribir el cierre del modal de ND para refrescar la pestaña de ND en la factura
+    const modalNDEl = document.getElementById('modalND');
+    if (modalNDEl) {
+        modalNDEl.addEventListener('hidden.bs.modal', function () {
+            window.fvRefrescarDatosModal();
+        });
+    }
+
     async function fvCargarGuiasRemision(numeroFactura) {
         const tbody = document.getElementById('m-tbody-guias-remision');
         if (!tbody) return;
@@ -6484,11 +6275,12 @@ $totalPages = $totalPagesOriginal;
     let _fvSaldoPendiente     = 0;          // saldo disponible de la factura activa
     const _fvAjaxHeaders = { 'X-Requested-With': 'XMLHttpRequest' };
 
-    function _fvSetTarjetas(totalFact, totalCob, totalRet, totalNC, saldo) {
+    function _fvSetTarjetas(totalFact, totalCob, totalRet, totalNC, totalND, saldo) {
         document.getElementById('fvPagoTotalFactura').textContent      = totalFact.toFixed(2);
         document.getElementById('fvPagoTotalCobrado').textContent      = totalCob.toFixed(2);
         document.getElementById('fvPagoTotalRetenciones').textContent  = totalRet.toFixed(2);
         document.getElementById('fvPagoTotalNC').textContent           = totalNC.toFixed(2);
+        document.getElementById('fvPagoTotalND').textContent           = totalND.toFixed(2);
         document.getElementById('fvPagoSaldoPendiente').textContent    = saldo.toFixed(2);
     }
 
@@ -6509,7 +6301,7 @@ $totalPages = $totalPagesOriginal;
             + '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...</td></tr>';
 
         if (!idFact) {
-            _fvSetTarjetas(0, 0, 0, 0, 0);
+            _fvSetTarjetas(0, 0, 0, 0, 0, 0);
             tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">'
                 + 'Guarda la factura primero para registrar cobros.</td></tr>';
             return;
@@ -6615,6 +6407,7 @@ $totalPages = $totalPagesOriginal;
             const totalFactura     = parseFloat(jCob.factura?.importe_total || 0);
             const totalRetenciones = parseFloat(jCob.total_retenciones      || 0);
             const totalNC          = parseFloat(jCob.total_nc               || 0);
+            const totalND          = parseFloat(jCob.total_nd               || 0);
 
             // Poblar historial
             let totalCobrado = 0;
@@ -6847,11 +6640,11 @@ $totalPages = $totalPagesOriginal;
             const esAnuladaFV = (window.FV_ESTADO_ACTIVO || (jCob.factura && jCob.factura.estado) || '')
                                     .toString().toLowerCase().includes('anulad');
 
-            // Saldo = Factura − Cobrado − Retenciones − Notas de Crédito − Pagos tarjeta aprobados
+            // Saldo = Factura + Notas de Débito − Cobrado − Retenciones − Notas de Crédito − Pagos tarjeta aprobados
             totalCobrado += totalPagadoTarjeta + totalPagadoNuvei;
-            const saldo = esAnuladaFV ? 0 : Math.max(0, totalFactura - totalCobrado - totalRetenciones - totalNC);
+            const saldo = esAnuladaFV ? 0 : Math.max(0, totalFactura + totalND - totalCobrado - totalRetenciones - totalNC);
             _fvSaldoPendiente = saldo;                       // guardar para validación
-            _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, saldo);
+            _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, totalND, saldo);
 
             const alertaAnulada = document.getElementById('fvPagoAlertaAnulada');
 
@@ -7055,7 +6848,13 @@ $totalPages = $totalPagesOriginal;
 <?php 
 $permNCRespaldo = $perm;
 $perm = $permNC;
-include_once MVC_APP . '/views/modulos/notas_credito/modal_nc.php'; 
+include_once MVC_APP . '/views/modulos/notas_credito/modal_nc.php';
+
+$perm = $permND;
+$puntosRespaldoFV = $puntos;
+$puntos = $puntosND;
+include_once MVC_APP . '/views/modulos/nota_debito/modal_nd.php';
+$puntos = $puntosRespaldoFV;
 
 $perm = $permGR;
 include_once MVC_APP . '/views/modulos/guias_remision/modal_gr.php';
@@ -7067,6 +6866,8 @@ $perm = $permNCRespaldo;
 <script src="<?= BASE_URL ?>/js/modulos/transportistas_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/guias_remision_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/notas_credito.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/nota_debito.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= time() ?>"></script>

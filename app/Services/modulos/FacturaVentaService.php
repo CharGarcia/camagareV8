@@ -381,12 +381,6 @@ class FacturaVentaService
             $pagos         = $this->repository->getPagos($idVenta);
             $infoAdicional = $this->repository->getInfoAdicional($idVenta);
 
-            $reembolsos = $this->repository->getReembolsos($idVenta);
-            foreach ($reembolsos as &$r) {
-                $r['impuestos'] = $this->repository->getImpuestosReembolso((int)$r['id']);
-            }
-            unset($r);
-
             // Empresa: usar la config ya disponible; si estÃ¡ vacÃ­a cargar del modelo
             $empresa = $empresaConfig;
             if (empty($empresa)) {
@@ -415,8 +409,7 @@ class FacturaVentaService
                 $pagos,
                 $infoAdicional,
                 $empresa,
-                $dirEstablecimiento,
-                $reembolsos
+                $dirEstablecimiento
             );
 
             $this->repository->updateDetalleXml($idVenta, $xmlString);
@@ -697,10 +690,6 @@ class FacturaVentaService
                 }
             }
 
-            // Reemplazar reembolsos
-            $this->repository->deleteReembolsos($id);
-            $this->guardarReembolsos($id, $data['reembolsos'] ?? [], $idUsuario);
-
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
@@ -916,8 +905,6 @@ class FacturaVentaService
                 }
             }
 
-            $this->guardarReembolsos($idVenta, $data['reembolsos'] ?? [], $idUsuario);
-
             // Campos de sistema en info adicional: se agregan aquí (una sola vez, al
             // crear) para que queden guardados con el documento y viajen igual en el
             // XML y el RIDE sin importar el origen (Factura de Venta o POS). Así también
@@ -1000,21 +987,6 @@ class FacturaVentaService
         return $infoAdicional;
     }
 
-    /** Inserta las líneas de reembolso (y su detalle de impuestos) de una factura. */
-    private function guardarReembolsos(int $idVenta, array $reembolsos, int $idUsuario): void
-    {
-        foreach ($reembolsos as $r) {
-            $r['id_venta']   = $idVenta;
-            $r['created_by'] = $idUsuario;
-            $idReembolso     = $this->repository->insertReembolso($r);
-
-            foreach ($r['impuestos'] ?? [] as $imp) {
-                $imp['id_reembolso'] = $idReembolso;
-                $this->repository->insertReembolsoImpuesto($imp);
-            }
-        }
-    }
-
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $res = $this->repository->getPorId($id);
@@ -1029,11 +1001,6 @@ class FacturaVentaService
         $res['pagos']          = $this->repository->getPagos($id);
         $res['info_adicional'] = $this->repository->getInfoAdicional($id);
 
-        $res['reembolsos'] = $this->repository->getReembolsos($id);
-        foreach ($res['reembolsos'] as &$r) {
-            $r['impuestos'] = $this->repository->getImpuestosReembolso((int) $r['id']);
-        }
-        unset($r);
 
         return $res;
     }

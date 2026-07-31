@@ -28,6 +28,7 @@ class SecuencialRepository
         'Recibos de venta'                     => ['tabla' => 'recibos_venta_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Nota de crédito'                      => ['tabla' => 'notas_credito_cabecera',  'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Nota de débito'                       => ['tabla' => 'nota_debito_cabecera',    'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Facturas de reembolso'                => ['tabla' => 'factura_reembolso_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Retenciones de compras'               => ['tabla' => 'retencion_compra_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Guía de remisión'                     => ['tabla' => 'guias_remision_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Liquidación de compras o servicios'   => ['tabla' => 'liquidaciones_cabecera',  'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
@@ -52,7 +53,7 @@ class SecuencialRepository
      * con las claves de DOCUMENT_MAP.
      */
     private const DOCUMENT_AREAS = [
-        'Ventas'         => ['Facturas de venta', 'Recibos de venta', 'Nota de crédito', 'Nota de débito', 'Proformas', 'Guía de remisión'],
+        'Ventas'         => ['Facturas de venta', 'Recibos de venta', 'Nota de crédito', 'Nota de débito', 'Facturas de reembolso', 'Proformas', 'Guía de remisión'],
         'Compras'        => ['Retenciones de compras', 'Liquidación de compras o servicios', 'Órdenes de compra', 'Importaciones'],
         'Tesorería'      => ['Ingresos', 'Egresos', 'Traspasos'],
         'Operativos'     => ['Pedidos', 'Cambios de productos', 'Ordenes car-wash', 'Ordenes de taller'],

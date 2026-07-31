@@ -2490,6 +2490,172 @@ class AsientoBuilderService
     }
 
     /**
+     * Arma el asiento contable "cuenta puente" de una Factura de Reembolso
+     * (ATS 41 — mismo patrón que generarAsientoConsignacion): el reembolso NO
+     * es ingreso propio de la empresa.
+     *
+     *   DEBE : Cuentas por Cobrar Cliente        = importe_total (todo lo que paga el cliente)
+     *   HABER: Reembolso a Terceros (puente)     = base + IVA reembolsado (terceros)
+     *   HABER: Ingresos por Honorarios            = solo líneas es_reembolso=false
+     *   HABER: IVA Ventas (honorarios)            = solo si esas líneas llevan IVA
+     *
+     * CXC/Ingresos/IVA honorarios reutilizan, si la empresa no configuró las
+     * cuentas propias del concepto 'factura_reembolso', las mismas cuentas ya
+     * configuradas para 'ventas_factura' (es el mismo tipo de cuenta que
+     * cualquier venta normal). La cuenta puente NO tiene fallback: es el único
+     * concepto genuinamente nuevo y debe configurarse explícitamente.
+     */
+    public function generarAsientoFacturaReembolso(int $idEmpresa, int $idFacturaReembolso): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        $stCab = $db->prepare(
+            "SELECT importe_total, total_base_imponible_reembolso, total_impuesto_reembolso, id_cliente
+             FROM factura_reembolso_cabecera WHERE id = ?"
+        );
+        $stCab->execute([$idFacturaReembolso]);
+        $cab = $stCab->fetch(\PDO::FETCH_ASSOC) ?: [];
+        $importeTotal  = round((float) ($cab['importe_total'] ?? 0), 2);
+        $baseReembolso = round((float) ($cab['total_base_imponible_reembolso'] ?? 0), 2);
+        $ivaReembolso  = round((float) ($cab['total_impuesto_reembolso'] ?? 0), 2);
+        $idCliente     = (int) ($cab['id_cliente'] ?? 0);
+        if ($importeTotal <= 0.0) {
+            return [];
+        }
+
+        $comercial = [];
+
+        // 1. Reglas propias del concepto 'factura_reembolso' (las 4 cuentas del seed).
+        $reglasReembolso = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'factura_reembolso');
+        $cuentaCxc = null;
+        $cuentaPuente = null;
+        $cuentaIngresoHonorarios = null;
+        $cuentaIvaHonorarios = null;
+        foreach ($reglasReembolso as $r) {
+            if (empty($r['id_cuenta'])) continue;
+            $codigo = strtoupper($r['asiento_tipo_codigo'] ?? $r['codigo'] ?? '');
+            $cuenta = [
+                'id_cuenta'     => (int) $r['id_cuenta'],
+                'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+            ];
+            if (str_contains($codigo, 'CXC_CLIENTE')) {
+                $cuentaCxc = $cuenta;
+            } elseif (str_contains($codigo, 'PUENTE_TERCEROS')) {
+                $cuentaPuente = $cuenta;
+            } elseif (str_contains($codigo, 'INGRESO_HONORARIOS')) {
+                $cuentaIngresoHonorarios = $cuenta;
+            } elseif (str_contains($codigo, 'IVA_VENTAS_HONORARIOS')) {
+                $cuentaIvaHonorarios = $cuenta;
+            }
+        }
+
+        // 2. Fallback de CXC/Ingresos a 'ventas_factura' (mismas cuentas de cualquier venta).
+        $reglasVentas = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura');
+        if ($cuentaCxc === null || $cuentaIngresoHonorarios === null) {
+            foreach ($reglasVentas as $r) {
+                if (empty($r['id_cuenta'])) continue;
+                $codigo   = strtoupper($r['codigo']   ?? '');
+                $concepto = strtolower($r['concepto'] ?? $r['referencia'] ?? '');
+                $cuenta = [
+                    'id_cuenta'     => (int) $r['id_cuenta'],
+                    'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                    'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                ];
+                if ($cuentaCxc === null && (str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar'))) {
+                    $cuentaCxc = $cuenta;
+                } elseif ($cuentaIngresoHonorarios === null && (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal'))) {
+                    $cuentaIngresoHonorarios = $cuenta;
+                }
+            }
+        }
+
+        // 3. DEBE: Cuentas por Cobrar Cliente, por el total de la factura.
+        $comercial[] = [
+            'id_cuenta_contable' => $cuentaCxc['id_cuenta']     ?? 0,
+            'cuenta_codigo'      => $cuentaCxc['cuenta_codigo'] ?? '',
+            'cuenta_nombre'      => $cuentaCxc['cuenta_nombre'] ?? '',
+            'debe'               => $importeTotal,
+            'haber'              => 0.0,
+            'referencia_detalle' => 'Cuentas por cobrar (factura de reembolso)',
+        ];
+
+        // 4. HABER: cuenta puente, por el total reembolsado a terceros (sin fallback).
+        if ($baseReembolso + $ivaReembolso > 0) {
+            $comercial[] = [
+                'id_cuenta_contable' => $cuentaPuente['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaPuente['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaPuente['cuenta_nombre'] ?? '',
+                'debe'               => 0.0,
+                'haber'              => round($baseReembolso + $ivaReembolso, 2),
+                'referencia_detalle' => 'Reembolso a terceros (pendiente de reconciliar con la compra origen)',
+            ];
+        }
+
+        // 5. HABER: Ingresos por honorarios (solo líneas es_reembolso = false).
+        $stHon = $db->prepare(
+            "SELECT COALESCE(SUM(precio_total_sin_impuesto), 0)
+             FROM factura_reembolso_detalle
+             WHERE id_factura_reembolso = ? AND es_reembolso = false"
+        );
+        $stHon->execute([$idFacturaReembolso]);
+        $baseHonorarios = round((float) $stHon->fetchColumn(), 2);
+        if ($baseHonorarios > 0) {
+            $comercial[] = [
+                'id_cuenta_contable' => $cuentaIngresoHonorarios['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaIngresoHonorarios['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaIngresoHonorarios['cuenta_nombre'] ?? '',
+                'debe'               => 0.0,
+                'haber'              => $baseHonorarios,
+                'referencia_detalle' => 'Ingresos por honorarios',
+            ];
+        }
+
+        // 6. HABER: IVA de las líneas de honorarios, por tarifa — cascada cliente > general
+        //    (mismo mecanismo que 'ventas_factura'), con fallback a la cuenta plana del
+        //    concepto 'factura_reembolso' si esa tarifa específica no está configurada.
+        $sqlIva = "SELECT di.codigo_porcentaje, SUM(di.valor) AS total_valor,
+                          COALESCE(ap_cli.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
+                          pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                   FROM factura_reembolso_detalle_impuestos di
+                   INNER JOIN factura_reembolso_detalle d ON d.id = di.id_factura_reembolso_detalle
+                   LEFT JOIN asientos_programados ap_cli
+                          ON ap_cli.id_referencia = :id_cliente AND ap_cli.tipo_referencia = 'cliente'
+                         AND ap_cli.id_asiento_tipo = 0 AND ap_cli.codigo_tarifa_iva = di.codigo_porcentaje::text
+                         AND ap_cli.direccion_iva = 'venta' AND ap_cli.id_empresa = :emp AND ap_cli.eliminado = false
+                   LEFT JOIN asientos_programados ap_gen
+                          ON ap_gen.id_referencia   = CAST(di.codigo_porcentaje AS INTEGER)
+                         AND ap_gen.tipo_referencia = 'iva_ventas_factura'
+                         AND ap_gen.id_empresa      = :emp AND ap_gen.eliminado = false
+                   LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_cli.id_cuenta, ap_gen.id_cuenta)
+                   WHERE d.id_factura_reembolso = :id AND d.es_reembolso = false AND di.codigo_impuesto = '2'
+                   GROUP BY di.codigo_porcentaje, COALESCE(ap_cli.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
+        $stIva = $db->prepare($sqlIva);
+        $stIva->execute([':emp' => $idEmpresa, ':id' => $idFacturaReembolso, ':id_cliente' => $idCliente]);
+        while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
+            $valorIva = round((float) $row['total_valor'], 2);
+            if ($valorIva <= 0) continue;
+            $idCuentaIva = !empty($row['id_cuenta']) ? (int) $row['id_cuenta'] : ($cuentaIvaHonorarios['id_cuenta'] ?? 0);
+            $comercial[] = [
+                'id_cuenta_contable' => $idCuentaIva,
+                'cuenta_codigo'      => $row['cuenta_codigo'] ?? ($cuentaIvaHonorarios['cuenta_codigo'] ?? ''),
+                'cuenta_nombre'      => $row['cuenta_nombre'] ?? ($cuentaIvaHonorarios['cuenta_nombre'] ?? ''),
+                'debe'               => 0.0,
+                'haber'              => $valorIva,
+                'referencia_detalle' => 'IVA Ventas (honorarios)',
+            ];
+        }
+
+        $totalDebe  = round(array_sum(array_column($comercial, 'debe')),  2);
+        $totalHaber = round(array_sum(array_column($comercial, 'haber')), 2);
+        if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            throw new \Exception("No hay cuentas configuradas para la factura de reembolso o los montos son cero.");
+        }
+
+        return $this->aplicarAjusteRedondeo($comercial, $reglasReembolso, 'factura de reembolso');
+    }
+
+    /**
      * Arma el asiento contable de una retención recibida en ventas.
      *   DEBE : cuenta configurada por cada código de retención (retenciones_venta_debe),
      *          por el valor retenido de ese código.

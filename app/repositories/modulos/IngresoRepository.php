@@ -264,6 +264,15 @@ class IngresoRepository extends BaseRepository
                       AND nc.eliminado = false
                       AND nc.id_empresa = :id_empresa
                     GROUP BY nc.num_doc_modificado
+                ),
+                nd_aplic AS (
+                    -- Notas de débito de venta: SUMAN al saldo pendiente (al contrario de la NC).
+                    SELECT nd.num_doc_modificado, SUM(nd.importe_total) AS total_nd
+                    FROM nota_debito_cabecera nd
+                    WHERE nd.estado != 'anulado'
+                      AND nd.eliminado = false
+                      AND nd.id_empresa = :id_empresa
+                    GROUP BY nd.num_doc_modificado
                 )
                 SELECT * FROM (
                     SELECT 'FACTURA'::varchar AS tipo_documento,
@@ -273,17 +282,18 @@ class IngresoRepository extends BaseRepository
                            v.importe_total,
                            COALESCE(c.total_cobrado, 0) AS monto_cobrado,
                            COALESCE(rf.total_retenido, 0) AS monto_retenido,
-                           (v.importe_total - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) AS saldo_pendiente
+                           (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) AS saldo_pendiente
                     FROM ventas_cabecera v
                     LEFT JOIN cobrado c        ON v.id = c.id_referencia_documento
                     LEFT JOIN retenido_fact rf ON v.id = rf.id_venta
                     LEFT JOIN nc_aplic ncf     ON ncf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    LEFT JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     WHERE v.id_cliente = :id_cliente
                       AND v.id_empresa = :id_empresa
                       AND v.estado = 'autorizado' -- Solo facturas vigentes/autorizadas
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (v.importe_total - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
+                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
 
                     UNION ALL
 
@@ -630,9 +640,18 @@ class IngresoRepository extends BaseRepository
                       AND nc.eliminado = false
                       AND nc.id_empresa = :id_empresa
                     GROUP BY nc.num_doc_modificado
+                ),
+                nd_aplic AS (
+                    -- Notas de débito de venta: SUMAN al saldo pendiente (al contrario de la NC).
+                    SELECT nd.num_doc_modificado, SUM(nd.importe_total) AS total_nd
+                    FROM nota_debito_cabecera nd
+                    WHERE nd.estado != 'anulado'
+                      AND nd.eliminado = false
+                      AND nd.id_empresa = :id_empresa
+                    GROUP BY nd.num_doc_modificado
                 )
                 SELECT * FROM (
-                    -- Facturas de venta pendientes (saldo neto = total - cobros - retenciones - notas de crédito)
+                    -- Facturas de venta pendientes (saldo neto = total + notas de débito - cobros - retenciones - notas de crédito)
                     SELECT 'FACTURA'::varchar AS tipo_documento,
                            v.id,
                            CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_documento,
@@ -641,7 +660,7 @@ class IngresoRepository extends BaseRepository
                            v.importe_total,
                            COALESCE(cb.total_cobrado, 0) AS monto_cobrado,
                            COALESCE(rf.total_retenido, 0) AS monto_retenido,
-                           (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) AS saldo_pendiente,
+                           (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) AS saldo_pendiente,
                            c.id             AS id_cliente,
                            c.nombre         AS cliente_nombre,
                            c.identificacion AS cliente_ruc
@@ -650,11 +669,12 @@ class IngresoRepository extends BaseRepository
                     LEFT  JOIN cobrado cb       ON v.id = cb.id_referencia_documento
                     LEFT  JOIN retenido_fact rf ON v.id = rf.id_venta
                     LEFT  JOIN nc_aplic ncf     ON ncf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    LEFT  JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     WHERE v.id_empresa = :id_empresa
                       AND v.estado = 'autorizado'
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
+                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
                       $filtroBusq
 
                     UNION ALL

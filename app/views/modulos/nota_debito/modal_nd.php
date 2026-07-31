@@ -36,12 +36,14 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="ndTabs" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" id="tab-nd-principal-btn" data-bs-toggle="tab" href="#tab-nd-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-plus me-1"></i> Nota de débito</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-factura-btn" data-bs-toggle="tab" href="#tab-nd-factura" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Factura relacionada</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-contable-btn" data-bs-toggle="tab" href="#tab-nd-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-sri-btn" data-bs-toggle="tab" href="#tab-nd-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
                             $pestanasConfigND = [
+                                'tab-nd-factura'  => 'Factura relacionada',
                                 'tab-nd-contable' => 'Asiento contable',
                                 'tab-nd-sri'      => 'SRI'
                             ];
@@ -261,6 +263,66 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                                                 <input type="hidden" name="importe_total" id="nd_importe_total">
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pestaña: Factura relacionada -->
+                        <div class="tab-pane fade p-3" id="tab-nd-factura" role="tabpanel">
+                            <div id="nd-factura-relacionada-loading" class="text-center py-5 text-muted">
+                                <i class="bi bi-info-circle me-1"></i> Guarda la nota de débito para ver el detalle de la factura relacionada.
+                            </div>
+                            <div id="nd-factura-relacionada-contenido" class="d-none">
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Número</div>
+                                        <div class="fw-bold" id="ndf-numero"></div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Fecha emisión</div>
+                                        <div class="fw-bold" id="ndf-fecha"></div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Cliente</div>
+                                        <div class="fw-bold" id="ndf-cliente"></div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Estado</div>
+                                        <div id="ndf-estado"></div>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Subtotal</div>
+                                        <div class="fw-semibold">$<span id="ndf-subtotal"></span></div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Total factura</div>
+                                        <div class="fw-semibold">$<span id="ndf-total"></span></div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Cobrado</div>
+                                        <div class="fw-semibold text-success">$<span id="ndf-cobrado"></span></div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-muted x-small">Saldo pendiente</div>
+                                        <div class="fw-bold text-danger">$<span id="ndf-saldo"></span></div>
+                                    </div>
+                                </div>
+                                <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                    <div class="table-responsive" style="max-height: 260px;">
+                                        <table class="table table-sm small mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th class="ps-3 py-2">Descripción</th>
+                                                    <th class="text-end">Cant.</th>
+                                                    <th class="text-end">P. Unitario</th>
+                                                    <th class="text-end pe-3">Subtotal</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ndf-tbody-detalles"></tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>

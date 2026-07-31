@@ -294,6 +294,10 @@
                             <div class="text-muted" style="font-size:.7rem;">Nota Crédito</div>
                             <div class="fw-semibold text-info">$<span id="cobro-nc"></span></div>
                         </div>
+                        <div class="col-3 mt-1">
+                            <div class="text-muted" style="font-size:.7rem;">Nota Débito</div>
+                            <div class="fw-semibold text-dark">$<span id="cobro-nd"></span></div>
+                        </div>
                         <div class="col-12 mt-1 text-end border-top pt-1">
                             <span class="text-muted" style="font-size:.7rem;">Saldo Pendiente: </span>
                             <span class="fw-bold text-danger fs-5" id="cobro-saldo-pend"></span>

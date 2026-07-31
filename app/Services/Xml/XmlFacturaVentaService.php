@@ -28,8 +28,7 @@ class XmlFacturaVentaService
         array $pagos,
         array $infoAdicional,
         array $empresa,
-        ?string $dirEstablecimiento = null,
-        array $reembolsos = []
+        ?string $dirEstablecimiento = null
     ): string {
         // Decimales configurados por la empresa (igual que en el sistema/UI),
         // acotados al rango válido del SRI (0..6).
@@ -58,11 +57,6 @@ class XmlFacturaVentaService
         $factura->appendChild($this->buildInfoTributaria($dom, $cabecera, $empresa));
         $factura->appendChild($this->buildInfoFactura($dom, $cabecera, $detalles, $pagos, $empresa, $dirEstablecimiento));
         $factura->appendChild($this->buildDetalles($dom, $detalles));
-
-        $reembolsosEl = $this->buildReembolsos($dom, $reembolsos);
-        if ($reembolsosEl !== null) {
-            $factura->appendChild($reembolsosEl);
-        }
 
         $infoAdicionalEl = $this->buildInfoAdicional($dom, $infoAdicional);
         if ($infoAdicionalEl !== null) {
@@ -288,67 +282,6 @@ class XmlFacturaVentaService
                 $this->txt($dom, $impEl, 'tarifa',           $this->dec2($imp['tarifa']        ?? 0));
                 $this->txt($dom, $impEl, 'baseImponible',    $this->dec2($imp['base_imponible'] ?? 0));
                 $this->txt($dom, $impEl, 'valor',            $this->dec2($imp['valor']          ?? 0));
-                $impuestosEl->appendChild($impEl);
-            }
-            $det->appendChild($impuestosEl);
-
-            $el->appendChild($det);
-        }
-
-        return $el;
-    }
-
-    /**
-     * Nodo opcional <reembolsos> (hermano de <detalles>, antes de <infoAdicional>).
-     * Cada línea declara el documento de un tercero que la empresa pagó a nombre
-     * del cliente y que se re-factura sin ser ingreso ni IVA propio.
-     *
-     * NOTA: los 4 campos agregados de infoFactura (codDocReembolso,
-     * totalComprobantesReembolso, totalBaseImponibleReembolso, totalImpuestoReembolso)
-     * NO se emiten: según la Ficha Técnica SRI son obligatorios solo cuando
-     * <codDocReembolso> = 41 ("Documento de Reembolso" como comprobante único,
-     * caso de agencias/intermediarios sin documento propio del tercero), escenario
-     * distinto al de aquí (reembolso vinculado a compras ya registradas con su
-     * propio tipo de documento 01/03/04/05...). El nodo <reembolsos> por sí solo
-     * ya es válido y suficiente para ese caso.
-     */
-    private function buildReembolsos(\DOMDocument $dom, array $reembolsos): ?\DOMElement
-    {
-        if (empty($reembolsos)) {
-            return null;
-        }
-
-        $el = $dom->createElement('reembolsos');
-        foreach ($reembolsos as $r) {
-            $det = $dom->createElement('reembolsoDetalle');
-
-            $this->txt($dom, $det, 'tipoIdentificacionProveedorReembolso', (string) ($r['tipo_identificacion_proveedor'] ?? ''));
-            $this->txt($dom, $det, 'identificacionProveedorReembolso',     (string) ($r['identificacion_proveedor']    ?? ''));
-            if (!empty($r['cod_pais_pago_proveedor'])) {
-                $this->txt($dom, $det, 'codPaisPagoProveedorReembolso', (string) $r['cod_pais_pago_proveedor']);
-            }
-            $this->txt($dom, $det, 'tipoProveedorReembolso', (string) ($r['tipo_proveedor'] ?? ''));
-            $this->txt($dom, $det, 'codDocReembolso',        (string) ($r['cod_doc_reembolso'] ?? ''));
-            $this->txt($dom, $det, 'estabDocReembolso',      (string) ($r['estab_doc_reembolso'] ?? ''));
-            $this->txt($dom, $det, 'ptoEmiDocReembolso',     (string) ($r['pto_emi_doc_reembolso'] ?? ''));
-            $this->txt($dom, $det, 'secuencialDocReembolso', (string) ($r['secuencial_doc_reembolso'] ?? ''));
-
-            $fechaDoc = '';
-            if (!empty($r['fecha_emision_doc_reembolso'])) {
-                $ts = strtotime((string) $r['fecha_emision_doc_reembolso']);
-                $fechaDoc = $ts ? date('d/m/Y', $ts) : (string) $r['fecha_emision_doc_reembolso'];
-            }
-            $this->txt($dom, $det, 'fechaEmisionDocReembolso', $fechaDoc);
-            $this->txt($dom, $det, 'numeroautorizacionDocReemb', (string) ($r['numero_autorizacion_doc_reemb'] ?? ''));
-
-            $impuestosEl = $dom->createElement('detalleImpuestos');
-            foreach ($r['impuestos'] ?? [] as $imp) {
-                $impEl = $dom->createElement('detalleImpuesto');
-                $this->txt($dom, $impEl, 'codigo',                (string) ($imp['codigo_impuesto']   ?? ''));
-                $this->txt($dom, $impEl, 'codigoPorcentaje',      (string) ($imp['codigo_porcentaje'] ?? ''));
-                $this->txt($dom, $impEl, 'tarifa',                $this->dec2($imp['tarifa']          ?? 0));
-                $this->txt($dom, $impEl, 'baseImponibleReembolso',$this->dec2($imp['base_imponible']  ?? 0));
-                $this->txt($dom, $impEl, 'impuestoReembolso',     $this->dec2($imp['valor']           ?? 0));
                 $impuestosEl->appendChild($impEl);
             }
             $det->appendChild($impuestosEl);

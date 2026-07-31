@@ -159,6 +159,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(cb.total_cobrado, 0)                                                                               AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                                                              AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                    AS total_nc,
+                COALESCE(nd.total_nd, 0)                                                                                    AS total_nd,
                 v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                 v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
                 v.dias_credito,
@@ -366,7 +367,6 @@ class CuentasPorCobrarRepository extends BaseRepository
                     LEFT JOIN retenido rt ON rt.id_venta = v.id
                     LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     WHERE {$where}
                 ) sub
             ";
@@ -772,6 +772,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(cb.total_cobrado, 0)                                                                                AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                                                               AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                     AS total_nc,
+                COALESCE(nd.total_nd, 0)                                                                                     AS total_nd,
                 v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura
             FROM ventas_cabecera v

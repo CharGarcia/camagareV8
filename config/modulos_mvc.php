@@ -210,6 +210,14 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Pendiente: registrar el submódulo en submodulos_menu (ruta = 'modulos/factura-reembolso')
+    // y asignar permisos en modulos_asignados (ver database/menu_factura_reembolso.sql),
+    // luego actualizar este id_submodulo con el id real generado.
+    'modulos/factura-reembolso' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/guias_remision' => [
         'id_submodulo' => 166,
         'legacy_rutas' => [],

@@ -404,19 +404,72 @@
         // Reservado para un badge de cabecera si se agrega en el futuro.
     }
 
-    window.ND_cargarSecuencial = () => {
-        const idPt = document.getElementById('nd_id_punto_emision').value;
-        if (!idPt) return;
+    function ND_avisarSecuencialNoConfigurado(tipo) {
+        if (typeof Swal === 'undefined') return;
+        const html = (tipo === 'serie')
+            ? 'No hay una serie / punto de emisión disponible.<br>Configure los puntos de emisión y sus secuenciales en <strong>Empresa → Puntos de emisión</strong> antes de emitir la nota de débito.'
+            : 'No están configurados los secuenciales para esta serie (tipo de documento "Nota de débito").<br>Configúrelos en <strong>Empresa → Secuenciales</strong> antes de emitir la nota de débito.';
+        Swal.fire({
+            icon: 'warning',
+            title: 'Secuenciales no configurados',
+            html: html,
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#f39c12',
+            target: document.getElementById('modalND'),
+        });
+    }
 
-        const url = `${BASE_URL}/modulos/nota_debito/getSecuencialAjax?id_punto=${idPt}`;
-        fetch(url)
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    const padSec = String(data.secuencial).padStart(9, '0');
-                    document.getElementById('nd_secuencial').value = padSec;
+    window.ND_cargarSecuencial = async () => {
+        // En edición de una ND existente no se recalcula ni se valida la serie.
+        const idActual = document.getElementById('nd_id').value;
+        if (idActual) return;
+
+        const idPt = document.getElementById('nd_id_punto_emision').value;
+        const inputSec = document.getElementById('nd_secuencial');
+
+        if (!idPt) {
+            window.ND_SECUENCIAL_CONFIGURADO = false;
+            if (inputSec) { inputSec.value = ''; inputSec.placeholder = 'Sin serie'; }
+            ND_avisarSecuencialNoConfigurado('serie');
+            return;
+        }
+
+        if (inputSec) inputSec.placeholder = 'Cargando...';
+        try {
+            const resp = await fetch(`${BASE_URL}/modulos/nota_debito/getSecuencialAjax?id_punto=${idPt}`);
+            const data = await resp.json();
+            if (data.ok) {
+                inputSec.value = data.formateado || String(data.secuencial).padStart(9, '0');
+                inputSec.placeholder = '000000001';
+
+                if (data.es_gap) {
+                    inputSec.classList.add('border-warning');
+                    inputSec.title = data.detalle || 'Número faltante recuperado';
+                } else {
+                    inputSec.classList.remove('border-warning');
+                    inputSec.title = data.detalle || 'Siguiente consecutivo';
                 }
-            });
+
+                window.ND_SECUENCIAL_CONFIGURADO = (data.configurado !== false);
+                if (data.configurado === false) {
+                    inputSec.classList.add('border-danger');
+                    ND_avisarSecuencialNoConfigurado('secuencial');
+                } else {
+                    inputSec.classList.remove('border-danger');
+                }
+            } else {
+                inputSec.value = '000000001';
+                inputSec.placeholder = '000000001';
+                window.ND_SECUENCIAL_CONFIGURADO = false;
+                ND_avisarSecuencialNoConfigurado('secuencial');
+            }
+        } catch (e) {
+            if (inputSec) {
+                inputSec.value = '000000001';
+                inputSec.placeholder = '000000001';
+            }
+            console.error('Error cargando secuencial ND:', e);
+        }
     };
 
     // ─── AUTOCOMPLETE CLIENTES ──────────────────────────────────────────────
@@ -765,8 +818,9 @@
                 const sel = document.getElementById('nd_tarifa_iva');
                 if (sel) {
                     sel.innerHTML = listadoTarifasIva.map(t =>
-                        `<option value="${t.id}" data-codigo="${t.codigo}" data-porcentaje="${t.porcentaje_iva}">${t.nombre || (t.porcentaje_iva + '%')}</option>`
+                        `<option value="${t.id}" data-codigo="${t.codigo}" data-porcentaje="${t.porcentaje_iva}">${t.tarifa}</option>`
                     ).join('');
+                    window.ND_calcTotales();
                 }
             }
         } catch (e) {
@@ -904,6 +958,19 @@
     }
 
     window.ND_guardar = async () => {
+        // Bloqueo: secuenciales no configurados (solo al CREAR una nueva ND).
+        const _esNuevaND = !document.getElementById('nd_id').value;
+        if (_esNuevaND && window.ND_SECUENCIAL_CONFIGURADO === false) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'Secuenciales no configurados',
+                html: 'No están configurados los secuenciales para esta serie (tipo de documento "Nota de débito").<br>Configúrelos en <strong>Empresa → Secuenciales</strong> antes de emitir la nota de débito.',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#f39c12',
+                target: document.getElementById('modalND'),
+            });
+        }
+
         if (!ND_validarObligatorios()) return;
 
         const payload = {
@@ -1392,6 +1459,88 @@
                 const tab = ndAsientoTab();
                 const idEl = document.getElementById('nd_id');
                 if (tab) tab.cargar(idEl ? idEl.value : 0);
+            });
+        }
+    });
+})();
+
+// ─── Pestaña Factura relacionada ─────────────────────────────────────────────
+(function () {
+    async function ndCargarFacturaRelacionada(id) {
+        const loading  = document.getElementById('nd-factura-relacionada-loading');
+        const contenido = document.getElementById('nd-factura-relacionada-contenido');
+        if (!loading || !contenido) return;
+
+        id = parseInt(id) || 0;
+        if (!id) {
+            loading.innerHTML = '<i class="bi bi-info-circle me-1"></i> Guarda la nota de débito para ver el detalle de la factura relacionada.';
+            loading.classList.remove('d-none');
+            contenido.classList.add('d-none');
+            return;
+        }
+
+        loading.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Cargando factura relacionada...';
+        loading.classList.remove('d-none');
+        contenido.classList.add('d-none');
+
+        try {
+            const resp = await fetch(`${BASE_URL}/modulos/nota_debito/getFacturaRelacionadaAjax?id=${id}`);
+            const json = await resp.json();
+
+            if (!json.ok) {
+                loading.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (json.mensaje || 'No se pudo cargar la factura relacionada.');
+                return;
+            }
+
+            const f = json.factura || {};
+            const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+            const numero = `${(f.establecimiento || '').toString().padStart(3, '0')}-${(f.punto_emision || '').toString().padStart(3, '0')}-${(f.secuencial || '').toString().padStart(9, '0')}`;
+            setTxt('ndf-numero', numero);
+            setTxt('ndf-fecha', f.fecha_emision ? String(f.fecha_emision).split(' ')[0].split('T')[0] : '—');
+            setTxt('ndf-cliente', f.cliente_nombre || '—');
+            setTxt('ndf-subtotal', parseFloat(f.total_sin_impuestos || 0).toFixed(2));
+            setTxt('ndf-total', parseFloat(f.importe_total || 0).toFixed(2));
+            setTxt('ndf-cobrado', parseFloat(f.total_cobrado || 0).toFixed(2));
+            setTxt('ndf-saldo', parseFloat(json.saldo_pendiente || 0).toFixed(2));
+
+            const estado = (f.estado || '').toLowerCase();
+            const estadoClass = (estado === 'autorizado' || estado === 'aprobado') ? 'bg-success' :
+                (estado === 'anulado') ? 'bg-danger' : 'bg-secondary';
+            const elEstado = document.getElementById('ndf-estado');
+            if (elEstado) elEstado.innerHTML = `<span class="badge ${estadoClass} bg-opacity-10 text-${estadoClass.replace('bg-', '')} border border-${estadoClass.replace('bg-', '')} border-opacity-25">${estado.toUpperCase()}</span>`;
+
+            const tbody = document.getElementById('ndf-tbody-detalles');
+            if (tbody) {
+                const detalles = json.detalles || [];
+                if (!detalles.length) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin líneas de detalle.</td></tr>';
+                } else {
+                    tbody.innerHTML = detalles.map(d => `
+                        <tr>
+                            <td class="ps-3">${d.descripcion || ''}</td>
+                            <td class="text-end">${parseFloat(d.cantidad || 0)}</td>
+                            <td class="text-end">${parseFloat(d.precio_unitario || 0).toFixed(2)}</td>
+                            <td class="text-end pe-3">${parseFloat(d.precio_total_sin_impuesto || 0).toFixed(2)}</td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
+            loading.classList.add('d-none');
+            contenido.classList.remove('d-none');
+        } catch (e) {
+            console.error('Error al cargar factura relacionada:', e);
+            loading.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar la factura relacionada.';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const btnTab = document.getElementById('tab-nd-factura-btn');
+        if (btnTab) {
+            btnTab.addEventListener('shown.bs.tab', function () {
+                const idEl = document.getElementById('nd_id');
+                ndCargarFacturaRelacionada(idEl ? idEl.value : 0);
             });
         }
     });

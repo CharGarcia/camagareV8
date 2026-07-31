@@ -51,10 +51,18 @@ class NotaDebitoController extends BaseModuloController
         $empresaData  = $empresaModel->getPorId($idEmpresa);
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
 
+        // Solo se ofrecen como Serie los puntos de emisión que ya tienen
+        // configurado el secuencial inicial para "Nota de débito"
+        // (Empresa → Secuenciales); sin eso no se puede emitir válidamente.
+        $secRepo = new \App\repositories\SecuencialRepository();
         $puntos = [];
         foreach ($establecimientos as $est) {
             $pts = $empresaModel->getPuntosEmision((int) $est['id']);
             foreach ($pts as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Nota de débito');
+                if (empty($config['id'])) {
+                    continue;
+                }
                 $p['cod_establecimiento'] = $est['codigo'];
                 $puntos[] = $p;
             }
@@ -463,6 +471,60 @@ class NotaDebitoController extends BaseModuloController
         echo json_encode([
             'ok'       => true,
             'cabecera' => $factura,
+        ]);
+        exit;
+    }
+
+    /**
+     * Detalle de la factura de venta que modifica esta ND (pestaña
+     * "Factura relacionada" del modal). A diferencia de getFacturaDetallesAjax
+     * (que recibe el id de la factura directo, usado al elegirla desde el
+     * buscador), aquí se parte del id de la propia ND y se resuelve la
+     * factura por su num_doc_modificado.
+     */
+    public function getFacturaRelacionadaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $nd = $this->repository->getPorId($id);
+        if (!$nd || (int)($nd['id_empresa'] ?? 0) !== $idEmpresa) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Nota de débito no encontrada.']);
+            exit;
+        }
+
+        $numDocModificado = trim((string)($nd['num_doc_modificado'] ?? ''));
+        if ($numDocModificado === '') {
+            echo json_encode(['ok' => false, 'mensaje' => 'La nota de débito no tiene documento relacionado.']);
+            exit;
+        }
+
+        $facturaRepo = new FacturaVentaRepository();
+        $factura = $facturaRepo->getPorNumeroCompleto($numDocModificado, $idEmpresa);
+        if (!$factura) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No se encontró la factura relacionada (' . $numDocModificado . ').']);
+            exit;
+        }
+
+        // getPorId trae cliente + total_cobrado/total_nc/total_nd/total_retencion
+        // ya calculados (mismas subconsultas que usa la pestaña de Pagos de Factura de Venta).
+        $facturaCompleta = $facturaRepo->getPorId((int)$factura['id']) ?? $factura;
+        $detalles = $facturaRepo->getDetalles((int)$factura['id']);
+
+        $saldo = (float)($facturaCompleta['importe_total'] ?? 0)
+               + (float)($facturaCompleta['total_nd'] ?? 0)
+               - (float)($facturaCompleta['total_cobrado'] ?? 0)
+               - (float)($facturaCompleta['total_retencion'] ?? 0)
+               - (float)($facturaCompleta['total_nc'] ?? 0);
+
+        echo json_encode([
+            'ok'       => true,
+            'factura'  => $facturaCompleta,
+            'detalles' => $detalles,
+            'saldo_pendiente' => round(max(0, $saldo), 2),
         ]);
         exit;
     }
