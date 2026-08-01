@@ -14,9 +14,12 @@ class SincronizadorAsientosService
     /**
      * Resumen corto de documentos con problema, agrupado por módulo: ['Facturas de Venta' => 20, ...].
      * Es lo que se muestra por defecto al usuario (ej. "Hay 20 asiento(s) por generar en Facturas de
-     * Venta"); el detalle motivo-por-motivo sigue disponible en $warnings/error_log para diagnóstico.
+     * Venta"); el detalle motivo-por-motivo (qué cuenta falta, qué documentos) se guarda aparte en
+     * $detalle para que la UI lo pueda mostrar bajo un "Ver detalle" sin volver el mensaje largo.
      */
     private array $resumenPorModulo = [];
+    /** Detalle motivo-por-motivo (mismo contenido que antes iba directo a $warnings). */
+    private array $detalle = [];
 
     public function sincronizar(int $idEmpresa, int $idUsuario): void
     {
@@ -655,22 +658,24 @@ class SincronizadorAsientosService
             ? $this->resolverNumerosDocumento($db, $tablaVerif, $colsDoc, $idsParaNumero)
             : [];
 
-        // El detalle motivo-por-motivo y documento-por-documento se manda al log del servidor (útil
-        // para soporte/depuración) y se acumula en $resumenPorModulo para el aviso corto al usuario
-        // (ej. "Hay 20 asiento(s) por generar en Facturas de Venta") en vez de una línea por motivo.
+        // El aviso corto ("Hay 20 en Facturas de Venta") va en $resumenPorModulo; el motivo real
+        // (qué cuenta falta) y los documentos afectados quedan en $detalle, para un "Ver detalle"
+        // en la UI — y también al log del servidor por si hace falta revisar fuera del navegador.
         $totalConProblema = 0;
         foreach ($errores as $motivo => $idsFallidos) {
             $n = count($idsFallidos);
             $totalConProblema += $n;
-            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — "
-                . "docs: " . $this->listarDocumentos($idsFallidos, $numeros) . " — ids: " . implode(',', $idsFallidos));
+            $docs = $this->listarDocumentos($idsFallidos, $numeros);
+            $this->detalle[] = "{$nombreModulo} — {$n} asiento(s): {$motivo} (documento(s): {$docs})";
+            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — docs: {$docs} — ids: " . implode(',', $idsFallidos));
         }
 
         if (!empty($sinAsiento)) {
             $n = count($sinAsiento);
             $totalConProblema += $n;
-            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} documento(s) siguen sin asiento — "
-                . "docs: " . $this->listarDocumentos($sinAsiento, $numeros) . " — ids: " . implode(',', $sinAsiento));
+            $docs = $this->listarDocumentos($sinAsiento, $numeros);
+            $this->detalle[] = "{$nombreModulo} — {$n} documento(s) sin asiento (documento(s): {$docs})";
+            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} documento(s) siguen sin asiento — docs: {$docs} — ids: " . implode(',', $sinAsiento));
         }
 
         if ($totalConProblema > 0) {
@@ -740,10 +745,19 @@ class SincronizadorAsientosService
     }
 
     /**
-     * Arma el mensaje corto de una sola línea que ve el usuario por defecto (ej. "Hay 20 asiento(s)
-     * por generar en Facturas de Venta, 3 en Facturas de Compra. Revise la configuración contable.").
-     * El detalle motivo-por-motivo/documento-por-documento queda en getWarnings() y en el log del
-     * servidor para quien necesite profundizar (soporte, Auditoría Contable).
+     * Detalle real de cada motivo (qué cuenta falta, qué documentos), uno por línea. La UI lo
+     * muestra bajo un "Ver detalle" oculto por defecto, para no alargar el mensaje principal.
+     */
+    public function getDetalle(): array
+    {
+        return $this->detalle;
+    }
+
+    /**
+     * Arma el mensaje corto de una sola línea que ve el usuario por defecto (ej. "Hay asiento(s) por
+     * generar: 20 en Facturas de Venta, 3 en Facturas de Compra. Revise la configuración contable.").
+     * El detalle motivo-por-motivo/documento-por-documento está en getDetalle() (y en el log del
+     * servidor) para quien necesite profundizar (soporte, Auditoría Contable).
      */
     public function getResumenMensaje(): ?string
     {
@@ -754,6 +768,6 @@ class SincronizadorAsientosService
         foreach ($this->resumenPorModulo as $modulo => $n) {
             $partes[] = "{$n} en {$modulo}";
         }
-        return 'Hay ' . implode(', ', $partes) . '. Revise la configuración contable.';
+        return 'Hay asiento(s) por generar: ' . implode(', ', $partes) . '. Revise la configuración contable.';
     }
 }

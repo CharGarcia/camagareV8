@@ -40,11 +40,12 @@
                     return;
                 }
 
-                // 'resumen' es un único texto corto agrupado por módulo (ej. "Hay 20 en Facturas de
-                // Venta, 3 en Facturas de Compra. Revise la configuración contable."). El detalle
-                // motivo-por-motivo/documento-por-documento sigue viajando en 'warnings' pero ya NO
-                // se pinta aquí como lista larga (queda en el log del servidor para soporte).
+                // 'resumen' es un único texto corto agrupado por módulo (ej. "Hay asiento(s) por
+                // generar: 20 en Facturas de Venta. Revise la configuración contable."). El motivo
+                // real (qué cuenta falta, qué documentos) viaja en 'detalle' y se muestra oculto tras
+                // un "Ver detalle", para no alargar el mensaje pero sin perder la información.
                 const resumen = (typeof json.resumen === 'string' && json.resumen.trim() !== '') ? json.resumen.trim() : null;
+                const detalle = Array.isArray(json.detalle) ? json.detalle : [];
                 const warns = Array.isArray(json.warnings) ? json.warnings : [];
                 const generados = json.generados || 0;
                 const hayPendientes = !!resumen || warns.length > 0;
@@ -55,6 +56,15 @@
                 }
                 if (resumen) {
                     html += `<div class="text-start small mb-2"><i class="bi bi-exclamation-triangle text-warning me-1"></i> ${escapeHtml(resumen)}</div>`;
+                }
+                if (detalle.length) {
+                    const idDetalle = `asientosPendDetalle_${Date.now()}`;
+                    html += `<div class="text-start small mb-2">`
+                        + `<a href="#" class="link-secondary" onclick="event.preventDefault(); `
+                        + `var d=document.getElementById('${idDetalle}'); d.style.display = d.style.display==='none' ? '' : 'none';">`
+                        + `<i class="bi bi-chevron-down me-1"></i>Ver detalle (qué cuenta falta, qué documentos)</a>`
+                        + `<ul id="${idDetalle}" class="mb-0 mt-1 small" style="display:none;">`
+                        + detalle.map(d => `<li class="mb-1">${escapeHtml(d)}</li>`).join('') + `</ul></div>`;
                 }
                 if (warns.length) {
                     // Avisos sin documentos asociados (ej. configuración incompleta detectada de forma
@@ -69,6 +79,7 @@
                         icon: hayPendientes ? 'warning' : 'success',
                         title: hayPendientes ? 'Generación completada con avisos' : 'Asientos generados',
                         html: html,
+                        width: detalle.length ? 640 : undefined,
                         confirmButtonText: 'Aceptar',
                     }).then(() => { if (typeof onGenerado === 'function') onGenerado(); });
                 } else if (typeof onGenerado === 'function') {

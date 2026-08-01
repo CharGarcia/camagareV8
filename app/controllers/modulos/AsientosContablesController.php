@@ -96,6 +96,7 @@ class AsientosContablesController extends BaseModuloController
             echo json_encode([
                 'success'   => true,
                 'resumen'   => $sincronizador->getResumenMensaje(),
+                'detalle'   => $sincronizador->getDetalle(),
                 'warnings'  => $sincronizador->getWarnings(),
                 'generados' => $sincronizador->getGenerados(),
             ]);
