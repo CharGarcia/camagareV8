@@ -178,8 +178,33 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.BASE_URL = '<?= $base ?>';
 </script>
 <?php include 'modal_asiento.php'; ?>
+<?php include __DIR__ . '/../documento_origen/modal_documento.php'; ?>
+<script>window.DOCORIGEN_URL = '<?= $urlBaseModulo ?>/getDocumentoOrigenAjax';</script>
+<script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= time() ?>"></script>
+
+<script>
+    // El modal de Documento Origen se abre ENCIMA del de Asiento Contable: la regla
+    // global .modal { z-index: 5060 !important } (public/css/app.css) los deja a la misma
+    // altura, así que hay que subir el submodal (y su backdrop) por encima con inline
+    // !important, que sí gana a la regla global. Mismo fix que modulos/proformas.
+    (function() {
+        'use strict';
+        var Z_SUBMODAL = 5080;
+        var Z_BACKDROP = 5075;
+        document.addEventListener('show.bs.modal', function(ev) {
+            if (ev.target.id !== 'modalDocumentoOrigen') return;
+            ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
+            setTimeout(function() {
+                var bds = document.querySelectorAll('.modal-backdrop');
+                if (bds.length) {
+                    bds[bds.length - 1].style.setProperty('z-index', String(Z_BACKDROP), 'important');
+                }
+            }, 0);
+        });
+    })();
+</script>
 
 <script>
     (function() {

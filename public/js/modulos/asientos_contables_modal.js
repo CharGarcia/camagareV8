@@ -10,6 +10,16 @@
     const API_ASIENTOS = `${window.BASE_URL || ''}/modulos/asientos_contables`;
     const API_CUENTAS = `${window.BASE_URL || ''}/modulos/plan-cuentas`;
 
+    // modulo_origen con documento mapeado en App\Helpers\DocumentoOrigenAsiento::DOCUMENTOS.
+    // Nómina, activos fijos, declaraciones, traspasos y migración no tienen un documento con
+    // tercero identificable que mostrar, así que el botón "Ver Documento" ni se ofrece para ellos.
+    const MODULOS_CON_DOCUMENTO_ORIGEN = [
+        'factura_venta', 'compra', 'ingreso', 'egreso', 'recibo_venta',
+        'nota_credito', 'nota_debito', 'retencion_compra', 'retencion_venta',
+        'liquidacion_compra', 'importacion', 'consignacion_venta', 'retorno_cv',
+        'cambio_producto_cv', 'FACTURACION_CV',
+    ];
+
     function swalError(texto) {
         return Swal.fire({ icon: 'error', title: 'Error', text: texto, confirmButtonText: 'Aceptar' });
     }
@@ -68,6 +78,8 @@
         document.getElementById('btnAnularAsiento').classList.add('d-none');
         document.getElementById('btnRestablecerAsiento').classList.add('d-none');
         document.getElementById('btnGuardarAsiento').classList.remove('d-none');
+        document.getElementById('asientoBarraAcciones').classList.toggle('d-none', !(id > 0));
+        document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
         aplicarModoLecturaAsiento(false);
         document.getElementById('asientoModalTitle').textContent = id > 0 ? 'Editar Asiento' : 'Nuevo Asiento';
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
@@ -118,6 +130,7 @@
         document.getElementById('btnAnularAsiento').classList.add('d-none');
         document.getElementById('btnRestablecerAsiento').classList.add('d-none');
         document.getElementById('btnGuardarAsiento').classList.remove('d-none');
+        document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
         aplicarModoLecturaAsiento(false);
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
 
@@ -167,6 +180,10 @@
         document.getElementById('btnAnularAsiento').classList.toggle('d-none', esAnulado);
         document.getElementById('btnRestablecerAsiento').classList.toggle('d-none', !(esAnulado && esDiario));
         document.getElementById('btnGuardarAsiento').classList.toggle('d-none', soloLectura);
+        document.getElementById('asientoBarraAcciones').classList.toggle('d-none', !(data.id > 0));
+
+        const tieneOrigen = !!(data.id_referencia_origen && MODULOS_CON_DOCUMENTO_ORIGEN.includes(data.modulo_origen));
+        document.getElementById('btnVerDocumentoOrigenAsiento').classList.toggle('d-none', !tieneOrigen);
 
         if (data.detalles && data.detalles.length > 0) {
             data.detalles.forEach(d => window.ASIENTO_agregarFila(d));
@@ -393,6 +410,27 @@
         } finally {
             btn.innerHTML = textOrig;
             calcularTotales();
+        }
+    };
+
+    window.ASIENTO_exportarPdf = function() {
+        const id = document.getElementById('asiento_id').value;
+        if (!id) return;
+        window.open(`${API_ASIENTOS}/exportarPdfAjax?id=${id}`, '_blank');
+    };
+
+    window.ASIENTO_exportarExcel = function() {
+        const id = document.getElementById('asiento_id').value;
+        if (!id) return;
+        window.open(`${API_ASIENTOS}/exportarExcelAjax?id=${id}`, '_blank');
+    };
+
+    window.ASIENTO_verDocumentoOrigen = function() {
+        const modulo = document.getElementById('asiento_modulo_origen').value;
+        const idRef = document.getElementById('asiento_id_referencia_origen').value;
+        if (!modulo || modulo === 'manual' || !idRef) return;
+        if (typeof window.DOCORIGEN_abrirModal === 'function') {
+            window.DOCORIGEN_abrirModal(modulo, idRef);
         }
     };
 

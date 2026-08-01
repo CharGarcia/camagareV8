@@ -9,6 +9,12 @@
                     </h5>
                     <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+                <div class="px-4 py-2 bg-light border-bottom gap-1 align-items-center flex-wrap d-none" style="display:flex;" id="asientoBarraAcciones">
+                    <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="window.ASIENTO_exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.ASIENTO_exportarExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                    <div class="vr mx-1"></div>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2 d-none" id="btnVerDocumentoOrigenAsiento" onclick="window.ASIENTO_verDocumentoOrigen()" title="Ver documento origen"><i class="bi bi-file-earmark-text"></i> Ver Documento</button>
+                </div>
                 <div class="modal-body px-4 py-3">
                     <input type="hidden" id="asiento_id" name="id">
                     <input type="hidden" id="asiento_modulo_origen" name="modulo_origen" value="manual">

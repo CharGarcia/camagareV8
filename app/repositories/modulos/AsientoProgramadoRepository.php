@@ -681,13 +681,11 @@ class AsientoProgramadoRepository extends BaseRepository
         $generales = $this->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento);
         $reglasEntidad = $this->getReglasPorEntidad($idEmpresa, $tipoReferencia, $idReferencia, $referenciaTexto);
 
-        // Alcance real del motor (2026-07-31): el reparto COMPLETO por categoría (todos los
-        // conceptos: Cuenta por Cobrar, Subtotal, ICE, Costo, Inventario) ya está implementado en
-        // AsientoBuilderService::armarDistribucionVentasFactura() para 'ventas_factura'. Recibos de
-        // Venta, Notas de Crédito y Compras aún usan el reparto viejo (solo Subtotal/Gasto por
-        // línea) — pendiente de migrar (ver memoria "asiento-cascada-resolucion"). Actualizar este
-        // flag a medida que se repliquen.
-        $repartoCompletoImplementado = ($tipoAsiento === 'ventas_factura');
+        // Alcance real del motor (2026-08-01): el reparto COMPLETO por categoría ya está
+        // implementado en AsientoBuilderService para 'ventas_factura' (también cubre Notas de
+        // Crédito, que reusan la misma configuración), 'recibos_venta' y 'adquisiciones_compras'.
+        // Actualizar este flag si se agregan más tipos.
+        $repartoCompletoImplementado = in_array($tipoAsiento, ['ventas_factura', 'recibos_venta', 'adquisiciones_compras'], true);
         $esDimensionPorLinea = in_array($tipoReferencia, ['producto', 'categoria', 'marca', 'item_compra'], true);
 
         $conceptosFaltantes = [];
@@ -702,9 +700,13 @@ class AsientoProgramadoRepository extends BaseRepository
             $esSubtotal = str_contains($codigo, 'SUBTOTAL') || str_contains($conceptoLower, 'subtotal');
             // Propina y Descuento NUNCA se resuelven por dimensión, ni siquiera donde ya está el
             // reparto completo: Propina por decisión del usuario (no varía por línea); Descuento
-            // porque su reparto por categoría todavía no está implementado (alcance pendiente).
+            // porque su reparto por categoría todavía no está implementado (alcance pendiente). En
+            // Compras, ICE tampoco se reparte (el subtotal ya viene neto por línea, "v1" — a
+            // diferencia de Ventas/Recibos, donde ICE SÍ tiene reparto propio).
+            $esIce = str_contains($codigo, 'ICE') || str_contains($conceptoLower, 'ice');
             $esPropinaODescuento = str_contains($codigo, 'PROPINA') || str_contains($conceptoLower, 'propina')
-                                || str_contains($codigo, 'DESC')     || str_contains($conceptoLower, 'descuento');
+                                || str_contains($codigo, 'DESC')     || str_contains($conceptoLower, 'descuento')
+                                || ($tipoAsiento === 'adquisiciones_compras' && $esIce);
 
             $entidadAplicaAEsteConcepto = !$esDimensionPorLinea
                 ? true // Cliente/Proveedor: aplica a todos los conceptos, siempre.

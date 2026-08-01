@@ -10,6 +10,7 @@ use App\Services\LogSistemaService;
 use App\Services\modulos\AsientoContableService;
 use App\models\CentroCosto;
 use App\models\Proyecto;
+use App\models\Empresa;
 
 class AsientosContablesController extends BaseModuloController
 {
@@ -238,6 +239,147 @@ class AsientosContablesController extends BaseModuloController
                 'proyectos' => $proyectos
             ]
         ]);
+        exit;
+    }
+
+    public function getDocumentoOrigenAjax(): void
+    {
+        $this->requireLeer();
+        try {
+            $servicio = new \App\Services\modulos\DocumentoOrigenService();
+            $datos = $servicio->getDetalle(
+                trim($_GET['modulo'] ?? ''),
+                (int) ($_GET['id'] ?? 0),
+                (int) $_SESSION['id_empresa']
+            );
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
+    public function exportarPdfAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $asiento = $this->service->getDetalleAsiento($id, $idEmpresa);
+            if (!$asiento) {
+                http_response_code(404); echo 'Asiento no encontrado'; exit;
+            }
+
+            $empresaModel = new Empresa();
+            $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            $pdfService = new \App\Services\modulos\AsientoContablePdfService();
+            $pdfService->generar($asiento, $empresa);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $asiento = $this->service->getDetalleAsiento($id, $idEmpresa);
+            if (!$asiento) {
+                http_response_code(404); echo 'Asiento no encontrado'; exit;
+            }
+
+            $empresaModel = new Empresa();
+            $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Asiento');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:F1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'ASIENTO CONTABLE N.° ' . ($asiento['numero_comprobante'] ?? ''));
+            $sheet->mergeCells('A2:F2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($asiento['fecha_asiento']) ? date('d-m-Y', strtotime((string)$asiento['fecha_asiento'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Tipo: ' . str_replace('_', ' ', (string)($asiento['tipo_comprobante'] ?? '')));
+            $sheet->setCellValue('E3', 'Estado: ' . ucfirst((string)($asiento['estado'] ?? '')));
+
+            $sheet->setCellValue('A4', 'Concepto: ' . (string)($asiento['concepto'] ?? ''));
+            $sheet->mergeCells('A4:F4');
+
+            $headerRow = 6;
+            $headers = ['Cuenta Contable', 'Centro Costo', 'Proyecto', 'Documento/Ref', 'Debe', 'Haber'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':F' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            $totDebe = 0.0;
+            $totHaber = 0.0;
+            foreach ($asiento['detalles'] ?? [] as $d) {
+                $cuenta = trim((string)($d['codigo_cuenta'] ?? '') . ' - ' . (string)($d['nombre_cuenta'] ?? ''), ' -');
+                $debe  = (float)($d['debe'] ?? 0);
+                $haber = (float)($d['haber'] ?? 0);
+                $totDebe  += $debe;
+                $totHaber += $haber;
+
+                $sheet->setCellValueExplicit('A' . $row, $cuenta, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($d['nombre_centro_costo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('C' . $row, (string)($d['nombre_proyecto'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('D' . $row, (string)($d['documento_referencia'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('E' . $row, $debe > 0 ? $debe : null);
+                $sheet->setCellValue('F' . $row, $haber > 0 ? $haber : null);
+                $row++;
+            }
+
+            $sheet->setCellValue('D' . $row, 'TOTALES');
+            $sheet->getStyle('D' . $row)->getFont()->setBold(true);
+            $sheet->setCellValue('E' . $row, $totDebe);
+            $sheet->setCellValue('F' . $row, $totHaber);
+            $sheet->getStyle('E' . $row . ':F' . $row)->getFont()->setBold(true);
+
+            $sheet->getStyle('E' . ($headerRow + 1) . ':F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Asiento_' . ($asiento['numero_comprobante'] ?: 'comprobante') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
         exit;
     }
 

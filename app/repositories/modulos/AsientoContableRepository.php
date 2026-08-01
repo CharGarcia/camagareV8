@@ -95,10 +95,13 @@ class AsientoContableRepository
             return [];
         }
 
-        // Obtener detalles con la cuenta contable
-        $sqlDet = "SELECT d.*, c.codigo as codigo_cuenta, c.nombre as nombre_cuenta 
+        // Obtener detalles con la cuenta contable, centro de costo y proyecto
+        $sqlDet = "SELECT d.*, c.codigo as codigo_cuenta, c.nombre as nombre_cuenta,
+                          cc.nombre as nombre_centro_costo, p.nombre as nombre_proyecto
                    FROM asientos_contables_detalle d
                    LEFT JOIN plan_cuentas c ON d.id_cuenta_contable = c.id
+                   LEFT JOIN centro_costos cc ON d.id_centro_costo = cc.id
+                   LEFT JOIN proyectos p ON d.id_proyecto = p.id
                    WHERE d.id_asiento = :id_asiento AND d.eliminado = false
                    ORDER BY CASE WHEN d.debe > 0 THEN 1 ELSE 2 END ASC, d.id ASC";
         $stmtDet = $pdo->prepare($sqlDet);

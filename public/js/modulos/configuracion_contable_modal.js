@@ -840,19 +840,21 @@
             const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const faltan = [...(res.data.conceptos || []), ...(res.data.iva || [])];
 
-            // Alcance real del motor (2026-07-31): en Ventas con Factura, Producto/Categoría/Marca
-            // ya arman el asiento COMPLETO por línea (Cuenta por Cobrar, Subtotal, ICE, Costo,
-            // Inventario e IVA) — solo Propina y Descuento quedan siempre en Cliente/General. En
-            // Recibos de Venta y Compras, esa dimensión todavía solo afecta Subtotal/Gasto (y el
-            // IVA, que ya tenía su propia cascada); el resto sigue viniendo de Cliente/Proveedor o
-            // General — pendiente de migrar al mismo reparto completo.
+            // Alcance real del motor (2026-08-01): en Ventas con Factura, Recibos de Venta y
+            // Compras, Producto/Categoría/Marca (Ítem, en Compras) ya arman el asiento COMPLETO por
+            // línea (Cuenta por Cobrar/Por Pagar, Subtotal/Gasto, Costo, Inventario e IVA) — Propina
+            // y Descuento siempre quedan en Cliente/Proveedor/General. En Compras, ICE TAMPOCO se
+            // reparte (el subtotal ya viene neto por línea) — a diferencia de Ventas/Recibos, donde
+            // ICE sí tiene su propio reparto.
             const esDimensionPorLinea = ['producto', 'categoria', 'marca'].includes(tipo);
-            const repartoCompletoImplementado = (tipoAsiento === 'ventas_factura');
+            const repartoCompletoImplementado = ['ventas_factura', 'recibos_venta', 'adquisiciones_compras'].includes(tipoAsiento);
+            const esCompras = (tipoAsiento === 'adquisiciones_compras');
             let notaAlcance = '';
             if (esDimensionPorLinea && repartoCompletoImplementado) {
                 notaAlcance = '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>'
-                    + 'Esta regla arma el asiento completo de las líneas de esa dimensión (Cuenta por Cobrar, '
-                    + 'Subtotal, ICE, Costo e Inventario). Propina y Descuento siempre se toman del Cliente '
+                    + 'Esta regla arma el asiento completo de las líneas de esa dimensión ('
+                    + (esCompras ? 'Por Pagar, Subtotal/Gasto e Inventario' : 'Cuenta por Cobrar, Subtotal, ICE, Costo e Inventario')
+                    + `). Propina${esCompras ? ', Descuento e ICE' : ' y Descuento'} siempre se toman del Proveedor/Cliente `
                     + 'o de la Configuración General.</div>';
             } else if (esDimensionPorLinea) {
                 notaAlcance = '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>'

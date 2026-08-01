@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad
-version: 1.0
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen
+version: 1.1
 orden: 20
 estado: activo
 ---
@@ -55,6 +55,29 @@ centavo al redondear. El sistema las absorbe automáticamente en la línea de ma
 monto del lado que quedó corto. Un descuadre mayor que un redondeo sí detiene el
 proceso: eso indica un error real.
 
+## Imprimir en PDF o Excel
+
+Al abrir un asiento ya guardado aparece, debajo del título del modal, una barra
+con dos botones:
+
+- **PDF** (ícono rojo): descarga el asiento con su cabecera, el detalle de
+  cuentas (con centro de costo, proyecto y documento/ref) y los totales de
+  Debe y Haber.
+- **Excel** (ícono verde): la misma información en una hoja de cálculo.
+
+Estos botones no aparecen en un asiento nuevo sin guardar, porque todavía no
+tiene número de comprobante.
+
+## Ver el documento que originó el asiento
+
+Cuando el asiento nace de un documento (factura de venta, compra, ingreso,
+egreso, nota de crédito/débito, retención, liquidación de compra, importación,
+consignación, etc.), la misma barra muestra el botón **Ver Documento**: abre
+una ventana de solo lectura con el documento completo, sin salir del asiento.
+El botón no aparece en asientos manuales (tipo Diario) ni en los generados por
+nómina, activos fijos, declaraciones o traspasos, porque esos procesos no
+tienen un documento individual con tercero que mostrar.
+
 ## Errores frecuentes
 
 - **"El asiento no está cuadrado"**: el mensaje muestra el total del Debe y del
@@ -66,4 +89,6 @@ proceso: eso indica un error real.
 
 ## Historial de cambios
 
+- **1.1** — Botones de impresión en PDF y Excel del asiento, y botón para ver
+  el documento origen (factura, compra, egreso, etc.) sin salir del modal.
 - **1.0** — Versión inicial.
