@@ -114,6 +114,22 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en recordatorios de videollamadas: " . $e->getMessage() . "\n";
 }
 
+// ── SRI: reintentar comprobantes pendientes de resolución ────────────────────
+//    Corre en CADA tick a propósito: la elegibilidad la da la antigüedad de cada
+//    comprobante (mínimo 5 min desde el último intento), no una marca de "ya
+//    corrí". Es seguro e idempotente: SriEnvioService nunca reenvía una clave
+//    de acceso que el SRI ya tiene en cola, solo vuelve a consultar su estado.
+try {
+    $svcSriPend = new \App\Services\Sri\SriReintentosPendientesService();
+    $resSriPend = $svcSriPend->procesar();
+    if ($resSriPend['reintentados'] > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] SRI pendientes: {$resSriPend['reintentados']} reintentado(s), "
+            . "{$resSriPend['resueltos']} resuelto(s), {$resSriPend['avisos']} aviso(s) enviado(s).\n";
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en reintentos de comprobantes SRI: " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();

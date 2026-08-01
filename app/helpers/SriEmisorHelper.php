@@ -22,7 +22,9 @@ class SriEmisorHelper
     private static array $regimenCache = [];
 
     /**
-     * Leyenda del régimen RIMPE del emisor. '' si es general / no aplica.
+     * Leyenda del régimen RIMPE del emisor para el RIDE (PDF). '' si es
+     * general / no aplica. Descriptiva para el lector humano — NO usar en el
+     * XML (ver regimenRimpeLeyendaXml).
      */
     public static function regimenRimpeLeyenda(array $empresa): string
     {
@@ -38,6 +40,21 @@ class SriEmisorHelper
             return 'CONTRIBUYENTE RÉGIMEN RIMPE';
         }
         return ''; // General u otro régimen: no se muestra.
+    }
+
+    /**
+     * Leyenda del régimen RIMPE del emisor para el elemento <contribuyenteRimpe>
+     * del XML. El XSD del SRI (factura/NC/ND/retención/guía/liquidación,
+     * comprobado en v1.1.0 y v2.1.0) restringe este campo a un único valor fijo
+     * — "CONTRIBUYENTE RÉGIMEN RIMPE" — sin variante para Negocio Popular; un
+     * valor distinto hace que el comprobante no pase la validación de esquema
+     * del SRI (se queda sin resolver, sin rechazo explícito). A diferencia de
+     * regimenRimpeLeyenda() (para el PDF, donde sí se distingue Negocio
+     * Popular), aquí SIEMPRE se devuelve el literal exacto cuando aplica RIMPE.
+     */
+    public static function regimenRimpeLeyendaXml(array $empresa): string
+    {
+        return self::regimenRimpeLeyenda($empresa) !== '' ? 'CONTRIBUYENTE RÉGIMEN RIMPE' : '';
     }
 
     /**

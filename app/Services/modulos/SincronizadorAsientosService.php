@@ -11,6 +11,12 @@ class SincronizadorAsientosService
     private array $warnings = [];
     /** Notas informativas (no son errores): explican comportamientos intencionales. */
     private int $generados = 0;
+    /**
+     * Resumen corto de documentos con problema, agrupado por módulo: ['Facturas de Venta' => 20, ...].
+     * Es lo que se muestra por defecto al usuario (ej. "Hay 20 asiento(s) por generar en Facturas de
+     * Venta"); el detalle motivo-por-motivo sigue disponible en $warnings/error_log para diagnóstico.
+     */
+    private array $resumenPorModulo = [];
 
     public function sincronizar(int $idEmpresa, int $idUsuario): void
     {
@@ -649,24 +655,26 @@ class SincronizadorAsientosService
             ? $this->resolverNumerosDocumento($db, $tablaVerif, $colsDoc, $idsParaNumero)
             : [];
 
+        // El detalle motivo-por-motivo y documento-por-documento se manda al log del servidor (útil
+        // para soporte/depuración) y se acumula en $resumenPorModulo para el aviso corto al usuario
+        // (ej. "Hay 20 asiento(s) por generar en Facturas de Venta") en vez de una línea por motivo.
+        $totalConProblema = 0;
         foreach ($errores as $motivo => $idsFallidos) {
             $n = count($idsFallidos);
-            $this->warnings[] = "No se pudieron generar {$n} asiento(s) contable(s) en {$nombreModulo}. "
-                . "Motivo: «{$motivo}». Documento(s): " . $this->listarDocumentos($idsFallidos, $numeros) . ". "
-                . "Si es por cuentas sin configurar, revise {$dondeConfigurar}; "
-                . "puede reintentar desde Auditoría Contable (Regenerar) o al volver a abrir Estados Financieros.";
-
-            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — ids: " . implode(',', $idsFallidos));
+            $totalConProblema += $n;
+            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — "
+                . "docs: " . $this->listarDocumentos($idsFallidos, $numeros) . " — ids: " . implode(',', $idsFallidos));
         }
 
         if (!empty($sinAsiento)) {
             $n = count($sinAsiento);
-            $this->warnings[] = "Quedaron {$n} documento(s) SIN asiento contable en {$nombreModulo}: "
-                . $this->listarDocumentos($sinAsiento, $numeros) . ". No se generó ninguna línea contable "
-                . "(normalmente porque faltan cuentas por configurar): revise {$dondeConfigurar}. "
-                . "Al volver a abrir Estados Financieros se reintentará automáticamente.";
+            $totalConProblema += $n;
+            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} documento(s) siguen sin asiento — "
+                . "docs: " . $this->listarDocumentos($sinAsiento, $numeros) . " — ids: " . implode(',', $sinAsiento));
+        }
 
-            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} documento(s) siguen sin asiento — ids: " . implode(',', $sinAsiento));
+        if ($totalConProblema > 0) {
+            $this->resumenPorModulo[$nombreModulo] = ($this->resumenPorModulo[$nombreModulo] ?? 0) + $totalConProblema;
         }
     }
 
@@ -723,5 +731,29 @@ class SincronizadorAsientosService
     public function getGenerados(): int
     {
         return $this->generados;
+    }
+
+    /** Resumen corto por módulo: ['Facturas de Venta' => 20, 'Facturas de Compra' => 3, ...]. */
+    public function getResumenPorModulo(): array
+    {
+        return $this->resumenPorModulo;
+    }
+
+    /**
+     * Arma el mensaje corto de una sola línea que ve el usuario por defecto (ej. "Hay 20 asiento(s)
+     * por generar en Facturas de Venta, 3 en Facturas de Compra. Revise la configuración contable.").
+     * El detalle motivo-por-motivo/documento-por-documento queda en getWarnings() y en el log del
+     * servidor para quien necesite profundizar (soporte, Auditoría Contable).
+     */
+    public function getResumenMensaje(): ?string
+    {
+        if (empty($this->resumenPorModulo)) {
+            return null;
+        }
+        $partes = [];
+        foreach ($this->resumenPorModulo as $modulo => $n) {
+            $partes[] = "{$n} en {$modulo}";
+        }
+        return 'Hay ' . implode(', ', $partes) . '. Revise la configuración contable.';
     }
 }

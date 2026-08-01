@@ -62,7 +62,7 @@ class XmlNotaDebitoService
         if ($agente !== '') {
             $this->txt($dom, $el, 'agenteRetencion', $agente);
         }
-        $regimen = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($emp);
+        $regimen = \App\Helpers\SriEmisorHelper::regimenRimpeLeyendaXml($emp);
         if ($regimen !== '') {
             $this->txt($dom, $el, 'contribuyenteRimpe', $regimen);
         }

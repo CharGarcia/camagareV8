@@ -123,6 +123,7 @@ class MayoresController extends BaseModuloController
 
             echo json_encode([
                 'success'   => true,
+                'resumen'   => $sincronizador->getResumenMensaje(),
                 'warnings'  => $sincronizador->getWarnings(),
                 'generados' => $sincronizador->getGenerados(),
             ]);

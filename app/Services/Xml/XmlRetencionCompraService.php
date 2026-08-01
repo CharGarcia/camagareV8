@@ -96,7 +96,7 @@ class XmlRetencionCompraService
         if ($agente !== '') {
             $this->addChild($dom, $node, 'agenteRetencion', $agente);
         }
-        $regimen = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($emp);
+        $regimen = \App\Helpers\SriEmisorHelper::regimenRimpeLeyendaXml($emp);
         if ($regimen !== '') {
             $this->addChild($dom, $node, 'contribuyenteRimpe', $regimen);
         }

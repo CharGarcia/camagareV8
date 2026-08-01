@@ -40,25 +40,35 @@
                     return;
                 }
 
+                // 'resumen' es un único texto corto agrupado por módulo (ej. "Hay 20 en Facturas de
+                // Venta, 3 en Facturas de Compra. Revise la configuración contable."). El detalle
+                // motivo-por-motivo/documento-por-documento sigue viajando en 'warnings' pero ya NO
+                // se pinta aquí como lista larga (queda en el log del servidor para soporte).
+                const resumen = (typeof json.resumen === 'string' && json.resumen.trim() !== '') ? json.resumen.trim() : null;
                 const warns = Array.isArray(json.warnings) ? json.warnings : [];
                 const generados = json.generados || 0;
+                const hayPendientes = !!resumen || warns.length > 0;
 
                 let html = '';
                 if (generados > 0) {
                     html += `<div class="mb-2"><i class="bi bi-check-circle-fill text-success me-1"></i> Se generaron <strong>${generados}</strong> asiento(s) contable(s).</div>`;
                 }
+                if (resumen) {
+                    html += `<div class="text-start small mb-2"><i class="bi bi-exclamation-triangle text-warning me-1"></i> ${escapeHtml(resumen)}</div>`;
+                }
                 if (warns.length) {
-                    html += `<div class="text-start mt-2"><strong>Pendientes o con avisos:</strong>`
+                    // Avisos sin documentos asociados (ej. configuración incompleta detectada de forma
+                    // proactiva, o fallas de migración): siguen siendo pocos y cortos, se listan aparte.
+                    html += `<div class="text-start small"><strong>Otros avisos:</strong>`
                         + `<ul class="mb-0 mt-1 small">${warns.map(w => `<li class="mb-1">${escapeHtml(w)}</li>`).join('')}</ul></div>`;
                 }
                 if (!html) html = 'No quedaron asientos por generar.';
 
                 if (window.Swal) {
                     Swal.fire({
-                        icon: warns.length ? 'warning' : 'success',
-                        title: warns.length ? 'Generación completada con avisos' : 'Asientos generados',
+                        icon: hayPendientes ? 'warning' : 'success',
+                        title: hayPendientes ? 'Generación completada con avisos' : 'Asientos generados',
                         html: html,
-                        width: warns.length ? 640 : undefined,
                         confirmButtonText: 'Aceptar',
                     }).then(() => { if (typeof onGenerado === 'function') onGenerado(); });
                 } else if (typeof onGenerado === 'function') {
