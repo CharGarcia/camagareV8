@@ -1137,11 +1137,19 @@ class AsientoBuilderService
         $ivaParaCuentaGeneral = round($totalIvaTotal - $totalIvaMapeado, 2);
 
         // ── 4. Pre-scan: ¿existe regla de DESCUENTO? ──
-        // Si hay una regla DESC/descuento activa Y hay descuento en la factura,
-        // el SUBTOTAL (HABER) debe ser el importe bruto (neto + descuento) para que cuadre.
+        // Si hay una CUENTA de descuento realmente CONFIGURADA (no solo el concepto en el catálogo
+        // asientos_tipo, que siempre existe con o sin cuenta) Y hay descuento en la factura, el
+        // SUBTOTAL (HABER) debe ser el importe bruto (neto + descuento) para que cuadre.
+        //
+        // BUG corregido (encontrado 2026-08-01): antes no se comprobaba `id_cuenta`, así que
+        // CUALQUIER factura con descuento > 0 activaba este modo aunque no hubiera ninguna cuenta
+        // de Descuento configurada — desactivando TODO el reparto por categoría (Subtotal, y ahora
+        // también Cuenta por Cobrar/ICE/Costo/Inventario) sin motivo real, y sin ningún aviso que lo
+        // explicara (el mensaje de "faltan cuentas" no distinguía este caso del de verdad faltante).
         $tieneReglaDescuento = false;
         if ($descuento > 0) {
             foreach ($reglas as $r) {
+                if (empty($r['id_cuenta'])) continue;
                 $c  = strtoupper($r['asiento_tipo_codigo']      ?? $r['codigo']     ?? '');
                 $cv = strtolower($r['asiento_tipo_referencia']  ?? $r['concepto']   ?? $r['referencia'] ?? '');
                 if (str_contains($c, 'DESC') || str_contains($cv, 'descuento')) {
@@ -1195,6 +1203,22 @@ class AsientoBuilderService
             // aplicarAjusteRedondeo() ya emite su propio mensaje. Reportarla en un descuadre grande
             // desviaba el diagnóstico de la cuenta que realmente falta (p. ej. el IVA de una tarifa).
             if (str_contains($codigo, 'REDONDEO')) continue;
+
+            // Descuento tampoco se reporta como faltante: sin cuenta configurada, el Subtotal se
+            // postea NETO (ya refleja el descuento) y el asiento cuadra igual — no es una cuenta
+            // bloqueante, a diferencia del resto. Reportarla generaba ruido en facturas con
+            // descuento aunque todo lo demás (Cuenta por Cobrar, Subtotal, IVA...) ya se generara bien.
+            if (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
+                if (!empty($r['id_cuenta']) && $descuento > 0) {
+                    $lado = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($descuento, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($descuento, 2),
+                        'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
+                    ];
+                }
+                continue;
+            }
 
             $esPorCobrar  = str_contains($codigo, 'PORCOBRAR')  || str_contains($concepto, 'cobrar');
             $esSubtotal   = str_contains($codigo, 'SUBTOTAL')   || str_contains($concepto, 'subtotal');
@@ -1263,19 +1287,6 @@ class AsientoBuilderService
                     $detalles[] = [
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($valorMapeado, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorMapeado, 2),
-                        'referencia_detalle' => $refBase,
-                    ];
-                }
-                continue;
-            }
-
-            // Descuento en ventas — sin reparto por categoría en esta fase (sigue como un solo valor
-            // de todo el documento; ver nota en la memoria del proyecto sobre el alcance pendiente).
-            if (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
-                if (!empty($r['id_cuenta']) && $descuento > 0) {
-                    $detalles[] = [
-                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
-                        'debe' => $lado === 'debe' ? round($descuento, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($descuento, 2),
                         'referencia_detalle' => $refBase,
                     ];
                 }
@@ -1572,9 +1583,12 @@ class AsientoBuilderService
         $ivaParaCuentaGeneral = round($totalIvaTotal - $totalIvaMapeado, 2);
 
         // ── 4. Pre-scan: ¿existe regla de DESCUENTO? ──
+        // Mismo fix que en armarDistribucionVentasFactura (2026-08-01): solo cuenta si la cuenta de
+        // Descuento está REALMENTE configurada (id_cuenta), no solo el concepto en el catálogo.
         $tieneReglaDescuento = false;
         if ($descuento > 0) {
             foreach ($reglas as $r) {
+                if (empty($r['id_cuenta'])) continue;
                 $c  = strtoupper($r['asiento_tipo_codigo']      ?? $r['codigo']     ?? '');
                 $cv = strtolower($r['asiento_tipo_referencia']  ?? $r['concepto']   ?? $r['referencia'] ?? '');
                 if (str_contains($c, 'DESC') || str_contains($cv, 'descuento')) {
@@ -1593,6 +1607,20 @@ class AsientoBuilderService
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
 
             if (str_contains($codigo, 'REDONDEO')) continue;
+
+            // Descuento no se reporta como faltante (mismo criterio que en ventas_factura, 2026-08-01):
+            // sin cuenta configurada, el Subtotal se postea NETO y el asiento cuadra igual.
+            if (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
+                if (!empty($r['id_cuenta']) && $descuento > 0) {
+                    $ladoDesc = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $ladoDesc === 'debe' ? round($descuento, 2) : 0.0, 'haber' => $ladoDesc === 'debe' ? 0.0 : round($descuento, 2),
+                        'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
+                    ];
+                }
+                continue;
+            }
 
             if (empty($r['id_cuenta'])) {
                 $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
@@ -1632,9 +1660,6 @@ class AsientoBuilderService
                     }
                     continue;
                 }
-            }
-            elseif (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
-                $valorMapeado = $descuento;
             }
             elseif (str_contains($codigo, 'ICE') || str_contains($concepto, 'ice')) {
                 $valorMapeado = $totalIce;
