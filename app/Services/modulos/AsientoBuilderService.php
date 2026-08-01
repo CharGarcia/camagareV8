@@ -569,30 +569,51 @@ class AsientoBuilderService
     }
 
     /**
-     * Reparto POR LÍNEA del subtotal de ventas en CASCADA: cada línea toma la cuenta de su producto;
-     * si no, la de su categoría; si no, la de su marca; si ninguna, la cuenta base (General de Ventas).
-     * Agrupa por la cuenta resultante y concilia el redondeo contra $montoTotal.
+     * Reparto POR LÍNEA en CASCADA para VENTAS: cada línea toma la cuenta de su producto; si no, la
+     * de su categoría; si no, la de su marca; si ninguna, la cuenta base (General). Agrupa por la
+     * cuenta resultante y concilia el redondeo contra $montoTotal.
      *
-     * @return array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>
+     * Generalizada para reutilizarse en cualquier concepto que tenga un valor real por línea (no
+     * solo Subtotal): Cuenta por Cobrar, Costo de Ventas, Inventario, ICE — ver "Diseño: reparto
+     * completo por categoría" (2026-07-31). $valorExpr es la expresión SQL a sumar por línea
+     * (columna de `ventas_detalle d`, o de un join agregado en $joinsExtra); $joinsExtra son JOINs
+     * adicionales que $valorExpr pueda necesitar. Ambos son literales del código, no entrada de
+     * usuario — seguros de interpolar.
+     *
+     * A diferencia de antes, la cuenta BASE (General/Cliente) puede venir VACÍA — pasa cuando el
+     * concepto solo está configurado a nivel de Producto/Categoría/Marca y en ningún otro lado. En
+     * ese caso, las líneas que sí resuelven cuenta (por su producto/categoría/marca) se postean
+     * igual; lo que no resuelve NI por línea NI por la base se devuelve aparte en 'sin_cuenta' —
+     * nunca se postea una línea con id_cuenta=0.
+     *
+     * @return array{partes: array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>, sin_cuenta: float}
      */
-    private function repartirVentasCascada(\PDO $db, int $idEmpresa, int $idVenta, int $idAsientoTipo, array $cuentaBase, float $montoTotal): array
+    private function repartirVentasCascada(\PDO $db, int $idEmpresa, int $idVenta, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = ''): array
     {
+        $idCuentaBase = (int)($cuentaBase['id_cuenta'] ?? 0);
         $baseLinea = [
-            'id_cuenta'     => (int)($cuentaBase['id_cuenta'] ?? 0),
+            'id_cuenta'     => $idCuentaBase,
             'cuenta_codigo' => $cuentaBase['cuenta_codigo'] ?? '',
             'cuenta_nombre' => $cuentaBase['cuenta_nombre'] ?? '',
             'monto'         => round($montoTotal, 2),
         ];
-        if ($idVenta <= 0 || $montoTotal <= 0 || empty($baseLinea['id_cuenta'])) {
-            return [$baseLinea];
+        if ($montoTotal <= 0) {
+            return ['partes' => [], 'sin_cuenta' => 0.0];
+        }
+        if ($idVenta <= 0) {
+            // Sin id_venta (preview): no hay líneas que consultar todavía.
+            return $idCuentaBase > 0
+                ? ['partes' => [$baseLinea], 'sin_cuenta' => 0.0]
+                : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
         // COALESCE(producto, categoría, marca) → la cuenta más específica configurada para cada línea.
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM(d.precio_total_sin_impuesto)::numeric, 2) AS monto
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto
                 FROM ventas_detalle d
                 LEFT JOIN productos p ON p.id = d.id_producto
+                {$joinsExtra}
                 LEFT JOIN asientos_programados ap_p
                        ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
                       AND ap_p.id_asiento_tipo = :id_tipo1 AND ap_p.id_empresa = :emp1 AND ap_p.eliminado = false
@@ -613,15 +634,28 @@ class AsientoBuilderService
             ':id_doc'   => $idVenta,
         ]);
 
-        $mapa  = [];
-        $total = 0.0;
+        $mapa      = [];
+        $total     = 0.0;
+        $sinCuenta = 0.0;
         while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
             $monto = round((float)$row['monto'], 2);
             if ($monto == 0.0) continue;
             $tieneCta = !empty($row['dim_cuenta']);
-            $idCta = $tieneCta ? (int)$row['dim_cuenta'] : (int)$baseLinea['id_cuenta'];
-            $cod   = $tieneCta ? ($row['dim_codigo'] ?? '') : $baseLinea['cuenta_codigo'];
-            $nom   = $tieneCta ? ($row['dim_nombre'] ?? '') : $baseLinea['cuenta_nombre'];
+            if ($tieneCta) {
+                $idCta = (int)$row['dim_cuenta'];
+                $cod   = $row['dim_codigo'] ?? '';
+                $nom   = $row['dim_nombre'] ?? '';
+            } elseif ($idCuentaBase > 0) {
+                $idCta = $idCuentaBase;
+                $cod   = $baseLinea['cuenta_codigo'];
+                $nom   = $baseLinea['cuenta_nombre'];
+            } else {
+                // Ni la línea (producto/categoría/marca) ni la General/Cliente tienen cuenta:
+                // no se puede postear — se reporta aparte, nunca con id_cuenta=0.
+                $sinCuenta = round($sinCuenta + $monto, 2);
+                $total     = round($total + $monto, 2);
+                continue;
+            }
             if (!isset($mapa[$idCta])) {
                 $mapa[$idCta] = ['id_cuenta' => $idCta, 'cuenta_codigo' => $cod, 'cuenta_nombre' => $nom, 'monto' => 0.0];
             }
@@ -629,19 +663,60 @@ class AsientoBuilderService
             $total = round($total + $monto, 2);
         }
 
-        if (empty($mapa)) {
-            return [$baseLinea];
+        if (empty($mapa) && $sinCuenta <= 0) {
+            return $idCuentaBase > 0
+                ? ['partes' => [$baseLinea], 'sin_cuenta' => 0.0]
+                : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
-        // Conciliación de redondeo contra el subtotal esperado.
+        // Conciliación de redondeo contra el total esperado: se ajusta el bucket resuelto más
+        // grande; si no hay ninguno resuelto, la diferencia se suma a "sin cuenta".
         $dif = round($montoTotal - $total, 2);
         if (abs($dif) >= 0.01) {
-            $keys = array_keys($mapa);
-            $ult = end($keys);
-            $mapa[$ult]['monto'] = round($mapa[$ult]['monto'] + $dif, 2);
+            if (!empty($mapa)) {
+                $keys = array_keys($mapa);
+                $ult  = end($keys);
+                $mapa[$ult]['monto'] = round($mapa[$ult]['monto'] + $dif, 2);
+            } else {
+                $sinCuenta = round($sinCuenta + $dif, 2);
+            }
         }
 
-        return array_values($mapa);
+        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2)];
+    }
+
+    /**
+     * Aplica repartirVentasCascada() para UN concepto (Cuenta por Cobrar, Subtotal, ICE, Costo,
+     * Inventario) y traduce el resultado a líneas de asiento, agregándolas a $detalles (o a
+     * $costoLineas si es del bloque de costo). Lo que ninguna línea ni la cuenta base resuelven
+     * se reporta en $reglasSinCuenta (mismo criterio de mensaje que el resto del builder).
+     */
+    private function aplicarRepartoPorCategoria(
+        \PDO $db, int $idEmpresa, int $idVenta, array $r, float $monto, string $valorExpr, string $joinsExtra,
+        string $refBase, bool $esLineaCosto, array &$detalles, array &$costoLineas, array &$reglasSinCuenta
+    ): void {
+        if ($monto <= 0) return;
+        $lado = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
+        $cuentaBase = [
+            'id_cuenta'     => (int)($r['id_cuenta'] ?? 0),
+            'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+            'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+        ];
+        $res = $this->repartirVentasCascada($db, $idEmpresa, $idVenta, (int)$r['id_asiento_tipo'], $cuentaBase, $monto, $valorExpr, $joinsExtra);
+        foreach ($res['partes'] as $pte) {
+            $linea = [
+                'id_cuenta_contable' => $pte['id_cuenta'],
+                'cuenta_codigo'      => $pte['cuenta_codigo'],
+                'cuenta_nombre'      => $pte['cuenta_nombre'],
+                'debe'               => $lado === 'debe' ? round($pte['monto'], 2) : 0.0,
+                'haber'              => $lado === 'debe' ? 0.0 : round($pte['monto'], 2),
+                'referencia_detalle' => $refBase . ' · por línea',
+            ];
+            if ($esLineaCosto) { $costoLineas[] = $linea; } else { $detalles[] = $linea; }
+        }
+        if ($res['sin_cuenta'] >= 0.01) {
+            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca, ni en la General)';
+        }
     }
 
     /**
@@ -1088,6 +1163,29 @@ class AsientoBuilderService
         // Arranca con las tarifas de IVA sin cuenta: son la causa más frecuente del descuadre.
         $reglasSinCuenta = $ivaTarifasSinCuenta;
 
+        // Reparto por categoría (Producto → Categoría → Marca → General/Cliente): activo solo cuando
+        // la entidad NO tiene reglas propias y no hay cuenta de Descuento (misma restricción que ya
+        // tenía Subtotal — ver "Diseño: reparto completo por categoría", 2026-07-31). Cuenta por
+        // Cobrar, Subtotal, ICE, Costo de Ventas e Inventario participan; Descuento y Propina NO
+        // (Propina por decisión del usuario: siempre Cliente/General; Descuento queda pendiente).
+        $aplicaRepartoPorCategoria = $repartePorLinea && !$tieneReglaDescuento && $idVenta > 0;
+
+        // Joins reutilizables para sumar el valor real POR LÍNEA de cada concepto repartible, sin
+        // fan-out (subconsultas agregadas primero, 1 fila por línea, luego JOIN 1:1 a `d`).
+        $joinImpuestosPorLinea = "LEFT JOIN (
+                SELECT id_venta_detalle, SUM(valor) AS total_impuestos
+                FROM ventas_detalle_impuestos WHERE codigo_impuesto IN ('2','3') GROUP BY id_venta_detalle
+            ) imp_cxc ON imp_cxc.id_venta_detalle = d.id";
+        $joinIcePorLinea = "LEFT JOIN (
+                SELECT id_venta_detalle, SUM(valor) AS total_ice
+                FROM ventas_detalle_impuestos WHERE codigo_impuesto = '3' GROUP BY id_venta_detalle
+            ) imp_ice ON imp_ice.id_venta_detalle = d.id";
+        // Por producto+documento (no por id_inventario_kardex): un lote/kit puede generar más de un
+        // movimiento de Kardex por línea; así se capturan todos los de ese producto en esta venta.
+        $joinCostoPorLinea = "LEFT JOIN inventario_kardex kc
+                ON kc.referencia_tipo = 'factura_venta' AND kc.referencia_id = d.id_venta
+               AND kc.id_producto = d.id_producto AND kc.tipo_movimiento = 'salida' AND kc.eliminado = false";
+
         foreach ($reglas as $r) {
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
@@ -1098,101 +1196,158 @@ class AsientoBuilderService
             // desviaba el diagnóstico de la cuenta que realmente falta (p. ej. el IVA de una tarifa).
             if (str_contains($codigo, 'REDONDEO')) continue;
 
-            if (empty($r['id_cuenta'])) {
+            $esPorCobrar  = str_contains($codigo, 'PORCOBRAR')  || str_contains($concepto, 'cobrar');
+            $esSubtotal   = str_contains($codigo, 'SUBTOTAL')   || str_contains($concepto, 'subtotal');
+            $esIce        = str_contains($codigo, 'ICE')        || str_contains($concepto, 'ice');
+            $esCosto      = str_contains($codigo, 'COSTO')      || str_contains($concepto, 'costo');
+            $esInventario = str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario');
+            $esRepartible = $esPorCobrar || $esSubtotal || $esIce || $esCosto || $esInventario;
+
+            // Si NO hay cuenta General/Cliente para este concepto, solo se perdona cuando el reparto
+            // por categoría está activo Y el concepto participa de él — puede que la cuenta exista
+            // solo a nivel de Producto/Categoría/Marca (antes esto se descartaba sin más, aunque la
+            // categoría SÍ tuviera la cuenta configurada).
+            if (empty($r['id_cuenta']) && !($aplicaRepartoPorCategoria && $esRepartible)) {
                 $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
                                   ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
                 continue;
             }
 
-            $debe  = 0.00;
-            $haber = 0.00;
-            $valorMapeado = 0.00;
-            $esLineaCosto = false;
-            $esTotalDocumento = false;
+            $refBase = $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '';
+            $lado    = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
 
-            // Cuenta por cobrar → importe total (incluyendo impuestos)
-            if (str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
-                $valorMapeado = $importeTotal;
-                // Ancla del documento: esta línea DEBE valer el total de la factura. El resto
-                // del Debe (costo de ventas, descuento) no forma parte de ese total, por eso
-                // el cuadre contra la factura se mide aquí y no sobre el Debe total.
-                $esTotalDocumento = true;
-            }
-            // Subtotal / Ventas: neto si no hay desc, bruto si hay cuenta de desc
-            elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal')) {
-                $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
-                // Reparto en cascada por línea (producto → categoría → marca → General): cada línea a la
-                // cuenta más específica de su producto; las no mapeadas, a la cuenta base de Ventas.
-                if ($repartePorLinea && !$tieneReglaDescuento && $idVenta > 0 && $valorMapeado > 0) {
-                    $lado = (($r['debe_haber'] ?? 'haber') === 'debe') ? 'debe' : 'haber';
-                    $partes = $this->repartirVentasCascada(
-                        $db, $idEmpresa, $idVenta, (int)$r['id_asiento_tipo'],
-                        ['id_cuenta' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'] ?? '', 'cuenta_nombre' => $r['cuenta_nombre'] ?? ''],
-                        $valorMapeado
+            // Cuenta por cobrar → importe total. Se reparte por categoría con el valor REAL de cada
+            // línea (subtotal neto + IVA + ICE, todo ya guardado por línea). La Propina NO participa
+            // (no existe por línea en la BD) — se agrega aparte, a la cuenta General/Cliente, para
+            // que la suma total siga cuadrando contra el importe real de la factura.
+            if ($esPorCobrar) {
+                if ($aplicaRepartoPorCategoria) {
+                    $this->aplicarRepartoPorCategoria(
+                        $db, $idEmpresa, $idVenta, $r, round($importeTotal - $propina, 2),
+                        '(d.precio_total_sin_impuesto + COALESCE(imp_cxc.total_impuestos, 0))', $joinImpuestosPorLinea,
+                        $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
                     );
-                    $refBase = $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? 'Ventas';
-                    foreach ($partes as $pte) {
-                        $detalles[] = [
-                            'id_cuenta_contable' => $pte['id_cuenta'],
-                            'cuenta_codigo'      => $pte['cuenta_codigo'],
-                            'cuenta_nombre'      => $pte['cuenta_nombre'],
-                            'debe'               => $lado === 'debe' ? round($pte['monto'], 2) : 0.0,
-                            'haber'              => $lado === 'debe' ? 0.0 : round($pte['monto'], 2),
-                            'referencia_detalle' => $refBase . ' · por línea',
-                        ];
+                    if ($propina > 0) {
+                        if (!empty($r['id_cuenta'])) {
+                            $detalles[] = [
+                                'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                                'debe' => $lado === 'debe' ? round($propina, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($propina, 2),
+                                'referencia_detalle' => $refBase . ' · propina',
+                            ];
+                        } else {
+                            $reglasSinCuenta[] = $refBase . ' (para la propina; configure la cuenta en Cliente o en la General)';
+                        }
                     }
-                    continue;
+                } elseif (!empty($r['id_cuenta'])) {
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($importeTotal, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($importeTotal, 2),
+                        'referencia_detalle' => $refBase, 'es_total_documento' => true,
+                    ];
                 }
-            }
-            // Descuento en ventas
-            elseif (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
-                $valorMapeado = $descuento;
-            }
-            // ICE
-            elseif (str_contains($codigo, 'ICE') || str_contains($concepto, 'ice')) {
-                $valorMapeado = $totalIce;
-            }
-            // Propina
-            elseif (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
-                $valorMapeado = $propina;
-            }
-            // Costo de Ventas (bloque de costo)
-            elseif (str_contains($codigo, 'COSTO') || str_contains($concepto, 'costo')) {
-                $valorMapeado = $costoRealInventario;
-                $esLineaCosto = true;
-            }
-            // Inventario (contrapartida del costo, bloque de costo)
-            elseif (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
-                $valorMapeado = $costoRealInventario;
-                $esLineaCosto = true;
-            }
-            // IVA general: recibe el IVA que no pudo mapearse a cuenta específica por tasa
-            elseif (str_contains($codigo, 'IVA') || str_contains($concepto, 'iva')) {
-                $valorMapeado = $ivaParaCuentaGeneral > 0 ? $ivaParaCuentaGeneral : 0.0;
+                continue;
             }
 
-            if ($valorMapeado > 0) {
-                if (($r['debe_haber'] ?? 'debe') === 'debe') {
-                    $debe = $valorMapeado;
-                } else {
-                    $haber = $valorMapeado;
+            // Subtotal / Ventas: neto si no hay regla de descuento, bruto si la hay (sin reparto en
+            // ese caso — igual que antes).
+            if ($esSubtotal) {
+                $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
+                if ($valorMapeado <= 0) continue;
+                if ($aplicaRepartoPorCategoria) {
+                    $this->aplicarRepartoPorCategoria(
+                        $db, $idEmpresa, $idVenta, $r, $valorMapeado,
+                        'd.precio_total_sin_impuesto', '',
+                        $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
+                    );
+                } elseif (!empty($r['id_cuenta'])) {
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($valorMapeado, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorMapeado, 2),
+                        'referencia_detalle' => $refBase,
+                    ];
                 }
+                continue;
+            }
 
-                $linea = [
-                    'id_cuenta_contable' => (int)$r['id_cuenta'],
-                    'cuenta_codigo'      => $r['cuenta_codigo'],
-                    'cuenta_nombre'      => $r['cuenta_nombre'],
-                    'debe'               => round($debe, 2),
-                    'haber'              => round($haber, 2),
-                    'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
-                    'es_total_documento' => $esTotalDocumento,
-                ];
-
-                if ($esLineaCosto) {
-                    $costoLineas[] = $linea;
-                } else {
-                    $detalles[] = $linea;
+            // Descuento en ventas — sin reparto por categoría en esta fase (sigue como un solo valor
+            // de todo el documento; ver nota en la memoria del proyecto sobre el alcance pendiente).
+            if (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
+                if (!empty($r['id_cuenta']) && $descuento > 0) {
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($descuento, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($descuento, 2),
+                        'referencia_detalle' => $refBase,
+                    ];
                 }
+                continue;
+            }
+
+            // ICE: se reparte por categoría igual que el IVA (ya se calcula por línea en
+            // ventas_detalle_impuestos, codigo_impuesto='3').
+            if ($esIce) {
+                if ($totalIce <= 0) continue;
+                if ($aplicaRepartoPorCategoria) {
+                    $this->aplicarRepartoPorCategoria(
+                        $db, $idEmpresa, $idVenta, $r, $totalIce,
+                        'COALESCE(imp_ice.total_ice, 0)', $joinIcePorLinea,
+                        $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
+                    );
+                } elseif (!empty($r['id_cuenta'])) {
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($totalIce, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($totalIce, 2),
+                        'referencia_detalle' => $refBase,
+                    ];
+                }
+                continue;
+            }
+
+            // Propina: SIEMPRE Cliente/General, nunca por categoría (decisión confirmada con el
+            // usuario — no tiene dato por línea en la BD).
+            if (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
+                if (!empty($r['id_cuenta']) && $propina > 0) {
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($propina, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($propina, 2),
+                        'referencia_detalle' => $refBase,
+                    ];
+                }
+                continue;
+            }
+
+            // Costo de Ventas / Inventario (bloque de costo): por categoría, con el costo real del
+            // Kardex de cada producto dentro de esta venta. Costo e Inventario se reparten cada uno
+            // con SU PROPIA cascada (pueden tener cuentas distintas configuradas por categoría).
+            if ($esCosto || $esInventario) {
+                if ($costoRealInventario <= 0) continue;
+                if ($aplicaRepartoPorCategoria) {
+                    $this->aplicarRepartoPorCategoria(
+                        $db, $idEmpresa, $idVenta, $r, $costoRealInventario,
+                        'COALESCE(kc.costo_total, 0)', $joinCostoPorLinea,
+                        $refBase, true, $detalles, $costoLineas, $reglasSinCuenta
+                    );
+                } elseif (!empty($r['id_cuenta'])) {
+                    $costoLineas[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($costoRealInventario, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($costoRealInventario, 2),
+                        'referencia_detalle' => $refBase,
+                    ];
+                }
+                continue;
+            }
+
+            // IVA general: recibe el IVA que no pudo mapearse a cuenta específica por tasa (ya
+            // resuelto arriba, sección 3 — cascada propia por tarifa, independiente de este reparto).
+            if (str_contains($codigo, 'IVA') || str_contains($concepto, 'iva')) {
+                $valorIvaGen = $ivaParaCuentaGeneral > 0 ? $ivaParaCuentaGeneral : 0.0;
+                if ($valorIvaGen > 0 && !empty($r['id_cuenta'])) {
+                    $detalles[] = [
+                        'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
+                        'debe' => $lado === 'debe' ? round($valorIvaGen, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIvaGen, 2),
+                        'referencia_detalle' => $refBase,
+                    ];
+                }
+                continue;
             }
         }
 

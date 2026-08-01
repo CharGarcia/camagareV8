@@ -840,14 +840,37 @@
             const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const faltan = [...(res.data.conceptos || []), ...(res.data.iva || [])];
 
+            // Alcance real del motor (2026-07-31): en Ventas con Factura, Producto/Categoría/Marca
+            // ya arman el asiento COMPLETO por línea (Cuenta por Cobrar, Subtotal, ICE, Costo,
+            // Inventario e IVA) — solo Propina y Descuento quedan siempre en Cliente/General. En
+            // Recibos de Venta y Compras, esa dimensión todavía solo afecta Subtotal/Gasto (y el
+            // IVA, que ya tenía su propia cascada); el resto sigue viniendo de Cliente/Proveedor o
+            // General — pendiente de migrar al mismo reparto completo.
+            const esDimensionPorLinea = ['producto', 'categoria', 'marca'].includes(tipo);
+            const repartoCompletoImplementado = (tipoAsiento === 'ventas_factura');
+            let notaAlcance = '';
+            if (esDimensionPorLinea && repartoCompletoImplementado) {
+                notaAlcance = '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>'
+                    + 'Esta regla arma el asiento completo de las líneas de esa dimensión (Cuenta por Cobrar, '
+                    + 'Subtotal, ICE, Costo e Inventario). Propina y Descuento siempre se toman del Cliente '
+                    + 'o de la Configuración General.</div>';
+            } else if (esDimensionPorLinea) {
+                notaAlcance = '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>'
+                    + 'Por ahora, esta regla solo se usa para el Subtotal/Gasto de cada línea y el IVA por tarifa. '
+                    + 'Los demás conceptos siempre se toman del Cliente/Proveedor o de la Configuración General, '
+                    + 'aunque se asignen aquí (próximamente se ampliará, igual que ya funciona en Ventas con Factura).</div>';
+            }
+
             if (faltan.length === 0) {
                 cont.innerHTML = '<div class="alert alert-success py-2 px-3 small mb-0"><i class="bi bi-check-circle me-1"></i> '
-                    + 'Con esta regla, todos los conceptos quedan cubiertos (por esta regla o por la Configuración General).</div>';
+                    + 'Con esta regla, todos los conceptos quedan cubiertos (por esta regla o por la Configuración General).'
+                    + notaAlcance + '</div>';
             } else {
                 cont.innerHTML = '<div class="alert alert-warning py-2 px-3 small mb-0"><i class="bi bi-exclamation-triangle me-1"></i> '
                     + 'Si esta entidad usa esta regla, el asiento quedaría INCOMPLETO — falta cuenta (ni aquí ni en la General) para: '
                     + `<strong>${faltan.map(esc).join(', ')}</strong>. `
-                    + 'Puede asignarlas aquí mismo, o en la Configuración General para que apliquen a todos.</div>';
+                    + 'Puede asignarlas en la Configuración General para que apliquen a todos.'
+                    + notaAlcance + '</div>';
             }
         } catch (e) {
             console.error(e);

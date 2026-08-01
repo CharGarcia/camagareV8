@@ -132,10 +132,10 @@ $base = BASE_URL;
             <div class="fw-bold text-dark mt-1">Cómo decide el sistema la cuenta de cada documento (cascada):</div>
             <ul class="mb-1 mt-1 ps-3">
                 <li><b>1. Cliente / Proveedor</b> — si la entidad del documento tiene reglas, <b>todo el documento se contabiliza con sus cuentas</b>; los conceptos que no le configuraste pasan directo a <b>General</b> (no se reparten por producto).</li>
-                <li><b>2. Producto → Categoría → Marca</b> — solo cuando el documento <b>no</b> tiene cliente/proveedor con reglas: cada línea usa la cuenta de su producto; si no, la de su categoría; si no, la de su marca.</li>
-                <li><b>3. General</b> — todo lo que no haya resuelto un nivel anterior.</li>
+                <li><b>2. Producto → Categoría → Marca</b> — solo cuando el documento <b>no</b> tiene cliente/proveedor con reglas. En <b>Ventas con Factura</b>, cada línea arma su <b>asiento completo</b> con la cuenta de su producto (si no, categoría; si no, marca): Cuenta por Cobrar, Subtotal, ICE, Costo e Inventario pueden quedar repartidos en varias líneas contables, una por cada producto/categoría/marca presente en el documento. En Recibos de Venta y Compras, por ahora esta dimensión solo reparte el Subtotal/Gasto.</li>
+                <li><b>3. General</b> — todo lo que no haya resuelto un nivel anterior (para cualquier concepto que la entidad no cubrió).</li>
             </ul>
-            Siempre se toman de su propia fuente (no se personalizan por entidad): <b>IVA por tarifa</b>, <b>Costo de venta</b> e <b>Inventario</b>. Las columnas <b>Debe / Haber</b> indican la naturaleza de la cuenta, y <b>“Copiar cuentas de General”</b> precarga las cuentas base.
+            <b>Propina</b> nunca se reparte por Producto/Categoría/Marca: siempre sale del Cliente o de la General. El <b>IVA por tarifa</b> tiene su propia cascada independiente (cliente/proveedor → producto → categoría → marca → general). Las columnas <b>Debe / Haber</b> indican la naturaleza de la cuenta, y <b>“Copiar cuentas de General”</b> precarga las cuentas base.
         </div>
     </div>
 
