@@ -329,6 +329,96 @@ class TraspasosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Exporta a Excel (XLSX) el Comprobante de Traspaso: cabecera y movimiento
+     * origen → destino. Mismos datos que el PDF (ComprobanteCajaPdfService::generarTraspaso).
+     * Este documento no tiene detalle de documentos aplicados ni formas de pago
+     * separadas (las formas de origen/destino SON el movimiento), así que se
+     * reemplaza la tabla de detalle por una sección simple Origen/Destino/Monto.
+     */
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $traspaso = $this->service->getPorId($id, $idEmpresa);
+            if (!$traspaso || (int) ($traspaso['id_empresa'] ?? 0) !== $idEmpresa) {
+                http_response_code(404); echo 'Traspaso no encontrado'; exit;
+            }
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            $numero  = (string) ($traspaso['numero_traspaso'] ?? $id);
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Traspaso');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:E1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'COMPROBANTE DE TRASPASO N.° ' . $numero);
+            $sheet->mergeCells('A2:E2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($traspaso['fecha_emision']) ? date('d-m-Y', strtotime((string) $traspaso['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Estado: ' . ucfirst((string) ($traspaso['estado'] ?? '')));
+            $sheet->setCellValue('A4', 'Concepto: ' . (trim((string) ($traspaso['observaciones'] ?? '')) ?: '—'));
+            $sheet->mergeCells('A4:E4');
+
+            $headerRow = 6;
+            $headers = ['Origen', 'Tipo Origen', 'Destino', 'Tipo Destino', 'Monto'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':E' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            $sheet->setCellValueExplicit('A' . $row, (string) ($traspaso['origen_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('B' . $row, (string) ($traspaso['origen_tipo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('C' . $row, (string) ($traspaso['destino_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('D' . $row, (string) ($traspaso['destino_tipo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue('E' . $row, (float) ($traspaso['monto'] ?? 0));
+            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $row += 2;
+            $sheet->setCellValue('D' . $row, 'TOTAL');
+            $sheet->getStyle('D' . $row)->getFont()->setBold(true);
+            $sheet->setCellValue('E' . $row, (float) ($traspaso['monto'] ?? 0));
+            $sheet->getStyle('E' . $row)->getFont()->setBold(true);
+            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+            foreach (['A', 'B', 'C', 'D', 'E'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Traspaso_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
     private function cargarEmpresaParaPdf(int $idEmpresa): array
     {

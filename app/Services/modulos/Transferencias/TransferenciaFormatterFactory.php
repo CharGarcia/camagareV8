@@ -3,25 +3,28 @@ declare(strict_types=1);
 
 namespace App\Services\modulos\Transferencias;
 
+use App\Services\modulos\Transferencias\Formatters\TransferenciaFormatoConfigurable;
 use App\Services\modulos\Transferencias\Formatters\TransferenciaFormatoGenericoExcel;
-use App\Services\modulos\Transferencias\Formatters\TransferenciaFormatoProdubanco;
 
 /**
- * Resuelve el formateador de archivo según el nombre del banco (bancos_ecuador.nombre_banco
- * del banco elegido como "formato" del lote). Sin una implementación específica, cae al
- * formato genérico Excel. Agregar un banco nuevo = una clase que implemente
- * TransferenciaFormatterInterface + un caso nuevo en el match de abajo (no requiere tocar
- * el resto del módulo).
+ * Resuelve el formateador de archivo a partir de una fila de
+ * `transferencia_formatos` (catálogo configurable en /config/transferencia-formatos).
+ * Si la fila trae `clase_formatter`, se instancia esa clase (escape hatch para un
+ * layout que el motor genérico no pueda expresar). Si no, se usa el motor
+ * genérico TransferenciaFormatoConfigurable, que arma el archivo a partir de
+ * `campos`. Sin formato (lote viejo o formato eliminado), cae al Excel
+ * genérico como red de seguridad.
  */
 class TransferenciaFormatterFactory
 {
-    public static function getFormatter(?string $nombreBanco): TransferenciaFormatterInterface
+    public static function getFormatter(?array $formato): TransferenciaFormatterInterface
     {
-        return match (strtoupper(trim((string) $nombreBanco))) {
-            // Banco Promerica se fusionó con Produbanco; comparten el mismo formato.
-            'PRODUBANCO', 'PROMERICA' => new TransferenciaFormatoProdubanco(),
-            // Ejemplo futuro: 'PICHINCHA' => new TransferenciaFormatoPichincha(),
-            default => new TransferenciaFormatoGenericoExcel(),
-        };
+        if (!$formato) {
+            return new TransferenciaFormatoGenericoExcel();
+        }
+        if (!empty($formato['clase_formatter']) && class_exists($formato['clase_formatter'])) {
+            return new $formato['clase_formatter']();
+        }
+        return new TransferenciaFormatoConfigurable($formato);
     }
 }

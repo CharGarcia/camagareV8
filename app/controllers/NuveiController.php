@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\controllers;
 
 use App\core\Controller;
+use App\models\Empresa;
 use App\repositories\NuveiRepository;
 use App\Services\NuveiService;
 
@@ -70,6 +71,14 @@ class NuveiController extends Controller
             $trans = $this->nuvei->getTransaccion($devReference);
 
             if (!$trans) {
+                $this->view('publica.nuvei.pago', ['estado' => 'error']);
+                return;
+            }
+
+            // No iniciar un cobro nuevo a nombre de una empresa inactiva. Si el pago
+            // ya se había hecho antes de desactivarla, el callback/webhook de resultado
+            // sigue sin bloquearse (no hay que perder un cobro ya ejecutado en Nuvei).
+            if (!(new Empresa())->estaActiva((int) $trans['id_empresa'])) {
                 $this->view('publica.nuvei.pago', ['estado' => 'error']);
                 return;
             }
@@ -245,6 +254,13 @@ class NuveiController extends Controller
             $sol = $this->nuvei->getSolicitudTarjeta($token);
 
             if (!$sol) {
+                $this->view('publica.nuvei.tarjeta', ['estado' => 'error']);
+                return;
+            }
+
+            // Mismo criterio que en pago(): no ofrecer el widget de tokenización de
+            // tarjeta a nombre de una empresa inactiva.
+            if (!(new Empresa())->estaActiva((int) $sol['id_empresa'])) {
                 $this->view('publica.nuvei.tarjeta', ['estado' => 'error']);
                 return;
             }

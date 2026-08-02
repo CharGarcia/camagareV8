@@ -394,6 +394,113 @@ class RolesPagoController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Excel individual (ficha) de un empleado dentro del rol: cabecera del rol +
+     * tabla Concepto/Ingreso/Egreso (igual al desglose del PDF) + neto a recibir.
+     */
+    public function excelEmpleado(): void
+    {
+        $this->requireLeer();
+        $idDetalle = (int) ($_GET['det'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if ($idDetalle <= 0) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa, (int) $_SESSION['id_usuario']);
+            if (!$lin) { http_response_code(404); echo 'Línea no encontrada'; exit; }
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+
+            $cab = $lin['cabecera'] ?? [];
+            $mes = CatalogoNovedades::MESES[(int) ($cab['periodo_mes'] ?? 0)] ?? ($cab['periodo_mes'] ?? '');
+            $periodo = trim($mes . ' ' . ($cab['periodo_anio'] ?? ''));
+            $tipo = CatalogoRol::nombreTipo((string) ($cab['tipo_rol'] ?? ''));
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Rol de Pago');
+
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+
+            $empNom = (string) ($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? '');
+            $sheet->setCellValue('A1', strtoupper($empNom));
+            $sheet->mergeCells('A1:C1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'ROL DE PAGO — ' . strtoupper(trim($tipo . ' ' . $periodo)));
+            $sheet->mergeCells('A2:C2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $sheet->setCellValue('A4', 'Empleado:');
+            $sheet->getStyle('A4')->getFont()->setBold(true);
+            $sheet->setCellValueExplicit('B4', (string) ($lin['nombres_apellidos'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue('A5', 'Cédula:');
+            $sheet->getStyle('A5')->getFont()->setBold(true);
+            $sheet->setCellValueExplicit('B5', (string) ($lin['identificacion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue('A6', 'Cargo:');
+            $sheet->getStyle('A6')->getFont()->setBold(true);
+            $sheet->setCellValueExplicit('B6', (string) ($lin['cargo'] ?? '—'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue('A7', 'Días trabajados:');
+            $sheet->getStyle('A7')->getFont()->setBold(true);
+            $sheet->setCellValue('B7', (float) ($lin['dias_trabajados'] ?? 0));
+
+            $headerRow = 9;
+            $headers = ['Concepto', 'Ingreso', 'Egreso'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $sheet->getStyle('A' . $headerRow . ':C' . $headerRow)->applyFromArray($headerStyle);
+
+            $rubros = $lin['rubros'] ?? [];
+            $row = $headerRow + 1;
+            foreach ($rubros as $r) {
+                $sheet->setCellValueExplicit('A' . $row, (string) ($r['concepto'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                if (($r['tipo'] ?? '') === 'ingreso') {
+                    $sheet->setCellValue('B' . $row, (float) ($r['valor'] ?? 0));
+                } else {
+                    $sheet->setCellValue('C' . $row, (float) ($r['valor'] ?? 0));
+                }
+                $row++;
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('B' . ($headerRow + 1) . ':C' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $sheet->setCellValue('A' . $row, 'TOTALES');
+            $sheet->setCellValue('B' . $row, (float) ($lin['total_ingresos'] ?? 0));
+            $sheet->setCellValue('C' . $row, (float) ($lin['total_egresos'] ?? 0));
+            $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
+            $sheet->getStyle('A' . $row . ':C' . $row)->applyFromArray(['fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F1F3F5']]]);
+            $sheet->getStyle('B' . $row . ':C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $row += 2;
+
+            $sheet->setCellValue('A' . $row, 'NETO A RECIBIR');
+            $sheet->setCellValue('B' . $row, (float) ($lin['neto'] ?? 0));
+            $sheet->getStyle('A' . $row . ':B' . $row)->getFont()->setBold(true)->setSize(11);
+            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+            foreach (['A', 'B', 'C'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $nombreArch = 'Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado')) . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombreArch . '"');
+            header('Cache-Control: max-age=0');
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /** Envía por correo el rol individual del empleado. */
     public function enviarCorreoEmpleado(): void
     {

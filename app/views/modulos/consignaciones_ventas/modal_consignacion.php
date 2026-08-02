@@ -118,6 +118,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <button type="button" class="btn btn-sm btn-outline-danger px-2 py-1" onclick="pdfConsignacion()" title="Generar PDF">
                                     <i class="bi bi-file-earmark-pdf"></i>
                                 </button>
+                                <button type="button" class="btn btn-sm btn-outline-success px-2 py-1" onclick="excelConsignacion()" title="Exportar Excel">
+                                    <i class="bi bi-file-earmark-excel"></i>
+                                </button>
                                 <button type="button" class="btn btn-sm btn-outline-primary px-2 py-1" onclick="emailConsignacion()" title="Enviar por Correo">
                                     <i class="bi bi-envelope"></i>
                                 </button>
@@ -1651,6 +1654,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         document.getElementById('btn_agregar_items_seleccionados').classList.add('d-none');
         document.getElementById('bp_empty_state').classList.remove('d-none');
         window.ACTUAL_PEDIDO_ID = null;
+        if (typeof window.CMG_Bloqueo !== 'undefined') window.CMG_Bloqueo.detener();
     };
 
     window.buscarPedidosAutocompletar = async function() {
@@ -1731,6 +1735,26 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             Swal.close();
 
             if (data.ok && data.data) {
+                if (typeof window.CMG_Bloqueo !== 'undefined') {
+                    const bloqueo = await window.CMG_Bloqueo.iniciar({
+                        urlBase: RUTA_MODULO_CONSIGNACION,
+                        idRegistro: id,
+                        moduloContexto: 'Consignación de Venta',
+                        onPerdido: () => {
+                            Swal.fire({ icon: 'warning', title: 'Perdiste el control de este pedido', text: 'Otro usuario lo tomó mientras armabas la consignación.' });
+                        }
+                    });
+                    if (!bloqueo.tomado) {
+                        const contexto = bloqueo.modulo_contexto ? ` (${bloqueo.modulo_contexto})` : '';
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Pedido en uso',
+                            text: `Este pedido lo está usando ahora mismo ${bloqueo.usuario || 'otro usuario'}${contexto}. Intenta con otro pedido o espera a que termine.`
+                        });
+                        return;
+                    }
+                }
+
                 const c = data.data.cabecera;
                 const d = data.data.detalles;
                 
@@ -1858,6 +1882,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             Swal.fire('Error', 'Ocurrió un error al cargar el detalle.', 'error');
         }
     };
+
+    // Libera el bloqueo del pedido en uso sin importar cómo se cierre el modal
+    // (Cancelar, X, Escape, o el .hide() tras guardar).
+    document.addEventListener('DOMContentLoaded', () => {
+        const modalConsEl = document.getElementById('modalConsignacion');
+        if (modalConsEl) {
+            modalConsEl.addEventListener('hidden.bs.modal', () => {
+                if (typeof window.CMG_Bloqueo !== 'undefined') window.CMG_Bloqueo.detener();
+            });
+        }
+    });
 
     window.agregarItemsSeleccionadosPaso2 = async function() {
         const id = window.ACTUAL_PEDIDO_ID;
@@ -2082,6 +2117,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         const id = document.getElementById('cons_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar la consignación primero', 'warning');
         window.open(`${RUTA_MODULO_CONSIGNACION}/pdf?id=${id}`, '_blank');
+    }
+
+    function excelConsignacion() {
+        const id = document.getElementById('cons_id').value;
+        if (!id) return Swal.fire('Atención', 'Debe guardar la consignación primero', 'warning');
+        window.open(`${RUTA_MODULO_CONSIGNACION}/excel?id=${id}`, '_blank');
     }
     async function emailConsignacion() {
         const id = document.getElementById('cons_id').value;

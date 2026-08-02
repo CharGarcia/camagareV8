@@ -550,6 +550,114 @@ class FacturacionCvController extends BaseModuloController
         return (new \App\Services\modulos\ConsignacionFacturaPdfService())->generar($doc, $detalles, $empresa, $outputDest);
     }
 
+    /** Genera el Excel del documento (mismas columnas que el PDF). */
+    public function excel(): void
+    {
+        $this->requireLeer();
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $doc = $this->service->getDetalleCompleto($id, $idEmpresa);
+            if (!$doc) { http_response_code(404); echo 'Documento no encontrado'; exit; }
+
+            $detalles = $doc['detalles'] ?? [];
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $numero   = trim((string)($doc['serie'] ?? '') . '-' . (string)($doc['secuencial'] ?? ''), '-');
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Facturacion');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:H1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'FACTURACIÓN DE CONSIGNACIÓN N.° ' . ($numero !== '' ? $numero : '—'));
+            $sheet->mergeCells('A2:H2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($doc['fecha_emision']) ? date('d-m-Y', strtotime((string)$doc['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('D3', 'Cliente: ' . (string)($doc['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string)($doc['cliente_identificacion'] ?? ''));
+            $sheet->setCellValue('D4', 'Vendedor: ' . (string)($doc['vendedor_nombre'] ?? ''));
+            $sheet->setCellValue('A5', 'Factura relacionada: ' . (string)($doc['numero_factura'] ?? '—'));
+            $sheet->setCellValue('D5', 'Estado: ' . ucfirst((string)($doc['estado'] ?? '')));
+
+            $headerRow = 7;
+            $headers = ['Código', 'Descripción', 'Lote', 'Cantidad', 'Precio', 'Descuento', 'Subtotal', 'IVA', 'Total'];
+            $col = 'A';
+            foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':I' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            $bruto = 0.0; $descTotal = 0.0;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('C' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('D' . $row, (float)($d['cantidad'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float)($d['precio_unitario'] ?? 0));
+                $sheet->setCellValue('F' . $row, (float)($d['descuento'] ?? 0));
+                $sheet->setCellValue('G' . $row, (float)($d['subtotal'] ?? 0));
+                $sheet->setCellValue('H' . $row, (float)($d['valor_impuesto'] ?? 0));
+                $sheet->setCellValue('I' . $row, (float)($d['total'] ?? 0));
+                $bruto     += (float)($d['precio_unitario'] ?? 0) * (float)($d['cantidad'] ?? 0);
+                $descTotal += (float)($d['descuento'] ?? 0);
+                $row++;
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('D' . ($headerRow + 1) . ':I' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $row += 1;
+            $totales = [
+                'Subtotal'  => round($bruto, 2),
+                'Descuento' => round($descTotal, 2),
+                'IVA'       => (float)($doc['impuesto'] ?? 0),
+                'TOTAL'     => (float)($doc['total'] ?? 0),
+            ];
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('H' . $row, $label);
+                $sheet->getStyle('H' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('I' . $row, $valor);
+                $sheet->getStyle('I' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            $obs = trim((string)($doc['observaciones'] ?? ''));
+            if ($obs !== '') {
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Observaciones: ' . $obs);
+                $sheet->mergeCells('A' . $row . ':I' . $row);
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'FacturacionConsignacion_' . ($numero !== '' ? $numero : 'comprobante') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     public function enviarCorreoAjax(): void
     {
         ob_start();

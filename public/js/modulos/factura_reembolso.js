@@ -305,6 +305,7 @@
         document.getElementById('fr-btn-sri').disabled = !habilitar || esAutorizado || esAnulado;
         document.getElementById('fr-btn-pdf').disabled = !habilitar;
         document.getElementById('fr-btn-xml').disabled = !habilitar;
+        document.getElementById('fr-btn-excel').disabled = !habilitar;
         document.getElementById('fr-btn-correo').disabled = !habilitar || !esAutorizado;
         document.getElementById('btnGuardarFR').disabled = esAutorizado || esAnulado;
 
@@ -1338,6 +1339,11 @@
         const id = document.getElementById('fr_id').value;
         if (!id) return;
         window.location.href = `${BASE_URL}/modulos/factura-reembolso/exportXmlDoc?id=${id}`;
+    };
+
+    window.FR_exportarExcel = () => {
+        const id = document.getElementById('fr_id').value;
+        if (id) window.open(`${BASE_URL}/modulos/factura-reembolso/exportExcelDoc?id=${id}`, '_blank');
     };
 
     window.FR_enviarPorCorreo = async () => {

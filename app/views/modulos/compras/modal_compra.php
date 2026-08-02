@@ -20,10 +20,13 @@
           <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="abrirModalProveedorCrear()" title="Registrar nuevo proveedor"><i class="bi bi-person-plus fs-6"></i></button>
           <?php endif; ?>
           <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="mcBtnPdf" onclick="mcExportarPdf()" title="Exportar PDF">
-            <i class="bi bi-file-earmark-pdf fs-6"></i> <span class="d-none d-md-inline small">PDF</span>
+            <i class="bi bi-file-earmark-pdf fs-6"></i>
           </button>
           <button type="button" class="btn btn-outline-secondary btn-sm px-2 d-none" id="mcBtnDescargarXml" onclick="mcDescargarXml()" title="Descargar XML del documento electrónico">
-            <i class="bi bi-file-earmark-code fs-6"></i> <span class="d-none d-md-inline small">XML</span>
+            <i class="bi bi-file-earmark-code fs-6"></i>
+          </button>
+          <button type="button" class="btn btn-outline-success btn-sm px-2 d-none" id="mcBtnExcel" onclick="mcExportarExcel()" title="Exportar Excel">
+            <i class="bi bi-file-earmark-excel fs-6"></i>
           </button>
         </div>
 

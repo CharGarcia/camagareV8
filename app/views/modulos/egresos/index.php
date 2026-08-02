@@ -292,6 +292,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfEgreso" onclick="abrirPdfEgreso()" title="Generar PDF del comprobante">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2 d-none" id="btnExcelEgreso" onclick="exportarExcelEgreso()" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-excel fs-6"></i>
+                    </button>
                     <button type="button" class="btn btn-outline-info btn-sm px-2 d-none" id="btnCorreoEgreso" onclick="enviarCorreoEgreso()" title="Enviar comprobante por correo">
                         <i class="bi bi-envelope fs-6"></i>
                     </button>
@@ -1582,6 +1585,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         document.getElementById('eg-footer-ver-extra').classList.add('d-none');
         document.getElementById('btnPdfEgreso').classList.add('d-none');
+        document.getElementById('btnExcelEgreso').classList.add('d-none');
         document.getElementById('btnCorreoEgreso').classList.add('d-none');
         document.getElementById('eg-input-fecha').value = new Date().toISOString().slice(0,10);
         
@@ -1762,6 +1766,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         a.remove();
     }
 
+    function exportarExcelEgreso() {
+        const id = document.getElementById('eg-input-id').value;
+        if (!id) return;
+        const url = `${EGR_URL}/exportarExcelAjax?id=${id}`;
+        window.open(url, '_blank');
+    }
+
     async function enviarCorreoEgreso() {
         const id = document.getElementById('eg-input-id').value;
         if (!id) return;
@@ -1804,6 +1815,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('modalEgresoTitulo').textContent = `Ver Egreso #${e.numero_egreso}`;
             document.getElementById('eg-input-id').value = e.id;
             document.getElementById('btnPdfEgreso').classList.remove('d-none');
+            document.getElementById('btnExcelEgreso').classList.remove('d-none');
             const _btnCorreoEg = document.getElementById('btnCorreoEgreso');
             _btnCorreoEg.classList.remove('d-none');
             _btnCorreoEg.dataset.email = e.sujeto_email || '';

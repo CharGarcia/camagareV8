@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion
-version: 1.1
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -73,8 +73,10 @@ corresponden.
 
 ## Documentos del módulo
 
-Desde la compra guardada se puede generar el **PDF** del documento y consultar su
-**XML**. Los botones están en la barra de acciones al inicio del formulario.
+Desde la compra guardada se puede generar el **PDF** del documento, exportarlo a
+**Excel** y consultar su **XML**. Los botones están en la barra de acciones al
+inicio del formulario (solo visibles si la compra es un comprobante electrónico
+con XML guardado).
 
 ## Exportar el listado
 
@@ -102,5 +104,6 @@ ve solo las que registró.
 
 ## Historial de cambios
 
+- **1.2** — Nuevo botón Excel en el documento de la compra (junto a PDF y XML).
 - **1.1** — Corregidos los botones Excel y PDF del listado: no descargaban nada.
 - **1.0** — Versión inicial.

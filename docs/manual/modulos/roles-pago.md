@@ -6,7 +6,7 @@ ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
 etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir
-version: 1.0
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -43,6 +43,13 @@ dos veces lo mismo. Por eso el orden de generación importa: primero la quincena
 Por eso, antes de generar un rol conviene revisar que todas las novedades del
 periodo estén registradas: lo que no esté cargado, no se paga ni se descuenta.
 
+## Ficha del empleado dentro del rol
+
+Al abrir el detalle de un empleado en una corrida ya generada, el encabezado del
+modal tiene un botón rojo para el **PDF** del rol individual y, junto a él, uno
+verde para el **Excel**: una tabla Concepto/Ingreso/Egreso con los mismos
+rubros del PDF, más el neto a recibir.
+
 ## Errores frecuentes
 
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
@@ -54,4 +61,5 @@ periodo estén registradas: lo que no esté cargado, no se paga ni se descuenta.
 
 ## Historial de cambios
 
+- **1.1** — Botón para exportar a Excel la ficha individual del empleado, junto al de PDF.
 - **1.0** — Versión inicial.

@@ -275,6 +275,16 @@ class FacturaExpressQrService
         $solicitud = $this->repo->getSolicitudById($idSolicitud, $idEmpresa);
         if (!$solicitud) throw new Exception('Solicitud no encontrada al facturar.');
 
+        // Defensa en profundidad: el flujo automático (sin aprobación) ya queda
+        // bloqueado en getPlantillaByToken(), pero la aprobación manual llega vía
+        // sesión con revalidación cada 5 min (AuthMiddleware) y no aplica a nivel 3.
+        $db = $this->repo->getDb();
+        $stActiva = $db->prepare("SELECT 1 FROM empresas WHERE id = :id AND estado = '1' AND eliminado = false LIMIT 1");
+        $stActiva->execute([':id' => $idEmpresa]);
+        if (!$stActiva->fetchColumn()) {
+            throw new Exception('La empresa no está activa. No es posible generar la factura.');
+        }
+
         $items = json_decode($solicitud['items_json'] ?? '[]', true) ?: [];
         if (!empty($datosEditados['items'])) {
             $items = $datosEditados['items'];

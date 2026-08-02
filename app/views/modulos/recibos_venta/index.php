@@ -453,6 +453,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <button id="m-btn-generar-factura" type="button" class="btn btn-outline-success btn-sm px-2 d-none" onclick="generarFacturaDesdeRecibo()" title="Generar factura de venta"><i class="bi bi-file-earmark-medical me-1"></i>Facturar</button>
                         <div class="vr mx-1"></div>
                         <button id="m-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
+                        <button id="m-btn-excel" type="button" class="btn btn-outline-success btn-sm px-2" onclick="exportarExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
                         <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Recibo"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                         <div class="vr mx-1"></div>
@@ -1940,6 +1941,7 @@ $totalPages = $totalPagesOriginal;
         const btnSri = document.getElementById('m-btn-sri');
         const btnDuplicar  = document.getElementById('m-btn-duplicar');
         const btnPdf       = document.getElementById('m-btn-pdf');
+        const btnExcel     = document.getElementById('m-btn-excel');
         const btnXml       = document.getElementById('m-btn-xml');
         const btnCorreo    = document.getElementById('m-btn-correo');
         const btnWhatsapp  = document.getElementById('m-btn-whatsapp');
@@ -1953,6 +1955,7 @@ $totalPages = $totalPagesOriginal;
             if (btnSri) btnSri.classList.add('d-none');
             if (btnDuplicar) btnDuplicar.classList.add('d-none');
             if (btnPdf) btnPdf.classList.add('d-none');
+            if (btnExcel) btnExcel.classList.add('d-none');
             if (btnXml) btnXml.classList.add('d-none');
             if (btnCorreo) btnCorreo.classList.add('d-none');
             if (btnWhatsapp) btnWhatsapp.classList.add('d-none');
@@ -1967,6 +1970,7 @@ $totalPages = $totalPagesOriginal;
         if (btnSri) btnSri.classList.remove('d-none');
         if (btnDuplicar) btnDuplicar.classList.remove('d-none');
         if (btnPdf) btnPdf.classList.remove('d-none');
+        if (btnExcel) btnExcel.classList.remove('d-none');
         if (btnXml) btnXml.classList.remove('d-none');
         if (btnCorreo) btnCorreo.classList.remove('d-none');
         if (btnWhatsapp) btnWhatsapp.classList.remove('d-none');
@@ -1979,6 +1983,7 @@ $totalPages = $totalPagesOriginal;
 
         if (btnDuplicar) btnDuplicar.disabled = false;
         if (btnPdf) btnPdf.disabled = false;
+        if (btnExcel) btnExcel.disabled = false;
         if (btnCorreo) btnCorreo.disabled = !esAutorizado;
         if (btnWhatsapp) btnWhatsapp.disabled = !esAutorizado;
 
@@ -2782,6 +2787,13 @@ $totalPages = $totalPagesOriginal;
         const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-pdf-ajax?id=${id}`;
+        window.open(url, '_blank');
+    }
+
+    function exportarExcel() {
+        const id = parseInt(RV_ID_ACTIVO) || 0;
+        if (!id) return;
+        const url = `${B_URL}/${RUTA_MODULO}/exportar-excel-ajax?id=${id}`;
         window.open(url, '_blank');
     }
 

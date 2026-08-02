@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja
-version: 1.0
+etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar
+version: 1.1
 orden: 10
 estado: activo
 ---
@@ -85,6 +85,14 @@ la empresa. Al modificarlo, el asiento se regenera; al anularlo, se anula.
 En las líneas de concepto general se puede elegir la cuenta contable por línea,
 cuando el concepto no tiene una cuenta fija.
 
+## Comprobante en PDF y Excel
+
+Al abrir un ingreso ya guardado, la barra de acciones superior del modal
+muestra el botón **PDF** (comprobante de ingreso) y, junto a él, el botón
+**Excel**: descarga el mismo comprobante (cabecera, documentos cobrados y
+formas de cobro) en un archivo `.xlsx`. Ambos botones quedan ocultos mientras
+el ingreso es nuevo y no se ha guardado.
+
 ## Permisos
 
 Con **acceso total** se ven los ingresos de toda la empresa; sin él, cada usuario
@@ -105,4 +113,6 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **1.1** — Botón para exportar el comprobante a Excel, junto al de PDF, en la
+  barra de acciones superior del modal.
 - **1.0** — Versión inicial.

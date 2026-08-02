@@ -427,6 +427,7 @@
         document.getElementById('nc-btn-sri').disabled = !habilitar || esAutorizado || esAnulado;
         document.getElementById('nc-btn-pdf').disabled = !habilitar;
         document.getElementById('nc-btn-xml').disabled = !habilitar;
+        document.getElementById('nc-btn-excel').disabled = !habilitar;
         document.getElementById('nc-btn-correo').disabled = !habilitar || !esAutorizado;
         document.getElementById('btnGuardarNC').disabled = esAutorizado || esAnulado;
 
@@ -1568,6 +1569,11 @@
     window.NC_exportarXml = () => {
         const id = document.getElementById('nc_id').value;
         if (id) window.location.href = `${BASE_URL}/modulos/notas_credito/exportXmlDoc?id=${id}`;
+    };
+
+    window.NC_exportarExcel = () => {
+        const id = document.getElementById('nc_id').value;
+        if (id) window.open(`${BASE_URL}/modulos/notas_credito/exportExcelDoc?id=${id}`, '_blank');
     };
 
     window.NC_enviarPorCorreo = async () => {

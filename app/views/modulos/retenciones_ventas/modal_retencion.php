@@ -43,6 +43,12 @@
                                 title="Descargar XML">
                             <i class="fa-solid fa-file-code me-1"></i> XML
                         </button>
+                        <button type="button" id="retv-btn-excel"
+                                class="btn btn-outline-success btn-sm px-2 d-none"
+                                onclick="window.RETV_exportarExcel()"
+                                title="Descargar Excel">
+                            <i class="fa-solid fa-file-excel me-1"></i> Excel
+                        </button>
                         <div class="ms-auto" id="retv_estado_badge"></div>
                     </div>
 

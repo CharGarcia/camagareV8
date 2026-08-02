@@ -39,7 +39,8 @@ class FirmaSolicitudRepository extends BaseRepository
         $sql = "SELECT s.*, e.nombre AS empresa_nombre, e.ruc AS empresa_ruc
                 FROM {$this->table} s
                 JOIN empresas e ON e.id = s.id_empresa
-                WHERE s.token = :token AND s.eliminado = false";
+                WHERE s.token = :token AND s.eliminado = false
+                  AND e.estado = '1' AND e.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':token' => $token]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

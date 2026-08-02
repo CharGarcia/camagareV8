@@ -381,6 +381,7 @@
         document.getElementById('nd-btn-sri').disabled = !habilitar || esAutorizado || esAnulado;
         document.getElementById('nd-btn-pdf').disabled = !habilitar;
         document.getElementById('nd-btn-xml').disabled = !habilitar;
+        document.getElementById('nd-btn-excel').disabled = !habilitar;
         document.getElementById('nd-btn-correo').disabled = !habilitar || !esAutorizado;
         document.getElementById('btnGuardarND').disabled = esAutorizado || esAnulado;
 
@@ -1291,6 +1292,11 @@
     window.ND_exportarXml = () => {
         const id = document.getElementById('nd_id').value;
         if (id) window.location.href = `${BASE_URL}/modulos/nota_debito/exportXmlDoc?id=${id}`;
+    };
+
+    window.ND_exportarExcel = () => {
+        const id = document.getElementById('nd_id').value;
+        if (id) window.open(`${BASE_URL}/modulos/nota_debito/exportExcelDoc?id=${id}`, '_blank');
     };
 
     window.ND_enviarPorCorreo = async () => {

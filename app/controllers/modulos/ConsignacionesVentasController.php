@@ -8,10 +8,16 @@ use App\repositories\modulos\ConsignacionVentaRepository;
 use App\Rules\modulos\ConsignacionVentaRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\ConsignacionVentaService;
+use App\Traits\BloqueoEdicionTrait;
 use Exception;
 
 class ConsignacionesVentasController extends BaseModuloController
 {
+    use BloqueoEdicionTrait;
+
+    /** Bloquea el PEDIDO (no la consignación) mientras se usa como fuente de una consignación. */
+    private const TABLA_BLOQUEO_PEDIDO = 'pedidos_cabecera';
+
     private ConsignacionVentaService $service;
     private \App\Services\modulos\ConsignacionFacturaService $facturaService;
     private const RUTA_MODULO = 'modulos/consignaciones-ventas';
@@ -292,6 +298,104 @@ class ConsignacionesVentasController extends BaseModuloController
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Genera el Excel de la consignación (mismas columnas que el PDF). */
+    public function excel(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $cons = $this->service->getDetalleCompleto($id, $idEmpresa);
+            if (!$cons) { http_response_code(404); echo 'Consignación no encontrada'; exit; }
+
+            $detalles = $cons['detalles'] ?? [];
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+
+            // Cantidad retornada por línea (misma columna "Retorno" del PDF).
+            $retornado = $this->service->getRetornadoPorLinea($id, $idEmpresa);
+            foreach ($detalles as &$d) {
+                $d['retornado'] = $retornado[(int)($d['id'] ?? 0)] ?? 0;
+            }
+            unset($d);
+
+            $numero = trim((string)($cons['serie'] ?? '') . '-' . (string)($cons['secuencial'] ?? ''), '-');
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Consignacion');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:H1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'CONSIGNACIÓN EN VENTAS N.° ' . ($numero !== '' ? $numero : '—'));
+            $sheet->mergeCells('A2:H2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cons['fecha_emision']) ? date('d-m-Y', strtotime((string)$cons['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha emisión: ' . $fecha);
+            $sheet->setCellValue('D3', 'Cliente: ' . (string)($cons['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string)($cons['cliente_identificacion'] ?? ''));
+            $sheet->setCellValue('D4', 'Asesor: ' . (string)($cons['vendedor_nombre'] ?? ''));
+            $sheet->setCellValue('A5', 'Resp. traslado: ' . (string)($cons['responsable_traslado_nombre'] ?? ''));
+            $sheet->setCellValue('D5', 'Estado: ' . ucfirst((string)($cons['estado'] ?? '')));
+
+            $headerRow = 7;
+            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Cantidad', 'Retorno', 'Facturados'];
+            $col = 'A';
+            foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('C' . $row, (string)($d['bodega_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('D' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('E' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('F' . $row, (float)($d['cantidad'] ?? 0));
+                $sheet->setCellValue('G' . $row, (float)($d['retornado'] ?? 0));
+                $sheet->setCellValue('H' . $row, (float)($d['facturado'] ?? 0));
+                $row++;
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('F' . ($headerRow + 1) . ':H' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $obs = trim((string)($cons['observaciones'] ?? ''));
+            if ($obs !== '') {
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Observaciones: ' . $obs);
+                $sheet->mergeCells('A' . $row . ':H' . $row);
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Consignacion_' . ($numero !== '' ? $numero : 'comprobante') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
         }
         exit;
     }
@@ -938,5 +1042,21 @@ class ConsignacionesVentasController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /** Toma/renueva/libera el uso exclusivo del pedido cargado en el paso 2 (mismo mecanismo que Pedidos). */
+    public function bloquearAjax(): void {
+        $this->requireLeer();
+        $this->tomarBloqueoAjax(self::TABLA_BLOQUEO_PEDIDO);
+    }
+
+    public function renovarBloqueoAjax(): void {
+        $this->requireLeer();
+        $this->renovarBloqueoAjaxTrait(self::TABLA_BLOQUEO_PEDIDO);
+    }
+
+    public function liberarBloqueoAjax(): void {
+        $this->requireLeer();
+        $this->liberarBloqueoAjaxTrait(self::TABLA_BLOQUEO_PEDIDO);
     }
 }

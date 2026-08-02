@@ -18,6 +18,7 @@
                 <!-- Barra de acciones superior (estándar del sistema: PDF / Correo / WhatsApp) -->
                 <div class="d-flex gap-1 align-items-center flex-wrap mb-3 pb-2 border-bottom">
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="retPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="retExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                     <button type="button" class="btn btn-outline-info btn-sm px-2" onclick="retEmail()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="retWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                 </div>
@@ -613,6 +614,11 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
+    };
+    window.retExcel = function () {
+        const id = document.getElementById('ret_id').value;
+        if (!id) return Swal.fire('Atención', 'Debe guardar el retorno primero.', 'warning');
+        window.open(`${RUTA}/excel?id=${id}`, '_blank');
     };
     window.retEmail = async function () {
         const id = document.getElementById('ret_id').value;

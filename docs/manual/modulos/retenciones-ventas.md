@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro
-version: 1.0
+version: 1.1
 orden: 40
 estado: activo
 ---
@@ -54,6 +54,15 @@ Al registrar el ingreso que cobra esa factura, la retención se descuenta del
 saldo pendiente. Por eso conviene registrarla **antes** de dar por cobrada la
 factura: así los números cuadran solos.
 
+## Exportar el comprobante
+
+En el modal de una retención ya guardada, junto al botón **PDF** hay un botón
+**Excel** que descarga el mismo comprobante en formato `.xlsx` (archivo
+`Retencion_Venta_001-001-000000123.xlsx`): datos del cliente y del período
+fiscal, el detalle de las líneas retenidas (documento sustento, código,
+concepto, base imponible, porcentaje y valor) y los totales de renta, IVA, ISD
+y total retenido. Ambos botones solo aparecen cuando la retención ya se guardó.
+
 ## Errores frecuentes
 
 - **"El período fiscal debe tener el formato MM/YYYY"**: escríbalo con mes y año,
@@ -63,4 +72,6 @@ factura: así los números cuadran solos.
 
 ## Historial de cambios
 
+- **1.1** — Nuevo botón **Excel** junto al de PDF en el modal: descarga el
+  comprobante de la retención en `.xlsx` con el mismo detalle y totales.
 - **1.0** — Versión inicial.

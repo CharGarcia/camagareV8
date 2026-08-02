@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso
-version: 1.1
+etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -99,6 +99,14 @@ Cada egreso genera su asiento automáticamente según la configuración contable
 la empresa; al anularlo, el asiento se anula. En las líneas de concepto general
 se puede elegir la cuenta contable línea por línea.
 
+## Comprobante en PDF y Excel
+
+Al abrir un egreso ya guardado, la barra de acciones superior del modal
+muestra el botón **PDF** (comprobante de egreso) y, junto a él, el botón
+**Excel**: descarga el mismo comprobante (cabecera, documentos pagados y
+formas de pago) en un archivo `.xlsx`. Ambos botones quedan ocultos mientras
+el egreso es nuevo y no se ha guardado.
+
 ## Permisos
 
 Con **acceso total** se ven los egresos de toda la empresa; sin él, cada usuario
@@ -119,6 +127,8 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.2** — Botón para exportar el comprobante a Excel, junto al de PDF, en la
+  barra de acciones superior del modal.
 - **1.1** — Configurar impresión de cheque por banco desde la fila de pago y el
   modal de impresión en lote (abre el diseñador visual, crea la plantilla del
   banco si no existe).

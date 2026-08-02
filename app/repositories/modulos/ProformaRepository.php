@@ -132,7 +132,9 @@ class ProformaRepository extends BaseRepository
                        c.email          AS cliente_email
                 FROM proformas_cabecera p
                 INNER JOIN clientes c ON p.id_cliente = c.id
+                INNER JOIN empresas emp ON emp.id = p.id_empresa
                 WHERE p.aprobacion_token = ? AND p.eliminado = FALSE
+                  AND emp.estado = '1' AND emp.eliminado = FALSE
                 LIMIT 1";
         $row = $this->query($sql, [$token])->fetch();
         return $row ?: null;

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, anular, nota de credito, whatsapp, link de pago, payphone, nuvei
-version: 1.1
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -37,9 +37,9 @@ Una factura guardada queda en borrador hasta que se envía al SRI.
 ## Barra de acciones del documento
 
 En la parte superior del formulario están las acciones sobre el documento ya
-guardado: generar el **PDF**, ver el **XML**, enviarlo por **correo** o por
-**WhatsApp** y remitirlo al **SRI**. Cada acción comprueba primero que la factura
-esté guardada.
+guardado: generar el **PDF**, ver el **XML**, descargar un **Excel** con el
+detalle y los totales, enviarlo por **correo** o por **WhatsApp** y remitirlo
+al **SRI**. Cada acción comprueba primero que la factura esté guardada.
 
 ## Enviar la factura y el enlace de pago por WhatsApp
 
@@ -107,6 +107,9 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **1.3** — Nuevo botón **Excel** en la barra de acciones, junto al de XML:
+  descarga el detalle de la factura (líneas, totales y forma de pago) en una
+  hoja de cálculo.
 - **1.2** — Normativa SRI 2026: campo fijo "RUC Proveedor" en info adicional (no
   editable) y placa del vehículo obligatoria para operadoras de transporte
   comercial. Columnas "Precios" y "Medida" del detalle ahora solo aparecen cuando

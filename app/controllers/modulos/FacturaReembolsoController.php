@@ -729,6 +729,198 @@ class FacturaReembolsoController extends BaseModuloController
         exit;
     }
 
+    public function exportExcelDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $fr = $this->repository->getPorId($id);
+            if (!$fr || (int) ($fr['id_empresa'] ?? 0) !== $idEmpresa) {
+                http_response_code(404); echo 'Factura de reembolso no encontrada'; exit;
+            }
+
+            [$detalles, $terceros, $pagos] = $this->cargarDatosCompletos($id);
+            [$empresa] = $this->construirEmpresaComprobante($idEmpresa, $fr);
+
+            $numero = ($fr['establecimiento'] ?? '001') . '-' . ($fr['punto_emision'] ?? '001') . '-'
+                    . str_pad((string) ($fr['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Factura Reembolso');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:F1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'FACTURA DE REEMBOLSO N.° ' . $numero);
+            $sheet->mergeCells('A2:F2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($fr['fecha_emision']) ? date('d-m-Y', strtotime((string) $fr['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Cliente: ' . (string) ($fr['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string) ($fr['cliente_ruc'] ?? ''));
+            $sheet->setCellValue('C4', 'Estado: ' . ucfirst((string) ($fr['estado'] ?? '')));
+
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+
+            // ── Detalle ──────────────────────────────────────────────────────
+            $headerRow = 6;
+            $headers = ['Descripción', 'Cantidad', 'P. Unitario', 'Descuento', 'Subtotal', 'Reembolso'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $sheet->getStyle('A' . $headerRow . ':F' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            $subtotMap = []; $ivaMap = []; $tarifaMap = [];
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string) ($d['descripcion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('B' . $row, (float) ($d['cantidad'] ?? 0));
+                $sheet->setCellValue('C' . $row, (float) ($d['precio_unitario'] ?? 0));
+                $sheet->setCellValue('D' . $row, (float) ($d['descuento'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float) ($d['precio_total_sin_impuesto'] ?? 0));
+                $sheet->setCellValueExplicit('F' . $row, !empty($d['es_reembolso']) ? 'Sí' : 'No', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $row++;
+
+                foreach ($d['impuestos'] ?? [] as $imp) {
+                    if ((string) ($imp['codigo_impuesto'] ?? '') !== '2') continue;
+                    $codPct = (string) ($imp['codigo_porcentaje'] ?? '0');
+                    $subtotMap[$codPct] = ($subtotMap[$codPct] ?? 0.0) + (float) ($imp['base_imponible'] ?? 0);
+                    $ivaMap[$codPct]    = ($ivaMap[$codPct] ?? 0.0) + (float) ($imp['valor'] ?? 0);
+                    $tarifaMap[$codPct] = (float) ($imp['tarifa'] ?? 0);
+                }
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('B' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            // ── Totales ──────────────────────────────────────────────────────
+            $subtotal = (float) ($fr['total_sin_impuestos'] ?? 0);
+            $descuentoTotal = (float) ($fr['total_descuento'] ?? 0);
+            $propina = (float) ($fr['propina'] ?? 0);
+            $total = (float) ($fr['importe_total'] ?? 0);
+            $totalIva = array_sum($ivaMap);
+
+            $row += 1;
+            $totales = [
+                'Subtotal sin impuestos' => $subtotal,
+                'Descuento' => $descuentoTotal,
+            ];
+            ksort($ivaMap);
+            foreach ($ivaMap as $codPct => $ivaVal) {
+                $tarPct = $tarifaMap[$codPct] ?? 0.0;
+                $tarLabel = $tarPct == (int) $tarPct ? (string) (int) $tarPct : number_format($tarPct, 2);
+                $totales["IVA {$tarLabel}%"] = $ivaVal;
+            }
+            if ($propina > 0) $totales['Propina'] = $propina;
+            $totales['TOTAL'] = $total;
+
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('D' . $row, $label);
+                $sheet->getStyle('D' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('E' . $row, $valor);
+                $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            // ── Terceros reembolsados ────────────────────────────────────────
+            if (!empty($terceros)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Terceros reembolsados');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                $tHeaderRow = $row;
+                $tHeaders = ['Fecha', 'Identificación', 'Razón social', 'Documento', 'Base imponible', 'Impuesto'];
+                $col = 'A';
+                foreach ($tHeaders as $h) {
+                    $sheet->setCellValue($col . $tHeaderRow, $h);
+                    $col++;
+                }
+                $sheet->getStyle('A' . $tHeaderRow . ':F' . $tHeaderRow)->applyFromArray($headerStyle);
+                $row++;
+
+                $totalReembBase = 0.0; $totalReembIva = 0.0;
+                foreach ($terceros as $t) {
+                    $fechaDoc = '';
+                    if (!empty($t['fecha_emision_doc_reembolso'])) {
+                        $ts = strtotime((string) $t['fecha_emision_doc_reembolso']);
+                        $fechaDoc = $ts ? date('d-m-Y', $ts) : (string) $t['fecha_emision_doc_reembolso'];
+                    }
+                    $doc = ($t['estab_doc_reembolso'] ?? '') . '-' . ($t['pto_emi_doc_reembolso'] ?? '') . '-' . ($t['secuencial_doc_reembolso'] ?? '');
+                    $base = (float) ($t['base_imponible_total'] ?? 0);
+                    $imp  = (float) ($t['impuesto_total'] ?? 0);
+                    $totalReembBase += $base;
+                    $totalReembIva  += $imp;
+
+                    $sheet->setCellValueExplicit('A' . $row, $fechaDoc, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('B' . $row, (string) ($t['identificacion_proveedor_reembolso'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('C' . $row, (string) ($t['razon_social_proveedor_reembolso'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('D' . $row, (string) $doc, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValue('E' . $row, $base);
+                    $sheet->setCellValue('F' . $row, $imp);
+                    $sheet->getStyle('E' . $row . ':F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+
+                $row += 1;
+                $sheet->setCellValue('D' . $row, 'BASE REEMBOLSADA');
+                $sheet->getStyle('D' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('E' . $row, $totalReembBase);
+                $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+                $sheet->setCellValue('D' . $row, 'IVA REEMBOLSADO');
+                $sheet->getStyle('D' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('E' . $row, $totalReembIva);
+                $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            // ── Forma de pago ────────────────────────────────────────────────
+            if (!empty($pagos)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Forma de pago');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($pagos as $p) {
+                    $sheet->setCellValue('A' . $row, (string) ($p['nombre_forma_pago'] ?? $p['forma_pago'] ?? ''));
+                    $sheet->setCellValue('C' . $row, (float) ($p['total'] ?? 0));
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'FacturaReembolso_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     public function exportXmlDoc(): void
     {
         $this->requireLeer();

@@ -167,6 +167,9 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                         <button type="button" class="btn btn-sm btn-outline-danger" id="btnEmpPdf" onclick="window.imprimirEmpleadoPdf()" title="Imprimir ficha del empleado (PDF)">
                             <i class="bi bi-file-earmark-pdf"></i>
                         </button>
+                        <button type="button" class="btn btn-outline-success btn-sm px-2" id="btnEmpExcel" onclick="window.exportarEmpleadoExcel()" title="Exportar Excel">
+                            <i class="bi bi-file-earmark-excel"></i>
+                        </button>
                     </div>
 
                     <!-- Pestañas -->

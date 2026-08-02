@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp
-version: 1.1
+etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel
+version: 1.2
 orden: 15
 estado: activo
 ---
@@ -59,6 +59,15 @@ Solo se puede editar una proforma en **borrador**. Si ya está aprobada y necesi
 cambiarla, tiene dos caminos: anularla y crear una nueva, o —cuando el cambio es
 menor— convertirla a factura y corregir en la factura antes de enviarla.
 
+## Exportar a Excel
+
+Desde la proforma guardada, el botón **Excel** (junto al de PDF, en la barra de
+acciones superior del modal) descarga la cotización en formato `.xlsx`: datos
+de la empresa, número y fecha de la proforma, cliente, el detalle de ítems
+(código, descripción, cantidad, precio unitario, descuento, IVA % y subtotal),
+los totales, la información adicional y las observaciones. Igual que el PDF,
+no está disponible en una proforma nueva sin guardar.
+
 ## Enviar la proforma por WhatsApp
 
 Desde la proforma guardada, el botón de **WhatsApp** la manda al cliente con su
@@ -99,6 +108,7 @@ comercial.
 
 ## Historial de cambios
 
+- **1.2** — Se agrega el botón **Excel** para exportar la proforma a `.xlsx`.
 - **1.1** — Se documenta el envío de la proforma por WhatsApp y la plantilla del
   sistema `proforma`.
 - **1.0** — Versión inicial.

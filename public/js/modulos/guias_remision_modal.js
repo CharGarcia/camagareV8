@@ -903,6 +903,7 @@
         document.body.removeChild(a);
     };
     window.GR_exportarXml = function () { if (idActual) window.open(urlBaseGR + '/exportar-xml-ajax?id=' + idActual, '_blank'); };
+    window.GR_exportarExcel = function () { if (idActual) window.open(urlBaseGR + '/exportar-excel-ajax?id=' + idActual, '_blank'); };
 
     window.GR_cargarHistorialSri = function (id) {
         fetch(urlBaseGR + '/get-historial-sri-ajax?id=' + id)

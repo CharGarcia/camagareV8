@@ -1107,6 +1107,12 @@
         window.open(`${API_URL}/descargarXmlOriginalAjax?id=${id}`, '_blank');
     };
 
+    window.LC_exportarExcel = function() {
+        const id = liqIdGuardado();
+        if (!id) return;
+        window.open(`${API_URL}/exportarExcelDoc?id=${id}`, '_blank');
+    };
+
     window.LC_enviarCorreo = async function() {
         const id = liqIdGuardado();
         if (!id) return;

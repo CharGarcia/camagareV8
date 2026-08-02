@@ -8,17 +8,22 @@ use App\repositories\modulos\ConsignacionVentaEntregaRepository;
 use App\repositories\modulos\ConsignacionVentaRepository;
 use App\repositories\modulos\InventarioRepository;
 use App\Rules\modulos\ConsignacionVentaRules;
+use App\Services\BloqueoEdicionService;
 use App\Services\LogSistemaService;
 use App\core\Database;
 use Exception;
 
 class ConsignacionVentaService
 {
+    /** Debe coincidir con ConsignacionesVentasController::TABLA_BLOQUEO_PEDIDO. */
+    private const TABLA_BLOQUEO_PEDIDO = 'pedidos_cabecera';
+
     private ConsignacionVentaRepository $repository;
     private ConsignacionVentaRules $rules;
     private LogSistemaService $logService;
     private InventarioRepository $inventarioRepo;
     private ClienteRepository $clienteRepo;
+    private BloqueoEdicionService $bloqueoService;
 
     public function __construct(
         ConsignacionVentaRepository $repository,
@@ -30,6 +35,35 @@ class ConsignacionVentaService
         $this->logService = $logService;
         $this->inventarioRepo = new InventarioRepository();
         $this->clienteRepo = new ClienteRepository();
+        $this->bloqueoService = new BloqueoEdicionService();
+    }
+
+    /**
+     * Defensa en profundidad: si alguno de los pedidos que alimentan estos detalles
+     * está siendo editado ahora mismo por otro usuario (módulo Pedidos), se rechaza
+     * antes de tocar inventario. La UI ya debería haber bloqueado la selección; esto
+     * cubre el caso de una petición que llega igual (doble clic, F5, etc.).
+     */
+    private function verificarPedidosLibres(array $detalles, int $idEmpresa, int $idUsuario): void
+    {
+        $idsPedidoDetalle = array_unique(array_filter(array_map(
+            static fn($d) => (int) ($d['id_pedido_detalle'] ?? 0),
+            $detalles
+        )));
+        if (empty($idsPedidoDetalle)) return;
+
+        $db = Database::getConnection();
+        $in = implode(',', array_fill(0, count($idsPedidoDetalle), '?'));
+        $st = $db->prepare("SELECT DISTINCT id_pedido FROM pedidos_detalle WHERE id IN ($in)");
+        $st->execute(array_values($idsPedidoDetalle));
+        $idsPedido = $st->fetchAll(\PDO::FETCH_COLUMN);
+
+        foreach ($idsPedido as $idPedido) {
+            $enUso = $this->bloqueoService->verificarLibreOPropio(self::TABLA_BLOQUEO_PEDIDO, (int) $idPedido, $idEmpresa, $idUsuario);
+            if ($enUso !== null) {
+                throw new Exception("El pedido usado en esta línea lo está editando ahora mismo {$enUso['usuario']}. Espera a que termine e intenta de nuevo.");
+            }
+        }
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
@@ -76,11 +110,12 @@ class ConsignacionVentaService
         $this->rules->validarCreacion($data);
         $db = Database::getConnection();
 
+        $idEmpresa = $data['id_empresa'];
+        $idUsuario = $data['id_usuario'];
+        $this->verificarPedidosLibres($data['detalles'] ?? [], (int) $idEmpresa, (int) $idUsuario);
+
         try {
             $db->beginTransaction();
-
-            $idEmpresa = $data['id_empresa'];
-            $idUsuario = $data['id_usuario'];
 
             // Cabecera
             $cabecera = [
@@ -231,6 +266,8 @@ class ConsignacionVentaService
         if ($this->tieneFacturaAsociada($id, $idEmpresa)) {
             throw new Exception("No se puede editar: la consignación tiene una factura asociada.");
         }
+
+        $this->verificarPedidosLibres($data['detalles'] ?? [], $idEmpresa, $idUsuario);
 
         $db = Database::getConnection();
         try {

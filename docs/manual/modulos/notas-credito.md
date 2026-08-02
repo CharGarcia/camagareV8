@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri
-version: 1.1
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -52,6 +52,13 @@ mal, hay que gestionarlo como cualquier comprobante autorizado erróneo.
 Una nota de crédito por devolución **devuelve la mercadería al inventario** y
 reduce el saldo por cobrar de esa factura.
 
+## Exportar el documento
+
+En la barra de acciones superior del modal, además de **PDF** y **XML**, hay
+un botón **Excel** (icono verde) que descarga el detalle y los totales de esa
+nota de crédito puntual. Igual que PDF y XML, solo se habilita cuando el
+documento ya está guardado.
+
 ## Exportar el listado
 
 Los botones **Excel** y **PDF** de la parte superior del listado exportan las
@@ -69,5 +76,8 @@ momento (no solo la página visible).
 
 ## Historial de cambios
 
+- **1.2** — Botón **Excel** en la barra de acciones del modal, para exportar
+  el detalle y totales de una nota de crédito puntual (antes solo existía
+  para el listado completo).
 - **1.1** — Agregada la exportación a Excel y PDF del listado (no existía).
 - **1.0** — Versión inicial.

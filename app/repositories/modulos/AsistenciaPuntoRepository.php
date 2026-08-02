@@ -127,8 +127,10 @@ class AsistenciaPuntoRepository extends BaseRepository
     /** Resuelve un punto por el token de su QR (global, no filtra por empresa). */
     public function getByQrToken(string $qrToken): ?array
     {
-        $sql = "SELECT * FROM {$this->table}
-                WHERE qr_token = :t AND eliminado = false AND estado = 'activo' LIMIT 1";
+        $sql = "SELECT p.* FROM {$this->table} p
+                JOIN empresas emp ON emp.id = p.id_empresa
+                WHERE p.qr_token = :t AND p.eliminado = false AND p.estado = 'activo'
+                  AND emp.estado = '1' AND emp.eliminado = false LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([':t' => $qrToken]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

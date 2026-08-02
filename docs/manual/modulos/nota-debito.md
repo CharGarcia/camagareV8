@@ -6,7 +6,7 @@ ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri
-version: 1.0
+version: 1.1
 orden: 31
 estado: activo
 ---
@@ -51,6 +51,13 @@ factura relacionada (en Cuentas por Cobrar) y genera un asiento contable en el
 mismo sentido que una factura: debita Cuentas por Cobrar y acredita Ventas
 (más IVA Ventas si aplica).
 
+## Exportar el documento
+
+En la barra de acciones superior del modal, además de **PDF** y **XML**, hay
+un botón **Excel** (icono verde) que descarga los motivos, totales y forma de
+pago de esa nota de débito puntual. Solo se habilita con el documento ya
+guardado.
+
 ## Exportar el listado
 
 Los botones **Excel** y **PDF** de la parte superior del listado exportan las
@@ -68,4 +75,6 @@ momento (no solo la página visible).
 
 ## Historial de cambios
 
+- **1.1** — Botón **Excel** en la barra de acciones del modal, para exportar
+  motivos, totales y forma de pago de una nota de débito puntual.
 - **1.0** — Versión inicial (emisión de notas de débito de venta).

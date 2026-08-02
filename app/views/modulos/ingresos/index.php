@@ -286,6 +286,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfIngreso" onclick="abrirPdfIngreso()" title="Generar PDF del comprobante">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2 d-none" id="btnExcelIngreso" onclick="exportarExcelIngreso()" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-excel fs-6"></i>
+                    </button>
                     <button type="button" class="btn btn-outline-info btn-sm px-2 d-none" id="btnCorreoIngreso" onclick="enviarCorreoIngreso()" title="Enviar comprobante por correo">
                         <i class="bi bi-envelope fs-6"></i>
                     </button>
@@ -1759,6 +1762,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('btnGuardarIngreso').classList.remove('d-none');
         document.getElementById('m-container-footer-ver').classList.add('d-none');
         document.getElementById('btnPdfIngreso').classList.add('d-none');
+        document.getElementById('btnExcelIngreso').classList.add('d-none');
         document.getElementById('btnCorreoIngreso').classList.add('d-none');
 
         document.getElementById('m-input-fecha').value = new Date().toISOString().slice(0, 10);
@@ -1994,6 +1998,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         a.remove();
     }
 
+    function exportarExcelIngreso() {
+        const id = document.getElementById('m-input-id').value;
+        if (!id) return;
+        const url = `<?= BASE_URL ?>/<?= $rutaModulo ?>/exportarExcelAjax?id=${id}`;
+        window.open(url, '_blank');
+    }
+
     async function enviarCorreoIngreso() {
         const id = document.getElementById('m-input-id').value;
         if (!id) return;
@@ -2049,6 +2060,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 
                 document.getElementById('m-input-id').value = ing.id;
                 document.getElementById('btnPdfIngreso').classList.remove('d-none');
+                document.getElementById('btnExcelIngreso').classList.remove('d-none');
                 const _btnCorreo = document.getElementById('btnCorreoIngreso');
                 _btnCorreo.classList.remove('d-none');
                 _btnCorreo.dataset.email = ing.cliente_email || ing.recibo_cliente_email || '';

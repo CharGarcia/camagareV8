@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\controllers;
 
 use App\core\Controller;
+use App\models\Empresa;
 use App\repositories\PayphoneRepository;
 use App\Services\PayphoneService;
 
@@ -131,6 +132,14 @@ class PayphoneController extends Controller
             $trans = $this->pp->getTransaccionByClientId($ctid);
 
             if (!$trans) {
+                $this->view('publica.payphone.pago', ['estado' => 'error', 'widgetConfig' => null]);
+                return;
+            }
+
+            // No iniciar un cobro nuevo a nombre de una empresa inactiva. Si el pago
+            // ya se había hecho antes de desactivarla, el retorno/confirmación sigue
+            // sin bloquearse (no hay que perder un cobro ya ejecutado en Payphone).
+            if (!(new Empresa())->estaActiva((int) $trans['id_empresa'])) {
                 $this->view('publica.payphone.pago', ['estado' => 'error', 'widgetConfig' => null]);
                 return;
             }

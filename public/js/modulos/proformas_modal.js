@@ -67,6 +67,7 @@
         show('pf-btn-duplicar', perm().crear && guardada);
         show('pf-vr1',          perm().crear && guardada);
         show('pf-btn-pdf',       guardada);
+        show('pf-btn-excel',     guardada);
         show('pf-btn-correo',    guardada);
         show('pf-btn-whatsapp',  guardada);
         show('pf-vr2',          perm().actualizar && guardada);
@@ -129,7 +130,7 @@
 
         // Ocultar todos los botones de acción
         ['pf-btn-factura','pf-btn-pedido','pf-btn-recibo','pf-btn-duplicar','pf-vr1',
-         'pf-btn-pdf','pf-btn-whatsapp','pf-btn-correo','pf-vr2',
+         'pf-btn-pdf','pf-btn-excel','pf-btn-whatsapp','pf-btn-correo','pf-vr2',
          'pf-btn-aprobar','pf-btn-rechazar','pf-btn-anular',
          'pf_btnEliminar','pf_btnGuardar'].forEach(id => {
             const el = $id(id); if (el) el.classList.add('d-none');
@@ -1279,6 +1280,17 @@
             // (sin abrir una pestaña en blanco).
             const a = document.createElement('a');
             a.href = `${urlBase()}/exportarPdfAjax?id=${id}`;
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        },
+
+        exportarExcel() {
+            const id = $id('pf_id').value;
+            if (!id) { toast('Guarde la proforma antes de exportar el Excel', 'error'); return; }
+            const a = document.createElement('a');
+            a.href = `${urlBase()}/exportarExcelAjax?id=${id}`;
             a.rel = 'noopener';
             document.body.appendChild(a);
             a.click();

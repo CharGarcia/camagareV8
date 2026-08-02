@@ -569,6 +569,185 @@ class EmpleadosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Exporta la ficha del empleado a Excel: secciones etiqueta/valor (no es un
+     * listado con líneas de detalle, es una ficha), igual a la del PDF.
+     */
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if ($id <= 0) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $emp = $this->service->getDetalle($id, $idEmpresa);
+            if (!$emp) { http_response_code(404); echo 'Empleado no encontrado'; exit; }
+
+            // Resolver nombre del banco (findById no hace join).
+            if (!empty($emp['id_banco_ecuador'])) {
+                $bancos = (new BancoEcuador())->getAll('nombre_banco', 'ASC');
+                foreach ($bancos as $b) {
+                    if ((int)$b['id'] === (int)$emp['id_banco_ecuador']) {
+                        $emp['nombre_banco'] = $b['nombre_banco'];
+                        break;
+                    }
+                }
+            }
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Ficha Empleado');
+
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+
+            $row = 1;
+            $sheet->setCellValue('A' . $row, 'FICHA DEL EMPLEADO');
+            $sheet->mergeCells('A' . $row . ':B' . $row);
+            $sheet->getStyle('A' . $row)->getFont()->setBold(true)->setSize(13);
+            $row += 2;
+
+            $seccion = function (string $titulo) use ($sheet, &$row, $headerStyle) {
+                $sheet->setCellValue('A' . $row, $titulo);
+                $sheet->mergeCells('A' . $row . ':B' . $row);
+                $sheet->getStyle('A' . $row . ':B' . $row)->applyFromArray($headerStyle);
+                $row++;
+            };
+
+            $fila = function (string $etiqueta, $valor) use ($sheet, &$row) {
+                $sheet->setCellValueExplicit('A' . $row, $etiqueta, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $sheet->setCellValueExplicit('B' . $row, (string) $valor, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $row++;
+            };
+
+            $cap = function ($s) {
+                $s = str_replace('_', ' ', trim((string) $s));
+                return $s === '' ? '—' : mb_convert_case($s, MB_CASE_TITLE, 'UTF-8');
+            };
+            $fecha = function ($v) {
+                $v = trim((string) $v);
+                if ($v === '' || str_starts_with($v, '0000')) return '—';
+                $ts = strtotime($v);
+                return $ts ? date('d-m-Y', $ts) : $v;
+            };
+            $siNo = function ($v) {
+                if (is_string($v)) return in_array(strtolower($v), ['t', 'true', '1', 'si', 'sí'], true) ? 'Sí' : 'No';
+                return $v ? 'Sí' : 'No';
+            };
+            $fondos = function ($v) use ($cap) {
+                return match ($v) {
+                    'no_se_paga' => 'No se paga',
+                    'rol'        => 'En Rol Mensual',
+                    'desde_anio' => 'Se paga a partir del año',
+                    'planilla'   => 'Planilla IESS',
+                    default      => $cap($v),
+                };
+            };
+
+            // Datos generales
+            $seccion('DATOS GENERALES');
+            $fila('Identificación', $cap($emp['tipo_id'] ?? '') . ': ' . ($emp['identificacion'] ?? ''));
+            $fila('Nombres y Apellidos', $emp['nombres_apellidos'] ?? '');
+            $fila('Sexo', $emp['sexo'] ?? '');
+            $fila('Fecha Nacimiento', $fecha($emp['fecha_nacimiento'] ?? ''));
+            $fila('Correo', $emp['email'] ?? '');
+            $fila('Teléfono', $emp['telefono'] ?? '');
+            $fila('Contacto Emergencia', $emp['contacto_emergencia'] ?? '');
+            $fila('Dirección', $emp['direccion'] ?? '');
+            $fila('Estado', $cap($emp['estado'] ?? ''));
+            $row++;
+
+            // Datos laborales
+            $seccion('DATOS LABORALES');
+            $fila('Cargo', $emp['cargo'] ?? '');
+            $fila('Departamento', $emp['departamento'] ?? '');
+            $fila('Región', $cap($emp['region'] ?? ''));
+            $fila('Cód. Sectorial IESS', $emp['codigo_sectorial_iess'] ?? '');
+            $fila('Lugar de Trabajo', $emp['lugar_trabajo'] ?? '');
+            $fila('Horario', $emp['horario_trabajo'] ?? '');
+            $fila('Fondos de Reserva', $fondos($emp['fondos_reserva'] ?? ''));
+            $fila('Aporta IESS', $siNo($emp['aporta_iess'] ?? false));
+            $fila('Décimo Tercero', $cap($emp['decimo_tercero'] ?? ''));
+            $fila('Décimo Cuarto', $cap($emp['decimo_cuarto'] ?? ''));
+            $fila('Aporte Personal (%)', number_format((float) ($emp['aporte_personal'] ?? 0), 4));
+            $fila('Aporte Patronal (%)', number_format((float) ($emp['aporte_patronal'] ?? 0), 4));
+            $fila('Sueldo Base', number_format((float) ($emp['sueldo_base'] ?? 0), 2));
+            $fila('V. Semanal', number_format((float) ($emp['valor_semanal'] ?? 0), 2));
+            $fila('V. Quincena', number_format((float) ($emp['valor_quincena'] ?? 0), 2));
+            $row++;
+
+            // Datos bancarios
+            $seccion('DATOS BANCARIOS');
+            $fila('Banco', $emp['nombre_banco'] ?? '—');
+            $fila('Tipo Cuenta', $cap($emp['tipo_cuenta'] ?? ''));
+            $fila('Número de Cuenta', $emp['numero_cuenta'] ?? '');
+            $row++;
+
+            // Historial laboral (periodos)
+            $seccion('HISTORIAL LABORAL');
+            $periodos = $emp['periodos'] ?? [];
+            if (empty($periodos)) {
+                $fila('Periodos', 'Sin periodos registrados.');
+            } else {
+                $sheet->setCellValue('A' . $row, 'Ingreso');
+                $sheet->setCellValue('B' . $row, 'Salida');
+                $sheet->setCellValue('C' . $row, 'Motivo');
+                $sheet->getStyle('A' . $row . ':C' . $row)->applyFromArray($headerStyle);
+                $row++;
+                foreach ($periodos as $p) {
+                    $sheet->setCellValueExplicit('A' . $row, $fecha($p['fecha_ingreso'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('B' . $row, $fecha($p['fecha_salida'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('C' . $row, (string) ($p['motivo_salida'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $row++;
+                }
+            }
+            $row++;
+
+            // Rubros fijos
+            $seccion('RUBROS FIJOS');
+            $rubros = $emp['rubros'] ?? [];
+            if (empty($rubros)) {
+                $fila('Rubros', 'Sin rubros registrados.');
+            } else {
+                $sheet->setCellValue('A' . $row, 'Tipo');
+                $sheet->setCellValue('B' . $row, 'Nombre');
+                $sheet->setCellValue('C' . $row, 'Valor');
+                $sheet->setCellValue('D' . $row, 'Aporta IESS');
+                $sheet->getStyle('A' . $row . ':D' . $row)->applyFromArray($headerStyle);
+                $row++;
+                foreach ($rubros as $r) {
+                    $sheet->setCellValueExplicit('A' . $row, $cap($r['tipo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('B' . $row, (string) ($r['nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValue('C' . $row, (float) ($r['valor'] ?? 0));
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->setCellValueExplicit('D' . $row, $siNo($r['aporta_iess'] ?? false), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $nombreArch = 'Ficha_Empleado_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($emp['identificacion'] ?? 'empleado')) . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombreArch . '"');
+            header('Cache-Control: max-age=0');
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
     private function cargarEmpresaParaPdf(int $idEmpresa): array
     {

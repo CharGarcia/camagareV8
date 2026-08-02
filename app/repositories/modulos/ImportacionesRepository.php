@@ -337,7 +337,8 @@ class ImportacionesRepository extends BaseRepository
                 LEFT  JOIN bodegas     b ON b.id = i.id_bodega_destino
                 LEFT  JOIN usuarios    u ON u.id = i.created_by
                 LEFT  JOIN empresas    e ON e.id = i.id_empresa
-                WHERE i.token_aprobacion = :t AND i.eliminado = false LIMIT 1";
+                WHERE i.token_aprobacion = :t AND i.eliminado = false
+                  AND e.estado = '1' AND e.eliminado = false LIMIT 1";
         return $this->query($sql, [':t' => $token])->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 

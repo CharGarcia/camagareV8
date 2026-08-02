@@ -167,10 +167,52 @@ async function PED_fetchSearch(page = 1) {
     }
 }
 
+/**
+ * Bloqueo de edición (CMG_Bloqueo): evita que un pedido se edite mientras otro
+ * usuario ya lo está usando en Consignaciones de Venta (o viceversa).
+ */
+function PED_bloquearControles(bloquear) {
+    const form = document.getElementById('form-pedido-cabecera');
+    if (form) {
+        form.querySelectorAll('input, select, button').forEach(el => { el.disabled = bloquear; });
+    }
+    const btnGuardar = document.getElementById('btn-guardar-pedido');
+    if (btnGuardar) btnGuardar.classList.toggle('d-none', bloquear);
+    const btnEliminar = document.getElementById('btn-eliminar-modal');
+    if (btnEliminar && bloquear) btnEliminar.classList.add('d-none');
+}
+
+function PED_mostrarAvisoBloqueo(info) {
+    const aviso = document.getElementById('aviso-bloqueo-pedido');
+    const texto = document.getElementById('aviso-bloqueo-pedido-texto');
+    if (!aviso || !texto) return;
+    const contexto = info.modulo_contexto ? ` (${info.modulo_contexto})` : '';
+    texto.textContent = `Este pedido lo está usando ahora mismo ${info.usuario || 'otro usuario'}${contexto}. Puedes verlo, pero no editarlo hasta que termine.`;
+    aviso.classList.remove('d-none');
+    PED_bloquearControles(true);
+}
+
+function PED_ocultarAvisoBloqueo() {
+    const aviso = document.getElementById('aviso-bloqueo-pedido');
+    if (aviso) aviso.classList.add('d-none');
+    PED_bloquearControles(false);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const modalEl = document.getElementById('modalPedido');
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (typeof window.CMG_Bloqueo !== 'undefined') window.CMG_Bloqueo.detener();
+        });
+    }
+});
+
 function nuevoPedido() {
     const form = document.getElementById('form-pedido-cabecera');
     if (form) form.reset();
-    
+
+    PED_ocultarAvisoBloqueo();
+
     document.getElementById('pedido_id').value = '';
     document.getElementById('detalle-productos').innerHTML = '';
     document.getElementById('id_cliente').value = '';
@@ -626,7 +668,8 @@ async function editarPedido(id) {
             if (btnEliminar) btnEliminar.classList.remove('d-none');
 
             calcTotales();
-            
+            PED_ocultarAvisoBloqueo();
+
             const modalEl = document.getElementById('modalPedido');
             if (modalEl) {
                 bootstrap.Modal.getOrCreateInstance(modalEl).show();
@@ -635,6 +678,19 @@ async function editarPedido(id) {
                 }
             } else {
                 console.error("No se encontró el elemento modal 'modalPedido' en el DOM.");
+            }
+
+            if (typeof window.CMG_Bloqueo !== 'undefined') {
+                window.CMG_Bloqueo.iniciar({
+                    urlBase: window.CMG_urlBase,
+                    idRegistro: p.id,
+                    moduloContexto: 'Pedidos',
+                    onBloqueado: PED_mostrarAvisoBloqueo,
+                    onPerdido: () => {
+                        Swal.fire({ icon: 'warning', title: 'Perdiste el control de este pedido', text: 'Otro usuario lo tomó. Guarda tus cambios pendientes con cuidado o recarga.' });
+                        PED_bloquearControles(true);
+                    }
+                });
             }
         } else {
             Swal.fire({

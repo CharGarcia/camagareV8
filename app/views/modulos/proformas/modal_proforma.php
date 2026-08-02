@@ -97,6 +97,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                         onclick="PF.exportarPdf()" title="Exportar PDF">
                         <i class="bi bi-file-earmark-pdf"></i>
                     </button>
+                    <button id="pf-btn-excel" type="button" class="btn btn-outline-success btn-sm px-2 d-none"
+                        onclick="PF.exportarExcel()" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-excel"></i>
+                    </button>
                     <button id="pf-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2 d-none"
                         onclick="PF.enviarCorreo()" title="Enviar por correo">
                         <i class="bi bi-envelope"></i>

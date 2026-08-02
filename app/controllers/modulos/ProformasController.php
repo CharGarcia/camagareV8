@@ -372,6 +372,162 @@ class ProformasController extends BaseModuloController
         exit;
     }
 
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $cabecera = $this->repository->getPorId($id);
+            if (!$cabecera || (int) ($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
+                http_response_code(404); echo 'Proforma no encontrada'; exit;
+            }
+
+            $detalles = $this->repository->getDetalles($id);
+            foreach ($detalles as &$d) {
+                $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+            }
+            unset($d);
+
+            $adicional = $this->repository->getInfoAdicional($id);
+
+            $empresaModel = new Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            $numero = ($cabecera['establecimiento'] ?? '001') . '-'
+                    . ($cabecera['punto_emision']   ?? '001') . '-'
+                    . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Proforma');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:G1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'PROFORMA N.° ' . $numero);
+            $sheet->mergeCells('A2:G2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cabecera['fecha_emision']) ? date('d-m-Y', strtotime((string) $cabecera['fecha_emision'])) : '';
+            $dias  = (int) ($cabecera['dias_vigencia'] ?? 15);
+            $vence = !empty($cabecera['fecha_emision'])
+                ? date('d-m-Y', strtotime((string) $cabecera['fecha_emision'] . " +{$dias} days"))
+                : '';
+
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('D3', 'Válida hasta: ' . $vence);
+            $sheet->setCellValue('A4', 'Cliente: ' . (string) ($cabecera['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('D4', 'Identificación: ' . (string) ($cabecera['cliente_ruc'] ?? ''));
+            $sheet->setCellValue('A5', 'Estado: ' . ucfirst((string) ($cabecera['estado'] ?? '')));
+
+            $headerRow = 7;
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unitario', 'Descuento', 'IVA %', 'Subtotal'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':G' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $ivaPct = 0.0;
+                foreach ($d['impuestos'] ?? [] as $imp) {
+                    if ((string) ($imp['codigo_impuesto'] ?? '2') === '2') { $ivaPct = (float) ($imp['tarifa'] ?? 0); break; }
+                }
+
+                $sheet->setCellValueExplicit('A' . $row, (string) ($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string) ($d['descripcion'] ?? $d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('C' . $row, (float) ($d['cantidad'] ?? 0));
+                $sheet->setCellValue('D' . $row, (float) ($d['precio_unitario'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float) ($d['descuento'] ?? 0));
+                $sheet->setCellValue('F' . $row, $ivaPct);
+                $sheet->setCellValue('G' . $row, (float) ($d['precio_total_sin_impuesto'] ?? 0));
+                $row++;
+            }
+
+            $sheet->getStyle('C' . ($headerRow + 1) . ':C' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('D' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('F' . ($headerRow + 1) . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('0.00');
+            $sheet->getStyle('G' . ($headerRow + 1) . ':G' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $subtotal = (float) ($cabecera['total_sin_impuestos'] ?? 0);
+            $descuentoTotal = (float) ($cabecera['total_descuento'] ?? 0);
+            $ice = (float) ($cabecera['total_ice'] ?? 0);
+            $total = (float) ($cabecera['importe_total'] ?? 0);
+            $iva = round($total - $subtotal - $ice, 2);
+
+            $row += 1;
+            $totales = [
+                'Subtotal sin impuestos' => $subtotal,
+                'Descuento' => $descuentoTotal,
+            ];
+            if ($ice > 0) $totales['ICE'] = $ice;
+            $totales['IVA'] = $iva;
+            $totales['TOTAL'] = $total;
+
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('F' . $row, $label);
+                $sheet->getStyle('F' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('G' . $row, $valor);
+                $sheet->getStyle('G' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            if (!empty($adicional)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Información adicional');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($adicional as $a) {
+                    $nombre = trim((string) ($a['nombre'] ?? ''));
+                    $valor  = trim((string) ($a['valor'] ?? ''));
+                    if ($nombre === '' && $valor === '') continue;
+                    $sheet->setCellValueExplicit('A' . $row, $nombre, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('B' . $row, $valor, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $row++;
+                }
+            }
+
+            if (!empty(trim((string) ($cabecera['observaciones'] ?? '')))) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Observaciones');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                $sheet->setCellValueExplicit('A' . $row, (string) $cabecera['observaciones'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->mergeCells('A' . $row . ':G' . $row);
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Proforma_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /**
      * Envía la proforma por correo (PDF adjunto) a los destinatarios indicados.
      * Reutiliza EnvioDocumentosSRIService::enviarPdfSimple (igual maquinaria que factura).

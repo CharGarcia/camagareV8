@@ -19,6 +19,9 @@
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfTraspaso" onclick="window.TRP_abrirPdf()" title="Generar PDF del comprobante">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2 d-none" id="btnExcelTraspaso" onclick="window.TRP_abrirExcel()" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-excel fs-6"></i>
+                    </button>
                 </div>
 
                 <!-- Pestañas -->

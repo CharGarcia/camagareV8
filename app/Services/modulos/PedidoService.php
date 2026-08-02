@@ -3,16 +3,22 @@
 namespace App\Services\Modulos;
 
 use App\Repositories\Modulos\PedidoRepository;
+use App\Services\BloqueoEdicionService;
 use App\core\Database;
 use Exception;
 
 class PedidoService {
+    /** Debe coincidir con PedidosController::TABLA_BLOQUEO. */
+    private const TABLA_BLOQUEO = 'pedidos_cabecera';
+
     private $repository;
     private $db;
+    private BloqueoEdicionService $bloqueoService;
 
     public function __construct() {
         $this->repository = new PedidoRepository();
         $this->db = Database::getConnection();
+        $this->bloqueoService = new BloqueoEdicionService();
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array {
@@ -27,6 +33,16 @@ class PedidoService {
     }
 
     public function guardarPedido($cabecera, $detalles, $id_empresa, $id_usuario) {
+        // Defensa en profundidad: aunque la UI ya deshabilita "Guardar" cuando otro usuario
+        // tiene el pedido en uso (edición o consumo desde Consignaciones), se re-verifica aquí
+        // por si la petición llega igual (doble clic ya en vuelo, F5 con caché, etc.).
+        if (!empty($cabecera['id'])) {
+            $enUso = $this->bloqueoService->verificarLibreOPropio(self::TABLA_BLOQUEO, (int) $cabecera['id'], $id_empresa, $id_usuario);
+            if ($enUso !== null) {
+                throw new Exception("Este pedido lo está usando ahora mismo {$enUso['usuario']}. Espera a que termine e intenta de nuevo.");
+            }
+        }
+
         try {
             $this->db->beginTransaction();
 
@@ -145,6 +161,11 @@ class PedidoService {
     }
 
     public function eliminarPedido($id, $id_empresa, $id_usuario) {
+        $enUso = $this->bloqueoService->verificarLibreOPropio(self::TABLA_BLOQUEO, (int) $id, $id_empresa, $id_usuario);
+        if ($enUso !== null) {
+            throw new Exception("Este pedido lo está usando ahora mismo {$enUso['usuario']}. Espera a que termine e intenta de nuevo.");
+        }
+
         try {
             $this->db->beginTransaction();
 

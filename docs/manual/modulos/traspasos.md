@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/traspasos
 tipo: modulo
 visibilidad: todos
-etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago
-version: 1.0
+etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -46,6 +46,14 @@ Un traspaso ya anulado no se puede volver a anular.
 Cada traspaso genera su asiento automáticamente: acredita la forma de pago de
 origen y debita la de destino, según la configuración contable de la empresa.
 
+## Comprobante en PDF y Excel
+
+Al abrir un traspaso ya guardado, la barra de acciones superior del modal
+muestra el botón **PDF** (comprobante de traspaso) y, junto a él, el botón
+**Excel**: descarga el mismo comprobante (fecha, estado, concepto y el
+movimiento origen → destino con el monto) en un archivo `.xlsx`. Ambos botones
+quedan ocultos mientras el traspaso es nuevo y no se ha guardado.
+
 ## Errores frecuentes
 
 - **"Saldo insuficiente en la forma de pago de origen"**: el mensaje indica el
@@ -57,4 +65,6 @@ origen y debita la de destino, según la configuración contable de la empresa.
 
 ## Historial de cambios
 
+- **1.1** — Botón para exportar el comprobante a Excel, junto al de PDF, en la
+  barra de acciones superior del modal.
 - **1.0** — Versión inicial.

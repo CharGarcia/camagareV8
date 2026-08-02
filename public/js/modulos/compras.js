@@ -296,12 +296,19 @@ function CMG_poblarModal(d) {
     // Bloquear campos si es electrónica
     mcActualizarBloqueoCampos();
 
-    // Mostrar/ocultar botones XML y PDF (ambos requieren XML del comprobante)
+    // Mostrar/ocultar botones XML y PDF (ambos requieren XML del comprobante:
+    // se arman a partir del sobre electrónico, no de las tablas de la compra).
     const tieneXml = !!(d.detalle_xml && d.detalle_xml.trim().length > 0);
     const btnXml = document.getElementById('mcBtnDescargarXml');
     if (btnXml) btnXml.classList.toggle('d-none', !tieneXml);
     const btnPdf = document.getElementById('mcBtnPdf');
     if (btnPdf) btnPdf.classList.toggle('d-none', !tieneXml);
+
+    // Excel: a diferencia de PDF/XML, se arma desde las tablas de la compra
+    // (compras_detalle/compras_pagos), no del XML — disponible en CUALQUIER
+    // compra ya guardada, tenga o no comprobante electrónico adjunto.
+    const btnExcel = document.getElementById('mcBtnExcel');
+    if (btnExcel) btnExcel.classList.toggle('d-none', !(d.id > 0));
 
     // Pestaña de documentos relacionados (NC ↔ factura)
     mcActualizarPestanaRelacionados(d);
@@ -375,7 +382,7 @@ function mcAplicarSoloLectura(d) {
 
     modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(bloquear);
     modal.querySelectorAll('.modal-body button').forEach(btn => {
-        if (btn.id === 'mcBtnPdf' || btn.id === 'mcBtnDescargarXml') return;
+        if (btn.id === 'mcBtnPdf' || btn.id === 'mcBtnExcel' || btn.id === 'mcBtnDescargarXml') return;
         if (btn.hasAttribute('data-bs-toggle')) return; // pestañas
         bloquear(btn);
     });
@@ -520,6 +527,10 @@ function CMG_resetModal() {
     // Ocultar botón PDF (compra nueva / sin guardar)
     const btnPdf = document.getElementById('mcBtnPdf');
     if (btnPdf) btnPdf.classList.add('d-none');
+
+    // Ocultar botón Excel (compra nueva / sin guardar)
+    const btnExcel = document.getElementById('mcBtnExcel');
+    if (btnExcel) btnExcel.classList.add('d-none');
 
     // Revertir bloqueo de solo lectura y ocultar su aviso (migrada / período cerrado)
     mcLimpiarBloqueoSoloLectura();
@@ -3125,6 +3136,22 @@ window.mcExportarPdf = function () {
     }
     const a = document.createElement('a');
     a.href = `${window.CMG_urlBase}/exportar-pdf-ajax?id=${id}`;
+    a.download = '';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+};
+
+// Exportar (descargar) Excel de la compra
+window.mcExportarExcel = function () {
+    const id = document.getElementById('mcId')?.value || document.getElementById('modalCompra')?.dataset.id;
+    if (!id) {
+        Swal.fire('Atención', 'Guarde la compra primero para generar el Excel.', 'warning');
+        return;
+    }
+    const a = document.createElement('a');
+    a.href = `${window.CMG_urlBase}/exportar-excel-ajax?id=${id}`;
     a.download = '';
     a.style.display = 'none';
     document.body.appendChild(a);

@@ -146,11 +146,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small fw-bold">Banco (formato de archivo)</label>
+                        <label class="form-label small fw-bold">Formato de archivo</label>
                         <select id="tr-f-banco" class="form-select form-select-sm">
-                            <option value="">Genérico (Excel)</option>
-                            <?php foreach (($bancosDisponibles ?? []) as $b): ?>
-                                <option value="<?= (int) $b['id'] ?>"><?= htmlspecialchars($b['nombre_banco']) ?></option>
+                            <option value="">Seleccione…</option>
+                            <?php foreach (($formatosTransferencia ?? []) as $f): ?>
+                                <option value="<?= (int) $f['id'] ?>"><?= htmlspecialchars($f['nombre']) ?><?= !empty($f['nombre_banco']) ? ' (' . htmlspecialchars($f['nombre_banco']) . ')' : '' ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>

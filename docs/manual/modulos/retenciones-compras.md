@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri
-version: 1.0
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -48,6 +48,12 @@ Una compra que ya tiene retención **no se puede eliminar**: primero hay que
 eliminar la retención. Es una protección deliberada, porque la retención declara
 al SRI una compra que dejaría de existir.
 
+## Documentos del módulo
+
+Desde la retención guardada están disponibles el **PDF** del comprobante, su
+**Excel**, su **XML** y el envío por **correo**, en la barra de acciones al
+inicio del formulario.
+
 ## Errores frecuentes
 
 - **"El tipo de documento de sustento no es válido"**: use uno de los códigos
@@ -58,4 +64,5 @@ al SRI una compra que dejaría de existir.
 
 ## Historial de cambios
 
+- **1.1** — Nuevo botón Excel en el documento de la retención (junto a PDF y XML).
 - **1.0** — Versión inicial.

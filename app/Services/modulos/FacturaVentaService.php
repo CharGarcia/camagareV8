@@ -8,14 +8,19 @@ use App\repositories\modulos\FacturaVentaRepository;
 use App\repositories\modulos\EmpresaRepository;
 use App\models\TarifaIva;
 use App\Rules\modulos\FacturaVentaRules;
+use App\Services\BloqueoEdicionService;
 use App\Services\LogSistemaService;
 use App\core\Database;
 
 class FacturaVentaService
 {
+    /** Debe coincidir con FacturaVentaController::TABLA_BLOQUEO. */
+    private const TABLA_BLOQUEO = 'ventas_cabecera';
+
     private FacturaVentaRepository $repository;
     private FacturaVentaRules $rules;
     private LogSistemaService $logService;
+    private BloqueoEdicionService $bloqueoService;
     private ?BodegaService $bodegaService = null;
     private ?InventarioService $inventarioService = null;
     private ?EmpresaRepository $empresaRepository = null;
@@ -31,6 +36,20 @@ class FacturaVentaService
         $this->repository = $repository;
         $this->rules      = $rules;
         $this->logService = $logService;
+        $this->bloqueoService = new BloqueoEdicionService();
+    }
+
+    /**
+     * Defensa en profundidad (no solo UI): rechaza si otro usuario tiene esta
+     * factura en uso ahora mismo. Solo se llama para facturas en borrador (única
+     * situación donde guardar/eliminar reescribe o borra datos de verdad).
+     */
+    private function verificarFacturaLibre(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $enUso = $this->bloqueoService->verificarLibreOPropio(self::TABLA_BLOQUEO, $id, $idEmpresa, $idUsuario);
+        if ($enUso !== null) {
+            throw new \Exception("Esta factura la está usando ahora mismo {$enUso['usuario']}. Espera a que termine e intenta de nuevo.");
+        }
     }
 
     /**
@@ -506,6 +525,8 @@ class FacturaVentaService
         if (($cabecera['estado'] ?? '') !== 'borrador') {
             throw new \Exception('Solo se pueden modificar facturas en estado borrador.');
         }
+
+        $this->verificarFacturaLibre($id, (int) $data['id_empresa'], (int) $data['id_usuario']);
 
         $this->validarSecuencial($data, $id);
 
@@ -1125,6 +1146,8 @@ class FacturaVentaService
         if (($cabecera['estado'] ?? '') !== 'borrador') {
             throw new \Exception('Solo se pueden eliminar facturas en estado borrador.');
         }
+
+        $this->verificarFacturaLibre($id, $idEmpresa, $idUsuario);
 
         // Ingresos asociados: un borrador normal no tiene, pero el POS genera el Ingreso
         // (cobro de tesorería) en el acto aunque la factura quede en borrador. Al eliminarla

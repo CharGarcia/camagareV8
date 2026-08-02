@@ -639,6 +639,137 @@ class IngresosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Exporta a Excel (XLSX) el Comprobante de Ingreso: cabecera, documentos
+     * aplicados y formas de cobro. Mismos datos que el PDF
+     * (ComprobanteCajaPdfService::generarIngreso).
+     */
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $ingreso = $this->service->getPorId($id, $idEmpresa);
+            if (!$ingreso || (int) ($ingreso['id_empresa'] ?? 0) !== $idEmpresa) {
+                http_response_code(404); echo 'Ingreso no encontrado'; exit;
+            }
+
+            $detalles = $ingreso['detalles'] ?? [];
+            $pagos    = $ingreso['pagos'] ?? [];
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $numero   = (string) ($ingreso['numero_ingreso'] ?? $id);
+            $sujeto   = trim((string) ($ingreso['recibo_de'] ?? $ingreso['cliente_nombre'] ?? $ingreso['recibo_cliente_nombre'] ?? ''));
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Ingreso');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:G1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'COMPROBANTE DE INGRESO N.° ' . $numero);
+            $sheet->mergeCells('A2:G2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($ingreso['fecha_emision']) ? date('d-m-Y', strtotime((string) $ingreso['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('D3', 'Recibí de: ' . ($sujeto !== '' ? $sujeto : '—'));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string) ($ingreso['cliente_ruc'] ?? ''));
+            $sheet->setCellValue('D4', 'Estado: ' . ucfirst((string) ($ingreso['estado'] ?? '')));
+            $sheet->setCellValue('A5', 'Concepto: ' . (trim((string) ($ingreso['observaciones'] ?? '')) ?: '—'));
+            $sheet->mergeCells('A5:G5');
+
+            $headerRow = 7;
+            $headers = ['Tipo', 'N.° Documento', 'Descripción', 'Monto Doc.', 'Saldo Anterior', 'Cobrado', 'Saldo Actual'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':G' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string) ($d['tipo_documento'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string) ($d['numero_documento'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('C' . $row, (string) ($d['descripcion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('D' . $row, (float) ($d['monto_documento'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float) ($d['saldo_anterior'] ?? 0));
+                $sheet->setCellValue('F' . $row, (float) ($d['monto_cobrado'] ?? 0));
+                $sheet->setCellValue('G' . $row, (float) ($d['saldo_actual'] ?? 0));
+                $row++;
+            }
+            if (empty($detalles)) {
+                $sheet->setCellValue('A' . $row, 'Sin documentos.');
+                $sheet->mergeCells('A' . $row . ':G' . $row);
+                $row++;
+            }
+
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('D' . ($headerRow + 1) . ':G' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $row += 1;
+            $sheet->setCellValue('F' . $row, 'TOTAL');
+            $sheet->getStyle('F' . $row)->getFont()->setBold(true);
+            $sheet->setCellValue('G' . $row, (float) ($ingreso['monto_total'] ?? 0));
+            $sheet->getStyle('G' . $row)->getFont()->setBold(true);
+            $sheet->getStyle('G' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+            if (!empty($pagos)) {
+                $row += 2;
+                $sheet->setCellValue('A' . $row, 'Formas de Cobro');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Forma');
+                $sheet->setCellValue('B' . $row, 'Referencia');
+                $sheet->setCellValue('C' . $row, 'Valor');
+                $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($pagos as $p) {
+                    $ref    = trim((string) ($p['referencia'] ?? ''));
+                    $tipoOp = trim((string) ($p['tipo_operacion_bancaria'] ?? ''));
+                    if ($tipoOp !== '') {
+                        $extra = (strtoupper($tipoOp) === 'CHEQUE' && !empty($p['numero_cheque'])) ? ('CHEQUE #' . $p['numero_cheque']) : $tipoOp;
+                        $ref   = $ref !== '' ? ($extra . ' — ' . $ref) : $extra;
+                    }
+                    $sheet->setCellValueExplicit('A' . $row, (string) ($p['forma_cobro_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('B' . $row, $ref, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValue('C' . $row, (float) ($p['monto'] ?? 0));
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Ingreso_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
     private function cargarEmpresaParaPdf(int $idEmpresa): array
     {

@@ -122,6 +122,12 @@ eliminado (boolean), deleted_at, deleted_by
 - `getPermisos()` del controlador base entrega a la vista: `ver, crear, actualizar, eliminar, todo`.
 - Administrar permisos en la UI: `/config/permisos-modulos`.
 
+**Endpoints públicos / sin login (obligatorio validar empresa activa)**
+- Todo controlador registrado en `$publicControllers` (`app/core/Application.php`) sirve a usuarios **sin sesión** (clientes escaneando un QR, empleados marcando asistencia, aprobaciones por token en un correo, etc.). Ese flujo **nunca** pasa por `AuthMiddleware`, así que **nunca** recibe la revalidación de empresa activa que sí aplica a los usuarios logueados (`AuthMiddleware` → `Empresa::estaActiva()`, cada 5 min).
+- **Regla**: cualquier endpoint público que identifique la empresa dueña del recurso por un token/QR (no por sesión) debe filtrar explícitamente `empresas.estado = '1' AND empresas.eliminado = false` en el mismo query que resuelve ese token — normalmente en el repository, con `JOIN empresas` sobre la tabla dueña del token. Si la empresa está inactiva, el token debe comportarse como si no existiera (mismo mensaje de error que "token inválido"), sin filtrar el motivo.
+- Como defensa en profundidad, el Service que ejecuta la acción final (crear factura, registrar marca, etc.) debe repetir la validación antes de escribir en BD, por si el mismo Service se invoca también desde un flujo autenticado (aprobación manual) que no pasa por ese repository.
+- Referencia de implementación: `FacturaExpressQrRepository::getPlantillaByToken()` + `FacturaExpressQrService::_facturarSolicitud()`, y `BiometriaRepository::getByQrToken()` + `AsistenciaPuntoRepository::getByQrToken()` (control de asistencia).
+
 ---
 
 ## 7. Auditoría

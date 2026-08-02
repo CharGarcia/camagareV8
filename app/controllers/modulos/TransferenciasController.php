@@ -5,6 +5,7 @@ namespace App\controllers\modulos;
 
 use App\Services\modulos\TransferenciaLoteService;
 use App\repositories\modulos\FormaPagoRepository;
+use App\repositories\TransferenciaFormatoRepository;
 
 /**
  * Módulo Cargar Transferencias (modulos/transferencias).
@@ -75,7 +76,7 @@ class TransferenciasController extends BaseModuloController
             'idUsuarioActual'    => $idUsuario,
             'aprobadoresNombres' => $this->service->getAprobadoresNombres($idEmpresa),
             'formasPagoOrigen'   => $formasBancoOrigen,
-            'bancosDisponibles'  => $formaPagoRepo->getBancosDisponibles(),
+            'formatosTransferencia' => (new TransferenciaFormatoRepository())->getActivosParaBanco(null),
             'rutaModulo'   => self::RUTA_MODULO,
             'fullWidth'    => true,
         ]);
@@ -132,7 +133,7 @@ class TransferenciasController extends BaseModuloController
             $idLote = $this->service->crearLote($idEmpresa, $idUsuario, [
                 'tipo_lote'            => strtoupper(trim($_POST['tipo_lote'] ?? '')),
                 'id_forma_pago_origen' => (int) ($_POST['id_forma_pago_origen'] ?? 0),
-                'id_banco_formato'     => (int) ($_POST['id_banco_formato'] ?? 0),
+                'id_formato_transferencia' => (int) ($_POST['id_formato_transferencia'] ?? 0),
                 'fecha_pago'           => trim($_POST['fecha_pago'] ?? ''),
                 'observaciones'        => trim($_POST['observaciones'] ?? ''),
             ]);
@@ -156,7 +157,7 @@ class TransferenciasController extends BaseModuloController
             $this->service->actualizarCabecera($id, $idEmpresa, $idUsuario, [
                 'tipo_lote'            => strtoupper(trim($_POST['tipo_lote'] ?? '')),
                 'id_forma_pago_origen' => (int) ($_POST['id_forma_pago_origen'] ?? 0),
-                'id_banco_formato'     => (int) ($_POST['id_banco_formato'] ?? 0),
+                'id_formato_transferencia' => (int) ($_POST['id_formato_transferencia'] ?? 0),
                 'fecha_pago'           => trim($_POST['fecha_pago'] ?? ''),
                 'observaciones'        => trim($_POST['observaciones'] ?? ''),
             ]);

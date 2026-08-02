@@ -270,7 +270,9 @@ class CargaInventarioRepository extends BaseRepository
             "SELECT c.*, u.nombre AS creado_por_nombre
              FROM inventario_cargas c
              LEFT JOIN usuarios u ON u.id = c.created_by
-             WHERE c.token_aprobacion = :t AND c.eliminado = false LIMIT 1"
+             JOIN empresas emp ON emp.id = c.id_empresa
+             WHERE c.token_aprobacion = :t AND c.eliminado = false
+               AND emp.estado = '1' AND emp.eliminado = false LIMIT 1"
         );
         $st->execute([':t' => $token]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;

@@ -598,6 +598,165 @@ class ComprasController extends BaseModuloController
         exit;
     }
 
+    /** Mapa de tipos de comprobante (código SRI => nombre), igual que ComprasPdfService. */
+    private const TIPOS_COMPROBANTE_EXCEL = [
+        '01' => 'FACTURA',
+        '02' => 'NOTA DE VENTA',
+        '03' => 'LIQUIDACIÓN DE COMPRA',
+        '04' => 'NOTA DE CRÉDITO',
+        '05' => 'NOTA DE DÉBITO',
+        '06' => 'GUÍA DE REMISIÓN',
+        '07' => 'COMPROBANTE DE RETENCIÓN',
+    ];
+
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            // A diferencia del PDF (que se arma EXCLUSIVAMENTE desde el XML del
+            // comprobante electrónico), el Excel se arma desde las tablas propias
+            // de la compra (compras_cabecera/compras_detalle/compras_pagos), así
+            // que está disponible para CUALQUIER compra guardada, tenga o no XML
+            // adjunto (compras ingresadas manualmente, migradas, etc.).
+            $cabecera = $this->repository->getPorId($id, $idEmpresa);
+            if (!$cabecera) { http_response_code(404); echo 'Compra no encontrada'; exit; }
+
+            $detalles = $this->repository->getDetalles($id);
+            foreach ($detalles as &$d) {
+                $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+            }
+            unset($d);
+            $pagos = $this->repository->getPagos($id);
+
+            $empresaModel = new Empresa();
+            $empresaCfg   = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            $tipoCod = (string) ($cabecera['tipo_comprobante'] ?? '01');
+            $titulo  = self::TIPOS_COMPROBANTE_EXCEL[$tipoCod] ?? 'DOCUMENTO DE COMPRA';
+
+            $numero = str_pad((string)($cabecera['establecimiento_prov'] ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+                    . str_pad((string)($cabecera['punto_emision_prov']   ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+                    . str_pad((string)($cabecera['secuencial_prov']      ?? ''), 9, '0', STR_PAD_LEFT);
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Compra');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresaCfg['nombre'] ?? '')));
+            $sheet->mergeCells('A1:F1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', $titulo . ' N.° ' . $numero);
+            $sheet->mergeCells('A2:F2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cabecera['fecha_emision']) ? date('d-m-Y', strtotime((string)$cabecera['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Proveedor: ' . (string)($cabecera['proveedor_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'RUC Proveedor: ' . (string)($cabecera['proveedor_ruc'] ?? ''));
+            $sheet->setCellValue('C4', 'Autorización: ' . (string)($cabecera['numero_autorizacion'] ?? ''));
+
+            $headerRow = 6;
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unitario', 'Descuento', 'Subtotal'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':F' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            $totalIva = 0.0;
+            $totalIce = 0.0;
+            $totalDescuento = 0.0;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string)($d['codigo_principal'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($d['descripcion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('C' . $row, (float)($d['cantidad'] ?? 0));
+                $sheet->setCellValue('D' . $row, (float)($d['precio_unitario'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float)($d['descuento'] ?? 0));
+                $sheet->setCellValue('F' . $row, (float)($d['precio_total_sin_impuesto'] ?? 0));
+                $row++;
+
+                $totalDescuento += (float)($d['descuento'] ?? 0);
+                foreach ($d['impuestos'] ?? [] as $imp) {
+                    $codImp = (string)($imp['codigo_impuesto'] ?? '');
+                    $valImp = (float)($imp['valor'] ?? 0);
+                    if ($codImp === '2') {
+                        $totalIva += $valImp;
+                    } elseif ($codImp === '3') {
+                        $totalIce += $valImp;
+                    }
+                }
+            }
+
+            $sheet->getStyle('C' . ($headerRow + 1) . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $subtotal = (float)($cabecera['total_sin_impuestos'] ?? 0);
+            $propina  = (float)($cabecera['propina'] ?? 0);
+            $total    = (float)($cabecera['importe_total'] ?? 0);
+
+            $row += 1;
+            $totales = [
+                'Subtotal sin impuestos' => $subtotal,
+                'Descuento' => $totalDescuento,
+                'IVA' => $totalIva,
+            ];
+            if ($totalIce > 0) $totales['ICE'] = $totalIce;
+            if ($propina > 0) $totales['Propina'] = $propina;
+            $totales['TOTAL'] = $total;
+
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('E' . $row, $label);
+                $sheet->getStyle('E' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('F' . $row, $valor);
+                $sheet->getStyle('F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            if (!empty($pagos)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Forma de pago');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($pagos as $p) {
+                    $sheet->setCellValue('A' . $row, (string)($p['forma_pago_nombre'] ?? ''));
+                    $sheet->setCellValue('C' . $row, (float)($p['total'] ?? 0));
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Compra_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
 
     public function getEgresoDependenciesAjax(): void
     {

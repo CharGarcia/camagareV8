@@ -9,6 +9,7 @@
                 </h5>
                 <div class="d-flex align-items-center gap-2">
                     <button type="button" class="btn btn-sm btn-outline-danger" id="rolemp_pdf" title="PDF del rol"><i class="bi bi-file-earmark-pdf"></i></button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2" id="rolemp_excel" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                     <button type="button" class="btn btn-sm btn-outline-info" id="rolemp_email" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                     <button type="button" class="btn-close shadow-none ms-1" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>

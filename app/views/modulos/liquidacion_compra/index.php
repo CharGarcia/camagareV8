@@ -314,6 +314,7 @@ $pestanasConfigLiq = [
                         <div class="vr mx-1"></div>
                         <button type="button" id="btnPdfLiq" class="btn btn-outline-danger btn-sm px-2" onclick="window.LC_exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                         <button type="button" id="btnXmlLiq" class="btn btn-outline-success btn-sm px-2" onclick="window.LC_exportarXml()" title="Exportar XML"><i class="bi bi-file-earmark-code"></i></button>
+                        <button type="button" id="btnExcelLiq" class="btn btn-outline-success btn-sm px-2" onclick="window.LC_exportarExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                         <button type="button" id="btnCorreoLiq" class="btn btn-outline-info btn-sm px-2" onclick="window.LC_enviarCorreo()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                         <button type="button" id="btnWhatsappLiq" class="btn btn-outline-success btn-sm px-2" onclick="window.LC_enviarWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <div class="vr mx-1"></div>

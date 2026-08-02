@@ -317,6 +317,16 @@
         window.open(`${BASE}/exportPdfDoc?id=${retvIdActual}`, '_blank');
     };
 
+    // ── MODAL — DESCARGAR EXCEL ──────────────────────────────────────────────────
+
+    window.RETV_exportarExcel = () => {
+        if (!retvIdActual) {
+            mostrarAlerta('Guarde la retención antes de generar el Excel.', 'warning');
+            return;
+        }
+        window.open(`${BASE}/exportExcelDoc?id=${retvIdActual}`, '_blank');
+    };
+
     // ── MODAL — GUARDAR ─────────────────────────────────────────────────────────
 
     window.RETV_guardar = async () => {
@@ -738,6 +748,10 @@
         // Botón PDF: disponible para cualquier retención ya guardada.
         const btnPdf = document.getElementById('retv-btn-pdf');
         if (btnPdf) btnPdf.classList.toggle('d-none', !tieneId);
+
+        // Botón Excel: disponible para cualquier retención ya guardada.
+        const btnExcel = document.getElementById('retv-btn-excel');
+        if (btnExcel) btnExcel.classList.toggle('d-none', !tieneId);
 
         // Campos del encabezado
         const camposHeader = [

@@ -150,6 +150,36 @@ class ConfigController extends Controller
         (new BancosEcuadorController())->store();
     }
 
+    public function transferenciaFormatos(): void
+    {
+        (new TransferenciaFormatoController())->index();
+    }
+
+    public function transferenciaFormatosStore(): void
+    {
+        (new TransferenciaFormatoController())->store();
+    }
+
+    public function transferenciaFormatosUpdate(): void
+    {
+        (new TransferenciaFormatoController())->update();
+    }
+
+    public function transferenciaFormatosDelete(): void
+    {
+        (new TransferenciaFormatoController())->delete();
+    }
+
+    public function transferenciaFormatosActivar(): void
+    {
+        (new TransferenciaFormatoController())->activar();
+    }
+
+    public function transferenciaFormatosDesactivar(): void
+    {
+        (new TransferenciaFormatoController())->desactivar();
+    }
+
     public function iaAgentes(): void
     {
         (new IaAgentesController())->index();

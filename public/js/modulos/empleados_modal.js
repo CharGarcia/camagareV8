@@ -649,6 +649,21 @@
         a.remove();
     };
 
+    // Botón "Exportar Excel" de la barra superior del modal.
+    window.exportarEmpleadoExcel = function() {
+        const id = document.getElementById('emp_id').value;
+        if (!id) {
+            Swal.fire({ icon: 'info', title: 'Guarde primero', text: 'Debe guardar el empleado antes de exportar su ficha.' });
+            return;
+        }
+        const a = document.createElement('a');
+        a.href = `${urlModuloEmp}/exportarExcelAjax?id=${id}`;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    };
+
     if (formEmp) {
         formEmp.addEventListener('submit', async (e) => {
             e.preventDefault();

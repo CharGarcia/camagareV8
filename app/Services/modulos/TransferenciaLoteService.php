@@ -114,7 +114,7 @@ class TransferenciaLoteService
                 'numero'               => $numero,
                 'tipo_lote'            => $data['tipo_lote'],
                 'id_forma_pago_origen' => $data['id_forma_pago_origen'],
-                'id_banco_formato'     => $data['id_banco_formato'] ?? null,
+                'id_formato_transferencia' => $data['id_formato_transferencia'] ?? null,
                 'fecha_pago'           => $data['fecha_pago'],
                 'observaciones'        => $data['observaciones'] ?? null,
                 'created_by'           => $idUsuario,
@@ -286,14 +286,11 @@ class TransferenciaLoteService
         $detalle = $this->repo->getDetalle($idLote, $idEmpresa);
         $this->rules->validarTieneLineas($detalle);
 
-        $codigoBanco = null;
-        if (!empty($lote['id_banco_formato'])) {
-            $bancos = (new \App\repositories\modulos\FormaPagoRepository())->getBancosDisponibles();
-            foreach ($bancos as $b) {
-                if ((int) $b['id'] === (int) $lote['id_banco_formato']) { $codigoBanco = $b['nombre_banco']; break; }
-            }
+        $formato = null;
+        if (!empty($lote['id_formato_transferencia'])) {
+            $formato = (new \App\repositories\TransferenciaFormatoRepository())->getById((int) $lote['id_formato_transferencia']);
         }
-        $formatter = TransferenciaFormatterFactory::getFormatter($codigoBanco);
+        $formatter = TransferenciaFormatterFactory::getFormatter($formato);
 
         $dir = MVC_ROOT . '/storage/transferencias/' . $idEmpresa;
         if (!is_dir($dir)) mkdir($dir, 0755, true);

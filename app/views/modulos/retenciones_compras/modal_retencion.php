@@ -41,6 +41,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                         <button id="ret-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.RET_exportarXml()" title="Exportar XML" disabled>
                             <i class="bi bi-file-earmark-code"></i>
                         </button>
+                        <button id="ret-btn-excel" type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.RET_exportarExcel()" title="Exportar Excel" disabled>
+                            <i class="bi bi-file-earmark-excel"></i>
+                        </button>
                         <button id="ret-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="window.RET_enviarPorCorreo()" title="Enviar por correo" disabled>
                             <i class="bi bi-envelope"></i>
                         </button>

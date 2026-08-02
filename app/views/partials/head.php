@@ -23,6 +23,8 @@
      disponibles antes de los scripts inline de las vistas (que se ejecutan al parsear el body).
      Solo define funciones al cargar; su inicialización corre en DOMContentLoaded. -->
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/favoritos.js?v=<?= time() ?>"></script>
+<!-- CMG_Bloqueo: bloqueo de edición concurrente entre módulos relacionados (genérico). -->
+<script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/bloqueo-edicion.js?v=<?= time() ?>"></script>
 <style>
     /* Prevent horizontal scrolling ("floating paper" effect on mobile) */
     html, body {

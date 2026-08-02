@@ -44,6 +44,7 @@
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="faccvNuevoCliente()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="faccvPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
+                        <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="faccvExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                         <button type="button" class="btn btn-outline-info btn-sm px-2" onclick="faccvEmail()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                         <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="faccvWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <div class="vr mx-1"></div>
@@ -977,6 +978,10 @@
     window.faccvPdf = function () {
         const id = $('faccv_id').value; if (!id) return Swal.fire('Atención', 'Guarde el documento primero.', 'warning');
         const a = document.createElement('a'); a.href = `${RUTA}/pdf?id=${id}`; document.body.appendChild(a); a.click(); a.remove();
+    };
+    window.faccvExcel = function () {
+        const id = $('faccv_id').value; if (!id) return Swal.fire('Atención', 'Guarde el documento primero.', 'warning');
+        window.open(`${RUTA}/excel?id=${id}`, '_blank');
     };
     window.faccvEmail = async function () {
         const id = $('faccv_id').value; if (!id) return Swal.fire('Atención', 'Guarde el documento primero.', 'warning');

@@ -76,12 +76,12 @@ class TransferenciaLoteRepository extends BaseRepository
 
         $sql = "SELECT l.*,
                        fp.nombre AS forma_pago_nombre,
-                       b.nombre_banco AS banco_formato_nombre,
+                       tf.nombre AS banco_formato_nombre,
                        u.nombre AS creado_por_nombre,
                        ua.nombre AS aprobado_por_nombre
                 FROM transferencias_lotes l
                 $joins
-                LEFT JOIN bancos_ecuador b ON b.id = l.id_banco_formato
+                LEFT JOIN transferencia_formatos tf ON tf.id = l.id_formato_transferencia
                 LEFT JOIN usuarios u  ON u.id = l.created_by
                 LEFT JOIN usuarios ua ON ua.id = l.aprobado_por
                 $where
@@ -99,14 +99,14 @@ class TransferenciaLoteRepository extends BaseRepository
             "SELECT l.*,
                     fp.nombre AS forma_pago_nombre,
                     fp.numero_cuenta AS forma_pago_numero_cuenta,
-                    b.nombre_banco AS banco_formato_nombre,
+                    tf.nombre AS banco_formato_nombre,
                     u.nombre AS creado_por_nombre,
                     ua.nombre AS aprobado_por_nombre,
                     ur.nombre AS rechazado_por_nombre,
                     uc.nombre AS confirmado_por_nombre
              FROM transferencias_lotes l
              LEFT JOIN empresa_formas_pago fp ON fp.id = l.id_forma_pago_origen
-             LEFT JOIN bancos_ecuador b ON b.id = l.id_banco_formato
+             LEFT JOIN transferencia_formatos tf ON tf.id = l.id_formato_transferencia
              LEFT JOIN usuarios u  ON u.id = l.created_by
              LEFT JOIN usuarios ua ON ua.id = l.aprobado_por
              LEFT JOIN usuarios ur ON ur.id = l.rechazado_por
@@ -120,7 +120,7 @@ class TransferenciaLoteRepository extends BaseRepository
     public function getDetalle(int $idLote, int $idEmpresa): array
     {
         $st = $this->db->prepare(
-            "SELECT d.*, ec.numero_egreso, b.codigo_banco
+            "SELECT d.*, ec.numero_egreso, b.codigo_banco, b.nombre_banco AS banco_nombre
              FROM transferencias_lotes_detalle d
              LEFT JOIN egresos_cabecera ec ON ec.id = d.id_egreso
              LEFT JOIN bancos_ecuador b ON b.id = d.id_banco_ecuador
@@ -239,10 +239,10 @@ class TransferenciaLoteRepository extends BaseRepository
     public function crearCabecera(array $d): int
     {
         $sql = "INSERT INTO transferencias_lotes
-                    (id_empresa, numero, tipo_lote, id_forma_pago_origen, id_banco_formato,
+                    (id_empresa, numero, tipo_lote, id_forma_pago_origen, id_formato_transferencia,
                      fecha_pago, observaciones, estado, created_by, created_at, eliminado)
                 VALUES
-                    (:id_empresa, :numero, :tipo, :forma, :banco,
+                    (:id_empresa, :numero, :tipo, :forma, :formato,
                      :fecha_pago, :obs, 'BORRADOR', :cb, CURRENT_TIMESTAMP, false)
                 RETURNING id";
         $st = $this->db->prepare($sql);
@@ -251,7 +251,7 @@ class TransferenciaLoteRepository extends BaseRepository
             ':numero'     => $d['numero'],
             ':tipo'       => $d['tipo_lote'],
             ':forma'      => $d['id_forma_pago_origen'] ?: null,
-            ':banco'      => $d['id_banco_formato'] ?: null,
+            ':formato'    => $d['id_formato_transferencia'] ?: null,
             ':fecha_pago' => $d['fecha_pago'] ?: null,
             ':obs'        => $d['observaciones'] ?? null,
             ':cb'         => $d['created_by'] ?? null,
@@ -320,7 +320,7 @@ class TransferenciaLoteRepository extends BaseRepository
         $sql = "UPDATE transferencias_lotes SET
                     tipo_lote = :tipo,
                     id_forma_pago_origen = :forma,
-                    id_banco_formato = :banco,
+                    id_formato_transferencia = :formato,
                     fecha_pago = :fecha_pago,
                     observaciones = :obs,
                     updated_by = :ub,
@@ -330,7 +330,7 @@ class TransferenciaLoteRepository extends BaseRepository
         return $st->execute([
             ':tipo'       => $d['tipo_lote'],
             ':forma'      => $d['id_forma_pago_origen'] ?: null,
-            ':banco'      => $d['id_banco_formato'] ?: null,
+            ':formato'    => $d['id_formato_transferencia'] ?: null,
             ':fecha_pago' => $d['fecha_pago'] ?: null,
             ':obs'        => $d['observaciones'] ?? null,
             ':ub'         => $idUsuario,
@@ -374,7 +374,9 @@ class TransferenciaLoteRepository extends BaseRepository
             "SELECT l.*, u.nombre AS creado_por_nombre
              FROM transferencias_lotes l
              LEFT JOIN usuarios u ON u.id = l.created_by
-             WHERE l.token_aprobacion = :t AND l.eliminado = false LIMIT 1"
+             JOIN empresas emp ON emp.id = l.id_empresa
+             WHERE l.token_aprobacion = :t AND l.eliminado = false
+               AND emp.estado = '1' AND emp.eliminado = false LIMIT 1"
         );
         $st->execute([':t' => $token]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;

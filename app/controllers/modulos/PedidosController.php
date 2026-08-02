@@ -7,9 +7,15 @@ use App\Repositories\Modulos\PedidoRepository;
 use App\Repositories\Modulos\ResponsableTrasladoRepository;
 use App\Rules\Modulos\PedidoRules;
 use App\models\Empresa;
+use App\Traits\BloqueoEdicionTrait;
 use Exception;
 
 class PedidosController extends BaseModuloController {
+    use BloqueoEdicionTrait;
+
+    /** Tabla protegida por el bloqueo de edición (compartida con Consignaciones de Venta). */
+    private const TABLA_BLOQUEO = 'pedidos_cabecera';
+
     private $service;
     private $repository;
 
@@ -376,6 +382,22 @@ class PedidosController extends BaseModuloController {
             }
             $this->json(['status' => false, 'message' => $e->getMessage()]);
         }
+    }
+
+    /** Un usuario tomó/renovó el uso exclusivo de un pedido (edición o consumo desde Consignaciones). */
+    public function bloquearAjax(): void {
+        $this->requireLeer();
+        $this->tomarBloqueoAjax(self::TABLA_BLOQUEO);
+    }
+
+    public function renovarBloqueoAjax(): void {
+        $this->requireLeer();
+        $this->renovarBloqueoAjaxTrait(self::TABLA_BLOQUEO);
+    }
+
+    public function liberarBloqueoAjax(): void {
+        $this->requireLeer();
+        $this->liberarBloqueoAjaxTrait(self::TABLA_BLOQUEO);
     }
 
     public function countPendientesAjax(): void

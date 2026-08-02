@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento
-version: 1.0
+version: 1.1
 orden: 40
 estado: activo
 ---
@@ -47,8 +47,8 @@ registrar una compra normal.
 ## Documentos del módulo
 
 Desde la liquidación guardada están disponibles el **PDF** del documento, su
-**XML** y el envío por **correo** o **WhatsApp**, en la barra de acciones al
-inicio del formulario.
+**Excel**, su **XML** y el envío por **correo** o **WhatsApp**, en la barra de
+acciones al inicio del formulario.
 
 ## Errores frecuentes
 
@@ -61,4 +61,5 @@ inicio del formulario.
 
 ## Historial de cambios
 
+- **1.1** — Nuevo botón Excel en el documento de la liquidación (junto a PDF y XML).
 - **1.0** — Versión inicial.

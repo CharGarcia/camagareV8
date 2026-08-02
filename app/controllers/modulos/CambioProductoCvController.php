@@ -360,6 +360,126 @@ class CambioProductoCvController extends BaseModuloController
         exit;
     }
 
+    /** Genera el Excel del cambio (mismas secciones que el PDF: Devuelve / Entrega). */
+    public function excel(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $cambio = $this->service->getDetalleCompleto($id, $idEmpresa);
+            if (!$cambio) { http_response_code(404); echo 'Cambio no encontrado'; exit; }
+
+            $detalles     = $cambio['detalles'] ?? [];
+            $devoluciones = array_values(array_filter($detalles, fn($d) => ($d['tipo_linea'] ?? '') === 'devolucion'));
+            $entregas     = array_values(array_filter($detalles, fn($d) => ($d['tipo_linea'] ?? '') === 'entrega'));
+
+            $empresaModel = new \App\models\Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            $numero = trim((string)($cambio['serie'] ?? '') . '-' . (string)($cambio['secuencial'] ?? ''), '-');
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Cambio');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:F1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'CAMBIO DE PRODUCTOS N.° ' . ($numero !== '' ? $numero : '—'));
+            $sheet->mergeCells('A2:F2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cambio['fecha_cambio']) ? date('d-m-Y', strtotime((string)$cambio['fecha_cambio'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Cliente: ' . (string)($cambio['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string)($cambio['cliente_identificacion'] ?? ''));
+            $sheet->setCellValue('C4', 'Estado: ' . ucfirst((string)($cambio['estado'] ?? '')));
+
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+
+            $row = 6;
+            $escribirTabla = function (string $titulo, array $filas) use ($sheet, $headerStyle, &$row) {
+                $sheet->setCellValue('A' . $row, $titulo);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                $headers = ['Código', 'Descripción', 'Lote', 'Cantidad', 'P. Unitario', 'Total'];
+                $col = 'A';
+                foreach ($headers as $h) { $sheet->setCellValue($col . $row, $h); $col++; }
+                $sheet->getStyle('A' . $row . ':F' . $row)->applyFromArray($headerStyle);
+                $row++;
+
+                $inicio = $row;
+                if (empty($filas)) {
+                    $sheet->setCellValue('A' . $row, 'Sin productos.');
+                    $sheet->mergeCells('A' . $row . ':F' . $row);
+                    $row++;
+                } else {
+                    foreach ($filas as $d) {
+                        $sheet->setCellValueExplicit('A' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('C' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValue('D' . $row, (float)($d['cantidad'] ?? 0));
+                        $sheet->setCellValue('E' . $row, (float)($d['precio_unitario'] ?? 0));
+                        $sheet->setCellValue('F' . $row, (float)($d['total'] ?? 0));
+                        $row++;
+                    }
+                }
+                $sheet->getStyle('D' . $inicio . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            };
+
+            $escribirTabla('Productos que devuelve', $devoluciones);
+            $escribirTabla('Productos que entrega a cambio', $entregas);
+
+            $totales = [
+                'Total devuelto'  => (float)($cambio['subtotal_devuelto'] ?? 0),
+                'Total entregado' => (float)($cambio['subtotal_entregado'] ?? 0),
+                'Diferencia'      => (float)($cambio['diferencia'] ?? 0),
+            ];
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('E' . $row, $label);
+                $sheet->getStyle('E' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('F' . $row, $valor);
+                $sheet->getStyle('F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            $row++;
+            $sheet->setCellValue('A' . $row, 'Motivo: ' . (string)($cambio['motivo'] ?? ''));
+            $sheet->mergeCells('A' . $row . ':F' . $row);
+            $row++;
+            $sheet->setCellValue('A' . $row, 'Observaciones: ' . (string)($cambio['observaciones'] ?? ''));
+            $sheet->mergeCells('A' . $row . ':F' . $row);
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Cambio_' . ($numero !== '' ? $numero : 'comprobante') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /** Envía por correo SOLO el PDF del cambio. */
     public function enviarCorreoAjax(): void
     {

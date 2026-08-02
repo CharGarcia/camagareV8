@@ -14,6 +14,12 @@
             </div>
 
             <div class="modal-body p-3">
+                <!-- Aviso: otro usuario tiene este pedido en uso (edición o consumo desde Consignaciones) -->
+                <div id="aviso-bloqueo-pedido" class="alert alert-warning d-flex align-items-center gap-2 mb-3 d-none" role="alert">
+                    <i class="bi bi-lock-fill"></i>
+                    <span id="aviso-bloqueo-pedido-texto"></span>
+                </div>
+
                 <!-- Acciones Rápidas Superior -->
                 <div class="d-flex justify-content-start gap-1 mb-3">
                     <?php if (\App\Helpers\Permisos::puedeCrear('modulos/clientes')): ?>
@@ -165,7 +171,7 @@
                         <i class="bi bi-x-lg me-1"></i> Cerrar
                     </button>
                     <?php if ($perm['crear'] || $perm['actualizar']): ?>
-                        <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm" onclick="guardarPedido()">
+                        <button type="button" id="btn-guardar-pedido" class="btn btn-primary btn-sm px-4 shadow-sm" onclick="guardarPedido()">
                             <i class="bi bi-check2-circle me-1"></i> Guardar
                         </button>
                     <?php endif; ?>

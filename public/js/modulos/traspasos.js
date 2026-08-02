@@ -98,6 +98,7 @@
         document.getElementById('trp-btn-anular').classList.add('d-none');
         document.getElementById('trp-btn-guardar').classList.remove('d-none');
         document.getElementById('btnPdfTraspaso').classList.add('d-none');
+        document.getElementById('btnExcelTraspaso').classList.add('d-none');
         setCamposHabilitados(true);
         document.getElementById('trp-asiento-contenido').innerHTML = '<p class="text-muted small mb-0">El asiento contable se genera automáticamente al guardar el traspaso.</p>';
         window.TRP_onCambioFormas();
@@ -146,6 +147,10 @@
             const btnPdf = document.getElementById('btnPdfTraspaso');
             btnPdf.classList.remove('d-none');
             btnPdf.dataset.id = t.id;
+
+            const btnExcel = document.getElementById('btnExcelTraspaso');
+            btnExcel.classList.remove('d-none');
+            btnExcel.dataset.id = t.id;
 
             window.TRP_onCambioFormas();
             cargarAsientoTraspaso(t.id);
@@ -198,6 +203,12 @@
         const id = document.getElementById('btnPdfTraspaso')?.dataset.id;
         if (!id) return;
         window.open(`${TRP_URL}/pdf?id=${id}`, '_blank');
+    };
+
+    window.TRP_abrirExcel = function () {
+        const id = document.getElementById('btnExcelTraspaso')?.dataset.id;
+        if (!id) return;
+        window.open(`${TRP_URL}/exportarExcelAjax?id=${id}`, '_blank');
     };
 
     // ── Formas de pago: saldo disponible + evitar elegir la misma en ambos lados ──

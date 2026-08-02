@@ -421,6 +421,136 @@ class ReciboVentaController extends BaseModuloController
         exit;
     }
 
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $recibo = $this->repository->getPorId($id);
+            if (!$recibo || (int) ($recibo['id_empresa'] ?? 0) !== $idEmpresa) {
+                http_response_code(404); echo 'Recibo no encontrado'; exit;
+            }
+
+            $detalles = $this->repository->getDetalles($id);
+            $pagos    = $this->repository->getPagos($id);
+
+            $empresaModel = new Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            $numero = trim((string) ($recibo['recibo_numero'] ?? ''));
+            if ($numero === '') {
+                $numero = ($recibo['establecimiento'] ?? '001') . '-' . ($recibo['punto_emision'] ?? '001') . '-'
+                        . str_pad((string) ($recibo['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+            }
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Recibo');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:F1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'RECIBO DE VENTA N.° ' . $numero);
+            $sheet->mergeCells('A2:F2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($recibo['fecha_emision']) ? date('d-m-Y', strtotime((string) $recibo['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Cliente: ' . (string) ($recibo['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string) ($recibo['cliente_ruc'] ?? ''));
+            $sheet->setCellValue('C4', 'Estado: ' . ucfirst((string) ($recibo['estado'] ?? '')));
+
+            $headerRow = 6;
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unitario', 'Descuento', 'Subtotal'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':F' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string) ($d['codigo_principal'] ?? $d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string) ($d['descripcion'] ?? $d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('C' . $row, (float) ($d['cantidad'] ?? 0));
+                $sheet->setCellValue('D' . $row, (float) ($d['precio_unitario'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float) ($d['descuento'] ?? 0));
+                $sheet->setCellValue('F' . $row, (float) ($d['precio_total_sin_impuesto'] ?? 0));
+                $row++;
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('C' . ($headerRow + 1) . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $subtotal = (float) ($recibo['total_sin_impuestos'] ?? 0);
+            $descuentoTotal = (float) ($recibo['total_descuento'] ?? 0);
+            $ice = (float) ($recibo['total_ice'] ?? 0);
+            $propina = (float) ($recibo['propina'] ?? 0);
+            $total = (float) ($recibo['importe_total'] ?? 0);
+            $iva = $total - $subtotal + $descuentoTotal - $ice - $propina;
+
+            $row += 1;
+            $totales = [
+                'Subtotal sin impuestos' => $subtotal,
+                'Descuento' => $descuentoTotal,
+                'IVA' => $iva,
+            ];
+            if ($ice > 0) $totales['ICE'] = $ice;
+            if ($propina > 0) $totales['Propina'] = $propina;
+            $totales['TOTAL'] = $total;
+
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('E' . $row, $label);
+                $sheet->getStyle('E' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('F' . $row, $valor);
+                $sheet->getStyle('F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            if (!empty($pagos)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Forma de pago');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($pagos as $p) {
+                    $sheet->setCellValue('A' . $row, (string) ($p['nombre_forma_pago'] ?? $p['forma_pago'] ?? ''));
+                    $sheet->setCellValue('C' . $row, (float) ($p['total'] ?? $p['valor'] ?? 0));
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Recibo_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     public function getClientesAjax(): void
     {
         $this->requireLeer();

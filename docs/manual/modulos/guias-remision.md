@@ -6,7 +6,7 @@ ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
 etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia
-version: 1.1
+version: 1.5
 orden: 55
 estado: activo
 ---
@@ -106,6 +106,17 @@ código de barras aparece solo cuando existe clave de acceso.
 Cuando la empresa tiene una **plantilla PDF activa** para guías de remisión, se
 usa esa plantilla en lugar de este formato.
 
+## Exportar a Excel
+
+Junto al botón **PDF** hay un botón **Excel** que descarga el mismo comprobante
+en formato `.xlsx` (archivo `Guia_Remision_001-001-000000123.xlsx`). Como una
+guía de remisión no tiene totales monetarios —es un documento de transporte, no
+de venta—, el Excel muestra: fecha de emisión, estado, destinatario, direcciones
+de partida y destino, motivo del traslado, ruta, transportista, placa y fechas
+de inicio/fin de transporte, seguido del detalle de productos y cantidades
+transportadas, y la información adicional si la guía la tiene. Ambos botones
+solo aparecen en una guía ya guardada.
+
 ## La guía no mueve inventario
 
 Emitir una guía **no descuenta stock**: solo ampara el traslado. El movimiento de
@@ -128,6 +139,9 @@ traslado entre bodegas).
 
 ## Historial de cambios
 
+- **1.5** — Nuevo botón **Excel** junto al de PDF en el modal: descarga el mismo
+  comprobante en `.xlsx`, adaptado a un documento de transporte (sin totales
+  monetarios): cabecera de traslado, transportista y detalle de productos/cantidades.
 - **1.4** — Las fechas se validan en orden (emisión → salida → llegada) y el
   modal impide elegirlas fuera de ese orden. **Anular** queda disponible solo
   para guías autorizadas y comprueba contra el SRI que ya no lo estén, igual que

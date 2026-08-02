@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos
-version: 1.0
+version: 1.1
 orden: 35
 estado: activo
 ---
@@ -43,6 +43,13 @@ tributarias. Elija según lo que respalde el documento.
 | Contabilidad | Genera asiento de venta |
 | SRI | **No** se envía |
 
+## Exportar el documento
+
+En la barra de acciones superior del modal, junto al botón **PDF**, hay un
+botón **Excel** (icono verde) que descarga el detalle, los totales y la forma
+de pago de ese recibo puntual. Ambos se habilitan solo con el recibo ya
+guardado.
+
 ## Cuándo no usarlo
 
 Si la operación requiere comprobante válido para el cliente, hay que emitir
@@ -56,4 +63,6 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
 
 ## Historial de cambios
 
+- **1.1** — Botón **Excel** en la barra de acciones del modal, para exportar
+  el detalle, totales y forma de pago de un recibo puntual.
 - **1.0** — Versión inicial.

@@ -500,6 +500,11 @@
         window.open(`${BASE}/exportXmlDoc?id=${retIdActual}`, '_blank');
     };
 
+    window.RET_exportarExcel = () => {
+        if (!retIdActual) return;
+        window.open(`${BASE}/exportExcelDoc?id=${retIdActual}`, '_blank');
+    };
+
     window.RET_enviarPorCorreo = async () => {
         const id = parseInt(retIdActual) || 0;
         if (!id) return;
@@ -1212,6 +1217,7 @@
         const btnSri      = document.getElementById('ret-btn-sri');
         const btnPdf      = document.getElementById('ret-btn-pdf');
         const btnXml      = document.getElementById('ret-btn-xml');
+        const btnExcel    = document.getElementById('ret-btn-excel');
         const btnCorreo   = document.getElementById('ret-btn-correo');
         const btnEliminar = document.getElementById('ret-btn-eliminar');
         const btnAnular   = document.getElementById('ret-btn-anular');
@@ -1226,6 +1232,7 @@
         }
         if (btnPdf) btnPdf.disabled = !tieneId;
         if (btnXml) btnXml.disabled = !tieneId;
+        if (btnExcel) btnExcel.disabled = !tieneId;
         if (btnCorreo) btnCorreo.disabled = !(tieneId && cab.estado === 'autorizada');
 
         if (btnEliminar) {

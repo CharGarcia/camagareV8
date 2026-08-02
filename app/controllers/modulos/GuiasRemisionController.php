@@ -318,6 +318,133 @@ class GuiasRemisionController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Exporta a Excel el comprobante individual de una guía de remisión (mismo
+     * documento que exportarPdfAjax, pero en formato .xlsx). Una guía no tiene
+     * totales monetarios: es un documento de transporte de mercadería, así que
+     * el Excel muestra cabecera de traslado, transportista y el detalle de
+     * productos/cantidades transportadas.
+     */
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $cabecera = $this->repo->getPorId($id);
+            if (!$cabecera || (int)($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
+                http_response_code(404); echo 'Guía no encontrada'; exit;
+            }
+
+            $detalles      = $this->repo->getDetalles($id);
+            $infoAdicional = $this->repo->getInfoAdicional($id);
+            $empresa       = (new Empresa())->getPorId($idEmpresa) ?? [];
+
+            $numero = ($cabecera['establecimiento'] ?? '001') . '-'
+                    . ($cabecera['punto_emision']   ?? '001') . '-'
+                    . str_pad((string)($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Guía Remisión');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:D1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'GUÍA DE REMISIÓN N.° ' . $numero);
+            $sheet->mergeCells('A2:D2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fechaEmision = !empty($cabecera['fecha_emision']) ? date('d-m-Y', strtotime((string)$cabecera['fecha_emision'])) : '';
+            $fechaInicio  = !empty($cabecera['fecha_inicio_transporte']) ? date('d-m-Y', strtotime((string)$cabecera['fecha_inicio_transporte'])) : '';
+            $fechaFin     = !empty($cabecera['fecha_fin_transporte']) ? date('d-m-Y', strtotime((string)$cabecera['fecha_fin_transporte'])) : '';
+
+            $datosCabecera = [
+                'Fecha de emisión'         => $fechaEmision,
+                'Estado'                   => ucfirst(str_replace('_', ' ', (string)($cabecera['estado'] ?? ''))),
+                'Destinatario'             => (string)($cabecera['cliente_nombre'] ?? ''),
+                'Identificación destinatario' => (string)($cabecera['cliente_ruc'] ?? ''),
+                'Dirección de partida'     => (string)($cabecera['direccion_partida'] ?? ''),
+                'Dirección de destino'     => (string)($cabecera['direccion_destino'] ?? ''),
+                'Motivo del traslado'      => (string)($cabecera['motivo_traslado'] ?? ''),
+                'Ruta'                     => (string)($cabecera['ruta'] ?? ''),
+                'Transportista'            => (string)($cabecera['transportista_nombre'] ?? ''),
+                'Identificación transportista' => (string)($cabecera['transportista_ruc'] ?? ''),
+                'Placa'                    => (string)($cabecera['placa'] ?? ''),
+                'Fecha inicio transporte'  => $fechaInicio,
+                'Fecha fin transporte'     => $fechaFin,
+            ];
+
+            $row = 4;
+            foreach ($datosCabecera as $label => $valor) {
+                $sheet->setCellValueExplicit('A' . $row, $label, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $sheet->setCellValueExplicit('B' . $row, (string) $valor, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->mergeCells('B' . $row . ':D' . $row);
+                $row++;
+            }
+
+            $row += 1;
+            $headerRow = $row;
+            $headers = ['Código', 'Descripción del producto', 'Cantidad'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':C' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string)($d['codigo_principal'] ?? $d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($d['descripcion'] ?? $d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('C' . $row, (float)($d['cantidad'] ?? 0));
+                $row++;
+            }
+
+            if (!empty($infoAdicional)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Información adicional');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($infoAdicional as $inf) {
+                    $sheet->setCellValueExplicit('A' . $row, (string)($inf['nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                    $sheet->setCellValueExplicit('B' . $row, (string)($inf['valor'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->mergeCells('B' . $row . ':C' . $row);
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Guia_Remision_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     public function exportarXmlAjax(): void
     {
         $this->requireLeer();

@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion
-version: 1.0
+version: 1.1
 orden: 45
 estado: activo
 ---
@@ -39,6 +39,13 @@ Una consignación **no es una venta**, así que su asiento no registra ingresos:
 una **reclasificación de inventario a costo**, es decir, mercadería que sale del
 almacén propio pero sigue siendo un activo de la empresa.
 
+## Exportar
+
+En la pestaña General del comprobante, junto al botón **PDF**, hay un botón
+**Excel** que descarga el detalle de la consignación (producto, bodega, lote,
+NUP, cantidad entregada, retornada y facturada) en una hoja de cálculo.
+Requiere que la consignación esté guardada.
+
 ## Errores frecuentes
 
 - **La consignación no aparece en ventas**: es correcto, no es una venta hasta
@@ -50,4 +57,7 @@ almacén propio pero sigue siendo un activo de la empresa.
 
 ## Historial de cambios
 
+- **1.1** — Nuevo botón **Excel** en la barra de acciones del comprobante,
+  junto al de PDF: descarga el detalle de la consignación en una hoja de
+  cálculo.
 - **1.0** — Versión inicial.

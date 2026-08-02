@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
 etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico
-version: 1.0
+version: 1.1
 orden: 21
 estado: activo
 ---
@@ -52,8 +52,10 @@ reembolsado (proveedor, documento y su IVA).
    sentido como reembolso.
 5. Guarde. Con la factura guardada (borrador), use la barra de acciones
    superior para **Enviar al SRI**.
-6. Autorizada, ya se pueden usar los botones de **PDF**, **XML** y
+6. Autorizada, ya se pueden usar los botones de **PDF**, **XML**, **Excel** y
    **Correo** (el correo también se envía automáticamente al autorizarse).
+   El botón **Excel** (icono verde) descarga el detalle, los terceros
+   reembolsados y los totales en una hoja de cálculo.
 
 ## Campos del formulario
 
@@ -123,3 +125,6 @@ bajo el submódulo "Factura de Reembolso" (colgado junto a Factura de Venta).
   (vinculados a Compras o manuales), envío al SRI, asiento contable de
   cuenta puente, PDF y correo. Sin WhatsApp e integración simple con
   Cuentas por Cobrar (sin aparecer aún en su listado/antigüedad de saldos).
+- **1.1** — Botón **Excel** en la barra de acciones del modal: exporta
+  detalle, terceros reembolsados, totales y forma de pago a una hoja de
+  cálculo (mismo patrón que Factura de Venta).

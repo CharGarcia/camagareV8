@@ -149,6 +149,7 @@ class DocumentosLegalesRepository extends BaseRepository
                FROM empresas_documentos_envios ev
                INNER JOIN empresas e ON e.id = ev.id_empresa
               WHERE ev.token = :t AND ev.eliminado = FALSE
+                AND e.estado = '1' AND e.eliminado = FALSE
               LIMIT 1"
         );
         $st->execute([':t' => $token]);

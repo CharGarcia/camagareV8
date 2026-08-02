@@ -63,7 +63,8 @@ class FacturaExpressQrRepository extends BaseRepository
             "SELECT p.*, e.nombre AS empresa_nombre, e.ruc AS empresa_ruc, e.mail AS empresa_mail
              FROM factura_express_plantillas p
              JOIN empresas e ON e.id = p.id_empresa
-             WHERE p.token = :token AND p.eliminado = false AND p.activo = true"
+             WHERE p.token = :token AND p.eliminado = false AND p.activo = true
+               AND e.estado = '1' AND e.eliminado = false"
         );
         $st->execute([':token' => $token]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
@@ -313,8 +314,9 @@ class FacturaExpressQrRepository extends BaseRepository
                     e.nombre AS empresa_nombre
              FROM factura_express_solicitudes s
              LEFT JOIN factura_express_plantillas p ON p.id = s.id_plantilla
-             LEFT JOIN empresas e ON e.id = s.id_empresa
-             WHERE s.token_cliente = :token AND s.eliminado = false"
+             JOIN empresas e ON e.id = s.id_empresa
+             WHERE s.token_cliente = :token AND s.eliminado = false
+               AND e.estado = '1' AND e.eliminado = false"
         );
         $st->execute([':token' => $token]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

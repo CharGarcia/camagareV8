@@ -6,7 +6,7 @@ ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
 etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion
-version: 1.0
+version: 1.1
 orden: 10
 estado: activo
 ---
@@ -34,6 +34,15 @@ la ficha, el empleado no existe para ninguno de esos procesos.
 | Correo electrónico | Si se llena, debe tener formato válido |
 | Sexo | Debe ser uno de los valores admitidos |
 
+## Ficha en PDF y Excel
+
+En la barra superior del modal (junto al título) hay dos botones para exportar
+la ficha del empleado ya guardado: el ícono rojo descarga el **PDF** y el ícono
+verde descarga el **Excel**. Ambos incluyen los mismos datos —generales,
+laborales, bancarios, historial de periodos y rubros fijos—; el Excel los
+organiza en secciones con pares etiqueta/valor. Los dos quedan deshabilitados
+(avisan "Guarde primero") mientras el empleado no se ha guardado.
+
 ## Un catálogo por empresa
 
 Los empleados pertenecen a una empresa. A diferencia de los comprobantes
@@ -49,4 +58,5 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.1** — Botón para exportar la ficha del empleado a Excel, junto al de PDF.
 - **1.0** — Versión inicial.

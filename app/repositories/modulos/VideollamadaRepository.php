@@ -412,7 +412,9 @@ class VideollamadaRepository extends BaseRepository
                        s.permite_invitados, s.id_anfitrion
                 FROM videollamadas_participantes p
                 INNER JOIN videollamadas_salas s ON s.id = p.id_sala AND s.eliminado = FALSE
-                WHERE p.token_acceso = :token AND p.eliminado = FALSE";
+                INNER JOIN empresas emp ON emp.id = p.id_empresa
+                WHERE p.token_acceso = :token AND p.eliminado = FALSE
+                  AND emp.estado = '1' AND emp.eliminado = FALSE";
         $row = $this->query($sql, [':token' => $token])->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }

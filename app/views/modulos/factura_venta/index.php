@@ -452,6 +452,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             </div>
 
             <div class="modal-body p-0">
+                <!-- Aviso: otro usuario está editando/eliminando esta factura ahora mismo -->
+                <div id="aviso-bloqueo-factura" class="alert alert-warning d-flex align-items-center gap-2 mb-0 rounded-0 d-none" role="alert">
+                    <i class="bi bi-lock-fill"></i>
+                    <span id="aviso-bloqueo-factura-texto"></span>
+                </div>
                 <form id="formFacturaModal">
                     <!-- Barra de Acciones Superior -->
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
@@ -461,6 +466,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <div class="vr mx-1"></div>
                         <button id="m-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                         <button id="m-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="exportarXml()" title="Exportar XML"><i class="bi bi-file-earmark-code"></i></button>
+                        <button id="m-btn-excel" type="button" class="btn btn-outline-success btn-sm px-2" onclick="exportarExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                         <button id="m-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="enviarPorCorreo()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                         <button id="m-btn-whatsapp" type="button" class="btn btn-outline-success btn-sm px-2" onclick="FV_abrirModalWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
@@ -2378,6 +2384,7 @@ $totalPages = $totalPagesOriginal;
         const btnRecibo    = document.getElementById('m-btn-recibo');
         const btnPdf       = document.getElementById('m-btn-pdf');
         const btnXml       = document.getElementById('m-btn-xml');
+        const btnExcel     = document.getElementById('m-btn-excel');
         const btnCorreo    = document.getElementById('m-btn-correo');
         const btnWhatsapp  = document.getElementById('m-btn-whatsapp');
         const btnTicket    = document.getElementById('m-btn-ticket');
@@ -2391,6 +2398,7 @@ $totalPages = $totalPagesOriginal;
             if (btnRecibo) btnRecibo.classList.add('d-none');
             if (btnPdf) btnPdf.classList.add('d-none');
             if (btnXml) btnXml.classList.add('d-none');
+            if (btnExcel) btnExcel.classList.add('d-none');
             if (btnCorreo) btnCorreo.classList.add('d-none');
             if (btnWhatsapp) btnWhatsapp.classList.add('d-none');
             if (btnTicket) btnTicket.classList.add('d-none');
@@ -2409,6 +2417,7 @@ $totalPages = $totalPagesOriginal;
         if (btnRecibo) btnRecibo.classList.remove('d-none');
         if (btnPdf) btnPdf.classList.remove('d-none');
         if (btnXml) btnXml.classList.remove('d-none');
+        if (btnExcel) btnExcel.classList.remove('d-none');
         if (btnCorreo) btnCorreo.classList.remove('d-none');
         if (btnWhatsapp) btnWhatsapp.classList.remove('d-none');
         if (btnTicket) btnTicket.classList.remove('d-none');
@@ -2461,6 +2470,12 @@ $totalPages = $totalPagesOriginal;
             const tieneItems = document.querySelectorAll('#m-tbodyDetalle tr.row-detalle').length > 0;
             btnXml.disabled = !(tieneCliente && tieneItems);
             btnXml.title = btnXml.disabled ? 'Se requiere cliente e ítems para exportar XML' : 'Exportar XML';
+        }
+        if (btnExcel) {
+            const tieneCliente = !!(document.getElementById('m-id-cliente')?.value);
+            const tieneItems = document.querySelectorAll('#m-tbodyDetalle tr.row-detalle').length > 0;
+            btnExcel.disabled = !(tieneCliente && tieneItems);
+            btnExcel.title = btnExcel.disabled ? 'Se requiere cliente e ítems para exportar Excel' : 'Exportar Excel';
         }
 
         // ”€”€ Lógica de Solo Lectura para la pestaña Factura de Venta ”€”€
@@ -2569,6 +2584,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     function fvResetearModal() {
+        FV_ocultarAvisoBloqueo();
         // Quitar pestañas de módulos relacionados de la factura anterior.
         fvLimpiarPestanhasRelacionadas();
         document.getElementById('formFacturaModal').reset();
@@ -3317,6 +3333,13 @@ $totalPages = $totalPagesOriginal;
         const id = parseInt(FV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-xml-ajax?id=${id}`;
+        window.open(url, '_blank');
+    }
+
+    function exportarExcel() {
+        const id = parseInt(FV_ID_ACTIVO) || 0;
+        if (!id) return;
+        const url = `${B_URL}/${RUTA_MODULO}/exportar-excel-ajax?id=${id}`;
         window.open(url, '_blank');
     }
 
@@ -4799,6 +4822,32 @@ $totalPages = $totalPagesOriginal;
         } catch (e) { /* silencioso: las pestañas relacionadas son informativas */ }
     }
 
+    /**
+     * Bloqueo de edición (CMG_Bloqueo): evita que una factura en borrador se
+     * guarde/elimine mientras otro usuario ya la tiene abierta. Solo aplica a
+     * borradores: una factura autorizada solo permite "Actualizar Vendedor" y
+     * no se puede eliminar, así que el riesgo de choque no aplica ahí.
+     */
+    function FV_mostrarAvisoBloqueo(info) {
+        const aviso = document.getElementById('aviso-bloqueo-factura');
+        const texto = document.getElementById('aviso-bloqueo-factura-texto');
+        if (!aviso || !texto) return;
+        const contexto = info.modulo_contexto ? ` (${info.modulo_contexto})` : '';
+        texto.textContent = `Esta factura la está usando ahora mismo ${info.usuario || 'otro usuario'}${contexto}. Puedes verla, pero no editarla ni eliminarla hasta que termine.`;
+        aviso.classList.remove('d-none');
+        document.getElementById('btnGuardarFacturaModal')?.classList.add('d-none');
+        document.getElementById('btnEliminarFacturaModal')?.classList.add('d-none');
+    }
+
+    function FV_ocultarAvisoBloqueo() {
+        document.getElementById('aviso-bloqueo-factura')?.classList.add('d-none');
+    }
+
+    document.getElementById('modalNuevaFactura')?.addEventListener('hidden.bs.modal', function(event) {
+        if (event.target.id !== 'modalNuevaFactura') return; // ignora sub-modales anidados (NC, ND, GR)
+        if (typeof window.CMG_Bloqueo !== 'undefined') window.CMG_Bloqueo.detener();
+    });
+
     window.abrirModalFacturaVer = async function(row) {
         const data = JSON.parse(row.dataset.row);
         const id = parseInt(data.id) || 0;
@@ -4921,6 +4970,23 @@ $totalPages = $totalPagesOriginal;
 
         // Asegurar que fvActualizarEstadoBotones se llame para los botones superiores
         fvActualizarEstadoBotones(data.estado || 'borrador');
+
+        if (typeof window.CMG_Bloqueo !== 'undefined') {
+            window.CMG_Bloqueo.detener(); // libera el lock de la factura anterior, si había uno
+            if (esBorrador) {
+                window.CMG_Bloqueo.iniciar({
+                    urlBase: `${B_URL}/${RUTA_MODULO}`,
+                    idRegistro: id,
+                    moduloContexto: 'Factura de Venta',
+                    onBloqueado: FV_mostrarAvisoBloqueo,
+                    onPerdido: () => {
+                        Swal.fire({ icon: 'warning', title: 'Perdiste el control de esta factura', text: 'Otro usuario la tomó. Guarda tus cambios pendientes con cuidado o recarga.' });
+                        document.getElementById('btnGuardarFacturaModal')?.classList.add('d-none');
+                        document.getElementById('btnEliminarFacturaModal')?.classList.add('d-none');
+                    }
+                });
+            }
+        }
 
         modalMain.show();
 

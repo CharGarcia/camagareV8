@@ -360,6 +360,103 @@ class RetornosCvController extends BaseModuloController
         exit;
     }
 
+    /** Genera el Excel del retorno (mismas columnas que el PDF). */
+    public function excel(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $retorno = $this->service->getDetalleCompleto($id, $idEmpresa);
+            if (!$retorno) { http_response_code(404); echo 'Retorno no encontrado'; exit; }
+
+            try {
+                $db = \App\Core\Database::getConnection();
+                $st = $db->prepare("SELECT nombre FROM usuarios WHERE id = :u LIMIT 1");
+                $st->execute([':u' => (int) ($retorno['created_by'] ?? 0)]);
+                $retorno['usuario_nombre'] = (string) ($st->fetchColumn() ?: '');
+            } catch (\Throwable $e) {
+                $retorno['usuario_nombre'] = '';
+            }
+
+            $detalles = $retorno['detalles'] ?? [];
+            $empresaModel = new \App\models\Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            $numero = trim((string)($retorno['serie'] ?? '') . '-' . (string)($retorno['secuencial'] ?? ''), '-');
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Retorno');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:E1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'RETORNO DE CONSIGNACIÓN N.° ' . ($numero !== '' ? $numero : '—'));
+            $sheet->mergeCells('A2:E2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($retorno['fecha_retorno']) ? date('d-m-Y', strtotime((string)$retorno['fecha_retorno'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Cliente: ' . (string)($retorno['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string)($retorno['cliente_identificacion'] ?? ''));
+            $sheet->setCellValue('C4', 'Estado: ' . ucfirst((string)($retorno['estado'] ?? '')));
+            $sheet->setCellValue('A5', 'Resp. traslado: ' . (string)($retorno['responsable_traslado_nombre'] ?? ''));
+
+            $headerRow = 7;
+            $headers = ['Código', 'Descripción', 'Lote', 'NUP', 'Cantidad'];
+            $col = 'A';
+            foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':E' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('C' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('D' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('E' . $row, (float)($d['cantidad'] ?? 0));
+                $row++;
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('E' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $row += 1;
+            $sheet->setCellValue('A' . $row, 'Motivo: ' . (string)($retorno['motivo'] ?? ''));
+            $sheet->mergeCells('A' . $row . ':E' . $row);
+            $row++;
+            $sheet->setCellValue('A' . $row, 'Observaciones: ' . (string)($retorno['observaciones'] ?? ''));
+            $sheet->mergeCells('A' . $row . ':E' . $row);
+
+            foreach (['A', 'B', 'C', 'D', 'E'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Retorno_' . ($numero !== '' ? $numero : 'comprobante') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /** Envía por correo SOLO el PDF del retorno (mismo mecanismo que Facturas/Consignaciones). */
     public function enviarCorreoAjax(): void
     {

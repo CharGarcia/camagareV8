@@ -200,7 +200,10 @@ class MesaRepository extends BaseRepository
      */
     public function getByQrToken(string $token): ?array
     {
-        $sql = "SELECT * FROM {$this->table} WHERE qr_token = :t AND eliminado = false LIMIT 1";
+        $sql = "SELECT m.* FROM {$this->table} m
+                JOIN empresas emp ON emp.id = m.id_empresa
+                WHERE m.qr_token = :t AND m.eliminado = false
+                  AND emp.estado = '1' AND emp.eliminado = false LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([':t' => $token]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

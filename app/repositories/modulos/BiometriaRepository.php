@@ -37,8 +37,10 @@ class BiometriaRepository extends BaseRepository
         $sql = "SELECT b.*, e.nombres_apellidos, e.identificacion, e.id_usuario_sistema, e.estado AS empleado_estado
                 FROM {$this->table} b
                 JOIN empleados e ON e.id = b.id_empleado
+                JOIN empresas emp ON emp.id = b.id_empresa
                 WHERE b.qr_token = :t AND b.eliminado = false AND b.activo = true
-                  AND e.eliminado = false LIMIT 1";
+                  AND e.eliminado = false
+                  AND emp.estado = '1' AND emp.eliminado = false LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([':t' => $qrToken]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

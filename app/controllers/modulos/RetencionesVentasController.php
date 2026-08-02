@@ -334,6 +334,117 @@ class RetencionesVentasController extends BaseModuloController
     }
 
     /**
+     * Exporta a Excel el comprobante individual de una retención (mismo documento
+     * que exportPdfDoc, pero en formato .xlsx). Hermano de exportPdfDoc().
+     */
+    public function exportExcelDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $cabecera = $this->repository->getPorId($id, $idEmpresa);
+            if (!$cabecera) {
+                http_response_code(404); echo 'Retención no encontrada'; exit;
+            }
+
+            $lineas  = $this->repository->getDetalle($id);
+            $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $numero  = self::numeroRetencion($cabecera);
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Retención');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:G1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'COMPROBANTE DE RETENCIÓN N.° ' . $numero);
+            $sheet->mergeCells('A2:G2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cabecera['fecha_emision']) ? date('d-m-Y', strtotime((string)$cabecera['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha emisión: ' . $fecha);
+            $sheet->setCellValue('D3', 'Período fiscal: ' . (string)($cabecera['periodo_fiscal'] ?? ''));
+            $sheet->setCellValueExplicit('A4', 'Cliente: ' . (string)($cabecera['cliente_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('A5', 'Identificación: ' . (string)($cabecera['cliente_identificacion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('D5', 'Origen: ' . (($cabecera['origen'] ?? 'manual') === 'electronico' ? 'Electrónico' : 'Manual'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+
+            $headerRow = 7;
+            $headers = ['Comprobante Sustento', 'N.° Doc. Sustento', 'Fecha Doc.', 'Código', 'Concepto', 'Base Imponible', '%', 'Valor Retenido'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($lineas as $l) {
+                $impuesto = (string)($l['codigo_impuesto'] ?? '');
+                $labelImp = ($impuesto === '2' || strtoupper($impuesto) === 'IVA') ? 'IVA'
+                    : ((($impuesto === '6' || $impuesto === '3') || strtoupper($impuesto) === 'ISD') ? 'ISD' : 'RENTA');
+
+                $sheet->setCellValueExplicit('A' . $row, (string)($l['cod_doc_sustento'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($l['num_doc_sustento'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('C' . $row, !empty($l['fecha_emision_doc_sustento']) ? date('d-m-Y', strtotime((string)$l['fecha_emision_doc_sustento'])) : '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('D' . $row, (string)($l['codigo_retencion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('E' . $row, (string)($l['concepto'] ?? $l['sri_concepto'] ?? '') . ' (' . $labelImp . ')', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('F' . $row, (float)($l['base_imponible'] ?? 0));
+                $sheet->setCellValue('G' . $row, (float)($l['porcentaje_retencion'] ?? 0));
+                $sheet->setCellValue('H' . $row, (float)($l['valor_retenido'] ?? 0));
+                $row++;
+            }
+
+            $sheet->getStyle('F' . ($headerRow + 1) . ':H' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $row += 1;
+            $totales = [
+                'Total Retenido Renta' => (float)($cabecera['total_renta'] ?? 0),
+                'Total Retenido IVA'   => (float)($cabecera['total_iva'] ?? 0),
+                'Total Retenido ISD'   => (float)($cabecera['total_isd'] ?? 0),
+                'TOTAL RETENIDO'       => (float)($cabecera['total_retenido'] ?? 0),
+            ];
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('G' . $row, $label);
+                $sheet->getStyle('G' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('H' . $row, $valor);
+                $sheet->getStyle('H' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Retencion_Venta_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /**
      * Genera el PDF de una retención en ventas MANUAL (sin XML autorizado) usando
      * la plantilla activa (tipo 'retencion_venta'); si no hay una configurada,
      * usa el diseño original hardcodeado. Las retenciones con XML autorizado

@@ -862,6 +862,152 @@ class LiquidacionCompraController extends BaseModuloController
         exit;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Excel del documento
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Etiqueta de la forma de pago SRI (igual mapa que LiquidacionCompraPdfService::formaPagoLabel). */
+    private function formaPagoLabelExcel(string $cod): string
+    {
+        return match ($cod) {
+            '01' => '01 - Sin utilización del sistema financiero',
+            '15' => '15 - Compensación de deudas',
+            '16' => '16 - Tarjeta de débito',
+            '17' => '17 - Dinero electrónico',
+            '18' => '18 - Tarjeta prepago',
+            '19' => '19 - Tarjeta de crédito',
+            '20' => '20 - Otros con utilización del sistema financiero',
+            '21' => '21 - Endoso de títulos',
+            default => $cod !== '' ? $cod : 'Sin especificar',
+        };
+    }
+
+    public function exportarExcelDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $datos = $this->cargarDatosDocumento($id, $idEmpresa);
+            if (!$datos) { http_response_code(404); echo 'Liquidación no encontrada'; exit; }
+
+            $cabecera = $datos['cabecera'];
+            $detalles = $datos['detalles'];
+            $pagos    = $datos['pagos'];
+            $empresa  = $datos['empresa'];
+
+            $numero = str_pad((string)($cabecera['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+                    . str_pad((string)($cabecera['punto_emision']   ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+                    . str_pad((string)($cabecera['secuencial']      ?? ''),   9, '0', STR_PAD_LEFT);
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Liquidación');
+
+            $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:F1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'LIQUIDACIÓN DE COMPRA DE BIENES Y PRESTACIÓN DE SERVICIOS N.° ' . $numero);
+            $sheet->mergeCells('A2:F2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cabecera['fecha_emision']) ? date('d-m-Y', strtotime((string)$cabecera['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Proveedor: ' . (string)($cabecera['proveedor_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'RUC/Identificación: ' . (string)($cabecera['proveedor_ruc'] ?? ''));
+            $claveAcceso = trim((string)($cabecera['numero_autorizacion'] ?? '')) ?: trim((string)($cabecera['clave_acceso'] ?? ''));
+            $sheet->setCellValue('C4', 'Autorización: ' . $claveAcceso);
+
+            $headerRow = 6;
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unitario', 'Descuento', 'Subtotal'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':F' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            $totalIva = 0.0;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string)($d['codigo_principal'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string)($d['descripcion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('C' . $row, (float)($d['cantidad'] ?? 0));
+                $sheet->setCellValue('D' . $row, (float)($d['precio_unitario'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float)($d['descuento'] ?? 0));
+                $sheet->setCellValue('F' . $row, (float)($d['precio_total_sin_impuesto'] ?? 0));
+                $row++;
+
+                foreach ($d['impuestos'] ?? [] as $imp) {
+                    if ((int)($imp['codigo_impuesto'] ?? 0) === 2) {
+                        $totalIva += (float)($imp['valor'] ?? 0);
+                    }
+                }
+            }
+
+            $sheet->getStyle('C' . ($headerRow + 1) . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $subtotal   = (float)($cabecera['total_sin_impuestos'] ?? 0);
+            $descuento  = (float)($cabecera['total_descuento'] ?? 0);
+            $total      = (float)($cabecera['importe_total'] ?? 0);
+
+            $row += 1;
+            $totales = [
+                'Subtotal sin impuestos' => $subtotal,
+                'Descuento' => $descuento,
+                'IVA' => $totalIva,
+                'TOTAL' => $total,
+            ];
+
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('E' . $row, $label);
+                $sheet->getStyle('E' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('F' . $row, $valor);
+                $sheet->getStyle('F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            if (!empty($pagos)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Forma de pago');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($pagos as $p) {
+                    $sheet->setCellValueExplicit('A' . $row, $this->formaPagoLabelExcel((string)($p['forma_pago'] ?? '')), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValue('C' . $row, (float)($p['total'] ?? 0));
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Liquidacion_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     /**
      * Genera el PDF de una liquidación de compra usando la plantilla activa
      * (tipo 'liquidacion_compra') del módulo Plantillas de Documentos; si la

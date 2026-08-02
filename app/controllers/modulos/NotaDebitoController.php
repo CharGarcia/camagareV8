@@ -766,6 +766,136 @@ class NotaDebitoController extends BaseModuloController
         exit;
     }
 
+    public function exportExcelDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $nd = $this->repository->getPorId($id);
+            if (!$nd || (int) ($nd['id_empresa'] ?? 0) !== $idEmpresa) {
+                http_response_code(404); echo 'Nota de débito no encontrada'; exit;
+            }
+
+            $motivos   = $this->repository->getMotivos($id);
+            $impuestos = $this->repository->getImpuestos($id);
+            $pagos     = $this->repository->getPagos($id);
+            [$empresa] = $this->construirEmpresaComprobante($idEmpresa, $nd);
+
+            $numero = ($nd['establecimiento'] ?? '001') . '-' . ($nd['punto_emision'] ?? '001') . '-'
+                    . str_pad((string) ($nd['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Nota Debito');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:D1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'NOTA DE DÉBITO N.° ' . $numero);
+            $sheet->mergeCells('A2:D2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($nd['fecha_emision']) ? date('d-m-Y', strtotime((string) $nd['fecha_emision'])) : '';
+            $sheet->setCellValue('A3', 'Fecha: ' . $fecha);
+            $sheet->setCellValue('C3', 'Cliente: ' . (string) ($nd['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Identificación: ' . (string) ($nd['cliente_ruc'] ?? ''));
+            $sheet->setCellValue('C4', 'Estado: ' . ucfirst((string) ($nd['estado'] ?? '')));
+
+            $docModificado = (string) ($nd['num_doc_modificado'] ?? '');
+            $fechaSustento = !empty($nd['fecha_emision_docs_sustento']) ? date('d-m-Y', strtotime((string) $nd['fecha_emision_docs_sustento'])) : '';
+            $sheet->setCellValue('A5', 'Documento modificado: ' . $docModificado . ($fechaSustento ? ' (' . $fechaSustento . ')' : ''));
+
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+
+            // ── Motivos ──────────────────────────────────────────────────────
+            $headerRow = 7;
+            $sheet->setCellValue('A' . $headerRow, 'Motivo');
+            $sheet->setCellValue('D' . $headerRow, 'Valor');
+            $sheet->mergeCells('A' . $headerRow . ':C' . $headerRow);
+            $sheet->getStyle('A' . $headerRow . ':D' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($motivos as $m) {
+                $sheet->setCellValueExplicit('A' . $row, (string) ($m['razon'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->mergeCells('A' . $row . ':C' . $row);
+                $sheet->setCellValue('D' . $row, (float) ($m['valor'] ?? 0));
+                $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            // ── Totales (a partir de impuestos IVA código 2) ────────────────
+            $subtotMap = []; $ivaMap = []; $tarifaMap = [];
+            foreach ($impuestos as $imp) {
+                if ((string) ($imp['codigo_impuesto'] ?? '') !== '2') continue;
+                $codPct = (string) ($imp['codigo_porcentaje'] ?? '0');
+                $subtotMap[$codPct] = ($subtotMap[$codPct] ?? 0.0) + (float) ($imp['base_imponible'] ?? 0);
+                $ivaMap[$codPct]    = ($ivaMap[$codPct] ?? 0.0) + (float) ($imp['valor'] ?? 0);
+                $tarifaMap[$codPct] = (float) ($imp['tarifa'] ?? 0);
+            }
+            ksort($ivaMap);
+
+            $subtotal = (float) ($nd['total_sin_impuestos'] ?? 0);
+            $total = (float) ($nd['importe_total'] ?? 0);
+
+            $row += 1;
+            $totales = ['Subtotal sin impuestos' => $subtotal];
+            foreach ($ivaMap as $codPct => $ivaVal) {
+                $tarPct = $tarifaMap[$codPct] ?? 0.0;
+                $tarLabel = $tarPct == (int) $tarPct ? (string) (int) $tarPct : number_format($tarPct, 2);
+                $totales["IVA {$tarLabel}%"] = $ivaVal;
+            }
+            $totales['TOTAL'] = $total;
+
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('C' . $row, $label);
+                $sheet->getStyle('C' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('D' . $row, $valor);
+                $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            // ── Forma de pago ────────────────────────────────────────────────
+            if (!empty($pagos)) {
+                $row += 1;
+                $sheet->setCellValue('A' . $row, 'Forma de pago');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+                foreach ($pagos as $p) {
+                    $sheet->setCellValue('A' . $row, (string) ($p['forma_pago'] ?? ''));
+                    $sheet->setCellValue('C' . $row, (float) ($p['total'] ?? 0));
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+            }
+
+            foreach (['A', 'B', 'C', 'D'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'NotaDebito_' . $numero . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     public function exportXmlDoc(): void
     {
         $this->requireLeer();

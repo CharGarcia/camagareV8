@@ -38,6 +38,9 @@
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="GR_exportarXml()" title="Exportar XML">
                         <i class="bi bi-file-earmark-code"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="GR_exportarExcel()" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-excel"></i>
+                    </button>
                     <?php if ($perm['actualizar']): ?>
                         <button type="button" class="btn btn-outline-warning btn-sm" id="btn-gr-anular" onclick="GR_anular()">
                             <i class="bi bi-slash-circle me-1"></i>Anular

@@ -17,6 +17,7 @@
                 <!-- Barra de acciones superior (PDF / Correo / WhatsApp) -->
                 <div class="d-flex gap-1 align-items-center flex-wrap mb-3 pb-2 border-bottom">
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="camPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="camExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                     <button type="button" class="btn btn-outline-info btn-sm px-2" onclick="camEmail()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="camWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                 </div>
@@ -802,6 +803,11 @@
         const a = document.createElement('a');
         a.href = `${RUTA}/pdf?id=${id}`; a.download = '';
         document.body.appendChild(a); a.click(); a.remove();
+    };
+    window.camExcel = function () {
+        const id = document.getElementById('cam_id').value;
+        if (!id) return Swal.fire('Atención', 'Debe guardar el cambio primero.', 'warning');
+        window.open(`${RUTA}/excel?id=${id}`, '_blank');
     };
     window.camEmail = async function () {
         const id = document.getElementById('cam_id').value;

@@ -23,6 +23,7 @@ class CitaPortalRepository extends BaseRepository
             FROM citas_config_portal p
             JOIN empresas e ON e.id = p.id_empresa
             WHERE p.slug = :slug AND p.activo = true
+              AND e.estado = '1' AND e.eliminado = false
         ");
         $stmt->execute([':slug' => $slug]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);

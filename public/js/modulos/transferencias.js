@@ -83,7 +83,7 @@ function TR_poblarForm(l) {
     document.getElementById('tr-f-tipo').value = l.tipo_lote || 'AMBOS';
     document.getElementById('tr-f-fecha').value = l.fecha_pago ? l.fecha_pago.substring(0, 10) : '';
     document.getElementById('tr-f-forma').value = l.id_forma_pago_origen || '';
-    document.getElementById('tr-f-banco').value = l.id_banco_formato || '';
+    document.getElementById('tr-f-banco').value = l.id_formato_transferencia || '';
     document.getElementById('tr-f-obs').value = l.observaciones || '';
 }
 
@@ -273,7 +273,7 @@ async function TR_guardarCabecera() {
     body.append('tipo_lote', tipo);
     body.append('fecha_pago', fecha);
     body.append('id_forma_pago_origen', forma);
-    body.append('id_banco_formato', banco);
+    body.append('id_formato_transferencia', banco);
     body.append('observaciones', obs);
 
     const btn = document.getElementById('tr-btn-guardar');

@@ -404,6 +404,11 @@
                 a.href = `${urlModulo}/pdfEmpleado?det=${det}`;
                 document.body.appendChild(a); a.click(); a.remove();
             };
+            $('rolemp_excel').onclick = () => {
+                const a = document.createElement('a');
+                a.href = `${urlModulo}/excelEmpleado?det=${det}`;
+                document.body.appendChild(a); a.click(); a.remove();
+            };
             const btnMail = $('rolemp_email');
             btnMail.disabled = !d.email;
             btnMail.title = d.email ? 'Enviar por correo' : 'Sin correo en la ficha';
