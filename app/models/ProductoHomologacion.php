@@ -37,13 +37,37 @@ class ProductoHomologacion extends BaseModel
 
             $sql = "INSERT INTO productos_homologacion (id_empresa, id_proveedor, codigo_proveedor, id_producto, created_by, eliminado)
                     VALUES (?, ?, ?, ?, ?, false)
-                    ON CONFLICT (id_empresa, id_proveedor, codigo_proveedor) 
+                    ON CONFLICT (id_empresa, id_proveedor, codigo_proveedor)
                     DO UPDATE SET id_producto = EXCLUDED.id_producto, eliminado = false";
-            
+
             $st = $db->prepare($sql);
             return $st->execute([(int)$idEmpresa, (int)$idProveedor, $codigo, (int)$idProducto, (int)$idUsuario]);
         } catch (\Exception $e) {
             return false;
         }
+    }
+
+    public function eliminarVinculacion(int $idEmpresa, int $idProveedor, string $codigoProveedor, int $idUsuario): bool
+    {
+        $db = \App\core\Database::getConnection();
+        $codigo = trim($codigoProveedor);
+        if ($codigo === '') return false;
+
+        $sql = "UPDATE productos_homologacion SET
+                    eliminado = true,
+                    deleted_at = CURRENT_TIMESTAMP,
+                    deleted_by = :uid,
+                    updated_at = CURRENT_TIMESTAMP,
+                    updated_by = :uid
+                WHERE id_empresa = :id_e AND id_proveedor = :id_p
+                  AND TRIM(codigo_proveedor) ILIKE :codigo AND eliminado = false";
+
+        $st = $db->prepare($sql);
+        return $st->execute([
+            ':uid'    => $idUsuario,
+            ':id_e'   => $idEmpresa,
+            ':id_p'   => $idProveedor,
+            ':codigo' => $codigo,
+        ]);
     }
 }

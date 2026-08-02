@@ -1098,6 +1098,80 @@ if (!function_exists('enviar_correo_invitacion_videollamada')) {
     }
 }
 
+if (!function_exists('enviar_correo_reporte')) {
+    /**
+     * Envía un reporte generado (PDF y/o Excel) por correo, con adjuntos opcionales.
+     * Usa la configuración de correos_config (codigo: notificaciones).
+     *
+     * @param string[] $destinatarios
+     * @param array    $adjuntos [rutaArchivo => nombreVisible]
+     */
+    function enviar_correo_reporte(array $destinatarios, string $asunto, string $cuerpoHtml, array $adjuntos = []): bool
+    {
+        $destinatarios = array_values(array_filter(
+            array_map('trim', $destinatarios),
+            static fn($c) => filter_var($c, FILTER_VALIDATE_EMAIL) !== false
+        ));
+        if (empty($destinatarios)) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'Sin destinatarios válidos.';
+            return false;
+        }
+
+        $base = \App\services\EmailConfigService::getDataForSendEmail('notificaciones');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config para "notificaciones"';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        if (!file_exists($docMailDir . '/phpmailer.php')) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No se encuentra PHPMailer';
+            return false;
+        }
+
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth = true;
+            $mail->Username = $base['emisor'];
+            $mail->Password = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port = $base['port'];
+            $mail->CharSet = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            foreach ($destinatarios as $c) { $mail->addAddress($c); }
+            $mail->Subject = $asunto;
+            $mail->Body = $cuerpoHtml;
+            $mail->isHTML(true);
+
+            foreach ($adjuntos as $ruta => $nombre) {
+                if (is_file($ruta)) {
+                    $mail->addAttachment($ruta, is_string($nombre) && $nombre !== '' ? $nombre : basename($ruta));
+                }
+            }
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $e) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $e->getMessage();
+            error_log('Mailer Error (ReporteAdjunto): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+}
+
 if (!function_exists('enviar_correo_sri_pendientes')) {
     /**
      * Avisa a la empresa que un comprobante lleva más de una hora enviado al

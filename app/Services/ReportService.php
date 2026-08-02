@@ -23,9 +23,99 @@ class ReportService
     public function exportToExcel(string $filename, array $headers, array $data, string $sheetTitle = 'Reporte', ?string $mainTitle = null): void
     {
         try {
-            // Limpiar búfer de salida para evitar corrupción
-            if (ob_get_length()) ob_end_clean();
+            $spreadsheet = $this->construirSpreadsheet($headers, $data, $sheetTitle, $mainTitle);
+            $this->descargarSpreadsheet($spreadsheet, $filename);
+        } catch (\Throwable $e) {
+            throw new \Exception("Error al generar el reporte Excel: " . $e->getMessage());
+        }
+    }
 
+    /**
+     * Igual que exportToExcel(), pero guarda el archivo en disco en vez de
+     * descargarlo (para adjuntarlo a un correo, por ejemplo).
+     */
+    public function guardarExcelEnArchivo(array $headers, array $data, string $sheetTitle, ?string $mainTitle, string $path): void
+    {
+        $spreadsheet = $this->construirSpreadsheet($headers, $data, $sheetTitle, $mainTitle);
+        (new Xlsx($spreadsheet))->save($path);
+    }
+
+    /**
+     * Envía al navegador un Spreadsheet ya armado (por ejemplo, uno con varias
+     * hojas agregadas vía agregarHoja()). Deja la primera hoja activa.
+     */
+    public function descargarSpreadsheet(Spreadsheet $spreadsheet, string $filename): void
+    {
+        if (ob_get_length()) ob_end_clean();
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $fullFilename = $filename . '_' . date('Ymd_His') . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $fullFilename . '"');
+        header('Cache-Control: max-age=0');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
+
+    /**
+     * Agrega una hoja adicional simple (encabezados + filas, sin título
+     * principal) a un Spreadsheet ya existente. Útil para reportes que
+     * necesitan una segunda hoja de detalle junto al resumen principal.
+     */
+    public function agregarHoja(Spreadsheet $spreadsheet, array $headers, array $data, string $sheetTitle): void
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle(substr($sheetTitle, 0, 31));
+
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '4472C4']
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
+            'borders' => [
+                'allBorders' => ['borderStyle' => Border::BORDER_THIN]
+            ]
+        ];
+
+        $col = 1;
+        foreach ($headers as $headerText) {
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+            $sheet->setCellValueExplicit($colLetter . '1', $headerText, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $col++;
+        }
+        $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastColLetter}1")->applyFromArray($headerStyle);
+
+        $rowNum = 2;
+        foreach ($data as $rowData) {
+            $col = 1;
+            foreach ($rowData as $value) {
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+                if (is_string($value) && ctype_digit($value) && strlen($value) > 10) {
+                    $sheet->setCellValueExplicit($colLetter . $rowNum, $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                } else {
+                    $sheet->setCellValue($colLetter . $rowNum, $value);
+                }
+                $col++;
+            }
+            $rowNum++;
+        }
+
+        for ($i = 1; $i <= count($headers); $i++) {
+            $sheet->getColumnDimensionByColumn($i)->setAutoSize(true);
+        }
+    }
+
+    public function construirSpreadsheet(array $headers, array $data, string $sheetTitle, ?string $mainTitle): Spreadsheet
+    {
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle(substr($sheetTitle, 0, 31));
@@ -92,19 +182,7 @@ class ReportService
                 $sheet->getColumnDimensionByColumn($i)->setAutoSize(true);
             }
 
-            // Configurar cabeceras de descarga
-            $fullFilename = $filename . '_' . date('Ymd_His') . '.xlsx';
-            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment;filename="' . $fullFilename . '"');
-            header('Cache-Control: max-age=0');
-
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-            exit;
-
-        } catch (\Throwable $e) {
-            throw new \Exception("Error al generar el reporte Excel: " . $e->getMessage());
-        }
+            return $spreadsheet;
     }
 
     /**
@@ -122,6 +200,34 @@ class ReportService
         try {
             if (ob_get_length()) ob_end_clean();
 
+            $spreadsheet = $this->construirSpreadsheetSeccionado($headers, $secciones, $sheetTitle, $mainTitle, $filaFinal);
+
+            $fullFilename = $filename . '_' . date('Ymd_His') . '.xlsx';
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $fullFilename . '"');
+            header('Cache-Control: max-age=0');
+
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+            exit;
+
+        } catch (\Throwable $e) {
+            throw new \Exception("Error al generar el reporte Excel: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Igual que exportToExcelSeccionado(), pero guarda el archivo en disco en
+     * vez de descargarlo (para adjuntarlo a un correo, por ejemplo).
+     */
+    public function guardarExcelSeccionadoEnArchivo(array $headers, array $secciones, string $sheetTitle, ?string $mainTitle, string $path, ?array $filaFinal = null): void
+    {
+        $spreadsheet = $this->construirSpreadsheetSeccionado($headers, $secciones, $sheetTitle, $mainTitle, $filaFinal);
+        (new Xlsx($spreadsheet))->save($path);
+    }
+
+    private function construirSpreadsheetSeccionado(array $headers, array $secciones, string $sheetTitle, ?string $mainTitle, ?array $filaFinal): Spreadsheet
+    {
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle(substr($sheetTitle, 0, 31));
@@ -223,17 +329,6 @@ class ReportService
                 $sheet->getColumnDimensionByColumn($i)->setAutoSize(true);
             }
 
-            $fullFilename = $filename . '_' . date('Ymd_His') . '.xlsx';
-            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment;filename="' . $fullFilename . '"');
-            header('Cache-Control: max-age=0');
-
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-            exit;
-
-        } catch (\Throwable $e) {
-            throw new \Exception("Error al generar el reporte Excel: " . $e->getMessage());
-        }
+            return $spreadsheet;
     }
 }

@@ -217,6 +217,22 @@ class VendedorRepository extends BaseRepository
     }
 
     /**
+     * Vendedor vinculado a una cuenta de usuario (vendedores.id_usuario). Se usa
+     * para restringir reportes a "mis ventas" cuando el usuario no tiene acceso
+     * total sobre el submódulo.
+     */
+    public function getPorUsuario(int $idEmpresa, int $idUsuario): ?array
+    {
+        $sql = "SELECT id, nombre FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND id_usuario = :id_usuario AND eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':id_usuario' => $idUsuario]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
      * Cuenta cuántos clientes activos tiene asignados el vendedor.
      */
     public function contarClientesAsignados(int $id, int $idEmpresa): int

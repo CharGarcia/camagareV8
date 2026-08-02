@@ -523,6 +523,14 @@ return [
         'id_submodulo' => 38,
         'legacy_rutas' => [],
     ],
+    'modulos/reporte_ventas_vendedor' => [
+        // Ventas netas (facturas − NC) filtrables por vendedor/producto/marca/
+        // categoría. Registrar el submódulo en submodulos_menu (id_modulo = 9,
+        // Reportes) con ruta = 'modulos/reporte_ventas_vendedor', y actualizar
+        // este id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/reporte_ingresos_egresos' => [
         // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
         // ruta = 'modulos/reporte_ingresos_egresos', y actualizar este id_submodulo
@@ -556,6 +564,16 @@ return [
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
+    'modulos/producto_mas_vendido' => [
+        // Ranking de productos más vendidos (cantidad) con filtros de cliente,
+        // producto, tipo de documento (Facturas/Recibos), Top N y período; export
+        // a PDF/Excel y envío por correo. Registrar el submódulo en
+        // submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/producto_mas_vendido', y actualizar este id_submodulo
+        // con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/declaracion_retenciones' => [
         // Formulario 103 SRI (Declaración de Retenciones en la Fuente del Impuesto
         // a la Renta). Registrar el submódulo en submodulos_menu (id_modulo = 9,
@@ -577,6 +595,26 @@ return [
         // ruta = 'modulos/reporte_inventarios' (ver database/migrations/
         // 20260712_create_reporte_inventarios_submodulo.sql), y actualizar este
         // id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    'modulos/mejor_cliente' => [
+        // Ranking de clientes por monto neto o cantidad de documentos (Facturas +
+        // Recibos − NC de venta). Registrar el submódulo en submodulos_menu
+        // (id_modulo = 9, Reportes) con ruta = 'modulos/mejor_cliente', y
+        // actualizar este id_submodulo con el id real. Asignar permisos en
+        // /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    'modulos/reporte_cartera' => [
+        // Estado de cuenta cronológico (kardex) de un cliente o proveedor:
+        // facturación/compras, cobros/pagos, retenciones y NC/ND, con saldo
+        // corriendo; filtros por entidad (multi-selección) y fecha/mes/año;
+        // export a PDF/Excel y envío por correo. Registrar el submódulo en
+        // submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/reporte_cartera', y actualizar este id_submodulo
+        // con el id real. Asignar permisos en /config/permisos-modulos.
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],

@@ -1526,4 +1526,49 @@ class ComprasController extends BaseModuloController
         }
         exit;
     }
+
+    /**
+     * Quita la vinculación (homologación) de un código de proveedor con un producto del
+     * catálogo, para permitir corregirla desde la pestaña Inventario de la compra cuando
+     * el usuario se equivocó al vincular. Solo aplica a líneas aún NO procesadas a
+     * inventario (esa validación la hace el frontend antes de mostrar el botón); el
+     * id_producto ya persistido en compras_detalle/inventario_kardex de líneas procesadas
+     * no se toca.
+     */
+    public function eliminarVinculacionAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int)$_SESSION['id_empresa'];
+            $idUsuario = (int)$_SESSION['id_usuario'];
+            $idProv    = (int)($_POST['id_proveedor'] ?? 0);
+            $codigoProv = trim($_POST['codigo_proveedor'] ?? '');
+
+            if (!$idProv || $codigoProv === '') {
+                throw new \Exception('Datos insuficientes para quitar la vinculación.');
+            }
+
+            $homologModel = new \App\models\ProductoHomologacion();
+            $ok = $homologModel->eliminarVinculacion($idEmpresa, $idProv, $codigoProv, $idUsuario);
+
+            if ($ok) {
+                (new \App\Services\LogSistemaService())->registrar(
+                    $idUsuario,
+                    $idEmpresa,
+                    'eliminar',
+                    'productos_homologacion',
+                    null,
+                    ['id_proveedor' => $idProv, 'codigo_proveedor' => $codigoProv],
+                    ['eliminado' => true]
+                );
+            }
+
+            echo json_encode(['ok' => true, 'mensaje' => 'Vinculación eliminada correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
 }

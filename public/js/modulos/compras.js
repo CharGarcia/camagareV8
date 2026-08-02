@@ -873,58 +873,11 @@ window.CMG_seleccionarProducto = function(p) {
                 descInput.value = p.nombre;
             }
 
-            const trInv = document.querySelector(`#mc-tbody-inventario tr[data-index="${_idxAVincularInv}"]`);
-            if (trInv) {
-                trInv.querySelector('.input-inv-id-producto').value = p.id;
-                trInv.dataset.idProducto = p.id;
-
-                const taNombre = trInv.querySelector('.mc-nombre-inv');
-                if (taNombre) {
-                    taNombre.classList.add('text-primary', 'fw-bold');
-                    taNombre.value = p.nombre;
-                    mcAutosizeTextareaInv(taNombre);
-                    if (!taNombre.previousElementSibling || !taNombre.previousElementSibling.classList.contains('bi-tag-fill')) {
-                        const icon = document.createElement('i');
-                        icon.className = 'bi bi-tag-fill me-1 mt-1';
-                        taNombre.parentElement.insertBefore(icon, taNombre);
-                    }
-
-                    // Mostrar descripción original del documento debajo
-                    const divCont = taNombre.closest('.fw-medium.small');
-                    const descOriginal = tr.dataset.descripcionOriginal || '';
-                    if (divCont && descOriginal && descOriginal !== p.nombre) {
-                        let smallDesc = divCont.querySelector('.small-original');
-                        if (!smallDesc) {
-                            smallDesc = document.createElement('small');
-                            smallDesc.className = 'text-muted d-block small-original';
-                            smallDesc.style.fontSize = '0.65rem';
-                            smallDesc.style.fontStyle = 'italic';
-                            divCont.appendChild(smallDesc);
-                        }
-                        smallDesc.textContent = `Documento: ${descOriginal}`;
-                    }
-                }
-
-                const selMedida = trInv.querySelector('.input-inv-medida');
-                if (selMedida) {
-                    const idTipoNuevo = p.id_tipo_medida || '0';
-                    const opc = (window.CMG_unidadesMedida || [])
-                        .filter(u => u.id_tipo == idTipoNuevo || idTipoNuevo == '0')
-                        .map(u => `<option value="${u.id}">${u.nombre} (${u.abreviatura})</option>`)
-                        .join('');
-                    selMedida.innerHTML = opc;
-                    if (p.id_medida) selMedida.value = p.id_medida;
-                }
-
-                const selBodega = trInv.querySelector('.input-inv-bodega');
-                if (selBodega && !selBodega.value) {
-                    const defBod = (window.CMG_bodegas || []).find(b => b.es_default);
-                    if (defBod) selBodega.value = defBod.id;
-                }
-
-                const vincCont = trInv.querySelector('.vinculacion-inline-container');
-                if (vincCont) vincCont.classList.add('d-none');
-            }
+            // Re-render completo de la fila en Inventario (en vez de parchear el DOM a mano)
+            // para que se apliquen también el botón "Quitar vinculación" y el resto de reglas
+            // de la fila (medida por defecto, bodega por defecto, etc.) igual que en cualquier
+            // otro camino de vinculación.
+            mcSincronizarInventario();
 
             const idProv = document.getElementById('mcIdProveedor').value;
             const codProv = tr.querySelector('.input-codigo')?.value || tr.dataset.descripcionOriginal;
@@ -1106,6 +1059,74 @@ window.CMG_cancelarVinculacionInline = function(idx) {
         _vincListaAbierta = null;
         _vincInputAbierta = null;
     }
+};
+
+/**
+ * Quita la vinculación de un producto en la pestaña Inventario (por si el usuario se
+ * equivocó al vincular). Solo se ofrece en líneas aún sin nada procesado a inventario;
+ * lo procesado ya quedó registrado con el producto original y no se toca.
+ */
+window.mcQuitarVinculacionInv = async function(idx) {
+    const trInv = document.querySelector(`#mc-tbody-inventario tr[data-index="${idx}"]`);
+    if (!trInv) return;
+
+    const nombre = trInv.querySelector('.mc-nombre-inv')?.value || 'este producto';
+    const codigo = trInv.dataset.codigo || '';
+    const idProv = document.getElementById('mcIdProveedor')?.value || '';
+
+    const confirm = await Swal.fire({
+        title: '¿Quitar vinculación?',
+        html: `Se quitará la vinculación de <strong>${_esc(nombre)}</strong> con el producto del catálogo y se olvidará la homologación guardada para este código de proveedor, para poder buscar y vincular el producto correcto.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, quitar',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!confirm.isConfirmed) return;
+
+    if (idProv && codigo) {
+        try {
+            const fd = new FormData();
+            fd.append('id_proveedor', idProv);
+            fd.append('codigo_proveedor', codigo);
+            await fetch(`${window.CMG_urlBase}/eliminarVinculacionAjax`, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+        } catch (err) { console.error('Error al eliminar homologación:', err); }
+    }
+
+    // Limpiar el vínculo en memoria (Detalle + Inventario); se persiste al Guardar la
+    // compra, igual que ocurre al vincular desde CMG_seleccionarProducto.
+    const trDet = document.querySelector(`#tbodyDetalle tr[data-idx="${idx}"]`);
+    if (trDet) {
+        const inputIdProd = trDet.querySelector('.input-id-producto');
+        if (inputIdProd) inputIdProd.value = '';
+        const inputIdMedida = trDet.querySelector('.input-id-medida');
+        if (inputIdMedida) inputIdMedida.value = '';
+        const inputIdTipoMedida = trDet.querySelector('.input-id-tipo-medida');
+        if (inputIdTipoMedida) inputIdTipoMedida.value = '';
+        trDet.dataset.productoNombre = '';
+    }
+
+    // Misma secuencia que al cambiar a la pestaña Inventario (ver listener de
+    // 'shown.bs.tab'): refrescar primero el status procesado y luego re-sincronizar,
+    // para evitar que quede una sincronización a medias con datos obsoletos.
+    window._mcSincronizando = false;
+    if (typeof mcCargarStatusInventario === 'function') {
+        await mcCargarStatusInventario();
+    }
+    mcSincronizarInventario();
+
+    Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Vinculación eliminada',
+        showConfirmButton: false,
+        timer: 2000
+    });
 };
 
 
@@ -2096,7 +2117,10 @@ window.mcSincronizarInventario = function(forceReset = false) {
     window._mcSincronizando = true;
 
     const tbody = document.getElementById('mc-tbody-inventario');
-    if (!tbody) return;
+    if (!tbody) {
+        window._mcSincronizando = false;
+        return;
+    }
 
     const itemsCompra = [];
     document.querySelectorAll('#tbodyDetalle tr').forEach((tr, i) => {
@@ -2137,6 +2161,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
     if (itemsCompra.length === 0) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted"><i class="bi bi-box-seam d-block fs-3 mb-2"></i>Agregue productos a la compra para verlos aquí</td></tr>`;
         document.getElementById('mc-inventario-count').textContent = '0';
+        window._mcSincronizando = false;
         return;
     }
 
@@ -2207,7 +2232,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
         const opcBodegaLocal = (window.CMG_bodegas || []).map(b => `<option value="${b.id}" ${b.id == targetBodegaId ? 'selected' : ''}>${b.nombre}</option>`).join('');
         
         return `
-            <tr class="row-inv ${isDisabled ? 'table-success bg-opacity-10' : ''}" data-index="${item.index}" data-id-producto="${item.id_producto || ''}" data-id-detalle="${item.id_detalle || ''}">
+            <tr class="row-inv ${isDisabled ? 'table-success bg-opacity-10' : ''}" data-index="${item.index}" data-id-producto="${item.id_producto || ''}" data-id-detalle="${item.id_detalle || ''}" data-codigo="${_esc(item.codigo || '')}">
                 <input type="hidden" class="input-inv-id-producto" value="${item.id_producto || ''}">
                 <td class="ps-3 py-2">
                     <div class="fw-medium small">
@@ -2215,6 +2240,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
                             ${(item.id_producto && item.id_producto != '0') ? '<i class="bi bi-tag-fill me-1 mt-1"></i>' : ''}
                             <textarea class="form-control form-control-sm border-0 bg-transparent p-0 mc-nombre-inv ${(item.id_producto && item.id_producto != '0') ? 'text-primary fw-bold' : ''}" readonly rows="1" style="resize:none; overflow:hidden; flex:1 1 auto; min-width:0; font-size:.8rem; line-height:1.25;">${(item.id_producto && item.id_producto != '0') ? _esc(item.producto_nombre || item.descripcion) : _esc(item.descripcion)}</textarea>
                             ${procesadoEnFila >= item.cantidad ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 mt-1"><i class="bi bi-check-all me-1"></i>Enviado</span>' : ''}
+                            ${(item.id_producto && item.id_producto != '0' && procesadoEnFila === 0) ? `<button type="button" class="btn btn-xs btn-link text-danger p-0 ms-1 mt-1" style="font-size:0.8rem; line-height:1;" title="Quitar vinculación (producto equivocado)" onclick="mcQuitarVinculacionInv(${item.index})"><i class="bi bi-x-circle"></i></button>` : ''}
                         </div>
                         ${(procesadoEnFila > 0 && procesadoEnFila < item.cantidad) ? `<div class="text-warning x-small mt-1 fw-bold" style="font-size:0.7rem;"><i class="bi bi-info-circle me-1"></i>Saldo por enviar a inventario: ${(item.cantidad - procesadoEnFila).toFixed(2)}</div>` : ''}
                         ${(item.id_producto && item.id_producto != '0') && item.producto_nombre && item.producto_nombre !== item.descripcion_original ? 
