@@ -10,6 +10,8 @@ use PDO;
 
 class ProformaRepository extends BaseRepository
 {
+    private array $colsCache = [];
+
     public function __construct()
     {
         parent::__construct('proformas_cabecera');
@@ -20,6 +22,19 @@ class ProformaRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st;
+    }
+
+    /** Columnas reales de una tabla (para detectar campos opcionales aún no migrados). */
+    private function columnasExistentes(string $tabla): array
+    {
+        if (!isset($this->colsCache[$tabla])) {
+            $st = $this->db->prepare(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ? AND table_schema = 'public'"
+            );
+            $st->execute([$tabla]);
+            $this->colsCache[$tabla] = $st->fetchAll(PDO::FETCH_COLUMN);
+        }
+        return $this->colsCache[$tabla];
     }
 
     public function getListado(
@@ -287,7 +302,8 @@ class ProformaRepository extends BaseRepository
 
     public function getDetalles(int $idProforma): array
     {
-        $sql = "SELECT d.*, COALESCE(p.nombre, d.descripcion) AS producto_nombre, p.codigo AS producto_codigo
+        $sql = "SELECT d.*, COALESCE(p.nombre, d.descripcion) AS producto_nombre, p.codigo AS producto_codigo,
+                       p.imagen AS producto_imagen
                 FROM proformas_detalle d
                 LEFT JOIN productos p ON d.id_producto = p.id
                 WHERE d.id_proforma = ?
@@ -321,12 +337,12 @@ class ProformaRepository extends BaseRepository
 
     public function insertDetalle(array $data): int
     {
-        $sql = "INSERT INTO proformas_detalle (
-                    id_proforma, id_producto, id_unidad_medida,
-                    codigo_principal, codigo_auxiliar, descripcion,
-                    cantidad, precio_unitario, descuento, precio_total_sin_impuesto, id_tarifa_iva
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id";
-        return (int) $this->query($sql, [
+        $cols = [
+            'id_proforma', 'id_producto', 'id_unidad_medida',
+            'codigo_principal', 'codigo_auxiliar', 'descripcion',
+            'cantidad', 'precio_unitario', 'descuento', 'precio_total_sin_impuesto', 'id_tarifa_iva',
+        ];
+        $params = [
             (int) $data['id_proforma'],
             !empty($data['id_producto']) ? (int) $data['id_producto'] : null,
             !empty($data['id_unidad_medida']) ? (int) $data['id_unidad_medida'] : null,
@@ -338,7 +354,20 @@ class ProformaRepository extends BaseRepository
             $data['descuento'],
             $data['precio_total_sin_impuesto'],
             (int) ($data['id_tarifa_iva'] ?? 0),
-        ])->fetchColumn();
+        ];
+
+        // Campo opcional (requiere la migración proformas_detalle_info_adicional.sql);
+        // detectado en runtime para no romper instalaciones donde aún no se ha aplicado.
+        if (in_array('info_adicional', $this->columnasExistentes('proformas_detalle'), true)) {
+            $cols[]   = 'info_adicional';
+            $params[] = !empty($data['adicional']) ? (string) $data['adicional'] : null;
+        }
+
+        $colSql = implode(', ', $cols);
+        $valSql = implode(', ', array_fill(0, count($params), '?'));
+        $sql    = "INSERT INTO proformas_detalle ({$colSql}) VALUES ({$valSql}) RETURNING id";
+
+        return (int) $this->query($sql, $params)->fetchColumn();
     }
 
     public function insertImpuesto(array $data): void

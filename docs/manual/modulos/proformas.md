@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel
-version: 1.2
+etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional
+version: 1.3
 orden: 15
 estado: activo
 ---
@@ -68,6 +68,28 @@ de la empresa, número y fecha de la proforma, cliente, el detalle de ítems
 los totales, la información adicional y las observaciones. Igual que el PDF,
 no está disponible en una proforma nueva sin guardar.
 
+## Información adicional por producto e Info Productos
+
+Cada línea del detalle tiene una columna **Adicional** para anotar un dato libre
+sobre ese ítem (por ejemplo color, talla, condición o una aclaración para el
+cliente). Ese mismo dato se ve también en la pestaña **Info Productos**, que
+muestra en formato de catálogo — con la imagen guardada en la ficha del
+producto — cada línea de la proforma; el campo de información adicional se
+puede editar desde cualquiera de las dos pestañas, es el mismo dato. Los ítems
+sin producto vinculado (líneas libres) o sin imagen cargada se muestran con un
+marcador genérico.
+
+Como cualquier otra pestaña, **Info Productos** se puede ocultar desde el
+engranaje junto a las pestañas si no se usa.
+
+## Ficha de productos en el correo
+
+Al enviar la proforma por correo, aparece la opción **"Adjuntar ficha de
+productos con imágenes"**. Si se marca, además del PDF de la proforma se envía
+un segundo PDF tipo catálogo con la imagen, código/nombre, cantidad e
+información adicional de cada línea — útil para que el cliente reconozca
+visualmente lo cotizado. Es opcional y no se adjunta si no se marca la casilla.
+
 ## Enviar la proforma por WhatsApp
 
 Desde la proforma guardada, el botón de **WhatsApp** la manda al cliente con su
@@ -108,6 +130,9 @@ comercial.
 
 ## Historial de cambios
 
+- **1.3** — Pestaña **Info Productos** (catálogo con imagen por línea), campo de
+  información adicional por producto persistido, y ficha de productos con
+  imágenes como adjunto opcional del correo.
 - **1.2** — Se agrega el botón **Excel** para exportar la proforma a `.xlsx`.
 - **1.1** — Se documenta el envío de la proforma por WhatsApp y la plantilla del
   sistema `proforma`.

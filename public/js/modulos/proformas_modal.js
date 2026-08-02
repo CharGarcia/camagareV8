@@ -120,6 +120,9 @@
         const tbodyFac = $id('pf_tbodyFacturas');
         if (tbodyFac) tbodyFac.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-3">Sin facturas asociadas</td></tr>';
 
+        // Info Productos: se reconstruye vacía (una fila sin descripción aún)
+        _renderInfoProductos();
+
         // Badge estado
         const badge = $id('pf_estadoBadge');
         badge.className = 'badge d-none';
@@ -387,6 +390,7 @@
                 value="${_esc(data.descripcion || '')}" placeholder="Buscar producto o escribe descripción...">
             <input type="hidden" class="input-id-producto" value="${data.id_producto || ''}">
             <input type="hidden" class="input-codigo" value="${_esc(data.codigo_principal || '')}">
+            <input type="hidden" class="input-imagen" value="${_esc(data.producto_imagen || data.imagen || '')}">
         </td>
         <td>
             <input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic"
@@ -568,6 +572,8 @@
         tr.querySelector('.input-id-producto').value = p.id    || '';
         tr.querySelector('.input-codigo').value      = p.codigo || '';
         tr.querySelector('.input-descripcion').value = p.nombre || '';
+        const inpImg = tr.querySelector('.input-imagen');
+        if (inpImg) inpImg.value = p.imagen || '';
         tr.querySelector('.input-cantidad').value    = '1.00';
         tr.querySelector('.input-precio').value      = pSin.toFixed(4);
         tr.querySelector('.input-precio-iva').value  = pCon.toFixed(4);
@@ -855,6 +861,54 @@
         }
     }
 
+    /* ── Pestaña "Info Productos" ───────────────────────────────
+     * Se reconstruye a partir del DOM de la pestaña "Proforma" (misma fuente de
+     * verdad), así que siempre refleja lo último aunque el usuario haya editado
+     * la lista de detalle sin guardar todavía. El textarea de información
+     * adicional escribe en vivo sobre el input .input-adicional de su propia fila. */
+    function _renderInfoProductos() {
+        const cont = $id('pf_gridInfoProductos');
+        if (!cont) return;
+
+        const filas = Array.from(document.querySelectorAll('#pf_tbodyDetalle .row-detalle'))
+            .filter(tr => tr.querySelector('.input-descripcion')?.value.trim());
+
+        if (!filas.length) {
+            cont.innerHTML = '<div class="text-center text-muted small py-4">Agregue productos en la pestaña "Proforma" para verlos aquí.</div>';
+            return;
+        }
+
+        const base = (typeof BASE_URL !== 'undefined' ? BASE_URL : (typeof B_URL !== 'undefined' ? B_URL : ''));
+        cont.innerHTML = '';
+        filas.forEach(tr => {
+            const codigo   = tr.querySelector('.input-codigo')?.value.trim() || '';
+            const nombre   = tr.querySelector('.input-descripcion')?.value   || '';
+            const cantidad = tr.querySelector('.input-cantidad')?.value      || '';
+            const imagen   = tr.querySelector('.input-imagen')?.value.trim() || '';
+            const inpAdic  = tr.querySelector('.input-adicional');
+
+            const card = document.createElement('div');
+            card.className = 'pf-card-producto';
+            card.innerHTML = `
+                ${imagen
+                    ? `<img class="pf-card-producto-img" src="${_esc(base + '/' + imagen)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pf-card-producto-sinimg',innerHTML:'<i class=\\'bi bi-image\\' style=\\'font-size:2rem;opacity:.4\\'></i>'}))">`
+                    : `<div class="pf-card-producto-sinimg"><i class="bi bi-image" style="font-size:1.1rem;opacity:.4"></i></div>`}
+                <div class="pf-card-producto-body">
+                    <div class="fw-bold mb-1">${codigo ? _esc(codigo) + ' — ' : ''}${_esc(nombre)}</div>
+                    <div class="text-muted mb-1" style="font-size:0.62rem;">Cant.: ${_esc(cantidad)}</div>
+                    <textarea class="form-control form-control-sm pf-card-producto-adicional" rows="1"
+                        placeholder="Info. adicional...">${_esc(inpAdic?.value || '')}</textarea>
+                </div>`;
+
+            const ta = card.querySelector('.pf-card-producto-adicional');
+            ta.addEventListener('input', () => {
+                if (inpAdic) inpAdic.value = ta.value;
+            });
+
+            cont.appendChild(card);
+        });
+    }
+
     async function _cargarProforma(id) {
         try {
             const data = await (await fetch(`${urlBase()}/getProformaAjax?id=${id}`)).json();
@@ -939,6 +993,7 @@
             }
 
             _cargarFacturas(id);
+            _renderInfoProductos();
         } catch(e) {
             console.error(e);
             toast('Error de conexión', 'error');
@@ -1354,21 +1409,30 @@
             const correoActual = ($id('pf_clienteEmail')?.textContent || '').trim();
             const modalEl = document.getElementById('modalProforma');
 
-            const { value: correos, isConfirmed } = await Swal.fire({
+            const { value: formValues, isConfirmed } = await Swal.fire({
                 title: 'Enviar proforma por correo',
-                input: 'text',
-                inputLabel: 'Correos electrónicos (separados por coma o espacio)',
-                inputValue: correoActual,
-                inputPlaceholder: 'cliente@correo.com',
+                html: `
+                    <label class="form-label small fw-bold text-start d-block mb-1">Correos electrónicos (separados por coma o espacio)</label>
+                    <input id="pf-swal-correos" class="swal2-input m-0" style="width:100%;" value="${_esc(correoActual)}" placeholder="cliente@correo.com">
+                    <div class="form-check text-start mt-3">
+                        <input class="form-check-input" type="checkbox" id="pf-swal-ficha">
+                        <label class="form-check-label small" for="pf-swal-ficha">
+                            Adjuntar ficha de productos con imágenes
+                        </label>
+                    </div>`,
                 target: modalEl || undefined,
                 showCancelButton: true,
                 confirmButtonText: '<i class="bi bi-send me-1"></i> Enviar',
                 cancelButtonText: 'Cancelar',
-                inputValidator: (value) => {
-                    if (!value || !value.trim()) return 'Ingrese al menos un correo válido.';
+                focusConfirm: false,
+                preConfirm: () => {
+                    const correos = document.getElementById('pf-swal-correos')?.value.trim() || '';
+                    if (!correos) { Swal.showValidationMessage('Ingrese al menos un correo válido.'); return false; }
+                    return { correos, adjuntarFicha: !!document.getElementById('pf-swal-ficha')?.checked };
                 }
             });
             if (!isConfirmed) return;
+            const { correos, adjuntarFicha } = formValues;
 
             Swal.fire({
                 title: 'Enviando correo...',
@@ -1382,6 +1446,7 @@
                 const fd = new FormData();
                 fd.append('id', id);
                 fd.append('correos', correos);
+                fd.append('adjuntarFicha', adjuntarFicha ? '1' : '0');
 
                 const resp = await fetch(`${urlBase()}/enviarCorreoAjax`, {
                     method: 'POST',
@@ -1674,6 +1739,11 @@
         } else {
             document.querySelector('#pf_tbodyDetalle .input-descripcion')?.focus();
         }
+    });
+
+    /* ── Refrescar "Info Productos" al abrir esa pestaña ────── */
+    document.addEventListener('shown.bs.tab', e => {
+        if (e.target?.id === 'pf-tab-productos-btn') _renderInfoProductos();
     });
 
     /* ── Limpiar dropdowns del body al cerrar el modal ──────── */

@@ -673,7 +673,8 @@ class EnvioDocumentosSRIService
         string $cuerpoHtml,
         string $pdfString,
         string $baseName,
-        string $empresaNombre = ''
+        string $empresaNombre = '',
+        array  $adjuntosExtra = []
     ): bool {
         $empresaRepo  = new EmpresaRepository();
         $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
@@ -713,10 +714,15 @@ class EnvioDocumentosSRIService
             ];
         }
 
-        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $cuerpoHtml, $baseName, '', $pdfString);
+        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $cuerpoHtml, $baseName, '', $pdfString, $adjuntosExtra);
     }
 
-    private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString): bool
+    /**
+     * @param array $adjuntosExtra Lista de adjuntos adicionales opcionales, cada uno
+     *                             ['contenido' => string, 'nombre' => string]. Ej.: la
+     *                             ficha de productos con imágenes de una Proforma.
+     */
+    private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString, array $adjuntosExtra = []): bool
     {
         $docMailDir = MVC_APP . '/lib/mail';
         if (!file_exists($docMailDir . '/phpmailer.php')) {
@@ -762,6 +768,10 @@ class EnvioDocumentosSRIService
             }
             if (!empty($pdfString)) {
                 $mail->addStringAttachment($pdfString, $baseName . '.pdf', 'base64', 'application/pdf');
+            }
+            foreach ($adjuntosExtra as $adj) {
+                if (empty($adj['contenido']) || empty($adj['nombre'])) continue;
+                $mail->addStringAttachment($adj['contenido'], $adj['nombre'], 'base64', 'application/pdf');
             }
 
             return $mail->send();

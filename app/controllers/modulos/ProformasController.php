@@ -537,9 +537,10 @@ class ProformasController extends BaseModuloController
         $this->requireLeer();
         header('Content-Type: application/json');
 
-        $id        = (int) ($_POST['id'] ?? 0);
-        $correos   = trim((string) ($_POST['correos'] ?? ''));
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id            = (int) ($_POST['id'] ?? 0);
+        $correos       = trim((string) ($_POST['correos'] ?? ''));
+        $adjuntarFicha = !empty($_POST['adjuntarFicha']) && $_POST['adjuntarFicha'] !== '0' && $_POST['adjuntarFicha'] !== 'false';
+        $idEmpresa     = (int) $_SESSION['id_empresa'];
 
         if (!$id)           { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
         if ($correos === '') { echo json_encode(['ok' => false, 'mensaje' => 'Debe indicar al menos un correo.']); exit; }
@@ -587,6 +588,16 @@ class ProformasController extends BaseModuloController
                 ($mostrarBoton ? $urlAprobar : '')
             );
 
+            $adjuntosExtra = [];
+            if ($adjuntarFicha) {
+                $detallesFicha = $this->repository->getDetalles($id);
+                $fichaPdf = (new \App\Services\modulos\ProformaFichaProductosPdfService())
+                    ->generar($cabecera, $detallesFicha, $empresa, 'S');
+                if ($fichaPdf !== '') {
+                    $adjuntosExtra[] = ['contenido' => $fichaPdf, 'nombre' => "Ficha_Productos_{$numero}.pdf"];
+                }
+            }
+
             $emailSvc = new \App\Services\EnvioDocumentosSRIService();
             $enviado  = $emailSvc->enviarPdfSimple(
                 $idEmpresa,
@@ -596,7 +607,8 @@ class ProformasController extends BaseModuloController
                 $cuerpo,
                 $pdf,
                 "Proforma_{$numero}",
-                (string) $empresaNombre
+                (string) $empresaNombre,
+                $adjuntosExtra
             );
 
             if ($enviado) {

@@ -42,6 +42,28 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
         box-shadow: 0 4px 16px rgba(0,0,0,.12);
         top: 100%; left: 0;
     }
+    /* Pestaña "Info Productos": catálogo con imagen del producto */
+    .pf-grid-productos {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 8px;
+    }
+    .pf-card-producto {
+        border: 1px solid #dee2e6; border-radius: 6px; background: #fff;
+        overflow: hidden; display: flex; flex-direction: column;
+    }
+    .pf-card-producto-img {
+        width: 100%; height: 65px; object-fit: contain; background: #f8f9fa;
+        border-bottom: 1px solid #eee;
+    }
+    .pf-card-producto-sinimg {
+        width: 100%; height: 65px; display: flex; align-items: center; justify-content: center;
+        background: #f8f9fa; color: #adb5bd; border-bottom: 1px solid #eee;
+    }
+    .pf-card-producto-body { padding: 5px 6px; font-size: 0.68rem; }
+    .pf-card-producto-adicional {
+        font-size: 0.66rem; resize: none; min-height: 32px;
+    }
 </style>
 
 <!-- Modal Proforma -->
@@ -141,10 +163,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                 <i class="bi bi-receipt me-1"></i>Facturas
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link py-2 small" id="pf-tab-productos-btn"
+                               data-bs-toggle="tab" data-bs-target="#pf-tab-productos" href="#pf-tab-productos" role="tab" style="white-space:nowrap;">
+                                <i class="bi bi-images me-1"></i>Info Productos
+                            </a>
+                        </li>
                     </ul>
                     <div class="ms-auto pb-1">
                         <?php
-                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['pf-tab-facturas' => 'Facturas'], $vistaConfigPF, 'modulos/proformas');
+                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas([
+                            'pf-tab-facturas'  => 'Facturas',
+                            'pf-tab-productos' => 'Info Productos',
+                        ], $vistaConfigPF, 'modulos/proformas');
                         ?>
                     </div>
                 </div>
@@ -414,6 +445,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             </div>
                         </div>
                     </div><!-- /pf-tab-facturas -->
+
+                    <!-- ── TAB INFO PRODUCTOS ──────────────────── -->
+                    <div class="tab-pane fade" id="pf-tab-productos" role="tabpanel">
+                        <div class="p-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-images me-2 text-primary"></i>
+                                <h6 class="mb-0 fw-bold text-secondary small">Información de productos</h6>
+                                <span class="ms-2 text-muted small">
+                                    Imagen del catálogo y datos de cada línea. La información adicional se puede
+                                    editar aquí o en la pestaña Proforma; ambas comparten el mismo dato y se
+                                    incluyen en la ficha de productos adjunta al enviar el correo.
+                                </span>
+                            </div>
+                            <div id="pf_gridInfoProductos" class="pf-grid-productos"></div>
+                        </div>
+                    </div><!-- /pf-tab-productos -->
                 </div><!-- /tab-content -->
             </div><!-- /modal-body -->
 
