@@ -18,10 +18,10 @@ class ProformaFichaProductosPdfService
     private array $grisTexto  = [110, 116, 124];
     private array $grisFondo  = [246, 247, 249];
 
-    private const COLS   = 2;
-    private const GAP    = 6.0;
-    private const CARD_H = 82.0;
-    private const IMG_H  = 42.0;
+    private const COLS   = 4;
+    private const GAP    = 5.0;
+    private const CARD_H = 41.0;
+    private const IMG_H  = 20.0;
 
     /** Devuelve '' si no hay líneas con descripción (no tiene sentido generar el PDF). */
     public function generar(array $cabecera, array $detalles, array $empresa, string $outputDest = 'S'): string
@@ -101,7 +101,7 @@ class ProformaFichaProductosPdfService
         $pdf->SetLineWidth(0.2);
         $pdf->RoundedRect($x, $y, $w, self::CARD_H, 1.5, '1111', 'D');
 
-        $pad     = 3.0;
+        $pad     = 2.0;
         $boxImgW = $w - $pad * 2;
         $imgTop  = $y + $pad;
 
@@ -115,12 +115,12 @@ class ProformaFichaProductosPdfService
             $pdf->SetFillColor(...$this->grisFondo);
             $pdf->RoundedRect($x + $pad, $imgTop, $boxImgW, self::IMG_H, 1, '1111', 'F');
             $pdf->SetTextColor(...$this->grisTexto);
-            $pdf->SetFont('helvetica', 'I', 8);
-            $pdf->SetXY($x + $pad, $imgTop + self::IMG_H / 2 - 2);
-            $pdf->Cell($boxImgW, 4, 'Sin imagen', 0, 0, 'C');
+            $pdf->SetFont('helvetica', 'I', 6);
+            $pdf->SetXY($x + $pad, $imgTop + self::IMG_H / 2 - 1.5);
+            $pdf->Cell($boxImgW, 3, 'Sin imagen', 0, 0, 'C');
         }
 
-        $yTexto = $imgTop + self::IMG_H + 2.5;
+        $yTexto = $imgTop + self::IMG_H + 1.3;
 
         // Código + nombre
         $codigo = trim((string) ($d['codigo_principal'] ?? ''));
@@ -128,27 +128,27 @@ class ProformaFichaProductosPdfService
         $titulo = $codigo !== '' ? ($codigo . ' — ' . $nombre) : $nombre;
 
         $pdf->SetTextColor(40, 44, 52);
-        $pdf->SetFont('helvetica', 'B', 8.3);
+        $pdf->SetFont('helvetica', 'B', 6.3);
         $pdf->SetXY($x + $pad, $yTexto);
-        $pdf->MultiCell($w - $pad * 2, 3.6, $titulo, 0, 'L', false, 1, '', '', true, 0, false, true, 7.2, 'T');
+        $pdf->MultiCell($w - $pad * 2, 2.6, $titulo, 0, 'L', false, 1, '', '', true, 0, false, true, 5.2, 'T');
 
         // Cantidad
         $pdf->SetTextColor(...$this->grisTexto);
-        $pdf->SetFont('helvetica', '', 7.5);
+        $pdf->SetFont('helvetica', '', 5.8);
         $pdf->SetX($x + $pad);
-        $pdf->Cell($w - $pad * 2, 4, 'Cantidad: ' . $this->num((float) ($d['cantidad'] ?? 0)), 0, 1, 'L');
+        $pdf->Cell($w - $pad * 2, 2.8, 'Cant.: ' . $this->num((float) ($d['cantidad'] ?? 0)), 0, 1, 'L');
 
         // Información adicional (se acota para no desbordar la tarjeta)
         $adicional = trim((string) ($d['info_adicional'] ?? ''));
-        if (mb_strlen($adicional) > 220) {
-            $adicional = mb_substr($adicional, 0, 219) . '…';
+        if (mb_strlen($adicional) > 90) {
+            $adicional = mb_substr($adicional, 0, 89) . '…';
         }
         if ($adicional !== '') {
             $pdf->SetTextColor(45, 49, 57);
-            $pdf->SetFont('helvetica', 'I', 7.5);
+            $pdf->SetFont('helvetica', 'I', 5.8);
             $pdf->SetX($x + $pad);
-            $maxH = ($y + self::CARD_H - 1.5) - $pdf->GetY();
-            $pdf->MultiCell($w - $pad * 2, 3.4, $adicional, 0, 'L', false, 1, '', '', true, 0, false, true, max(3.4, $maxH), 'T');
+            $maxH = ($y + self::CARD_H - 1) - $pdf->GetY();
+            $pdf->MultiCell($w - $pad * 2, 2.6, $adicional, 0, 'L', false, 1, '', '', true, 0, false, true, max(2.6, $maxH), 'T');
         }
     }
 

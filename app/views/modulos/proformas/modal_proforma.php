@@ -104,6 +104,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                         onclick="PF.duplicar()" title="Duplicar proforma">
                         <i class="bi bi-files"></i>
                     </button>
+                    <button id="pf-btn-plantillas" type="button" class="btn btn-outline-secondary btn-sm px-2"
+                        onclick="PF.abrirPlantillas()" title="Plantillas de proforma">
+                        <i class="bi bi-collection"></i>
+                    </button>
                     <div class="vr mx-1"></div>
                     <button id="pf-btn-nuevo-cliente" type="button" class="btn btn-outline-primary btn-sm px-2"
                         onclick="PF.nuevoCliente()" title="Registrar nuevo cliente">
@@ -173,8 +177,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                     <div class="ms-auto pb-1">
                         <?php
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas([
-                            'pf-tab-facturas'  => 'Facturas',
-                            'pf-tab-productos' => 'Info Productos',
+                            'pf-tab-facturas'   => 'Facturas',
+                            'pf-tab-productos'  => 'Info Productos',
                         ], $vistaConfigPF, 'modulos/proformas');
                         ?>
                     </div>
@@ -191,6 +195,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             <i class="bi bi-check-circle-fill me-1"></i>
                             <span id="pf_aprobacionClienteTexto"></span>
                         </div>
+
+                        <!-- Solo se puede editar en estado "borrador" (ver _aplicarEstado en
+                             proformas_modal.js). Un <fieldset disabled> deshabilita de una vez
+                             todos los inputs/selects/textareas/botones nativos de adentro, sin
+                             tener que enumerarlos uno por uno. -->
+                        <fieldset id="pf_fieldsetEditable" style="border:0;padding:0;margin:0;">
 
                         <!-- Cabecera -->
                         <div class="p-3 bg-white border-bottom">
@@ -416,6 +426,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             </div>
                         </div>
 
+                        </fieldset>
+
                     </div><!-- /pf-tab-proforma -->
 
                     <!-- ── TAB FACTURAS ───────────────────────── -->
@@ -457,6 +469,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                     editar aquí o en la pestaña Proforma; ambas comparten el mismo dato y se
                                     incluyen en la ficha de productos adjunta al enviar el correo.
                                 </span>
+                                <button type="button" class="btn btn-outline-danger btn-sm px-2 ms-auto"
+                                    onclick="PF.imprimirFichaProductos()" title="Descargar PDF de la ficha de productos">
+                                    <i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF
+                                </button>
                             </div>
                             <div id="pf_gridInfoProductos" class="pf-grid-productos"></div>
                         </div>
@@ -571,6 +587,135 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
     </div>
 </div>
 
+<!-- ── Modal: Plantillas de proforma (listado) ── -->
+<div class="modal fade modal-proforma" id="modalListaPlantillas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-collection me-2"></i>Plantillas de proforma</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-muted small">Usa plantillas prestablecidas para mayor facilidad.</span>
+                        <?php if (!empty($perm['crear'])): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2"
+                            onclick="PF.nuevaPlantilla()" title="Crear una nueva plantilla">
+                            <i class="bi bi-plus-circle me-1"></i>Nueva
+                        </button>
+                        <?php endif; ?>
+                    </div>
+                    <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                        <div class="table-responsive" style="max-height:350px;">
+                            <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                <thead>
+                                    <tr class="table-light border-bottom">
+                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width:40%;">Nombre</th>
+                                        <th class="py-2 small fw-bold text-muted text-center" style="width:15%;">Ítems</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width:20%;">Vigencia</th>
+                                        <th class="py-2 small fw-bold text-muted text-center" style="width:25%;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pf_tbodyPlantillas">
+                                    <tr><td colspan="4" class="text-center text-muted small py-3">Cargando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Nueva plantilla de proforma ── -->
+<div class="modal fade modal-proforma" id="modalPlantilla" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-collection me-2"></i><span id="plt_modalTitulo">Nueva plantilla</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="p-3">
+                    <input type="hidden" id="plt_id">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="x-small fw-bold text-muted mb-1">Nombre de la plantilla <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="plt_nombre" placeholder="Ej: Servicio mensual básico">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="x-small fw-bold text-muted mb-1">Días de vigencia</label>
+                            <input type="number" class="form-control form-control-sm" id="plt_diasVigencia" min="0" value="15">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="x-small fw-bold text-muted mb-1">Unidad</label>
+                            <select class="form-select form-select-sm" id="plt_vigenciaUnidad">
+                                <option value="dias">Días</option>
+                                <option value="meses">Meses</option>
+                                <option value="anios">Años</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <label class="x-small fw-bold text-muted mb-1 d-block">Detalle de ítems</label>
+                    <div class="border rounded-3 overflow-hidden bg-white shadow-sm mb-3">
+                        <div class="table-responsive" style="max-height:260px;">
+                            <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                <thead>
+                                    <tr class="table-light border-bottom">
+                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width:28%;">Descripción</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width:20%;">Adicional</th>
+                                        <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant.</th>
+                                        <th class="py-2 small fw-bold text-muted text-end" style="width:14%;">P. Unit.</th>
+                                        <th class="py-2 small fw-bold text-muted text-end" style="width:12%;">Desc.</th>
+                                        <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Iva</th>
+                                        <th style="width:40px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="plt_tbodyDetalle"></tbody>
+                            </table>
+                        </div>
+                        <div class="p-2 border-top bg-light">
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="PF.agregarFilaPlantilla()">
+                                <i class="bi bi-plus-circle me-1"></i>Agregar línea
+                            </button>
+                        </div>
+                    </div>
+
+                    <label class="x-small fw-bold text-muted mb-1 d-block">Información adicional</label>
+                    <div class="border rounded-2 overflow-hidden bg-white">
+                        <div class="table-responsive" style="max-height:160px;">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-2 py-0 small fw-bold text-muted" style="width:40%;">Concepto</th>
+                                        <th class="py-0 small fw-bold text-muted" style="width:50%;">Detalle</th>
+                                        <th class="py-0" style="width:10%;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="plt_tbodyAdicional"></tbody>
+                            </table>
+                        </div>
+                        <div class="p-1 border-top bg-light">
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="PF.agregarAdicionalPlantilla()">
+                                <i class="bi bi-plus-circle me-1"></i>Agregar línea
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4" id="plt_btnGuardar" onclick="PF.guardarPlantillaModal()">
+                    <i class="bi bi-check2-circle me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php
 // ─────────────────────────────────────────────────────────────────────────────
 // Modales reutilizados para crear Cliente y Producto desde la proforma
@@ -623,28 +768,39 @@ $totalPages = $pf_totalPagesBackup;
     // 5060 sin importar el z-index inline. Para que los modales de Cliente/Producto se
     // abran ENCIMA del de Proforma, hay que subirlos POR ENCIMA de 5060 (con inline
     // !important, que gana a la regla global) junto con su backdrop.
-    var Z_SUBMODAL = 5080;   // por encima del modal de proforma (5060 por la regla global)
-    var Z_BACKDROP = 5075;   // dim de la proforma, por debajo del submodal
+    var Z_SUBMODAL = 5080;   // nivel 2: por encima del modal de proforma (5060 por la regla global)
+    var Z_BACKDROP = 5075;   // dim de la proforma, por debajo del submodal nivel 2
 
-    var SUBMODALES = ['modalCliente', 'modalProducto', 'modalEnviarWhatsappProforma'];
+    // modalPlantilla (crear/editar) se abre DESDE modalListaPlantillas, así que necesita
+    // un tercer nivel por encima de este último, no solo por encima de la proforma.
+    var Z_SUBMODAL_3 = 5100;
+    var Z_BACKDROP_3 = 5095;
+
+    var SUBMODALES        = ['modalCliente', 'modalProducto', 'modalEnviarWhatsappProforma', 'modalListaPlantillas'];
+    var SUBMODALES_NIVEL3 = ['modalPlantilla'];
+
     document.addEventListener('show.bs.modal', function (ev) {
-        if (SUBMODALES.indexOf(ev.target.id) === -1) return;
+        var esNivel3 = SUBMODALES_NIVEL3.indexOf(ev.target.id) !== -1;
+        if (!esNivel3 && SUBMODALES.indexOf(ev.target.id) === -1) return;
 
-        // 1) Elevar el propio submodal por encima de la proforma.
-        ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
+        var z  = esNivel3 ? Z_SUBMODAL_3 : Z_SUBMODAL;
+        var zb = esNivel3 ? Z_BACKDROP_3 : Z_BACKDROP;
 
-        // 2) Elevar el backdrop más reciente (el de este submodal) sobre la proforma.
+        // 1) Elevar el propio submodal por encima del nivel que le corresponde.
+        ev.target.style.setProperty('z-index', String(z), 'important');
+
+        // 2) Elevar el backdrop más reciente (el de este submodal).
         setTimeout(function () {
             var bds = document.querySelectorAll('.modal-backdrop');
             if (bds.length) {
-                bds[bds.length - 1].style.setProperty('z-index', String(Z_BACKDROP), 'important');
+                bds[bds.length - 1].style.setProperty('z-index', String(zb), 'important');
             }
         }, 0);
     });
 
     // Al cerrar un submodal, si la proforma sigue abierta, conservar el scroll-lock.
     document.addEventListener('hidden.bs.modal', function (ev) {
-        if (SUBMODALES.indexOf(ev.target.id) !== -1
+        if ((SUBMODALES.indexOf(ev.target.id) !== -1 || SUBMODALES_NIVEL3.indexOf(ev.target.id) !== -1)
             && document.querySelectorAll('.modal.show').length > 0) {
             document.body.classList.add('modal-open');
         }

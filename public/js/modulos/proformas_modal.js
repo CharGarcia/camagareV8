@@ -65,6 +65,13 @@
         // El recibo aplica las mismas reglas de facturación → misma condición que la factura.
         show('pf-btn-recibo',   facturable);
         show('pf-btn-duplicar', perm().crear && guardada);
+        // Solo se puede editar en borrador: fuera de ahí se bloquea todo el detalle
+        // (cliente, ítems, info adicional, vigencia) y no tiene sentido ofrecer
+        // aplicar una plantilla que de todos modos no se podría guardar.
+        const editable = estado === 'borrador';
+        const fieldset = $id('pf_fieldsetEditable');
+        if (fieldset) fieldset.disabled = !editable;
+        show('pf-btn-plantillas', editable);
         show('pf-vr1',          perm().crear && guardada);
         show('pf-btn-pdf',       guardada);
         show('pf-btn-excel',     guardada);
@@ -94,9 +101,11 @@
 
         // Punto de emisión — seleccionar el primero si hay uno solo
         const selPunto = $id('pf_punto');
-        // Para nueva proforma: desbloquear secuencial y cargar el siguiente
-        _bloquearSecuencial = false;
+        // La serie solo se bloquea al editar (ver PF.verDetalle); aquí se libera
+        // porque _reset() se usa para "nueva proforma" o para reiniciar antes de
+        // cargar otra. El flag en sí lo maneja quien llama a _reset(), no esta función.
         if (selPunto) {
+            selPunto.disabled = false;
             selPunto.selectedIndex = 0;   // primer punto (no hay opción vacía)
             _syncEstab(selPunto);
             if (selPunto.value) _cargarSecuencial(selPunto.value);
@@ -130,6 +139,12 @@
 
         // Aviso de aprobación del cliente (oculto en proforma nueva)
         $id('pf_aprobacionCliente')?.classList.add('d-none');
+
+        // Una proforma nueva siempre es editable (por si el modal quedó bloqueado
+        // por una proforma aprobada/anulada que se estaba viendo antes).
+        const fieldsetReset = $id('pf_fieldsetEditable');
+        if (fieldsetReset) fieldsetReset.disabled = false;
+        $id('pf-btn-plantillas')?.classList.remove('d-none');
 
         // Ocultar todos los botones de acción
         ['pf-btn-factura','pf-btn-pedido','pf-btn-recibo','pf-btn-duplicar','pf-vr1',
@@ -196,6 +211,10 @@
         try {
             const resp = await fetch(`${urlBase()}/getSecuencialAjax?id_punto_emision=${idPunto}`);
             const json = await resp.json();
+            // Re-chequear tras el await: si mientras esta respuesta viajaba se empezó
+            // a cargar una proforma existente (que bloquea y fija su propio secuencial),
+            // esta respuesta ya está obsoleta y no debe pisarlo.
+            if (_bloquearSecuencial) return;
             if (json.ok) {
                 inputSec.value       = json.formateado || String(json.secuencial).padStart(9, '0');
                 inputSec.placeholder = '000000001';
@@ -909,6 +928,222 @@
         });
     }
 
+    /* ── Pestaña "Plantillas" ────────────────────────────────────
+     * Lista global de la empresa (no depende de la proforma actual). Guardar
+     * toma una foto del detalle/adicional/vigencia visibles en ese momento;
+     * usar reemplaza esos mismos datos en el formulario. */
+    function _badgeVigenciaPlantilla(p) {
+        const unidad = { dias: 'días', meses: 'meses', anios: 'años' }[p.vigencia_unidad] || p.vigencia_unidad;
+        return `${_esc(p.dias_vigencia)} ${_esc(unidad)}`;
+    }
+
+    async function _cargarPlantillas() {
+        const tbody = $id('pf_tbodyPlantillas');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-3">Cargando...</td></tr>';
+        try {
+            const data = await (await fetch(`${urlBase()}/listarPlantillasAjax`)).json();
+            const lista = (data.ok && data.plantillas) ? data.plantillas : [];
+            if (!lista.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-3">Aún no hay plantillas guardadas</td></tr>';
+                return;
+            }
+            const puedeActualizar = !!perm().actualizar;
+            const puedeEliminar   = !!perm().eliminar;
+            tbody.innerHTML = lista.map(p => `
+                <tr>
+                    <td class="ps-3 small">${_esc(p.nombre)}</td>
+                    <td class="small text-center">${_esc(p.total_items)}</td>
+                    <td class="small">${_badgeVigenciaPlantilla(p)}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" onclick="PF.usarPlantilla(${p.id})" title="Usar esta plantilla">
+                            <i class="bi bi-box-arrow-in-down"></i> Usar
+                        </button>
+                        ${puedeActualizar ? `
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 ms-1" onclick="PF.editarPlantilla(${p.id})" title="Editar plantilla">
+                            <i class="bi bi-pencil"></i>
+                        </button>` : ''}
+                        ${puedeEliminar ? `
+                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 ms-1" onclick="PF.eliminarPlantilla(${p.id})" title="Eliminar plantilla">
+                            <i class="bi bi-trash3"></i>
+                        </button>` : ''}
+                    </td>
+                </tr>`).join('');
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger small py-3">Error al cargar plantillas</td></tr>';
+        }
+    }
+
+    /* ── Modal "Nueva plantilla" ─────────────────────────────────
+     * Tabla de ítems independiente de la que usa la proforma en edición (clases
+     * propias plt-*), con su propio autocomplete de producto pero sin recálculo
+     * de subtotales/totales — una plantilla no muestra un total, solo guarda los
+     * datos base para reusarlos. */
+    function _crearFilaPlantilla(data = {}) {
+        const idTarIva = parseInt(data.id_tarifa_iva || 0);
+        const tr = document.createElement('tr');
+        tr.className = 'row-plt-detalle';
+
+        tr.innerHTML = `
+        <td class="ps-3">
+            <input type="text" class="form-control form-control-sm input-detalle plt-input-descripcion"
+                value="${_esc(data.descripcion || '')}" placeholder="Buscar producto o escribe descripción...">
+            <input type="hidden" class="plt-input-id-producto" value="${data.id_producto || ''}">
+            <input type="hidden" class="plt-input-codigo" value="${_esc(data.codigo_principal || '')}">
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm input-detalle plt-input-adicional text-muted fst-italic"
+                value="${_esc(data.adicional || '')}" placeholder="Info adicional">
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm input-detalle text-center plt-input-cantidad"
+                value="${parseFloat(data.cantidad || 1).toFixed(2)}" step="any" min="0">
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm input-detalle text-end plt-input-precio"
+                value="${parseFloat(data.precio_unitario || 0).toFixed(4)}" step="any" min="0">
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm input-detalle text-end plt-input-desc"
+                value="${parseFloat(data.descuento || 0).toFixed(2)}" step="any" min="0">
+        </td>
+        <td>
+            <select class="form-select form-select-sm input-detalle text-center plt-input-iva">
+                ${_tivasOpts(idTarIva)}
+            </select>
+        </td>
+        <td class="text-center" style="width:40px;">
+            <button type="button" class="btn btn-link btn-sm p-0 text-danger shadow-none border-0" onclick="PF.eliminarFilaPlantilla(this)">
+                <i class="bi bi-trash3 fs-6"></i>
+            </button>
+        </td>`;
+
+        // Autocomplete descripción → productos (mismo patrón que la tabla de detalle
+        // de la proforma, dropdown anclado al body para escapar el overflow de la tabla)
+        const inpDesc = tr.querySelector('.plt-input-descripcion');
+        const ddProd  = document.createElement('div');
+        ddProd.className = 'list-group shadow d-none';
+        ddProd.style.cssText = [
+            'position:fixed', 'z-index:9999', 'min-width:340px', 'max-height:220px',
+            'overflow-y:auto', 'background:#fff', 'border:1px solid #dee2e6',
+            'border-radius:0 0 6px 6px', 'box-shadow:0 4px 16px rgba(0,0,0,.12)',
+        ].join(';');
+        document.body.appendChild(ddProd);
+        tr._pltDdProd = ddProd;
+        ddProd._pltTr = tr;
+
+        function _posDdProd() {
+            const r = inpDesc.getBoundingClientRect();
+            ddProd.style.top   = r.bottom + 'px';
+            ddProd.style.left  = r.left   + 'px';
+            ddProd.style.width = Math.max(r.width, 340) + 'px';
+        }
+
+        inpDesc.addEventListener('keydown', e => {
+            const idProd = tr.querySelector('.plt-input-id-producto');
+            if ((e.key === 'Backspace' || e.key === 'Delete') && idProd && idProd.value) {
+                e.preventDefault();
+                inpDesc.value = '';
+                idProd.value = '';
+                tr.querySelector('.plt-input-codigo').value = '';
+                ddProd.classList.add('d-none');
+            }
+        });
+
+        let timer;
+        inpDesc.addEventListener('input', () => {
+            clearTimeout(timer);
+            const q = inpDesc.value.trim();
+            if (!q) {
+                ddProd.classList.add('d-none');
+                tr.querySelector('.plt-input-id-producto').value = '';
+                tr.querySelector('.plt-input-codigo').value = '';
+                return;
+            }
+            timer = setTimeout(async () => {
+                try {
+                    const res = await (await fetch(`${urlBase()}/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
+                    if (!res.ok || !res.data?.length) {
+                        ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
+                    } else {
+                        ddProd.innerHTML = res.data.map(p =>
+                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
+                                 onclick='window._pltSelProd(this, ${JSON.stringify(p)})'>
+                                <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
+                                <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
+                            </div>`
+                        ).join('');
+                    }
+                    _posDdProd();
+                    ddProd.classList.remove('d-none');
+                } catch (e) { console.error(e); }
+            }, 280);
+        });
+        document.addEventListener('click', e => {
+            if (!inpDesc.contains(e.target) && !ddProd.contains(e.target)) ddProd.classList.add('d-none');
+        });
+
+        return tr;
+    }
+
+    window._pltSelProd = (el, p) => {
+        const dd = el.closest('.list-group');
+        const tr = dd?._pltTr;
+        if (!tr) return;
+        dd.classList.add('d-none');
+
+        tr.querySelector('.plt-input-id-producto').value = p.id     || '';
+        tr.querySelector('.plt-input-codigo').value      = p.codigo || '';
+        tr.querySelector('.plt-input-descripcion').value = p.nombre || '';
+        tr.querySelector('.plt-input-cantidad').value    = '1.00';
+        tr.querySelector('.plt-input-precio').value      = parseFloat(p.precio_base || 0).toFixed(4);
+        tr.querySelector('.plt-input-desc').value        = '0.00';
+
+        let pctFinal = null;
+        if (p.porcentaje_iva_final !== undefined && p.porcentaje_iva_final !== null) {
+            pctFinal = parseFloat(p.porcentaje_iva_final);
+        } else if (p.porcentaje_iva !== undefined && p.porcentaje_iva !== null) {
+            pctFinal = parseFloat(p.porcentaje_iva);
+        } else if (p.porcentaje !== undefined && p.porcentaje !== null) {
+            pctFinal = parseFloat(p.porcentaje);
+        } else if (p.tarifa_iva) {
+            const tFound = tivas().find(t => t.id == p.tarifa_iva);
+            if (tFound) pctFinal = parseFloat(tFound.porcentaje_iva || tFound.porcentaje);
+        }
+
+        const selIva = tr.querySelector('.plt-input-iva');
+        if (selIva && (pctFinal !== null || p.tarifa_iva)) {
+            let opt = p.tarifa_iva ? Array.from(selIva.options).find(o => o.dataset.id == p.tarifa_iva) : null;
+            if (!opt && pctFinal !== null) {
+                opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - pctFinal) < 0.001);
+            }
+            if (opt) selIva.selectedIndex = opt.index;
+            else if (pctFinal === 0) selIva.value = '0';
+        }
+    };
+
+    function _recolectarPlantillaModal() {
+        const detalles = [];
+        document.querySelectorAll('#plt_tbodyDetalle .row-plt-detalle').forEach(tr => {
+            const descripcion = tr.querySelector('.plt-input-descripcion')?.value.trim() || '';
+            if (!descripcion) return;
+            const sel = tr.querySelector('.plt-input-iva');
+            detalles.push({
+                id_producto:               tr.querySelector('.plt-input-id-producto')?.value || null,
+                codigo_principal:          tr.querySelector('.plt-input-codigo')?.value.trim() || '',
+                descripcion:               descripcion,
+                adicional:                 tr.querySelector('.plt-input-adicional')?.value.trim() || '',
+                cantidad:                  parseFloat(tr.querySelector('.plt-input-cantidad').value || 0),
+                precio_unitario:           parseFloat(tr.querySelector('.plt-input-precio').value || 0),
+                descuento:                 parseFloat(tr.querySelector('.plt-input-desc').value || 0),
+                precio_total_sin_impuesto: 0,
+                id_tarifa_iva:             parseInt(sel?.selectedOptions[0]?.dataset.id || 0),
+            });
+        });
+        return detalles;
+    }
+
     async function _cargarProforma(id) {
         try {
             const data = await (await fetch(`${urlBase()}/getProformaAjax?id=${id}`)).json();
@@ -926,12 +1161,31 @@
             // (igual que FV_BLOQUEAR_SECUENCIAL en factura de venta)
             _bloquearSecuencial = true;
 
+            // La serie NO se puede cambiar al editar (el secuencial ya quedó fijado
+            // al crear y no se recalcula para otra serie — ver ProformaService::actualizar).
+            // Se deshabilita el select para que coincida con ese comportamiento; antes
+            // se podía cambiar la serie sin que el secuencial se actualizara, dejando
+            // la proforma con una serie nueva pero el número de la anterior.
             const selPunto = $id('pf_punto');
-            if (selPunto && c.id_punto_emision) {
-                Array.from(selPunto.options).forEach(o => {
-                    o.selected = parseInt(o.value) === parseInt(c.id_punto_emision);
-                });
+            if (selPunto) {
+                let opt = c.id_punto_emision
+                    ? Array.from(selPunto.options).find(o => parseInt(o.value) === parseInt(c.id_punto_emision))
+                    : null;
+                if (!opt && c.id_punto_emision) {
+                    // El punto de emisión original ya no está activo (o fue eliminado de
+                    // la lista): se agrega una opción con los datos guardados para no
+                    // mostrar en silencio una serie distinta a la real.
+                    opt = document.createElement('option');
+                    opt.value = c.id_punto_emision;
+                    opt.dataset.est      = c.id_establecimiento || '';
+                    opt.dataset.codEst   = estab;
+                    opt.dataset.codPunto = punto;
+                    opt.textContent      = `${estab}-${punto} (inactivo)`;
+                    selPunto.appendChild(opt);
+                }
+                Array.from(selPunto.options).forEach(o => { o.selected = (o === opt); });
                 _syncEstab(selPunto);
+                selPunto.disabled = true;
             }
 
             // Restaurar el secuencial guardado (formateado a 9 dígitos)
@@ -1192,6 +1446,7 @@
 
         $id('pf-aviso-restaurar').onclick = () => {
             aviso.remove();
+            _bloquearSecuencial = false;
             _reset();
             _initClienteBuscar();
             const modalEl = $id('modalProforma');
@@ -1204,6 +1459,7 @@
         $id('pf-aviso-nueva').onclick = () => {
             _limpiarBorrador();
             aviso.remove();
+            _bloquearSecuencial = false;
             _reset();
             _initClienteBuscar();
             getModal().show();
@@ -1226,6 +1482,7 @@
                 return;
             }
 
+            _bloquearSecuencial = false;
             _reset();
             _initClienteBuscar();
             getModal().show();
@@ -1238,6 +1495,10 @@
         limpiarBorrador() { _limpiarBorrador(); },
 
         async verDetalle(id) {
+            // Bloquear ANTES de _reset() (igual que factura de venta) para que
+            // ninguna llamada asíncrona de _reset() pise el secuencial real que
+            // está por cargar _cargarProforma().
+            _bloquearSecuencial = true;
             _reset();
             _initClienteBuscar();
             await _cargarProforma(id);
@@ -1350,6 +1611,192 @@
             document.body.appendChild(a);
             a.click();
             a.remove();
+        },
+
+        imprimirFichaProductos() {
+            const id = $id('pf_id').value;
+            if (!id) { toast('Guarde la proforma antes de generar la ficha', 'error'); return; }
+            const a = document.createElement('a');
+            a.href = `${urlBase()}/exportarFichaProductosAjax?id=${id}`;
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        },
+
+        /* ── Plantillas ──────────────────────────────────────── */
+        abrirPlantillas() {
+            _cargarPlantillas();
+            bootstrap.Modal.getOrCreateInstance($id('modalListaPlantillas')).show();
+        },
+
+        nuevaPlantilla() {
+            $id('plt_id').value = '';
+            $id('plt_nombre').value = '';
+            $id('plt_diasVigencia').value = 15;
+            $id('plt_vigenciaUnidad').value = 'dias';
+            if ($id('plt_modalTitulo')) $id('plt_modalTitulo').textContent = 'Nueva plantilla';
+
+            const tbody = $id('plt_tbodyDetalle');
+            tbody.innerHTML = '';
+            tbody.appendChild(_crearFilaPlantilla());
+
+            const tbodyAd = $id('plt_tbodyAdicional');
+            tbodyAd.innerHTML = '';
+            tbodyAd.appendChild(_crearFilaAdicional());
+
+            bootstrap.Modal.getOrCreateInstance($id('modalPlantilla')).show();
+        },
+
+        async editarPlantilla(idPlantilla) {
+            try {
+                const data = await (await fetch(`${urlBase()}/getPlantillaAjax?id=${idPlantilla}`)).json();
+                if (!data.ok) { toast(data.mensaje || 'Error al cargar la plantilla', 'error'); return; }
+                const p = data.plantilla;
+
+                $id('plt_id').value = p.id;
+                $id('plt_nombre').value = p.nombre || '';
+                $id('plt_diasVigencia').value = p.dias_vigencia || 15;
+                $id('plt_vigenciaUnidad').value = p.vigencia_unidad || 'dias';
+                if ($id('plt_modalTitulo')) $id('plt_modalTitulo').textContent = 'Editar plantilla';
+
+                const tbody = $id('plt_tbodyDetalle');
+                tbody.innerHTML = '';
+                (p.detalles || []).forEach(d => {
+                    tbody.appendChild(_crearFilaPlantilla({ ...d, adicional: d.info_adicional }));
+                });
+                if (!tbody.children.length) tbody.appendChild(_crearFilaPlantilla());
+
+                const tbodyAd = $id('plt_tbodyAdicional');
+                tbodyAd.innerHTML = '';
+                (p.info_adicional || []).forEach(a => tbodyAd.appendChild(_crearFilaAdicional(a.nombre, a.valor)));
+                if (!tbodyAd.children.length) tbodyAd.appendChild(_crearFilaAdicional());
+
+                bootstrap.Modal.getOrCreateInstance($id('modalPlantilla')).show();
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            }
+        },
+
+        agregarFilaPlantilla() {
+            $id('plt_tbodyDetalle')?.appendChild(_crearFilaPlantilla());
+        },
+
+        agregarAdicionalPlantilla() {
+            $id('plt_tbodyAdicional')?.appendChild(_crearFilaAdicional());
+        },
+
+        eliminarFilaPlantilla(btn) {
+            const tr = btn.closest('tr');
+            if (tr?._pltDdProd) tr._pltDdProd.remove();
+            tr?.remove();
+        },
+
+        async guardarPlantillaModal() {
+            const nombre = $id('plt_nombre').value.trim();
+            if (!nombre) { toast('Ingrese un nombre para la plantilla', 'error'); return; }
+
+            const detalles = _recolectarPlantillaModal();
+            if (!detalles.length) { toast('Agregue al menos un ítem con descripción', 'error'); return; }
+
+            const info_adicional = [];
+            document.querySelectorAll('#plt_tbodyAdicional tr').forEach(tr => {
+                const n = tr.querySelector('.inp-ad-nombre')?.value.trim() || '';
+                const v = tr.querySelector('.inp-ad-valor')?.value.trim()  || '';
+                if (n && v) info_adicional.push({ nombre: n, valor: v });
+            });
+
+            const payload = {
+                id:              parseInt($id('plt_id').value || 0),
+                nombre,
+                dias_vigencia:   parseInt($id('plt_diasVigencia').value || 15),
+                vigencia_unidad: $id('plt_vigenciaUnidad').value || 'dias',
+                detalles,
+                info_adicional,
+            };
+
+            const btn = $id('plt_btnGuardar');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...'; }
+            try {
+                const resp = await fetch(`${urlBase()}/guardarPlantillaAjax`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (!data.ok) { toast(data.mensaje || 'Error al guardar la plantilla', 'error'); return; }
+                toast('Plantilla guardada correctamente');
+                bootstrap.Modal.getInstance($id('modalPlantilla'))?.hide();
+                _cargarPlantillas();
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Guardar'; }
+            }
+        },
+
+        async usarPlantilla(idPlantilla) {
+            const tieneDatos = Array.from(document.querySelectorAll('#pf_tbodyDetalle .row-detalle'))
+                .some(tr => tr.querySelector('.input-descripcion')?.value.trim());
+            if (tieneDatos) {
+                const ok = await confirm2('Esto reemplazará el detalle, la información adicional y la vigencia actuales por los de la plantilla.');
+                if (!ok) return;
+            }
+
+            try {
+                const data = await (await fetch(`${urlBase()}/getPlantillaAjax?id=${idPlantilla}`)).json();
+                if (!data.ok) { toast(data.mensaje || 'Error al cargar la plantilla', 'error'); return; }
+                const p = data.plantilla;
+
+                const tbody = $id('pf_tbodyDetalle');
+                tbody.innerHTML = '';
+                (p.detalles || []).forEach(d => {
+                    tbody.appendChild(_crearFila({ ...d, adicional: d.info_adicional }));
+                });
+                if (!tbody.children.length) tbody.appendChild(_crearFila());
+                _calcularTotales();
+
+                const tbodyAd = $id('pf_tbodyAdicional');
+                tbodyAd.innerHTML = '';
+                (p.info_adicional || []).forEach(a => tbodyAd.appendChild(_crearFilaAdicional(a.nombre, a.valor)));
+                if (!tbodyAd.children.length) tbodyAd.appendChild(_crearFilaAdicional());
+
+                if ($id('pf_diasVigencia'))   $id('pf_diasVigencia').value   = p.dias_vigencia   || 15;
+                if ($id('pf_vigenciaUnidad')) $id('pf_vigenciaUnidad').value = p.vigencia_unidad || 'dias';
+
+                _renderInfoProductos();
+
+                // Cerrar el modal de plantillas y mostrar la pestaña Proforma para
+                // que se vea el detalle recién aplicado.
+                bootstrap.Modal.getInstance($id('modalListaPlantillas'))?.hide();
+                const tabProforma = $id('pf-tab-proforma-btn');
+                if (tabProforma) {
+                    (bootstrap.Tab.getInstance(tabProforma) || new bootstrap.Tab(tabProforma)).show();
+                }
+
+                toast('Plantilla aplicada');
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            }
+        },
+
+        async eliminarPlantilla(idPlantilla) {
+            const ok = await confirm2('¿Eliminar esta plantilla? Esta acción no se puede deshacer.');
+            if (!ok) return;
+            try {
+                const fd = new FormData();
+                fd.append('id', idPlantilla);
+                const data = await (await fetch(`${urlBase()}/eliminarPlantillaAjax`, { method: 'POST', body: fd })).json();
+                if (!data.ok) { toast(data.mensaje || 'Error al eliminar', 'error'); return; }
+                toast('Plantilla eliminada');
+                _cargarPlantillas();
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            }
         },
 
         async enviarWhatsapp() {
@@ -1751,6 +2198,11 @@
         if (e.target.id === 'modalProforma') {
             document.querySelectorAll('#pf_tbodyDetalle .row-detalle').forEach(tr => {
                 if (tr._pfDdProd) { tr._pfDdProd.remove(); tr._pfDdProd = null; }
+            });
+        }
+        if (e.target.id === 'modalPlantilla') {
+            document.querySelectorAll('#plt_tbodyDetalle .row-plt-detalle').forEach(tr => {
+                if (tr._pltDdProd) { tr._pltDdProd.remove(); tr._pltDdProd = null; }
             });
         }
     });

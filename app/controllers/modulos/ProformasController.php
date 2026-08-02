@@ -14,6 +14,7 @@ class ProformasController extends BaseModuloController
 {
     private ProformaRepository $repository;
     private ProformaService $service;
+    private \App\Services\modulos\ProformaPlantillaService $plantillaService;
 
     protected function getRutaModulo(): string
     {
@@ -27,6 +28,10 @@ class ProformasController extends BaseModuloController
         $rules            = new ProformaRules();
         $logService       = new LogSistemaService();
         $this->service    = new ProformaService($this->repository, $rules, $logService);
+        $this->plantillaService = new \App\Services\modulos\ProformaPlantillaService(
+            new \App\repositories\modulos\ProformaPlantillaRepository(),
+            $logService
+        );
     }
 
     public function index(): void
@@ -174,6 +179,81 @@ class ProformasController extends BaseModuloController
             'detalles'       => $detalles,
             'info_adicional' => $this->repository->getInfoAdicional($id),
         ]);
+        exit;
+    }
+
+    /* ── Plantillas de proforma ──────────────────────────────────────
+     * Reusan los permisos del propio módulo Proformas (leer/crear/eliminar);
+     * no son un módulo aparte. */
+
+    public function listarPlantillasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        echo json_encode(['ok' => true, 'plantillas' => $this->plantillaService->listar($idEmpresa)]);
+        exit;
+    }
+
+    public function getPlantillaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $plantilla = $this->plantillaService->obtener($id, $idEmpresa);
+        if (!$plantilla) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Plantilla no encontrada.']);
+            exit;
+        }
+        echo json_encode(['ok' => true, 'plantilla' => $plantilla]);
+        exit;
+    }
+
+    public function guardarPlantillaAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $rawBody = file_get_contents('php://input');
+            $data    = json_decode($rawBody, true) ?: [];
+
+            $data['id_empresa'] = (int) $_SESSION['id_empresa'];
+            $data['id_usuario'] = (int) $_SESSION['id_usuario'];
+
+            $id = (int) ($data['id'] ?? 0);
+            if ($id > 0) {
+                $this->requireActualizar();
+                $this->plantillaService->actualizar($id, $data);
+                $idPlantilla = $id;
+            } else {
+                $this->requireCrear();
+                $idPlantilla = $this->plantillaService->crear($data);
+            }
+
+            echo json_encode(['ok' => true, 'id' => $idPlantilla, 'mensaje' => 'Plantilla guardada correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function eliminarPlantillaAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            $this->plantillaService->eliminar($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Plantilla eliminada.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
         exit;
     }
 
@@ -369,6 +449,40 @@ class ProformasController extends BaseModuloController
             (new \App\Services\modulos\ProformaPdfService())
                 ->generar($cabecera, $detalles, $adicional, $empresa ?? [], 'D');
         }
+        exit;
+    }
+
+    /** Ficha de productos (catálogo con imágenes) en PDF, para ver/imprimir desde la pestaña "Info Productos". */
+    public function exportarFichaProductosAjax(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $cabecera = $this->repository->getPorId($id);
+        if (!$cabecera || (int) $cabecera['id_empresa'] !== $idEmpresa) {
+            http_response_code(404);
+            echo 'Proforma no encontrada.';
+            exit;
+        }
+
+        $detalles = $this->repository->getDetalles($id);
+        $empresa  = (new Empresa())->getPorId($idEmpresa) ?? [];
+
+        $pdf = (new \App\Services\modulos\ProformaFichaProductosPdfService())->generar($cabecera, $detalles, $empresa, 'S');
+        if ($pdf === '') {
+            http_response_code(404);
+            echo 'La proforma no tiene productos para generar la ficha.';
+            exit;
+        }
+
+        $numero = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
+                . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="Ficha_Productos_' . $numero . '.pdf"');
+        header('Content-Length: ' . strlen($pdf));
+        echo $pdf;
         exit;
     }
 

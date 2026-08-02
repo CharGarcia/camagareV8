@@ -103,9 +103,15 @@ class ProformaService
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
 
-        // En edición el secuencial NO cambia: se conserva el ya asignado al crear
-        // (el valor del cliente es solo lectura y no debe alterar la numeración).
-        $data['secuencial'] = $proforma['secuencial'];
+        // En edición la serie (establecimiento/punto de emisión) y el secuencial NO
+        // cambian: se conservan los ya asignados al crear. El select de serie está
+        // deshabilitado en el modal de edición, pero esto es la validación real —
+        // nunca confiar en que el cliente no haya alterado esos campos.
+        $data['id_establecimiento'] = (int) $proforma['id_establecimiento'];
+        $data['id_punto_emision']   = (int) $proforma['id_punto_emision'];
+        $data['establecimiento']    = $proforma['establecimiento'];
+        $data['punto_emision']      = $proforma['punto_emision'];
+        $data['secuencial']         = $proforma['secuencial'];
 
         if ($this->repository->existeSecuencial(
             $idEmpresa,

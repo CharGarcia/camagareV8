@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional
-version: 1.3
+etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla
+version: 1.4
 orden: 15
 estado: activo
 ---
@@ -55,9 +55,12 @@ si la factura anterior fue anulada).
 
 ## Editar
 
-Solo se puede editar una proforma en **borrador**. Si ya está aprobada y necesita
-cambiarla, tiene dos caminos: anularla y crear una nueva, o —cuando el cambio es
-menor— convertirla a factura y corregir en la factura antes de enviarla.
+Solo se puede editar una proforma en **borrador**. Fuera de ese estado, el modal
+se abre en modo solo lectura (cliente, detalle, información adicional y
+vigencia bloqueados; sin botón Guardar) — no solo se rechaza al guardar, se ve
+bloqueado desde que se abre. Si ya está aprobada y necesita cambiarla, tiene dos
+caminos: anularla y crear una nueva, o —cuando el cambio es menor— convertirla a
+factura y corregir en la factura antes de enviarla.
 
 ## Exportar a Excel
 
@@ -79,6 +82,9 @@ puede editar desde cualquiera de las dos pestañas, es el mismo dato. Los ítems
 sin producto vinculado (líneas libres) o sin imagen cargada se muestran con un
 marcador genérico.
 
+El botón **Descargar PDF** de esa pestaña descarga la ficha de productos sin
+necesidad de enviarla por correo primero.
+
 Como cualquier otra pestaña, **Info Productos** se puede ocultar desde el
 engranaje junto a las pestañas si no se usa.
 
@@ -89,6 +95,31 @@ productos con imágenes"**. Si se marca, además del PDF de la proforma se enví
 un segundo PDF tipo catálogo con la imagen, código/nombre, cantidad e
 información adicional de cada línea — útil para que el cliente reconozca
 visualmente lo cotizado. Es opcional y no se adjunta si no se marca la casilla.
+
+## Plantillas
+
+Una plantilla guarda una "foto" del **detalle de ítems**, la **información
+adicional** y la **vigencia** para reutilizarla y armar una proforma nueva más
+rápido. No incluye cliente ni fechas — eso se define en cada proforma.
+
+Para crear una: en la pestaña **Plantillas** pulsa **"Nueva plantilla"**. Se
+abre un formulario propio (nombre, vigencia, detalle de ítems con buscador de
+producto e información adicional por línea, e información adicional de
+cabecera) — es independiente de la proforma que estés editando en ese momento.
+
+Para usarla: en la pestaña **Plantillas** pulsa **Usar** sobre la que
+necesites. Si el detalle actual ya tiene datos, se pide confirmación porque
+**reemplaza** por completo el detalle, la información adicional y la vigencia
+— no los combina. Al aplicarla, el modal cambia automáticamente a la pestaña
+**Proforma** para que veas el resultado.
+
+Para modificarla, pulsa el ícono de lápiz — abre el mismo formulario con sus
+datos cargados. Eliminar una plantilla no afecta a las proformas que ya se
+generaron con ella.
+
+El IVA de cada línea de la plantilla se recalcula con la tarifa **vigente** al
+usarla, no con la que tenía cuando se guardó — así una plantilla antigua no
+aplica un IVA desactualizado.
 
 ## Enviar la proforma por WhatsApp
 
@@ -130,6 +161,9 @@ comercial.
 
 ## Historial de cambios
 
+- **1.4** — Pestaña **Plantillas**: guarda detalle + información adicional +
+  vigencia como plantilla reutilizable y la aplica para armar proformas más
+  rápido.
 - **1.3** — Pestaña **Info Productos** (catálogo con imagen por línea), campo de
   información adicional por producto persistido, y ficha de productos con
   imágenes como adjunto opcional del correo.
