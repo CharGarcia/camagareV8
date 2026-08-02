@@ -105,6 +105,31 @@ function PMV_setupBuscadorChips({ inputId, dropdownId, chipsId, campoOculto, end
     });
 }
 
+// Sincroniza el input libre de "Top" (o el checkbox "Mostrar todos") con el
+// campo oculto top_n que realmente viaja en el formulario.
+window.PMV_syncTopN = function () {
+    const num = document.getElementById('pmv_top_n');
+    const hidden = document.getElementById('pmv_top_n_hidden');
+    const todos = document.getElementById('pmv_top_todos').checked;
+
+    if (todos) {
+        hidden.value = 'TODOS';
+        return;
+    }
+
+    let v = parseInt(num.value, 10);
+    if (!v || v < 1) v = 20;
+    num.value = v;
+    hidden.value = String(v);
+};
+
+window.PMV_toggleTopTodos = function () {
+    const todos = document.getElementById('pmv_top_todos').checked;
+    document.getElementById('pmv_top_n').disabled = todos;
+    window.PMV_syncTopN();
+    window.PMV_generarReporte();
+};
+
 window.PMV_cambiarMesAnio = function () {
     const mes = document.getElementById('pmv-mes').value;
     const anio = document.getElementById('pmv-anio').value;

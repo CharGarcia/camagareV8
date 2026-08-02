@@ -200,6 +200,16 @@
         </div>
     </div>
 
+    <!-- ── Gráfico ── -->
+    <div class="card border-0 shadow-sm mb-4" id="chart-container" style="display: none;">
+        <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+            <h6 class="mb-0 fw-bold text-dark" style="font-family: 'Outfit', sans-serif;"><i class="bi bi-bar-chart-line text-primary me-2"></i><span id="chart-titulo">Top Clientes por Monto Neto</span></h6>
+        </div>
+        <div class="card-body">
+            <canvas id="reporteChart" style="max-height: 300px;"></canvas>
+        </div>
+    </div>
+
     <!-- ── Tarjeta Principal (Tabla) ── -->
     <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-2 px-3 border-bottom">
@@ -280,4 +290,5 @@
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
 </script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/mejor_cliente.js?v=<?php echo time(); ?>"></script>

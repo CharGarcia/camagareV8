@@ -72,17 +72,63 @@ window.MC_generarReporte = function () {
                 document.getElementById('stat-monto').textContent = '$' + parseFloat(res.stats.monto_neto_total).toFixed(2);
                 document.getElementById('stat-venta-promedio').textContent = '$' + parseFloat(res.stats.venta_promedio).toFixed(2);
             }
+
+            const chartContainer = document.getElementById('chart-container');
+            if (res.rawData && res.rawData.length > 0) {
+                chartContainer.style.display = 'flex';
+                MC_dibujarGrafico(res.rawData, document.getElementById('mc_orden_por').value);
+            } else {
+                chartContainer.style.display = 'none';
+            }
         } else {
             Swal.fire('Error', res.error || 'Ocurrió un error al generar el reporte', 'error');
             tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error al generar reporte.</td></tr>';
+            document.getElementById('chart-container').style.display = 'none';
         }
     })
     .catch(err => {
         console.error(err);
         Swal.fire('Error del Servidor', 'Detalle: ' + err.message, 'error');
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error de conexión.</td></tr>';
+        document.getElementById('chart-container').style.display = 'none';
     });
 };
+
+let chartInstance = null;
+function MC_dibujarGrafico(rawData, ordenPor) {
+    const ctx = document.getElementById('reporteChart').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+
+    const top = rawData.slice(0, 15);
+    const labels = top.map(r => r.cliente_nombre);
+    const esCantidad = ordenPor === 'cantidad';
+    const data = top.map(r => parseFloat(esCantidad ? r.cantidad_documentos : r.monto_neto));
+
+    document.getElementById('chart-titulo').textContent = esCantidad
+        ? 'Top Clientes por Cantidad de Documentos'
+        : 'Top Clientes por Monto Neto';
+
+    chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: esCantidad ? 'Cantidad de Documentos' : 'Monto Neto ($)',
+                data: data,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } }
+        }
+    });
+}
 
 window.MC_exportarExcel = function () {
     const form = document.getElementById('form-filtros-reporte');

@@ -39,13 +39,17 @@
 
                         <div class="col-md-2">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Top</label>
-                            <select name="top_n" id="pmv_top_n" class="form-select form-select-sm shadow-none border" onchange="window.PMV_generarReporte()">
-                                <option value="10">Top 10</option>
-                                <option value="20" selected>Top 20</option>
-                                <option value="50">Top 50</option>
-                                <option value="100">Top 100</option>
-                                <option value="TODOS">Todos</option>
-                            </select>
+                            <input type="hidden" name="top_n" id="pmv_top_n_hidden" value="20">
+                            <input type="number" id="pmv_top_n" class="form-control form-control-sm shadow-none border" min="1" step="1"
+                                   value="20" placeholder="Cantidad" list="pmv-top-n-sugeridos"
+                                   onchange="window.PMV_syncTopN(); window.PMV_generarReporte();">
+                            <datalist id="pmv-top-n-sugeridos">
+                                <option value="10"><option value="20"><option value="50"><option value="100">
+                            </datalist>
+                            <div class="form-check mt-1">
+                                <input class="form-check-input" type="checkbox" id="pmv_top_todos" onchange="window.PMV_toggleTopTodos()">
+                                <label class="form-check-label text-muted" for="pmv_top_todos" style="font-size: 0.68rem;">Mostrar todos</label>
+                            </div>
                         </div>
 
                         <div class="col-md-2">
