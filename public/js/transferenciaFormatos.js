@@ -23,6 +23,7 @@
         tr.className = 'tf-fila-campo';
         tr.dataset.rowId = id;
         tr.innerHTML = `
+            <td class="text-center text-muted fw-bold tf-c-num"></td>
             <td><input type="text" class="form-control form-control-sm tf-c-etiqueta" value="${escHtml(c.etiqueta || '')}" placeholder="Ej: Cuenta"></td>
             <td><select class="form-select form-select-sm tf-c-origen">${origenDatoOptions(c.origen_dato || '')}</select></td>
             <td><input type="text" class="form-control form-control-sm tf-c-valorfijo" value="${escHtml(c.valor_fijo || '')}" placeholder="Solo si el dato es 'Texto fijo'"></td>
@@ -37,8 +38,10 @@
             <td><input type="number" min="1" class="form-control form-control-sm tf-c-long" value="${c.longitud_fija || ''}"></td>
             <td><input type="text" maxlength="1" class="form-control form-control-sm tf-c-relleno" value="${escHtml(c.relleno_caracter || '')}" placeholder="' ' u '0'"></td>
             <td class="text-nowrap">
+                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 border-0" title="Mover arriba" onclick="TF_moverFila('${id}', -1)"><i class="bi bi-arrow-up"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 border-0" title="Mover abajo" onclick="TF_moverFila('${id}', 1)"><i class="bi bi-arrow-down"></i></button>
                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 border-0" title="Opciones avanzadas" onclick="TF_toggleAvanzado('${id}')"><i class="bi bi-sliders"></i></button>
-                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 border-0" title="Quitar" onclick="this.closest('tr').nextElementSibling?.remove(); this.closest('tr').remove();"><i class="bi bi-trash"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 border-0" title="Quitar" onclick="this.closest('tr').nextElementSibling?.remove(); this.closest('tr').remove(); TF_renumerarFilas();"><i class="bi bi-trash"></i></button>
             </td>`;
         tbody.appendChild(tr);
 
@@ -46,7 +49,7 @@
         trAv.className = 'tf-fila-avanzada d-none';
         trAv.dataset.rowId = id;
         trAv.innerHTML = `
-            <td colspan="10" class="bg-light">
+            <td colspan="11" class="bg-light">
                 <div class="row g-2 p-2 small">
                     <div class="col-md-2">
                         <label class="form-label mb-0">Alineación</label>
@@ -83,6 +86,45 @@
 
         actualizarVisibilidadValorFijo(tr);
         tr.querySelector('.tf-c-origen').addEventListener('change', () => actualizarVisibilidadValorFijo(tr));
+        TF_renumerarFilas();
+    };
+
+    /** Numera las filas visibles en orden (1, 2, 3…) para que el usuario no se pierda entre tantas columnas. */
+    window.TF_renumerarFilas = function () {
+        document.querySelectorAll('#tf-campos-tbody > .tf-fila-campo').forEach((tr, i) => {
+            const celda = tr.querySelector('.tf-c-num');
+            if (celda) celda.textContent = i + 1;
+        });
+    };
+
+    function parDeFila(id) {
+        const tbody = document.getElementById('tf-campos-tbody');
+        return [
+            tbody.querySelector(`.tf-fila-campo[data-row-id="${id}"]`),
+            tbody.querySelector(`.tf-fila-avanzada[data-row-id="${id}"]`),
+        ];
+    }
+
+    /** Mueve la fila (y su fila de opciones avanzadas asociada) una posición arriba (-1) o abajo (+1). El orden en pantalla define el orden real de las columnas en el archivo. */
+    window.TF_moverFila = function (id, direccion) {
+        const tbody = document.getElementById('tf-campos-tbody');
+        const filas = Array.from(tbody.querySelectorAll('.tf-fila-campo'));
+        const idx = filas.findIndex(tr => tr.dataset.rowId === id);
+        const idxDestino = idx + direccion;
+        if (idxDestino < 0 || idxDestino >= filas.length) return;
+
+        const [filaActual, avActual] = parDeFila(id);
+        const [filaDestino, avDestino] = parDeFila(filas[idxDestino].dataset.rowId);
+
+        if (direccion < 0) {
+            tbody.insertBefore(filaActual, filaDestino);
+            tbody.insertBefore(avActual, filaDestino);
+        } else {
+            const referencia = avDestino.nextSibling;
+            tbody.insertBefore(filaActual, referencia);
+            tbody.insertBefore(avActual, referencia);
+        }
+        TF_renumerarFilas();
     };
 
     window.TF_toggleAvanzado = function (id) {

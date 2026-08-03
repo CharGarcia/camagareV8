@@ -194,16 +194,17 @@ $etiquetasTipoArchivo = [
                             <table class="table table-sm table-bordered align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th style="width:16%">Etiqueta</th>
-                                        <th style="width:18%">Dato de origen</th>
-                                        <th style="width:12%">Valor fijo</th>
-                                        <th style="width:9%">Tipo</th>
-                                        <th style="width:8%">Mayús.</th>
-                                        <th style="width:8%">S/tildes</th>
-                                        <th style="width:8%">Máx. car.</th>
-                                        <th style="width:8%">Long. fija</th>
-                                        <th style="width:8%">Relleno</th>
-                                        <th style="width:5%"></th>
+                                        <th style="width:3%" class="text-center">#</th>
+                                        <th style="width:14%">Etiqueta</th>
+                                        <th style="width:16%">Dato de origen</th>
+                                        <th style="width:10%">Valor fijo</th>
+                                        <th style="width:8%">Tipo</th>
+                                        <th style="width:7%">Mayús.</th>
+                                        <th style="width:7%">S/tildes</th>
+                                        <th style="width:7%">Máx. car.</th>
+                                        <th style="width:7%">Long. fija</th>
+                                        <th style="width:7%">Relleno</th>
+                                        <th style="width:14%">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody class="tf-campos-tbody" id="tf-campos-tbody"></tbody>
