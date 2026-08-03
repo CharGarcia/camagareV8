@@ -139,6 +139,19 @@ class RolPagoRepository extends BaseRepository
         $st->execute([':a' => $idAsiento, ':id' => $id]);
     }
 
+    /**
+     * Fuerza el updated_at del rol a un valor exacto (no CURRENT_TIMESTAMP) — usado SOLO por
+     * RolAsientoService::contabilizar() justo después de setIdAsiento()/setEstado() para
+     * resincronizarlo con el updated_at de su(s) asiento(s) recién vinculado(s). Sin esto, el
+     * rol queda "más nuevo" que su propio asiento (porque estos dos métodos lo tocan DESPUÉS de
+     * guardarAsiento) y SincronizadorAsientosService lo vuelve a marcar pendiente de inmediato.
+     */
+    public function forzarUpdatedAt(int $id, string $fecha): void
+    {
+        $st = $this->db->prepare("UPDATE {$this->table} SET updated_at = :f WHERE id = :id");
+        $st->execute([':f' => $fecha, ':id' => $id]);
+    }
+
     public function setEstado(int $id, int $idEmpresa, string $estado, int $idUsuario): bool
     {
         $st = $this->db->prepare("UPDATE {$this->table} SET estado = :e, updated_by = :u, updated_at = CURRENT_TIMESTAMP

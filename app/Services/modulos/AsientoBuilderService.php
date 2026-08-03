@@ -3529,7 +3529,8 @@ class AsientoBuilderService
 
         $sqlCab = "SELECT i.id,
                           o.id_cuenta_contable AS concepto_id_cuenta,
-                          o.nombre             AS concepto_nombre
+                          o.nombre             AS concepto_nombre,
+                          o.comportamiento     AS concepto_comportamiento
                    FROM ingresos_cabecera i
                    LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = i.id_ingreso_concepto
                    WHERE i.id = :id AND i.id_empresa = :emp AND i.eliminado = false";
@@ -3538,6 +3539,19 @@ class AsientoBuilderService
         $ingreso = $stCab->fetch(\PDO::FETCH_ASSOC);
         if (!$ingreso) {
             return [];
+        }
+
+        // Si el concepto está atado a un módulo con contabilización propia (FACTURA_VENTA,
+        // RECIBO_VENTA), la cuenta "oficial" de Configuración Contable manda sobre la que tenga
+        // guardada aparte el concepto (ese campo quedó de respaldo/legado — ver
+        // egresos-compras-cxp-contrapartida-faltante). Anticipos (ANTICIPO_CLIENTE) no tienen
+        // equivalente y siguen usando su propia cuenta.
+        $conceptoIdCuenta = (int) ($ingreso['concepto_id_cuenta'] ?? 0);
+        $oficialIngreso = $this->programadoRepo->getCuentaOficialPorComportamiento(
+            $idEmpresa, (string) ($ingreso['concepto_comportamiento'] ?? '')
+        );
+        if ($oficialIngreso !== null && $oficialIngreso['id_cuenta'] > 0) {
+            $conceptoIdCuenta = $oficialIngreso['id_cuenta'];
         }
 
         // ── DEBE: formas de cobro (banco/caja) → config Cobros/Pagos ──
@@ -3566,7 +3580,7 @@ class AsientoBuilderService
         if ($restante > 0.0) {
             $contrapartida = $this->contrapartidaPorCuenta(
                 $db, $idEmpresa, $idIngreso, 'ingreso',
-                (int) ($ingreso['concepto_id_cuenta'] ?? 0),
+                $conceptoIdCuenta,
                 (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
                 $restante, $detallesConCuenta
             );
@@ -3595,7 +3609,8 @@ class AsientoBuilderService
 
         $sqlCab = "SELECT e.id,
                           o.id_cuenta_contable AS concepto_id_cuenta,
-                          o.nombre             AS concepto_nombre
+                          o.nombre             AS concepto_nombre,
+                          o.comportamiento     AS concepto_comportamiento
                    FROM egresos_cabecera e
                    LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = e.id_egreso_concepto
                    WHERE e.id = :id AND e.id_empresa = :emp AND e.eliminado = false";
@@ -3604,6 +3619,19 @@ class AsientoBuilderService
         $egreso = $stCab->fetch(\PDO::FETCH_ASSOC);
         if (!$egreso) {
             return [];
+        }
+
+        // Si el concepto está atado a un módulo con contabilización propia (COMPRA,
+        // LIQUIDACION), la cuenta "oficial" de Configuración Contable manda sobre la que tenga
+        // guardada aparte el concepto (ese campo quedó de respaldo/legado — ver
+        // egresos-compras-cxp-contrapartida-faltante). Anticipos/préstamos no tienen
+        // equivalente y siguen usando su propia cuenta.
+        $conceptoIdCuenta = (int) ($egreso['concepto_id_cuenta'] ?? 0);
+        $oficialEgreso = $this->programadoRepo->getCuentaOficialPorComportamiento(
+            $idEmpresa, (string) ($egreso['concepto_comportamiento'] ?? '')
+        );
+        if ($oficialEgreso !== null && $oficialEgreso['id_cuenta'] > 0) {
+            $conceptoIdCuenta = $oficialEgreso['id_cuenta'];
         }
 
         // ── HABER: formas de pago (banco/caja) → config Cobros/Pagos ──
@@ -3677,7 +3705,7 @@ class AsientoBuilderService
         if ($restante > 0.0) {
             $contrapartida = $this->contrapartidaPorCuenta(
                 $db, $idEmpresa, $idEgreso, 'egreso',
-                (int) ($egreso['concepto_id_cuenta'] ?? 0),
+                $conceptoIdCuenta,
                 (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
                 $restante, $detallesConCuenta
             );

@@ -549,8 +549,20 @@ class ConfiguracionContableController extends BaseModuloController
         $tipoReferencia = $naturaleza === 'ingreso' ? 'opcion_ingreso' : 'opcion_egreso';
 
         try {
-            // 1. Sincronizar la cuenta en el módulo de Opciones de Ingreso/Egreso
             $opcRepo = new OpcionIngresoEgresoRepository();
+
+            // Conceptos atados a un módulo con contabilización propia (COMPRA, LIQUIDACION,
+            // FACTURA_VENTA, RECIBO_VENTA) ya no aceptan una cuenta propia aquí: su cuenta real
+            // se configura en la sección de Adquisiciones/Ventas/Recibos de este mismo módulo
+            // (ver egresos-compras-cxp-contrapartida-faltante).
+            $opcionActual = $opcRepo->getById($idOpcion, $idEmpresa);
+            $comportamientoActual = (string) ($opcionActual['comportamiento'] ?? '');
+            if ($this->repository->tieneCuentaOficialPorComportamiento($comportamientoActual)) {
+                echo json_encode(['ok' => false, 'error' => 'Este concepto toma su cuenta directamente de la configuración del módulo (Adquisiciones/Ventas/Recibos) — no se puede asignar una cuenta aparte aquí.']);
+                exit;
+            }
+
+            // 1. Sincronizar la cuenta en el módulo de Opciones de Ingreso/Egreso
             $opcRepo->updateCuentaContable($idOpcion, $idEmpresa, $idCuenta, $idUsuario);
 
             // 2. Crear o actualizar el asiento programado asociado
@@ -573,9 +585,8 @@ class ConfiguracionContableController extends BaseModuloController
 
             // 3. Si la opción es de anticipo (cliente/proveedor), propagar la misma cuenta a la
             //    forma de Cobro/Pago de anticipo correspondiente, si aún no tiene cuenta asignada.
-            $opcion = $opcRepo->getById($idOpcion, $idEmpresa);
-            if ($opcion && !empty($opcion['comportamiento'])) {
-                $this->propagarCuentaAnticipoAFormas($idEmpresa, $idUsuario, (string) $opcion['comportamiento'], $idCuenta);
+            if ($comportamientoActual !== '') {
+                $this->propagarCuentaAnticipoAFormas($idEmpresa, $idUsuario, $comportamientoActual, $idCuenta);
             }
 
             echo json_encode(['ok' => true, 'msg' => $msg]);

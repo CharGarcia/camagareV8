@@ -76,6 +76,9 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                                 </div>
                                 <div id="oie-cuenta-drop" class="list-group shadow-sm position-absolute w-100 dropdown-predictivo d-none" style="max-height: 160px; overflow-y:auto; z-index:2000;"></div>
                             </div>
+                            <div id="oie-cuenta-bloqueada-nota" class="form-text text-muted d-none" style="font-size: 0.7rem;">
+                                <i class="bi bi-lock-fill me-1"></i>Esta cuenta se configura en <strong>Contabilidad → Configuración Contable</strong>, no aquí.
+                            </div>
                         </div>
 
                         <!-- Col 3: Switch de Estado -->
@@ -144,6 +147,26 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
 <script>
     let modalInstanciaOIE = null;
 
+    // Comportamientos cuya cuenta viene de Configuración Contable (no editable aquí) — debe
+    // coincidir con AsientoProgramadoRepository::COMPORTAMIENTO_CUENTA_OFICIAL.
+    const OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA = ['COMPRA', 'LIQUIDACION', 'FACTURA_VENTA', 'RECIBO_VENTA'];
+
+    function actualizarBloqueoCuentaOIE(comportamiento) {
+        const bloqueada = OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA.includes(comportamiento);
+        const inpSrc = document.getElementById('oie-src-cuenta');
+        const btnClear = document.getElementById('oie-btn-clear-cuenta');
+        const nota = document.getElementById('oie-cuenta-bloqueada-nota');
+        if (inpSrc) {
+            inpSrc.disabled = bloqueada;
+            inpSrc.placeholder = bloqueada ? '' : 'Buscar cuenta...';
+        }
+        if (btnClear) btnClear.disabled = bloqueada;
+        if (nota) nota.classList.toggle('d-none', !bloqueada);
+        // El valor de oie-idcuenta no se limpia aquí: el servidor ignora este campo por
+        // completo para estos comportamientos (ver OpcionIngresoEgresoService::registrar/
+        // actualizar), así que da igual qué traiga cuando el form se envía.
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const modalEl = document.getElementById('modalOpcion');
         if (modalEl) {
@@ -200,6 +223,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                 else if (['FACTURA_VENTA', 'FACTURA_REEMBOLSO', 'RECIBO_VENTA', 'ANTICIPO_CLIENTE'].includes(comp)) {
                     document.getElementById('oie-rdo-ingreso').checked = true;
                 }
+                actualizarBloqueoCuentaOIE(comp);
             });
         }
 
@@ -318,6 +342,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
 
         document.getElementById('oie-rdo-ingreso').checked = true;
         document.getElementById('oie-comportamiento').value = 'GENERAL';
+        actualizarBloqueoCuentaOIE('GENERAL');
         const swActivo = document.getElementById('oie-sw-activo');
         swActivo.checked = true;
         swActivo.nextElementSibling.nextElementSibling.innerText = 'Estado: Activo';
@@ -336,6 +361,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                         document.getElementById('oie-id').value = d.id;
                         document.getElementById('oie-nombre').value = d.nombre;
                         document.getElementById('oie-comportamiento').value = d.comportamiento || 'GENERAL';
+                        actualizarBloqueoCuentaOIE(d.comportamiento || 'GENERAL');
 
                         const checkBool = (val) => val === true || val === 't' || val === '1' || val === 1;
                         const resIng = checkBool(d.aplica_ingresos);

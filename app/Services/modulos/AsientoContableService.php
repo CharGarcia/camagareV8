@@ -51,6 +51,24 @@ class AsientoContableService
         return $this->repository->getAsientoPorOrigen($modulo, $idRef, $idEmpresa);
     }
 
+    /** @return int[] Todos los ids de asientos activos de un origen (puede haber varios). */
+    public function getIdsAsientosPorOrigen(string $modulo, int $idRef, int $idEmpresa): array
+    {
+        return $this->repository->getIdsAsientosPorOrigen($modulo, $idRef, $idEmpresa);
+    }
+
+    /** @return int[] id_entidad distintos que cubre un asiento ya guardado. */
+    public function getEntidadesDeAsiento(int $idAsiento, string $tipoEntidad): array
+    {
+        return $this->repository->getEntidadesDeAsiento($idAsiento, $tipoEntidad);
+    }
+
+    /** updated_at más reciente entre varias cabeceras (ver AsientoContableRepository::getMaxUpdatedAt). */
+    public function getMaxUpdatedAt(array $ids): ?string
+    {
+        return $this->repository->getMaxUpdatedAt($ids);
+    }
+
     public function guardarAsiento(array $cabeceraData, array $detallesData, int $idEmpresa, int $idUsuario): int
     {
         // Ordenar detalles: cuentas con 'debe' > 0 primero

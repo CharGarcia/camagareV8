@@ -118,17 +118,21 @@ class ControlBancarioRepository extends BaseRepository
     /**
      * Fragmento SQL común: deriva tipo/dirección/número de cheque/fechas desde la
      * clasificación manual (control_bancario_movimientos) o, si no existe, desde
-     * ingresos_pagos/egresos_pagos (vía modulo_origen + id_referencia_origen del asiento).
+     * ingresos_pagos/egresos_pagos (vía tipo_comprobante + id_referencia_origen del asiento).
      *
      * Para el tipo de transacción: si el cobro/pago ya trae un dato más específico
      * (ip.tipo_operacion_bancaria: DEPOSITO/TRANSFERENCIA/CHEQUE/DEBITO) se usa ese.
-     * Si no, y el asiento viene de un documento real del sistema (ingreso, egreso,
-     * recibo_venta, factura_venta, compra, etc. — cualquiera menos 'migracion'/'manual'),
-     * se usa el TIPO de la forma de pago de la cuenta (fp.tipo: BANCO→Transferencia,
+     * Si no, pero SÍ hay un ingreso/egreso real enlazado (ip.id/ep.id no nulo — esto
+     * incluye ingresos/egresos MIGRADOS: la migración también inserta su fila en
+     * ingresos_pagos/egresos_pagos, solo que sin tipo_operacion_bancaria), o el asiento
+     * viene de otro documento real del sistema (recibo_venta, factura_venta, compra,
+     * etc. — cualquiera menos 'migracion'/'manual' sin ingreso/egreso detrás), se usa
+     * el TIPO de la forma de pago de la cuenta (fp.tipo: BANCO→Transferencia,
      * CHEQUE→Cheque), porque esa línea SÍ es un movimiento bancario real aunque el
-     * documento de origen (p. ej. Recibo de Venta) no guarde el detalle del método de
-     * cobro. Solo queda "OTRO" para asientos migrados o manuales, donde no hay
-     * ningún documento de negocio detrás que sustente la inferencia.
+     * documento de origen no guarde el detalle del método de cobro. Solo queda "OTRO"
+     * para asientos manuales o migrados sin ningún ingreso/egreso que los respalde
+     * (p. ej. diario general migrado), donde no hay ningún documento de negocio
+     * detrás que sustente la inferencia.
      */
     private function selectDerivado(): string
     {
@@ -139,7 +143,7 @@ class ControlBancarioRepository extends BaseRepository
                              THEN UPPER(ip.tipo_operacion_bancaria)
                          WHEN ep.id IS NOT NULL AND NULLIF(ep.tipo_operacion_bancaria, '') IS NOT NULL
                              THEN UPPER(ep.tipo_operacion_bancaria)
-                         WHEN ac.modulo_origen NOT IN ('migracion', 'manual') THEN
+                         WHEN ip.id IS NOT NULL OR ep.id IS NOT NULL OR ac.modulo_origen NOT IN ('migracion', 'manual') THEN
                              CASE fp.tipo
                                  WHEN 'CHEQUE' THEN 'CHEQUE'
                                  WHEN 'BANCO'  THEN 'TRANSFERENCIA'
@@ -165,10 +169,16 @@ class ControlBancarioRepository extends BaseRepository
 
     private function joinsDerivado(string $aliasForma = ':id_forma_pago'): string
     {
+        // Se usa ac.tipo_comprobante ('ingresos'/'egresos') en vez de ac.modulo_origen para
+        // que el enlace también funcione en asientos MIGRADOS: la migración de contabilidad
+        // deja modulo_origen='migracion' siempre (así el sincronizador nunca los toca), pero
+        // sí setea tipo_comprobante='ingresos'/'egresos' e id_referencia_origen apuntando al
+        // ingreso/egreso ya migrado (igual que un asiento nativo). Filtrar por modulo_origen
+        // dejaba a los migrados sin ip/ep y por eso siempre caían en "OTRO".
         return "
             LEFT JOIN control_bancario_movimientos cbm ON cbm.id_asiento_detalle = ad.id AND cbm.eliminado = FALSE
-            LEFT JOIN ingresos_pagos ip ON ac.modulo_origen = 'ingreso' AND ac.id_referencia_origen = ip.id_ingreso AND ip.id_forma_cobro = fp.id
-            LEFT JOIN egresos_pagos ep ON ac.modulo_origen = 'egreso' AND ac.id_referencia_origen = ep.id_egreso AND ep.id_forma_pago = fp.id AND ep.eliminado = FALSE";
+            LEFT JOIN ingresos_pagos ip ON ac.tipo_comprobante = 'ingresos' AND ac.id_referencia_origen = ip.id_ingreso AND ip.id_forma_cobro = fp.id
+            LEFT JOIN egresos_pagos ep ON ac.tipo_comprobante = 'egresos' AND ac.id_referencia_origen = ep.id_egreso AND ep.id_forma_pago = fp.id AND ep.eliminado = FALSE";
     }
 
     /**

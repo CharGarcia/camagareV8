@@ -133,6 +133,65 @@ class AsientoContableRepository
         return null;
     }
 
+    /**
+     * Todos los ids de cabeceras ACTIVAS para un origen — a diferencia de getAsientoPorOrigen
+     * (que asume una sola y trae la más reciente), un mismo origen puede tener varios asientos
+     * a la vez (p. ej. nómina contabilizada por empleado, uno por cada uno).
+     */
+    public function getIdsAsientosPorOrigen(string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): array
+    {
+        $sql = "SELECT id FROM asientos_contables_cabecera
+                WHERE modulo_origen = :modulo AND id_referencia_origen = :id_ref
+                  AND id_empresa = :id_empresa AND eliminado = false AND estado != 'anulado'
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                ORDER BY id";
+        $pdo = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':modulo' => $moduloOrigen,
+            ':id_ref' => $idReferenciaOrigen,
+            ':id_empresa' => $idEmpresa
+        ]);
+        return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * id_entidad distintos (de un tipo_entidad dado) que cubren las líneas de un asiento ya
+     * guardado — para emparejar, en una regeneración, cada asiento existente con "su" entidad
+     * (p. ej. qué empleado le corresponde a cada asiento de nómina por empleado).
+     */
+    public function getEntidadesDeAsiento(int $idAsiento, string $tipoEntidad): array
+    {
+        $sql = "SELECT DISTINCT id_entidad FROM asientos_contables_detalle
+                WHERE id_asiento = :id AND tipo_entidad = :tipo
+                  AND eliminado = false AND id_entidad IS NOT NULL";
+        $pdo = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id' => $idAsiento, ':tipo' => $tipoEntidad]);
+        return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * updated_at más reciente entre varias cabeceras. Sirve para resincronizar el updated_at
+     * del documento de origen (p. ej. rol_cabecera) justo después de vincular su asiento — ver
+     * RolAsientoService::contabilizar(), que lo necesita para no quedar "más nuevo" que su
+     * propio asiento recién generado (eso lo marcaría como pendiente otra vez en
+     * SincronizadorAsientosService, en un ciclo infinito).
+     */
+    public function getMaxUpdatedAt(array $ids): ?string
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        if (empty($ids)) {
+            return null;
+        }
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        $pdo = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare("SELECT MAX(updated_at) FROM asientos_contables_cabecera WHERE id IN ($in)");
+        $stmt->execute($ids);
+        $v = $stmt->fetchColumn();
+        return $v ?: null;
+    }
+
     public function generarNumeroComprobante(int $idEmpresa, string $tipoComprobante): string
     {
         $tipoComprobante = strtolower(trim($tipoComprobante));

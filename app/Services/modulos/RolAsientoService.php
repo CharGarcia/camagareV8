@@ -104,14 +104,33 @@ class RolAsientoService
             return $idCuenta;
         };
 
-        // Una línea de detalle por empleado y concepto (etiquetada con el empleado).
-        $lineas = [];
-        $push = function (string $codigo, string $lado, float $valor, string $concepto, array $empOv, int $idEmp, string $nombre) use (&$lineas, $cuentaDe, $ref): void {
+        // ── Modo del rol: GENERAL (un solo asiento combinado) vs POR EMPLEADO (uno
+        // independiente por cada uno) ────────────────────────────────────────────
+        // Se detecta automáticamente: basta que UN empleado del rol tenga una cuenta propia
+        // configurada (override en Configuración Contable, tipo_referencia='empleado') para que
+        // TODO el rol pase a modo por-empleado — así se puede reportar el gasto por centro de
+        // costo/departamento sin mezclarlo con quienes siguen la cuenta general.
+        $overridesPorEmpleado = [];
+        $modoPorEmpleado = false;
+        foreach ($detalle as $lin) {
+            $idEmp = (int) $lin['id_empleado'];
+            $ov = $progRepo->getReglasEmpleado($idEmpresa, $idEmp);
+            $overridesPorEmpleado[$idEmp] = $ov;
+            if (!empty($ov)) {
+                $modoPorEmpleado = true;
+            }
+        }
+
+        // Líneas agrupadas por empleado (id_empleado => líneas[]). Construirlas así de una vez
+        // sirve para ambos modos: en modo general se aplanan todas en un solo asiento; en modo
+        // por empleado, cada grupo es su propio asiento.
+        $lineasPorEmpleado = [];
+        $push = function (string $codigo, string $lado, float $valor, string $concepto, array $empOv, int $idEmp, string $nombre) use (&$lineasPorEmpleado, $cuentaDe, $ref): void {
             $valor = round($valor, 2);
             if ($valor <= 0) return;
             $idCuenta = $cuentaDe($codigo, $empOv);
             if (!$idCuenta) return;
-            $lineas[] = [
+            $lineasPorEmpleado[$idEmp][] = [
                 'id_cuenta_contable'   => $idCuenta,
                 'debe'                 => $lado === 'debe' ? $valor : 0,
                 'haber'                => $lado === 'haber' ? $valor : 0,
@@ -122,10 +141,12 @@ class RolAsientoService
             ];
         };
 
+        $nombresPorEmpleado = [];
         foreach ($detalle as $lin) {
             $idEmp  = (int) $lin['id_empleado'];
             $nombre = (string) $lin['nombres_apellidos'];
-            $empOv  = $progRepo->getReglasEmpleado($idEmpresa, $idEmp); // overrides por empleado
+            $nombresPorEmpleado[$idEmp] = $nombre;
+            $empOv  = $overridesPorEmpleado[$idEmp];
             $provis = $prov->calcularProvisiones($lin, $salario);
 
             $push('GASTOSUELDOSNOMINA', 'debe', (float) $lin['total_ingresos'], 'Gasto Sueldos y Salarios', $empOv, $idEmp, $nombre);
@@ -154,33 +175,118 @@ class RolAsientoService
         if (!empty($faltan)) {
             throw new Exception('Configure las cuentas de nómina en Configuración Contable: ' . implode(', ', array_unique($faltan)) . '.');
         }
-        if (empty($lineas)) throw new Exception('No hay valores para contabilizar.');
+        if (empty($lineasPorEmpleado)) throw new Exception('No hay valores para contabilizar.');
 
         // ── Persistir ────────────────────────────────────────────────────────
         $asientoRepo    = new AsientoContableRepository();
         $asientoService = new AsientoContableService($asientoRepo, new AsientoContableRules(), $this->log);
-        $previo         = $asientoService->getAsientoPorOrigen('nomina', $idRol, $idEmpresa);
+        $fecha          = $cab['fecha_pago'] ?: date('Y-m-t', mktime(0, 0, 0, (int) $cab['periodo_mes'], 1, (int) $cab['periodo_anio']));
+        $tituloBase     = CatalogoRol::nombreTipo((string) $cab['tipo_rol']) . ' - ' . $ref;
+        $idsExistentes  = $asientoService->getIdsAsientosPorOrigen('nomina', $idRol, $idEmpresa);
 
-        $fecha = $cab['fecha_pago'] ?: date('Y-m-t', mktime(0, 0, 0, (int) $cab['periodo_mes'], 1, (int) $cab['periodo_anio']));
-        $cabeceraData = [
-            'id'                   => $previo ? (int) $previo['id'] : null,
-            'fecha_asiento'        => $fecha,
-            'tipo_comprobante'     => 'nomina',
-            'numero_comprobante'   => $previo['numero_comprobante'] ?? '',
-            'concepto'             => CatalogoRol::nombreTipo((string) $cab['tipo_rol']) . ' - ' . $ref,
-            'estado'               => 'contabilizado',
-            'modulo_origen'        => 'nomina',
-            'id_referencia_origen' => $idRol,
-            'observaciones'        => null,
-        ];
+        if (!$modoPorEmpleado) {
+            // Un solo asiento combinado (comportamiento histórico). Si quedaron varios activos
+            // de una corrida "por empleado" anterior (el modo cambió porque se quitaron los
+            // overrides), se anulan todos menos el que se reutiliza para no duplicar.
+            $lineas   = array_merge(...array_values($lineasPorEmpleado));
+            $previoId = count($idsExistentes) === 1 ? $idsExistentes[0] : null;
+            foreach ($idsExistentes as $idExistente) {
+                if ($idExistente !== $previoId) {
+                    $asientoService->anular($idExistente, $idEmpresa, $idUsuario);
+                }
+            }
 
-        $idAsiento = $asientoService->guardarAsiento($cabeceraData, $lineas, $idEmpresa, $idUsuario);
+            $cabeceraData = [
+                'id'                   => $previoId,
+                'fecha_asiento'        => $fecha,
+                'tipo_comprobante'     => 'nomina',
+                'numero_comprobante'   => '',
+                'concepto'             => $tituloBase,
+                'estado'               => 'contabilizado',
+                'modulo_origen'        => 'nomina',
+                'id_referencia_origen' => $idRol,
+                'observaciones'        => null,
+            ];
+            $idAsiento = $asientoService->guardarAsiento($cabeceraData, $lineas, $idEmpresa, $idUsuario);
 
-        $this->repo->setIdAsiento($idRol, $idAsiento);
+            $this->repo->setIdAsiento($idRol, $idAsiento);
+            $this->repo->setEstado($idRol, $idEmpresa, 'contabilizado', $idUsuario);
+            $this->sincronizarUpdatedAt($idRol, $asientoService, [$idAsiento]);
+            $this->log->registrar($idUsuario, $idEmpresa, 'CONTABILIZAR', 'rol_cabecera', $idRol, $cab, ['id_asiento' => $idAsiento, 'modo' => 'general']);
+
+            return ['id_asiento' => $idAsiento, 'lineas' => count($lineas), 'modo' => 'general'];
+        }
+
+        // Modo por empleado: un asiento independiente por cada uno. Se empareja cada asiento ya
+        // existente con "su" empleado (vía id_entidad de sus propias líneas) para actualizarlo en
+        // el mismo lugar en vez de duplicar; lo que sobre (empleado ya no está en la corrida, o
+        // era el asiento combinado de una corrida "general" anterior) se anula.
+        $mapaEmpleadoAsientoPrevio = [];
+        foreach ($idsExistentes as $idExistente) {
+            $entidades = $asientoService->getEntidadesDeAsiento($idExistente, 'empleado');
+            if (count($entidades) === 1) {
+                $mapaEmpleadoAsientoPrevio[$entidades[0]] = $idExistente;
+            } else {
+                $asientoService->anular($idExistente, $idEmpresa, $idUsuario);
+            }
+        }
+
+        $idsGenerados = [];
+        foreach ($lineasPorEmpleado as $idEmp => $lineasEmp) {
+            $previoId = $mapaEmpleadoAsientoPrevio[$idEmp] ?? null;
+            unset($mapaEmpleadoAsientoPrevio[$idEmp]);
+
+            $cabeceraData = [
+                'id'                   => $previoId,
+                'fecha_asiento'        => $fecha,
+                'tipo_comprobante'     => 'nomina',
+                'numero_comprobante'   => '',
+                'concepto'             => $tituloBase . ' - ' . ($nombresPorEmpleado[$idEmp] ?? ''),
+                'estado'               => 'contabilizado',
+                'modulo_origen'        => 'nomina',
+                'id_referencia_origen' => $idRol,
+                'observaciones'        => null,
+            ];
+            $idsGenerados[] = $asientoService->guardarAsiento($cabeceraData, $lineasEmp, $idEmpresa, $idUsuario);
+        }
+
+        // Empleados que ya no están en esta corrida (removidos del rol entre una contabilización
+        // y otra): su asiento anterior queda sin reclamar, se anula.
+        foreach ($mapaEmpleadoAsientoPrevio as $idSobrante) {
+            $asientoService->anular($idSobrante, $idEmpresa, $idUsuario);
+        }
+
+        // rol_cabecera.id_asiento guarda uno cualquiera de los generados: solo se usa como
+        // marcador booleano de "¿este rol ya tiene asiento(s)?" (ver anularAsiento() y
+        // SincronizadorAsientosService, que detectan la lista real por origen, no por esta
+        // columna).
+        $this->repo->setIdAsiento($idRol, $idsGenerados[0] ?? null);
         $this->repo->setEstado($idRol, $idEmpresa, 'contabilizado', $idUsuario);
-        $this->log->registrar($idUsuario, $idEmpresa, 'CONTABILIZAR', 'rol_cabecera', $idRol, $cab, ['id_asiento' => $idAsiento]);
+        $this->sincronizarUpdatedAt($idRol, $asientoService, $idsGenerados);
+        $this->log->registrar($idUsuario, $idEmpresa, 'CONTABILIZAR', 'rol_cabecera', $idRol, $cab, ['ids_asiento' => $idsGenerados, 'modo' => 'por_empleado']);
 
-        return ['id_asiento' => $idAsiento, 'lineas' => count($lineas)];
+        return [
+            'id_asiento'  => $idsGenerados[0] ?? null,
+            'ids_asiento' => $idsGenerados,
+            'lineas'      => array_sum(array_map('count', $lineasPorEmpleado)),
+            'modo'        => 'por_empleado',
+        ];
+    }
+
+    /**
+     * setIdAsiento()/setEstado() tocan rol_cabecera.updated_at con CURRENT_TIMESTAMP DESPUÉS de
+     * que el/los asiento(s) ya se guardaron — eso deja al rol "más nuevo" que su propia
+     * contabilización recién hecha, y SincronizadorAsientosService (que compara
+     * asiento.updated_at < rol.updated_at para decidir "pendiente") lo vuelve a marcar
+     * pendiente de inmediato, en un ciclo que nunca se resuelve. Se alinea el updated_at del rol
+     * con el más reciente de sus asientos para que quede exactamente al día.
+     */
+    private function sincronizarUpdatedAt(int $idRol, AsientoContableService $asientoService, array $idsAsiento): void
+    {
+        $fecha = $asientoService->getMaxUpdatedAt($idsAsiento);
+        if ($fecha !== null) {
+            $this->repo->forzarUpdatedAt($idRol, $fecha);
+        }
     }
 
     /**
@@ -229,21 +335,28 @@ class RolAsientoService
         return ['debe' => $debe, 'haber' => $haber, 'total_debe' => round($td, 2), 'total_haber' => round($th, 2), 'cuadrado' => abs($td - $th) < 0.01];
     }
 
-    /** Anula el asiento asociado al rol (si existe) y lo desvincula. */
+    /**
+     * Anula TODOS los asientos asociados al rol (si tiene) y lo desvincula. Puede haber más de
+     * uno si el rol se contabilizó en modo "por empleado" — por eso se busca por origen
+     * (modulo_origen='nomina' + id_referencia_origen) en vez de confiar solo en el único id que
+     * guarda rol_cabecera.id_asiento.
+     */
     public function anularAsiento(array $cab, int $idEmpresa, int $idUsuario): void
     {
-        $idAsiento = (int) ($cab['id_asiento'] ?? 0);
-        if ($idAsiento <= 0) return;
-        try {
-            $asientoService = new AsientoContableService(new AsientoContableRepository(), new AsientoContableRules(), $this->log);
-            $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
-        } catch (\Throwable $e) {
-            // Un período cerrado debe abortar la operación completa: si se tragara, el rol
-            // quedaría anulado con su asiento aún vigente (descuadre silencioso).
-            if (stripos($e->getMessage(), 'contable cerrado') !== false) {
-                throw $e;
+        $asientoService = new AsientoContableService(new AsientoContableRepository(), new AsientoContableRules(), $this->log);
+        $ids = $asientoService->getIdsAsientosPorOrigen('nomina', (int) $cab['id'], $idEmpresa);
+        if (empty($ids)) return;
+        foreach ($ids as $idAsiento) {
+            try {
+                $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
+            } catch (\Throwable $e) {
+                // Un período cerrado debe abortar la operación completa: si se tragara, el rol
+                // quedaría anulado con parte de sus asientos aún vigentes (descuadre silencioso).
+                if (stripos($e->getMessage(), 'contable cerrado') !== false) {
+                    throw $e;
+                }
+                // Otros errores: continuar con los demás, igual desvinculamos del rol al final.
             }
-            // Otros errores: continuar, igual desvinculamos del rol
         }
         $this->repo->setIdAsiento((int) $cab['id'], null);
     }

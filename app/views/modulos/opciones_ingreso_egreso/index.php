@@ -149,6 +149,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                     <?php else: ?>
                                         <span class="text-muted italic">No asignada</span>
                                     <?php endif; ?>
+                                    <?php if (!empty($r['cuenta_bloqueada'])): ?>
+                                        <i class="bi bi-lock-fill text-muted ms-1" title="Se configura en Contabilidad → Configuración Contable, no aquí"></i>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="text-center" data-col="estado">
                                     <?php if (strtoupper($r['estado'] ?? '') === 'ACTIVO'): ?>

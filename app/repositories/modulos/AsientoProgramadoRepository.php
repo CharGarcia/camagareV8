@@ -328,6 +328,52 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * comportamiento (empresa_opciones_ingreso_egreso) => [tipo_asiento, codigo] de la cuenta
+     * "oficial" que ese módulo YA usa para su propia Cuenta por Pagar/Cobrar en Configuración
+     * Contable. Solo cubre comportamientos con un documento de origen que genera su propio
+     * asiento (compra, liquidación, factura de venta, recibo de venta); anticipos y préstamos
+     * (ANTICIPO_CLIENTE, ANTICIPO_PROVEEDOR, QUINCENA, PRESTAMO, ROL) no tienen equivalente
+     * porque son la transacción de origen y necesitan su propia cuenta configurable.
+     */
+    private const COMPORTAMIENTO_CUENTA_OFICIAL = [
+        'COMPRA'        => ['adquisiciones_compras', 'PORPAGARFACTURACOMPRA'],
+        'LIQUIDACION'   => ['adquisiciones_compras', 'PORPAGARFACTURACOMPRA'],
+        'FACTURA_VENTA' => ['ventas_factura',        'PORCOBRARFACTURAVENTA'],
+        'RECIBO_VENTA'  => ['recibos_venta',         'PORCOBRARRECIBOVENTA'],
+    ];
+
+    /** ¿Este comportamiento tiene una cuenta oficial equivalente (ver COMPORTAMIENTO_CUENTA_OFICIAL)? */
+    public function tieneCuentaOficialPorComportamiento(string $comportamiento): bool
+    {
+        return isset(self::COMPORTAMIENTO_CUENTA_OFICIAL[strtoupper($comportamiento)]);
+    }
+
+    /**
+     * Resuelve la cuenta "oficial" (Configuración Contable) de un comportamiento de concepto de
+     * Ingresos/Egresos. Devuelve null si ese comportamiento no tiene equivalente (sigue usando su
+     * propia cuenta libre); devuelve id_cuenta=0 si SÍ tiene equivalente pero aún no está
+     * configurada en Configuración Contable.
+     */
+    public function getCuentaOficialPorComportamiento(int $idEmpresa, string $comportamiento): ?array
+    {
+        $map = self::COMPORTAMIENTO_CUENTA_OFICIAL[strtoupper($comportamiento)] ?? null;
+        if ($map === null) {
+            return null;
+        }
+        [$tipoAsiento, $codigo] = $map;
+        foreach ($this->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento) as $r) {
+            if (($r['codigo'] ?? '') === $codigo) {
+                return [
+                    'id_cuenta'     => (int) ($r['id_cuenta'] ?? 0),
+                    'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                    'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                ];
+            }
+        }
+        return ['id_cuenta' => 0, 'cuenta_codigo' => '', 'cuenta_nombre' => ''];
+    }
+
+    /**
      * Obtiene las opciones de Ingresos/Egresos (módulo empresa_opciones_ingreso_egreso) activas
      * que aplican a la naturaleza indicada, cruzadas con su cuenta contable programada.
      * La cuenta se toma del asiento programado si existe; en su defecto, de la cuenta asignada
