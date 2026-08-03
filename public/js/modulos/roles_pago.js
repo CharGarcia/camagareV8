@@ -495,22 +495,23 @@
     }
 
     function renderProvisiones(d) {
-        const prov = d.provisiones || [];
-        if (!prov.length) { $('rolemp_prov_body').innerHTML = '<div class="text-muted py-3 text-center">Las provisiones solo aplican al rol mensual.</div>'; return; }
+        const todas = d.provisiones || [];
+        if (!todas.length) { $('rolemp_prov_body').innerHTML = '<div class="text-muted py-3 text-center">Las provisiones solo aplican al rol mensual.</div>'; return; }
+        const prov = todas.filter(p => p.incluir && (parseFloat(p.valor) || 0) > 0);
+        if (!prov.length) { $('rolemp_prov_body').innerHTML = '<div class="text-muted py-3 text-center">No hay provisiones para este empleado este mes.</div>'; return; }
         let rows = '', tot = 0;
         prov.forEach(p => {
-            if (p.incluir) tot += parseFloat(p.valor) || 0;
-            rows += `<tr class="${p.incluir ? '' : 'text-muted'}">
+            tot += parseFloat(p.valor) || 0;
+            rows += `<tr>
                 <td class="ps-3">${esc(p.concepto)}</td>
-                <td class="text-end">${money(p.valor)}</td>
-                <td class="small">${p.incluir ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Provisionado</span>' : '<span class="badge bg-secondary bg-opacity-10 text-secondary">' + esc(p.nota) + '</span>'}</td></tr>`;
+                <td class="text-end">${money(p.valor)}</td></tr>`;
         });
         $('rolemp_prov_body').innerHTML = `
             <p class="small text-muted">Beneficios sociales que la empresa acumula este mes por el empleado.</p>
             <table class="table table-sm table-bordered align-middle">
-                <thead class="table-light"><tr><th class="ps-3">Concepto</th><th class="text-end">Valor mensual</th><th>Estado</th></tr></thead>
+                <thead class="table-light"><tr><th class="ps-3">Concepto</th><th class="text-end">Valor mensual</th></tr></thead>
                 <tbody>${rows}
-                    <tr class="table-light fw-bold"><td class="ps-3">Total provisionado</td><td class="text-end">${money(tot)}</td><td></td></tr>
+                    <tr class="table-light fw-bold"><td class="ps-3">Total provisionado</td><td class="text-end">${money(tot)}</td></tr>
                 </tbody>
             </table>`;
     }
