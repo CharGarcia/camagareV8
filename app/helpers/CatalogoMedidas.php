@@ -34,9 +34,9 @@ class CatalogoMedidas
     {
         return [
             [
-                'codigo'    => 'CANT',
-                'nombre'    => 'CANTIDAD',
-                'sinonimos' => ['CANTIDAD', 'UNIDAD', 'UNIDADES', 'CONTEO'],
+                'codigo'    => 'UNI',
+                'nombre'    => 'UNIDAD',
+                'sinonimos' => ['UNIDAD', 'CANTIDAD', 'CANT', 'UNIDADES', 'CONTEO'],
                 'unidades'  => [
                     ['codigo' => 'UND', 'nombre' => 'UNIDAD', 'abreviatura' => 'u',   'factor_base' => 1.0,    'es_base' => true],
                     ['codigo' => 'PAR', 'nombre' => 'PAR',    'abreviatura' => 'par', 'factor_base' => 2.0,    'es_base' => false],

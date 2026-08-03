@@ -180,10 +180,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                                 <thead class="table-light">
                                     <tr>
                                         <th style="width:30px;"><input type="checkbox" class="form-check-input" id="tr-sel-todos" onchange="TR_marcarTodos(this)" title="Seleccionar todos"></th>
-                                        <th>Beneficiario</th><th>Banco</th><th>Tipo Cuenta</th><th>N° Cuenta</th><th class="text-end">Monto</th>
+                                        <th>N° Egreso</th><th>Tipo</th><th>F. Emisión</th><th>Beneficiario</th><th>Banco</th><th>Tipo Cuenta</th><th>N° Cuenta</th><th class="text-end">Monto</th>
                                     </tr>
                                 </thead>
-                                <tbody id="tr-selector-body"><tr><td colspan="6" class="text-center text-muted py-3">Cargando…</td></tr></tbody>
+                                <tbody id="tr-selector-body"><tr><td colspan="9" class="text-center text-muted py-3">Cargando…</td></tr></tbody>
                             </table>
                         </div>
                         <div class="d-flex justify-content-end mt-2">

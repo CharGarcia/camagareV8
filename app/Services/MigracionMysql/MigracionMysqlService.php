@@ -651,14 +651,17 @@ class MigracionMysqlService
             $s = strtr((string) $s, ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N','á'=>'A','é'=>'E','í'=>'I','ó'=>'O','ú'=>'U','ü'=>'U','ñ'=>'N']);
             return strtoupper(trim(preg_replace('/\s+/', ' ', $s)));
         };
-        $porNom = []; $porAbre = []; $default = null;
-        foreach ($pg->query("SELECT id, nombre, abreviatura, id_tipo FROM unidades_medida WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false") as $u) {
+        // Ordena es_base primero: si la empresa tiene unidades DUPLICADAS por nombre (catálogos viejos
+        // con "UNIDAD" en dos tipos), se prefiere la base (la canónica) al indexar.
+        $porNom = []; $porAbre = [];
+        foreach ($pg->query("SELECT id, nombre, abreviatura, id_tipo FROM unidades_medida WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY es_base DESC, id ASC") as $u) {
             $par = [(int) $u['id'], (int) $u['id_tipo']];
             $n = $norm($u['nombre']); $a = $norm($u['abreviatura']);
             if ($n !== '' && !isset($porNom[$n]))  { $porNom[$n]  = $par; }
             if ($a !== '' && !isset($porAbre[$a])) { $porAbre[$a] = $par; }
-            if ($n === 'UNIDAD') { $default = $par; }
         }
+        // Default (id 0 / no casado) = la unidad UNIDAD de la empresa (misma que casa el id 17).
+        $default = $porNom['UNIDAD'] ?? null;
         $viejo = [];
         foreach ($mysql->query("SELECT id_medida, nombre_medida, abre_medida FROM unidad_medida") as $v) {
             $viejo[(int) $v['id_medida']] = [$norm($v['nombre_medida']), $norm($v['abre_medida'])];

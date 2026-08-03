@@ -19,6 +19,13 @@ function TR_esc(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/** Formatea una fecha 'YYYY-MM-DD[ HH:MM:SS]' a d-m-Y. */
+function TR_formatFecha(f) {
+    if (!f) return '-';
+    const m = String(f).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : TR_esc(f);
+}
+
 // ─── SweetAlert helpers ─────────────────────────────────────────────────────
 
 /**
@@ -330,7 +337,7 @@ document.getElementById('tr-selector-buscar').addEventListener('input', function
 
 async function TR_cargarSelector() {
     const body = document.getElementById('tr-selector-body');
-    body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Cargando…</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Cargando…</td></tr>';
     const chkTodos = document.getElementById('tr-sel-todos');
     if (chkTodos) { chkTodos.checked = false; chkTodos.indeterminate = false; }
     // Se usa el tipo elegido en el formulario (sirve tanto al crear como al editar un borrador).
@@ -340,13 +347,17 @@ async function TR_cargarSelector() {
         const res = await fetch(`${TR_URL}/getPagosDisponiblesAjax?tipo=${encodeURIComponent(tipo)}&b=${encodeURIComponent(b)}`);
         const json = await res.json();
         if (!json.ok || !json.data.length) {
-            body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No hay pagos pendientes de transferencia disponibles.</td></tr>';
+            body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">No hay pagos pendientes de transferencia disponibles.</td></tr>';
             return;
         }
         body.innerHTML = json.data.map(p => {
             const sinCuenta = !p.id_banco || !p.numero_cuenta;
+            const tipoLabel = p.tipo_sujeto === 'PROVEEDOR' ? 'Proveedor' : (p.tipo_sujeto === 'EMPLEADO' ? 'Nómina' : TR_esc(p.tipo_sujeto || '-'));
             return `<tr class="${sinCuenta ? 'table-danger' : 'tr-sel-fila'}" style="${sinCuenta ? '' : 'cursor:pointer;'}" title="${sinCuenta ? 'Sin banco/cuenta registrada' : ''}" onclick="TR_toggleFila(event, this)">
                 <td><input type="checkbox" class="form-check-input tr-sel-pago" value="${p.id_egreso_pago}" ${sinCuenta ? 'disabled' : ''}></td>
+                <td>${TR_esc(p.numero_egreso)}</td>
+                <td>${tipoLabel}</td>
+                <td>${TR_formatFecha(p.fecha_emision)}</td>
                 <td>${TR_esc(p.beneficiario)}</td>
                 <td>${sinCuenta ? '<span class="text-danger">Sin banco</span>' : TR_esc(p.banco_nombre)}</td>
                 <td>${sinCuenta ? '-' : TR_esc(p.tipo_cuenta)}</td>
@@ -355,7 +366,7 @@ async function TR_cargarSelector() {
             </tr>`;
         }).join('');
     } catch (err) {
-        body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error de conexión.</td></tr>';
+        body.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-3">Error de conexión.</td></tr>';
     }
 }
 
