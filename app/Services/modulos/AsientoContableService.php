@@ -352,6 +352,7 @@ class AsientoContableService
             $origenesConMapaGenerico = [
                 'compra', 'recibo_venta', 'nota_credito', 'nota_debito',
                 'liquidacion_compra', 'importacion', 'consignacion_venta', 'retorno_cv', 'cambio_producto_cv',
+                'FACTURACION_CV',
             ];
             if (in_array($origenDoc, $origenesConMapaGenerico, true) && !empty($asiento['id_referencia_origen'])) {
                 $doc = \App\Helpers\DocumentoOrigenAsiento::paraModulo($origenDoc);

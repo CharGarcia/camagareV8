@@ -1556,16 +1556,27 @@ class AuditoriaContableRepository extends BaseRepository
         return $st->rowCount();
     }
 
-    /** Desvincula el asiento del documento (deja id_asiento_contable en NULL). */
+    /** Desvincula el asiento del documento (deja su columna de enlace en NULL). */
     public function desvincularDocumento(string $origen, int $idDocumento, int $idEmpresa): void
     {
         $tabla = $this->getTablaOrigen($origen);
-        // Algunas cabeceras (rol_cabecera, consignaciones_facturas) no tienen id_asiento_contable:
-        // el vínculo vive solo en el asiento, así que no hay nada que desvincular.
-        if ($tabla === null || empty($this->origenes[$origen]['tiene_id_asiento'])) {
+        if ($tabla === null) {
             return;
         }
-        $sql = "UPDATE {$tabla} SET id_asiento_contable = NULL,
+        // La mayoría de módulos enlazan por 'id_asiento_contable' (tiene_id_asiento=true); dos
+        // SÍ tienen enlace pero con otro nombre de columna — antes se trataban como "sin enlace"
+        // (tiene_id_asiento=false) y por eso su documento quedaba huérfano al anular su asiento
+        // desde aquí (Auditoría Contable): nomina usa rol_cabecera.id_asiento, y FACTURACION_CV
+        // usa consignaciones_facturas.id_asiento_reingreso.
+        $columna = match ($origen) {
+            'nomina'         => 'id_asiento',
+            'FACTURACION_CV' => 'id_asiento_reingreso',
+            default          => !empty($this->origenes[$origen]['tiene_id_asiento']) ? 'id_asiento_contable' : null,
+        };
+        if ($columna === null) {
+            return;
+        }
+        $sql = "UPDATE {$tabla} SET {$columna} = NULL,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :emp";
         $st = $this->db->prepare($sql);
