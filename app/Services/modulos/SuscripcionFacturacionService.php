@@ -255,7 +255,8 @@ class SuscripcionFacturacionService
         return array_merge(
             $this->mapaPeriodo($dt,    ''),
             $this->mapaPeriodo($dtAnt, '_ant'),
-            $this->mapaFin($dt, $dtFin)
+            $this->mapaFin($dt, $dtFin),
+            ['{anio_mes_ant}' => $dtAnt->format('Y-m')]
         );
     }
 
