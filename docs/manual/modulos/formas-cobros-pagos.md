@@ -6,7 +6,7 @@ ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
 etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque
-version: 1.0
+version: 1.1
 orden: 70
 estado: activo
 ---
@@ -47,6 +47,17 @@ Cada forma de pago apunta a una cuenta contable. Es lo que hace que un cobro en
 efectivo y uno por banco terminen en cuentas distintas sin que nadie lo indique
 en cada documento.
 
+**Una cuenta de tipo Banco/Cheque no puede compartirse con una forma que no
+sea bancaria.** [Control Bancario](control-bancario.md) arma el mayor de una
+cuenta bancaria filtrando directamente por esa cuenta contable, sin importar
+qué forma de pago se usó. Si una forma de **Efectivo**, **Tarjeta** u otro tipo
+no bancario reutiliza la cuenta de un banco, sus movimientos se mezclan en la
+conciliación de ese banco como si fueran transacciones bancarias reales. El
+sistema bloquea el guardado en ese caso con el mensaje "Esa cuenta contable ya
+está asignada a...". Sí es válido que **dos formas bancarias** (Banco y
+Cheque) compartan la misma cuenta: representan la misma cuenta física vista
+por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
+
 ## Errores frecuentes
 
 - **No aparece al registrar un cobro**: puede estar inactiva, o ser de un tipo que
@@ -55,7 +66,19 @@ en cada documento.
   traspaso: es de tipo anticipo o está inactiva.
 - **Los cobros van a la cuenta contable equivocada**: revise la cuenta asignada a
   esa forma de pago.
+- **"Esa cuenta contable ya está asignada a..."**: está intentando guardar una
+  forma no bancaria (Efectivo, Tarjeta...) con la misma cuenta contable que ya
+  usa una forma de tipo Banco o Cheque. Elija una cuenta distinta para la forma
+  no bancaria, o si en realidad es un movimiento de banco, cambie su tipo a
+  Banco y complete los datos bancarios.
+- **En Control Bancario aparecen movimientos que no son del banco** (de una
+  forma Efectivo/Tarjeta, etc.): la causa es la anterior pero ya sucedida —
+  edite esa forma de pago y cambie su cuenta contable a una que no sea la del
+  banco (o conviértala a tipo Banco si de verdad corresponde a esa cuenta).
 
 ## Historial de cambios
 
+- **1.1** — Nueva validación: una forma NO bancaria ya no puede guardar la
+  misma cuenta contable que una forma de tipo Banco/Cheque (causaba que sus
+  movimientos aparecieran mezclados en Control Bancario).
 - **1.0** — Versión inicial.

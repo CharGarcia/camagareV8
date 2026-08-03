@@ -425,6 +425,28 @@ class FormaPagoRepository extends BaseRepository
         return round($inicial + $generado - $aplicado, 2);
     }
 
+    /**
+     * Otra forma de pago (de la misma empresa) que ya usa esta cuenta contable, si la hay.
+     * Se usa para evitar que una forma NO bancaria (efectivo, tarjeta...) comparta la cuenta
+     * de una forma BANCO/CHEQUE: Control Bancario filtra el mayor por id_cuenta_contable, así
+     * que compartirla mezcla movimientos ajenos en la conciliación de esa cuenta bancaria.
+     */
+    public function getOtraFormaConMismaCuenta(int $idEmpresa, int $idCuenta, ?int $excluirId): ?array
+    {
+        $sql = "SELECT id, nombre, tipo FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND id_cuenta_contable = :id_cuenta AND eliminado = FALSE";
+        $params = [':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuenta];
+        if ($excluirId !== null) {
+            $sql .= " AND id != :excluir";
+            $params[':excluir'] = $excluirId;
+        }
+        $sql .= " LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function estaUsado(int $id, int $idEmpresa): bool
     {
         // 1. Verificar en ingresos_pagos

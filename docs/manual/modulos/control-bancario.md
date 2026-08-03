@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.2
+version: 1.5
 orden: 60
 estado: activo
 ---
@@ -50,13 +50,24 @@ Si el movimiento no tiene una clasificación manual guardada, el sistema intenta
 adivinar el **tipo de transacción** antes de mostrar "Otro":
 
 1. Si el ingreso/egreso que originó la línea ya trae el dato específico
-   (depósito, transferencia, cheque, débito), se usa ese.
+   (depósito, transferencia, cheque, débito) — lo que el usuario elige al
+   registrar el cobro/pago con una forma de tipo banco — se usa ese.
 2. Si no, pero la línea sí corresponde a un ingreso o egreso real (incluyendo
    los **migrados** del sistema anterior), se usa el tipo de la cuenta bancaria:
    cuenta de tipo cheque → "Cheque"; cuenta bancaria → "Depósito" si el dinero
    **entra** a la cuenta o "Transferencia" si **sale**.
 3. Solo queda como **"Otro"** cuando el asiento no tiene ningún ingreso/egreso
    detrás (asientos manuales o del diario general migrado sin esa clasificación).
+
+La detección siempre queda atada a **la cuenta contable de la cuenta bancaria
+que se está viendo** (la línea contable debe pertenecer a esa cuenta) y **a la
+forma de pago usada en ese ingreso/egreso específico** — pero "la forma de
+pago de la cuenta" no significa una sola fila: si esa cuenta bancaria tiene
+**más de una forma de pago bancaria** apuntándole (p. ej. "Cheques Pichincha" y
+"Transferencias Pichincha" son la misma cuenta física vista por dos formas),
+un cobro/pago hecho con CUALQUIERA de esas formas se reconoce igual, sin
+importar cuál de las dos se tenga seleccionada en el filtro — nunca se toman
+datos de una cuenta contable distinta.
 
 ## Errores frecuentes
 
@@ -65,6 +76,13 @@ adivinar el **tipo de transacción** antes de mostrar "Otro":
   tipo cheque.
 - **El saldo del banco no coincide con el contable**: revise los movimientos sin
   clasificar y los cheques girados que aún no se cobraron.
+- **Aparecen movimientos de Efectivo/Tarjeta/otra forma no bancaria mezclados
+  en esta cuenta**: esa forma de pago quedó configurada con la MISMA cuenta
+  contable que este banco (ver [Formas de cobro y pago](formas-cobros-pagos.md)).
+  Como este módulo arma el mayor filtrando por cuenta contable, cualquier
+  forma que postee ahí aparece, sea o no bancaria. Corrija la cuenta contable
+  de esa forma de pago (el sistema ya bloquea que esto vuelva a pasar al
+  guardar una forma nueva).
 - **Movimientos migrados aparecían todos como "Otro"** (incluso depósitos):
   el enlace a los pagos migrados se buscaba por un dato que los migrados no
   siempre tienen, y las corridas de migración antiguas guardaron el dato de
@@ -74,6 +92,18 @@ adivinar el **tipo de transacción** antes de mostrar "Otro":
 
 ## Historial de cambios
 
+- **1.5** — Corrección: cuando una cuenta bancaria tiene dos o más formas de
+  pago bancarias (Banco/Cheque) apuntándole (p. ej. al convertir una forma
+  antes no bancaria para que quede junto al banco real), un cobro/pago hecho
+  con cualquiera de esas formas ya se reconoce correctamente sin importar cuál
+  esté seleccionada como "cuenta bancaria" en el filtro.
+- **1.4** — Documentado el caso de una forma de pago no bancaria compartiendo
+  cuenta contable con un banco (causa raíz y cómo corregirlo); ver
+  [Formas de cobro y pago](formas-cobros-pagos.md).
+- **1.3** — Corrección: cuando un ingreso/egreso paga dos veces con la MISMA
+  forma de pago (p. ej. dos cheques distintos depositados el mismo día a la
+  misma cuenta), el enlace ya no duplica la línea del movimiento en el
+  listado ni descuadra el saldo acumulado.
 - **1.2** — Corrección: la comparación que enlaza un asiento migrado con su
   ingreso/egreso original ahora ignora mayúsculas/minúsculas (las corridas de
   migración antiguas guardaron ese dato en mayúsculas), así que los migrados

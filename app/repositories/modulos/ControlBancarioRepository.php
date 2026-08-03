@@ -194,10 +194,43 @@ class ControlBancarioRepository extends BaseRepository
         // ingreso/egreso ya migrado (igual que un asiento nativo). Filtrar por modulo_origen
         // dejaba a los migrados sin ip/ep y por eso siempre caían en "OTRO". UPPER() porque
         // corridas de migración antiguas dejaron el valor en mayúsculas ('EGRESOS', 'INGRESOS').
+        //
+        // LATERAL + LIMIT 1 (en vez de un LEFT JOIN plano): un ingreso/egreso puede tener MÁS
+        // de una fila en ingresos_pagos/egresos_pagos con la MISMA forma de pago (p. ej. dos
+        // cheques distintos depositados el mismo día a la misma cuenta). Un LEFT JOIN normal
+        // matchearía ambas filas contra la MISMA línea del asiento (ad), duplicando esa línea
+        // en el listado y descuadrando el saldo acumulado (la ventana SUM() la contaría dos
+        // veces). LATERAL garantiza como máximo una fila de pago por línea de asiento.
+        //
+        // El match es por CUENTA CONTABLE (fp2.id_cuenta_contable = fp.id_cuenta_contable), no
+        // por "misma forma de pago exacta" (fp2.id = fp.id): una cuenta bancaria puede tener
+        // MÁS de una forma de pago bancaria apuntando a ella a propósito (p. ej. "Cheques
+        // Pichincha" y "Transferencias Pichincha" son la MISMA cuenta física vista por dos
+        // formas — ver FormaPagoService::validar()). Si el pago se hizo con la OTRA forma
+        // bancaria de esa misma cuenta, igual debe encontrarse aquí; si no, se pierde el dato
+        // específico (tipo_operacion_bancaria, número de cheque) al verla desde la forma que no
+        // se usó para ese pago en particular.
         return "
             LEFT JOIN control_bancario_movimientos cbm ON cbm.id_asiento_detalle = ad.id AND cbm.eliminado = FALSE
-            LEFT JOIN ingresos_pagos ip ON UPPER(ac.tipo_comprobante) = 'INGRESOS' AND ac.id_referencia_origen = ip.id_ingreso AND ip.id_forma_cobro = fp.id
-            LEFT JOIN egresos_pagos ep ON UPPER(ac.tipo_comprobante) = 'EGRESOS' AND ac.id_referencia_origen = ep.id_egreso AND ep.id_forma_pago = fp.id AND ep.eliminado = FALSE";
+            LEFT JOIN LATERAL (
+                SELECT ip2.* FROM ingresos_pagos ip2
+                INNER JOIN empresa_formas_pago fp2 ON fp2.id = ip2.id_forma_cobro
+                    AND fp2.id_cuenta_contable = fp.id_cuenta_contable AND fp2.eliminado = FALSE
+                WHERE UPPER(ac.tipo_comprobante) = 'INGRESOS'
+                  AND ac.id_referencia_origen = ip2.id_ingreso
+                ORDER BY ip2.id
+                LIMIT 1
+            ) ip ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT ep2.* FROM egresos_pagos ep2
+                INNER JOIN empresa_formas_pago fp2 ON fp2.id = ep2.id_forma_pago
+                    AND fp2.id_cuenta_contable = fp.id_cuenta_contable AND fp2.eliminado = FALSE
+                WHERE UPPER(ac.tipo_comprobante) = 'EGRESOS'
+                  AND ac.id_referencia_origen = ep2.id_egreso
+                  AND ep2.eliminado = FALSE
+                ORDER BY ep2.id
+                LIMIT 1
+            ) ep ON TRUE";
     }
 
     /**

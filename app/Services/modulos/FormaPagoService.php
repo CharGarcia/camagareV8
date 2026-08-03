@@ -106,6 +106,32 @@ class FormaPagoService
                 throw new Exception("Un anticipo debe aplicar a una sola dirección: Ingreso (clientes) o Egreso (proveedores).");
             }
         }
+
+        // Una cuenta contable de tipo BANCO/CHEQUE es tratada por Control Bancario como el
+        // mayor de esa cuenta bancaria (filtra por id_cuenta_contable, no por la forma de pago
+        // elegida). Si una forma NO bancaria (Efectivo, Tarjeta...) reutiliza esa misma cuenta,
+        // sus movimientos se mezclan en la conciliación de esa cuenta como si fueran del banco.
+        // Entre dos formas BANCO/CHEQUE compartir cuenta SÍ es válido (representan la misma
+        // cuenta física vista por dos medios, p. ej. "Cheques Pichincha" y "Transferencias
+        // Pichincha"): el conflicto solo existe cuando una es bancaria y la otra no.
+        if (!empty($data['id_cuenta_contable'])) {
+            $tiposBancarios = ['BANCO', 'CHEQUE'];
+            $estaEsBancaria = in_array($data['tipo'], $tiposBancarios, true);
+            $excluirId = !empty($data['id']) ? (int) $data['id'] : null;
+            $otra = $this->repository->getOtraFormaConMismaCuenta(
+                (int) $data['id_empresa'], (int) $data['id_cuenta_contable'], $excluirId
+            );
+            if ($otra !== null) {
+                $otraEsBancaria = in_array($otra['tipo'], $tiposBancarios, true);
+                if ($estaEsBancaria !== $otraEsBancaria) {
+                    throw new Exception(
+                        "Esa cuenta contable ya está asignada a \"{$otra['nombre']}\" (tipo {$otra['tipo']}). "
+                        . "Una forma bancaria (Banco/Cheque) no puede compartir cuenta con una que no lo es: "
+                        . "sus movimientos se mezclarían en Control Bancario. Elija otra cuenta contable."
+                    );
+                }
+            }
+        }
     }
 
     /** Mapa [id_forma => saldo] de las formas no-anticipo (Efectivo/Banco/Tarjeta/Otro). */
