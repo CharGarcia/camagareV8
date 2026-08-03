@@ -787,16 +787,59 @@ class ProductoRepository extends BaseRepository
             return $codigo;
         }
 
-        // 2) Sin numeración propia: formato autogenerado exacto (P001, S42…).
-        //    Un código manual como 'PCFE01' o 'SINCODIGO' no debe mover el consecutivo.
-        $sql = "SELECT MAX(substring(codigo from 2)::bigint)
-                FROM {$this->table}
-                WHERE id_empresa = :id_empresa AND codigo ~ :patron
-                  AND eliminado = false";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa, ':patron' => '^' . $prefijo . '[0-9]{1,9}$']);
-        $numero = (int) ($st->fetchColumn() ?: 0);
+        // 2) Prefijo genérico + número (p. ej. 'VTA.0001', 'VTA.0002'… o el propio
+        //    'P001', 'S001'…, que es solo un caso particular de este mismo patrón).
+        //    Se separa cada código en "prefijo" (parte no numérica) + "sufijo"
+        //    (dígitos finales, máx. 9) y se agrupa por prefijo. Gana el prefijo
+        //    más usado (no el del último creado, por la misma razón del punto 1:
+        //    un código manual suelto no debe desviar la convención real de la
+        //    empresa); empate se resuelve por el sufijo más alto encontrado.
+        $stTodos = $this->db->prepare(
+            "SELECT codigo FROM {$this->table}
+             WHERE id_empresa = :id_empresa AND tipo_produccion = :tipo
+               AND eliminado = false"
+        );
+        $stTodos->execute([':id_empresa' => $idEmpresa, ':tipo' => $tipo]);
 
+        $grupos = [];
+        foreach ($stTodos->fetchAll(PDO::FETCH_COLUMN) as $codigoExistente) {
+            $codigoExistente = (string) $codigoExistente;
+            if (!preg_match('/^(.*?)([0-9]{1,9})$/', $codigoExistente, $m) || $m[1] === '') {
+                continue; // sin prefijo (numérico puro) ya se resolvió en el punto 1
+            }
+            $pref = $m[1];
+            $valor = (int) $m[2];
+            if (!isset($grupos[$pref])) {
+                $grupos[$pref] = ['count' => 0, 'max' => -1, 'codigoMax' => ''];
+            }
+            $grupos[$pref]['count']++;
+            if ($valor > $grupos[$pref]['max']) {
+                $grupos[$pref]['max'] = $valor;
+                $grupos[$pref]['codigoMax'] = $codigoExistente;
+            }
+        }
+
+        if (!empty($grupos)) {
+            uasort($grupos, fn(array $a, array $b): int => $b['count'] <=> $a['count'] ?: $b['max'] <=> $a['max']);
+            $prefGanador = array_key_first($grupos);
+            $g = $grupos[$prefGanador];
+
+            $sufMax = substr($g['codigoMax'], strlen($prefGanador));
+            $longitud = strlen($sufMax);
+            $numero = (int) $sufMax;
+
+            do {
+                $numero++;
+                $codigo = $prefGanador . str_pad((string) $numero, $longitud, '0', STR_PAD_LEFT);
+                $stExiste->execute([':id_empresa' => $idEmpresa, ':codigo' => $codigo]);
+            } while ($stExiste->fetchColumn() && $numero < 999999999);
+
+            return $codigo;
+        }
+
+        // 3) Catálogo vacío para este tipo: no hay ninguna convención previa que
+        //    seguir. Se arranca desde cero con el formato autogenerado (P001, S001…).
+        $numero = 0;
         do {
             $numero++;
             $codigo = $prefijo . str_pad((string) $numero, 3, '0', STR_PAD_LEFT);

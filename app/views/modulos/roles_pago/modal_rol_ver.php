@@ -45,7 +45,6 @@
                 <button type="button" class="btn btn-outline-danger btn-sm" id="rolverBtnPdf" onclick="window.rolVerPdf()" title="PDF con todos los empleados"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>
                 <button type="button" class="btn btn-outline-success btn-sm" id="rolverBtnExcel" onclick="window.rolVerExcel()" title="Excel con el detalle de todos los empleados"><i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel</button>
                 <?php if (!empty($perm['actualizar'])): ?>
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="rolverBtnRecalcular" onclick="window.rolVerRecalcular()" title="Vuelve a calcular los valores de todos los empleados (los que ya tienen pago no cambian) y sincroniza el asiento contable"><i class="bi bi-arrow-clockwise me-1"></i>Recalcular</button>
                     <button type="button" class="btn btn-success btn-sm" id="rolverBtnEgresos" onclick="window.abrirEgresoLote()"><i class="bi bi-cash-coin me-1"></i>Generar egresos</button>
                 <?php endif; ?>
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
