@@ -8,6 +8,7 @@ use App\models\AsientoContableCabecera;
 use App\models\AsientoContableDetalle;
 use App\repositories\modulos\AsientoContableRepository;
 use App\repositories\modulos\PeriodosContablesRepository;
+use App\repositories\modulos\RolPagoRepository;
 use App\Rules\modulos\AsientoContableRules;
 use App\Rules\modulos\PeriodosContablesRules;
 use App\Services\LogSistemaService;
@@ -340,6 +341,53 @@ class AsientoContableService
                     idRegistro: (int)$asiento['id_referencia_origen'],
                     antes: ['id_asiento_contable' => $idAsiento],
                     despues: ['id_asiento_contable' => null]
+                );
+            }
+
+            // Compras, Recibos de Venta, Notas de Crédito/Débito, Liquidaciones de Compra,
+            // Importaciones, Consignaciones y sus derivados (Retorno, Cambio de Producto):
+            // desvincular su columna de asiento (mismo hueco que tenía nómina — ver el bloque de
+            // abajo y egresos-compras-cxp-contrapartida-faltante). Se reutiliza el mapa fijo
+            // DocumentoOrigenAsiento (tabla + columna) en vez de repetir un método por módulo.
+            $origenesConMapaGenerico = [
+                'compra', 'recibo_venta', 'nota_credito', 'nota_debito',
+                'liquidacion_compra', 'importacion', 'consignacion_venta', 'retorno_cv', 'cambio_producto_cv',
+            ];
+            if (in_array($origenDoc, $origenesConMapaGenerico, true) && !empty($asiento['id_referencia_origen'])) {
+                $doc = \App\Helpers\DocumentoOrigenAsiento::paraModulo($origenDoc);
+                if ($doc !== null) {
+                    $this->repository->desvincularAsientoGenerico($doc['tabla'], $doc['col_asiento'], (int) $asiento['id_referencia_origen']);
+
+                    $this->logService->registrar(
+                        idUsuario: $idUsuario,
+                        idEmpresa: $idEmpresa,
+                        accion: 'Desvincular Asiento de ' . ($doc['etiqueta'] ?? ucfirst($origenDoc)),
+                        tabla: $doc['tabla'],
+                        idRegistro: (int) $asiento['id_referencia_origen'],
+                        antes: [$doc['col_asiento'] => $idAsiento],
+                        despues: [$doc['col_asiento'] => null]
+                    );
+                }
+            }
+
+            // Si el asiento pertenece a un rol de nómina, desvincular rol_cabecera.id_asiento.
+            // Un rol MENSUAL puede tener VARIOS asientos activos a la vez (modo por empleado —
+            // ver RolAsientoService::contabilizar), así que se desvincula sin condicionar a que
+            // este id sea justo el que tenía guardado: cualquier anulación de un asiento de este
+            // rol debe dejarlo marcado como pendiente en SincronizadorAsientosService (que solo
+            // mira si id_asiento es NULL o quedó desactualizado); al recontabilizar, el rol
+            // reconcilia solo qué otros asientos siguen vigentes (no los duplica).
+            if (($asiento['modulo_origen'] ?? '') === 'nomina' && !empty($asiento['id_referencia_origen'])) {
+                (new RolPagoRepository())->setIdAsiento((int) $asiento['id_referencia_origen'], null);
+
+                $this->logService->registrar(
+                    idUsuario: $idUsuario,
+                    idEmpresa: $idEmpresa,
+                    accion: 'Desvincular Asiento de Rol de Pagos',
+                    tabla: 'rol_cabecera',
+                    idRegistro: (int) $asiento['id_referencia_origen'],
+                    antes: ['id_asiento' => $idAsiento],
+                    despues: ['id_asiento' => null]
                 );
             }
 

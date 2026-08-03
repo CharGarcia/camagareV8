@@ -449,4 +449,18 @@ class AsientoContableRepository
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':id' => $idTraspaso]);
     }
+
+    /**
+     * Desvincula genéricamente la columna de asiento de un documento (tabla + columna salen del
+     * mapa fijo App\Helpers\DocumentoOrigenAsiento::DOCUMENTOS, nunca de entrada de usuario —
+     * seguro interpolarlas). Evita repetir un método desvincularAsientoX() por cada módulo nuevo
+     * que se agregue a ese mapa (ver AsientoContableService::anular()).
+     */
+    public function desvincularAsientoGenerico(string $tabla, string $columna, int $id): void
+    {
+        $sql = "UPDATE {$tabla} SET {$columna} = NULL WHERE id = :id";
+        $pdo = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id' => $id]);
+    }
 }
