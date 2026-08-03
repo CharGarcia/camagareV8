@@ -325,11 +325,12 @@ class RolesPagoController extends BaseModuloController
         $this->requireLeer();
         $id = (int) ($_GET['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $dest = ($_GET['view'] ?? '') === '1' ? 'I' : 'D'; // descarga por defecto, igual que pdfEmpleado()
         try {
             $rol = $this->service->getDetalle($id, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$rol) { http_response_code(404); echo 'Corrida no encontrada'; exit; }
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
-            (new RolPagoPdfService())->generarGeneral($rol, $empresa, 'I');
+            (new RolPagoPdfService())->generarGeneral($rol, $empresa, $dest);
         } catch (\Throwable $e) {
             echo 'Error al generar PDF: ' . $e->getMessage();
         }

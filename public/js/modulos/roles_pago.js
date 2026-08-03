@@ -136,14 +136,6 @@
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
         renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || []);
 
-        // Contabilizar: solo aplica al rol MENSUAL, y solo si todavía no está contabilizado
-        // (las quincenas/semanas se netean en el mensual, nunca tienen asiento propio).
-        const btnContab = $('rolverBtnContabilizar');
-        if (btnContab) {
-            const puedeContabilizar = rol.tipo_rol === 'MENSUAL' && !['borrador', 'anulado', 'contabilizado'].includes(rol.estado);
-            btnContab.classList.toggle('d-none', !puedeContabilizar);
-        }
-
         const det = rol.detalle || [];
         if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
 
@@ -212,7 +204,9 @@
     // ─── PDF / Excel generales del rol (todos los empleados) ─────────────────
     window.rolVerPdf = function () {
         if (!rolActual || !rolActual.id) return;
-        window.open(`${urlModulo}/pdf?id=${rolActual.id}`, '_blank');
+        const a = document.createElement('a');
+        a.href = `${urlModulo}/pdf?id=${rolActual.id}`;
+        document.body.appendChild(a); a.click(); a.remove();
     };
 
     window.rolVerExcel = function () {
@@ -220,39 +214,6 @@
         const a = document.createElement('a');
         a.href = `${urlModulo}/excelGeneral?id=${rolActual.id}`;
         document.body.appendChild(a); a.click(); a.remove();
-    };
-
-    // ─── Contabilizar el rol MENSUAL (genera el asiento contable) ────────────
-    window.rolContabilizar = async function () {
-        if (!rolActual || !rolActual.id) return;
-        const r = await Swal.fire({
-            title: '¿Contabilizar este rol?',
-            text: 'Se generará el asiento contable de la nómina (gasto, IESS, provisiones, anticipos y bancos).',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Sí, contabilizar',
-            cancelButtonText: 'Cancelar'
-        });
-        if (!r.isConfirmed) return;
-
-        const btn = $('rolverBtnContabilizar');
-        const original = btn.innerHTML;
-        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        try {
-            const fd = new FormData(); fd.append('id', rolActual.id);
-            const resp = await fetch(`${urlModulo}/contabilizar`, { method: 'POST', body: fd });
-            const json = await resp.json();
-            if (json.ok) {
-                Swal.fire({ icon: 'success', title: 'Rol contabilizado', text: json.msg || 'Asiento generado.', timer: 1800, showConfirmButton: false });
-                window.abrirModalVer({ id: rolActual.id });
-                window.dispatchEvent(new CustomEvent('rolGuardado'));
-            } else {
-                Swal.fire({ icon: 'error', title: 'No se pudo contabilizar', text: json.error || 'Error desconocido.' });
-            }
-        } catch (e) {
-            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
-        }
-        btn.disabled = false; btn.innerHTML = original;
     };
 
     // ─── Generar egresos de nómina en lote (un egreso por empleado) ──────────
