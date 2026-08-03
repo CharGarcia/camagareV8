@@ -321,9 +321,21 @@ class SincronizadorAsientosService
             'colsDoc' => ['numero_ingreso'],
         ];
 
-        // 7. Egresos (pagos): contrapartida del concepto + formas de pago
+        // 7. Egresos (pagos): contrapartida del concepto + formas de pago. Se excluyen
+        //    los que pagan un rol MENSUAL: esos NUNCA generan asiento propio a propósito
+        //    (ver EgresoService::egresoPagaRolMensual) — su contabilidad completa la arma
+        //    RolAsientoService::contabilizar() al contabilizar el rol; incluirlos aquí
+        //    los marcaría como "sin asiento" para siempre.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('egresos', 'egresos_cabecera.id'),
+            'sql'    => "SELECT id FROM egresos_cabecera ec2 WHERE ec2.id_empresa = ? AND ec2.eliminado = false
+                         AND ec2.id_asiento_contable IS NULL AND ec2.estado <> 'anulado'
+                         AND NOT EXISTS (
+                             SELECT 1 FROM egresos_detalle ed
+                             JOIN rol_detalle rd ON rd.id = ed.id_referencia_documento
+                             JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                             WHERE ed.id_egreso = ec2.id AND ed.tipo_documento = 'ROL'
+                               AND rc.tipo_rol = 'MENSUAL' AND ed.eliminado = false
+                         )" . $excMig('egresos', 'ec2.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\EgresoService(

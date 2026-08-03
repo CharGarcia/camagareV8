@@ -95,7 +95,7 @@
                 renderVer(json.data);
                 modalVer()?.show();
                 window.dispatchEvent(new CustomEvent('rolGuardado'));
-                avisarPendientes(json.data.avisos || []);
+                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || []);
             } else {
                 Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo generar.' });
             }
@@ -131,10 +131,18 @@
         badge.textContent = ESTADOS[rol.estado] || rol.estado;
         badge.className = 'badge ms-2 bg-' + (COLOR[rol.estado] || 'secondary');
         badge.classList.remove('d-none');
-        rolActual = { id: rol.id, estado: rol.estado };
+        rolActual = { id: rol.id, estado: rol.estado, tipo_rol: rol.tipo_rol };
         $('rolver_periodo').textContent = `${mes} ${rol.periodo_anio}${num}`;
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
-        renderAvisos(rol.avisos || []);
+        renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || []);
+
+        // Contabilizar: solo aplica al rol MENSUAL, y solo si todavía no está contabilizado
+        // (las quincenas/semanas se netean en el mensual, nunca tienen asiento propio).
+        const btnContab = $('rolverBtnContabilizar');
+        if (btnContab) {
+            const puedeContabilizar = rol.tipo_rol === 'MENSUAL' && !['borrador', 'anulado', 'contabilizado'].includes(rol.estado);
+            btnContab.classList.toggle('d-none', !puedeContabilizar);
+        }
 
         const det = rol.detalle || [];
         if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
@@ -151,28 +159,52 @@
         $('rolver_conteo').textContent = det.length + ' empleados';
     }
 
-    // Banner de anticipos/préstamos pendientes de desembolso (no se descuentan hasta pagarlos).
-    function renderAvisos(avisos) {
+    // Banners: (1) empleados activos NO incluidos por falta de período, (2) anticipos/
+    // préstamos pendientes de desembolso (no se descuentan hasta pagarlos).
+    function renderAvisos(avisos, sinPeriodo) {
         const box = $('rolver_avisos');
         if (!box) return;
-        if (!avisos || !avisos.length) { box.innerHTML = ''; return; }
-        const li = avisos.map(a =>
-            `<li>${esc(a.empleado)} — <b>${esc(a.concepto)}</b>: ${money(a.monto)} <span class="text-muted">(${a.tipo === 'anticipo' ? 'anticipo sin pagar' : 'préstamo sin desembolsar'})</span></li>`
-        ).join('');
-        box.innerHTML = `<div class="alert alert-warning py-2 px-3 mb-2 small">
-            <i class="bi bi-exclamation-triangle-fill me-1"></i>
-            <b>Pendientes de desembolso.</b> Estas novedades NO se descuentan en el rol hasta pagarlas en <b>Egresos → Nómina</b>:
-            <ul class="mb-0 mt-1">${li}</ul></div>`;
+        let html = '';
+        if (sinPeriodo && sinPeriodo.length) {
+            const liSp = sinPeriodo.map(e =>
+                `<li>${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion || '')}</span></li>`
+            ).join('');
+            html += `<div class="alert alert-danger py-2 px-3 mb-2 small">
+                <i class="bi bi-person-fill-exclamation me-1"></i>
+                <b>${sinPeriodo.length} empleado(s) activo(s) NO incluido(s) en este rol.</b> No tienen un período registrado que cubra este mes — regístrelo en su ficha (pestaña <b>Periodos</b>) y vuelva a abrir este rol:
+                <ul class="mb-0 mt-1">${liSp}</ul></div>`;
+        }
+        if (avisos && avisos.length) {
+            const li = avisos.map(a =>
+                `<li>${esc(a.empleado)} — <b>${esc(a.concepto)}</b>: ${money(a.monto)} <span class="text-muted">(${a.tipo === 'anticipo' ? 'anticipo sin pagar' : 'préstamo sin desembolsar'})</span></li>`
+            ).join('');
+            html += `<div class="alert alert-warning py-2 px-3 mb-2 small">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                <b>Pendientes de desembolso.</b> Estas novedades NO se descuentan en el rol hasta pagarlas en <b>Egresos → Nómina</b>:
+                <ul class="mb-0 mt-1">${li}</ul></div>`;
+        }
+        box.innerHTML = html;
     }
 
-    // Aviso emergente al generar, si hay pendientes de desembolso.
-    function avisarPendientes(avisos) {
-        if (!avisos || !avisos.length) return;
-        const li = avisos.map(a => `<li>${esc(a.empleado)} — ${esc(a.concepto)}: ${money(a.monto)}</li>`).join('');
+    // Aviso emergente al generar, si hay empleados sin período o novedades sin desembolsar.
+    function avisarPendientes(avisos, sinPeriodo) {
+        const hayAvisos = avisos && avisos.length;
+        const haySinPeriodo = sinPeriodo && sinPeriodo.length;
+        if (!hayAvisos && !haySinPeriodo) return;
+
+        let html = '';
+        if (haySinPeriodo) {
+            const liSp = sinPeriodo.map(e => `<li>${esc(e.nombres_apellidos)}</li>`).join('');
+            html += `<div class="mb-2"><b>${sinPeriodo.length} empleado(s) activo(s) NO se incluyeron</b> en este rol porque no tienen un período registrado que cubra este mes:<ul class="mt-1 mb-0">${liSp}</ul></div>`;
+        }
+        if (hayAvisos) {
+            const li = avisos.map(a => `<li>${esc(a.empleado)} — ${esc(a.concepto)}: ${money(a.monto)}</li>`).join('');
+            html += `<div>Estos anticipos/préstamos <b>no se descontaron</b> en el rol porque aún no se han pagado en <b>Egresos → Nómina</b>:<ul class="mt-1 mb-0">${li}</ul></div>`;
+        }
         Swal.fire({
             icon: 'warning',
-            title: 'Hay novedades sin desembolsar',
-            html: `<div class="small text-start">Estos anticipos/préstamos <b>no se descontaron</b> en el rol porque aún no se han pagado en <b>Egresos → Nómina</b>:<ul class="mt-2">${li}</ul></div>`,
+            title: 'Revise antes de continuar',
+            html: `<div class="small text-start">${html}</div>`,
             confirmButtonText: 'Entendido'
         });
     }
@@ -188,6 +220,39 @@
         const a = document.createElement('a');
         a.href = `${urlModulo}/excelGeneral?id=${rolActual.id}`;
         document.body.appendChild(a); a.click(); a.remove();
+    };
+
+    // ─── Contabilizar el rol MENSUAL (genera el asiento contable) ────────────
+    window.rolContabilizar = async function () {
+        if (!rolActual || !rolActual.id) return;
+        const r = await Swal.fire({
+            title: '¿Contabilizar este rol?',
+            text: 'Se generará el asiento contable de la nómina (gasto, IESS, provisiones, anticipos y bancos).',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, contabilizar',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!r.isConfirmed) return;
+
+        const btn = $('rolverBtnContabilizar');
+        const original = btn.innerHTML;
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+            const fd = new FormData(); fd.append('id', rolActual.id);
+            const resp = await fetch(`${urlModulo}/contabilizar`, { method: 'POST', body: fd });
+            const json = await resp.json();
+            if (json.ok) {
+                Swal.fire({ icon: 'success', title: 'Rol contabilizado', text: json.msg || 'Asiento generado.', timer: 1800, showConfirmButton: false });
+                window.abrirModalVer({ id: rolActual.id });
+                window.dispatchEvent(new CustomEvent('rolGuardado'));
+            } else {
+                Swal.fire({ icon: 'error', title: 'No se pudo contabilizar', text: json.error || 'Error desconocido.' });
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
+        }
+        btn.disabled = false; btn.innerHTML = original;
     };
 
     // ─── Generar egresos de nómina en lote (un egreso por empleado) ──────────

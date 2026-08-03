@@ -319,7 +319,7 @@ class RolesPagoController extends BaseModuloController
         exit;
     }
 
-    /** PDF del rol general (planilla). */
+    /** PDF del rol general (planilla horizontal, con logo, datos de empresa y firmas). */
     public function pdf(): void
     {
         $this->requireLeer();
@@ -328,37 +328,8 @@ class RolesPagoController extends BaseModuloController
         try {
             $rol = $this->service->getDetalle($id, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$rol) { http_response_code(404); echo 'Corrida no encontrada'; exit; }
-
-            $mes = CatalogoNovedades::MESES[(int) $rol['periodo_mes']] ?? $rol['periodo_mes'];
-            $pdf = new \TCPDF('L', 'mm', 'A4', true, 'UTF-8', false);
-            $pdf->setPrintHeader(false);
-            $pdf->setPrintFooter(false);
-            $pdf->SetMargins(8, 8, 8);
-            $pdf->AddPage();
-
-            $html = '<h3>' . htmlspecialchars(CatalogoRol::nombreTipo((string) $rol['tipo_rol'])) . ' — ' . htmlspecialchars($mes . ' ' . $rol['periodo_anio']) . '</h3>';
-            $html .= '<table border="0.5" cellpadding="3"><tr style="background-color:#e9ecef;font-weight:bold;font-size:8px;">'
-                . '<th width="34%">Empleado</th><th width="13%">Identificación</th>'
-                . '<th width="13%" align="right">Ingresos</th><th width="13%" align="right">Egresos</th>'
-                . '<th width="13%" align="right">IESS</th><th width="14%" align="right">Neto</th></tr>';
-            foreach ($rol['detalle'] as $d) {
-                $html .= '<tr style="font-size:8px;">'
-                    . '<td width="34%">' . htmlspecialchars((string) $d['nombres_apellidos']) . '</td>'
-                    . '<td width="13%">' . htmlspecialchars((string) $d['identificacion']) . '</td>'
-                    . '<td width="13%" align="right">' . number_format((float) $d['total_ingresos'], 2) . '</td>'
-                    . '<td width="13%" align="right">' . number_format((float) $d['total_egresos'], 2) . '</td>'
-                    . '<td width="13%" align="right">' . number_format((float) $d['aporte_iess'], 2) . '</td>'
-                    . '<td width="14%" align="right"><b>' . number_format((float) $d['neto'], 2) . '</b></td></tr>';
-            }
-            $html .= '<tr style="font-size:8.5px;font-weight:bold;background-color:#f1f3f5;">'
-                . '<td width="47%" colspan="2">TOTALES</td>'
-                . '<td width="13%" align="right">' . number_format((float) $rol['total_ingresos'], 2) . '</td>'
-                . '<td width="13%" align="right">' . number_format((float) $rol['total_egresos'], 2) . '</td>'
-                . '<td width="13%" align="right"></td>'
-                . '<td width="14%" align="right">' . number_format((float) $rol['total_neto'], 2) . '</td></tr>';
-            $html .= '</table>';
-            $pdf->writeHTML($html, true, false, true, false, '');
-            $pdf->Output('Rol_' . $id . '.pdf', 'I');
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            (new RolPagoPdfService())->generarGeneral($rol, $empresa, 'I');
         } catch (\Throwable $e) {
             echo 'Error al generar PDF: ' . $e->getMessage();
         }
@@ -375,23 +346,53 @@ class RolesPagoController extends BaseModuloController
             $rol = $this->service->getDetalle($id, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$rol) { http_response_code(404); echo 'Corrida no encontrada'; exit; }
 
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
             $mes = CatalogoNovedades::MESES[(int) $rol['periodo_mes']] ?? $rol['periodo_mes'];
-            $titulo = CatalogoRol::nombreTipo((string) $rol['tipo_rol']) . ' - ' . $mes . ' ' . $rol['periodo_anio'];
+            $num = (int) ($rol['numero_periodo'] ?? 0) > 0 ? ' #' . (int) $rol['numero_periodo'] : '';
+            $empNom = (string) ($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? '');
+            $empRuc = (string) ($empresa['ruc'] ?? '');
+            $titulo = trim($empNom . ' (RUC ' . $empRuc . ') — ' . CatalogoRol::nombreTipo((string) $rol['tipo_rol']) . ' - ' . $mes . ' ' . $rol['periodo_anio'] . $num);
 
-            $headers = ['Empleado', 'Identificación', 'Ingresos', 'Egresos', 'Aporte IESS', 'Neto'];
+            // Hoja 1: resumen, un empleado por fila con el mayor detalle posible.
+            $headers = ['Empleado', 'Identificación', 'Cargo', 'Días', 'Sueldo Base', 'Total Ingresos', 'Aporte IESS', 'IR', 'Otros Egresos', 'Total Egresos', 'Neto'];
             $data = [];
+            $novedades = [];
+            $otros = [];
             foreach ($rol['detalle'] as $d) {
+                $iess = (float) ($d['aporte_iess'] ?? 0);
+                $ir   = (float) ($d['retencion_renta'] ?? 0);
+                $egr  = (float) ($d['total_egresos'] ?? 0);
                 $data[] = [
                     $d['nombres_apellidos'],
                     $d['identificacion'],
-                    (float) $d['total_ingresos'],
-                    (float) $d['total_egresos'],
-                    (float) $d['aporte_iess'],
-                    (float) $d['neto'],
+                    $d['cargo'] ?? '—',
+                    (float) ($d['dias_trabajados'] ?? 0),
+                    (float) ($d['sueldo_base'] ?? 0),
+                    (float) ($d['total_ingresos'] ?? 0),
+                    $iess,
+                    $ir,
+                    max(0.0, $egr - $iess - $ir),
+                    $egr,
+                    (float) ($d['neto'] ?? 0),
                 ];
+
+                // Hoja 2 (Novedades) y Hoja 3 (Otros Detalles): todos los rubros de cada empleado.
+                foreach (($d['rubros'] ?? []) as $r) {
+                    $fila = [$d['nombres_apellidos'], $d['identificacion'], $r['concepto'] ?? '', ($r['tipo'] ?? '') === 'ingreso' ? 'Ingreso' : 'Egreso', (float) ($r['valor'] ?? 0)];
+                    if (($r['origen'] ?? '') === 'novedad') {
+                        $novedades[] = $fila;
+                    } elseif (($r['origen'] ?? '') !== 'sueldo') {
+                        array_splice($fila, 3, 0, [(string) ($r['origen'] ?? '')]);
+                        $otros[] = $fila;
+                    }
+                }
             }
 
-            (new \App\Services\ReportService())->exportToExcel('Rol_' . $id, $headers, $data, 'Rol de Pago', $titulo);
+            $reportSvc = new \App\Services\ReportService();
+            $spreadsheet = $reportSvc->construirSpreadsheet($headers, $data, 'Resumen', $titulo);
+            $reportSvc->agregarHoja($spreadsheet, ['Empleado', 'Identificación', 'Concepto', 'Tipo', 'Valor'], $novedades, 'Novedades');
+            $reportSvc->agregarHoja($spreadsheet, ['Empleado', 'Identificación', 'Concepto', 'Origen', 'Tipo', 'Valor'], $otros, 'Otros Detalles');
+            $reportSvc->descargarSpreadsheet($spreadsheet, 'Rol_' . $id);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
@@ -459,28 +460,50 @@ class RolesPagoController extends BaseModuloController
             ];
 
             $empNom = (string) ($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? '');
+            $empRuc = (string) ($empresa['ruc'] ?? '');
+            $empDir = (string) ($empresa['direccion'] ?? '');
+            $empTel = (string) ($empresa['telefono'] ?? '');
             $sheet->setCellValue('A1', strtoupper($empNom));
             $sheet->mergeCells('A1:C1');
             $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
-            $sheet->setCellValue('A2', 'ROL DE PAGO — ' . strtoupper(trim($tipo . ' ' . $periodo)));
-            $sheet->mergeCells('A2:C2');
-            $sheet->getStyle('A2')->getFont()->setBold(true);
+            $filaInfoEmp = 2;
+            $sheet->setCellValueExplicit('A' . $filaInfoEmp, 'RUC: ' . $empRuc, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->mergeCells('A' . $filaInfoEmp . ':C' . $filaInfoEmp);
+            $filaInfoEmp++;
+            if ($empDir !== '') {
+                $sheet->setCellValueExplicit('A' . $filaInfoEmp, $empDir, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->mergeCells('A' . $filaInfoEmp . ':C' . $filaInfoEmp);
+                $filaInfoEmp++;
+            }
+            if ($empTel !== '') {
+                $sheet->setCellValueExplicit('A' . $filaInfoEmp, 'Tel: ' . $empTel, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->mergeCells('A' . $filaInfoEmp . ':C' . $filaInfoEmp);
+                $filaInfoEmp++;
+            }
 
-            $sheet->setCellValue('A4', 'Empleado:');
-            $sheet->getStyle('A4')->getFont()->setBold(true);
-            $sheet->setCellValueExplicit('B4', (string) ($lin['nombres_apellidos'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValue('A5', 'Cédula:');
-            $sheet->getStyle('A5')->getFont()->setBold(true);
-            $sheet->setCellValueExplicit('B5', (string) ($lin['identificacion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValue('A6', 'Cargo:');
-            $sheet->getStyle('A6')->getFont()->setBold(true);
-            $sheet->setCellValueExplicit('B6', (string) ($lin['cargo'] ?? '—'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValue('A7', 'Días trabajados:');
-            $sheet->getStyle('A7')->getFont()->setBold(true);
-            $sheet->setCellValue('B7', (float) ($lin['dias_trabajados'] ?? 0));
+            $filaInfoEmp++;
+            $sheet->setCellValue('A' . $filaInfoEmp, 'ROL DE PAGO — ' . strtoupper(trim($tipo . ' ' . $periodo)));
+            $sheet->mergeCells('A' . $filaInfoEmp . ':C' . $filaInfoEmp);
+            $sheet->getStyle('A' . $filaInfoEmp)->getFont()->setBold(true);
+            $filaInfoEmp += 2;
 
-            $headerRow = 9;
+            $filaDatos = [
+                'Empleado:'        => (string) ($lin['nombres_apellidos'] ?? ''),
+                'Cédula:'          => (string) ($lin['identificacion'] ?? ''),
+                'Cargo:'           => (string) ($lin['cargo'] ?? '—'),
+                'Días trabajados:' => (string) ($lin['dias_trabajados'] ?? 0),
+                'Sueldo base:'     => number_format((float) ($lin['sueldo_base'] ?? 0), 2),
+                'Fecha de pago:'   => !empty($cab['fecha_pago']) ? date('d-m-Y', strtotime((string) $cab['fecha_pago'])) : '—',
+            ];
+            foreach ($filaDatos as $etiqueta => $valor) {
+                $sheet->setCellValue('A' . $filaInfoEmp, $etiqueta);
+                $sheet->getStyle('A' . $filaInfoEmp)->getFont()->setBold(true);
+                $sheet->setCellValueExplicit('B' . $filaInfoEmp, $valor, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $filaInfoEmp++;
+            }
+
+            $headerRow = $filaInfoEmp + 1;
             $headers = ['Concepto', 'Ingreso', 'Egreso'];
             $col = 'A';
             foreach ($headers as $h) {
@@ -521,13 +544,23 @@ class RolesPagoController extends BaseModuloController
                 $sheet->getColumnDimension($c)->setAutoSize(true);
             }
 
-            $nombreArch = 'Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado')) . '.xlsx';
+            // Hoja 2 (Novedades) y Hoja 3 (Otros Detalles): mismo criterio que excelGeneral().
+            $novedades = [];
+            $otros = [];
+            foreach ($rubros as $r) {
+                $tipoRubro = ($r['tipo'] ?? '') === 'ingreso' ? 'Ingreso' : 'Egreso';
+                if (($r['origen'] ?? '') === 'novedad') {
+                    $novedades[] = [$r['concepto'] ?? '', $tipoRubro, (float) ($r['valor'] ?? 0)];
+                } elseif (($r['origen'] ?? '') !== 'sueldo') {
+                    $otros[] = [$r['concepto'] ?? '', (string) ($r['origen'] ?? ''), $tipoRubro, (float) ($r['valor'] ?? 0)];
+                }
+            }
+            $reportSvc = new \App\Services\ReportService();
+            $reportSvc->agregarHoja($spreadsheet, ['Concepto', 'Tipo', 'Valor'], $novedades, 'Novedades');
+            $reportSvc->agregarHoja($spreadsheet, ['Concepto', 'Origen', 'Tipo', 'Valor'], $otros, 'Otros Detalles');
 
-            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment;filename="' . $nombreArch . '"');
-            header('Cache-Control: max-age=0');
-            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-            $writer->save('php://output');
+            $nombreArch = 'Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado'));
+            $reportSvc->descargarSpreadsheet($spreadsheet, $nombreArch);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();

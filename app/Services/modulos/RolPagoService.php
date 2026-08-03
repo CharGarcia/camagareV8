@@ -73,6 +73,12 @@ class RolPagoService
             (int) $cab['periodo_mes'],
             CatalogoRol::aplicaEn((string) $cab['tipo_rol'])
         );
+        // Aviso: empleados activos que quedaron FUERA del cálculo por no tener un
+        // período que cubra este rango (getEmpleadosActivos los excluye en silencio;
+        // aquí se avisa para que se sepa por qué "faltan" en la lista).
+        $inicioMes = sprintf('%04d-%02d-01', (int) $cab['periodo_anio'], (int) $cab['periodo_mes']);
+        $finMes    = date('Y-m-t', mktime(0, 0, 0, (int) $cab['periodo_mes'], 1, (int) $cab['periodo_anio']));
+        $cab['empleados_sin_periodo'] = $this->repo->getEmpleadosActivosSinPeriodo($idEmpresa, $inicioMes, $finMes);
         return $cab;
     }
 

@@ -807,6 +807,28 @@ class RolPagoRepository extends BaseRepository
     }
 
     /**
+     * Empleados activos que quedaron FUERA de getEmpleadosActivos() por no tener
+     * ningún período que cubra el rango: en vez de excluirlos en silencio, se usa
+     * para avisar al usuario (ficha del empleado → pestaña Periodos).
+     */
+    public function getEmpleadosActivosSinPeriodo(int $idEmpresa, string $inicioMes, string $finMes): array
+    {
+        $sql = "SELECT e.id, e.nombres_apellidos, e.identificacion
+                FROM empleados e
+                WHERE e.id_empresa = :emp AND e.eliminado = false AND e.estado = 'activo'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM empleado_periodos p
+                    WHERE p.id_empleado = e.id AND p.eliminado = false
+                      AND p.fecha_ingreso <= :fin_mes
+                      AND (p.fecha_salida IS NULL OR p.fecha_salida >= :inicio_mes)
+                  )
+                ORDER BY e.nombres_apellidos";
+        $st = $this->db->prepare($sql);
+        $st->execute([':emp' => $idEmpresa, ':inicio_mes' => $inicioMes, ':fin_mes' => $finMes]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Meses (periodo_anio/mes + tipo_rol) en los que el empleado tiene un rol PAGADO:
      * la corrida está contabilizada/pagada, o su línea recibió pago vía egreso (no anulado).
      * Se usa para impedir editar la fecha de ingreso/salida de un rol ya pagado.

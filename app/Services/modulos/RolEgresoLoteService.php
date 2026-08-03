@@ -172,6 +172,15 @@ class RolEgresoLoteService
             'con_error'        => count($errores),
         ]);
 
+        // Si con este lote quedaron TODOS los empleados cubiertos (saldo 0), el rol
+        // pasa a 'pagado'. Sin esto, el rol se queda en 'generado' para siempre aunque
+        // ya se haya pagado a todos — y la contabilización automática (Estados
+        // Financieros) exige justamente 'pagado' para no tocar un rol que aún podría
+        // recalcularse.
+        if ($cab['estado'] === 'generado' && $rolRepo->contarLineasPendientesPago($idRol, $idEmpresa) === 0) {
+            $rolRepo->setEstado($idRol, $idEmpresa, 'pagado', $idUsuario);
+        }
+
         return [
             'creados'          => $creados,
             'total'            => round($total, 2),
