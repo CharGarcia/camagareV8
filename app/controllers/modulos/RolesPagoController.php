@@ -442,7 +442,7 @@ class RolesPagoController extends BaseModuloController
         if ($idDetalle <= 0) { http_response_code(400); echo 'ID requerido'; exit; }
 
         try {
-            $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa, (int) $_SESSION['id_usuario']);
+            $lin = $this->service->getEmpleadoCompleto($idDetalle, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$lin) { http_response_code(404); echo 'Línea no encontrada'; exit; }
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
 
@@ -559,6 +559,60 @@ class RolesPagoController extends BaseModuloController
             $reportSvc = new \App\Services\ReportService();
             $reportSvc->agregarHoja($spreadsheet, ['Concepto', 'Tipo', 'Valor'], $novedades, 'Novedades');
             $reportSvc->agregarHoja($spreadsheet, ['Concepto', 'Origen', 'Tipo', 'Valor'], $otros, 'Otros Detalles');
+
+            // Hoja 4: Provisiones (beneficios sociales que la empresa acumula este mes).
+            // Solo se listan las que realmente se provisionaron (mismo criterio que la
+            // pestaña "Provisiones" del modal): sin valor o si el rol no es mensual, un
+            // único mensaje en vez de una tabla vacía.
+            $provFilas = [];
+            foreach (($lin['provisiones'] ?? []) as $p) {
+                if (!empty($p['incluir']) && (float) ($p['valor'] ?? 0) > 0) {
+                    $provFilas[] = [(string) ($p['concepto'] ?? ''), (float) $p['valor']];
+                }
+            }
+            if (empty($provFilas)) {
+                $msg = (($cab['tipo_rol'] ?? '') === 'MENSUAL')
+                    ? 'No hay provisiones para este empleado este mes.'
+                    : 'Las provisiones solo aplican al rol mensual.';
+                $provFilas[] = [$msg, ''];
+            }
+            $reportSvc->agregarHoja($spreadsheet, ['Concepto', 'Valor Mensual'], $provFilas, 'Provisiones');
+
+            // Hoja 5: Asiento contable (cuentas reales resueltas: override por empleado > general).
+            $asiento = $lin['asiento'] ?? null;
+            $asientoFilas = [];
+            if ($asiento) {
+                foreach (($asiento['debe'] ?? []) as $x) {
+                    $asientoFilas[] = [(string) ($x['cuenta_codigo'] ?? ''), (string) ($x['cuenta_nombre'] ?? ''), (string) ($x['concepto'] ?? ''), (float) $x['valor'], 0];
+                }
+                foreach (($asiento['haber'] ?? []) as $x) {
+                    $asientoFilas[] = [(string) ($x['cuenta_codigo'] ?? ''), (string) ($x['cuenta_nombre'] ?? ''), (string) ($x['concepto'] ?? ''), 0, (float) $x['valor']];
+                }
+                $asientoFilas[] = ['', '', 'TOTALES', (float) ($asiento['total_debe'] ?? 0), (float) ($asiento['total_haber'] ?? 0)];
+            } else {
+                $asientoFilas[] = ['El asiento contable solo aplica al rol mensual.', '', '', '', ''];
+            }
+            $reportSvc->agregarHoja($spreadsheet, ['Cuenta', 'Nombre', 'Concepto', 'Debe', 'Haber'], $asientoFilas, 'Asiento Contable');
+
+            // Hoja 6: Asistencia (jornadas del mes del rol: faltas, atrasos, horas extra).
+            $asistFilas = [];
+            $cap = fn($s) => $s !== '' ? mb_strtoupper(mb_substr($s, 0, 1)) . mb_substr($s, 1) : '';
+            foreach (($lin['asistencia']['dias'] ?? []) as $x) {
+                $fecha = substr((string) ($x['fecha'] ?? ''), 0, 10);
+                $asistFilas[] = [
+                    $fecha !== '' ? date('d-m-Y', strtotime($fecha)) : '',
+                    $x['primera_entrada'] ? substr((string) $x['primera_entrada'], 11, 5) : '—',
+                    $x['ultima_salida'] ? substr((string) $x['ultima_salida'], 11, 5) : '—',
+                    (float) ($x['horas_trabajadas'] ?? 0),
+                    (int) ($x['atraso_min'] ?? 0),
+                    (int) ($x['extra_min'] ?? 0),
+                    $cap((string) ($x['estado'] ?? '')),
+                ];
+            }
+            if (empty($asistFilas)) {
+                $asistFilas[] = ['Sin marcaciones/jornadas registradas para este empleado en el período.', '', '', '', '', '', ''];
+            }
+            $reportSvc->agregarHoja($spreadsheet, ['Fecha', 'Entrada', 'Salida', 'Horas Trabajadas', 'Atraso (min)', 'Extra (min)', 'Estado'], $asistFilas, 'Asistencia');
 
             $nombreArch = 'Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado'));
             $reportSvc->descargarSpreadsheet($spreadsheet, $nombreArch);
