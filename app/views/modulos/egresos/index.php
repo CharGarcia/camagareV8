@@ -1133,7 +1133,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function recalcEgresoTot() {
         const comp = document.getElementById('eg-input-tipo-egreso').value;
         let total = 0;
-        if (comp !== 'GENERAL') {
+        if (!['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
             docsEgreso.filter(d => d.seleccionado).forEach(d => total += d.pagado);
         } else {
             manualEgreso.forEach(m => total += m.monto);

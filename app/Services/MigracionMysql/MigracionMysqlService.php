@@ -637,6 +637,46 @@ class MigracionMysqlService
     }
 
     /** Migra los productos/servicios del contribuyente. */
+    /**
+     * Mapa de unidad de medida vieja → nueva. El catálogo viejo (unidad_medida) es GLOBAL con ids
+     * propios (p.ej. 17='Unidad'); el nuevo (unidades_medida) es POR EMPRESA con otros ids/códigos
+     * (sembrado por CatalogoMedidas). Se casa por NOMBRE y luego ABREVIATURA (normalizados: mayúsculas,
+     * sin plural final, sin prefijo "UN "). Todo lo que no case —incluido id 0 (sin unidad)— cae a UNIDAD.
+     * Devuelve ['map' => [old_id => [id_medida_new, id_tipo_new]], 'default' => [id, tipo]|null].
+     */
+    private function mapaUnidades(int $idEmpresa, PDO $mysql, PDO $pg): array
+    {
+        // Normaliza: sin acentos, mayúsculas, espacios colapsados (para casar "Galones"↔"GALÓN").
+        $norm = static function ($s): string {
+            $s = strtr((string) $s, ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N','á'=>'A','é'=>'E','í'=>'I','ó'=>'O','ú'=>'U','ü'=>'U','ñ'=>'N']);
+            return strtoupper(trim(preg_replace('/\s+/', ' ', $s)));
+        };
+        $porNom = []; $porAbre = []; $default = null;
+        foreach ($pg->query("SELECT id, nombre, abreviatura, id_tipo FROM unidades_medida WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false") as $u) {
+            $par = [(int) $u['id'], (int) $u['id_tipo']];
+            $n = $norm($u['nombre']); $a = $norm($u['abreviatura']);
+            if ($n !== '' && !isset($porNom[$n]))  { $porNom[$n]  = $par; }
+            if ($a !== '' && !isset($porAbre[$a])) { $porAbre[$a] = $par; }
+            if ($n === 'UNIDAD') { $default = $par; }
+        }
+        $viejo = [];
+        foreach ($mysql->query("SELECT id_medida, nombre_medida, abre_medida FROM unidad_medida") as $v) {
+            $viejo[(int) $v['id_medida']] = [$norm($v['nombre_medida']), $norm($v['abre_medida'])];
+        }
+        $map = [];
+        foreach ($viejo as $oid => $par) {
+            [$nom, $abre] = $par;
+            // exacto por nombre → por abreviatura → singular (quita "S"/"ES": GALONES→GALON, METROS→METRO)
+            $hit = $porNom[$nom] ?? $porAbre[$abre] ?? $porNom[preg_replace('/E?S$/', '', $nom)] ?? null;
+            if (!$hit) { // sin prefijo "UN "/"UNA " (Un rollo → ROLLO)
+                $nom2 = preg_replace('/^UN[A]? /', '', $nom);
+                $hit = $porNom[$nom2] ?? $porNom[preg_replace('/E?S$/', '', $nom2)] ?? null;
+            }
+            $map[$oid] = $hit ?? $default;
+        }
+        return ['map' => $map, 'default' => $default];
+    }
+
     private function migrarProductos(int $idEmpresa, string $ruc, int $idUsuario): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
@@ -652,14 +692,17 @@ class MigracionMysqlService
             $done[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']];
         }
 
+        $um = $this->mapaUnidades($idEmpresa, $mysql, $pg); // unidad de medida vieja → nueva (por nombre)
+
         // Dedup por (id_empresa, codigo) — no hay unique constraint, se controla aquí.
         $buscar = $pg->prepare("SELECT id FROM productos WHERE id_empresa = :e AND codigo = :cod LIMIT 1");
-        // Al re-migrar: corrige el IVA de los productos que insertó la migración (corridas viejas
-        // guardaban el CÓDIGO SRI donde va el id de tarifa_iva).
-        $updIva = $pg->prepare("UPDATE productos SET tarifa_iva = ?, updated_at = now(), updated_by = ? WHERE id = ? AND id_empresa = ?");
+        // Al re-migrar: corrige el IVA y la UNIDAD de medida de los productos que insertó la migración
+        // (corridas viejas guardaban el CÓDIGO SRI en tarifa_iva y no traían la unidad). COALESCE en IVA
+        // para no borrarlo si esta corrida no lo resuelve.
+        $updIva = $pg->prepare("UPDATE productos SET id_medida = ?, id_tipo_medida = ?, tarifa_iva = COALESCE(?, tarifa_iva), updated_at = now(), updated_by = ? WHERE id = ? AND id_empresa = ?");
         $ins = $pg->prepare(
-            "INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, status, inventariable, id_usuario, created_by)
-             VALUES (:e, :cod, :nom, :aux, :barras, :precio, :tipo, :iva, :status, :inv, :u, :cb) RETURNING id"
+            "INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, id_medida, id_tipo_medida, status, inventariable, id_usuario, created_by)
+             VALUES (:e, :cod, :nom, :aux, :barras, :precio, :tipo, :iva, :medida, :tipomedida, :status, :inv, :u, :cb) RETURNING id"
         );
         $insMap = $pg->prepare(
             "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by)
@@ -667,19 +710,23 @@ class MigracionMysqlService
         );
 
         $stmt = $mysql->query(
-            "SELECT id, codigo_producto, nombre_producto, codigo_auxiliar, precio_producto, tipo_produccion, tarifa_iva, status
+            "SELECT id, codigo_producto, nombre_producto, codigo_auxiliar, precio_producto, tipo_produccion, tarifa_iva, status, id_unidad_medida
                FROM productos_servicios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base)
         );
 
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $r['id'];
+            // Unidad de medida: casa la vieja con la nueva de la empresa (id 0/no casado → UNIDAD).
+            $oldUm = (int) $r['id_unidad_medida'];
+            $par   = ($oldUm > 0 ? ($um['map'][$oldUm] ?? null) : null) ?? $um['default'];
+            [$idMedida, $idTipoMed] = $par ?? [null, null];
             if (isset($done[(string) $old])) {
-                // Ya migrado: reconciliar el IVA solo si lo INSERTÓ la migración (los 'vinculado' son
+                // Ya migrado: reconciliar IVA y UNIDAD solo si lo INSERTÓ la migración (los 'vinculado' son
                 // productos nativos del sistema nuevo y no se tocan).
                 if (!$done[(string) $old]['vin']) {
                     $ivaOk = $this->ivaIdPorCodigo($pg, (string) $r['tarifa_iva']);
-                    if ($ivaOk !== null) { $updIva->execute([$ivaOk, $idUsuario, $done[(string) $old]['id'], $idEmpresa]); }
+                    $updIva->execute([$idMedida, $idTipoMed, $ivaOk, $idUsuario, $done[(string) $old]['id'], $idEmpresa]);
                 }
                 $res['ya_migrados']++;
                 continue;
@@ -717,6 +764,7 @@ class MigracionMysqlService
                         ':e' => $idEmpresa, ':cod' => $codigo, ':nom' => $nombre,
                         ':aux' => trim((string) ($r['codigo_auxiliar'] ?? '')), ':barras' => '',
                         ':precio' => (float) ($r['precio_producto'] ?? 0), ':tipo' => $tipo, ':iva' => $iva,
+                        ':medida' => $idMedida, ':tipomedida' => $idTipoMed,
                         ':status' => (int) ($r['status'] ?? 1), ':inv' => $tipo === '01' ? 't' : 'f',
                         ':u' => $idUsuario, ':cb' => $idUsuario,
                     ]);
@@ -2103,7 +2151,14 @@ class MigracionMysqlService
         }
 
         $qStock = $pg->prepare("SELECT COALESCE(SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE -cantidad END), 0) FROM inventario_kardex WHERE id_empresa = ? AND id_producto = ? AND id_bodega = ? AND eliminado = false");
-        $ins    = $pg->prepare("INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        // La unidad del kardex (id_medida) sale de la del producto (el listado usa k.id_medida sin fallback
+        // al producto). Guard por si el esquema no tuviera la columna (el repo nativo también la verifica).
+        $tieneMedida = (bool) $pg->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'inventario_kardex' AND column_name = 'id_medida'")->fetchColumn();
+        $medStmt = $pg->prepare("SELECT id_medida FROM productos WHERE id = ? LIMIT 1");
+        $medCache = [];
+        $ins = $pg->prepare($tieneMedida
+            ? "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, id_medida, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+            : "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         // El kardex migrado por sí solo no alimenta productos_bodegas (el reporte de Existencias/
         // Valorización lee de ahí, no del kardex): sin este upsert el stock migrado queda invisible
         // en esas dos pestañas aunque el Kardex sí lo muestre.
@@ -2143,7 +2198,12 @@ class MigracionMysqlService
                 $post = $esEntrada ? $ant + $cant : $ant - $cant;
                 $stock[$key] = $post;
 
-                $ins->execute([$idEmpresa, $idProd, $idBod, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
+                if (!array_key_exists($idProd, $medCache)) { $medStmt->execute([$idProd]); $medCache[$idProd] = ($medStmt->fetchColumn() ?: null); }
+                $idMed = $medCache[$idProd];
+                $movParams = [$idEmpresa, $idProd, $idBod];
+                if ($tieneMedida) { $movParams[] = $idMed; }
+                array_push($movParams, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario);
+                $ins->execute($movParams);
                 $kid = (int) $ins->fetchColumn();
 
                 $upsertStock->execute([$idEmpresa, $idProd, $idBod, $post, $idUsuario, $idUsuario]);
