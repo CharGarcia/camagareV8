@@ -177,6 +177,19 @@
         });
     }
 
+    // ─── PDF / Excel generales del rol (todos los empleados) ─────────────────
+    window.rolVerPdf = function () {
+        if (!rolActual || !rolActual.id) return;
+        window.open(`${urlModulo}/pdf?id=${rolActual.id}`, '_blank');
+    };
+
+    window.rolVerExcel = function () {
+        if (!rolActual || !rolActual.id) return;
+        const a = document.createElement('a');
+        a.href = `${urlModulo}/excelGeneral?id=${rolActual.id}`;
+        document.body.appendChild(a); a.click(); a.remove();
+    };
+
     // ─── Generar egresos de nómina en lote (un egreso por empleado) ──────────
     let mEgLote = null;
     const modalEgLote = () => (mEgLote = mEgLote || (typeof bootstrap !== 'undefined' ? new bootstrap.Modal($('modalEgresoLote')) : null));
@@ -397,22 +410,26 @@
             const res = await resp.json();
             if (!res.ok) { $('rolemp_general_body').innerHTML = '<div class="text-danger">No se pudo cargar.</div>'; return; }
             const d = res.data;
+            // Usar SIEMPRE el id que devolvió el servidor (d.id), no el "det" con el
+            // que se abrió el modal: si el rol se refrescó al pedir el detalle, la
+            // fila puede haberse actualizado y su id ya no ser el mismo.
+            const detActual = d.id || det;
             $('rolemp_nombre').textContent = d.nombres_apellidos;
             $('rolemp_ident').textContent = d.identificacion;
             $('rolemp_pdf').onclick = () => {
                 const a = document.createElement('a');
-                a.href = `${urlModulo}/pdfEmpleado?det=${det}`;
+                a.href = `${urlModulo}/pdfEmpleado?det=${detActual}`;
                 document.body.appendChild(a); a.click(); a.remove();
             };
             $('rolemp_excel').onclick = () => {
                 const a = document.createElement('a');
-                a.href = `${urlModulo}/excelEmpleado?det=${det}`;
+                a.href = `${urlModulo}/excelEmpleado?det=${detActual}`;
                 document.body.appendChild(a); a.click(); a.remove();
             };
             const btnMail = $('rolemp_email');
             btnMail.disabled = !d.email;
             btnMail.title = d.email ? 'Enviar por correo' : 'Sin correo en la ficha';
-            btnMail.onclick = () => window.rolEmailEmpleado(det);
+            btnMail.onclick = () => window.rolEmailEmpleado(detActual);
             renderGeneral(d);
             renderProvisiones(d);
             renderAsiento(d);

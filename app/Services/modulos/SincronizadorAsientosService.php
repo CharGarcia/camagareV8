@@ -415,6 +415,29 @@ class SincronizadorAsientosService
             'colsDoc' => ['numero_factura'],
         ];
 
+        // 8. Roles de Pago (Nómina): solo el rol MENSUAL contabiliza (las quincenas/
+        //    semanas se netean en el mensual, ver RolCalculoService). Se contabiliza
+        //    recién cuando ya está 'pagado' (no 'generado'): mientras sigue en
+        //    'generado' puede refrescarse solo al abrirlo/pagarlo (ver
+        //    RolPagoService::refrescarSiCorresponde), así que generar su asiento antes
+        //    lo dejaría desactualizado si los números cambian después.
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM rol_cabecera WHERE id_empresa = ? AND eliminado = false
+                         AND tipo_rol = 'MENSUAL' AND estado = 'pagado' AND id_asiento IS NULL",
+            'params' => [$idEmpresa],
+            'factory' => function() {
+                return new \App\Services\modulos\RolAsientoService(
+                    new \App\repositories\modulos\RolPagoRepository(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'nombre' => 'Roles de Pago',
+            'dondeConfigurar' => 'Asientos Programados (tipo «Nómina»)',
+            'tablaVerif' => 'rol_cabecera',
+            'colAsiento' => 'id_asiento',
+            'colsDoc' => ['periodo_mes', 'periodo_anio'],
+        ];
+
         return $trabajos;
     }
 

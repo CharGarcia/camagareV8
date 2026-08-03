@@ -365,6 +365,40 @@ class RolesPagoController extends BaseModuloController
         exit;
     }
 
+    /** Excel general del rol: una fila por empleado con su desglose de totales. */
+    public function excelGeneral(): void
+    {
+        $this->requireLeer();
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        try {
+            $rol = $this->service->getDetalle($id, $idEmpresa, (int) $_SESSION['id_usuario']);
+            if (!$rol) { http_response_code(404); echo 'Corrida no encontrada'; exit; }
+
+            $mes = CatalogoNovedades::MESES[(int) $rol['periodo_mes']] ?? $rol['periodo_mes'];
+            $titulo = CatalogoRol::nombreTipo((string) $rol['tipo_rol']) . ' - ' . $mes . ' ' . $rol['periodo_anio'];
+
+            $headers = ['Empleado', 'Identificación', 'Ingresos', 'Egresos', 'Aporte IESS', 'Neto'];
+            $data = [];
+            foreach ($rol['detalle'] as $d) {
+                $data[] = [
+                    $d['nombres_apellidos'],
+                    $d['identificacion'],
+                    (float) $d['total_ingresos'],
+                    (float) $d['total_egresos'],
+                    (float) $d['aporte_iess'],
+                    (float) $d['neto'],
+                ];
+            }
+
+            (new \App\Services\ReportService())->exportToExcel('Rol_' . $id, $headers, $data, 'Rol de Pago', $titulo);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
     /** Detalle de un empleado del rol (general + provisiones + asiento). */
     public function getEmpleadoAjax(): void
     {

@@ -286,16 +286,22 @@ class RolPagoService
         $vacMap           = $esMensual ? $vacRepo->getValorParaRolMasivo($idEmpresa, $ids, $anio, $mes) : [];
         $mensualPagadoSet = $esParcial ? $this->repo->getMensualPagadoMasivo($idEmpresa, $ids, $anio, $mes) : [];
 
-        $totales = ['ingresos' => 0.0, 'egresos' => 0.0, 'neto' => 0.0, 'aporte_patronal' => 0.0];
         $totalCandidatos = count($empleados);
         $excluidosMensualPagado = 0;
 
+        // Filas YA existentes del rol (id_empleado => id_detalle), excluyendo a los
+        // ya pagados (esas nunca se tocan). Se usan para actualizar EN EL SITIO en
+        // vez de borrar y reinsertar: el id_detalle debe mantenerse estable entre
+        // regeneraciones, porque el usuario puede tener abierto el PDF/Excel/correo
+        // de un empleado (o la tabla del modal "Ver") con ese id ya cargado — si
+        // cambiara en cada refresco, esas pantallas dejarían de encontrar la línea.
+        $existentes = $this->repo->getIdsEmpleadoExistentesDelRol($id);
+        foreach (array_keys($empleadosPagados) as $idEmpPagado) {
+            unset($existentes[$idEmpPagado]);
+        }
+
         $this->repo->beginTransaction();
         try {
-            if (empty($empleadosPagados)) {
-                $this->repo->borrarDetalle($id);
-            }
-
             // Loop en memoria: solo cálculo, sin consultas.
             $filasDetalle = []; // [ ['id_empleado'=>int, 'calc'=>[...]], ... ]
             foreach ($empleados as $emp) {
@@ -334,10 +340,6 @@ class RolPagoService
                 }
 
                 $filasDetalle[] = ['id_empleado' => $idEmp, 'calc' => $calc];
-                $totales['ingresos']        += $calc['total_ingresos'];
-                $totales['egresos']         += $calc['total_egresos'];
-                $totales['neto']            += $calc['neto'];
-                $totales['aporte_patronal'] += $calc['aporte_patronal'];
             }
 
             // Si es semanal/quincena y TODOS los empleados del período quedaron excluidos
@@ -346,43 +348,44 @@ class RolPagoService
                 throw new Exception('No se puede generar esta corrida: el rol de fin de mes de ' . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio . ' ya está pagado para todos los empleados del período.');
             }
 
-            if (empty($empleadosPagados)) {
-                // Camino normal (nadie ha cobrado todavía): inserción en lote de todo el detalle.
-                if (!empty($filasDetalle)) {
-                    $idsDetalle = $this->repo->insertDetalleMasivo($id, $idEmpresa, $filasDetalle);
-                    $filasRubro = [];
-                    foreach ($filasDetalle as $f) {
-                        $idDet = $idsDetalle[$f['id_empleado']] ?? null;
-                        if ($idDet === null) continue;
-                        foreach ($f['calc']['rubros'] as $r) {
-                            $filasRubro[] = ['id_detalle' => $idDet, 'rubro' => $r];
-                        }
-                    }
-                    $this->repo->insertRubrosMasivo($idEmpresa, $filasRubro);
+            // A quien ya tenía fila y sigue calificando: actualizar EN EL SITIO (mismo
+            // id_detalle). A quien es nuevo en esta corrida: insertar en lote (rápido
+            // para la primera generación, cuando "existentes" está vacío). A quien
+            // tenía fila pero ya NO calificó en este cálculo (y no está pagado): borrar
+            // su fila huérfana.
+            $filasNuevas = [];
+            foreach ($filasDetalle as $f) {
+                $idDet = $existentes[$f['id_empleado']] ?? null;
+                if ($idDet !== null) {
+                    $this->repo->updateDetalle($idDet, $f['calc']);
+                    $this->repo->reemplazarRubrosDetalle($idDet, $idEmpresa, $f['calc']['rubros']);
+                    unset($existentes[$f['id_empleado']]);
+                } else {
+                    $filasNuevas[] = $f;
                 }
-                foreach ($totales as $k => $v) $totales[$k] = round($v, 2);
-            } else {
-                // Regeneración PARCIAL: hay empleados ya pagados (sus líneas no se tocaron
-                // arriba). Las de los que aún no cobran se actualizan en el sitio (o se
-                // insertan, si son nuevos en la nómina); nunca se borra nada del rol.
-                $idsExistentes = $this->repo->getIdsDetallePorEmpleadoMasivo($id, array_column($filasDetalle, 'id_empleado'));
-                foreach ($filasDetalle as $f) {
-                    $idDet = $idsExistentes[$f['id_empleado']] ?? null;
-                    if ($idDet !== null) {
-                        $this->repo->updateDetalle($idDet, $f['calc']);
-                        $this->repo->reemplazarRubrosDetalle($idDet, $idEmpresa, $f['calc']['rubros']);
-                    } else {
-                        $idDet = $this->repo->insertDetalle($id, $idEmpresa, $f['id_empleado'], $f['calc']);
-                        foreach ($f['calc']['rubros'] as $r) {
-                            $this->repo->insertRubro($idDet, $idEmpresa, $r);
-                        }
-                    }
-                }
-                // Los totales de la cabecera deben sumar TODO el rol: líneas ya pagadas
-                // (congeladas) + las que se acaban de actualizar.
-                $totales = $this->repo->sumarTotalesDelRol($id);
-                foreach ($totales as $k => $v) $totales[$k] = round($v, 2);
             }
+            if (!empty($filasNuevas)) {
+                $idsDetalle = $this->repo->insertDetalleMasivo($id, $idEmpresa, $filasNuevas);
+                $filasRubro = [];
+                foreach ($filasNuevas as $f) {
+                    $idDet = $idsDetalle[$f['id_empleado']] ?? null;
+                    if ($idDet === null) continue;
+                    foreach ($f['calc']['rubros'] as $r) {
+                        $filasRubro[] = ['id_detalle' => $idDet, 'rubro' => $r];
+                    }
+                }
+                $this->repo->insertRubrosMasivo($idEmpresa, $filasRubro);
+            }
+            // Lo que queda en $existentes ya no calificó en este cálculo (p. ej. quedó
+            // sin ningún concepto, o su período dejó de cubrir el mes) y no está pagado.
+            foreach ($existentes as $idDetHuerfano) {
+                $this->repo->borrarDetalleUno($idDetHuerfano);
+            }
+
+            // Los totales de la cabecera suman TODO el rol: líneas pagadas (congeladas)
+            // + las recién actualizadas/insertadas.
+            $totales = $this->repo->sumarTotalesDelRol($id);
+            foreach ($totales as $k => $v) $totales[$k] = round($v, 2);
 
             $this->repo->updateTotalesEstado($id, $totales, 'generado');
             $this->log->registrar($idUsuario, $idEmpresa, 'GENERAR', 'rol_cabecera', $id, $cab, $totales);

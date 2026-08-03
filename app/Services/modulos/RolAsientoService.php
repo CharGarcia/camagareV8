@@ -40,6 +40,22 @@ class RolAsientoService
         $this->log = $log;
     }
 
+    /**
+     * Punto de entrada para SincronizadorAsientosService: recibe solo el id (ya
+     * filtrado por id_empresa en la consulta del sincronizador, igual que
+     * FacturaVentaService y análogos). Usa como "usuario" quien pagó/actualizó
+     * por última vez la corrida — es lo más cercano a quién debería figurar como
+     * responsable de la contabilización automática.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idRol): void
+    {
+        $cab = $this->repo->findCabeceraPorId($idRol);
+        if (!$cab) return;
+        $idUsuario = (int) ($cab['updated_by'] ?? 0) ?: (int) ($cab['created_by'] ?? 0);
+        if ($idUsuario <= 0) return;
+        $this->contabilizar($idRol, (int) $cab['id_empresa'], $idUsuario);
+    }
+
     public function contabilizar(int $idRol, int $idEmpresa, int $idUsuario): array
     {
         $cab = $this->repo->findCabecera($idRol, $idEmpresa);

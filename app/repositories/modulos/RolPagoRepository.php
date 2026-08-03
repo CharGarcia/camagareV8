@@ -153,6 +153,18 @@ class RolPagoRepository extends BaseRepository
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    /**
+     * Igual que findCabecera(), pero sin filtrar por id_empresa: se usa desde
+     * SincronizadorAsientosService, que ya filtró el id por empresa en su propia
+     * consulta (mismo patrón que FacturaVentaRepository::getPorId() y análogos).
+     */
+    public function findCabeceraPorId(int $id): ?array
+    {
+        $st = $this->db->prepare("SELECT * FROM {$this->table} WHERE id = :id AND eliminado = false");
+        $st->execute([':id' => $id]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     public function deleteLogic(int $id, int $idEmpresa, int $idUsuario): bool
     {
         $st = $this->db->prepare("UPDATE {$this->table} SET eliminado = true, deleted_by = :u, deleted_at = CURRENT_TIMESTAMP
@@ -180,10 +192,28 @@ class RolPagoRepository extends BaseRepository
     }
 
     // ─── Detalle ─────────────────────────────────────────────────────────────
-    public function borrarDetalle(int $idRol): void
+    /** Borra UNA fila puntual de rol_detalle (cascade elimina sus rubros). */
+    public function borrarDetalleUno(int $idDetalle): void
     {
-        // ON DELETE CASCADE elimina también rol_detalle_rubro.
-        $this->db->prepare("DELETE FROM rol_detalle WHERE id_rol = :r")->execute([':r' => $idRol]);
+        $this->db->prepare("DELETE FROM rol_detalle WHERE id = :d")->execute([':d' => $idDetalle]);
+    }
+
+    /**
+     * [id_empleado => id_detalle] de TODAS las filas actuales de un rol (pagadas o
+     * no). Se usa para regenerar preservando IDs estables: a quien sigue
+     * calificando se le actualiza SU MISMA fila en vez de borrarla y reinsertarla
+     * — el id_detalle no puede cambiar en cada refresco porque otras pantallas
+     * (PDF/Excel/correo individual) lo guardan mientras el usuario interactúa.
+     */
+    public function getIdsEmpleadoExistentesDelRol(int $idRol): array
+    {
+        $map = [];
+        $st = $this->db->prepare("SELECT id, id_empleado FROM rol_detalle WHERE id_rol = :r");
+        $st->execute([':r' => $idRol]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(int) $r['id_empleado']] = (int) $r['id'];
+        }
+        return $map;
     }
 
     public function insertDetalle(int $idRol, int $idEmpresa, int $idEmpleado, array $t): int
@@ -238,21 +268,6 @@ class RolPagoRepository extends BaseRepository
             $set[(int) $idEmp] = true;
         }
         return $set;
-    }
-
-    /** [id_empleado => id_detalle] de las filas YA EXISTENTES de este rol, para esos empleados. */
-    public function getIdsDetallePorEmpleadoMasivo(int $idRol, array $idsEmpleado): array
-    {
-        $map = [];
-        $idsEmpleado = array_values(array_unique(array_map('intval', $idsEmpleado)));
-        if (empty($idsEmpleado)) return $map;
-        $in = implode(',', $idsEmpleado);
-        $st = $this->db->prepare("SELECT id, id_empleado FROM rol_detalle WHERE id_rol = :r AND id_empleado IN ($in)");
-        $st->execute([':r' => $idRol]);
-        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            $map[(int) $r['id_empleado']] = (int) $r['id'];
-        }
-        return $map;
     }
 
     /** Actualiza en el sitio (mismo id) los totales calculados de una línea ya existente. */
@@ -771,16 +786,16 @@ class RolPagoRepository extends BaseRepository
                 WHERE e.id_empresa = :emp AND e.eliminado = false AND e.estado = 'activo'";
         $params = [':emp' => $idEmpresa];
 
-        // Solo empleados cuyo ingreso vigente cubre el período (o sin periodos registrados).
+        // Solo empleados con al menos un período (vigente o cerrado) que solape el
+        // rango del rol: sin ningún período registrado que cubra esas fechas, NO
+        // se incluye (antes se incluía igual y se asumía "mes completo" sin
+        // periodos; eso ya no aplica: hace falta el período para poder calcular).
         if ($inicioMes !== null && $finMes !== null) {
-            $sql .= " AND (
-                NOT EXISTS (SELECT 1 FROM empleado_periodos p WHERE p.id_empleado = e.id AND p.eliminado = false)
-                OR EXISTS (
-                    SELECT 1 FROM empleado_periodos p
-                    WHERE p.id_empleado = e.id AND p.eliminado = false
-                      AND p.fecha_ingreso <= :fin_mes
-                      AND (p.fecha_salida IS NULL OR p.fecha_salida >= :inicio_mes)
-                )
+            $sql .= " AND EXISTS (
+                SELECT 1 FROM empleado_periodos p
+                WHERE p.id_empleado = e.id AND p.eliminado = false
+                  AND p.fecha_ingreso <= :fin_mes
+                  AND (p.fecha_salida IS NULL OR p.fecha_salida >= :inicio_mes)
             )";
             $params[':inicio_mes'] = $inicioMes;
             $params[':fin_mes'] = $finMes;
