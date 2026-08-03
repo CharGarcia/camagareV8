@@ -39,19 +39,35 @@ class AsientoBuilderService
 
     /**
      * tipo_documento (egresos_detalle) de la CARTERA de compras (documentos elegidos en el
-     * selector "Facturas/Liquidaciones pendientes de pago") => código (asientos_tipo, concepto
-     * 'adquisiciones_compras') de la Cuenta por Pagar que ese documento acreditó al registrarse.
-     * Al pagarlo por Egresos debe cancelarse esa MISMA cuenta, no la cuenta del concepto elegido
-     * en el egreso (que es para egresos de concepto directo, sin documento de cartera detrás).
+     * selector "Facturas/Liquidaciones pendientes de pago") => modulo_origen con el que ese
+     * documento guardó SU PROPIO asiento al registrarse. Se usa para leer de ahí la distribución
+     * real de su Cuenta por Pagar (puede estar repartida por línea/Producto/Categoría/Marca —
+     * ver contrapartidaCarteraCompras) en vez de asumir una única cuenta global.
      */
-    private const CONTRAPARTIDA_CARTERA_COMPRAS = [
-        'COMPRA'      => 'PORPAGARFACTURACOMPRA',
-        'LIQUIDACION' => 'PORPAGARFACTURACOMPRA',
+    private const MODULO_ORIGEN_CARTERA_COMPRAS = [
+        'COMPRA'      => 'compra',
+        'LIQUIDACION' => 'liquidacion_compra',
     ];
 
     private const NOMBRE_CONTRAPARTIDA_CARTERA_COMPRAS = [
         'COMPRA'      => 'Cuentas por Pagar (Factura de Compra)',
         'LIQUIDACION' => 'Cuentas por Pagar (Liquidación de Compra)',
+    ];
+
+    /**
+     * Mismo mecanismo que MODULO_ORIGEN_CARTERA_COMPRAS, pero para la CARTERA de ventas
+     * (ingresos_detalle.tipo_documento IN ('FACTURA','RECIBO')): modulo_origen con el que ese
+     * documento guardó su propio asiento (Cuenta por Cobrar en el Debe, posiblemente repartida
+     * por línea/Cliente/Producto — misma cascada que Compras).
+     */
+    private const MODULO_ORIGEN_CARTERA_VENTAS = [
+        'FACTURA' => 'factura_venta',
+        'RECIBO'  => 'recibo_venta',
+    ];
+
+    private const NOMBRE_CONTRAPARTIDA_CARTERA_VENTAS = [
+        'FACTURA' => 'Cuentas por Cobrar (Factura de Venta)',
+        'RECIBO'  => 'Cuentas por Cobrar (Recibo de Venta)',
     ];
 
     private AsientoProgramadoRepository $programadoRepo;
@@ -3530,21 +3546,38 @@ class AsientoBuilderService
             return [];
         }
 
-        // ── HABER: contrapartida repartida por la cuenta de cada línea de descripción.
+        // ── HABER (cartera de ventas: FACTURA/RECIBO): cancelan la MISMA distribución de
+        //    Cuenta por Cobrar que el documento acreditó (en su Debe) en su propio asiento al
+        //    registrarse (puede estar repartida en varias cuentas por línea/Cliente/Producto —
+        //    misma cascada que Compras), no la cuenta del concepto elegido en el ingreso.
+        $restante = $totalMovido;
+        [$lineasCartera, $totalCartera] = $this->contrapartidaCarteraVentas($db, $idEmpresa, $idIngreso);
+        if ($totalCartera > 0) {
+            foreach ($lineasCartera as $l) {
+                $detalles[] = $l;
+            }
+            $restante = round($restante - $totalCartera, 2);
+        }
+        // Documentos sin asiento propio resoluble (o sin línea de Debe): su monto se queda en
+        // $restante y cae al camino normal (cuenta del concepto).
+
+        // ── HABER (resto): contrapartida repartida por la cuenta de cada línea de descripción.
         //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
-        $contrapartida = $this->contrapartidaPorCuenta(
-            $db, $idEmpresa, $idIngreso, 'ingreso',
-            (int) ($ingreso['concepto_id_cuenta'] ?? 0),
-            (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
-            $totalMovido, $detallesConCuenta
-        );
-        foreach ($contrapartida as $linea) {
-            $detalles[] = [
-                'id_cuenta_contable' => $linea['id_cuenta'],
-                'debe'               => 0.0,
-                'haber'              => round($linea['monto'], 2),
-                'referencia_detalle' => $linea['referencia'],
-            ];
+        if ($restante > 0.0) {
+            $contrapartida = $this->contrapartidaPorCuenta(
+                $db, $idEmpresa, $idIngreso, 'ingreso',
+                (int) ($ingreso['concepto_id_cuenta'] ?? 0),
+                (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
+                $restante, $detallesConCuenta
+            );
+            foreach ($contrapartida as $linea) {
+                $detalles[] = [
+                    'id_cuenta_contable' => $linea['id_cuenta'],
+                    'debe'               => 0.0,
+                    'haber'              => round($linea['monto'], 2),
+                    'referencia_detalle' => $linea['referencia'],
+                ];
+            }
         }
 
         return $detalles;
@@ -3625,26 +3658,19 @@ class AsientoBuilderService
             // del concepto (igual que si la separación no aplicara).
         }
 
-        // ── DEBE (cartera de compras: COMPRA/LIQUIDACION): cancelan directo la Cuenta por
-        //    Pagar de Adquisiciones (la misma que se acreditó al registrar la compra o la
-        //    liquidación), no la cuenta del concepto elegido en el egreso.
-        foreach (self::CONTRAPARTIDA_CARTERA_COMPRAS as $tipoDocumento => $codigo) {
-            $totalTipo = $this->sumaPorTipoDocumento($db, $idEgreso, $tipoDocumento);
-            if ($totalTipo <= 0) continue;
-
-            $idCtaTipo = $this->cuentaProgramadaPorCodigo($idEmpresa, 'adquisiciones_compras', $codigo);
-            if ($idCtaTipo > 0) {
-                $detalles[] = [
-                    'id_cuenta_contable' => $idCtaTipo,
-                    'debe'               => round($totalTipo, 2),
-                    'haber'              => 0.0,
-                    'referencia_detalle' => self::NOMBRE_CONTRAPARTIDA_CARTERA_COMPRAS[$tipoDocumento] ?? $codigo,
-                ];
-                $restante = round($restante - $totalTipo, 2);
+        // ── DEBE (cartera de compras: COMPRA/LIQUIDACION): cancelan la MISMA distribución de
+        //    Cuenta por Pagar que el documento acreditó en su propio asiento al registrarse
+        //    (puede estar repartida en varias cuentas por línea/Producto/Categoría/Marca — ver
+        //    contrapartidaCarteraCompras), no la cuenta del concepto elegido en el egreso.
+        [$lineasCartera, $totalCartera] = $this->contrapartidaCarteraCompras($db, $idEmpresa, $idEgreso);
+        if ($totalCartera > 0) {
+            foreach ($lineasCartera as $l) {
+                $detalles[] = $l;
             }
-            // Si la cuenta no está configurada, no se separa: ese monto se queda en
-            // $restante y cae al camino normal (cuenta del concepto).
+            $restante = round($restante - $totalCartera, 2);
         }
+        // Documentos sin asiento propio resoluble (o sin línea de Haber): su monto se queda en
+        // $restante y cae al camino normal (cuenta del concepto).
 
         // ── DEBE (resto): contrapartida repartida por la cuenta de cada línea de descripción.
         //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
@@ -3837,6 +3863,162 @@ class AsientoBuilderService
                              WHERE id_egreso = :id AND tipo_documento = :tipo AND eliminado = FALSE");
         $st->execute([':id' => $idEgreso, ':tipo' => $tipoDocumento]);
         return round((float) $st->fetchColumn(), 2);
+    }
+
+    /**
+     * DEBE de la cartera de compras (COMPRA/LIQUIDACION) de un egreso: por cada documento
+     * pagado, refleja la MISMA distribución de cuentas que ESE documento acreditó en su propio
+     * asiento (modulo_origen 'compra'/'liquidacion_compra'). No asume una única cuenta global de
+     * "Cuentas por Pagar": el Haber de una compra puede estar repartido en varias cuentas por
+     * línea (cascada Producto → Categoría → Marca → General — p. ej. "Proveedores Mercadería"
+     * vs "Proveedores Servicios"), así que el pago se prorratea en esa misma proporción.
+     * Documentos sin asiento propio (o sin línea de Haber) se omiten: su monto queda fuera del
+     * total devuelto y el llamador lo deja caer al camino normal (cuenta del concepto).
+     *
+     * @return array{0: array, 1: float} [líneas del Debe (fusionadas por cuenta), total resuelto]
+     */
+    private function contrapartidaCarteraCompras(\PDO $db, int $idEmpresa, int $idEgreso): array
+    {
+        $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_pagado) AS total_pagado
+                FROM egresos_detalle
+                WHERE id_egreso = :id AND eliminado = FALSE
+                  AND tipo_documento IN ('COMPRA','LIQUIDACION')
+                  AND id_referencia_documento IS NOT NULL
+                GROUP BY tipo_documento, id_referencia_documento";
+        $st = $db->prepare($sql);
+        $st->execute([':id' => $idEgreso]);
+        $documentos = $st->fetchAll(\PDO::FETCH_ASSOC);
+
+        $lineasPorCuenta = [];
+        $totalResuelto = 0.0;
+
+        foreach ($documentos as $doc) {
+            $tipoDoc     = (string) $doc['tipo_documento'];
+            $idDoc       = (int) $doc['id_referencia_documento'];
+            $totalPagado = round((float) $doc['total_pagado'], 2);
+            $moduloOrigen = self::MODULO_ORIGEN_CARTERA_COMPRAS[$tipoDoc] ?? null;
+            if ($totalPagado <= 0 || $moduloOrigen === null) {
+                continue;
+            }
+
+            $sqlHaber = "SELECT d.id_cuenta_contable, SUM(d.haber) AS monto
+                         FROM asientos_contables_cabecera c
+                         INNER JOIN asientos_contables_detalle d ON d.id_asiento = c.id
+                         WHERE c.modulo_origen = :mod AND c.id_referencia_origen = :id_doc
+                           AND c.id_empresa = :emp AND c.eliminado = false AND c.estado != 'anulado'
+                           AND d.eliminado = false AND d.haber > 0
+                         GROUP BY d.id_cuenta_contable";
+            $stHaber = $db->prepare($sqlHaber);
+            $stHaber->execute([':mod' => $moduloOrigen, ':id_doc' => $idDoc, ':emp' => $idEmpresa]);
+            $haberLineas = $stHaber->fetchAll(\PDO::FETCH_ASSOC);
+
+            $totalHaberDoc = round((float) array_sum(array_column($haberLineas, 'monto')), 2);
+            if (empty($haberLineas) || $totalHaberDoc <= 0) {
+                continue; // documento sin asiento propio (o sin Haber): cae al camino normal
+            }
+
+            $referencia = self::NOMBRE_CONTRAPARTIDA_CARTERA_COMPRAS[$tipoDoc] ?? $tipoDoc;
+            $acumuladoDoc = 0.0;
+            $ultimaCuentaDoc = null;
+            foreach ($haberLineas as $hl) {
+                $idCuenta   = (int) $hl['id_cuenta_contable'];
+                $proporcion = round((float) $hl['monto'], 2) / $totalHaberDoc;
+                $monto      = round($totalPagado * $proporcion, 2);
+                if (!isset($lineasPorCuenta[$idCuenta])) {
+                    $lineasPorCuenta[$idCuenta] = ['id_cuenta_contable' => $idCuenta, 'debe' => 0.0, 'haber' => 0.0, 'referencia_detalle' => $referencia];
+                }
+                $lineasPorCuenta[$idCuenta]['debe'] = round($lineasPorCuenta[$idCuenta]['debe'] + $monto, 2);
+                $acumuladoDoc = round($acumuladoDoc + $monto, 2);
+                $ultimaCuentaDoc = $idCuenta;
+            }
+            // Conciliar el redondeo de ESTE documento contra su propio monto pagado (no el total
+            // del egreso completo, para no mezclar el ajuste entre documentos distintos).
+            $difDoc = round($totalPagado - $acumuladoDoc, 2);
+            if (abs($difDoc) >= 0.01 && $ultimaCuentaDoc !== null) {
+                $lineasPorCuenta[$ultimaCuentaDoc]['debe'] = round($lineasPorCuenta[$ultimaCuentaDoc]['debe'] + $difDoc, 2);
+            }
+
+            $totalResuelto = round($totalResuelto + $totalPagado, 2);
+        }
+
+        return [array_values($lineasPorCuenta), $totalResuelto];
+    }
+
+    /**
+     * Espejo de contrapartidaCarteraCompras para la CARTERA de ventas (ingresos_detalle.
+     * tipo_documento IN ('FACTURA','RECIBO')): por cada documento cobrado, refleja la MISMA
+     * distribución de cuentas que ESE documento acreditó en su propio asiento (modulo_origen
+     * 'factura_venta'/'recibo_venta'), esta vez leyendo el lado DEBE (donde vive la Cuenta por
+     * Cobrar en una venta, en vez del Haber como en compras). ingresos_detalle no tiene columna
+     * 'eliminado' (a diferencia de egresos_detalle), así que no se filtra por ella.
+     *
+     * @return array{0: array, 1: float} [líneas del Haber (fusionadas por cuenta), total resuelto]
+     */
+    private function contrapartidaCarteraVentas(\PDO $db, int $idEmpresa, int $idIngreso): array
+    {
+        $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
+                FROM ingresos_detalle
+                WHERE id_ingreso = :id
+                  AND tipo_documento IN ('FACTURA','RECIBO')
+                  AND id_referencia_documento IS NOT NULL
+                GROUP BY tipo_documento, id_referencia_documento";
+        $st = $db->prepare($sql);
+        $st->execute([':id' => $idIngreso]);
+        $documentos = $st->fetchAll(\PDO::FETCH_ASSOC);
+
+        $lineasPorCuenta = [];
+        $totalResuelto = 0.0;
+
+        foreach ($documentos as $doc) {
+            $tipoDoc      = (string) $doc['tipo_documento'];
+            $idDoc        = (int) $doc['id_referencia_documento'];
+            $totalCobrado = round((float) $doc['total_cobrado'], 2);
+            $moduloOrigen = self::MODULO_ORIGEN_CARTERA_VENTAS[$tipoDoc] ?? null;
+            if ($totalCobrado <= 0 || $moduloOrigen === null) {
+                continue;
+            }
+
+            $sqlDebe = "SELECT d.id_cuenta_contable, SUM(d.debe) AS monto
+                        FROM asientos_contables_cabecera c
+                        INNER JOIN asientos_contables_detalle d ON d.id_asiento = c.id
+                        WHERE c.modulo_origen = :mod AND c.id_referencia_origen = :id_doc
+                          AND c.id_empresa = :emp AND c.eliminado = false AND c.estado != 'anulado'
+                          AND d.eliminado = false AND d.debe > 0
+                        GROUP BY d.id_cuenta_contable";
+            $stDebe = $db->prepare($sqlDebe);
+            $stDebe->execute([':mod' => $moduloOrigen, ':id_doc' => $idDoc, ':emp' => $idEmpresa]);
+            $debeLineas = $stDebe->fetchAll(\PDO::FETCH_ASSOC);
+
+            $totalDebeDoc = round((float) array_sum(array_column($debeLineas, 'monto')), 2);
+            if (empty($debeLineas) || $totalDebeDoc <= 0) {
+                continue; // documento sin asiento propio (o sin Debe): cae al camino normal
+            }
+
+            $referencia = self::NOMBRE_CONTRAPARTIDA_CARTERA_VENTAS[$tipoDoc] ?? $tipoDoc;
+            $acumuladoDoc = 0.0;
+            $ultimaCuentaDoc = null;
+            foreach ($debeLineas as $dl) {
+                $idCuenta   = (int) $dl['id_cuenta_contable'];
+                $proporcion = round((float) $dl['monto'], 2) / $totalDebeDoc;
+                $monto      = round($totalCobrado * $proporcion, 2);
+                if (!isset($lineasPorCuenta[$idCuenta])) {
+                    $lineasPorCuenta[$idCuenta] = ['id_cuenta_contable' => $idCuenta, 'debe' => 0.0, 'haber' => 0.0, 'referencia_detalle' => $referencia];
+                }
+                $lineasPorCuenta[$idCuenta]['haber'] = round($lineasPorCuenta[$idCuenta]['haber'] + $monto, 2);
+                $acumuladoDoc = round($acumuladoDoc + $monto, 2);
+                $ultimaCuentaDoc = $idCuenta;
+            }
+            // Conciliar el redondeo de ESTE documento contra su propio monto cobrado (no el total
+            // del ingreso completo, para no mezclar el ajuste entre documentos distintos).
+            $difDoc = round($totalCobrado - $acumuladoDoc, 2);
+            if (abs($difDoc) >= 0.01 && $ultimaCuentaDoc !== null) {
+                $lineasPorCuenta[$ultimaCuentaDoc]['haber'] = round($lineasPorCuenta[$ultimaCuentaDoc]['haber'] + $difDoc, 2);
+            }
+
+            $totalResuelto = round($totalResuelto + $totalCobrado, 2);
+        }
+
+        return [array_values($lineasPorCuenta), $totalResuelto];
     }
 
     /**
