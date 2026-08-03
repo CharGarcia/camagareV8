@@ -129,10 +129,25 @@ class ControlBancarioRepository extends BaseRepository
      * etc. — cualquiera menos 'migracion'/'manual' sin ingreso/egreso detrás), se usa
      * el TIPO de la forma de pago de la cuenta (fp.tipo: BANCO→Transferencia,
      * CHEQUE→Cheque), porque esa línea SÍ es un movimiento bancario real aunque el
-     * documento de origen no guarde el detalle del método de cobro. Solo queda "OTRO"
-     * para asientos manuales o migrados sin ningún ingreso/egreso que los respalde
-     * (p. ej. diario general migrado), donde no hay ningún documento de negocio
+     * documento de origen no guarde el detalle del método de cobro.
+     *
+     * Caso adicional (migración de CONTABILIDAD sin el módulo Ingresos/Egresos migrado,
+     * o documento roto/no enlazado): el asiento migrado puede no tener ip/ep, pero el
+     * sistema viejo sí clasificó ese diario como tipo INGRESOS/EGRESOS, y eso quedó
+     * grabado en ac.tipo_comprobante aunque id_referencia_origen no haya podido
+     * enlazarse a un documento. En datos migrados por corridas antiguas ese valor quedó
+     * en MAYÚSCULAS ('EGRESOS', 'COMPRAS_SERVICIOS'..., el 'tipo' crudo del sistema
+     * viejo) en vez del valor en minúsculas que usan los asientos nativos ('ingresos',
+     * 'egresos'); por eso la comparación va con UPPER() en ambos lados. También ahí se
+     * aplica el fp.tipo, porque el dato de "es un cobro/pago bancario de esta cuenta" ya
+     * viene del sistema viejo. Solo queda "OTRO" para asientos manuales o para el diario
+     * general migrado sin esa clasificación, donde no hay ningún documento de negocio
      * detrás que sustente la inferencia.
+     *
+     * Dirección del movimiento en una cuenta BANCO (sin tipo_operacion_bancaria explícito):
+     * plata que ENTRA (debe > 0) es un "Depósito" en el lenguaje del estado de cuenta;
+     * plata que SALE (haber > 0) es una "Transferencia" (salida). Antes se etiquetaba
+     * todo como Transferencia sin importar la dirección.
      */
     private function selectDerivado(): string
     {
@@ -143,10 +158,12 @@ class ControlBancarioRepository extends BaseRepository
                              THEN UPPER(ip.tipo_operacion_bancaria)
                          WHEN ep.id IS NOT NULL AND NULLIF(ep.tipo_operacion_bancaria, '') IS NOT NULL
                              THEN UPPER(ep.tipo_operacion_bancaria)
-                         WHEN ip.id IS NOT NULL OR ep.id IS NOT NULL OR ac.modulo_origen NOT IN ('migracion', 'manual') THEN
+                         WHEN ip.id IS NOT NULL OR ep.id IS NOT NULL
+                              OR ac.modulo_origen NOT IN ('migracion', 'manual')
+                              OR UPPER(ac.tipo_comprobante) IN ('INGRESOS', 'EGRESOS') THEN
                              CASE fp.tipo
                                  WHEN 'CHEQUE' THEN 'CHEQUE'
-                                 WHEN 'BANCO'  THEN 'TRANSFERENCIA'
+                                 WHEN 'BANCO'  THEN CASE WHEN ad.debe > 0 THEN 'DEPOSITO' ELSE 'TRANSFERENCIA' END
                                  ELSE 'OTRO'
                              END
                          ELSE 'OTRO'
@@ -155,7 +172,8 @@ class ControlBancarioRepository extends BaseRepository
                      CASE
                          WHEN ip.id IS NOT NULL THEN 'RECIBIDO'
                          WHEN ep.id IS NOT NULL THEN 'EMITIDO'
-                         WHEN ac.modulo_origen NOT IN ('migracion', 'manual') THEN
+                         WHEN ac.modulo_origen NOT IN ('migracion', 'manual')
+                              OR UPPER(ac.tipo_comprobante) IN ('INGRESOS', 'EGRESOS') THEN
                              CASE WHEN ad.debe > 0 THEN 'RECIBIDO' WHEN ad.haber > 0 THEN 'EMITIDO' ELSE NULL END
                          ELSE NULL
                      END) AS cheque_direccion,
@@ -174,11 +192,12 @@ class ControlBancarioRepository extends BaseRepository
         // deja modulo_origen='migracion' siempre (así el sincronizador nunca los toca), pero
         // sí setea tipo_comprobante='ingresos'/'egresos' e id_referencia_origen apuntando al
         // ingreso/egreso ya migrado (igual que un asiento nativo). Filtrar por modulo_origen
-        // dejaba a los migrados sin ip/ep y por eso siempre caían en "OTRO".
+        // dejaba a los migrados sin ip/ep y por eso siempre caían en "OTRO". UPPER() porque
+        // corridas de migración antiguas dejaron el valor en mayúsculas ('EGRESOS', 'INGRESOS').
         return "
             LEFT JOIN control_bancario_movimientos cbm ON cbm.id_asiento_detalle = ad.id AND cbm.eliminado = FALSE
-            LEFT JOIN ingresos_pagos ip ON ac.tipo_comprobante = 'ingresos' AND ac.id_referencia_origen = ip.id_ingreso AND ip.id_forma_cobro = fp.id
-            LEFT JOIN egresos_pagos ep ON ac.tipo_comprobante = 'egresos' AND ac.id_referencia_origen = ep.id_egreso AND ep.id_forma_pago = fp.id AND ep.eliminado = FALSE";
+            LEFT JOIN ingresos_pagos ip ON UPPER(ac.tipo_comprobante) = 'INGRESOS' AND ac.id_referencia_origen = ip.id_ingreso AND ip.id_forma_cobro = fp.id
+            LEFT JOIN egresos_pagos ep ON UPPER(ac.tipo_comprobante) = 'EGRESOS' AND ac.id_referencia_origen = ep.id_egreso AND ep.id_forma_pago = fp.id AND ep.eliminado = FALSE";
     }
 
     /**

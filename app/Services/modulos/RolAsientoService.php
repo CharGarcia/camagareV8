@@ -122,8 +122,10 @@ class RolAsientoService
         }
 
         // Líneas agrupadas por empleado (id_empleado => líneas[]). Construirlas así de una vez
-        // sirve para ambos modos: en modo general se aplanan todas en un solo asiento; en modo
-        // por empleado, cada grupo es su propio asiento.
+        // sirve para ambos modos: en modo por empleado, cada grupo es su propio asiento; en modo
+        // general se funden todas en un solo asiento SUMANDO por cuenta (agruparPorCuenta) — no
+        // se aplanan sueltas, porque eso dejaría una línea por empleado por concepto en vez de
+        // una sola línea con el total por cuenta.
         $lineasPorEmpleado = [];
         $push = function (string $codigo, string $lado, float $valor, string $concepto, array $empOv, int $idEmp, string $nombre) use (&$lineasPorEmpleado, $cuentaDe, $ref): void {
             $valor = round($valor, 2);
@@ -134,6 +136,7 @@ class RolAsientoService
                 'id_cuenta_contable'   => $idCuenta,
                 'debe'                 => $lado === 'debe' ? $valor : 0,
                 'haber'                => $lado === 'haber' ? $valor : 0,
+                'concepto'             => $concepto,
                 'referencia_detalle'   => $concepto . ' - ' . $nombre,
                 'documento_referencia' => $ref,
                 'id_entidad'           => $idEmp,
@@ -185,10 +188,12 @@ class RolAsientoService
         $idsExistentes  = $asientoService->getIdsAsientosPorOrigen('nomina', $idRol, $idEmpresa);
 
         if (!$modoPorEmpleado) {
-            // Un solo asiento combinado (comportamiento histórico). Si quedaron varios activos
-            // de una corrida "por empleado" anterior (el modo cambió porque se quitaron los
-            // overrides), se anulan todos menos el que se reutiliza para no duplicar.
-            $lineas   = array_merge(...array_values($lineasPorEmpleado));
+            // Un solo asiento combinado, SUMANDO los rubros de todos los empleados y agrupando
+            // en la cuenta que corresponda — una línea por cuenta (con el total), no una línea
+            // por empleado por concepto. Si quedaron varios asientos activos de una corrida "por
+            // empleado" anterior (el modo cambió porque se quitaron los overrides), se anulan
+            // todos menos el que se reutiliza para no duplicar.
+            $lineas   = $this->agruparPorCuenta(array_merge(...array_values($lineasPorEmpleado)));
             $previoId = count($idsExistentes) === 1 ? $idsExistentes[0] : null;
             foreach ($idsExistentes as $idExistente) {
                 if ($idExistente !== $previoId) {
@@ -271,6 +276,54 @@ class RolAsientoService
             'lineas'      => array_sum(array_map('count', $lineasPorEmpleado)),
             'modo'        => 'por_empleado',
         ];
+    }
+
+    /**
+     * Modo GENERAL: funde las líneas de todos los empleados en una sola por cuenta contable,
+     * sumando debe/haber — así el asiento combinado no repite una fila por cada empleado que
+     * comparte la misma cuenta (p. ej. "Gasto Sueldos" de 30 empleados = una sola línea con el
+     * total, no 30). Si más de un concepto cayera en la misma cuenta (poco común, pero posible
+     * si el contador configuró la misma cuenta para dos rubros), sus nombres se combinan en la
+     * referencia. No aplica en modo por-empleado: ahí cada asiento ya es de un solo empleado.
+     *
+     * @param array $lineas Líneas individuales (una por empleado y concepto), con clave 'concepto'.
+     */
+    private function agruparPorCuenta(array $lineas): array
+    {
+        // Se agrupa por cuenta Y lado (no solo cuenta): si por configuración una cuenta de
+        // Gasto y una de Pasivo coincidieran en el mismo id_cuenta_contable, deben seguir siendo
+        // dos líneas separadas (una de Debe, otra de Haber) — mezclarlas violaría la regla de
+        // que ninguna línea puede tener Debe y Haber a la vez.
+        $grupos = [];
+        foreach ($lineas as $l) {
+            $cta  = (int) $l['id_cuenta_contable'];
+            $lado = ((float) $l['debe']) > 0 ? 'debe' : 'haber';
+            $clave = $cta . '|' . $lado;
+            if (!isset($grupos[$clave])) {
+                $grupos[$clave] = [
+                    'id_cuenta_contable'   => $cta,
+                    'debe'                 => 0.0,
+                    'haber'                => 0.0,
+                    'conceptos'            => [],
+                    'documento_referencia' => $l['documento_referencia'],
+                ];
+            }
+            $grupos[$clave]['debe']  += (float) $l['debe'];
+            $grupos[$clave]['haber'] += (float) $l['haber'];
+            $grupos[$clave]['conceptos'][$l['concepto']] = true;
+        }
+
+        $resultado = [];
+        foreach ($grupos as $g) {
+            $resultado[] = [
+                'id_cuenta_contable'   => $g['id_cuenta_contable'],
+                'debe'                 => round($g['debe'], 2),
+                'haber'                => round($g['haber'], 2),
+                'referencia_detalle'   => implode(' + ', array_keys($g['conceptos'])),
+                'documento_referencia' => $g['documento_referencia'],
+            ];
+        }
+        return $resultado;
     }
 
     /**

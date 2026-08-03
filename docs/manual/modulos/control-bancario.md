@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.1
+version: 1.2
 orden: 60
 estado: activo
 ---
@@ -53,9 +53,10 @@ adivinar el **tipo de transacción** antes de mostrar "Otro":
    (depósito, transferencia, cheque, débito), se usa ese.
 2. Si no, pero la línea sí corresponde a un ingreso o egreso real (incluyendo
    los **migrados** del sistema anterior), se usa el tipo de la cuenta bancaria:
-   cuentas de tipo cheque → "Cheque", cuentas bancarias → "Transferencia".
+   cuenta de tipo cheque → "Cheque"; cuenta bancaria → "Depósito" si el dinero
+   **entra** a la cuenta o "Transferencia" si **sale**.
 3. Solo queda como **"Otro"** cuando el asiento no tiene ningún ingreso/egreso
-   detrás (asientos manuales o del diario general migrado).
+   detrás (asientos manuales o del diario general migrado sin esa clasificación).
 
 ## Errores frecuentes
 
@@ -64,12 +65,20 @@ adivinar el **tipo de transacción** antes de mostrar "Otro":
   tipo cheque.
 - **El saldo del banco no coincide con el contable**: revise los movimientos sin
   clasificar y los cheques girados que aún no se cobraron.
-- **Movimientos migrados aparecían todos como "Otro"**: el enlace a los pagos
-  migrados se buscaba por un dato que los migrados no tienen; corregido para
-  que los ingresos/egresos migrados también hereden el tipo de la cuenta bancaria.
+- **Movimientos migrados aparecían todos como "Otro"** (incluso depósitos):
+  el enlace a los pagos migrados se buscaba por un dato que los migrados no
+  siempre tienen, y las corridas de migración antiguas guardaron el dato de
+  origen en mayúsculas en vez de minúsculas, así que la comparación nunca
+  hacía match. Corregido; además ahora un movimiento de entrada sin
+  clasificar dice "Depósito" en vez de "Transferencia".
 
 ## Historial de cambios
 
+- **1.2** — Corrección: la comparación que enlaza un asiento migrado con su
+  ingreso/egreso original ahora ignora mayúsculas/minúsculas (las corridas de
+  migración antiguas guardaron ese dato en mayúsculas), así que los migrados
+  también reciben el tipo automático. Además, un movimiento bancario de
+  entrada sin clasificar ahora dice "Depósito" en vez de "Transferencia".
 - **1.1** — Corrección: los movimientos de ingresos/egresos migrados ya no caen
   siempre en "Otro"; heredan el tipo (Transferencia/Cheque) de la cuenta bancaria.
 - **1.0** — Versión inicial.
