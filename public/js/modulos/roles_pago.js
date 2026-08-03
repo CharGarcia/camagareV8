@@ -105,12 +105,34 @@
         btn.disabled = false; btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Generar';
     };
 
+    // Botones del footer que dependen de rolActual: mientras se carga/recalcula un
+    // rol (getDetalleAjax siempre intenta refrescarlo primero, ver refrescarSiCorresponde
+    // en el backend) se deshabilitan para que nadie los use contra el rol anterior
+    // que quedó pintado, o contra uno que todavía no terminó de recalcularse.
+    function rolverBotonesCarga(cargando) {
+        ['rolverBtnPdf', 'rolverBtnExcel', 'rolverBtnRecalcular', 'rolverBtnEgresos', 'rolverBtnEliminar'].forEach(id => {
+            const b = $(id);
+            if (b) b.disabled = cargando;
+        });
+    }
+
     // ─── Ver rol: listado de empleados con buscador ──────────────────────────
     window.abrirModalVer = async function (tr) {
         const rowData = (tr instanceof HTMLElement) ? JSON.parse(tr.dataset.row) : tr;
         const id = rowData.id;
         if (!id) return;
-        $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted">Cargando…</td></tr>';
+        rolActual = null;
+        rolverBotonesCarga(true);
+        $('rolver_titulo').textContent = 'Rol de Pago';
+        $('rolver_estado').classList.add('d-none');
+        $('rolver_periodo').textContent = '';
+        $('rolver_totales').innerHTML = '';
+        $('rolver_avisos').innerHTML = '';
+        $('rolver_conteo').textContent = '';
+        // El rol puede tener muchos empleados: getDetalleAjax siempre lo recalcula
+        // primero (para que quede al día con novedades/reglas actuales, aunque ya
+        // esté pagado o contabilizado), así que esto puede tardar — se avisa explícito.
+        $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Actualizando rol de pago…</td></tr>';
         $('rolver_buscar').value = '';
         modalVer()?.show();
         try {
@@ -120,6 +142,8 @@
             else $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">No se pudo cargar.</td></tr>';
         } catch (e) {
             $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error de red.</td></tr>';
+        } finally {
+            rolverBotonesCarga(false);
         }
     };
 
@@ -200,6 +224,47 @@
             confirmButtonText: 'Entendido'
         });
     }
+
+    // ─── Recalcular un rol ya existente (vuelve a correr generar()) ──────────
+    // Necesario cuando algo cambió DESPUÉS de generado (novedad, ficha del empleado,
+    // corrección de una fórmula del sistema, etc.): refresca rol_detalle y, si el rol
+    // ya estaba contabilizado, deja el asiento marcado como desactualizado para que
+    // se corrija solo la próxima vez que se abra Libro Diario/Mayores/Estados Financieros.
+    window.rolVerRecalcular = async function () {
+        if (!rolActual || !rolActual.id) return;
+        const conf = await Swal.fire({
+            icon: 'question', title: '¿Recalcular este rol?',
+            html: 'Se vuelven a calcular los valores de todos los empleados con la configuración y novedades actuales. '
+                + 'Los empleados que ya tienen un pago (egreso) generado <b>no se modifican</b>. '
+                + 'Si el rol ya estaba contabilizado, el asiento se corregirá automáticamente al abrir Libro Diario, Mayores o Estados Financieros.',
+            showCancelButton: true, confirmButtonText: 'Recalcular', cancelButtonText: 'Cancelar'
+        });
+        if (!conf.isConfirmed) return;
+
+        const btn = $('rolverBtnRecalcular');
+        const htmlOriginal = btn.innerHTML;
+        rolverBotonesCarga(true);
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Recalculando...';
+        $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Actualizando rol de pago…</td></tr>';
+        try {
+            const fd = new FormData(); fd.append('id', rolActual.id);
+            const resp = await fetch(`${urlModulo}/generar`, { method: 'POST', body: fd });
+            const json = await resp.json();
+            if (json.ok) {
+                renderVer(json.data);
+                window.dispatchEvent(new CustomEvent('rolGuardado'));
+                Swal.fire({ icon: 'success', title: 'Rol recalculado', timer: 1400, showConfirmButton: false });
+                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || []);
+            } else {
+                Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo recalcular.' });
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
+        } finally {
+            rolverBotonesCarga(false);
+            btn.innerHTML = htmlOriginal;
+        }
+    };
 
     // ─── PDF / Excel generales del rol (todos los empleados) ─────────────────
     window.rolVerPdf = function () {

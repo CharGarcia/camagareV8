@@ -83,11 +83,19 @@ class RolPagoService
     }
 
     /**
-     * Regenera la corrida SI Y SOLO SI sigue en estado 'generado' (no pagada,
-     * contabilizada ni anulada): así lo que se muestra (ver, PDF) o se usa para
-     * pagar (generar egresos en lote) siempre refleja las novedades, préstamos
-     * desembolsados, reglas de cálculo, etc. más recientes, aunque hayan cambiado
-     * después de generar la corrida por última vez.
+     * Regenera la corrida SI Y SOLO SI no está anulada: así lo que se muestra (ver,
+     * PDF, Excel) o se usa para pagar (generar egresos en lote) siempre refleja las
+     * novedades, préstamos desembolsados, reglas de cálculo, etc. más recientes,
+     * aunque hayan cambiado después de generar la corrida por última vez — INCLUSO
+     * si ya está 'pagado' o 'contabilizado'. Antes esto se limitaba a 'generado'
+     * ("no tocar lo ya cerrado"), pero eso dejaba errores de cálculo ya corregidos en
+     * el código (p. ej. un bug de fondos de reserva) congelados PARA SIEMPRE en
+     * corridas viejas, porque nada en la base de datos cambiaba para que
+     * SincronizadorAsientosService detectara la corrida como desactualizada: sin
+     * volver a correr generar(), el rol nunca recupera su updated_at y el asiento
+     * contable nunca se vuelve a sincronizar. Se prefiere pagar el costo de
+     * recalcular en cada apertura (la UI muestra un loader en corridas grandes)
+     * antes que dejar corridas "ciegas" a las correcciones del sistema.
      *
      * generar() ya sabe, internamente, respetar a los empleados que dentro de esta
      * misma corrida ya tienen un egreso pagado (regeneración parcial: solo se
@@ -96,14 +104,12 @@ class RolPagoService
      * "congelados" para siempre a los empleados que aún no habían cobrado, con
      * valores viejos (p. ej. un IR que ya no debería aplicar).
      *
-     * Barato en el caso común: si el estado ya no es 'generado' (la inmensa mayoría
-     * de lo que se consulta día a día son corridas históricas ya cerradas), es solo
-     * el SELECT de findCabecera. Devuelve true si efectivamente regeneró.
+     * Devuelve true si efectivamente regeneró.
      */
     public function refrescarSiCorresponde(int $id, int $idEmpresa, int $idUsuario): bool
     {
         $cab = $this->repo->findCabecera($id, $idEmpresa);
-        if (!$cab || ($cab['estado'] ?? '') !== 'generado') {
+        if (!$cab || ($cab['estado'] ?? '') === 'anulado') {
             return false;
         }
         try {
