@@ -60,7 +60,7 @@ class MigracionConfigContableService
         'CCXDPP'   => 'DESAHUCIOPORPAGARNOMINA',
         'CCXAPE'   => 'IESSPORPAGARNOMINA',
         'CCXAS'    => 'ANTICIPOSDESCUENTOSNOMINA',
-        'CCXRPP'   => 'BANCOSNOMINA', // SUELDO POR PAGAR → Líquido a pagar (acordado con el usuario)
+        'CCXRPP'   => 'SUELDOSPORPAGARNOMINA', // SUELDO POR PAGAR → Sueldos por Pagar (antes mapeaba a BANCOSNOMINA/líquido a pagar; ahora el rol mensual se contabiliza en base devengado y esta es la cuenta que de verdad representa "sueldo devengado, aún no pagado")
     ];
 
     /**

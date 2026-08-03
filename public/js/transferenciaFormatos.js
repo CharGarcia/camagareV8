@@ -201,10 +201,13 @@
                     alert('Agregue al menos una columna.');
                     return;
                 }
-                if (tipoArchivo === 'txt_ancho_fijo' && campos.some(c => !c.longitud_fija)) {
-                    e.preventDefault();
-                    alert('El tipo de archivo "TXT ancho fijo" requiere que todas las columnas tengan longitud fija.');
-                    return;
+                if (tipoArchivo === 'txt_ancho_fijo') {
+                    const sinLongitud = campos.filter(c => !c.longitud_fija).map(c => c.etiqueta);
+                    if (sinLongitud.length) {
+                        e.preventDefault();
+                        alert('El tipo de archivo "TXT ancho fijo" requiere longitud fija en todas las columnas, incluso las que queden en blanco (se rellenan con espacios pero igual ocupan su posición). Falta en: ' + sinLongitud.join(', '));
+                        return;
+                    }
                 }
                 document.getElementById('tf-campos-json').value = JSON.stringify(campos);
             }

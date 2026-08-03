@@ -321,21 +321,14 @@ class SincronizadorAsientosService
             'colsDoc' => ['numero_ingreso'],
         ];
 
-        // 7. Egresos (pagos): contrapartida del concepto + formas de pago. Se excluyen
-        //    los que pagan un rol MENSUAL: esos NUNCA generan asiento propio a propósito
-        //    (ver EgresoService::egresoPagaRolMensual) — su contabilidad completa la arma
-        //    RolAsientoService::contabilizar() al contabilizar el rol; incluirlos aquí
-        //    los marcaría como "sin asiento" para siempre.
+        // 7. Egresos (pagos): contrapartida del concepto + formas de pago. Los que pagan
+        //    un rol MENSUAL SÍ generan su propio asiento (a partir de este cambio):
+        //    cancelan la cuenta "Sueldos por Pagar" que RolAsientoService acreditó al
+        //    contabilizar el rol (base devengado) — ver
+        //    AsientoBuilderService::generarAsientoEgreso(). Ya no se duplica el gasto
+        //    porque el rol ya no acredita Bancos directamente, solo el pasivo.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM egresos_cabecera ec2 WHERE ec2.id_empresa = ? AND ec2.eliminado = false
-                         AND ec2.id_asiento_contable IS NULL AND ec2.estado <> 'anulado'
-                         AND NOT EXISTS (
-                             SELECT 1 FROM egresos_detalle ed
-                             JOIN rol_detalle rd ON rd.id = ed.id_referencia_documento
-                             JOIN rol_cabecera rc ON rc.id = rd.id_rol
-                             WHERE ed.id_egreso = ec2.id AND ed.tipo_documento = 'ROL'
-                               AND rc.tipo_rol = 'MENSUAL' AND ed.eliminado = false
-                         )" . $excMig('egresos', 'ec2.id'),
+            'sql'    => "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('egresos', 'egresos_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\EgresoService(
@@ -428,14 +421,17 @@ class SincronizadorAsientosService
         ];
 
         // 8. Roles de Pago (Nómina): solo el rol MENSUAL contabiliza (las quincenas/
-        //    semanas se netean en el mensual, ver RolCalculoService). Se contabiliza
-        //    recién cuando ya está 'pagado' (no 'generado'): mientras sigue en
-        //    'generado' puede refrescarse solo al abrirlo/pagarlo (ver
-        //    RolPagoService::refrescarSiCorresponde), así que generar su asiento antes
-        //    lo dejaría desactualizado si los números cambian después.
+        //    semanas se netean en el mensual, ver RolCalculoService). Base DEVENGADO:
+        //    se contabiliza en cuanto está 'generado' (no espera a que se pague) — y
+        //    se REGENERA (edita el mismo asiento, no lo duplica) cada vez que el rol
+        //    se recalcula después de contabilizado y queda más nuevo que su asiento
+        //    (rol_cabecera.updated_at > asiento.updated_at). 'anulado' queda fuera.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM rol_cabecera WHERE id_empresa = ? AND eliminado = false
-                         AND tipo_rol = 'MENSUAL' AND estado = 'pagado' AND id_asiento IS NULL",
+            'sql'    => "SELECT rc2.id FROM rol_cabecera rc2
+                         LEFT JOIN asientos_contables_cabecera ac2 ON ac2.id = rc2.id_asiento
+                         WHERE rc2.id_empresa = ? AND rc2.eliminado = false
+                           AND rc2.tipo_rol = 'MENSUAL' AND rc2.estado IN ('generado', 'pagado', 'contabilizado')
+                           AND (rc2.id_asiento IS NULL OR ac2.updated_at < rc2.updated_at)",
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\RolAsientoService(

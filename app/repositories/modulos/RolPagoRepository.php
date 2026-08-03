@@ -908,9 +908,12 @@ class RolPagoRepository extends BaseRepository
     /** IDs de roles en estado 'generado' para un período+tipo (para auto-regenerar). */
     public function getRolesAfectados(int $idEmpresa, string $tipoRol, int $anio, int $mes): array
     {
+        // 'pagado'/'contabilizado' YA NO se excluyen: el rol mensual sigue siendo
+        // corregible después de contabilizarse (base devengado — su asiento se
+        // resincroniza solo). 'anulado' sí queda fuera.
         $st = $this->db->prepare("SELECT id FROM {$this->table}
                                   WHERE id_empresa = :emp AND tipo_rol = :t AND periodo_anio = :a AND periodo_mes = :m
-                                    AND estado = 'generado' AND eliminado = false
+                                    AND estado IN ('generado', 'pagado', 'contabilizado') AND eliminado = false
                                     AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)");
         $st->execute([':emp' => $idEmpresa, ':t' => $tipoRol, ':a' => $anio, ':m' => $mes]);
         return array_map('intval', array_column($st->fetchAll(PDO::FETCH_ASSOC), 'id'));

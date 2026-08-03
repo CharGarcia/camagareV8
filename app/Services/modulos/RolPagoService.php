@@ -228,9 +228,13 @@ class RolPagoService
     {
         $cab = $this->repo->findCabecera($id, $idEmpresa);
         if (!$cab) throw new Exception('Corrida no encontrada.');
-        if (in_array($cab['estado'], ['pagado', 'contabilizado', 'anulado'], true)) {
-            throw new Exception('No se puede regenerar una corrida en estado ' . CatalogoRol::nombreEstado($cab['estado']) . '.');
+        if ($cab['estado'] === 'anulado') {
+            throw new Exception('No se puede regenerar una corrida anulada.');
         }
+        // 'pagado' y 'contabilizado' YA NO bloquean la regeneración: el rol mensual se
+        // contabiliza en base devengado (al calcularse, no al pagarse), y debe poder
+        // seguir corrigiéndose después — el asiento se vuelve a sincronizar solo (ver
+        // SincronizadorAsientosService). La protección real sigue siendo por EMPLEADO:
         // Si el rol ya tiene pagos (egresos) para ALGÚN empleado, esas líneas NO se
         // tocan: recrearlas cambiaría sus IDs y rompería el vínculo con el pago ya
         // hecho. Pero los empleados que TODAVÍA no cobraron sí deben poder seguir

@@ -37,6 +37,23 @@ class AsientoBuilderService
         'DECIMO_CUARTO'  => 'Décimo Cuarto por Pagar',
     ];
 
+    /**
+     * tipo_documento (egresos_detalle) de la CARTERA de compras (documentos elegidos en el
+     * selector "Facturas/Liquidaciones pendientes de pago") => código (asientos_tipo, concepto
+     * 'adquisiciones_compras') de la Cuenta por Pagar que ese documento acreditó al registrarse.
+     * Al pagarlo por Egresos debe cancelarse esa MISMA cuenta, no la cuenta del concepto elegido
+     * en el egreso (que es para egresos de concepto directo, sin documento de cartera detrás).
+     */
+    private const CONTRAPARTIDA_CARTERA_COMPRAS = [
+        'COMPRA'      => 'PORPAGARFACTURACOMPRA',
+        'LIQUIDACION' => 'PORPAGARFACTURACOMPRA',
+    ];
+
+    private const NOMBRE_CONTRAPARTIDA_CARTERA_COMPRAS = [
+        'COMPRA'      => 'Cuentas por Pagar (Factura de Compra)',
+        'LIQUIDACION' => 'Cuentas por Pagar (Liquidación de Compra)',
+    ];
+
     private AsientoProgramadoRepository $programadoRepo;
 
     public function __construct()
@@ -3587,6 +3604,48 @@ class AsientoBuilderService
             // comportaba antes de esta integración.
         }
 
+        // ── DEBE (rol MENSUAL, base devengado): la porción del egreso que paga un rol
+        //    MENSUAL cancela "Sueldos por Pagar" (la misma cuenta que RolAsientoService
+        //    acreditó al contabilizar el rol), no la cuenta genérica del concepto.
+        //    Quincena/Semanal NO entran aquí (siguen la cuenta del concepto: son
+        //    anticipos, no pasivo ya devengado).
+        $totalRolMensual = $this->sumaRolMensualPorEgreso($db, $idEgreso);
+        if ($totalRolMensual > 0) {
+            $idCtaSueldosPorPagar = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', 'SUELDOSPORPAGARNOMINA');
+            if ($idCtaSueldosPorPagar > 0) {
+                $detalles[] = [
+                    'id_cuenta_contable' => $idCtaSueldosPorPagar,
+                    'debe'               => $totalRolMensual,
+                    'haber'              => 0.0,
+                    'referencia_detalle' => 'Sueldos por Pagar (rol mensual)',
+                ];
+                $restante = round($restante - $totalRolMensual, 2);
+            }
+            // Si la cuenta no está configurada, se queda en $restante y cae a la cuenta
+            // del concepto (igual que si la separación no aplicara).
+        }
+
+        // ── DEBE (cartera de compras: COMPRA/LIQUIDACION): cancelan directo la Cuenta por
+        //    Pagar de Adquisiciones (la misma que se acreditó al registrar la compra o la
+        //    liquidación), no la cuenta del concepto elegido en el egreso.
+        foreach (self::CONTRAPARTIDA_CARTERA_COMPRAS as $tipoDocumento => $codigo) {
+            $totalTipo = $this->sumaPorTipoDocumento($db, $idEgreso, $tipoDocumento);
+            if ($totalTipo <= 0) continue;
+
+            $idCtaTipo = $this->cuentaProgramadaPorCodigo($idEmpresa, 'adquisiciones_compras', $codigo);
+            if ($idCtaTipo > 0) {
+                $detalles[] = [
+                    'id_cuenta_contable' => $idCtaTipo,
+                    'debe'               => round($totalTipo, 2),
+                    'haber'              => 0.0,
+                    'referencia_detalle' => self::NOMBRE_CONTRAPARTIDA_CARTERA_COMPRAS[$tipoDocumento] ?? $codigo,
+                ];
+                $restante = round($restante - $totalTipo, 2);
+            }
+            // Si la cuenta no está configurada, no se separa: ese monto se queda en
+            // $restante y cae al camino normal (cuenta del concepto).
+        }
+
         // ── DEBE (resto): contrapartida repartida por la cuenta de cada línea de descripción.
         //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
         if ($restante > 0.0) {
@@ -3777,6 +3836,24 @@ class AsientoBuilderService
         $st = $db->prepare("SELECT COALESCE(SUM(monto_pagado), 0) FROM egresos_detalle
                              WHERE id_egreso = :id AND tipo_documento = :tipo AND eliminado = FALSE");
         $st->execute([':id' => $idEgreso, ':tipo' => $tipoDocumento]);
+        return round((float) $st->fetchColumn(), 2);
+    }
+
+    /**
+     * Suma lo pagado (egresos_detalle.monto_pagado) de un egreso que corresponde
+     * puntualmente a un rol MENSUAL (tipo_documento='ROL' cuyo rol_detalle.id_rol
+     * es de un rol_cabecera.tipo_rol='MENSUAL'). Quincena/Semanal no cuentan aquí:
+     * siguen la cuenta genérica del concepto (son anticipos).
+     */
+    private function sumaRolMensualPorEgreso(\PDO $db, int $idEgreso): float
+    {
+        $st = $db->prepare("SELECT COALESCE(SUM(ed.monto_pagado), 0)
+                             FROM egresos_detalle ed
+                             JOIN rol_detalle rd ON rd.id = ed.id_referencia_documento
+                             JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                             WHERE ed.id_egreso = :id AND ed.tipo_documento = 'ROL'
+                               AND rc.tipo_rol = 'MENSUAL' AND ed.eliminado = FALSE");
+        $st->execute([':id' => $idEgreso]);
         return round((float) $st->fetchColumn(), 2);
     }
 

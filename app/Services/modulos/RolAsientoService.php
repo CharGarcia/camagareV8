@@ -14,11 +14,21 @@ use App\models\CatalogoRol;
 use Exception;
 
 /**
- * Contabiliza un rol MENSUAL: agrega los conceptos de todos los empleados
- * (gastos, IESS, provisiones, anticipos) en líneas resumen, y el líquido a
- * pagar en una línea por empleado. Mapea cada concepto a su cuenta configurada
- * (asientos_programados / asientos_tipo, tipo 'nomina') y persiste con
- * AsientoContableService. Cuadra por construcción.
+ * Contabiliza un rol MENSUAL en base DEVENGADO: agrega los conceptos de todos
+ * los empleados (gastos, IESS, provisiones, anticipos) y el líquido a pagar
+ * como pasivo (Sueldos por Pagar) — no como salida de Bancos, porque el rol se
+ * contabiliza al calcularse, no al pagarse. El pago real (Generar egresos de
+ * nómina) cancela después esa misma cuenta contra Bancos.
+ *
+ * Idempotente: si ya existe un asiento para este rol (mismo modulo_origen +
+ * id_referencia_origen), lo actualiza en el mismo lugar en vez de duplicar —
+ * así que se puede volver a llamar cada vez que el rol cambia (ver
+ * SincronizadorAsientosService, que detecta cuándo el rol quedó desactualizado
+ * respecto a su último asiento).
+ *
+ * Mapea cada concepto a su cuenta configurada (asientos_programados /
+ * asientos_tipo, tipo 'nomina') y persiste con AsientoContableService. Cuadra
+ * por construcción.
  */
 class RolAsientoService
 {
@@ -133,7 +143,12 @@ class RolAsientoService
                 }
             }
             $push('ANTICIPOSDESCUENTOSNOMINA', 'haber', (float) $lin['total_egresos'] - (float) $lin['aporte_iess'], 'Anticipos y Descuentos', $empOv, $idEmp, $nombre);
-            $push('BANCOSNOMINA', 'haber', (float) $lin['neto'], 'Líquido a pagar', $empOv, $idEmp, $nombre);
+            // Base DEVENGADO: el rol se contabiliza al calcularse, no al pagarse — el
+            // líquido a pagar todavía no salió de Bancos, así que se reconoce como
+            // pasivo (Sueldos por Pagar), no como salida de caja. El egreso que
+            // efectivamente paga el rol (Generar egresos de nómina) cancela esta misma
+            // cuenta contra Bancos — ver AsientoBuilderService::generarAsientoEgreso().
+            $push('SUELDOSPORPAGARNOMINA', 'haber', (float) $lin['neto'], 'Sueldos por Pagar', $empOv, $idEmp, $nombre);
         }
 
         if (!empty($faltan)) {
@@ -204,7 +219,7 @@ class RolAsientoService
         $haber[] = $mk('IESSPORPAGARNOMINA', 'IESS por Pagar', (float) $lin['aporte_iess'] + (float) $lin['aporte_patronal']);
         foreach ($prov as $p) if (!empty($p['incluir']) && $p['valor'] > 0) $haber[] = $mk(self::PROV_MAP[$p['concepto']][1] ?? '', $p['concepto'] . ' por Pagar', (float) $p['valor']);
         $haber[] = $mk('ANTICIPOSDESCUENTOSNOMINA', 'Anticipos y Descuentos', (float) $lin['total_egresos'] - (float) $lin['aporte_iess']);
-        $haber[] = $mk('BANCOSNOMINA', 'Líquido a pagar', (float) $lin['neto']);
+        $haber[] = $mk('SUELDOSPORPAGARNOMINA', 'Sueldos por Pagar', (float) $lin['neto']);
 
         $debe = array_values(array_filter($debe));
         $haber = array_values(array_filter($haber));

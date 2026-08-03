@@ -297,29 +297,6 @@ class EgresoService
         }
     }
 
-    /**
-     * ¿Este egreso paga un rol MENSUAL? (tiene un detalle tipo_documento='ROL' que
-     * enlaza a un rol_detalle cuyo rol_cabecera.tipo_rol='MENSUAL'). Silencioso
-     * (false) si el módulo de nómina no está desplegado.
-     */
-    private function egresoPagaRolMensual(int $idEgreso): bool
-    {
-        try {
-            $db = Database::getConnection();
-            $st = $db->prepare("SELECT 1
-                                FROM egresos_detalle ed
-                                JOIN rol_detalle rd ON rd.id = ed.id_referencia_documento
-                                JOIN rol_cabecera rc ON rc.id = rd.id_rol
-                                WHERE ed.id_egreso = :eg AND ed.tipo_documento = 'ROL'
-                                  AND rc.tipo_rol = 'MENSUAL' AND ed.eliminado = false
-                                LIMIT 1");
-            $st->execute([':eg' => $idEgreso]);
-            return (bool) $st->fetchColumn();
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
     public function actualizarPagos(int $id, array $pagos, int $idEmpresa, int $idUsuario, ?string $fechaEmision = null, array $extraData = []): void
     {
         $egreso = $this->repository->getPorId($id, $idEmpresa);
@@ -595,18 +572,6 @@ class EgresoService
 
         $egreso = $this->repository->getPorId($idEgreso, $idEmpresa);
         if (!$egreso) {
-            return;
-        }
-
-        // Egreso que paga un rol MENSUAL: NO genera su propio asiento aquí. Su
-        // contabilidad completa (Gasto Sueldos, IESS, provisiones, y la
-        // reclasificación de lo ya adelantado en quincenas/semanas) la arma
-        // RolAsientoService::contabilizar() al contabilizar el rol — generar
-        // también uno genérico aquí duplicaría el pago (ver egresoPagaRolMensual()).
-        // Quincena/Semanal SÍ deben seguir generando su asiento normal aquí: son
-        // anticipos y esta es su única contabilización hasta que el mensual los
-        // reclasifique.
-        if ($this->egresoPagaRolMensual($idEgreso)) {
             return;
         }
 
