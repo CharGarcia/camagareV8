@@ -39,6 +39,27 @@ class RolProvisionService
         $dcMode = (string) ($lin['decimo_cuarto'] ?? '');
         $frMode = (string) ($lin['fondos_reserva'] ?? '');
 
+        // Fondos de reserva: 4 modos ('no_se_paga', 'rol', 'desde_anio', 'planilla').
+        // A diferencia de los décimos (solo 2 modos, sin ambigüedad), 'desde_anio' es
+        // "a veces sí, a veces no" — el mismo empleado puede o no haber cobrado fondos
+        // de reserva en el rol ESTE mes en particular, según si ya cumplió el año de
+        // servicio (lo resuelve RolPagoService::cumplioAnioServicio() al generar). En
+        // vez de recalcular esa fecha aquí de nuevo, se usa como fuente de verdad si el
+        // rol YA incluyó el rubro 'fondos' (origen del rubro que arma RolCalculoService
+        // cuando paga fondos de reserva) — así queda correcto sin duplicar lógica:
+        //   - 'no_se_paga': nunca se paga en el rol NI se provisiona (sin impacto contable).
+        //   - 'rol': se paga todos los meses en el rol → nunca se provisiona.
+        //   - 'desde_anio', antes del año: no se pagó este mes → SÍ se provisiona (se
+        //     va acumulando el pasivo hasta que empiece a pagarse en el rol).
+        //   - 'desde_anio', después del año: se pagó este mes en el rol → no se provisiona.
+        //   - 'planilla': nunca se paga en el rol (lo paga la empresa directo al IESS),
+        //     pero SÍ se provisiona (sigue siendo un gasto/pasivo real de la empresa).
+        $frPagadoEnRol = false;
+        foreach ($lin['rubros'] ?? [] as $r) {
+            if (($r['origen'] ?? '') === 'fondos') { $frPagadoEnRol = true; break; }
+        }
+        $frIncluir = !$frPagadoEnRol && $frMode !== 'no_se_paga';
+
         $mk = fn(string $c, float $v, bool $incl, string $nota) => [
             'concepto' => $c, 'valor' => round($v, 2), 'incluir' => $incl,
             'nota' => $nota,
@@ -48,7 +69,7 @@ class RolProvisionService
             $mk('Décimo Tercero', $base / 12, $dtMode !== 'mensualiza', $dtMode === 'mensualiza' ? 'Pagado en rol' : 'Provisión mensual'),
             $mk('Décimo Cuarto', $sbu / 12 * $factorDC, $dcMode !== 'mensualiza', $dcMode === 'mensualiza' ? 'Pagado en rol' : 'Provisión mensual'),
             $mk('Vacaciones', $base / 24, true, 'Provisión mensual'),
-            $mk('Fondos de Reserva', $base * $pctFR / 100, $frMode !== 'rol', $frMode === 'rol' ? 'Pagado en rol' : 'Provisión mensual'),
+            $mk('Fondos de Reserva', $base * $pctFR / 100, $frIncluir, $frPagadoEnRol ? 'Pagado en rol' : ($frMode === 'no_se_paga' ? 'No aplica' : 'Provisión mensual')),
             $mk('Desahucio', $base * 0.25 / 12, true, 'Provisión mensual'),
         ];
     }

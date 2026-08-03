@@ -48,6 +48,7 @@ class MigracionMysqlService
         'inventario'        => ['label' => 'Inventario (kardex)',               'tabla' => 'inventarios',                'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'contabilidad'      => ['label' => 'Contabilidad (asientos)',            'tabla' => 'encabezado_diario',          'fecha' => 'fecha_asiento',  'tipo' => 'documento'],
         'proformas'         => ['label' => 'Proformas (cotizaciones)',           'tabla' => 'encabezado_proforma',        'fecha' => 'fecha_proforma', 'tipo' => 'documento'],
+        'pedidos'           => ['label' => 'Pedidos',                          'tabla' => 'encabezado_pedido',          'fecha' => 'datecreated',    'tipo' => 'documento'],
         'consignaciones'    => ['label' => 'Consignaciones de venta',            'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion = 'ENTRADA'"],
         'consignaciones_fact' => ['label' => 'Facturación de consignación',       'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion = 'FACTURA'"],
         'consignaciones_ret' => ['label' => 'Retornos de consignación',           'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion LIKE 'DEVOL%'"],
@@ -174,6 +175,8 @@ class MigracionMysqlService
                 return $this->migrarContabilidad($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'proformas':
                 return $this->migrarProformas($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'pedidos':
+                return $this->migrarPedidos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'consignaciones':
                 return $this->migrarConsignaciones($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'consignaciones_fact':
@@ -236,6 +239,8 @@ class MigracionMysqlService
             'nietos' => [], 'hijos' => [['retornos_cv_detalles', 'id_retorno']]],
         'cambios_producto' => ['cab' => 'cambios_producto_cv', 'fecha' => 'fecha_cambio',
             'nietos' => [], 'hijos' => [['cambios_producto_cv_detalles', 'id_cambio']]],
+        'pedidos' => ['cab' => 'pedidos_cabecera', 'fecha' => 'fecha_pedido',
+            'nietos' => [], 'hijos' => [['pedidos_detalle', 'id_pedido']]],
     ];
 
     /** Cabecera + columna de fecha de las entidades con manejador especial (para acotar por rango). */
@@ -257,7 +262,7 @@ class MigracionMysqlService
         'inventario' => 'inventario_kardex', 'contabilidad' => 'asientos_contables_cabecera',
         'proformas' => 'proformas_cabecera', 'consignaciones' => 'consignaciones_ventas',
         'consignaciones_fact' => 'consignaciones_facturas', 'consignaciones_ret' => 'retornos_cv',
-        'cambios_producto' => 'cambios_producto_cv',
+        'cambios_producto' => 'cambios_producto_cv', 'pedidos' => 'pedidos_cabecera',
     ];
 
     /**
@@ -1991,6 +1996,91 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+    }
+
+    /**
+     * Migra los pedidos (encabezado_pedido/detalle_pedido → pedidos_cabecera/pedidos_detalle).
+     * El detalle viejo NO tiene precio (solo cantidad): el precio se toma del producto (precio_base) y el
+     * IVA se deja en 0 (los pedidos no calculan impuesto en el sistema viejo). Requiere cliente.
+     * tipo_ambiente se fija al de la empresa (el default '1' ocultaría los migrados en producción).
+     */
+    private function migrarPedidos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'pedidos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'pedido sin cliente', 'errores' => 0];
+
+        $done        = $this->idsMigrados($pg, $idEmpresa, 'pedidos');
+        $insMap      = $this->stmtMap($pg, 'pedidos');
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
+        $amb         = $this->ambienteEmpresa($pg, $idEmpresa);
+
+        // Precio por producto nuevo (precio_base): el detalle viejo no trae precio.
+        $precioProd = [];
+        foreach ($pg->query("SELECT id, COALESCE(precio_base, 0) pb FROM productos WHERE id_empresa = " . (int) $idEmpresa) as $p) { $precioProd[(int) $p['id']] = (float) $p['pb']; }
+
+        // Sin establecimiento/punto en el viejo: se usan '001'/'001'; secuencial = numero_pedido.
+        $buscar  = $pg->prepare("SELECT id FROM pedidos_cabecera WHERE id_empresa = :e AND establecimiento = '001' AND punto_emision = '001' AND secuencial = :sec ORDER BY eliminado, id LIMIT 1");
+        $insCab  = $pg->prepare("INSERT INTO pedidos_cabecera (id_empresa, id_cliente, fecha_pedido, estado, observaciones, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '001', '001', ?, ?, ?) RETURNING id");
+        $insDet  = $pg->prepare("INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total) VALUES (?, ?, ?, ?, ?, 0, ?)");
+        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, producto, cantidad FROM detalle_pedido WHERE id_pedido = :id");
+
+        $sql = "SELECT id, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
+                  FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ep = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ep['id'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ep['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            // status viejo → estado nuevo (1→Pendiente, 2→Procesado, 3→Facturado). Confirmar significado.
+            $est  = ['1' => 'Pendiente', '2' => 'Procesado', '3' => 'Facturado'][(string) $ep['status']] ?? 'Pendiente';
+            $sec  = str_pad(preg_replace('/\D+/', '', (string) $ep['numero_pedido']), 9, '0', STR_PAD_LEFT);
+            $fped = self::fechaCorta($ep['datecreated']);
+            $fent = self::fechaCorta($ep['fecha_entrega']);
+
+            try {
+                $pg->beginTransaction();
+                $buscar->execute([':e' => $idEmpresa, ':sec' => $sec]);
+                $exId = $buscar->fetchColumn();
+                if ($exId !== false) {
+                    $idPed = (int) $exId; $vin = true; $res['vinculados']++;
+                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = '001-001-' . $sec; }
+                } else {
+                    $insCab->execute([$idEmpresa, $idCliente, $fped, $est, self::nz($ep['observaciones_cliente']), self::nz($ep['observaciones_interna']), $fent, self::nz($ep['hora_entrega_desde']), self::nz($ep['hora_entrega_hasta']), $sec, $amb, $idUsuario]);
+                    $idPed = (int) $insCab->fetchColumn(); $vin = false; $res['migrados']++;
+                }
+
+                if (!$vin) { // no tocar el detalle de un pedido nativo enlazado
+                    $detStmt->execute([':id' => $old]);
+                    foreach ($detStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                        $idProd = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $d['id_producto'], (string) $d['codigo_producto'], (string) $d['producto'], '0', $idEmpresa, $idUsuario, $pg);
+                        if (!$idProd) { continue; }
+                        $cant = (float) $d['cantidad'];
+                        $pu   = $precioProd[$idProd] ?? 0.0;
+                        $stl  = round($cant * $pu, 2);
+                        $insDet->execute([$idPed, $idProd, $cant, $pu, $stl, $stl]);
+                    }
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idPed, ':cn' => (string) $ep['numero_pedido'], ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
     }
 
     /** Migra el kardex (tabla inventarios) → inventario_kardex, con saldo corrido por producto/bodega. */

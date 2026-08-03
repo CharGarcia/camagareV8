@@ -748,11 +748,47 @@ class ProductoRepository extends BaseRepository
     {
         $prefijo = ($tipo === '01') ? 'P' : 'S';
 
-        // Solo se consideran los códigos con el formato autogenerado exacto (P001, S42…).
-        // Un código manual como 'PCFE01' o 'SINCODIGO' no debe mover el consecutivo.
-        // Se limita a 9 dígitos para que el cast a bigint nunca desborde.
-        // Se cuentan únicamente los productos NO eliminados: el código de un producto
-        // borrado queda libre para reutilizarse.
+        // Saltar códigos ya ocupados (autogenerados o escritos a mano).
+        $stExiste = $this->db->prepare(
+            "SELECT 1 FROM {$this->table}
+             WHERE id_empresa = :id_empresa AND lower(codigo) = lower(:codigo)
+               AND eliminado = false
+             LIMIT 1"
+        );
+
+        // 1) Continuar la numeración real de la empresa: si ya existen códigos
+        //    puramente numéricos para este tipo (p. ej. 202401…202417, aunque no
+        //    sigan el formato P00X/S00X), se toma el mayor y se sugiere el
+        //    siguiente, conservando el mismo largo (relleno de ceros). Se usa el
+        //    MÁXIMO y no "el último creado" porque un producto reciente con un
+        //    código manual suelto (p. ej. '001') no debe desviar la secuencia.
+        //    Se limita a 9 dígitos (además de excluir del cast a bigint) para
+        //    no confundir un código de barras (EAN-13/UPC-A, 12-13 dígitos)
+        //    escrito por error en 'codigo' con la numeración real del producto.
+        $stMax = $this->db->prepare(
+            "SELECT codigo FROM {$this->table}
+             WHERE id_empresa = :id_empresa AND tipo_produccion = :tipo
+               AND eliminado = false AND codigo ~ '^[0-9]{1,9}$'
+             ORDER BY codigo::bigint DESC
+             LIMIT 1"
+        );
+        $stMax->execute([':id_empresa' => $idEmpresa, ':tipo' => $tipo]);
+        $maxCodigo = (string) ($stMax->fetchColumn() ?: '');
+
+        if ($maxCodigo !== '') {
+            $longitud = strlen($maxCodigo);
+            $numero = (int) $maxCodigo;
+            do {
+                $numero++;
+                $codigo = str_pad((string) $numero, $longitud, '0', STR_PAD_LEFT);
+                $stExiste->execute([':id_empresa' => $idEmpresa, ':codigo' => $codigo]);
+            } while ($stExiste->fetchColumn() && $numero < 999999999999999);
+
+            return $codigo;
+        }
+
+        // 2) Sin numeración propia: formato autogenerado exacto (P001, S42…).
+        //    Un código manual como 'PCFE01' o 'SINCODIGO' no debe mover el consecutivo.
         $sql = "SELECT MAX(substring(codigo from 2)::bigint)
                 FROM {$this->table}
                 WHERE id_empresa = :id_empresa AND codigo ~ :patron
@@ -760,14 +796,6 @@ class ProductoRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':patron' => '^' . $prefijo . '[0-9]{1,9}$']);
         $numero = (int) ($st->fetchColumn() ?: 0);
-
-        // Saltar códigos ya ocupados por registros manuales (p. ej. 'P002' escrito a mano).
-        $stExiste = $this->db->prepare(
-            "SELECT 1 FROM {$this->table}
-             WHERE id_empresa = :id_empresa AND lower(codigo) = lower(:codigo)
-               AND eliminado = false
-             LIMIT 1"
-        );
 
         do {
             $numero++;

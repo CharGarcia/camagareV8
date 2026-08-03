@@ -69,7 +69,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <option value="">— Seleccione —</option>
                         <?php foreach ($formas as $f): ?>
                             <option value="<?= (int) $f['id'] ?>" <?= (int) $f['id'] === $idFormaPago ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($f['nombre'] . ($f['nombre_banco'] ? ' — ' . $f['nombre_banco'] : '') . ($f['numero_cuenta'] ? ' (' . $f['numero_cuenta'] . ')' : '')) ?>
+                                <?= htmlspecialchars($f['nombre'] . ($f['nombre_banco'] ? ' — ' . $f['nombre_banco'] : '') . ($f['numero_cuenta'] ? ' (' . $f['numero_cuenta'] . ')' : '')) ?><?= empty($f['id_cuenta_contable']) ? ' ⚠ sin cuenta contable' : '' ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

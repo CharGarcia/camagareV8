@@ -36,7 +36,11 @@ class ControlBancarioRepository extends BaseRepository
     }
 
     /**
-     * Cuentas bancarias de la empresa: formas de pago con banco + cuenta contable asignados.
+     * Cuentas bancarias de la empresa: formas de pago con banco asignado. La cuenta contable
+     * (id_cuenta_contable) YA NO es obligatoria para aparecer aquí: si falta, la cuenta se lista
+     * igual (con cuenta_codigo/cuenta_nombre en NULL) para que el usuario vea que existe y sepa
+     * que hay que configurarla — antes desaparecía sin aviso. Sin cuenta contable no hay mayor que
+     * mostrar (getMovimientos filtra por esa cuenta), así que se ve vacía hasta que se asigne.
      */
     public function getFormasBancarias(int $idEmpresa): array
     {
@@ -44,25 +48,25 @@ class ControlBancarioRepository extends BaseRepository
                        fp.id_cuenta_contable, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                        b.nombre_banco
                 FROM empresa_formas_pago fp
-                INNER JOIN plan_cuentas pc ON pc.id = fp.id_cuenta_contable
+                LEFT JOIN plan_cuentas pc ON pc.id = fp.id_cuenta_contable
                 LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
                 WHERE fp.id_empresa = :id_empresa
                   AND fp.eliminado = FALSE
                   AND fp.activo = TRUE
                   AND fp.id_banco IS NOT NULL
-                  AND fp.id_cuenta_contable IS NOT NULL
                 ORDER BY fp.nombre ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /** Igual que getFormasBancarias(): la cuenta contable puede venir NULL. */
     public function getFormaBancaria(int $idFormaPago, int $idEmpresa): ?array
     {
         $sql = "SELECT fp.id, fp.nombre, fp.id_cuenta_contable, fp.id_banco
                 FROM empresa_formas_pago fp
                 WHERE fp.id = :id AND fp.id_empresa = :id_empresa AND fp.eliminado = FALSE
-                  AND fp.id_banco IS NOT NULL AND fp.id_cuenta_contable IS NOT NULL";
+                  AND fp.id_banco IS NOT NULL";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $idFormaPago, ':id_empresa' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

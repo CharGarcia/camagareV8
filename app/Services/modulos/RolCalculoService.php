@@ -187,9 +187,11 @@ class RolCalculoService
             }
         }
 
-        // 5) IESS personal (solo MENSUAL)
+        // 5) IESS personal y patronal (solo MENSUAL, y solo si el empleado aporta al
+        // IESS). Si aporta_iess=false, no se descuenta nada al empleado NI se genera
+        // gasto patronal — sin importar qué porcentajes tenga guardados en su ficha.
         $aporteIess = 0.0;
-        if ($esMensual) {
+        if ($esMensual && $this->esVerdadero($emp['aporta_iess'] ?? true)) {
             $pctPer = (float) ($emp['aporte_personal'] ?? 9.45);
             $aporteIess = round($baseIess * $pctPer / 100, 2);
             if ($aporteIess > 0) {

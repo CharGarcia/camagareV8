@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.5
+version: 1.6
 orden: 60
 estado: activo
 ---
@@ -69,6 +69,17 @@ un cobro/pago hecho con CUALQUIERA de esas formas se reconoce igual, sin
 importar cuál de las dos se tenga seleccionada en el filtro — nunca se toman
 datos de una cuenta contable distinta.
 
+## Selector de cuenta bancaria
+
+El selector lista toda forma de pago con **banco asignado** (activa, no
+eliminada), aunque todavía no tenga **cuenta contable** configurada — antes
+esas cuentas desaparecían del selector sin explicación. Si le falta la cuenta
+contable, aparece marcada con "⚠ sin cuenta contable" y, al seleccionarla,
+muestra saldo 0 y sin movimientos (no puede mostrar un mayor que no existe).
+En cuanto se le asigna la cuenta contable (desde
+[Formas de cobro y pago](formas-cobros-pagos.md)), sus movimientos aparecen
+solos, sin ninguna acción adicional.
+
 ## Errores frecuentes
 
 - **"Para un cheque debe indicar si fue emitido o recibido"**: falta ese dato.
@@ -92,6 +103,9 @@ datos de una cuenta contable distinta.
 
 ## Historial de cambios
 
+- **1.6** — La cuenta contable ya no es obligatoria para que una cuenta
+  bancaria aparezca en el selector; sin ella se ve con un aviso y saldo/
+  movimientos en 0 hasta que se le asigne una.
 - **1.5** — Corrección: cuando una cuenta bancaria tiene dos o más formas de
   pago bancarias (Banco/Cheque) apuntándole (p. ej. al convertir una forma
   antes no bancaria para que quede junto al banco real), un cobro/pago hecho

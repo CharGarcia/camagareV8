@@ -792,7 +792,7 @@ class RolPagoRepository extends BaseRepository
         }
 
         $sql = "SELECT e.id, e.identificacion, e.nombres_apellidos, e.sueldo_base, e.valor_semanal, e.valor_quincena,
-                       e.aporte_personal, e.aporte_patronal, e.fondos_reserva, e.decimo_tercero, e.decimo_cuarto,
+                       e.aporte_personal, e.aporte_patronal, e.aporta_iess, e.fondos_reserva, e.decimo_tercero, e.decimo_cuarto,
                        e.excluir_calculo_ir,
                        {$selPeriodos}
                 FROM empleados e
