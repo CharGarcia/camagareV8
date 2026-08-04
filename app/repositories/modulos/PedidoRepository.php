@@ -119,8 +119,10 @@ class PedidoRepository {
 
     public function obtenerPorId($id, $id_empresa) {
         $sql = "SELECT p.*, c.nombre as cliente_nombre, c.identificacion as cliente_identificacion,
+                       c.email as cliente_email,
                        uc.nombre as creado_por_nombre, uu.nombre as modificado_por_nombre,
-                       rt.nombre as responsable_entrega
+                       rt.nombre as responsable_entrega,
+                       (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido
                 FROM pedidos_cabecera p
                 JOIN clientes c ON p.id_cliente = c.id
                 LEFT JOIN usuarios uc ON p.created_by = uc.id

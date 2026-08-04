@@ -267,17 +267,22 @@ class EstadosFinancierosService
             $utilidadNeta[$p] = $utilidadBruta[$p] - $calc['totales']['6'][$p];
         }
 
+        // Ocultar columnas de mes sin ningún movimiento (no aportan información y alargan
+        // la tabla horizontal innecesariamente). El total de la derecha no cambia: los meses
+        // ocultos sumaban cero.
+        $clavesVisibles = $this->clavesConMovimiento($mov, $claves);
+
         return [
-            'periodos' => $periodos,
-            'ingresos' => $this->conTotalItems($calc['grupos']['4']),
-            'costos' => $this->conTotalItems($calc['grupos']['5']),
-            'gastos' => $this->conTotalItems($calc['grupos']['6']),
+            'periodos' => array_intersect_key($periodos, array_flip($clavesVisibles)),
+            'ingresos' => $this->filtrarValoresItems($this->conTotalItems($calc['grupos']['4']), $clavesVisibles),
+            'costos' => $this->filtrarValoresItems($this->conTotalItems($calc['grupos']['5']), $clavesVisibles),
+            'gastos' => $this->filtrarValoresItems($this->conTotalItems($calc['grupos']['6']), $clavesVisibles),
             'totales' => [
-                'ingresos' => $this->conTotal($calc['totales']['4']),
-                'costos' => $this->conTotal($calc['totales']['5']),
-                'gastos' => $this->conTotal($calc['totales']['6']),
-                'utilidad_bruta' => $this->conTotal($utilidadBruta),
-                'utilidad_neta' => $this->conTotal($utilidadNeta),
+                'ingresos' => $this->filtrarPorPeriodo($this->conTotal($calc['totales']['4']), $clavesVisibles),
+                'costos' => $this->filtrarPorPeriodo($this->conTotal($calc['totales']['5']), $clavesVisibles),
+                'gastos' => $this->filtrarPorPeriodo($this->conTotal($calc['totales']['6']), $clavesVisibles),
+                'utilidad_bruta' => $this->filtrarPorPeriodo($this->conTotal($utilidadBruta), $clavesVisibles),
+                'utilidad_neta' => $this->filtrarPorPeriodo($this->conTotal($utilidadNeta), $clavesVisibles),
             ],
         ];
     }
@@ -351,16 +356,21 @@ class EstadosFinancierosService
             $totalPasivoPatrimonioPorPeriodo[$p] = $balance['totales']['2'][$p] + $totalPatrimonioPorPeriodo[$p];
         }
 
+        // Ocultar columnas de mes sin ningún movimiento propio. El saldo acumulado de un mes sin
+        // movimiento es idéntico al del mes anterior (no aporta información nueva); el criterio
+        // usa el movimiento MENSUAL (no el acumulado) para decidir qué columnas mostrar.
+        $clavesVisibles = $this->clavesConMovimiento($movMensual, $claves);
+
         return [
-            'periodos' => $periodos,
-            'activos' => $balance['grupos']['1'],
-            'pasivos' => $balance['grupos']['2'],
-            'patrimonio' => $patrimonio,
+            'periodos' => array_intersect_key($periodos, array_flip($clavesVisibles)),
+            'activos' => $this->filtrarValoresItems($balance['grupos']['1'], $clavesVisibles),
+            'pasivos' => $this->filtrarValoresItems($balance['grupos']['2'], $clavesVisibles),
+            'patrimonio' => $this->filtrarValoresItems($patrimonio, $clavesVisibles),
             'totales' => [
-                'activos' => $balance['totales']['1'],
-                'pasivos' => $balance['totales']['2'],
-                'patrimonio' => $totalPatrimonioPorPeriodo,
-                'pasivo_patrimonio' => $totalPasivoPatrimonioPorPeriodo,
+                'activos' => $this->filtrarPorPeriodo($balance['totales']['1'], $clavesVisibles),
+                'pasivos' => $this->filtrarPorPeriodo($balance['totales']['2'], $clavesVisibles),
+                'patrimonio' => $this->filtrarPorPeriodo($totalPatrimonioPorPeriodo, $clavesVisibles),
+                'pasivo_patrimonio' => $this->filtrarPorPeriodo($totalPasivoPatrimonioPorPeriodo, $clavesVisibles),
             ],
         ];
     }
@@ -523,6 +533,57 @@ class EstadosFinancierosService
         }
 
         return ['grupos' => $grupos, 'totales' => $totales];
+    }
+
+    /**
+     * Claves de periodo (subconjunto de $claves) donde al menos una cuenta tuvo movimiento
+     * (debe o haber distinto de cero) ese mes en $movMensual. Se usa para ocultar columnas de
+     * mes sin ningún dato en los reportes "por periodos".
+     */
+    private function clavesConMovimiento(array $movMensual, array $claves): array
+    {
+        $conMovimiento = [];
+        foreach ($claves as $p) {
+            $tieneMovimiento = false;
+            foreach ($movMensual as $porPeriodo) {
+                $v = $porPeriodo[$p] ?? null;
+                if ($v !== null && (round((float)$v['debe'], 2) != 0 || round((float)$v['haber'], 2) != 0)) {
+                    $tieneMovimiento = true;
+                    break;
+                }
+            }
+            if ($tieneMovimiento) {
+                $conMovimiento[] = $p;
+            }
+        }
+        return $conMovimiento;
+    }
+
+    /**
+     * Recorta el array 'valores' de cada item a solo las claves de periodo visibles, sin tocar
+     * el resto del item (codigo, nombre, nivel, total…).
+     */
+    private function filtrarValoresItems(array $items, array $clavesVisibles): array
+    {
+        $keep = array_flip($clavesVisibles);
+        foreach ($items as &$item) {
+            $item['valores'] = array_intersect_key($item['valores'], $keep);
+        }
+        unset($item);
+        return $items;
+    }
+
+    /**
+     * Recorta un array periodo => valor a solo las claves visibles, preservando la clave
+     * 'total' si existe (no es un periodo, es la suma agregada).
+     */
+    private function filtrarPorPeriodo(array $porPeriodo, array $clavesVisibles): array
+    {
+        $keep = $clavesVisibles;
+        if (array_key_exists('total', $porPeriodo)) {
+            $keep[] = 'total';
+        }
+        return array_intersect_key($porPeriodo, array_flip($keep));
     }
 
     private function conTotal(array $porPeriodo): array

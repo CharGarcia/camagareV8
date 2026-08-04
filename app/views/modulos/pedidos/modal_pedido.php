@@ -30,6 +30,18 @@
                     <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="abrirModalResponsableCrear()" title="Crear responsable de traslado rápido">
                         <i class="bi bi-truck"></i>
                     </button>
+
+                    <div class="vr mx-1"></div>
+
+                    <button type="button" class="btn btn-outline-danger btn-sm px-2 py-1" onclick="pdfPedido()" title="Generar PDF">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="excelPedido()" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-excel"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="emailPedido()" title="Enviar por correo">
+                        <i class="bi bi-envelope"></i>
+                    </button>
                 </div>
                 <hr class="text-muted my-3 opacity-25">
 

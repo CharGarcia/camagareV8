@@ -97,6 +97,166 @@ class PedidosController extends BaseModuloController {
         ]);
     }
 
+    /** data: URI del logo del primer establecimiento (para el membrete de los reportes). '' si no hay logo. */
+    private function logoDataUri(int $idEmpresa): string
+    {
+        $empresaModel = new Empresa();
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        $ruta = $establecimientos[0]['logo_ruta'] ?? '';
+        if (empty($ruta)) {
+            return '';
+        }
+        $clean = ltrim((string) $ruta, '/');
+        if (strpos($clean, 'sistema/public/') === 0) {
+            $clean = substr($clean, strlen('sistema/public/'));
+        } elseif (strpos($clean, 'sistema/') === 0) {
+            $clean = substr($clean, strlen('sistema/'));
+        }
+        if (strpos($clean, 'public/') === 0) {
+            $clean = substr($clean, strlen('public/'));
+        }
+        foreach ([MVC_ROOT . '/public/' . $clean, MVC_ROOT . '/' . $clean] as $cand) {
+            if (is_file($cand)) {
+                $tipo = strtolower(pathinfo($cand, PATHINFO_EXTENSION)) === 'png' ? 'png' : 'jpeg';
+                return 'data:image/' . $tipo . ';base64,' . base64_encode((string) file_get_contents($cand));
+            }
+        }
+        return '';
+    }
+
+    /** Exporta el listado (filtrado) de pedidos a PDF, con membrete de la empresa. */
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'numero_pedido');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $rows = $data['rows'];
+
+        try {
+            $empresaModel  = new Empresa();
+            $empresa       = $empresaModel->getPorId($idEmpresa);
+            $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE PEDIDOS';
+            $logoUri       = $this->logoDataUri($idEmpresa);
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 7.5pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                .header img { max-height: 18mm; margin-bottom: 4px; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <?php if ($logoUri !== ''): ?>
+                        <img src="<?= $logoUri ?>">
+                    <?php endif; ?>
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Listado de Pedidos</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 12%">Nro. Pedido</th>
+                            <th style="width: 10%">Fecha Emisión</th>
+                            <th style="width: 10%">Fecha Entrega</th>
+                            <th style="width: 24%">Cliente</th>
+                            <th style="width: 16%">Resp. Entrega</th>
+                            <th style="width: 18%">Observaciones</th>
+                            <th style="width: 10%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string) ($r['numero_pedido'] ?? '')) ?></td>
+                                <td><?= !empty($r['fecha_pedido']) ? date('d-m-Y', strtotime($r['fecha_pedido'])) : '-' ?></td>
+                                <td><?= !empty($r['fecha_entrega']) ? date('d-m-Y', strtotime($r['fecha_entrega'])) : '-' ?></td>
+                                <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['responsable_entrega'] ?? '-')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['observaciones'] ?? '-')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['estado'] ?? '')) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Pedidos_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    /** Exporta el listado (filtrado) de pedidos a Excel. */
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'numero_pedido');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $rows = $data['rows'];
+
+        try {
+            $empresaModel  = new Empresa();
+            $empresa       = $empresaModel->getPorId($idEmpresa);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $headers = ['Nro. Pedido', 'Fecha Emisión', 'Fecha Entrega', 'Cliente', 'Resp. Entrega', 'Observaciones', 'Estado'];
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $exportData[] = [
+                    (string) ($r['numero_pedido'] ?? ''),
+                    !empty($r['fecha_pedido']) ? date('d-m-Y', strtotime($r['fecha_pedido'])) : '',
+                    !empty($r['fecha_entrega']) ? date('d-m-Y', strtotime($r['fecha_entrega'])) : '',
+                    (string) ($r['cliente_nombre'] ?? ''),
+                    (string) ($r['responsable_entrega'] ?? ''),
+                    (string) ($r['observaciones'] ?? ''),
+                    (string) ($r['estado'] ?? ''),
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Pedidos', $headers, $exportData, 'Listado de Pedidos', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+            }
+            exit;
+        }
+    }
+
     public function searchAjax(): void
     {
         $this->requireLeer();
@@ -252,6 +412,204 @@ class PedidosController extends BaseModuloController {
         } catch (Exception $e) {
             $this->json(['status' => false, 'message' => $e->getMessage()]);
         }
+    }
+
+    /** Cabecera + detalles de un pedido, listos para PDF/Excel/Correo. Null si no existe. */
+    private function cargarPedidoParaDocumento(int $id, int $idEmpresa): ?array
+    {
+        $cabecera = $this->repository->obtenerPorId($id, $idEmpresa);
+        if (!$cabecera) {
+            return null;
+        }
+        $detalles = $this->repository->obtenerDetalles($id, $idEmpresa);
+        return ['cabecera' => $cabecera, 'detalles' => $detalles];
+    }
+
+    /** Datos de la empresa (con el logo del establecimiento del pedido) para el PDF. */
+    private function cargarEmpresaParaPdf(int $idEmpresa, ?int $idEstablecimiento = null): array
+    {
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+        $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+        $estConfig = $idEstablecimiento ? $estRepo->getEstablecimientoConfig($idEstablecimiento) : null;
+        if (!empty($estConfig['logo_ruta'])) {
+            $empresa['logo_ruta'] = $estConfig['logo_ruta'];
+        } else {
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($establecimientos[0]['logo_ruta'])) {
+                $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+            }
+        }
+        return $empresa;
+    }
+
+    public function pdf(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $doc = $this->cargarPedidoParaDocumento($id, $idEmpresa);
+            if (!$doc) { http_response_code(404); echo 'Pedido no encontrado'; exit; }
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($doc['cabecera']['id_establecimiento']) ? (int) $doc['cabecera']['id_establecimiento'] : null);
+
+            (new \App\Services\modulos\PedidoPdfService())->generar($doc['cabecera'], $doc['detalles'], $empresa, 'D');
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Genera el Excel del pedido (mismas columnas que el PDF). */
+    public function excel(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $doc = $this->cargarPedidoParaDocumento($id, $idEmpresa);
+            if (!$doc) { http_response_code(404); echo 'Pedido no encontrado'; exit; }
+            $cabecera = $doc['cabecera'];
+            $detalles = $doc['detalles'];
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $numero  = (string) ($cabecera['numero_pedido'] ?? '');
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Pedido');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:C1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'PEDIDO N.° ' . ($numero !== '' ? $numero : '—'));
+            $sheet->mergeCells('A2:C2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cabecera['fecha_pedido']) ? date('d-m-Y', strtotime((string) $cabecera['fecha_pedido'])) : '';
+            $sheet->setCellValue('A3', 'Fecha pedido: ' . $fecha);
+            $sheet->setCellValue('A4', 'Cliente: ' . (string) ($cabecera['cliente_nombre'] ?? ''));
+            $sheet->setCellValue('A5', 'Identificación: ' . (string) ($cabecera['cliente_identificacion'] ?? ''));
+            $sheet->setCellValue('A6', 'Resp. entrega: ' . (string) ($cabecera['responsable_entrega'] ?? ''));
+            $sheet->setCellValue('B6', 'Estado: ' . ucfirst((string) ($cabecera['estado'] ?? '')));
+
+            $headerRow = 8;
+            $headers = ['Código', 'Descripción', 'Cantidad'];
+            $col = 'A';
+            foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':C' . $headerRow)->applyFromArray($headerStyle);
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $sheet->setCellValueExplicit('A' . $row, (string) ($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string) ($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('C' . $row, (float) ($d['cantidad'] ?? 0));
+                $row++;
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('C' . ($headerRow + 1) . ':C' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $obs = trim((string) ($cabecera['observaciones'] ?? ''));
+            if ($obs !== '') {
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Observaciones: ' . $obs);
+                $sheet->mergeCells('A' . $row . ':C' . $row);
+            }
+
+            foreach (['A', 'B', 'C'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'Pedido_' . ($numero !== '' ? $numero : 'comprobante') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Envía por correo el PDF del pedido. */
+    public function enviarCorreoAjax(): void
+    {
+        ob_start();
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+
+        try {
+            $doc = $this->cargarPedidoParaDocumento($id, $idEmpresa);
+            if (!$doc) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Pedido no encontrado.']); exit; }
+            $cabecera = $doc['cabecera'];
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $numero  = (string) ($cabecera['numero_pedido'] ?? '');
+
+            $pdfString = (new \App\Services\modulos\PedidoPdfService())->generar($cabecera, $doc['detalles'], $empresa, 'S');
+
+            // Destinatarios: el que venga del formulario o, en su defecto, el del cliente.
+            $correosDestino = trim($_POST['correos'] ?? '');
+            if ($correosDestino === '') {
+                $correosDestino = (string) ($cabecera['cliente_email'] ?? '');
+            }
+            if ($correosDestino === '') {
+                if (ob_get_level() > 0) ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'El cliente no tiene correo registrado. Ingrese uno para enviar.']);
+                exit;
+            }
+
+            $clienteNombre = (string) ($cabecera['cliente_nombre'] ?? 'Cliente');
+            $empresaNombre = (string) ($empresa['nombre'] ?? '');
+            $asunto = 'Pedido ' . ($numero !== '' ? $numero : '') . ($empresaNombre !== '' ? ' — ' . $empresaNombre : '');
+            $cuerpo = "<div style='font-family:Arial,sans-serif;line-height:1.5;'>"
+                . "<p>Estimad@ " . htmlspecialchars($clienteNombre) . ",</p>"
+                . "<p>Adjunto encontrará el comprobante del pedido <strong>" . htmlspecialchars($numero) . "</strong>.</p>"
+                . "<p>Saludos cordiales,<br>" . htmlspecialchars($empresaNombre) . "</p>"
+                . "</div>";
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarPdfSimple(
+                $idEmpresa, $correosDestino, $clienteNombre, $asunto, $cuerpo, $pdfString,
+                'Pedido_' . ($numero !== '' ? $numero : 'comprobante'), $empresaNombre
+            );
+
+            if (ob_get_level() > 0) ob_end_clean();
+            if ($enviado) {
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo o el destinatario.']);
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (ob_get_level() > 0) ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
+        exit;
     }
 
     public function getSecuencialAjax(): void

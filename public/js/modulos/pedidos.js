@@ -236,6 +236,7 @@ function nuevoPedido() {
     document.getElementById('id_cliente').value = '';
     document.getElementById('buscar-cliente').value = '';
     document.getElementById('estado').value = 'Pendiente';
+    window._PED_CLIENTE_EMAIL = '';
     
     // Configurar fecha de entrega con la fecha actual por defecto
     document.getElementById('fecha_entrega').value = CMG_fechaLocal();
@@ -455,6 +456,52 @@ async function syncSerie(idPunto) {
     }
 }
 
+function pdfPedido() {
+    const id = document.getElementById('pedido_id').value;
+    if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar el pedido primero.' });
+    window.open(`${window.CMG_urlBase}/pdf?id=${id}`, '_blank');
+}
+
+function excelPedido() {
+    const id = document.getElementById('pedido_id').value;
+    if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar el pedido primero.' });
+    window.open(`${window.CMG_urlBase}/excel?id=${id}`, '_blank');
+}
+
+async function emailPedido() {
+    const id = document.getElementById('pedido_id').value;
+    if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar el pedido primero.' });
+
+    const { value: correos, isConfirmed } = await Swal.fire({
+        title: 'Enviar por correo',
+        input: 'text',
+        inputLabel: 'Correo(s) destino, separados por coma.',
+        inputValue: window._PED_CLIENTE_EMAIL || '',
+        inputPlaceholder: 'cliente@correo.com',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+        cancelButtonText: 'Cancelar',
+        target: document.getElementById('modalPedido'),
+    });
+    if (!isConfirmed) return;
+
+    Swal.fire({ title: 'Enviando correo...', allowOutsideClick: false, didOpen: () => Swal.showLoading(), target: document.getElementById('modalPedido') });
+    try {
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('correos', correos || '');
+        const res = await fetch(`${window.CMG_urlBase}/enviarCorreoAjax`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            Swal.fire({ icon: 'success', title: 'Enviado', text: data.mensaje || 'Correo enviado correctamente.', target: document.getElementById('modalPedido') });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo enviar el correo.', target: document.getElementById('modalPedido') });
+        }
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo enviar el correo.', target: document.getElementById('modalPedido') });
+    }
+}
+
 function validarFechasYHoras() {
     const inputFecha = document.getElementById('fecha_entrega');
     const inputHoraIni = document.getElementById('hora_inicial_entrega');
@@ -665,6 +712,7 @@ async function editarPedido(id) {
             setVal('pedido_id', p.id);
             setVal('id_cliente', p.id_cliente);
             setVal('buscar-cliente', p.cliente_nombre);
+            window._PED_CLIENTE_EMAIL = p.cliente_email || '';
             
             let dFecha = p.fecha_pedido ? p.fecha_pedido.substring(0, 10) : '';
             setVal('fecha_pedido', dFecha);

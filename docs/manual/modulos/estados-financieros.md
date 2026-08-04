@@ -58,6 +58,13 @@ aplican a estas variantes (son formatos de un solo corte) y se ocultan al
 seleccionarlas; **PDF** y **Excel** sí exportan el comparativo completo (el PDF
 en orientación horizontal).
 
+**Meses sin movimiento no se muestran como columna.** Si un mes no tuvo ningún
+asiento contabilizado (en ninguna cuenta), esa columna se omite — no aparece
+como una columna en cero. El criterio se evalúa siempre sobre el movimiento
+propio de ese mes, incluso en el Estado de Situación Financiera por Periodos
+(donde el saldo mostrado es acumulado): un mes sin movimiento repetiría el
+mismo saldo del mes anterior, así que no aporta una columna nueva.
+
 ## Si el balance no cuadra
 
 Revise en este orden:
