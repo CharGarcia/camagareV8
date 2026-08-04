@@ -589,38 +589,68 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             if (tsUsu) tsUsu.on('change', onChangeUsu);
             else selUsuario.addEventListener('change', onChangeUsu);
 
+            // Limpiar la selección al cerrar: si no se resetea, reabrir el modal más
+            // adelante (para otro origen) puede dejar precargado un destino de una
+            // consulta anterior y aplicarse por error sobre el usuario equivocado.
+            modalEl.addEventListener('hidden.bs.modal', function() {
+                if (tsUsu) { tsUsu.clear(); }
+                else { selUsuario.value = ''; }
+                if (tsEmp) { tsEmp.clear(); tsEmp.clearOptions(); tsEmp.disable(); }
+                else { selEmpresa.innerHTML = '<option value="">Seleccione primero el usuario...</option>'; selEmpresa.disabled = true; }
+                btnCopiar.disabled = false;
+                setMsg('', '');
+            });
+
             btnCopiar.addEventListener('click', function() {
                 var idUd = getUsuDestino();
                 var idEd = getEmpDestino();
                 if (!idUd) { setMsg('err', 'Seleccione el usuario destino.'); return; }
                 if (!idEd) { setMsg('err', 'Seleccione la empresa destino.'); return; }
 
-                btnCopiar.disabled = true;
-                setMsg('load', '<i class="bi bi-arrow-repeat"></i> Copiando...');
+                var textoDestino = (tsUsu && tsUsu.options[idUd] && tsUsu.options[idUd].text) ? tsUsu.options[idUd].text : ('usuario #' + idUd);
 
-                var fd = new FormData();
-                fd.append('id_usuario_origen', idUsuOrig);
-                fd.append('id_empresa_origen', idEmpOrig);
-                fd.append('id_usuario_destino', idUd);
-                fd.append('id_empresa_destino', idEd);
+                function ejecutarCopia() {
+                    btnCopiar.disabled = true;
+                    setMsg('load', '<i class="bi bi-arrow-repeat"></i> Copiando...');
 
-                fetch(base + '/config/permisos-modulos?action=copiarPermisos', {
-                    method: 'POST', body: fd, credentials: 'same-origin',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(j) {
-                    btnCopiar.disabled = false;
-                    if (j.ok) {
-                        setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Permisos copiados correctamente.');
-                    } else {
-                        setMsg('err', '<i class="bi bi-x-circle-fill"></i> ' + (j.error || 'Error al copiar.'));
-                    }
-                })
-                .catch(function() {
-                    btnCopiar.disabled = false;
-                    setMsg('err', 'Error de conexión.');
-                });
+                    var fd = new FormData();
+                    fd.append('id_usuario_origen', idUsuOrig);
+                    fd.append('id_empresa_origen', idEmpOrig);
+                    fd.append('id_usuario_destino', idUd);
+                    fd.append('id_empresa_destino', idEd);
+
+                    fetch(base + '/config/permisos-modulos?action=copiarPermisos', {
+                        method: 'POST', body: fd, credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) {
+                        btnCopiar.disabled = false;
+                        if (j.ok) {
+                            setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Permisos copiados correctamente.');
+                        } else {
+                            setMsg('err', '<i class="bi bi-x-circle-fill"></i> ' + (j.error || 'Error al copiar.'));
+                        }
+                    })
+                    .catch(function() {
+                        btnCopiar.disabled = false;
+                        setMsg('err', 'Error de conexión.');
+                    });
+                }
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: '¿Reemplazar permisos de ' + textoDestino + '?',
+                        html: 'Esto <strong>borra todos los permisos actuales</strong> de ese usuario en la empresa seleccionada y los reemplaza por los de este usuario. No se suman, se reemplazan.',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, reemplazar',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: '#d33',
+                    }).then(function(r) { if (r.isConfirmed) ejecutarCopia(); });
+                } else if (window.confirm('Esto borra todos los permisos actuales de ' + textoDestino + ' y los reemplaza por los de este usuario. ¿Continuar?')) {
+                    ejecutarCopia();
+                }
             });
         })();
     </script>
@@ -668,6 +698,7 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             var base          = '<?= $base ?>';
             var idUsuario     = '<?= (int)$idUsuarioSel ?>';
             var idEmpresaActual = '<?= (int)$idEmpresaSel ?>';
+            var empresaActualTexto = <?= json_encode($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? ('Empresa #' . (int)$idEmpresaSel), JSON_UNESCAPED_UNICODE) ?>;
             var selOrigen     = document.getElementById('copiaEmp-empresa-origen');
             var btnCopiar     = document.getElementById('btn-copiar-desde-empresa');
             var msgEl         = document.getElementById('copiaEmp-msg');
@@ -740,35 +771,53 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                 var idOrigen = tsOrigen ? tsOrigen.getValue() : selOrigen.value;
                 if (!idOrigen) { setMsg('err', 'Seleccione la empresa origen.'); return; }
 
-                btnCopiar.disabled = true;
-                setMsg('load', '<i class="bi bi-arrow-repeat"></i> Copiando...');
+                var textoOrigen = (tsOrigen && tsOrigen.options[idOrigen] && tsOrigen.options[idOrigen].text) ? tsOrigen.options[idOrigen].text : ('empresa #' + idOrigen);
 
-                var fd = new FormData();
-                fd.append('id_usuario_origen',  idUsuario);
-                fd.append('id_empresa_origen',   idOrigen);
-                fd.append('id_usuario_destino',  idUsuario);
-                fd.append('id_empresa_destino',  idEmpresaActual);
+                function ejecutarCopia() {
+                    btnCopiar.disabled = true;
+                    setMsg('load', '<i class="bi bi-arrow-repeat"></i> Copiando...');
 
-                fetch(base + '/config/permisos-modulos?action=copiarPermisos', {
-                    method: 'POST', body: fd, credentials: 'same-origin',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(j) {
-                    if (j.ok) {
-                        setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Permisos copiados correctamente. Actualizando lista...');
-                        setTimeout(function() {
-                            window.location.href = base + '/config/permisos-modulos?u=' + idUsuario + '&e=' + idEmpresaActual + '&mostrar=1';
-                        }, 900);
-                    } else {
+                    var fd = new FormData();
+                    fd.append('id_usuario_origen',  idUsuario);
+                    fd.append('id_empresa_origen',   idOrigen);
+                    fd.append('id_usuario_destino',  idUsuario);
+                    fd.append('id_empresa_destino',  idEmpresaActual);
+
+                    fetch(base + '/config/permisos-modulos?action=copiarPermisos', {
+                        method: 'POST', body: fd, credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) {
+                        if (j.ok) {
+                            setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Permisos copiados correctamente. Actualizando lista...');
+                            setTimeout(function() {
+                                window.location.href = base + '/config/permisos-modulos?u=' + idUsuario + '&e=' + idEmpresaActual + '&mostrar=1';
+                            }, 900);
+                        } else {
+                            btnCopiar.disabled = false;
+                            setMsg('err', '<i class="bi bi-x-circle-fill"></i> ' + (j.error || 'Error al copiar.'));
+                        }
+                    })
+                    .catch(function() {
                         btnCopiar.disabled = false;
-                        setMsg('err', '<i class="bi bi-x-circle-fill"></i> ' + (j.error || 'Error al copiar.'));
-                    }
-                })
-                .catch(function() {
-                    btnCopiar.disabled = false;
-                    setMsg('err', 'Error de conexión.');
-                });
+                        setMsg('err', 'Error de conexión.');
+                    });
+                }
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: '¿Reemplazar permisos en esta empresa?',
+                        html: 'Esto <strong>borra todos los permisos actuales</strong> de este usuario en <strong>' + (empresaActualTexto) + '</strong> y los reemplaza por los que tiene en <strong>' + textoOrigen + '</strong>. No se suman, se reemplazan.',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, reemplazar',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: '#d33',
+                    }).then(function(r) { if (r.isConfirmed) ejecutarCopia(); });
+                } else if (window.confirm('Esto borra todos los permisos actuales de este usuario en esta empresa y los reemplaza por los de ' + textoOrigen + '. ¿Continuar?')) {
+                    ejecutarCopia();
+                }
             });
         })();
     </script>
