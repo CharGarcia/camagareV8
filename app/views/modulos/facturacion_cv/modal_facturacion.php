@@ -25,7 +25,7 @@
 </style>
 
 <div class="modal fade modal-factura" id="modalFacturacionCv" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-receipt-cutoff me-2"></i><span id="faccv_titulo">Nueva facturación de consignación</span></h5>
@@ -153,7 +153,6 @@
                                                     <th class="py-2 small fw-bold text-muted">Producto</th>
                                                     <th class="py-2 small fw-bold text-muted">Lote</th>
                                                     <th class="py-2 small fw-bold text-muted">Bodega</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end">Saldo</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width:100px;">Precio</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width:90px;">Cant.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width:90px;">Desc.</th>
@@ -163,7 +162,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody id="faccv_lineas_body">
-                                                <tr><td colspan="11" class="text-center text-muted py-4">Use <b>Cargar consignación</b> para agregar productos.</td></tr>
+                                                <tr><td colspan="10" class="text-center text-muted py-4">Use <b>Cargar consignación</b> para agregar productos.</td></tr>
                                             </tbody>
                                         </table>
                                     </div>
@@ -306,7 +305,7 @@
                 </div>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="bi bi-x-lg me-1"></i>Cerrar</button>
-                    <button type="button" class="btn btn-primary px-4 btn-sm" id="faccv_btn_guardar" onclick="faccvGuardar()"><i class="bi bi-check2-circle me-1"></i> Guardar borrador</button>
+                    <button type="button" class="btn btn-primary px-4 btn-sm" id="faccv_btn_guardar" onclick="faccvGuardar()"><i class="bi bi-check2-circle me-1"></i> Guardar</button>
                     <button type="button" class="btn btn-success px-3 btn-sm d-none" id="faccv_btn_generar" onclick="faccvGenerar()"><i class="bi bi-receipt-cutoff me-1"></i> Generar factura</button>
                 </div>
             </div>
@@ -323,6 +322,10 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
+                <div class="alert alert-warning py-2 px-3 small mb-2 d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>Solo se muestran consignaciones en estado <strong>Entregada</strong> con saldo pendiente de facturar.</span>
+                </div>
                 <div class="position-relative mb-2">
                     <label class="x-small fw-bold text-muted mb-1">Buscar por cliente o N° de consignación</label>
                     <input type="text" class="form-control form-control-sm" id="faccv_cg_busqueda" placeholder="Escriba cliente o número (mín. 2 caracteres)..." oninput="faccvCgBuscar(this.value)" autocomplete="off">
@@ -379,7 +382,7 @@
     function resetForm() {
         $('formFaccv').reset();
         ['faccv_id','faccv_id_factura','faccv_estado','faccv_serie','faccv_id_punto_emision','faccv_establecimiento','faccv_punto_emision','faccv_id_cliente','faccv_cliente_email','faccv_secuencial'].forEach(id => $(id).value = '');
-        $('faccv_lineas_body').innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Use <b>Cargar consignación</b> para agregar productos.</td></tr>';
+        $('faccv_lineas_body').innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Use <b>Cargar consignación</b> para agregar productos.</td></tr>';
         $('faccv_lineas_info').textContent = '';
         $('faccv_info_cliente').classList.add('d-none');
         $('faccv_tbody_info').innerHTML = '';
@@ -432,7 +435,7 @@
         $('faccv_id_factura').value = row.id_factura || '';
         $('faccv_titulo').textContent = 'Facturación ' + (row.serie || '') + '-' + (row.secuencial || '');
         pintarBadge(row.estado);
-        $('faccv_btn_guardar').innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar borrador';
+        $('faccv_btn_guardar').innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
         $('faccv_btn_eliminar').classList.toggle('d-none', !(row.estado === 'borrador' && window.FACCV_PERM.eliminar));
         $('faccv_btn_generar').classList.toggle('d-none', !(row.estado === 'borrador' && window.FACCV_PERM.actualizar));
         // "Crear nueva desde esta": disponible en documentos ya emitidos (facturada/anulada).
@@ -443,10 +446,10 @@
 
     async function cargarDetalle(id, editable) {
         const body = $('faccv_lineas_body');
-        body.innerHTML = '<tr><td colspan="11" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
         const res = await fetch(`${RUTA}/getDetalleAjax?id=${id}`);
         const data = await res.json();
-        if (!data.ok) { body.innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">No se pudo cargar.</td></tr>'; return; }
+        if (!data.ok) { body.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">No se pudo cargar.</td></tr>'; return; }
         const r = data.data;
 
         $('faccv_titulo').textContent = 'Facturación ' + (r.serie || '') + '-' + (r.secuencial || '');
@@ -496,7 +499,7 @@
             saldo: editable ? num(d.saldo_facturable) : num(d.cantidad),
             cantidad: num(d.cantidad), descuento: num(d.descuento), readonly: !editable
         }));
-        if (!dets.length) body.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Sin líneas.</td></tr>';
+        if (!dets.length) body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin líneas.</td></tr>';
         recalc();
     }
 
@@ -782,17 +785,16 @@
         const body = $('faccv_lineas_body');
         if (body.querySelector('td[colspan]')) body.innerHTML = '';
         const loteNup = [cfg.lote, cfg.nup].filter(x => x && x !== 'sin_lote').join(' / ') || '—';
-        const precio = num(cfg.precio), porc = num(cfg.porc), saldo = num(cfg.saldo), cant = num(cfg.cantidad), desc = num(cfg.descuento);
+        const precio = num(cfg.precio), porc = num(cfg.porc), cant = num(cfg.cantidad), desc = num(cfg.descuento);
         const neto = Math.max(0, precio * cant - desc);
         const tr = document.createElement('tr'); tr.className = 'row-detalle';
-        tr.dataset.idcd = idcd; tr.dataset.porc = porc; tr.dataset.saldo = saldo;
+        tr.dataset.idcd = idcd; tr.dataset.porc = porc;
         tr.dataset.precio = precio; tr.dataset.cant = cant; tr.dataset.desc = desc;
         tr.innerHTML = `
             <td class="ps-3 small">${esc(cfg.numero || '')}</td>
             <td class="small">${cfg.producto_codigo ? esc(cfg.producto_codigo) + ' · ' : ''}${esc(cfg.producto_nombre || '')}</td>
             <td class="small">${esc(loteNup)}</td>
             <td class="small">${esc(cfg.bodega_nombre || '—')}</td>
-            <td class="text-end small">${saldo.toFixed(2)}</td>
             <td class="text-end small">${precio.toFixed(DEC_P)}</td>
             <td class="text-end small">${cant.toFixed(2)}</td>
             <td class="text-end small">${desc.toFixed(2)}</td>
@@ -806,7 +808,7 @@
 
     window.faccvQuitar = function (btn) {
         const tr = btn.closest('tr'); added.delete(parseInt(tr.dataset.idcd, 10)); tr.remove();
-        if (!$('faccv_lineas_body').children.length) $('faccv_lineas_body').innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Use <b>Cargar consignación</b> para agregar productos.</td></tr>';
+        if (!$('faccv_lineas_body').children.length) $('faccv_lineas_body').innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Use <b>Cargar consignación</b> para agregar productos.</td></tr>';
         $('faccv_lineas_info').textContent = added.size ? added.size + ' línea(s)' : '';
         recalc();
     };

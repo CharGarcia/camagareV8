@@ -995,7 +995,8 @@ class ConsignacionesVentasController extends BaseModuloController
 
             $db = \App\Core\Database::getConnection();
             
-            $sql = "SELECT p.*, c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.id_vendedor, c.direccion as cliente_direccion
+            $sql = "SELECT p.*, (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido,
+                           c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.id_vendedor, c.direccion as cliente_direccion
                     FROM pedidos_cabecera p
                     JOIN clientes c ON p.id_cliente = c.id
                     WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false";

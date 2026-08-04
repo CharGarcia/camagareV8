@@ -109,19 +109,136 @@ function RI_fetchGenerar(tab, params, onOk, onError) {
 // PESTAÑA 1: EXISTENCIAS
 // ════════════════════════════════════════════════════════════════════
 window.RI_Existencias = {
-    chart: null,
+    orden: '',
+    dir: 'ASC',
 
     limpiarProducto() {
         RI_limpiarBusqueda('ri-ex-search-producto', 'ri-ex-id-producto', 'ri-ex-producto-seleccionado');
         this.generar();
     },
 
+    modalEditarInstance: null,
+
+    abrirModalEditar(btn) {
+        const d = btn.dataset;
+        document.getElementById('ri-ex-edit-id-producto').value = d.idProducto;
+        document.getElementById('ri-ex-edit-id-bodega').value = d.idBodega;
+        document.getElementById('ri-ex-edit-producto-nombre').textContent = d.productoNombre;
+        document.getElementById('ri-ex-edit-bodega-nombre').textContent = d.bodegaNombre;
+        document.getElementById('ri-ex-edit-minimo').value = d.stockMinimo;
+        document.getElementById('ri-ex-edit-minimo').dataset.original = d.stockMinimo;
+        document.getElementById('ri-ex-edit-maximo').value = d.stockMaximo;
+        document.getElementById('ri-ex-edit-maximo').dataset.original = d.stockMaximo;
+
+        const selCategoria = document.getElementById('ri-ex-edit-categoria');
+        selCategoria.innerHTML = '<option value="">Sin categoría</option>'
+            + Array.from(document.getElementById('ri-ex-categoria').options).slice(1).map(o => o.outerHTML).join('');
+        selCategoria.value = d.idCategoria || '';
+        selCategoria.dataset.original = d.idCategoria || '';
+        selCategoria.dataset.originalLabel = selCategoria.selectedOptions[0] ? selCategoria.selectedOptions[0].textContent : 'Sin categoría';
+
+        if (!this.modalEditarInstance) {
+            this.modalEditarInstance = new bootstrap.Modal(document.getElementById('ri-ex-modal-editar'));
+        }
+        this.modalEditarInstance.show();
+    },
+
+    confirmarGuardarEdicion() {
+        const idProducto = document.getElementById('ri-ex-edit-id-producto').value;
+        const idBodega = document.getElementById('ri-ex-edit-id-bodega').value;
+        const minEl = document.getElementById('ri-ex-edit-minimo');
+        const maxEl = document.getElementById('ri-ex-edit-maximo');
+        const catEl = document.getElementById('ri-ex-edit-categoria');
+
+        const nuevoMin = parseFloat(minEl.value || 0);
+        const nuevoMax = parseFloat(maxEl.value || 0);
+        const original_min = parseFloat(minEl.dataset.original || 0);
+        const original_max = parseFloat(maxEl.dataset.original || 0);
+        const cambioMinMax = nuevoMin !== original_min || nuevoMax !== original_max;
+        const cambioCategoria = catEl.value !== (catEl.dataset.original || '');
+
+        if (!cambioMinMax && !cambioCategoria) {
+            this.modalEditarInstance.hide();
+            return;
+        }
+        if (nuevoMax > 0 && nuevoMax < nuevoMin) {
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Datos inválidos', text: 'El máximo no puede ser menor que el mínimo.' });
+            else alert('El máximo no puede ser menor que el mínimo.');
+            return;
+        }
+
+        let resumen = '<ul class="text-start mb-0 ps-3">';
+        if (cambioMinMax) {
+            resumen += `<li>Mínimo: <b>${original_min}</b> &rarr; <b>${nuevoMin}</b></li>`;
+            resumen += `<li>Máximo: <b>${original_max}</b> &rarr; <b>${nuevoMax}</b></li>`;
+        }
+        if (cambioCategoria) {
+            const nuevaLabel = catEl.selectedOptions[0] ? catEl.selectedOptions[0].textContent : 'Sin categoría';
+            resumen += `<li>Categoría: <b>${catEl.dataset.originalLabel}</b> &rarr; <b>${nuevaLabel}</b></li>`;
+        }
+        resumen += '</ul>';
+
+        const ejecutarGuardado = () => {
+            const llamadas = [];
+            if (cambioMinMax) {
+                llamadas.push(fetch(BASE_URL + '/' + RUTA_MODULO + '/actualizarMinMaxAjax', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams({ id_producto: idProducto, id_bodega: idBodega, stock_minimo: nuevoMin, stock_maximo: nuevoMax }).toString(),
+                }).then(r => r.json()));
+            }
+            if (cambioCategoria) {
+                llamadas.push(fetch(BASE_URL + '/' + RUTA_MODULO + '/actualizarCategoriaAjax', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams({ id_producto: idProducto, id_categoria: catEl.value }).toString(),
+                }).then(r => r.json()));
+            }
+
+            Promise.all(llamadas).then(resultados => {
+                const error = resultados.find(r => !r.ok);
+                if (error) {
+                    if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'No se pudo guardar', text: error.error || 'Ocurrió un error' });
+                    else alert(error.error || 'No se pudo guardar');
+                    return;
+                }
+                this.modalEditarInstance.hide();
+                if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Cambios guardados', timer: 1800, showConfirmButton: false });
+                this.generar();
+            }).catch(err => {
+                console.error(err);
+                if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo comunicar con el servidor.' });
+                else alert('Error de conexión');
+            });
+        };
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Confirmar cambios',
+                html: resumen,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+            }).then(result => { if (result.isConfirmed) ejecutarGuardado(); });
+        } else if (confirm('¿Confirmas guardar estos cambios?')) {
+            ejecutarGuardado();
+        }
+    },
+
     dibujarCabecera(modo) {
+        const sortIcon = '<i class="bi bi-arrow-down-up small text-muted ms-1"></i>';
+        const th2 = (label, campo, extra) => `<th class="sortable-header ${extra || ''}" data-sort="${campo}" data-col="${campo}">${label}${sortIcon}</th>`;
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
-            th += `<th class="ps-3">Producto</th><th>Categoría</th><th>Bodega</th>
-                   <th class="text-end">Stock</th><th class="text-end">Mínimo</th><th class="text-end">Máximo</th>
-                   <th class="text-end">Costo Unit.</th><th class="text-end">Valor total</th><th class="text-center pe-3">Estado</th>`;
+            th += th2('Producto', 'producto_nombre', 'ps-3')
+                + th2('Categoría', 'categoria_nombre')
+                + th2('Bodega', 'bodega_nombre')
+                + th2('Stock', 'stock_actual', 'text-end')
+                + th2('Mínimo', 'stock_minimo', 'text-end')
+                + th2('Máximo', 'stock_maximo', 'text-end')
+                + th2('Costo Unit.', 'costo_unitario', 'text-end')
+                + th2('Valor total', 'valor_total', 'text-end pe-3');
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Productos</th>
                    <th class="text-end">Stock</th><th class="text-end">Mínimo</th>
@@ -129,6 +246,16 @@ window.RI_Existencias = {
         }
         th += '</tr>';
         document.getElementById('ri-ex-thead').innerHTML = th;
+
+        if (modo === 'NINGUNO' && typeof window.CMG_initSort === 'function') {
+            window.CMG_initSort('reporte_inventarios_existencias', (col, dir) => {
+                this.orden = col; this.dir = dir;
+                this.generar();
+            }, { container: '#ri-ex-thead', col: this.orden, dir: this.dir });
+        }
+        if (typeof window.initResizableColumns === 'function') {
+            window.initResizableColumns();
+        }
     },
 
     generar() {
@@ -141,44 +268,19 @@ window.RI_Existencias = {
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });
+        if (modo === 'NINGUNO' && this.orden) {
+            params.set('orden', this.orden);
+            params.set('dir', this.dir);
+        }
 
         const tbody = document.getElementById('ri-ex-tbody');
-        const colSpan = modo === 'NINGUNO' ? 9 : 6;
+        const colSpan = modo === 'NINGUNO' ? 8 : 6;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('existencias', params, (res) => {
             tbody.innerHTML = res.rows;
-            if (res.kpis) {
-                document.getElementById('ri-ex-kpi-productos').textContent = res.kpis.total_productos;
-                document.getElementById('ri-ex-kpi-valor').textContent = parseFloat(res.kpis.valor_total).toFixed(2);
-                document.getElementById('ri-ex-kpi-quiebre').textContent = res.kpis.en_quiebre;
-                document.getElementById('ri-ex-kpi-alerta').textContent = res.kpis.en_alerta;
-            }
-            const chartContainer = document.getElementById('ri-ex-chart-container');
-            if (res.rawData && res.rawData.length > 0) {
-                chartContainer.style.display = 'flex';
-                this.dibujarGrafico(res.rawData);
-            } else {
-                chartContainer.style.display = 'none';
-            }
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-            document.getElementById('ri-ex-chart-container').style.display = 'none';
-        });
-    },
-
-    dibujarGrafico(rawData) {
-        const ctx = document.getElementById('ri-ex-chart').getContext('2d');
-        if (this.chart) this.chart.destroy();
-
-        const top = [...rawData].sort((a, b) => parseFloat(b.valor_total) - parseFloat(a.valor_total)).slice(0, 10);
-        const labels = top.map(r => r.nombre_grupo || r.producto_nombre);
-        const data = top.map(r => parseFloat(r.valor_total));
-
-        this.chart = new Chart(ctx, {
-            type: 'bar',
-            data: { labels, datasets: [{ label: 'Valor ($)', data, backgroundColor: RI_colores(labels.length) }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
         });
     },
 
@@ -208,8 +310,6 @@ window.RI_Existencias = {
 // PESTAÑA 2: MOVIMIENTOS (KARDEX)
 // ════════════════════════════════════════════════════════════════════
 window.RI_Movimientos = {
-    chart: null,
-
     limpiarProducto() {
         RI_limpiarBusqueda('ri-mv-search-producto', 'ri-mv-id-producto', 'ri-mv-producto-seleccionado');
         this.generar();
@@ -268,52 +368,8 @@ window.RI_Movimientos = {
 
         RI_fetchGenerar('movimientos', params, (res) => {
             tbody.innerHTML = res.rows;
-            if (res.kpis) {
-                document.getElementById('ri-mv-kpi-total').textContent = res.kpis.total_movimientos;
-                document.getElementById('ri-mv-kpi-entradas').textContent = parseFloat(res.kpis.total_entradas).toFixed(2);
-                document.getElementById('ri-mv-kpi-salidas').textContent = parseFloat(res.kpis.total_salidas).toFixed(2);
-                document.getElementById('ri-mv-kpi-saldo').textContent = parseFloat(res.kpis.saldo_neto).toFixed(2);
-            }
-            const chartContainer = document.getElementById('ri-mv-chart-container');
-            if (modo !== 'NINGUNO' && res.rawData && res.rawData.length > 0) {
-                chartContainer.style.display = 'flex';
-                this.dibujarGrafico(res.rawData, modo);
-            } else {
-                chartContainer.style.display = 'none';
-            }
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-            document.getElementById('ri-mv-chart-container').style.display = 'none';
-        });
-    },
-
-    dibujarGrafico(rawData, modo) {
-        const ctx = document.getElementById('ri-mv-chart').getContext('2d');
-        if (this.chart) this.chart.destroy();
-
-        let rows = rawData;
-        let type = 'bar';
-        if (modo === 'FECHA' || modo === 'MES') {
-            rows = [...rawData].sort((a, b) => (a.id_grupo > b.id_grupo ? 1 : -1));
-            type = 'line';
-        } else {
-            rows = [...rawData].sort((a, b) => (parseFloat(b.total_entradas) + parseFloat(b.total_salidas)) - (parseFloat(a.total_entradas) + parseFloat(a.total_salidas))).slice(0, 10);
-        }
-
-        const labels = rows.map(r => r.nombre_grupo);
-        const entradas = rows.map(r => parseFloat(r.total_entradas));
-        const salidas = rows.map(r => parseFloat(r.total_salidas));
-
-        this.chart = new Chart(ctx, {
-            type,
-            data: {
-                labels,
-                datasets: [
-                    { label: 'Entradas', data: entradas, backgroundColor: 'rgba(25,135,84,.5)', borderColor: 'rgba(25,135,84,1)', tension: .3 },
-                    { label: 'Salidas', data: salidas, backgroundColor: 'rgba(220,53,69,.5)', borderColor: 'rgba(220,53,69,1)', tension: .3 },
-                ]
-            },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
     },
 
@@ -343,8 +399,6 @@ window.RI_Movimientos = {
 // PESTAÑA 3: VALORIZACIÓN
 // ════════════════════════════════════════════════════════════════════
 window.RI_Valorizacion = {
-    chart: null,
-
     limpiarProducto() {
         RI_limpiarBusqueda('ri-va-search-producto', 'ri-va-id-producto', 'ri-va-producto-seleccionado');
         this.generar();
@@ -361,38 +415,8 @@ window.RI_Valorizacion = {
 
         RI_fetchGenerar('valorizacion', params, (res) => {
             tbody.innerHTML = res.rows;
-            if (res.kpis) {
-                document.getElementById('ri-va-kpi-valor').textContent = parseFloat(res.kpis.valor_total).toFixed(2);
-                document.getElementById('ri-va-kpi-productos').textContent = res.kpis.total_productos;
-                document.getElementById('ri-va-kpi-top').textContent = res.kpis.producto_top
-                    ? `${res.kpis.producto_top} ($${parseFloat(res.kpis.producto_top_valor).toFixed(2)})` : '-';
-            }
-            const chartContainer = document.getElementById('ri-va-chart-container');
-            if (res.rawData && res.rawData.length > 0) {
-                chartContainer.style.display = 'flex';
-                this.dibujarGrafico(res.rawData);
-            } else {
-                chartContainer.style.display = 'none';
-            }
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">${msg}</td></tr>`;
-            document.getElementById('ri-va-chart-container').style.display = 'none';
-        });
-    },
-
-    dibujarGrafico(rawData) {
-        const ctx = document.getElementById('ri-va-chart').getContext('2d');
-        if (this.chart) this.chart.destroy();
-
-        const top = [...rawData].sort((a, b) => parseFloat(b.valor_total) - parseFloat(a.valor_total)).slice(0, 10);
-        const labels = top.map(r => r.nombre_grupo);
-        const data = top.map(r => parseFloat(r.valor_total));
-        const bg = RI_colores(labels.length);
-
-        this.chart = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels, datasets: [{ data, backgroundColor: bg, borderColor: bg.map(c => c.replace('.7', '1')), borderWidth: 1 }] },
-            options: { responsive: true, maintainAspectRatio: false }
         });
     },
 
@@ -418,8 +442,6 @@ window.RI_Valorizacion = {
 // PESTAÑA 4: CONSIGNACIONES
 // ════════════════════════════════════════════════════════════════════
 window.RI_Consignaciones = {
-    chart: null,
-
     limpiarCliente() {
         RI_limpiarBusqueda('ri-cv-search-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado');
         this.generar();
@@ -436,10 +458,10 @@ window.RI_Consignaciones = {
         if (modo === 'NINGUNO') {
             th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Vendedor</th>
                    <th class="text-center">Productos</th><th class="text-end">Saldo</th>
-                   <th class="text-end">Valor a costo</th><th class="text-center pe-3">Estado</th>`;
+                   <th class="text-center pe-3">Estado</th>`;
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Consignaciones</th>
-                   <th class="text-end">Saldo</th><th class="text-end pe-3">Valor a costo</th>`;
+                   <th class="text-end pe-3">Saldo</th>`;
         }
         th += '</tr>';
         document.getElementById('ri-cv-thead').innerHTML = th;
@@ -486,48 +508,19 @@ window.RI_Consignaciones = {
             id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
-            numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup',
+            numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',
             estado: 'ri-cv-estado',
             incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
         });
 
         const tbody = document.getElementById('ri-cv-tbody');
-        const colSpan = modo === 'NINGUNO' ? 7 : 4;
+        const colSpan = modo === 'NINGUNO' ? 6 : 3;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('consignaciones', params, (res) => {
             tbody.innerHTML = res.rows;
-            if (res.kpis) {
-                document.getElementById('ri-cv-kpi-unidades').textContent = parseFloat(res.kpis.unidades_vigentes).toFixed(2);
-                document.getElementById('ri-cv-kpi-valor').textContent = parseFloat(res.kpis.valor_vigente).toFixed(2);
-                document.getElementById('ri-cv-kpi-clientes').textContent = res.kpis.clientes_con_saldo;
-                document.getElementById('ri-cv-kpi-activas').textContent = res.kpis.consignaciones_activas;
-            }
-            const chartContainer = document.getElementById('ri-cv-chart-container');
-            if (modo !== 'NINGUNO' && res.rawData && res.rawData.length > 0) {
-                chartContainer.style.display = 'flex';
-                this.dibujarGrafico(res.rawData);
-            } else {
-                chartContainer.style.display = 'none';
-            }
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-            document.getElementById('ri-cv-chart-container').style.display = 'none';
-        });
-    },
-
-    dibujarGrafico(rawData) {
-        const ctx = document.getElementById('ri-cv-chart').getContext('2d');
-        if (this.chart) this.chart.destroy();
-
-        const top = [...rawData].sort((a, b) => parseFloat(b.valor_saldo) - parseFloat(a.valor_saldo)).slice(0, 10);
-        const labels = top.map(r => r.nombre_grupo);
-        const data = top.map(r => parseFloat(r.valor_saldo));
-
-        this.chart = new Chart(ctx, {
-            type: 'bar',
-            data: { labels, datasets: [{ label: 'Valor a costo ($)', data, backgroundColor: RI_colores(labels.length) }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
         });
     },
 
@@ -545,7 +538,7 @@ window.RI_Consignaciones = {
             id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
-            numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup',
+            numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',
             estado: 'ri-cv-estado',
             incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
         });

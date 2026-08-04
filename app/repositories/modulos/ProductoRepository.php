@@ -263,6 +263,18 @@ class ProductoRepository extends BaseRepository
         ]);
     }
 
+    /** Cambia solo la categoría del producto (edición en línea desde reportes). */
+    public function actualizarCategoria(int $id, int $idEmpresa, ?int $idCategoria, int $userId): void
+    {
+        $sql = "UPDATE {$this->table}
+                SET id_categoria = :id_categoria, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_categoria' => $idCategoria, ':id' => $id, ':id_empresa' => $idEmpresa, ':uid' => $userId,
+        ]);
+    }
+
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT p.*,

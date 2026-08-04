@@ -83,6 +83,8 @@ class ReporteInventariosController extends BaseModuloController
             'nup'          => trim($_REQUEST['nup'] ?? ''),
             'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
             'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
+            'orden'        => $_REQUEST['orden'] ?? '',
+            'dir'          => $_REQUEST['dir'] ?? 'ASC',
             'buscar'       => trim($_REQUEST['buscar']  ?? ''),
         ];
     }
@@ -132,6 +134,7 @@ class ReporteInventariosController extends BaseModuloController
             'nup'                => trim($_REQUEST['nup'] ?? ''),
             'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
             'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
+            'secuencial'         => trim($_REQUEST['secuencial'] ?? ''),
             'incluir_liquidadas' => !empty($_REQUEST['incluir_liquidadas']),
         ];
     }
@@ -178,7 +181,7 @@ class ReporteInventariosController extends BaseModuloController
         $kpis = $this->repository->getExistenciasKpis($idEmpresa, $filtros);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $modo === 'NINGUNO' ? 9 : 6),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $modo === 'NINGUNO' ? 8 : 6),
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
@@ -243,7 +246,7 @@ class ReporteInventariosController extends BaseModuloController
         $kpis = $this->repository->getConsignacionesKpis($idEmpresa, $filtros);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 7 : 4),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 6 : 3),
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
@@ -272,24 +275,30 @@ class ReporteInventariosController extends BaseModuloController
         $valor = number_format((float) ($r['valor_total'] ?? 0), 2);
 
         if ($modo === 'NINGUNO') {
-            $badges = [
-                'QUIEBRE' => 'bg-danger',
-                'ALERTA'  => 'bg-warning text-dark',
-                'EXCESO'  => 'bg-info text-dark',
-                'NORMAL'  => 'bg-success',
-            ];
-            $estado = $r['estado_stock'] ?? 'NORMAL';
-            $badgeClass = $badges[$estado] ?? 'bg-secondary';
-            return '<tr>'
+            $idProducto = (int) ($r['id_producto'] ?? 0);
+            $idBodega   = (int) ($r['id_bodega'] ?? 0);
+            $idCategoriaActual = $r['id_categoria'] ?? '';
+            $stockMinimo = (float) ($r['stock_minimo'] ?? 0);
+            $stockMaximo = (float) ($r['stock_maximo'] ?? 0);
+
+            return '<tr class="ri-ex-row" style="cursor:pointer;" title="Editar mínimo, máximo y categoría"'
+                . ' onclick="window.RI_Existencias.abrirModalEditar(this)"'
+                . ' data-id-producto="' . $idProducto . '"'
+                . ' data-id-bodega="' . $idBodega . '"'
+                . ' data-producto-nombre="' . htmlspecialchars($r['producto_nombre'] ?? '', ENT_QUOTES) . '"'
+                . ' data-bodega-nombre="' . htmlspecialchars($r['bodega_nombre'] ?? '', ENT_QUOTES) . '"'
+                . ' data-stock-minimo="' . $stockMinimo . '"'
+                . ' data-stock-maximo="' . $stockMaximo . '"'
+                . ' data-id-categoria="' . $idCategoriaActual . '"'
+                . '>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['categoria_nombre'] ?? '') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
-                . '<td class="text-end small text-muted">' . number_format((float) ($r['stock_minimo'] ?? 0), 2) . '</td>'
-                . '<td class="text-end small text-muted">' . number_format((float) ($r['stock_maximo'] ?? 0), 2) . '</td>'
+                . '<td class="text-end small text-muted">' . number_format($stockMinimo, 2) . '</td>'
+                . '<td class="text-end small text-muted">' . number_format($stockMaximo, 2) . '</td>'
                 . '<td class="text-end">' . $costo . '</td>'
                 . '<td class="text-end fw-bold text-primary">' . $valor . '</td>'
-                . '<td class="text-center"><span class="badge ' . $badgeClass . '">' . $estado . '</span></td>'
                 . '</tr>';
         }
 
@@ -366,7 +375,6 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td class="small">' . htmlspecialchars($r['vendedor_nombre'] ?? '-') . '</td>'
                 . '<td class="text-center">' . (int) ($r['cantidad_productos'] ?? 0) . '</td>'
                 . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'
-                . '<td class="text-end text-primary">' . number_format((float) ($r['valor_saldo'] ?? 0), 2) . '</td>'
                 . '<td class="text-center"><span class="badge ' . $badgeClass . '">' . htmlspecialchars($estado) . '</span></td>'
                 . '</tr>';
         }
@@ -375,7 +383,6 @@ class ReporteInventariosController extends BaseModuloController
             . '<td class="fw-bold">' . htmlspecialchars((string) ($r['nombre_grupo'] ?? '')) . '</td>'
             . '<td class="text-center">' . (int) ($r['cantidad_consignaciones'] ?? 0) . '</td>'
             . '<td class="text-end fw-bold">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
-            . '<td class="text-end text-primary">' . number_format((float) ($r['valor_saldo'] ?? 0), 2) . '</td>'
             . '</tr>';
     }
 
@@ -392,6 +399,95 @@ class ReporteInventariosController extends BaseModuloController
             . '<td class="text-end small">' . number_format((float) ($r['cantidad_facturada'] ?? 0), 2) . '</td>'
             . '<td class="text-end small fw-bold">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
             . '</tr>';
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // EDICIÓN EN LÍNEA (Existencias): mínimo/máximo por bodega y categoría
+    // ────────────────────────────────────────────────────────────────
+    public function actualizarMinMaxAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa   = (int) $_SESSION['id_empresa'];
+            $idUsuario   = (int) $_SESSION['id_usuario'];
+            $idProducto  = (int) ($_REQUEST['id_producto'] ?? 0);
+            $idBodega    = (int) ($_REQUEST['id_bodega'] ?? 0);
+            $stockMinimo = (float) ($_REQUEST['stock_minimo'] ?? 0);
+            $stockMaximo = (float) ($_REQUEST['stock_maximo'] ?? 0);
+
+            if ($idProducto <= 0 || $idBodega <= 0) {
+                throw new \InvalidArgumentException('Producto o bodega no válidos.');
+            }
+            if ($stockMinimo < 0 || $stockMaximo < 0) {
+                throw new \InvalidArgumentException('El mínimo y el máximo no pueden ser negativos.');
+            }
+            if ($stockMaximo > 0 && $stockMaximo < $stockMinimo) {
+                throw new \InvalidArgumentException('El máximo no puede ser menor que el mínimo.');
+            }
+
+            $inventarioRepo = new InventarioRepository();
+            $antes = $inventarioRepo->getProductoBodega($idProducto, $idBodega, $idEmpresa);
+            if (!$antes) {
+                throw new \InvalidArgumentException('El producto no tiene existencias registradas en esa bodega.');
+            }
+
+            $inventarioRepo->actualizarMinMax($idProducto, $idBodega, $idEmpresa, $stockMinimo, $stockMaximo, $idUsuario);
+
+            (new \App\Services\LogSistemaService())->registrar(
+                $idUsuario, $idEmpresa, 'actualizar_min_max', 'productos_bodegas', $idProducto,
+                ['stock_minimo' => $antes['stock_minimo'], 'stock_maximo' => $antes['stock_maximo']],
+                ['stock_minimo' => $stockMinimo, 'stock_maximo' => $stockMaximo]
+            );
+
+            echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function actualizarCategoriaAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa    = (int) $_SESSION['id_empresa'];
+            $idUsuario    = (int) $_SESSION['id_usuario'];
+            $idProducto   = (int) ($_REQUEST['id_producto'] ?? 0);
+            $idCategoria  = !empty($_REQUEST['id_categoria']) ? (int) $_REQUEST['id_categoria'] : null;
+
+            if ($idProducto <= 0) {
+                throw new \InvalidArgumentException('Producto no válido.');
+            }
+
+            $productoRepo = new ProductoRepository();
+            $antes = $productoRepo->getDetalleCompleto($idProducto, $idEmpresa);
+            if (!$antes) {
+                throw new \InvalidArgumentException('El producto no existe.');
+            }
+
+            $productoRepo->actualizarCategoria($idProducto, $idEmpresa, $idCategoria, $idUsuario);
+
+            (new \App\Services\LogSistemaService())->registrar(
+                $idUsuario, $idEmpresa, 'actualizar_categoria', 'productos', $idProducto,
+                ['id_categoria' => $antes['id_categoria']],
+                ['id_categoria' => $idCategoria]
+            );
+
+            $categoriaNombre = 'Sin categoría';
+            if ($idCategoria !== null) {
+                $cat = (new CategoriaRepository())->getDetalleCompleto($idCategoria, $idEmpresa);
+                $categoriaNombre = $cat['nombre'] ?? 'Sin categoría';
+            }
+
+            echo json_encode(['ok' => true, 'categoria_nombre' => $categoriaNombre]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     // ────────────────────────────────────────────────────────────────

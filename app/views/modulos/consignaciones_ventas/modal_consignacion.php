@@ -1981,6 +1981,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (isNewCons && c.cliente_direccion) {
             document.getElementById('cons_punto_llegada').value = c.cliente_direccion;
         }
+        const obsField = document.getElementById('cons_observaciones');
+        if (isNewCons && obsField && !obsField.value.trim() && c.numero_pedido) {
+            obsField.value = 'Pedido ' + c.numero_pedido + (c.observaciones ? ' — ' + c.observaciones : '');
+        }
 
         const selectedBodegaId = document.getElementById('buscar_pedido_bodega').value || document.getElementById('cons_id_bodega').value || '';
 

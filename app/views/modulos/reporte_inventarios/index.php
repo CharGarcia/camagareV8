@@ -158,46 +158,6 @@
                 </div>
             </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-primary bg-opacity-10 text-primary rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-box-seam fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Productos con stock</h6><h4 class="mb-0 fw-bold" id="ri-ex-kpi-productos">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-success bg-opacity-10 text-success rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-cash-stack fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Valor total</h6><h4 class="mb-0 fw-bold">$<span id="ri-ex-kpi-valor">0.00</span></h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-danger bg-opacity-10 text-danger rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-exclamation-octagon fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">En quiebre</h6><h4 class="mb-0 fw-bold text-danger" id="ri-ex-kpi-quiebre">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-warning bg-opacity-10 text-warning rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-graph-down-arrow fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Bajo mínimo</h6><h4 class="mb-0 fw-bold text-warning" id="ri-ex-kpi-alerta">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm mb-4" id="ri-ex-chart-container" style="display:none;">
-                <div class="card-header bg-white border-bottom-0 pt-4 pb-0"><h6 class="mb-0 fw-bold"><i class="bi bi-graph-up text-primary me-2"></i>Top 10 por valor</h6></div>
-                <div class="card-body"><canvas id="ri-ex-chart" style="max-height:300px;"></canvas></div>
-            </div>
-
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="btn-group btn-group-sm">
@@ -210,7 +170,7 @@
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-ex-thead"></thead>
                             <tbody id="ri-ex-tbody">
-                                <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -346,46 +306,6 @@
                 </div>
             </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-primary bg-opacity-10 text-primary rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-arrow-left-right fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Movimientos</h6><h4 class="mb-0 fw-bold" id="ri-mv-kpi-total">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-success bg-opacity-10 text-success rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-box-arrow-in-down fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Entradas</h6><h4 class="mb-0 fw-bold text-success" id="ri-mv-kpi-entradas">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-danger bg-opacity-10 text-danger rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-box-arrow-up fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Salidas</h6><h4 class="mb-0 fw-bold text-danger" id="ri-mv-kpi-salidas">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-info bg-opacity-10 text-info rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-arrow-down-up fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Saldo neto</h6><h4 class="mb-0 fw-bold" id="ri-mv-kpi-saldo">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm mb-4" id="ri-mv-chart-container" style="display:none;">
-                <div class="card-header bg-white border-bottom-0 pt-4 pb-0"><h6 class="mb-0 fw-bold"><i class="bi bi-graph-up text-primary me-2"></i>Entradas vs. Salidas</h6></div>
-                <div class="card-body"><canvas id="ri-mv-chart" style="max-height:300px;"></canvas></div>
-            </div>
-
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="btn-group btn-group-sm">
@@ -468,38 +388,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="row g-3 mb-3">
-                <div class="col-md-4">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-success bg-opacity-10 text-success rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-cash-stack fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Valor total de inventario</h6><h4 class="mb-0 fw-bold">$<span id="ri-va-kpi-valor">0.00</span></h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-primary bg-opacity-10 text-primary rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-box-seam fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Productos valorizados</h6><h4 class="mb-0 fw-bold" id="ri-va-kpi-productos">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-warning bg-opacity-10 text-warning rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-star fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Producto de mayor valor</h6><h6 class="mb-0 fw-bold small" id="ri-va-kpi-top">-</h6></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm mb-4" id="ri-va-chart-container" style="display:none;">
-                <div class="card-header bg-white border-bottom-0 pt-4 pb-0"><h6 class="mb-0 fw-bold"><i class="bi bi-pie-chart text-primary me-2"></i>Distribución de valor</h6></div>
-                <div class="card-body"><canvas id="ri-va-chart" style="max-height:300px;"></canvas></div>
             </div>
 
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
@@ -598,6 +486,10 @@
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">NUP</label>
                                     <input type="text" id="ri-cv-nup" class="form-control form-control-sm shadow-none border" placeholder="NUP">
                                 </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">N° Consignación</label>
+                                    <input type="text" id="ri-cv-secuencial" class="form-control form-control-sm shadow-none border" placeholder="Ej. 000000010">
+                                </div>
 
                                 <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
@@ -631,46 +523,6 @@
                 </div>
             </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-primary bg-opacity-10 text-primary rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-boxes fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Unidades vigentes</h6><h4 class="mb-0 fw-bold" id="ri-cv-kpi-unidades">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-success bg-opacity-10 text-success rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-cash-stack fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Valor a costo</h6><h4 class="mb-0 fw-bold">$<span id="ri-cv-kpi-valor">0.00</span></h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-info bg-opacity-10 text-info rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-people fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Clientes con saldo</h6><h4 class="mb-0 fw-bold" id="ri-cv-kpi-clientes">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                        <div class="card-body p-3 d-flex align-items-center">
-                            <div class="ri-kpi-icon bg-warning bg-opacity-10 text-warning rounded-3 me-3 d-flex align-items-center justify-content-center"><i class="bi bi-truck fs-4"></i></div>
-                            <div><h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size:.65rem;">Consignaciones activas</h6><h4 class="mb-0 fw-bold" id="ri-cv-kpi-activas">0</h4></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm mb-4" id="ri-cv-chart-container" style="display:none;">
-                <div class="card-header bg-white border-bottom-0 pt-4 pb-0"><h6 class="mb-0 fw-bold"><i class="bi bi-graph-up text-primary me-2"></i>Top clientes en consignación</h6></div>
-                <div class="card-body"><canvas id="ri-cv-chart" style="max-height:300px;"></canvas></div>
-            </div>
-
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="btn-group btn-group-sm">
@@ -683,7 +535,7 @@
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-cv-thead"></thead>
                             <tbody id="ri-cv-tbody">
-                                <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -730,6 +582,48 @@
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- MODAL: EDITAR MÍNIMO/MÁXIMO/CATEGORÍA (Existencias) -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="ri-ex-modal-editar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold mb-0">
+                    <i class="bi bi-pencil-square text-primary me-2"></i>Editar existencia
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ri-ex-edit-id-producto">
+                <input type="hidden" id="ri-ex-edit-id-bodega">
+                <div class="mb-3 small">
+                    <div><span class="text-muted">Producto:</span> <span id="ri-ex-edit-producto-nombre" class="fw-bold"></span></div>
+                    <div><span class="text-muted">Bodega:</span> <span id="ri-ex-edit-bodega-nombre" class="fw-bold"></span></div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Mínimo</label>
+                        <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="ri-ex-edit-minimo">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Máximo</label>
+                        <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="ri-ex-edit-maximo">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Categoría</label>
+                        <select class="form-select form-select-sm" id="ri-ex-edit-categoria"></select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="window.RI_Existencias.confirmarGuardarEdicion()"><i class="bi bi-check-lg me-1"></i>Guardar</button>
             </div>
         </div>
     </div>

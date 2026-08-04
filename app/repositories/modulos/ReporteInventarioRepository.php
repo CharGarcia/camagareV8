@@ -162,6 +162,12 @@ class ReporteInventarioRepository extends BaseRepository
         ";
     }
 
+    /** Columnas permitidas para ordenar el detalle de existencias (whitelist anti-inyección). */
+    private const SORT_COLUMNAS_EXISTENCIAS = [
+        'producto_nombre', 'categoria_nombre', 'bodega_nombre',
+        'stock_actual', 'stock_minimo', 'stock_maximo', 'costo_unitario', 'valor_total',
+    ];
+
     public function getExistenciasDetalle(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
@@ -170,7 +176,10 @@ class ReporteInventarioRepository extends BaseRepository
             $sql .= " AND e.estado_stock = :estado_stock";
             $params[':estado_stock'] = $filtros['estado_stock'];
         }
-        $sql .= " ORDER BY e.producto_nombre ASC, e.bodega_nombre ASC";
+
+        $orden = in_array($filtros['orden'] ?? '', self::SORT_COLUMNAS_EXISTENCIAS, true) ? $filtros['orden'] : 'producto_nombre';
+        $dir = strtoupper($filtros['dir'] ?? '') === 'DESC' ? 'DESC' : 'ASC';
+        $sql .= " ORDER BY e.{$orden} {$dir}, e.producto_nombre ASC, e.bodega_nombre ASC";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -570,6 +579,10 @@ class ReporteInventarioRepository extends BaseRepository
         if (!empty($filtros['fecha_caducidad_hasta'])) {
             $where .= " AND cvd.fecha_caducidad <= :fecha_caducidad_hasta";
             $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
+        }
+        if (!empty($filtros['secuencial'])) {
+            $where .= " AND cv.secuencial ILIKE :secuencial";
+            $params[':secuencial'] = '%' . $filtros['secuencial'] . '%';
         }
 
         return [$where, $params];

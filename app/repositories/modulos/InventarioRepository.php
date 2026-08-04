@@ -126,8 +126,8 @@ class InventarioRepository extends BaseRepository
     {
         $sql = "INSERT INTO productos_bodegas (id_empresa, id_producto, id_bodega, stock_actual, created_by, updated_by)
                 VALUES (:e, :p, :b, :stock, :uid, :uid)
-                ON CONFLICT (id_producto, id_bodega) 
-                DO UPDATE SET 
+                ON CONFLICT (id_producto, id_bodega)
+                DO UPDATE SET
                     stock_actual = EXCLUDED.stock_actual,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = CURRENT_TIMESTAMP,
@@ -136,6 +136,29 @@ class InventarioRepository extends BaseRepository
         $st->execute([
             ':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega,
             ':stock' => $nuevoStock, ':uid' => $userId
+        ]);
+    }
+
+    /** Fila actual de productos_bodegas de un producto/bodega (para el "antes" de la auditoría). */
+    public function getProductoBodega(int $idProducto, int $idBodega, int $idEmpresa): ?array
+    {
+        $sql = "SELECT * FROM productos_bodegas
+                WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** Actualiza el mínimo/máximo de stock de un producto en una bodega puntual (edición en línea desde reportes). */
+    public function actualizarMinMax(int $idProducto, int $idBodega, int $idEmpresa, float $stockMinimo, float $stockMaximo, int $userId): void
+    {
+        $sql = "UPDATE productos_bodegas
+                SET stock_minimo = :min, stock_maximo = :max, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':min' => $stockMinimo, ':max' => $stockMaximo,
+            ':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa, ':uid' => $userId,
         ]);
     }
 

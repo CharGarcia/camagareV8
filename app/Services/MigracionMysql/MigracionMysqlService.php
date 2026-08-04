@@ -1248,18 +1248,25 @@ class MigracionMysqlService
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $insMap      = $this->stmtMap($pg,'consignaciones');
         $respCache   = [];
+        // Reconcile (re-migrar): mapa old→[id,vinculado] para actualizar los ya migrados (solo los que
+        // INSERTÓ la migración; los nativos vinculados NO se tocan) sin tener que "Eliminar migrados".
+        $mapDest = [];
+        $qmd = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'consignaciones'");
+        $qmd->execute([$idEmpresa]);
+        foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
+        $updEntrega = $pg->prepare("UPDATE consignaciones_ventas SET fecha_entrega = :fe, hora_entrega_desde = :hd, hora_entrega_hasta = :hh, updated_at = now(), updated_by = :u WHERE id = :id");
 
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare(
-            "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id"
+            "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO consignaciones_ventas_detalles (id_consignacion, id_empresa, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
 
-        $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status
+        $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, fecha_entrega, hora_entrega_desde, hora_entrega_hasta
                   FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -1267,7 +1274,15 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_consignacion'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if (isset($mapDest[(string) $old])) { // ya migrada: reconciliar fecha/hora de entrega (solo insertadas)
+                if (!$mapDest[(string) $old]['vin']) {
+                    $hd = self::nz($ec['hora_entrega_desde']); if ($hd === '00:00:00') { $hd = null; }
+                    $hh = self::nz($ec['hora_entrega_hasta']); if ($hh === '00:00:00') { $hh = null; }
+                    try { $updEntrega->execute([':fe' => self::fechaCorta($ec['fecha_entrega']), ':hd' => $hd, ':hh' => $hh, ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
+                    catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
+                }
+                $res['ya_migrados']++; continue;
+            }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
@@ -1291,7 +1306,9 @@ class MigracionMysqlService
                 foreach ($dets as $d) { $sub += (float) $d['cant_consignacion'] * (float) $d['precio']; }
                 $est = ((int) $ec['status'] === 0) ? 'Anulada' : 'Emitida';
 
-                $insCab->execute([$idEmpresa, substr((string) $ec['fecha_consignacion'], 0, 10), (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idUsuario]);
+                $hd = self::nz($ec['hora_entrega_desde']); if ($hd === '00:00:00') { $hd = null; } // hora vacía → null (no medianoche)
+                $hh = self::nz($ec['hora_entrega_hasta']); if ($hh === '00:00:00') { $hh = null; }
+                $insCab->execute([$idEmpresa, substr((string) $ec['fecha_consignacion'], 0, 10), (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::fechaCorta($ec['fecha_entrega']), $hd, $hh, self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idUsuario]);
                 $idCons = (int) $insCab->fetchColumn();
 
                 foreach ($dets as $d) {
@@ -1349,12 +1366,29 @@ class MigracionMysqlService
         }
         $lineLookup = $pg->prepare("SELECT id FROM consignaciones_ventas_detalles WHERE id_consignacion = ? AND id_producto = ? AND eliminado = false LIMIT 1");
         $lineCache = [];
+        // Bodega del ítem (old id_bodega → nueva) + una por defecto; y el número de la factura vieja.
+        $mapBod = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $bodDef = (int) $pg->query("SELECT id FROM bodegas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY id LIMIT 1")->fetchColumn();
+        $oldFacNum = $esFactura ? $mysql->prepare("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE id_encabezado_factura = :id LIMIT 1") : null;
+        // Reconcile (re-migrar): actualiza los ya migrados (solo insertados, no vinculados) sin "Eliminar migrados".
+        // La bodega del detalle se toma de la línea de ENTRADA (consignaciones_ventas_detalles) que ya la tiene.
+        $mapDest = [];
+        $qmd = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
+        $qmd->execute([$idEmpresa, $entidad]);
+        foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
+        if ($esFactura) {
+            $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, updated_at = now(), updated_by = :u WHERE id = :id");
+            $updDetBod = $pg->prepare("UPDATE consignaciones_facturas_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_consignacion_factura = :id AND d.id_bodega IS NULL");
+        } else {
+            $updFacCab = null;
+            $updDetBod = $pg->prepare("UPDATE retornos_cv_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_retorno = :id AND d.id_bodega IS NULL");
+        }
 
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $opFilter = $esFactura ? "operacion = 'FACTURA'" : "operacion LIKE 'DEVOL%'";
 
         if ($esFactura) {
-            $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'Facturada', ?, ?, ?, ?) RETURNING id");
+            $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, numero_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'Facturada', ?, ?, ?, ?) RETURNING id");
             $insDet = $pg->prepare("INSERT INTO consignaciones_facturas_detalles (id_consignacion_factura, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         } else {
             $insCab = $pg->prepare("INSERT INTO retornos_cv (id_empresa, fecha_retorno, serie, secuencial, id_cliente, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id");
@@ -1369,7 +1403,31 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_consignacion'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if (isset($mapDest[(string) $old])) { // ya migrada: reconciliar número de factura + bodega del detalle (solo insertadas)
+                if (!$mapDest[(string) $old]['vin']) {
+                    $dest = $mapDest[(string) $old]['id'];
+                    try {
+                        $pg->beginTransaction();
+                        if ($esFactura) {
+                            $numFac = null;
+                            if ((int) $ec['factura_venta'] > 0) {
+                                $oldFacNum->execute([':id' => (int) $ec['factura_venta']]);
+                                $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
+                                if ($ff && trim((string) $ff['serie_factura']) !== '') {
+                                    $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+                                }
+                            }
+                            $updFacCab->execute([':nf' => $numFac, ':u' => $idUsuario, ':id' => $dest]);
+                        }
+                        $updDetBod->execute([':id' => $dest]);
+                        $pg->commit();
+                    } catch (Throwable $ex) {
+                        if ($pg->inTransaction()) { $pg->rollBack(); }
+                        $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+                    }
+                }
+                $res['ya_migrados']++; continue;
+            }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
@@ -1396,8 +1454,8 @@ class MigracionMysqlService
                 $pu   = (float) $d['precio'];
                 $st   = round($cant * $pu, 2);
                 $sub += $st;
-                $idBod = ((int) $d['id_bodega'] > 0) ? null : null; // bodega la toma del origen; se deja null
-                $lineas[] = [$idCons, $idConsDet, $idProd, $cant, $pu, $st, self::nz($d['lote']), self::nz($d['nup'])];
+                $idBod = $mapBod[(string) (int) $d['id_bodega']] ?? ($bodDef ?: null); // bodega del ítem (mapeada), o la por defecto
+                $lineas[] = [$idCons, $idConsDet, $idProd, $cant, $pu, $st, self::nz($d['lote']), self::nz($d['nup']), $idBod];
             }
             if ($incompleto || !$lineas) { $res['omitidos']++; continue; } // sin ENTRADA origen migrada / línea no casada
 
@@ -1413,10 +1471,19 @@ class MigracionMysqlService
                 if ($esFactura) {
                     $idFactura = $mapFactura[(string) (int) $ec['factura_venta']] ?? null;
                     $idVend = $mapVend[(string) (int) $ec['responsable']] ?? null;
-                    $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idUsuario]);
+                    // Número de la factura (viejo encabezado_factura serie+secuencial → "001-001-000000123")
+                    $numFac = null;
+                    if ((int) $ec['factura_venta'] > 0) {
+                        $oldFacNum->execute([':id' => (int) $ec['factura_venta']]);
+                        $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
+                        if ($ff && trim((string) $ff['serie_factura']) !== '') {
+                            $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+                        }
+                    }
+                    $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $numFac, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idUsuario]);
                     $idParent = (int) $insCab->fetchColumn();
                     foreach ($lineas as $ln) {
-                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], null, $ln[6], $ln[7]]);
+                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7]]);
                     }
                 } else {
                     $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ec['traslado_por'], $mysql, $pg, $respCache);
@@ -1424,7 +1491,7 @@ class MigracionMysqlService
                     $insCab->execute([$idEmpresa, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idUsuario]);
                     $idParent = (int) $insCab->fetchColumn();
                     foreach ($lineas as $ln) {
-                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], null, $ln[6], $ln[7]]);
+                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7]]);
                     }
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idParent, ':cn' => (string) $ec['numero_consignacion'], ':vin' => 'f', ':cb' => $idUsuario]);
