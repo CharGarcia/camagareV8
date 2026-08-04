@@ -2,6 +2,24 @@
  * Módulo de Pedidos - JavaScript Nativo (Vanilla JS)
  */
 
+// ¿La serie seleccionada tiene secuenciales configurados? (se actualiza en syncSerie)
+window.PED_SECUENCIAL_CONFIGURADO = true;
+
+function pedAvisarSecuencialNoConfigurado(tipo) {
+    if (typeof Swal === 'undefined') return;
+    const html = (tipo === 'serie')
+        ? 'No hay una serie / punto de emisión disponible.<br>Configure los puntos de emisión y sus secuenciales en <strong>Empresa → Puntos de emisión</strong> antes de crear el pedido.'
+        : 'No están configurados los secuenciales para esta serie.<br>Configúrelos en <strong>Empresa → Puntos de emisión</strong> antes de crear el pedido.';
+    Swal.fire({
+        icon: 'warning',
+        title: 'Secuenciales no configurados',
+        html: html,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#f39c12',
+        target: document.getElementById('modalPedido'),
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     PED_fetchSearch(window.currentPage);
 
@@ -235,6 +253,9 @@ function nuevoPedido() {
     if (selPuntos && selPuntos.options.length > 0) {
         selPuntos.disabled = false;
         syncSerie(selPuntos.value);
+    } else {
+        window.PED_SECUENCIAL_CONFIGURADO = false;
+        pedAvisarSecuencialNoConfigurado('serie');
     }
 
     document.getElementById('titulo-modal').innerHTML = '<i class="bi bi-cart-plus me-2"></i>Nuevo Pedido';
@@ -395,21 +416,39 @@ function calcTotales() {
 }
 
 async function syncSerie(idPunto) {
-    if (!idPunto) return;
+    if (!idPunto) {
+        window.PED_SECUENCIAL_CONFIGURADO = false;
+        pedAvisarSecuencialNoConfigurado('serie');
+        return;
+    }
 
     const select = document.getElementById('id_punto_emision');
     const option = select.options[select.selectedIndex];
-    
+
     if (option) {
         document.getElementById('id_establecimiento').value = option.dataset.est || '';
     }
 
+    const inputSec = document.getElementById('secuencial');
+
     try {
         const res = await fetch(`${window.CMG_urlBase}/getSecuencialAjax?id_punto_emision=${idPunto}`);
         const data = await res.json();
-        
+
         if (data.status && data.formateado) {
-            document.getElementById('secuencial').value = data.formateado;
+            inputSec.value = data.formateado;
+
+            // ¿Está configurado el secuencial para esta serie? (igual que Factura de Venta)
+            window.PED_SECUENCIAL_CONFIGURADO = (data.configurado !== false);
+            if (data.configurado === false) {
+                inputSec.classList.add('border-danger');
+                pedAvisarSecuencialNoConfigurado('secuencial');
+            } else {
+                inputSec.classList.remove('border-danger');
+            }
+        } else {
+            window.PED_SECUENCIAL_CONFIGURADO = false;
+            pedAvisarSecuencialNoConfigurado('secuencial');
         }
     } catch (e) {
         console.error("Error al obtener secuencial", e);
@@ -503,6 +542,12 @@ async function guardarPedido() {
         observaciones: document.getElementById('observaciones').value,
         observaciones_internas: document.getElementById('observaciones_internas').value
     };
+
+    // Bloqueo: secuenciales no configurados (solo al CREAR un pedido nuevo)
+    if (!cabecera.id && window.PED_SECUENCIAL_CONFIGURADO === false) {
+        pedAvisarSecuencialNoConfigurado('secuencial');
+        return;
+    }
 
     if (!cabecera.id_cliente || !cabecera.fecha_pedido || !cabecera.secuencial) {
         Swal.fire({ icon: 'warning', title: 'Faltan datos', text: 'El Cliente, Fecha de pedido y Secuencial son obligatorios.' });

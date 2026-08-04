@@ -117,6 +117,7 @@ class ReporteInventariosController extends BaseModuloController
     {
         return [
             'agrupar_por'        => $_REQUEST['agrupar_por'] ?? 'NINGUNO',
+            'estado'             => $_REQUEST['estado'] ?? 'Entregada',
             'id_cliente'         => $_REQUEST['id_cliente']  ?? '',
             'id_producto'        => $_REQUEST['id_producto'] ?? '',
             'id_bodega'          => $_REQUEST['id_bodega']   ?? '',
@@ -229,12 +230,12 @@ class ReporteInventariosController extends BaseModuloController
         $rows = match ($modo) {
             'CLIENTE'  => $this->repository->getConsignacionesAgrupadoCliente($idEmpresa, $filtros),
             'PRODUCTO' => $this->repository->getConsignacionesAgrupadoProducto($idEmpresa, $filtros),
-            default    => $this->repository->getConsignacionesDetalle($idEmpresa, $filtros),
+            default    => $this->repository->getConsignacionesCabeceras($idEmpresa, $filtros),
         };
         $kpis = $this->repository->getConsignacionesKpis($idEmpresa, $filtros);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 8 : 5),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 7 : 4),
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
@@ -344,16 +345,21 @@ class ReporteInventariosController extends BaseModuloController
     {
         if ($modo === 'NINGUNO') {
             $saldo = (float) ($r['saldo'] ?? 0);
-            $badge = $saldo > 0 ? '<span class="badge bg-warning text-dark">Pendiente</span>' : '<span class="badge bg-success">Liquidado</span>';
-            return '<tr>'
+            $badgesEstado = [
+                'Entregada' => 'bg-success',
+                'Emitida'   => 'bg-warning text-dark',
+                'Anulada'   => 'bg-danger',
+            ];
+            $estado = $r['estado'] ?? '';
+            $badgeClass = $badgesEstado[$estado] ?? 'bg-secondary';
+            return '<tr class="ri-cv-row" style="cursor:pointer;" onclick="window.RI_Consignaciones.verDetalle(' . (int) ($r['id_consignacion'] ?? 0) . ')" title="Ver detalle de productos">'
                 . '<td class="small">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '<br><small class="text-muted">' . htmlspecialchars($r['secuencial'] ?? '') . '</small></td>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['cliente_identificacion'] ?? '') . '</small></td>'
-                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
-                . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
-                . '<td class="text-end">' . number_format((float) ($r['cantidad_consignada'] ?? 0), 2) . '</td>'
+                . '<td class="small">' . htmlspecialchars($r['vendedor_nombre'] ?? '-') . '</td>'
+                . '<td class="text-center">' . (int) ($r['cantidad_productos'] ?? 0) . '</td>'
                 . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'
                 . '<td class="text-end text-primary">' . number_format((float) ($r['valor_saldo'] ?? 0), 2) . '</td>'
-                . '<td class="text-center">' . $badge . '</td>'
+                . '<td class="text-center"><span class="badge ' . $badgeClass . '">' . htmlspecialchars($estado) . '</span></td>'
                 . '</tr>';
         }
 
@@ -363,6 +369,65 @@ class ReporteInventariosController extends BaseModuloController
             . '<td class="text-end fw-bold">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
             . '<td class="text-end text-primary">' . number_format((float) ($r['valor_saldo'] ?? 0), 2) . '</td>'
             . '</tr>';
+    }
+
+    /** Fila de línea de producto dentro del modal de detalle de una consignación. */
+    private function filaConsignacionDetalleLinea(array $r): string
+    {
+        $saldo = (float) ($r['saldo'] ?? 0);
+        $badge = $saldo > 0 ? '<span class="badge bg-warning text-dark">Pendiente</span>' : '<span class="badge bg-success">Liquidado</span>';
+        return '<tr>'
+            . '<td class="small">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
+            . '<td class="text-end small">' . number_format((float) ($r['cantidad_consignada'] ?? 0), 2) . '</td>'
+            . '<td class="text-end small">' . number_format((float) ($r['cantidad_retornada'] ?? 0), 2) . '</td>'
+            . '<td class="text-end small">' . number_format((float) ($r['cantidad_facturada'] ?? 0), 2) . '</td>'
+            . '<td class="text-end small fw-bold">' . number_format($saldo, 2) . '</td>'
+            . '<td class="text-end small">' . number_format((float) ($r['costo_unitario'] ?? 0), 4) . '</td>'
+            . '<td class="text-end small text-primary">' . number_format((float) ($r['valor_saldo'] ?? 0), 2) . '</td>'
+            . '<td class="text-center">' . $badge . '</td>'
+            . '</tr>';
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // DETALLE DE UNA CONSIGNACIÓN (modal, click en la fila del listado)
+    // ────────────────────────────────────────────────────────────────
+    public function verConsignacionDetalleAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idConsignacion = (int) ($_REQUEST['id'] ?? 0);
+            if ($idConsignacion <= 0) {
+                throw new \InvalidArgumentException('Consignación no válida.');
+            }
+
+            $lineas = $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion);
+            if (empty($lineas)) {
+                echo json_encode(['ok' => false, 'error' => 'No se encontró la consignación o no pertenece a esta empresa.']);
+                exit;
+            }
+            $cab = $lineas[0];
+
+            echo json_encode([
+                'ok' => true,
+                'cabecera' => [
+                    'secuencial'    => $cab['secuencial'] ?? '',
+                    'fecha_emision' => !empty($cab['fecha_emision']) ? date('d-m-Y', strtotime($cab['fecha_emision'])) : '',
+                    'cliente'       => $cab['cliente_nombre'] ?? '',
+                    'identificacion'=> $cab['cliente_identificacion'] ?? '',
+                    'vendedor'      => $cab['vendedor_nombre'] ?? '-',
+                    'estado'        => $cab['estado'] ?? '',
+                ],
+                'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 9),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     // ────────────────────────────────────────────────────────────────

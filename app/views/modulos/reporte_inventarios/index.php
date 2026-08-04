@@ -544,14 +544,14 @@
                                     <div id="ri-cv-dropdown-producto" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:calc(100% - 1.5rem);max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                                     <small class="text-muted fst-italic" id="ri-cv-producto-seleccionado"></small>
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Bodega</label>
                                     <select id="ri-cv-bodega" class="form-select form-select-sm shadow-none border">
                                         <option value="">Todas</option>
                                         <?php foreach (($bodegas ?? []) as $b): ?><option value="<?= (int) $b['id'] ?>"><?= htmlspecialchars($b['nombre']) ?></option><?php endforeach; ?>
                                     </select>
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
                                     <select id="ri-cv-vendedor" class="form-select form-select-sm shadow-none border">
                                         <option value="">Todos</option>
@@ -567,6 +567,15 @@
                                     <input type="date" id="ri-cv-fecha-hasta" class="form-control form-control-sm shadow-none border">
                                 </div>
                                 <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
+                                    <select id="ri-cv-estado" class="form-select form-select-sm shadow-none border">
+                                        <option value="Entregada" selected>Entregada</option>
+                                        <option value="Emitida">Emitida</option>
+                                        <option value="Anulada">Anulada</option>
+                                        <option value="TODOS">Todos</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
                                     <select id="ri-cv-agrupar" class="form-select form-select-sm shadow-none border">
                                         <option value="NINGUNO">Detallado</option>
@@ -574,13 +583,13 @@
                                         <option value="PRODUCTO">Por Producto</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3 d-flex align-items-end">
+                                <div class="col-md-2 d-flex align-items-end">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="ri-cv-incluir-liquidadas">
                                         <label class="form-check-label small" for="ri-cv-incluir-liquidadas">Incluir liquidadas</label>
                                     </div>
                                 </div>
-                                <div class="col-md-3 d-flex align-items-end">
+                                <div class="col-md-2 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Generar</button>
                                 </div>
                             </form>
@@ -641,7 +650,7 @@
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-cv-thead"></thead>
                             <tbody id="ri-cv-tbody">
-                                <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -649,6 +658,48 @@
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- MODAL: DETALLE DE PRODUCTOS DE UNA CONSIGNACIÓN -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="ri-cv-modal-detalle" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold mb-0">
+                    <i class="bi bi-truck text-primary me-2"></i>Consignación <span id="ri-cv-modal-secuencial"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-3 small">
+                    <div class="col-md-3"><span class="text-muted">Fecha:</span> <span id="ri-cv-modal-fecha" class="fw-bold"></span></div>
+                    <div class="col-md-4"><span class="text-muted">Cliente:</span> <span id="ri-cv-modal-cliente" class="fw-bold"></span></div>
+                    <div class="col-md-2"><span class="text-muted">Vendedor:</span> <span id="ri-cv-modal-vendedor" class="fw-bold"></span></div>
+                    <div class="col-md-3"><span class="text-muted">Estado:</span> <span id="ri-cv-modal-estado" class="fw-bold"></span></div>
+                </div>
+                <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr class="text-secondary">
+                                <th>Producto</th><th>Bodega</th>
+                                <th class="text-end">Consignado</th><th class="text-end">Retornado</th><th class="text-end">Facturado</th>
+                                <th class="text-end">Saldo</th><th class="text-end">Costo unit.</th><th class="text-end">Valor a costo</th>
+                                <th class="text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ri-cv-modal-tbody">
+                            <tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
     </div>
 </div>
 

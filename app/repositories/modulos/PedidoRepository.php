@@ -159,6 +159,26 @@ class PedidoRepository {
         return $this->db->query("SELECT * FROM unidades_medida WHERE eliminado = false AND status = true ORDER BY nombre ASC")->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function existeSecuencial(int $idEmpresa, int $idPuntoEmision, string $secuencial, string $tipoAmbiente, ?int $excluirId = null): bool {
+        $sql = "SELECT COUNT(*) FROM pedidos_cabecera
+                WHERE id_empresa = :id_empresa AND id_punto_emision = :id_punto_emision
+                  AND secuencial = :secuencial AND tipo_ambiente = :tipo_ambiente
+                  AND eliminado = false";
+        $params = [
+            'id_empresa' => $idEmpresa,
+            'id_punto_emision' => $idPuntoEmision,
+            'secuencial' => $secuencial,
+            'tipo_ambiente' => $tipoAmbiente,
+        ];
+        if ($excluirId !== null) {
+            $sql .= " AND id <> :excluir_id";
+            $params['excluir_id'] = $excluirId;
+        }
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return ((int) $stmt->fetchColumn()) > 0;
+    }
+
     public function getEmpresaConfig(int $idEmpresa): array {
         $stmt = $this->db->prepare("SELECT * FROM empresas WHERE id = :id");
         $stmt->execute(['id' => $idEmpresa]);

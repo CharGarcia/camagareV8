@@ -483,9 +483,14 @@ class ReporteInventarioRepository extends BaseRepository
 
     private function buildWhereConsignaciones(int $idEmpresa, array $filtros): array
     {
-        $where = "cv.id_empresa = :id_empresa AND cv.eliminado = false AND cv.estado = 'Entregada'
-                   AND cvd.eliminado = false";
+        $where = "cv.id_empresa = :id_empresa AND cv.eliminado = false AND cvd.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
+
+        $estado = $filtros['estado'] ?? 'Entregada';
+        if ($estado !== '' && strtoupper($estado) !== 'TODOS') {
+            $where .= " AND cv.estado = :estado";
+            $params[':estado'] = $estado;
+        }
 
         if (!empty($filtros['id_cliente'])) {
             $where .= " AND cv.id_cliente = :id_cliente";
@@ -520,7 +525,7 @@ class ReporteInventarioRepository extends BaseRepository
     {
         return "
             SELECT * FROM (
-                SELECT cv.id AS id_consignacion, cv.secuencial, cv.fecha_emision,
+                SELECT cv.id AS id_consignacion, cv.secuencial, cv.fecha_emision, cv.estado,
                        cv.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                        cv.id_vendedor, COALESCE(v.nombre, '-') AS vendedor_nombre,
                        cvd.id AS id_detalle, cvd.id_producto,
@@ -564,6 +569,43 @@ class ReporteInventarioRepository extends BaseRepository
         }
         $sql .= " ORDER BY s.fecha_emision DESC, s.id_consignacion DESC";
 
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Una fila por CONSIGNACIÓN (no por línea de producto): para el listado "Detallado", que ahora
+     *  agrupa por documento y deja el detalle de productos para el modal (ver getConsignacionDetalleLineas). */
+    public function getConsignacionesCabeceras(int $idEmpresa, array $filtros): array
+    {
+        list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
+        $base = $this->wrapSaldoConsignacion($this->baseConsignaciones($where));
+        $having = empty($filtros['incluir_liquidadas']) ? "HAVING SUM(s.saldo) > 0" : "";
+
+        $sql = "SELECT s.id_consignacion, MAX(s.secuencial) AS secuencial, MAX(s.fecha_emision) AS fecha_emision,
+                       MAX(s.estado) AS estado, MAX(s.id_cliente) AS id_cliente,
+                       MAX(s.cliente_nombre) AS cliente_nombre, MAX(s.cliente_identificacion) AS cliente_identificacion,
+                       MAX(s.vendedor_nombre) AS vendedor_nombre,
+                       COUNT(DISTINCT s.id_producto) AS cantidad_productos,
+                       SUM(s.saldo) AS saldo, SUM(s.valor_saldo) AS valor_saldo
+                FROM ({$base}) s
+                GROUP BY s.id_consignacion
+                {$having}
+                ORDER BY MAX(s.fecha_emision) DESC, s.id_consignacion DESC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Líneas de producto de UNA consignación puntual (para el modal de detalle del listado). */
+    public function getConsignacionDetalleLineas(int $idEmpresa, int $idConsignacion): array
+    {
+        $where = "cv.id_empresa = :id_empresa AND cv.eliminado = false AND cvd.eliminado = false AND cv.id = :id_consignacion";
+        $params = [':id_empresa' => $idEmpresa, ':id_consignacion' => $idConsignacion];
+
+        $sql = "SELECT * FROM (" . $this->wrapSaldoConsignacion($this->baseConsignaciones($where)) . ") s
+                ORDER BY s.producto_nombre ASC";
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);

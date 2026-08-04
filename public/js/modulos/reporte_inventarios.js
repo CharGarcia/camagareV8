@@ -423,11 +423,13 @@ window.RI_Consignaciones = {
         this.generar();
     },
 
+    modalInstance: null,
+
     dibujarCabecera(modo) {
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
-            th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Producto</th><th>Bodega</th>
-                   <th class="text-end">Consignado</th><th class="text-end">Saldo</th>
+            th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Vendedor</th>
+                   <th class="text-center">Productos</th><th class="text-end">Saldo</th>
                    <th class="text-end">Valor a costo</th><th class="text-center pe-3">Estado</th>`;
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Consignaciones</th>
@@ -435,6 +437,38 @@ window.RI_Consignaciones = {
         }
         th += '</tr>';
         document.getElementById('ri-cv-thead').innerHTML = th;
+    },
+
+    verDetalle(idConsignacion) {
+        if (!this.modalInstance) {
+            this.modalInstance = new bootstrap.Modal(document.getElementById('ri-cv-modal-detalle'));
+        }
+        const tbody = document.getElementById('ri-cv-modal-tbody');
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        ['secuencial', 'fecha', 'cliente', 'vendedor', 'estado'].forEach(k => {
+            document.getElementById('ri-cv-modal-' + k).textContent = '';
+        });
+        this.modalInstance.show();
+
+        fetch(BASE_URL + '/' + RUTA_MODULO + '/verConsignacionDetalleAjax?id=' + encodeURIComponent(idConsignacion))
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok) {
+                    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
+                    return;
+                }
+                const c = res.cabecera;
+                document.getElementById('ri-cv-modal-secuencial').textContent = c.secuencial || '';
+                document.getElementById('ri-cv-modal-fecha').textContent = c.fecha_emision || '';
+                document.getElementById('ri-cv-modal-cliente').textContent = c.cliente + (c.identificacion ? ` (${c.identificacion})` : '');
+                document.getElementById('ri-cv-modal-vendedor').textContent = c.vendedor || '-';
+                document.getElementById('ri-cv-modal-estado').textContent = c.estado || '';
+                tbody.innerHTML = res.rows;
+            })
+            .catch(err => {
+                console.error(err);
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
+            });
     },
 
     generar() {
@@ -445,11 +479,12 @@ window.RI_Consignaciones = {
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
             id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
+            estado: 'ri-cv-estado',
             incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
         });
 
         const tbody = document.getElementById('ri-cv-tbody');
-        const colSpan = modo === 'NINGUNO' ? 8 : 4;
+        const colSpan = modo === 'NINGUNO' ? 7 : 4;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('consignaciones', params, (res) => {
@@ -501,6 +536,7 @@ window.RI_Consignaciones = {
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
             id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
+            estado: 'ri-cv-estado',
             incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
         });
         params.set('tab', 'consignaciones');

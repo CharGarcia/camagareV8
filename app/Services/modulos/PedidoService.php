@@ -4,8 +4,10 @@ namespace App\Services\Modulos;
 
 use App\Repositories\Modulos\PedidoRepository;
 use App\Services\BloqueoEdicionService;
+use App\Services\SecuencialService;
 use App\core\Database;
 use Exception;
+use PDOException;
 
 class PedidoService {
     /** Debe coincidir con PedidosController::TABLA_BLOQUEO. */
@@ -52,36 +54,70 @@ class PedidoService {
 
             if (empty($cabecera['id'])) {
                 // Nuevo
+                $stmtAmb = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa");
+                $stmtAmb->execute(['id_empresa' => $id_empresa]);
+                $tipoAmbiente = $stmtAmb->fetchColumn() ?: '1';
+
+                $idPuntoEmision = !empty($cabecera['id_punto_emision']) ? (int) $cabecera['id_punto_emision'] : null;
+                $secuencial = !empty($cabecera['secuencial']) ? $cabecera['secuencial'] : null;
+
+                if ($idPuntoEmision !== null) {
+                    // Serializa la generación del número por punto de emisión dentro de esta
+                    // transacción (mismo patrón de advisory lock usado para comandas): así dos
+                    // usuarios guardando "al mismo tiempo" quedan en fila y el segundo recalcula
+                    // el secuencial ya viendo el pedido que acaba de confirmar el primero.
+                    $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('pedido_secuencial:' || :punto || ':' || :amb))")
+                              ->execute(['punto' => $idPuntoEmision, 'amb' => $tipoAmbiente]);
+
+                    // Secuencial AUTORITATIVO del servidor: se recalcula aquí y NO se confía en el
+                    // valor que trae el navegador (readonly / vista previa cargada al abrir el
+                    // modal, puede llegar desfasado si el modal quedó abierto un rato).
+                    $secRes = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Pedidos');
+                    $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
+
+                    if ($this->repository->existeSecuencial($id_empresa, $idPuntoEmision, $secuencial, $tipoAmbiente)) {
+                        throw new Exception("El secuencial {$secuencial} ya está en uso para esta serie. Recargue e intente nuevamente.");
+                    }
+                }
+
                 $sql = "INSERT INTO pedidos_cabecera
                         (id_empresa, id_cliente, fecha_pedido, observaciones,
                         estado, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, id_responsable_entrega,
-                        id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, created_by)
+                        id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by)
                         VALUES
                         (:id_empresa, :id_cliente, :fecha_pedido, :observaciones,
                         :estado, :observaciones_internas, :fecha_entrega, :hora_inicial_entrega, :hora_maxima_entrega, :id_responsable_entrega,
-                        :id_establecimiento, :id_punto_emision, :establecimiento, :punto_emision, :secuencial, :created_by)
+                        :id_establecimiento, :id_punto_emision, :establecimiento, :punto_emision, :secuencial, :tipo_ambiente, :created_by)
                         RETURNING id";
 
                 $stmt = $this->db->prepare($sql);
-                $stmt->execute([
-                    'id_empresa' => $id_empresa,
-                    'id_cliente' => $cabecera['id_cliente'],
-                    'fecha_pedido' => $cabecera['fecha_pedido'],
-                    'observaciones' => $cabecera['observaciones'] ?? '',
-                    'estado' => 'Pendiente',
-                    'observaciones_internas' => $cabecera['observaciones_internas'] ?? '',
-                    'fecha_entrega' => $fecha_entrega,
-                    'hora_inicial_entrega' => $hora_inicial_entrega,
-                    'hora_maxima_entrega' => $hora_maxima_entrega,
-                    'id_responsable_entrega' => !empty($cabecera['id_responsable_entrega']) ? $cabecera['id_responsable_entrega'] : null,
-                    'id_establecimiento' => !empty($cabecera['id_establecimiento']) ? $cabecera['id_establecimiento'] : null,
-                    'id_punto_emision' => !empty($cabecera['id_punto_emision']) ? $cabecera['id_punto_emision'] : null,
-                    'establecimiento' => !empty($cabecera['establecimiento']) ? $cabecera['establecimiento'] : null,
-                    'punto_emision' => !empty($cabecera['punto_emision']) ? $cabecera['punto_emision'] : null,
-                    'secuencial' => !empty($cabecera['secuencial']) ? $cabecera['secuencial'] : null,
-                    'created_by' => $id_usuario
-                ]);
-                
+                try {
+                    $stmt->execute([
+                        'id_empresa' => $id_empresa,
+                        'id_cliente' => $cabecera['id_cliente'],
+                        'fecha_pedido' => $cabecera['fecha_pedido'],
+                        'observaciones' => $cabecera['observaciones'] ?? '',
+                        'estado' => 'Pendiente',
+                        'observaciones_internas' => $cabecera['observaciones_internas'] ?? '',
+                        'fecha_entrega' => $fecha_entrega,
+                        'hora_inicial_entrega' => $hora_inicial_entrega,
+                        'hora_maxima_entrega' => $hora_maxima_entrega,
+                        'id_responsable_entrega' => !empty($cabecera['id_responsable_entrega']) ? $cabecera['id_responsable_entrega'] : null,
+                        'id_establecimiento' => !empty($cabecera['id_establecimiento']) ? $cabecera['id_establecimiento'] : null,
+                        'id_punto_emision' => $idPuntoEmision,
+                        'establecimiento' => !empty($cabecera['establecimiento']) ? $cabecera['establecimiento'] : null,
+                        'punto_emision' => !empty($cabecera['punto_emision']) ? $cabecera['punto_emision'] : null,
+                        'secuencial' => $secuencial,
+                        'tipo_ambiente' => $tipoAmbiente,
+                        'created_by' => $id_usuario
+                    ]);
+                } catch (PDOException $e) {
+                    if (($e->errorInfo[0] ?? '') === '23505') {
+                        throw new Exception("El secuencial {$secuencial} ya está en uso para esta serie. Recargue e intente nuevamente.");
+                    }
+                    throw $e;
+                }
+
                 $id_pedido = $stmt->fetchColumn();
             } else {
                 // Actualizar Pedido
