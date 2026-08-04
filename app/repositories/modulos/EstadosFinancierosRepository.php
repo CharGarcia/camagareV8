@@ -74,6 +74,74 @@ class EstadosFinancierosRepository
     }
 
     /**
+     * Catálogo de cuentas de la empresa (todas, sin filtrar por movimiento). Base para armar
+     * la matriz cuenta × periodo del reporte "por periodos" (getSaldosPorPeriodo).
+     */
+    public function getPlanCuentas(int $idEmpresa): array
+    {
+        $sql = "SELECT id AS id_cuenta, codigo, nombre, nivel, codigo_sri
+                FROM plan_cuentas
+                WHERE id_empresa = :id_empresa AND eliminado = false
+                ORDER BY codigo ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute(['id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Movimientos (debe/haber) agrupados por cuenta y por mes (YYYY-MM), para los reportes
+     * "por periodos" (Estado de Resultados / Situación Financiera horizontal por mes). A
+     * diferencia de getSaldos(), no trae una fila por cuenta sin movimiento: el llamador
+     * combina esto con getPlanCuentas() para completar el universo de cuentas y rellenar
+     * con cero los periodos sin movimiento.
+     */
+    public function getSaldosPorPeriodo(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): array
+    {
+        $params = [
+            'id_empresa' => $idEmpresa,
+            'fecha_inicio' => $fechaInicio . ' 00:00:00',
+            'fecha_fin' => $fechaFin . ' 23:59:59'
+        ];
+
+        $centroCostoFilter = '';
+        if ($idCentroCosto !== null) {
+            $centroCostoFilter = " AND ad.id_centro_costo = :id_centro_costo";
+            $params['id_centro_costo'] = $idCentroCosto;
+        }
+
+        $proyectoFilter = '';
+        if ($idProyecto !== null) {
+            $proyectoFilter = " AND ad.id_proyecto = :id_proyecto";
+            $params['id_proyecto'] = $idProyecto;
+        }
+
+        $sql = "
+            SELECT
+                ad.id_cuenta_contable AS id_cuenta,
+                to_char(date_trunc('month', ac.fecha_asiento), 'YYYY-MM') AS periodo,
+                COALESCE(SUM(ad.debe), 0) AS total_debe,
+                COALESCE(SUM(ad.haber), 0) AS total_haber
+            FROM asientos_contables_detalle ad
+            INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                AND ac.eliminado = false
+                AND ac.estado = 'contabilizado'
+                AND ac.id_empresa = :id_empresa
+                AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
+                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+            WHERE ad.eliminado = false
+              $centroCostoFilter
+              $proyectoFilter
+            GROUP BY ad.id_cuenta_contable, periodo
+            ORDER BY periodo ASC
+        ";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Cuentas configuradas del tipo "Cierre del Ejercicio" (modulos/configuracion_contable):
      * cuenta de Utilidad y cuenta de Pérdida (ambas de patrimonio) donde el Balance muestra el
      * resultado según el signo. Devuelve ['utilidad' => [...]|null, 'perdida' => [...]|null].

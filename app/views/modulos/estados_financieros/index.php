@@ -27,6 +27,8 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                 <select class="form-select form-select-sm shadow-none" id="tipo_reporte" name="tipo_reporte" onchange="setTipoReporte(this.value)">
                     <option value="situacion">Estado de Situación Financiera</option>
                     <option value="resultados">Estado de Resultados</option>
+                    <option value="situacion_periodos">Estado de Situación Financiera por Periodos</option>
+                    <option value="resultados_periodos">Estado de Resultados por Periodos</option>
                 </select>
             </div>
             <div class="col">
@@ -108,19 +110,19 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <button type="button" class="btn btn-white border px-3" title="Descargar Excel" onclick="exportar('excel')">
                 <i class="bi bi-file-earmark-excel text-success"></i> Excel
             </button>
-            <button type="button" class="btn btn-white border px-3" title="Descargar Formato SRI" onclick="exportar('sri')">
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Formato SRI" onclick="exportar('sri')">
                 <i class="bi bi-file-earmark-code text-primary"></i> Renta SRI
             </button>
-            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias ESF" onclick="exportar('supercias_esf')">
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ESF" onclick="exportar('supercias_esf')">
                 <i class="bi bi-bank text-info"></i> Supercias ESF
             </button>
-            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias ERI" onclick="exportar('supercias_eri')">
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ERI" onclick="exportar('supercias_eri')">
                 <i class="bi bi-bank text-info"></i> Supercias ERI
             </button>
-            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias ECP" onclick="exportar('supercias_ecp')">
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ECP" onclick="exportar('supercias_ecp')">
                 <i class="bi bi-bank text-info"></i> Supercias ECP
             </button>
-            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias EFE" onclick="exportar('supercias_efe')">
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias EFE" onclick="exportar('supercias_efe')">
                 <i class="bi bi-bank text-info"></i> Supercias EFE
             </button>
         </div>
@@ -238,6 +240,12 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     function setTipoReporte(tipo) {
         tipoReporteActivo = tipo;
         document.getElementById('content-reporte').innerHTML = '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Presione Generar para actualizar el reporte.</p>';
+
+        // Renta SRI y Supercias son formatos de un solo corte; no aplican a los reportes por periodos.
+        const esPeriodos = tipo === 'resultados_periodos' || tipo === 'situacion_periodos';
+        document.querySelectorAll('.btn-export-periodo-unico').forEach(btn => {
+            btn.classList.toggle('d-none', esPeriodos);
+        });
     }
 
     function actualizarFechas() {
@@ -289,22 +297,20 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             document.getElementById('loader-reporte').classList.remove('d-none');
             document.getElementById('content-reporte').innerHTML = '';
             
-            if (tipoReporteActivo === 'resultados') {
-                const resp = await fetch(`${urlBase}/generarEstadoResultados?fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`);
-                const json = await resp.json();
-                if (json.success) {
-                    renderResultados(json.data, nivel);
-                } else {
-                    Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Error al generar el reporte' });
-                }
+            const endpoints = {
+                resultados: { url: 'generarEstadoResultados', render: renderResultados },
+                situacion: { url: 'generarEstadoSituacionFinanciera', render: renderSituacion },
+                resultados_periodos: { url: 'generarEstadoResultadosPorPeriodos', render: renderResultadosPeriodos },
+                situacion_periodos: { url: 'generarEstadoSituacionFinancieraPorPeriodos', render: renderSituacionPeriodos },
+            };
+            const ep = endpoints[tipoReporteActivo] || endpoints.situacion;
+
+            const resp = await fetch(`${urlBase}/${ep.url}?fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`);
+            const json = await resp.json();
+            if (json.success) {
+                ep.render(json.data, nivel);
             } else {
-                const resp = await fetch(`${urlBase}/generarEstadoSituacionFinanciera?fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`);
-                const json = await resp.json();
-                if (json.success) {
-                    renderSituacion(json.data, nivel);
-                } else {
-                    Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Error al generar el reporte' });
-                }
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Error al generar el reporte' });
             }
             document.getElementById('loader-reporte').classList.add('d-none');
         } catch (e) {
@@ -458,6 +464,133 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
         // TOTAL PASIVO + PATRIMONIO
         html += generarFilaTotal('TOTAL PASIVO + PATRIMONIO', data.totales.pasivo_patrimonio, nivel, cuadra ? '' : 'text-danger', true);
+
+        html += '</tbody></table>';
+        document.getElementById('content-reporte').innerHTML = html;
+    }
+
+    // ── Reportes horizontales "por periodos" (una columna por mes) ─────────────────────────
+
+    function generarCabeceraPeriodos(periodos, conTotal) {
+        let html = `<thead><tr><th width="10%">Código</th><th>Cuenta</th>`;
+        Object.values(periodos).forEach(lbl => { html += `<th class="text-end">${lbl}</th>`; });
+        if (conTotal) html += `<th class="text-end">Total</th>`;
+        return html + `</tr></thead><tbody>`;
+    }
+
+    function generarFilaPeriodos(item, periodosClaves, conTotal, nivelSeleccionado) {
+        const nivelItem = parseInt(item.nivel);
+        const nivelFiltro = parseInt(nivelSeleccionado);
+        const esPadre = nivelItem < nivelFiltro;
+        const indent = (nivelItem - 1) * 20;
+        const fwClass = esPadre ? 'fw-bold text-dark' : '';
+
+        let cursorClass = '';
+        let onclickAttr = '';
+        if (nivelItem === 5 && !esPadre) {
+            cursorClass = 'text-primary cursor-pointer fw-medium';
+            onclickAttr = `onclick="verMayorAuxiliar('${item.codigo}', '${item.nombre}')" style="cursor:pointer; text-decoration: underline;" title="Ver detalle del Mayor"`;
+        }
+
+        let tds = '';
+        periodosClaves.forEach(p => { tds += `<td class="text-end ${fwClass}">${formatMoney(item.valores[p] || 0)}</td>`; });
+        if (conTotal) tds += `<td class="text-end fw-bold ${fwClass}">${formatMoney(item.total || 0)}</td>`;
+
+        return `<tr>
+            <td class="${fwClass}">${item.codigo}</td>
+            <td style="padding-left: ${15 + indent}px !important;" class="${fwClass} ${cursorClass}" ${onclickAttr}>${item.nombre}</td>
+            ${tds}
+        </tr>`;
+    }
+
+    function generarFilaTotalPeriodos(titulo, porPeriodo, periodosClaves, conTotal, claseFila = 'tr-total', colorClass = '') {
+        let tds = '';
+        periodosClaves.forEach(p => { tds += `<td class="text-end ${colorClass}">${formatMoney(porPeriodo[p] || 0)}</td>`; });
+        if (conTotal) tds += `<td class="text-end ${colorClass}">${formatMoney(porPeriodo.total || 0)}</td>`;
+        return `<tr class="${claseFila}"><td colspan="2" class="text-end ${colorClass}">${titulo}</td>${tds}</tr>`;
+    }
+
+    function generarFilaGrupoPeriodos(titulo, icono, periodosClaves, conTotal) {
+        const cols = 2 + periodosClaves.length + (conTotal ? 1 : 0);
+        return `<tr class="tr-grupo"><td colspan="${cols}"><i class="${icono} me-2"></i> ${titulo}</td></tr>`;
+    }
+
+    function generarFilaEspacioPeriodos(periodosClaves, conTotal, h = 15) {
+        const cols = 2 + periodosClaves.length + (conTotal ? 1 : 0);
+        return `<tr><td colspan="${cols}" style="height:${h}px; border:none;"></td></tr>`;
+    }
+
+    function renderResultadosPeriodos(data, nivel) {
+        const claves = Object.keys(data.periodos);
+        let html = '<table class="tabla-reporte">';
+        html += generarCabeceraPeriodos(data.periodos, true);
+
+        html += generarFilaGrupoPeriodos('INGRESOS', 'bi bi-arrow-up-right-circle text-success', claves, true);
+        data.ingresos.forEach(item => { html += generarFilaPeriodos(item, claves, true, nivel); });
+        html += generarFilaTotalPeriodos('TOTAL INGRESOS', data.totales.ingresos, claves, true);
+        html += generarFilaEspacioPeriodos(claves, true);
+
+        html += generarFilaGrupoPeriodos('COSTOS', 'bi bi-box text-warning', claves, true);
+        data.costos.forEach(item => { html += generarFilaPeriodos(item, claves, true, nivel); });
+        html += generarFilaTotalPeriodos('TOTAL COSTOS', data.totales.costos, claves, true, 'tr-total', 'text-dark');
+        html += generarFilaEspacioPeriodos(claves, true, 10);
+
+        const lblBruta = data.totales.utilidad_bruta.total >= 0 ? 'UTILIDAD BRUTA' : 'PÉRDIDA BRUTA';
+        html += generarFilaTotalPeriodos(lblBruta, data.totales.utilidad_bruta, claves, true, 'tr-total-general');
+        html += generarFilaEspacioPeriodos(claves, true);
+
+        html += generarFilaGrupoPeriodos('GASTOS', 'bi bi-arrow-down-right-circle text-danger', claves, true);
+        data.gastos.forEach(item => { html += generarFilaPeriodos(item, claves, true, nivel); });
+        html += generarFilaTotalPeriodos('TOTAL GASTOS', data.totales.gastos, claves, true, 'tr-total', 'text-danger');
+        html += generarFilaEspacioPeriodos(claves, true);
+
+        const lblNeta = data.totales.utilidad_neta.total >= 0 ? 'UTILIDAD DEL EJERCICIO' : 'PÉRDIDA DEL EJERCICIO';
+        const classNeta = data.totales.utilidad_neta.total >= 0 ? 'text-success' : 'text-danger';
+        html += generarFilaTotalPeriodos(lblNeta, data.totales.utilidad_neta, claves, true, 'tr-total-general', classNeta);
+
+        html += '</tbody></table>';
+        document.getElementById('content-reporte').innerHTML = html;
+    }
+
+    function renderSituacionPeriodos(data, nivel) {
+        const claves = Object.keys(data.periodos);
+        const ultimaClave = claves[claves.length - 1];
+        const totalActivos = parseFloat(data.totales.activos[ultimaClave]) || 0;
+        const totalPasivoPatrimonio = parseFloat(data.totales.pasivo_patrimonio[ultimaClave]) || 0;
+        const diferencia = totalActivos - totalPasivoPatrimonio;
+        const cuadra = Math.abs(diferencia) < 0.01;
+
+        let html = '';
+        if (!cuadra) {
+            html += `<div class="alert alert-danger d-flex align-items-center shadow-sm mb-3" role="alert">
+                <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
+                <div>
+                    <strong>El balance no cuadra con el principio de partida doble (último periodo: ${data.periodos[ultimaClave]}).</strong>
+                    Activos (${formatMoney(totalActivos)}) ≠ Pasivo + Patrimonio (${formatMoney(totalPasivoPatrimonio)}) —
+                    diferencia de <strong>${formatMoney(Math.abs(diferencia))}</strong>.
+                </div>
+            </div>`;
+        }
+
+        html += '<table class="tabla-reporte">';
+        html += generarCabeceraPeriodos(data.periodos, false);
+
+        html += generarFilaGrupoPeriodos('ACTIVOS', 'bi bi-bank text-primary', claves, false);
+        data.activos.forEach(item => { html += generarFilaPeriodos(item, claves, false, nivel); });
+        html += generarFilaTotalPeriodos('TOTAL ACTIVOS', data.totales.activos, claves, false);
+        html += generarFilaEspacioPeriodos(claves, false);
+
+        html += generarFilaGrupoPeriodos('PASIVOS', 'bi bi-credit-card text-warning', claves, false);
+        data.pasivos.forEach(item => { html += generarFilaPeriodos(item, claves, false, nivel); });
+        html += generarFilaTotalPeriodos('TOTAL PASIVOS', data.totales.pasivos, claves, false, 'tr-total', 'text-dark');
+        html += generarFilaEspacioPeriodos(claves, false);
+
+        html += generarFilaGrupoPeriodos('PATRIMONIO', 'bi bi-pie-chart text-info', claves, false);
+        data.patrimonio.forEach(item => { html += generarFilaPeriodos(item, claves, false, nivel); });
+        html += generarFilaTotalPeriodos('TOTAL PATRIMONIO', data.totales.patrimonio, claves, false, 'tr-total', 'text-dark');
+        html += generarFilaEspacioPeriodos(claves, false);
+
+        html += generarFilaTotalPeriodos('TOTAL PASIVO + PATRIMONIO', data.totales.pasivo_patrimonio, claves, false, 'tr-total-general', cuadra ? '' : 'text-danger');
 
         html += '</tbody></table>';
         document.getElementById('content-reporte').innerHTML = html;

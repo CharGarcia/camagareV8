@@ -2160,8 +2160,8 @@ class MigracionMysqlService
         $medStmt = $pg->prepare("SELECT id_medida FROM productos WHERE id = ? LIMIT 1");
         $medCache = [];
         $ins = $pg->prepare($tieneMedida
-            ? "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, id_medida, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
-            : "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            ? "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, id_medida, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, fecha_caducidad, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+            : "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, fecha_caducidad, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         // El kardex migrado por sí solo no alimenta productos_bodegas (el reporte de Existencias/
         // Valorización lee de ahí, no del kardex): sin este upsert el stock migrado queda invisible
         // en esas dos pestañas aunque el Kardex sí lo muestre.
@@ -2171,8 +2171,14 @@ class MigracionMysqlService
                 DO UPDATE SET stock_actual = EXCLUDED.stock_actual, updated_by = EXCLUDED.updated_by,
                               updated_at = CURRENT_TIMESTAMP, eliminado = false");
         $stock  = [];
+        // Reconcile (re-migrar): en vez de saltar los ya migrados, actualiza su fecha_caducidad (y refresca
+        // la unidad). Así re-migrar CORRIGE la caducidad sin tener que "Eliminar migrados" primero.
+        $mapInv = $this->mapaDe($pg, $idEmpresa, 'inventario');
+        $updRec = $pg->prepare($tieneMedida
+            ? "UPDATE inventario_kardex SET fecha_caducidad = :cad, id_medida = COALESCE((SELECT id_medida FROM productos WHERE id = inventario_kardex.id_producto), id_medida), updated_at = now(), updated_by = :u WHERE id = :id"
+            : "UPDATE inventario_kardex SET fecha_caducidad = :cad, updated_at = now(), updated_by = :u WHERE id = :id");
 
-        $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote
+        $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote, fecha_vencimiento
                   FROM inventarios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -2180,7 +2186,14 @@ class MigracionMysqlService
         while ($iv = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $iv['id_inventario'];
-            if ($this->yaMigradoDoc($idEmpresa, 'inventario', 'inventario_kardex', $old, $pg)) { $res['ya_migrados']++; continue; }
+            // Ya migrado: reconciliar la fecha_caducidad (regla del cero) sin recomputar el stock.
+            if (isset($mapInv[(string) $old])) {
+                $cadR = self::caducidadODef($iv['fecha_vencimiento'], $iv['fecha_registro']);
+                try { $updRec->execute([':cad' => $cadR, ':u' => $idUsuario, ':id' => (int) $mapInv[(string) $old]]); }
+                catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
+                $res['ya_migrados']++;
+                continue;
+            }
 
             $esEntrada = strtoupper(trim((string) $iv['operacion'])) === 'ENTRADA';
             $cant = $esEntrada ? (float) $iv['cantidad_entrada'] : (float) $iv['cantidad_salida'];
@@ -2205,7 +2218,9 @@ class MigracionMysqlService
                 $idMed = $medCache[$idProd];
                 $movParams = [$idEmpresa, $idProd, $idBod];
                 if ($tieneMedida) { $movParams[] = $idMed; }
-                array_push($movParams, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario);
+                // Fecha de caducidad: vencimiento, o la fecha del movimiento si viene en cero (ningún ítem sin caducidad).
+                $cad = self::caducidadODef($iv['fecha_vencimiento'], $iv['fecha_registro']);
+                array_push($movParams, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), $cad, self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario);
                 $ins->execute($movParams);
                 $kid = (int) $ins->fetchColumn();
 
@@ -2855,8 +2870,8 @@ class MigracionMysqlService
                 $l = $lotes[$i] ?? null;
                 if ($l === null) { break; }
                 $lote = trim((string) $l['lote']);
-                if ($lote === '') { continue; }
-                $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => mb_substr($lote, 0, 100), 'fecha_caducidad' => self::fechaCorta($l['vencimiento'])]);
+                // Caducidad a TODAS las líneas: vencimiento, o la fecha de la factura si viene en cero.
+                $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => ($lote !== '' ? mb_substr($lote, 0, 100) : null), 'fecha_caducidad' => self::caducidadODef($l['vencimiento'], $ef['fecha_factura'])]);
             }
         };
 
@@ -3040,11 +3055,10 @@ class MigracionMysqlService
                         'id_venta_detalle' => $idDet, 'codigo_impuesto' => '2', 'codigo_porcentaje' => $cod,
                         'tarifa' => $pct, 'base_imponible' => round($base_i, 2), 'valor' => round($base_i * $pct / 100, 2),
                     ]);
-                    // Lote / vencimiento por línea (viejo cuerpo_factura.lote/vencimiento → ventas_detalle)
+                    // Lote / vencimiento por línea (viejo cuerpo_factura.lote/vencimiento → ventas_detalle).
+                    // Caducidad a TODAS las líneas: vencimiento, o la fecha de la factura si viene en cero.
                     $lote = trim((string) ($l['lote'] ?? ''));
-                    if ($lote !== '') {
-                        $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => mb_substr($lote, 0, 100), 'fecha_caducidad' => self::fechaCorta($l['vencimiento'] ?? null)]);
-                    }
+                    $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => ($lote !== '' ? mb_substr($lote, 0, 100) : null), 'fecha_caducidad' => self::caducidadODef($l['vencimiento'] ?? null, $ef['fecha_factura'])]);
                 }
 
                 $migrarHijos($idVenta, $ef, $diasDe($idCliente)); // formas de pago SRI + info adicional
@@ -4393,6 +4407,18 @@ class MigracionMysqlService
     {
         $s = trim((string) $v);
         return (strlen(preg_replace('/\D/', '', $s)) >= 10) ? $s : null;
+    }
+
+    /**
+     * fecha_caducidad de un ítem: la del vencimiento; si viene en CERO/basura (nula, 0000, epoch
+     * anterior a 2000) usa la FECHA DEL ÍTEM (fallback) — factura para líneas de factura, fecha del
+     * movimiento para el kardex. Decisión del usuario: ningún ítem queda sin caducidad.
+     */
+    private static function caducidadODef($vencimiento, $fechaItem): ?string
+    {
+        $cad = self::fechaCorta($vencimiento);
+        if ($cad === null || $cad < '2000-01-01') { $cad = self::fechaCorta($fechaItem); }
+        return $cad;
     }
 
     /** Infiere el tipo de identificación SRI a partir del número. */

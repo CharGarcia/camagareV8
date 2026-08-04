@@ -239,6 +239,307 @@ class EstadosFinancierosService
         ];
     }
 
+    /**
+     * Límite de columnas del reporte "por periodos" (meses). Protege de rangos absurdos
+     * (ej. 10 años) que generarían tablas horizontales inmanejables.
+     */
+    private const MAX_PERIODOS = 36;
+
+    /**
+     * Estado de Resultados horizontal por mes: cada columna es el movimiento propio de ese
+     * mes (no acumulado), igual que el Estado de Resultados de un solo periodo pero repetido
+     * mes a mes. La columna "total" es la suma de los meses (equivale al reporte de rango completo).
+     */
+    public function getEstadoResultadosPorPeriodos(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivelReporte = 5): array
+    {
+        $periodos = $this->construirPeriodos($fechaInicio, $fechaFin);
+        $claves = array_keys($periodos);
+
+        $catalogo = $this->indexarPorId($this->repository->getPlanCuentas($idEmpresa));
+        $mov = $this->indexarMovimientos($this->repository->getSaldosPorPeriodo($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto));
+
+        $calc = $this->calcularClasesPorPeriodo($catalogo, $mov, $claves, ['4' => 'C', '5' => 'D', '6' => 'D'], $nivelReporte);
+
+        $utilidadBruta = [];
+        $utilidadNeta = [];
+        foreach ($claves as $p) {
+            $utilidadBruta[$p] = $calc['totales']['4'][$p] - $calc['totales']['5'][$p];
+            $utilidadNeta[$p] = $utilidadBruta[$p] - $calc['totales']['6'][$p];
+        }
+
+        return [
+            'periodos' => $periodos,
+            'ingresos' => $this->conTotalItems($calc['grupos']['4']),
+            'costos' => $this->conTotalItems($calc['grupos']['5']),
+            'gastos' => $this->conTotalItems($calc['grupos']['6']),
+            'totales' => [
+                'ingresos' => $this->conTotal($calc['totales']['4']),
+                'costos' => $this->conTotal($calc['totales']['5']),
+                'gastos' => $this->conTotal($calc['totales']['6']),
+                'utilidad_bruta' => $this->conTotal($utilidadBruta),
+                'utilidad_neta' => $this->conTotal($utilidadNeta),
+            ],
+        ];
+    }
+
+    /**
+     * Estado de Situación Financiera horizontal por mes: cada columna es el saldo ACUMULADO
+     * desde fecha_inicio hasta el fin de ese mes (un balance es una fotografía a una fecha, no
+     * un flujo mensual). El último periodo equivale al Estado de Situación Financiera de rango
+     * completo; por eso no lleva columna "total" adicional.
+     */
+    public function getEstadoSituacionFinancieraPorPeriodos(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivelReporte = 5): array
+    {
+        $periodos = $this->construirPeriodos($fechaInicio, $fechaFin);
+        $claves = array_keys($periodos);
+        $ultimaClave = end($claves);
+
+        $catalogo = $this->indexarPorId($this->repository->getPlanCuentas($idEmpresa));
+        $movMensual = $this->indexarMovimientos($this->repository->getSaldosPorPeriodo($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto));
+        $movAcumulado = $this->acumularMovimientos($movMensual, $claves);
+
+        $balance = $this->calcularClasesPorPeriodo($catalogo, $movAcumulado, $claves, ['1' => 'D', '2' => 'C', '3' => 'C'], $nivelReporte);
+        $resultado = $this->calcularClasesPorPeriodo($catalogo, $movAcumulado, $claves, ['4' => 'C', '5' => 'D', '6' => 'D'], 5);
+
+        $utilidadNetaPorPeriodo = [];
+        foreach ($claves as $p) {
+            $utilidadNetaPorPeriodo[$p] = $resultado['totales']['4'][$p] - $resultado['totales']['5'][$p] - $resultado['totales']['6'][$p];
+        }
+
+        // Cierre virtual: saldo acumulado de la cuenta pivote (clase 7), igual que en el reporte
+        // de un solo periodo (ver getEstadoSituacionFinanciera).
+        $saldoPivotPorPeriodo = array_fill_keys($claves, 0.0);
+        foreach ($catalogo as $idCuenta => $cta) {
+            if ((int)$cta['nivel'] === 5 && str_starts_with((string)$cta['codigo'], '7')) {
+                foreach ($claves as $p) {
+                    $debe = (float)($movAcumulado[$idCuenta][$p]['debe'] ?? 0);
+                    $haber = (float)($movAcumulado[$idCuenta][$p]['haber'] ?? 0);
+                    $saldoPivotPorPeriodo[$p] += $haber - $debe;
+                }
+            }
+        }
+
+        $resultadoFinalPorPeriodo = [];
+        foreach ($claves as $p) {
+            $resultadoFinalPorPeriodo[$p] = $utilidadNetaPorPeriodo[$p] + $saldoPivotPorPeriodo[$p];
+        }
+
+        $ctasCierre = $this->repository->getCuentasCierreEjercicio($idEmpresa);
+        $signoFinal = $resultadoFinalPorPeriodo[$ultimaClave] ?? 0.0;
+        if ($signoFinal >= 0) {
+            $cta = $ctasCierre['utilidad'] ?? null;
+            $lblNeta = 'Utilidad del Ejercicio';
+        } else {
+            $cta = $ctasCierre['perdida'] ?? null;
+            $lblNeta = 'Pérdida del Ejercicio';
+        }
+
+        $patrimonio = $balance['grupos']['3'];
+        $patrimonio[] = [
+            'codigo' => $cta['codigo'] ?? '',
+            'nombre' => $cta['nombre'] ?? $lblNeta,
+            'nivel' => 1,
+            'valores' => $resultadoFinalPorPeriodo,
+        ];
+
+        $totalPatrimonioPorPeriodo = $balance['totales']['3'];
+        foreach ($claves as $p) {
+            $totalPatrimonioPorPeriodo[$p] += $resultadoFinalPorPeriodo[$p];
+        }
+        $totalPasivoPatrimonioPorPeriodo = [];
+        foreach ($claves as $p) {
+            $totalPasivoPatrimonioPorPeriodo[$p] = $balance['totales']['2'][$p] + $totalPatrimonioPorPeriodo[$p];
+        }
+
+        return [
+            'periodos' => $periodos,
+            'activos' => $balance['grupos']['1'],
+            'pasivos' => $balance['grupos']['2'],
+            'patrimonio' => $patrimonio,
+            'totales' => [
+                'activos' => $balance['totales']['1'],
+                'pasivos' => $balance['totales']['2'],
+                'patrimonio' => $totalPatrimonioPorPeriodo,
+                'pasivo_patrimonio' => $totalPasivoPatrimonioPorPeriodo,
+            ],
+        ];
+    }
+
+    /**
+     * Claves de periodo (YYYY-MM => "Mes Año") entre fecha_inicio y fecha_fin, un mes por
+     * columna. Limitado a MAX_PERIODOS para no generar tablas horizontales inmanejables.
+     */
+    private function construirPeriodos(string $fechaInicio, string $fechaFin): array
+    {
+        $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        $cursor = new \DateTime(date('Y-m-01', strtotime($fechaInicio)));
+        $fin = new \DateTime(date('Y-m-01', strtotime($fechaFin)));
+
+        $periodos = [];
+        while ($cursor <= $fin) {
+            if (count($periodos) >= self::MAX_PERIODOS) {
+                throw new Exception('El rango de fechas es demasiado amplio para el reporte por periodos (máximo ' . self::MAX_PERIODOS . ' meses).');
+            }
+            $clave = $cursor->format('Y-m');
+            $periodos[$clave] = $meses[(int)$cursor->format('n') - 1] . ' ' . $cursor->format('Y');
+            $cursor->modify('+1 month');
+        }
+
+        return $periodos;
+    }
+
+    private function indexarPorId(array $filas): array
+    {
+        $out = [];
+        foreach ($filas as $f) {
+            $out[(int)$f['id_cuenta']] = $f;
+        }
+        return $out;
+    }
+
+    /**
+     * [id_cuenta][periodo] => ['debe' => float, 'haber' => float]. Solo incluye cuentas/periodos
+     * con movimiento; el llamador debe usar ?? 0 para completar el resto de la matriz.
+     */
+    private function indexarMovimientos(array $filas): array
+    {
+        $out = [];
+        foreach ($filas as $f) {
+            if ($f['periodo'] === null) {
+                continue;
+            }
+            $out[(int)$f['id_cuenta']][$f['periodo']] = [
+                'debe' => (float)$f['total_debe'],
+                'haber' => (float)$f['total_haber'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Convierte movimientos mensuales en movimientos acumulados (running total) mes a mes,
+     * para el Estado de Situación Financiera por periodos (un balance es acumulado, no un flujo).
+     */
+    private function acumularMovimientos(array $movPorPeriodo, array $claves): array
+    {
+        $acumulado = [];
+        foreach ($movPorPeriodo as $idCuenta => $porPeriodo) {
+            $runningDebe = 0.0;
+            $runningHaber = 0.0;
+            foreach ($claves as $p) {
+                $runningDebe += (float)($porPeriodo[$p]['debe'] ?? 0);
+                $runningHaber += (float)($porPeriodo[$p]['haber'] ?? 0);
+                $acumulado[$idCuenta][$p] = ['debe' => $runningDebe, 'haber' => $runningHaber];
+            }
+        }
+        return $acumulado;
+    }
+
+    /**
+     * Calcula, para un conjunto de clases contables (prefijo de código => signo D/C), el saldo
+     * directo y el rollup jerárquico (flat: padre + todos los descendientes por prefijo de
+     * código, igual que getEstadoResultados/getEstadoSituacionFinanciera) por cada periodo.
+     * Devuelve ['grupos' => [prefijo => [items filtrados por nivel y no-cero]], 'totales' =>
+     * [prefijo => [periodo => valor]]] — los totales suman TODAS las cuentas (sin filtrar por
+     * nivel), igual que en el reporte de un solo periodo.
+     */
+    private function calcularClasesPorPeriodo(array $catalogo, array $movPorPeriodo, array $claves, array $prefijosSigno, int $nivelReporte): array
+    {
+        $directo = [];
+        $totales = [];
+        foreach (array_keys($prefijosSigno) as $prefijo) {
+            $totales[$prefijo] = array_fill_keys($claves, 0.0);
+        }
+
+        foreach ($catalogo as $idCuenta => $cta) {
+            $codigo = (string)$cta['codigo'];
+            $prefijoCuenta = $codigo !== '' ? $codigo[0] : '';
+            if (!isset($prefijosSigno[$prefijoCuenta])) {
+                continue;
+            }
+            $signo = $prefijosSigno[$prefijoCuenta];
+            foreach ($claves as $p) {
+                $debe = (float)($movPorPeriodo[$idCuenta][$p]['debe'] ?? 0);
+                $haber = (float)($movPorPeriodo[$idCuenta][$p]['haber'] ?? 0);
+                $valor = $signo === 'D' ? ($debe - $haber) : ($haber - $debe);
+                $directo[$idCuenta][$p] = $valor;
+                $totales[$prefijoCuenta][$p] += $valor;
+            }
+        }
+
+        $final = [];
+        foreach ($catalogo as $idCuenta => $cta) {
+            $codigo = (string)$cta['codigo'];
+            $prefijoCuenta = $codigo !== '' ? $codigo[0] : '';
+            if (!isset($prefijosSigno[$prefijoCuenta])) {
+                continue;
+            }
+            $prefijoHijos = $codigo . '.';
+            foreach ($claves as $p) {
+                $suma = $directo[$idCuenta][$p] ?? 0.0;
+                foreach ($catalogo as $idHijo => $ctaHijo) {
+                    if (str_starts_with((string)$ctaHijo['codigo'], $prefijoHijos)) {
+                        $suma += $directo[$idHijo][$p] ?? 0.0;
+                    }
+                }
+                $final[$idCuenta][$p] = $suma;
+            }
+        }
+
+        $grupos = [];
+        foreach (array_keys($prefijosSigno) as $prefijo) {
+            $grupos[$prefijo] = [];
+        }
+
+        foreach ($catalogo as $idCuenta => $cta) {
+            $codigo = (string)$cta['codigo'];
+            $prefijoCuenta = $codigo !== '' ? $codigo[0] : '';
+            if (!isset($prefijosSigno[$prefijoCuenta])) {
+                continue;
+            }
+            if ((int)$cta['nivel'] > $nivelReporte) {
+                continue;
+            }
+
+            $valores = $final[$idCuenta];
+            $tieneValor = false;
+            foreach ($valores as $v) {
+                if (round($v, 2) != 0) {
+                    $tieneValor = true;
+                    break;
+                }
+            }
+            if (!$tieneValor) {
+                continue;
+            }
+
+            $grupos[$prefijoCuenta][] = [
+                'codigo' => $cta['codigo'],
+                'nombre' => $cta['nombre'],
+                'nivel' => $cta['nivel'],
+                'codigo_sri' => $cta['codigo_sri'] ?? null,
+                'valores' => $valores,
+            ];
+        }
+
+        return ['grupos' => $grupos, 'totales' => $totales];
+    }
+
+    private function conTotal(array $porPeriodo): array
+    {
+        $porPeriodo['total'] = array_sum($porPeriodo);
+        return $porPeriodo;
+    }
+
+    private function conTotalItems(array $items): array
+    {
+        foreach ($items as &$item) {
+            $item['total'] = array_sum($item['valores']);
+        }
+        unset($item);
+        return $items;
+    }
+
     public function exportarSri(string $tipo, array $datos, string $empresaNombre, string $rangoFechas, string $rucEmpresa = ''): void
     {
         $agrupadoSri = [];
@@ -345,6 +646,195 @@ class EstadosFinancierosService
 
             $this->reportService->exportToExcel('Estado_Situacion_Financiera', $headers, $dataExport, 'Situacion Financiera', "{$empresaNombre} - Estado de Situación Financiera ({$rangoFechas})");
         }
+    }
+
+    /**
+     * Excel horizontal por periodos: una columna por mes (más "Total" en el reporte de
+     * Resultados; en Situación Financiera el último mes ya es el saldo final).
+     */
+    public function exportarExcelPorPeriodos(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void
+    {
+        $esResultados = $tipo === 'resultados_periodos';
+        $labels = array_values($datos['periodos']);
+        $headers = array_merge(['Código', 'Cuenta'], $labels, $esResultados ? ['Total'] : []);
+
+        $filaItem = function (array $item) use ($datos, $esResultados) {
+            $fila = [$item['codigo'], $item['nombre']];
+            foreach (array_keys($datos['periodos']) as $p) {
+                $fila[] = $item['valores'][$p] ?? 0;
+            }
+            if ($esResultados) {
+                $fila[] = $item['total'] ?? array_sum($item['valores']);
+            }
+            return $fila;
+        };
+
+        $filaTotal = function (string $titulo, array $porPeriodo) use ($datos, $esResultados) {
+            $fila = ['', $titulo];
+            foreach (array_keys($datos['periodos']) as $p) {
+                $fila[] = $porPeriodo[$p] ?? 0;
+            }
+            if ($esResultados) {
+                $fila[] = $porPeriodo['total'] ?? array_sum(array_intersect_key($porPeriodo, $datos['periodos']));
+            }
+            return $fila;
+        };
+
+        $dataExport = [];
+
+        if ($esResultados) {
+            $dataExport[] = array_merge(['INGRESOS'], array_fill(0, count($headers) - 1, ''));
+            foreach ($datos['ingresos'] as $item) $dataExport[] = $filaItem($item);
+            $dataExport[] = $filaTotal('TOTAL INGRESOS', $datos['totales']['ingresos']);
+            $dataExport[] = array_fill(0, count($headers), '');
+
+            $dataExport[] = array_merge(['COSTOS'], array_fill(0, count($headers) - 1, ''));
+            foreach ($datos['costos'] as $item) $dataExport[] = $filaItem($item);
+            $dataExport[] = $filaTotal('TOTAL COSTOS', $datos['totales']['costos']);
+            $dataExport[] = array_fill(0, count($headers), '');
+
+            $dataExport[] = $filaTotal('UTILIDAD/PÉRDIDA BRUTA', $datos['totales']['utilidad_bruta']);
+            $dataExport[] = array_fill(0, count($headers), '');
+
+            $dataExport[] = array_merge(['GASTOS'], array_fill(0, count($headers) - 1, ''));
+            foreach ($datos['gastos'] as $item) $dataExport[] = $filaItem($item);
+            $dataExport[] = $filaTotal('TOTAL GASTOS', $datos['totales']['gastos']);
+            $dataExport[] = array_fill(0, count($headers), '');
+
+            $dataExport[] = $filaTotal('UTILIDAD/PÉRDIDA DEL EJERCICIO', $datos['totales']['utilidad_neta']);
+
+            $this->reportService->exportToExcel('Estado_Resultados_Periodos', $headers, $dataExport, 'Resultados x Periodo', "{$empresaNombre} - Estado de Resultados por Periodos ({$rangoFechas})");
+        } else {
+            $dataExport[] = array_merge(['ACTIVOS'], array_fill(0, count($headers) - 1, ''));
+            foreach ($datos['activos'] as $item) $dataExport[] = $filaItem($item);
+            $dataExport[] = $filaTotal('TOTAL ACTIVOS', $datos['totales']['activos']);
+            $dataExport[] = array_fill(0, count($headers), '');
+
+            $dataExport[] = array_merge(['PASIVOS'], array_fill(0, count($headers) - 1, ''));
+            foreach ($datos['pasivos'] as $item) $dataExport[] = $filaItem($item);
+            $dataExport[] = $filaTotal('TOTAL PASIVOS', $datos['totales']['pasivos']);
+            $dataExport[] = array_fill(0, count($headers), '');
+
+            $dataExport[] = array_merge(['PATRIMONIO'], array_fill(0, count($headers) - 1, ''));
+            foreach ($datos['patrimonio'] as $item) $dataExport[] = $filaItem($item);
+            $dataExport[] = $filaTotal('TOTAL PATRIMONIO', $datos['totales']['patrimonio']);
+            $dataExport[] = array_fill(0, count($headers), '');
+
+            $dataExport[] = $filaTotal('TOTAL PASIVO + PATRIMONIO', $datos['totales']['pasivo_patrimonio']);
+
+            $this->reportService->exportToExcel('Estado_Situacion_Financiera_Periodos', $headers, $dataExport, 'Situación x Periodo', "{$empresaNombre} - Estado de Situación Financiera por Periodos ({$rangoFechas})");
+        }
+    }
+
+    /**
+     * PDF horizontal por periodos. Usa orientación horizontal (Landscape) porque el número de
+     * columnas (una por mes) no cabe en A4 vertical.
+     */
+    public function exportarPdfPorPeriodos(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void
+    {
+        $esResultados = $tipo === 'resultados_periodos';
+        $labels = array_values($datos['periodos']);
+        $claves = array_keys($datos['periodos']);
+
+        $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8', false);
+        $pdf->SetCreator('Sistema Contable');
+        $pdf->SetAuthor($empresaNombre);
+        $tituloReporte = $esResultados ? 'Estado de Resultados por Periodos' : 'Estado de Situación Financiera por Periodos';
+        $pdf->SetTitle($tituloReporte);
+
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetAutoPageBreak(TRUE, 15);
+        $pdf->AddPage();
+
+        $pdf->SetFont('helvetica', 'B', 14);
+        $pdf->Cell(0, 10, strtoupper($empresaNombre), 0, 1, 'C');
+        $pdf->SetFont('helvetica', 'B', 12);
+        $pdf->Cell(0, 8, strtoupper($tituloReporte), 0, 1, 'C');
+        $pdf->SetFont('helvetica', '', 10);
+        $pdf->Cell(0, 8, "Período: " . $rangoFechas, 0, 1, 'C');
+        $pdf->Ln(5);
+
+        $formatoDinero = function ($val) {
+            return number_format((float)$val, 2, '.', ',');
+        };
+
+        $numColsPeriodo = count($labels) + ($esResultados ? 1 : 0);
+        $anchoCodigo = 8;
+        $anchoCuenta = 25;
+        $anchoPeriodo = max(6, (int)((100 - $anchoCodigo - $anchoCuenta) / max(1, $numColsPeriodo)));
+
+        $html = '<table border="1" cellpadding="2" style="font-size:7px;">
+                    <thead>
+                        <tr style="background-color:#f0f0f0; font-weight:bold;">
+                            <th width="' . $anchoCodigo . '%">Código</th>
+                            <th width="' . $anchoCuenta . '%">Cuenta</th>';
+        foreach ($labels as $lbl) {
+            $html .= '<th width="' . $anchoPeriodo . '%" align="right">' . htmlspecialchars($lbl) . '</th>';
+        }
+        if ($esResultados) {
+            $html .= '<th width="' . $anchoPeriodo . '%" align="right">Total</th>';
+        }
+        $html .= '</tr></thead><tbody>';
+
+        $filaItemHtml = function (array $item) use ($claves, $esResultados, $formatoDinero) {
+            $fila = "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td>";
+            foreach ($claves as $p) {
+                $fila .= '<td align="right">' . $formatoDinero($item['valores'][$p] ?? 0) . '</td>';
+            }
+            if ($esResultados) {
+                $fila .= '<td align="right">' . $formatoDinero($item['total'] ?? array_sum($item['valores'])) . '</td>';
+            }
+            return $fila . '</tr>';
+        };
+
+        $filaTotalHtml = function (string $titulo, array $porPeriodo) use ($claves, $esResultados, $formatoDinero) {
+            $fila = "<tr><td colspan=\"2\" style=\"font-weight:bold;\">{$titulo}</td>";
+            foreach ($claves as $p) {
+                $fila .= '<td align="right" style="font-weight:bold;">' . $formatoDinero($porPeriodo[$p] ?? 0) . '</td>';
+            }
+            if ($esResultados) {
+                $fila .= '<td align="right" style="font-weight:bold;">' . $formatoDinero($porPeriodo['total'] ?? array_sum(array_intersect_key($porPeriodo, array_flip($claves)))) . '</td>';
+            }
+            return $fila . '</tr>';
+        };
+
+        if ($esResultados) {
+            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">INGRESOS</td></tr>';
+            foreach ($datos['ingresos'] as $item) $html .= $filaItemHtml($item);
+            $html .= $filaTotalHtml('TOTAL INGRESOS', $datos['totales']['ingresos']);
+
+            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">COSTOS</td></tr>';
+            foreach ($datos['costos'] as $item) $html .= $filaItemHtml($item);
+            $html .= $filaTotalHtml('TOTAL COSTOS', $datos['totales']['costos']);
+            $html .= $filaTotalHtml('UTILIDAD/PÉRDIDA BRUTA', $datos['totales']['utilidad_bruta']);
+
+            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">GASTOS</td></tr>';
+            foreach ($datos['gastos'] as $item) $html .= $filaItemHtml($item);
+            $html .= $filaTotalHtml('TOTAL GASTOS', $datos['totales']['gastos']);
+            $html .= $filaTotalHtml('UTILIDAD/PÉRDIDA DEL EJERCICIO', $datos['totales']['utilidad_neta']);
+        } else {
+            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">ACTIVOS</td></tr>';
+            foreach ($datos['activos'] as $item) $html .= $filaItemHtml($item);
+            $html .= $filaTotalHtml('TOTAL ACTIVOS', $datos['totales']['activos']);
+
+            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">PASIVOS</td></tr>';
+            foreach ($datos['pasivos'] as $item) $html .= $filaItemHtml($item);
+            $html .= $filaTotalHtml('TOTAL PASIVOS', $datos['totales']['pasivos']);
+
+            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">PATRIMONIO</td></tr>';
+            foreach ($datos['patrimonio'] as $item) $html .= $filaItemHtml($item);
+            $html .= $filaTotalHtml('TOTAL PATRIMONIO', $datos['totales']['patrimonio']);
+            $html .= $filaTotalHtml('TOTAL PASIVO + PATRIMONIO', $datos['totales']['pasivo_patrimonio']);
+        }
+
+        $html .= '</tbody></table>';
+
+        $pdf->writeHTML($html, true, false, true, false, '');
+        $filename = "{$tituloReporte}_" . date('YmdHis') . ".pdf";
+        if (ob_get_length()) ob_end_clean();
+        $pdf->Output($filename, 'D');
+        exit;
     }
 
     public function exportarPdf(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void

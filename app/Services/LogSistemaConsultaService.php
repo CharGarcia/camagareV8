@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\repositories\LogSistemaRepository;
+use App\repositories\LoginIntentoRepository;
 
 /**
  * Lógica de consulta (solo lectura) de la bitácora de auditoría.
@@ -13,11 +14,13 @@ class LogSistemaConsultaService
 {
     private LogSistemaRepository $repo;
     private LogSistemaService $logService;
+    private LoginIntentoRepository $loginRepo;
 
     public function __construct()
     {
         $this->repo = new LogSistemaRepository();
         $this->logService = new LogSistemaService();
+        $this->loginRepo = new LoginIntentoRepository();
     }
 
     /**
@@ -69,6 +72,18 @@ class LogSistemaConsultaService
     public function getParaExportar(array $scope, string $buscar, string $ordenCol, string $ordenDir, int $limit = 10000, array $filtros = []): array
     {
         return $this->repo->getParaExportar($scope, $buscar, $ordenCol, $ordenDir, $limit, $filtros);
+    }
+
+    /**
+     * Listado paginado de intentos de login (pestaña "Intentos de login").
+     * Sin scope de empresa: la tabla es global (nivel 3 únicamente, se valida en el controller).
+     *
+     * @param array{exitoso:?bool,desde:?string,hasta:?string} $filtros
+     * @return array{rows: array, total: int}
+     */
+    public function getListadoIntentos(string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, array $filtros = []): array
+    {
+        return $this->loginRepo->getListado($buscar, $page, $perPage, $ordenCol, $ordenDir, $filtros);
     }
 
     /**

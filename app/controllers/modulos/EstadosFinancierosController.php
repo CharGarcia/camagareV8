@@ -168,6 +168,48 @@ class EstadosFinancierosController extends BaseModuloController
         }
     }
 
+    public function generarEstadoResultadosPorPeriodos(): void
+    {
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
+            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
+
+            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
+            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+            $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
+
+            $datos = $this->service->getEstadoResultadosPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
+    public function generarEstadoSituacionFinancieraPorPeriodos(): void
+    {
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
+            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
+
+            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
+            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+            $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
+
+            $datos = $this->service->getEstadoSituacionFinancieraPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     public function exportar(): void
     {
         $this->requireLeer();
@@ -185,6 +227,19 @@ class EstadosFinancierosController extends BaseModuloController
         $empresa = $empresaModel->getPorId($idEmpresa);
         $empresaNombre = $empresa['nombre_comercial'] ?: $empresa['nombre'];
         $rangoFechas = $fechaInicio . ' al ' . $fechaFin;
+
+        if ($tipo === 'resultados_periodos' || $tipo === 'situacion_periodos') {
+            $datos = $tipo === 'resultados_periodos'
+                ? $this->service->getEstadoResultadosPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel)
+                : $this->service->getEstadoSituacionFinancieraPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+
+            if ($formato === 'pdf') {
+                $this->service->exportarPdfPorPeriodos($tipo, $datos, $empresaNombre, $rangoFechas);
+            } else {
+                $this->service->exportarExcelPorPeriodos($tipo, $datos, $empresaNombre, $rangoFechas);
+            }
+            return;
+        }
 
         if ($tipo === 'resultados') {
             $datos = $this->service->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);

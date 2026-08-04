@@ -20,6 +20,9 @@ class LogSistemaConsultaController extends Controller
     /** Columnas de ordenamiento permitidas (deben coincidir con el repositorio). */
     private const COLUMNAS_ORDEN = ['created_at', 'accion', 'tabla', 'usuario', 'empresa', 'id'];
 
+    /** Columnas de ordenamiento permitidas para la pestaña de intentos de login. */
+    private const COLUMNAS_ORDEN_INTENTOS = ['created_at', 'identificador', 'ip', 'exitoso'];
+
     public function __construct()
     {
         parent::__construct();
@@ -97,6 +100,60 @@ class LogSistemaConsultaController extends Controller
         }
 
         $this->json(['ok' => true, 'html' => $this->renderDetalle($detalle)]);
+    }
+
+    /**
+     * Pestaña "Intentos de login" — solo nivel 3: login_intentos es una tabla
+     * global (sin id_empresa), así que no se puede acotar por empresa como el
+     * resto de la auditoría; un nivel 2 vería intentos de cédulas de otras empresas.
+     */
+    public function intentosAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(3);
+
+        $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
+        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'created_at');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
+        $perPage  = 25;
+
+        if (!in_array($ordenCol, self::COLUMNAS_ORDEN_INTENTOS, true)) {
+            $ordenCol = 'created_at';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'DESC';
+        }
+
+        $resultado = trim($_GET['fr'] ?? $_POST['fr'] ?? '');
+        $desde = trim($_GET['fd'] ?? $_POST['fd'] ?? '');
+        $hasta = trim($_GET['fh'] ?? $_POST['fh'] ?? '');
+        $rgxFecha = '/^\d{4}-\d{2}-\d{2}$/';
+
+        $filtros = [
+            'exitoso' => $resultado === '' ? null : ($resultado === '1'),
+            'desde'   => preg_match($rgxFecha, $desde) ? $desde : null,
+            'hasta'   => preg_match($rgxFecha, $hasta) ? $hasta : null,
+        ];
+
+        try {
+            $result = $this->service->getListadoIntentos($buscar, $page, $perPage, $ordenCol, $ordenDir, $filtros);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => 'Error al cargar los intentos de login: ' . $e->getMessage()]);
+        }
+
+        $rows       = $result['rows'];
+        $total      = $result['total'];
+        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+        $from       = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $to         = $total > 0 ? min($page * $perPage, $total) : 0;
+
+        $this->json([
+            'ok'         => true,
+            'rows'       => $this->renderFilasIntentos($rows),
+            'pagination' => $this->renderPaginacion($page, $totalPages, 'LOGIN_cambiarPagina'),
+            'info'       => "$from-$to / $total",
+        ]);
     }
 
     public function exportarExcel(): void
@@ -304,14 +361,43 @@ class LogSistemaConsultaController extends Controller
         return (string) ob_get_clean();
     }
 
-    private function renderPaginacion(int $page, int $totalPages): string
+    private function renderPaginacion(int $page, int $totalPages, string $jsCallback = 'LOGSIS_cambiarPagina'): string
     {
         $prevDisabled = ($page <= 1) ? 'disabled' : '';
         $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
         return '<div class="btn-group btn-group-sm">'
-            . '<button type="button" class="btn btn-outline-secondary" ' . $prevDisabled . ' onclick="LOGSIS_cambiarPagina(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>'
-            . '<button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="LOGSIS_cambiarPagina(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>'
+            . '<button type="button" class="btn btn-outline-secondary" ' . $prevDisabled . ' onclick="' . $jsCallback . '(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>'
+            . '<button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="' . $jsCallback . '(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>'
             . '</div>';
+    }
+
+    /** Filas de la tabla de intentos de login (pestaña nivel 3). */
+    private function renderFilasIntentos(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="5" class="text-center py-5 text-muted">No se encontraron intentos de inicio de sesión en el rango seleccionado.</td></tr>';
+        }
+
+        ob_start();
+        foreach ($rows as $r) {
+            $fecha         = date('d-m-Y H:i:s', strtotime((string) $r['created_at']));
+            $identificador = htmlspecialchars((string) $r['identificador']);
+            $ip            = htmlspecialchars((string) ($r['ip'] ?? '-'));
+            $ua            = htmlspecialchars((string) ($r['user_agent'] ?? '-'));
+            $exitoso       = filter_var($r['exitoso'], FILTER_VALIDATE_BOOLEAN);
+            $badge         = $exitoso
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2 small">Exitoso</span>'
+                : '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2 small">Fallido</span>';
+
+            echo '<tr class="align-middle">'
+                . '<td class="ps-3 text-nowrap small">' . $fecha . '</td>'
+                . '<td class="small">' . $identificador . '</td>'
+                . '<td>' . $badge . '</td>'
+                . '<td class="small text-muted text-nowrap">' . $ip . '</td>'
+                . '<td class="small text-muted text-truncate d-inline-block" style="max-width:280px;" title="' . $ua . '">' . $ua . '</td>'
+                . '</tr>';
+        }
+        return (string) ob_get_clean();
     }
 
     private function renderDetalle(array $d): string

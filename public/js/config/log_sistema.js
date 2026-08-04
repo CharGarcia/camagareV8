@@ -3,6 +3,7 @@
 
     const API = `${window.BASE_URL || ''}/config/log-sistema`;
 
+    // ── Auditoría ────────────────────────────────────────────────────────────
     let currentPage = 1;
     let sortCol = 'created_at';
     let sortDir = 'DESC';
@@ -98,19 +99,108 @@
         window.open(`${API}?${params.toString()}`, '_blank');
     };
 
-    function actualizarIndicadoresOrden() {
-        document.querySelectorAll('.log-sort').forEach(function (th) {
+    function actualizarIndicadoresOrden(selector, col, dir) {
+        document.querySelectorAll(selector).forEach(function (th) {
             const icon = th.querySelector('i');
             if (icon) icon.remove();
-            if (th.getAttribute('data-col') === sortCol) {
+            if (th.getAttribute('data-col') === col) {
                 const i = document.createElement('i');
-                i.className = 'bi ' + (sortDir === 'ASC' ? 'bi-arrow-up-short' : 'bi-arrow-down-short');
+                i.className = 'bi ' + (dir === 'ASC' ? 'bi-arrow-up-short' : 'bi-arrow-down-short');
                 th.appendChild(i);
             }
         });
     }
 
+    // ── Intentos de login (nivel 3) ──────────────────────────────────────────
+    let loginPage = 1;
+    let loginSortCol = 'created_at';
+    let loginSortDir = 'DESC';
+    let loginTimerBusqueda = null;
+    let loginCargado = false;
+
+    function getLoginBuscar() {
+        const el = document.getElementById('loginInputBuscar');
+        return el ? el.value.trim() : '';
+    }
+
+    function getLoginFiltros() {
+        const map = { fr: 'fltIntResultado', fd: 'fltIntDesde', fh: 'fltIntHasta' };
+        const out = {};
+        Object.keys(map).forEach(function (param) {
+            const el = document.getElementById(map[param]);
+            if (el && el.value.trim() !== '') out[param] = el.value.trim();
+        });
+        return out;
+    }
+
+    function construirParamsLogin(extra) {
+        const params = new URLSearchParams(extra);
+        const f = getLoginFiltros();
+        Object.keys(f).forEach(function (k) { params.set(k, f[k]); });
+        return params;
+    }
+
+    window.LOGIN_cargarListado = async function (page = 1) {
+        loginPage = page;
+        const tbody = document.getElementById('tbodyLoginIntentos');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        const params = construirParamsLogin({
+            action: 'intentos',
+            b: getLoginBuscar(),
+            page: String(page),
+            sort: loginSortCol,
+            dir: loginSortDir,
+        });
+
+        try {
+            const resp = await fetch(`${API}?${params.toString()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const res = await resp.json();
+            if (res.ok) {
+                if (tbody) tbody.innerHTML = res.rows;
+                const info = document.getElementById('loginPaginationInfo');
+                if (info) info.textContent = res.info;
+                const pag = document.getElementById('loginWrapperPagination');
+                if (pag) pag.innerHTML = res.pagination;
+            } else {
+                if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">${res.error || 'Error al cargar'}</td></tr>`;
+            }
+        } catch (e) {
+            console.error(e);
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
+        }
+    };
+
+    window.LOGIN_cambiarPagina = function (page) {
+        if (page < 1) return;
+        LOGIN_cargarListado(page);
+    };
+
+    // ── Pestañas ─────────────────────────────────────────────────────────────
+    function activarTab(tab) {
+        document.querySelectorAll('.log-tab-btn').forEach(function (btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+        });
+
+        const esAuditoria = tab === 'auditoria';
+        const headerAud = document.getElementById('logHeaderAuditoria');
+        const bodyAud = document.getElementById('logBodyAuditoria');
+        const headerInt = document.getElementById('logHeaderIntentos');
+        const bodyInt = document.getElementById('logBodyIntentos');
+
+        if (headerAud) headerAud.classList.toggle('d-none', !esAuditoria);
+        if (bodyAud) bodyAud.classList.toggle('d-none', !esAuditoria);
+        if (headerInt) headerInt.classList.toggle('d-none', esAuditoria);
+        if (bodyInt) bodyInt.classList.toggle('d-none', esAuditoria);
+
+        if (!esAuditoria && !loginCargado) {
+            loginCargado = true;
+            LOGIN_cargarListado(1);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        // Auditoría: búsqueda con debounce.
         const input = document.getElementById('logInputBuscar');
         if (input) {
             input.addEventListener('input', function () {
@@ -129,12 +219,11 @@
                     sortCol = col;
                     sortDir = 'DESC';
                 }
-                actualizarIndicadoresOrden();
+                actualizarIndicadoresOrden('.log-sort', sortCol, sortDir);
                 LOGSIS_cargarListado(1);
             });
         });
 
-        // Filtros: recargar al cambiar cualquiera.
         ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla', 'fltDesde', 'fltHasta'].forEach(function (id) {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', function () { LOGSIS_cargarListado(1); });
@@ -143,7 +232,6 @@
         const btnLimpiar = document.getElementById('btnLimpiarFiltros');
         if (btnLimpiar) {
             btnLimpiar.addEventListener('click', function () {
-                // Selects a "todos"; fechas de vuelta a su valor por defecto (año actual → hoy).
                 ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla'].forEach(function (id) {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
@@ -157,5 +245,54 @@
                 LOGSIS_cargarListado(1);
             });
         }
+
+        // Intentos de login: búsqueda con debounce.
+        const loginInput = document.getElementById('loginInputBuscar');
+        if (loginInput) {
+            loginInput.addEventListener('input', function () {
+                clearTimeout(loginTimerBusqueda);
+                loginTimerBusqueda = setTimeout(() => LOGIN_cargarListado(1), 400);
+            });
+        }
+
+        document.querySelectorAll('.login-sort').forEach(function (th) {
+            th.addEventListener('click', function () {
+                const col = th.getAttribute('data-col');
+                if (!col) return;
+                if (loginSortCol === col) {
+                    loginSortDir = loginSortDir === 'ASC' ? 'DESC' : 'ASC';
+                } else {
+                    loginSortCol = col;
+                    loginSortDir = 'DESC';
+                }
+                actualizarIndicadoresOrden('.login-sort', loginSortCol, loginSortDir);
+                LOGIN_cargarListado(1);
+            });
+        });
+
+        ['fltIntResultado', 'fltIntDesde', 'fltIntHasta'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', function () { LOGIN_cargarListado(1); });
+        });
+
+        const btnLimpiarIntentos = document.getElementById('btnLimpiarFiltrosIntentos');
+        if (btnLimpiarIntentos) {
+            btnLimpiarIntentos.addEventListener('click', function () {
+                const sel = document.getElementById('fltIntResultado');
+                if (sel) sel.value = '';
+                ['fltIntDesde', 'fltIntHasta'].forEach(function (id) {
+                    const el = document.getElementById(id);
+                    if (el) el.value = el.defaultValue;
+                });
+                const inputB = document.getElementById('loginInputBuscar');
+                if (inputB) inputB.value = '';
+                LOGIN_cargarListado(1);
+            });
+        }
+
+        // Pestañas
+        document.querySelectorAll('.log-tab-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () { activarTab(btn.getAttribute('data-tab')); });
+        });
     });
 })();

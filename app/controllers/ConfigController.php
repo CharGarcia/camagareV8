@@ -681,6 +681,7 @@ class ConfigController extends Controller
             'detalle'        => 'detalleAjax',
             'exportarExcel'  => 'exportarExcel',
             'exportarPdf'    => 'exportarPdf',
+            'intentos'       => 'intentosAjax',
             default          => 'index',
         };
         if (method_exists($c, $method)) {

@@ -15,6 +15,7 @@ use App\models\Empresa;
 use App\models\Usuario;
 use App\Services\Api\JwtService;
 use App\Services\Api\RefreshTokenService;
+use App\Services\LoginRateLimitService;
 use App\Services\SesionActivaService;
 
 class AuthController extends ApiBaseController
@@ -52,11 +53,26 @@ class AuthController extends ApiBaseController
             $this->jsonError('CREDENCIALES', 'Usuario o contraseña incorrectos.', 401);
         }
 
+        // Freno de fuerza bruta: se comprueba ANTES de tocar la contraseña, igual que
+        // el login web (AuthController::login) — mismo servicio, mismos contadores.
+        $rateLimit = new LoginRateLimitService();
+        $bloqueo = $rateLimit->bloqueo($cedula);
+        if ($bloqueo !== null) {
+            $this->jsonError('BLOQUEADO', $rateLimit->mensajeBloqueo($bloqueo), 429, [
+                'motivo'  => $bloqueo['motivo'],
+                'minutos' => $bloqueo['minutos'],
+            ]);
+        }
+
         $model = new Usuario();
         $user = $model->validaLogin($cedula, $password);
         if (!$user) {
+            $rateLimit->registrarFallo($cedula);
             $this->jsonError('CREDENCIALES', 'Usuario o contraseña incorrectos.', 401);
         }
+
+        // Credenciales correctas: pone el contador de fallos a cero y deja auditoría.
+        $rateLimit->registrarExito($cedula);
 
         $sesionSvc = new SesionActivaService();
         $sesionActiva = $sesionSvc->obtenerSesionActiva((int) $user['id'], self::CANAL);

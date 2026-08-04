@@ -422,6 +422,10 @@ return [
         'id_submodulo' => 0, // Ajustar con el ID de la base de datos después de la migración
         'legacy_rutas' => [],
     ],
+    'modulos/balance-comprobacion' => [
+        'id_submodulo' => 0, // Ajustar con el ID real tras insertar el submódulo en submodulos_menu (id_modulo=314, Contabilidad)
+        'legacy_rutas' => [],
+    ],
     'modulos/control-bancario' => [
         'id_submodulo' => 0, // Ajustar con el ID real tras ejecutar database/migrations/20260716_menu_control_bancario.sql
         'legacy_rutas' => [],

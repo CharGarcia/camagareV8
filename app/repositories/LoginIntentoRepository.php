@@ -11,15 +11,120 @@ declare(strict_types=1);
 
 namespace App\repositories;
 
+use App\Helpers\FiltrosBusqueda;
 use PDO;
 
 class LoginIntentoRepository
 {
+    /** Columnas de ordenamiento permitidas (whitelist) para el listado de consulta. */
+    private const MAPA_ORDEN = [
+        'created_at'    => 'created_at',
+        'identificador' => 'identificador',
+        'ip'            => 'ip',
+        'exitoso'       => 'exitoso',
+    ];
+
     private PDO $db;
 
     public function __construct()
     {
         $this->db = \App\core\Database::getConnection();
+    }
+
+    /**
+     * Listado paginado de intentos de login, para la pestaña de consulta en
+     * Auditoría del sistema (solo nivel 3: la tabla es global, sin id_empresa).
+     *
+     * @param array{exitoso:?bool,desde:?string,hasta:?string} $filtros
+     * @return array{rows: array, total: int}
+     */
+    public function getListado(string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, array $filtros = []): array
+    {
+        [$where, $params] = $this->construirWhere($buscar, $filtros);
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) FROM login_intentos {$where}");
+        $stCount->execute($params);
+        $total = (int) $stCount->fetchColumn();
+
+        $colSql = self::MAPA_ORDEN[$ordenCol] ?? 'created_at';
+        $dirSql = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+        $perPage = max(1, min(200, $perPage));
+        $offset  = max(0, ($page - 1) * $perPage);
+
+        $sql = "SELECT id, identificador, ip, exitoso, user_agent, created_at
+                FROM login_intentos
+                {$where}
+                ORDER BY {$colSql} {$dirSql}, id {$dirSql}
+                LIMIT {$perPage} OFFSET {$offset}";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Arma el WHERE: filtros explícitos (dropdown resultado/fechas) + búsqueda
+     * por texto libre y tokens (identificador:, ip:, resultado:, fecha:).
+     *
+     * @param array{exitoso:?bool,desde:?string,hasta:?string} $filtros
+     * @return array{0:string,1:array}
+     */
+    private function construirWhere(string $buscar, array $filtros): array
+    {
+        $where  = 'WHERE 1=1';
+        $params = [];
+        $tieneFechaExplicita = false;
+
+        if (array_key_exists('exitoso', $filtros) && $filtros['exitoso'] !== null) {
+            $where .= ' AND exitoso = :f_exitoso';
+            $params[':f_exitoso'] = $filtros['exitoso'] ? 'true' : 'false';
+        }
+        if (!empty($filtros['desde'])) {
+            $where .= ' AND created_at >= :f_desde';
+            $params[':f_desde'] = $filtros['desde'] . ' 00:00:00';
+            $tieneFechaExplicita = true;
+        }
+        if (!empty($filtros['hasta'])) {
+            $where .= ' AND created_at <= :f_hasta';
+            $params[':f_hasta'] = $filtros['hasta'] . ' 23:59:59';
+            $tieneFechaExplicita = true;
+        }
+
+        $parsed = FiltrosBusqueda::parsear($buscar);
+
+        // "resultado:exitoso" / "resultado:fallido": valor de texto, no columna
+        // ILIKE/exacta genérica, así que se traduce a mano antes de aplicarFiltros.
+        if (isset($parsed['filtros']['resultado'])) {
+            $f = $parsed['filtros']['resultado'];
+            $valor = is_array($f['valor']) ? ($f['valor'][0] ?? '') : $f['valor'];
+            $esExitoso = in_array(mb_strtolower((string) $valor, 'UTF-8'), ['exitoso', 'exito', 'éxito', 'ok'], true);
+            $where .= ($f['neg'] ? ' AND exitoso != :f_res' : ' AND exitoso = :f_res');
+            $params[':f_res'] = $esExitoso ? 'true' : 'false';
+            unset($parsed['filtros']['resultado']);
+        }
+
+        if ($parsed['texto_libre'] !== '') {
+            $where .= ' AND (identificador ILIKE :txt OR ip ILIKE :txt)';
+            $params[':txt'] = '%' . $parsed['texto_libre'] . '%';
+        }
+
+        FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'identificador' => 'identificador',
+                'ip'            => 'ip',
+            ],
+            'fecha' => [
+                'fecha' => 'created_at',
+            ],
+        ]);
+
+        // Igual que la bitácora general: sin filtro de fecha explícito, últimos 30 días.
+        if (!isset($parsed['filtros']['fecha']) && !$tieneFechaExplicita) {
+            $where .= " AND created_at >= (CURRENT_DATE - INTERVAL '30 days')";
+        }
+
+        return [$where, $params];
     }
 
     /** Deja constancia de un intento. $identificador es la cédula tecleada. */
