@@ -54,10 +54,16 @@ class UsuariosSistemaController extends Controller
         // Límite de usuarios para admins
         $limiteUsuarios = null;
         $idEmpresaActual = (int) ($_SESSION['id_empresa'] ?? 0);
+        $modelAsignada = new \App\models\EmpresaAsignada();
         if ($idEmpresaActual > 0) {
-            $modelAsignada = new \App\models\EmpresaAsignada();
             $limiteUsuarios = $modelAsignada->getLimiteUsuariosEmpresa($idEmpresaActual);
         }
+
+        // Empresas candidatas para asignar al crear un usuario nuevo: superadmin ve
+        // todas las empresas activas, admin solo las que él mismo tiene asignadas.
+        $empresasParaCrear = $nivel >= 3
+            ? $modelAsignada->getTodasEmpresasParaSelect()
+            : $modelAsignada->getEmpresasDeUsuario($idActual);
 
         $this->viewWithLayout('layouts.main', 'usuariosSistema.index', [
             'titulo' => 'Usuarios del sistema',
@@ -72,6 +78,8 @@ class UsuariosSistemaController extends Controller
             'ordenDir' => $ordenDir,
             'msg' => $msg,
             'limiteUsuarios' => $limiteUsuarios,
+            'empresasParaCrear' => $empresasParaCrear,
+            'idEmpresaActual' => $idEmpresaActual,
         ]);
     }
 

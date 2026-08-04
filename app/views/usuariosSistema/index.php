@@ -21,6 +21,8 @@ $to = $total > 0 ? min($page * $perPage, $total) : 0;
 $msg = $msg ?? null;
 $limiteUsuarios = $limiteUsuarios ?? null;
 $urlRecuperar = rtrim(BASE_URL, '/') . '/auth/enviar-correo-recuperar';
+$empresasParaCrear = $empresasParaCrear ?? [];
+$idEmpresaActual = $idEmpresaActual ?? 0;
 
 function nivelTexto(int $n): string
 {
@@ -266,7 +268,7 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
 <div class="modal fade" id="modalCrearUsuario" tabindex="-1" aria-labelledby="modalCrearUsuarioLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="<?= $base ?>/config/crear-usuario">
+            <form method="POST" action="<?= $base ?>/config/crear-usuario" id="form-crear-usuario">
                 <input type="hidden" name="redirect" value="usuarios-sistema">
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalCrearUsuarioLabel"><i class="bi bi-person-plus"></i> Crear usuario</h5>
@@ -282,10 +284,44 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                         <label for="crear-correo" class="form-label">Correo electrónico</label>
                         <input type="email" id="crear-correo" name="correo" class="form-control" required placeholder="correo@ejemplo.com">
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Empresa<?= count($empresasParaCrear) > 1 ? '(s)' : '' ?> a asignar</label>
+                        <?php if (empty($empresasParaCrear)): ?>
+                            <p class="text-danger small mb-0">No tiene empresas asignadas para asociar al nuevo usuario. Contacte al super administrador.</p>
+                        <?php elseif (count($empresasParaCrear) === 1): ?>
+                            <?php $unica = $empresasParaCrear[0]; ?>
+                            <p class="mb-1">
+                                <span class="badge bg-info bg-opacity-10 text-info border border-info">
+                                    <?= htmlspecialchars($unica['nombre_comercial'] ?? '') ?>
+                                </span>
+                            </p>
+                            <input type="hidden" name="empresas[]" value="<?= (int)($unica['id_empresa'] ?? 0) ?>">
+                            <small class="text-muted">Se asignará automáticamente esta empresa al nuevo usuario.</small>
+                        <?php else: ?>
+                            <input type="text" id="crear-empresa-filtro" class="form-control form-control-sm mb-2" placeholder="Buscar empresa...">
+                            <div class="border rounded p-2" id="crear-empresas-lista" style="max-height:180px; overflow-y:auto;">
+                                <?php foreach ($empresasParaCrear as $e): ?>
+                                    <?php
+                                    $idEmp = (int)($e['id_empresa'] ?? 0);
+                                    $nombreEmp = $e['nombre_comercial'] ?? '';
+                                    $checked = $idEmp === $idEmpresaActual ? 'checked' : '';
+                                    ?>
+                                    <div class="form-check crear-empresa-item" data-nombre="<?= htmlspecialchars(mb_strtolower($nombreEmp)) ?>">
+                                        <input class="form-check-input" type="checkbox" name="empresas[]" value="<?= $idEmp ?>" id="crear-emp-<?= $idEmp ?>" <?= $checked ?>>
+                                        <label class="form-check-label small" for="crear-emp-<?= $idEmp ?>">
+                                            <?= htmlspecialchars($nombreEmp) ?>
+                                            <span class="text-muted">(<?= htmlspecialchars($e['ruc'] ?? '') ?>)</span>
+                                        </label>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <small class="text-muted">Seleccione al menos una empresa para el nuevo usuario.</small>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-person-plus"></i> Crear usuario</button>
+                    <button type="submit" class="btn btn-success" <?= empty($empresasParaCrear) ? 'disabled' : '' ?>><i class="bi bi-person-plus"></i> Crear usuario</button>
                 </div>
             </form>
         </div>
@@ -518,6 +554,86 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
             cargarEmpresasDisponibles();
             cargarEmpresasParaResponsables();
             new bootstrap.Modal(modal).show();
+        }
+
+        // Filtro de empresas en el modal de crear usuario (cuando hay varias)
+        var filtroEmpresa = document.getElementById('crear-empresa-filtro');
+        if (filtroEmpresa) {
+            filtroEmpresa.addEventListener('input', function() {
+                var q = this.value.trim().toLowerCase();
+                document.querySelectorAll('#crear-empresas-lista .crear-empresa-item').forEach(function(item) {
+                    item.style.display = item.dataset.nombre.indexOf(q) !== -1 ? '' : 'none';
+                });
+            });
+        }
+
+        // Crear usuario (AJAX + SweetAlert)
+        var formCrear = document.getElementById('form-crear-usuario');
+        if (formCrear) {
+            formCrear.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                var checks = formCrear.querySelectorAll('input[name="empresas[]"]');
+                if (checks.length > 1) {
+                    var algunaMarcada = Array.prototype.some.call(checks, function(c) { return c.checked; });
+                    if (!algunaMarcada) {
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire('Atención', 'Seleccione al menos una empresa para el nuevo usuario.', 'warning');
+                        } else {
+                            alert('Seleccione al menos una empresa para el nuevo usuario.');
+                        }
+                        return;
+                    }
+                }
+
+                var btnSubmit = formCrear.querySelector('button[type="submit"]');
+                if (btnSubmit) btnSubmit.disabled = true;
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: 'Creando usuario...',
+                        text: 'Enviando correo de invitación al nuevo usuario.',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: function() { Swal.showLoading(); }
+                    });
+                }
+
+                var formData = new FormData(formCrear);
+                fetch(formCrear.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    if (res.ok) {
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({ icon: 'success', title: 'Usuario creado', text: res.msg }).then(function() {
+                                location.reload();
+                            });
+                        } else {
+                            alert(res.msg);
+                            location.reload();
+                        }
+                    } else {
+                        if (btnSubmit) btnSubmit.disabled = false;
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire('No se pudo crear', res.msg || 'Error desconocido.', 'error');
+                        } else {
+                            alert(res.msg || 'Error al crear el usuario.');
+                        }
+                    }
+                })
+                .catch(function() {
+                    if (btnSubmit) btnSubmit.disabled = false;
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire('Error', 'Error de conexión. Intente de nuevo.', 'error');
+                    } else {
+                        alert('Error de conexión. Intente de nuevo.');
+                    }
+                });
+            });
         }
 
         // Interceptar formulario de edición (AJAX)

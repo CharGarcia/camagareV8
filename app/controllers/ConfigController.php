@@ -931,7 +931,12 @@ class ConfigController extends Controller
     {
         $this->requireAuth();
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+
         if ($nivel < 2) {
+            if ($esAjax) {
+                $this->json(['ok' => false, 'msg' => 'No tiene permisos.']);
+            }
             $_SESSION['config_msg'] = ['danger', 'No tiene permisos.'];
             $this->redirect(BASE_URL . '/config');
         }
@@ -951,9 +956,36 @@ class ConfigController extends Controller
             };
             $targetUrl = BASE_URL . '/config/' . $redirectTo;
 
-            if ($nombre === '' || $correo === '') {
-                $_SESSION[$msgKey] = ['danger', 'Nombre y correo son obligatorios.'];
+            $fallar = function (string $msg) use ($esAjax, $msgKey, $targetUrl): never {
+                if ($esAjax) {
+                    $this->json(['ok' => false, 'msg' => $msg]);
+                }
+                $_SESSION[$msgKey] = ['danger', $msg];
                 $this->redirect($targetUrl);
+            };
+
+            if ($nombre === '' || $correo === '') {
+                $fallar('Nombre y correo son obligatorios.');
+            }
+
+            // Empresas a asignar al nuevo usuario (solo cuando el formulario las envía,
+            // p. ej. modal de config/usuarios-sistema). Nivel 3: cualquier empresa activa.
+            // Nivel 2: únicamente las que él mismo tiene asignadas (empresa_asignada).
+            $idsEmpresasPost = array_map('intval', (array) ($_POST['empresas'] ?? []));
+            $idsEmpresasPost = array_values(array_unique(array_filter($idsEmpresasPost, fn($v) => $v > 0)));
+            $idsEmpresasValidas = [];
+            if (!empty($idsEmpresasPost)) {
+                $modelAsignadaEmp = new \App\models\EmpresaAsignada();
+                if ($nivel >= 3) {
+                    $permitidas = array_column($modelAsignadaEmp->getTodasEmpresasParaSelect(), 'id_empresa');
+                } else {
+                    $permitidas = array_column($modelAsignadaEmp->getEmpresasDeUsuario($idAdmin), 'id_empresa');
+                }
+                $permitidas = array_map('intval', $permitidas);
+                $idsEmpresasValidas = array_values(array_intersect($idsEmpresasPost, $permitidas));
+                if (empty($idsEmpresasValidas)) {
+                    $fallar('Las empresas seleccionadas no son válidas para su usuario.');
+                }
             }
 
             // Validar límite de usuarios por empresa para admins (nivel < 3)
@@ -963,8 +995,7 @@ class ConfigController extends Controller
                     $modelAsignada = new \App\models\EmpresaAsignada();
                     $limite = $modelAsignada->getLimiteUsuariosEmpresa($idEmpresaActual);
                     if ($limite['actual'] >= $limite['max']) {
-                        $_SESSION[$msgKey] = ['danger', "Ha alcanzado el límite de {$limite['max']} usuario(s) permitidos para esta empresa. Contacte al super administrador para ampliar el límite."];
-                        $this->redirect($targetUrl);
+                        $fallar("Ha alcanzado el límite de {$limite['max']} usuario(s) permitidos para esta empresa. Contacte al super administrador para ampliar el límite.");
                     }
                 }
             }
@@ -974,6 +1005,13 @@ class ConfigController extends Controller
                 $resultado = $model->crearPorCorreo($nombre, $correo, $idAdmin);
                 $idNuevo = $resultado['id'];
                 $token = $resultado['token'];
+
+                if (!empty($idsEmpresasValidas)) {
+                    $modelAsignadaEmp = $modelAsignadaEmp ?? new \App\models\EmpresaAsignada();
+                    foreach ($idsEmpresasValidas as $idEmp) {
+                        $modelAsignadaEmp->asignar($idEmp, $idNuevo, $idAdmin);
+                    }
+                }
 
                 if ($token !== '') {
                     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
@@ -985,14 +1023,16 @@ class ConfigController extends Controller
                     enviar_correo_nuevo_usuario($nombre, $correo, $urlInvite);
                 }
 
-                $_SESSION[$msgKey] = ['success', 'Usuario creado. Se ha enviado un correo a ' . $correo . ' para que complete su registro.'];
+                $msgExito = 'Usuario creado. Se ha enviado un correo a ' . $correo . ' para que complete su registro.';
+                if ($esAjax) {
+                    $this->json(['ok' => true, 'msg' => $msgExito]);
+                }
+                $_SESSION[$msgKey] = ['success', $msgExito];
                 $this->redirect($targetUrl);
             } catch (\InvalidArgumentException $e) {
-                $_SESSION[$msgKey] = ['danger', $e->getMessage()];
-                $this->redirect($targetUrl);
+                $fallar($e->getMessage());
             } catch (\Throwable $e) {
-                $_SESSION[$msgKey] = ['danger', 'Error al crear usuario: ' . $e->getMessage()];
-                $this->redirect($targetUrl);
+                $fallar('Error al crear usuario: ' . $e->getMessage());
             }
         }
 

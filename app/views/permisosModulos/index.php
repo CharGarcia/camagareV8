@@ -854,6 +854,15 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                     if (Array.isArray(data) && data.length > 0) {
                         tsEmpresa.addOptions(data);
                         tsEmpresa.refreshOptions(false);
+                        // Si el usuario solo tiene una empresa asignada, se selecciona
+                        // automáticamente y se avanza directo a mostrar los submódulos.
+                        if (data.length === 1) {
+                            tsEmpresa.setValue(data[0].value, true);
+                            var empresaMsgEl = document.getElementById('empresa-msg');
+                            if (empresaMsgEl) empresaMsgEl.classList.add('d-none');
+                            var formBuscar = document.getElementById('form-permisos-buscar');
+                            if (formBuscar) formBuscar.submit();
+                        }
                     }
                 })
                 .catch(function() {});
@@ -866,9 +875,9 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                 return;
             }
             actualizarUsuarioPaso2();
-            cargarEmpresas(idU);
             paso1.style.display = 'none';
             paso2.style.display = 'block';
+            cargarEmpresas(idU);
         });
 
         btnAnterior.addEventListener('click', function() {
