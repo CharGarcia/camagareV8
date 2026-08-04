@@ -398,6 +398,11 @@ class ComprasRepository extends BaseRepository
 
     public function insertCabecera(array $data): int
     {
+        // tipo_ambiente NO se toma de $data: el formulario manual nunca lo envía y quedaría
+        // en 1 por defecto, mientras el listado filtra contra el ambiente ACTUAL de la
+        // empresa (getListado(), ~línea 43) — un desfase deja la compra invisible para
+        // siempre (mismo bug ya visto en Kardex y Pedidos). Se toma en vivo de `empresas`,
+        // igual que ya hace DocumentoAutomatedRegisterService para las cargas del SRI.
         $sql = "INSERT INTO compras_cabecera (
                     id_empresa, id_proveedor, id_establecimiento,
                     id_sustento_tributario, tipo_comprobante, tipo_id_proveedor,
@@ -410,7 +415,8 @@ class ComprasRepository extends BaseRepository
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?,
+                    (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                 ) RETURNING id";
 
         $params = [
@@ -442,7 +448,7 @@ class ComprasRepository extends BaseRepository
             (int)   $data['id_usuario'], // created_by
             (int)   $data['id_usuario'], // updated_by
             (int)   $data['id_usuario'], // id_usuario
-            (int)   ($data['tipo_ambiente'] ?? 1) // tipo_ambiente
+            (int)   $data['id_empresa'], // → subconsulta tipo_ambiente
         ];
 
         return (int) $this->query($sql, $params)->fetchColumn();

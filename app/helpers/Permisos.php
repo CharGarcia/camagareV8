@@ -55,6 +55,13 @@ class Permisos
             'eliminar' => true, 'todo' => true,
         ];
 
+        // Nivel 3 (superadmin): acceso total incondicional. NO depende de modulos_asignados
+        // — ni de que no exista fila, ni de lo que esa fila diga si existiera. Se resuelve
+        // antes de tocar el modelo/BD para no quedar nunca sujeto a datos de permisos.
+        if ($nivel >= 3) {
+            return self::$cache[$key] = $todos + ['id_submodulo' => null];
+        }
+
         try {
             $model = self::model();
             $idSub = $model->getIdSubmoduloPorRutaMvc($pathMvc);
@@ -64,16 +71,13 @@ class Permisos
                 'eliminar' => false, 'todo' => false, 'id_submodulo' => $idSub,
             ];
 
-            // Nivel 3 (superadmin): acceso total, aun sin id_submodulo detectado.
             if ($idSub === null) {
-                $res = $nivel >= 3 ? ($todos + ['id_submodulo' => null]) : $base;
-                return self::$cache[$key] = $res;
+                return self::$cache[$key] = $base;
             }
 
             $map = $model->getPermisosDeUsuario($idU, $idE);
             if (!isset($map[$idSub])) {
-                $res = $nivel >= 3 ? ($todos + ['id_submodulo' => $idSub]) : $base;
-                return self::$cache[$key] = $res;
+                return self::$cache[$key] = $base;
             }
 
             $p = $map[$idSub];
@@ -86,10 +90,11 @@ class Permisos
                 'id_submodulo' => $idSub,
             ];
         } catch (\Throwable $e) {
-            // Ante cualquier error, nivel 3 conserva acceso; el resto queda sin permiso.
-            return self::$cache[$key] = ($nivel >= 3
-                ? ($todos + ['id_submodulo' => null])
-                : ['ver' => false, 'crear' => false, 'actualizar' => false, 'eliminar' => false, 'todo' => false, 'id_submodulo' => null]);
+            // Nivel 3 ya se resolvió arriba sin tocar el modelo; aquí solo caen niveles 1-2.
+            return self::$cache[$key] = [
+                'ver' => false, 'crear' => false, 'actualizar' => false,
+                'eliminar' => false, 'todo' => false, 'id_submodulo' => null,
+            ];
         }
     }
 

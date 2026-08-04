@@ -4995,7 +4995,10 @@ $totalPages = $totalPagesOriginal;
         try {
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getFacturaAjax?id=${id}`);
             const json = await resp.json();
-            if (!json.ok) return;
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'No se pudo cargar la factura', text: json.mensaje || json.error || 'Intenta cerrar y volver a abrir esta factura.' });
+                return;
+            }
 
             const cab = json.cabecera;
 
@@ -5394,6 +5397,7 @@ $totalPages = $totalPagesOriginal;
 
         } catch (err) {
             console.error('Error cargando factura:', err);
+            Swal.fire({ icon: 'error', title: 'No se pudo cargar la factura', text: 'Ocurrió un error de conexión. Intenta cerrar y volver a abrir esta factura.' });
         } finally {
             // Liberar el bloqueo: a partir de aquÃ­ cualquier cambio manual de punto de emisiÃ³n
             // podrÃ¡ volver a cargar el siguiente consecutivo normalmente

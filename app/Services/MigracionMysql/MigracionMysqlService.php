@@ -3217,13 +3217,14 @@ class MigracionMysqlService
         // Ids válidos de sustento tributario en el sistema nuevo (para no romper la FK; viejo y nuevo comparten ids)
         $sustValidos = [];
         foreach ($pg->query("SELECT id FROM sustento_tributario") as $s) { $sustValidos[(int) $s['id']] = true; }
-        // Claves ELECTRÓNICAS (49 díg.) ya usadas en la empresa: el viejo a veces repite la MISMA clave en
-        // varias compras (dato duplicado) y el índice único uq_compras_numaut_activo (solo 49 díg.) lo
-        // rechaza (23505). La 2ª+ ocurrencia va con numero_autorizacion NULL. Las FÍSICAS (10 díg.) se
+        // Claves ELECTRÓNICAS (49 díg.) ya usadas en la empresa → id de la compra dueña. El viejo a veces
+        // repite la MISMA clave en varias compras (dato duplicado) y el índice único uq_compras_numaut_activo
+        // (solo 49 díg.) lo rechaza (23505); la 2ª+ ocurrencia va con numero_autorizacion NULL. Se guarda el
+        // id dueño para que al RECONCILIAR una compra no se anule su PROPIA clave. Las FÍSICAS (10 díg.) se
         // comparten entre documentos del talonario y NO se deduplican, así que no se cargan aquí.
         $authUsadas = [];
-        foreach ($pg->query("SELECT numero_autorizacion FROM compras_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false AND numero_autorizacion IS NOT NULL AND length(regexp_replace(numero_autorizacion, '[^0-9]', '', 'g')) = 49") as $a) {
-            $authUsadas[(string) $a['numero_autorizacion']] = true;
+        foreach ($pg->query("SELECT id, numero_autorizacion FROM compras_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false AND numero_autorizacion IS NOT NULL AND length(regexp_replace(numero_autorizacion, '[^0-9]', '', 'g')) = 49") as $a) {
+            $authUsadas[(string) $a['numero_autorizacion']] = (int) $a['id'];
         }
         // id_comprobante viejo -> código SRI (01 factura, 03 liquidación, 04 NC, 05 ND...). NO todos son facturas.
         $mapComprobante = [];
@@ -3249,7 +3250,7 @@ class MigracionMysqlService
         $delDetImp = $pg->prepare("DELETE FROM compras_detalle_impuestos WHERE id_compra_detalle IN (SELECT id FROM compras_detalle WHERE id_compra = ?)");
         $delDet    = $pg->prepare("DELETE FROM compras_detalle WHERE id_compra = ?");
         // Al re-correr: actualiza el ambiente y los datos tributarios de una compra ya migrada, según la empresa actual
-        $updCab = $pg->prepare("UPDATE compras_cabecera SET tipo_ambiente = :amb, tipo_comprobante = :tcomp, documento_modificado = :docmod, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
+        $updCab = $pg->prepare("UPDATE compras_cabecera SET numero_autorizacion = :aut, tipo_ambiente = :amb, tipo_comprobante = :tcomp, documento_modificado = :docmod, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
         // Formas de pago SRI de la compra: viejo formas_pago_compras → nuevo compras_pagos (enlaza por codigo_documento)
         $fpStmt  = $mysql->prepare("SELECT forma_pago, total_pago, plazo_pago, tiempo_pago FROM formas_pago_compras WHERE codigo_documento = :cd");
         $insPago = $pg->prepare("INSERT INTO compras_pagos (id_compra, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
@@ -3287,12 +3288,19 @@ class MigracionMysqlService
             $tcomp = $mapComprobante[(int) $ec['id_comprobante']] ?? '01'; // 01 factura, 03 liquidación, 04 NC, 05 ND...
             // Documento que modifica (solo NC '04' / ND '05'): viejo factura_aplica_nc_nd (ya viene con guiones)
             $docmod = in_array($tcomp, ['04', '05'], true) ? (trim((string) $ec['factura_aplica_nc_nd']) ?: null) : null;
+            // Autorización SRI: física (10 díg.) se conserva tal cual; electrónica (49 díg.) es única por
+            // empresa (índice) → se dedup contra otras compras (no contra sí misma).
+            $aut = self::numAutorizacion($ec['aut_sri']);
+            $autEsElectronica = ($aut !== null && strlen(preg_replace('/\D/', '', $aut)) === 49);
             // Ya migrada: reconciliar ambiente + datos tributarios con la configuración ACTUAL de la empresa (re-corrida)
             if (isset($mapCompra[(string) $old])) {
                 $idExist = (int) $mapCompra[(string) $old];
+                // dedup electrónica excluyendo la PROPIA compra (su clave ya está en $authUsadas apuntando a sí misma)
+                $autRec = ($autEsElectronica && isset($authUsadas[$aut]) && $authUsadas[$aut] !== $idExist) ? null : $aut;
                 try {
                     $pg->beginTransaction();
-                    $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
+                    $updCab->execute([':aut' => $autRec, ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
+                    if ($autEsElectronica && $autRec !== null) { $authUsadas[$aut] = $idExist; }
                     // Rehacer detalle + impuestos desde el cuerpo viejo: corrige el IVA de corridas
                     // viejas que usaban `impuesto` (siempre '2'=12%) en vez de `det_impuesto`.
                     $delDetImp->execute([$idExist]);
@@ -3348,15 +3356,12 @@ class MigracionMysqlService
                 $tsi = 0.0; $tdes = 0.0;
                 foreach ($lineas as $l) { $tsi += (float) $l['subtotal'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
 
-                $aut = self::numAutorizacion($ec['aut_sri']);
-                // Solo las autorizaciones ELECTRÓNICAS (clave de 49 dígitos) son únicas por empresa. Las
-                // FÍSICAS (autorización de impresión de 10 dígitos) se comparten legítimamente entre
-                // documentos del mismo talonario → NO se deduplican (el índice único solo aplica a las de 49).
-                $autEsElectronica = ($aut !== null && strlen(preg_replace('/\D/', '', $aut)) === 49);
-                if ($autEsElectronica && isset($authUsadas[$aut])) { $aut = null; } // clave electrónica repetida en el viejo → evita 23505
+                // $aut / $autEsElectronica ya calculados arriba. Solo las electrónicas (49 díg.) se deduplican
+                // (evita 23505); las físicas (10 díg., compartidas por talonario) se conservan siempre.
+                $autIns = ($autEsElectronica && isset($authUsadas[$aut])) ? null : $aut;
                 $insCab->execute([
                     ':e' => $idEmpresa, ':prov' => $idProv, ':est' => $est, ':pto' => $pto, ':sec' => $sec,
-                    ':aut' => $aut, ':fe' => $fe,
+                    ':aut' => $autIns, ':fe' => $fe,
                     ':fr' => substr((string) $ec['fecha_registro'], 0, 19) ?: null, ':tot' => (float) $ec['total_compra'],
                     ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
                     ':obs' => null, ':treg' => $treg, ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
@@ -3364,7 +3369,7 @@ class MigracionMysqlService
                     ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario,
                 ]);
                 $idCompra = (int) $insCab->fetchColumn();
-                if ($autEsElectronica && $aut !== null) { $authUsadas[$aut] = true; }
+                if ($autEsElectronica && $autIns !== null) { $authUsadas[$aut] = $idCompra; }
 
                 foreach ($lineas as $l) {
                     $base_i = (float) $l['subtotal'] - (float) $l['descuento'];

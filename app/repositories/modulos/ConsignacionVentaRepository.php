@@ -23,16 +23,52 @@ class ConsignacionVentaRepository extends BaseRepository
             $params[':uid'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $where .= " AND (cv.secuencial ILIKE :b OR c.nombre ILIKE :b OR c.identificacion ILIKE :b OR v.nombre ILIKE :b OR cv.estado ILIKE :b)";
-            $params[':b'] = "%$buscar%";
+        $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        $textoLibre = $parsed['texto_libre'];
+        $filtros    = $parsed['filtros'];
+
+        if ($textoLibre !== '') {
+            $where .= " AND (cv.secuencial ILIKE :b OR c.nombre ILIKE :b OR c.identificacion ILIKE :b OR v.nombre ILIKE :b OR cv.estado ILIKE :b OR cv.observaciones ILIKE :b)";
+            $params[':b'] = "%$textoLibre%";
         }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
+            'texto' => [
+                'serie'          => 'cv.secuencial',
+                'secuencial'     => 'cv.secuencial',
+                'numero'         => 'cv.secuencial',
+                'cliente'        => 'c.nombre',
+                'ruc'            => 'c.identificacion',
+                'identificacion' => 'c.identificacion',
+                'vendedor'       => 'v.nombre',
+                'asesor'         => 'v.nombre',
+                'responsable'    => 'rt.nombre',
+                'obs'            => 'cv.observaciones',
+                'observacion'    => 'cv.observaciones',
+                'observaciones'  => 'cv.observaciones',
+            ],
+            'exacto' => [
+                'estado' => 'cv.estado',
+            ],
+            'fecha' => [
+                'fecha'         => 'cv.fecha_emision',
+                'fecha_emision' => 'cv.fecha_emision',
+                'entrega'       => 'cv.fecha_entrega',
+                'fecha_entrega' => 'cv.fecha_entrega',
+            ],
+            'numerico' => [
+                'total'    => 'cv.total',
+                'monto'    => 'cv.total',
+                'subtotal' => 'cv.subtotal',
+            ],
+        ]);
 
         $sqlCount = "
             SELECT COUNT(*)
             FROM consignaciones_ventas cv
             INNER JOIN clientes c ON c.id = cv.id_cliente
             LEFT JOIN vendedores v ON v.id = cv.id_vendedor
+            LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
             $where
         ";
         $stCount = $this->db->prepare($sqlCount);

@@ -73,9 +73,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             containerId: 'fbBuscadorCONS',
                             hiddenInputId: 'b',
                             fields: [
+                                { key: 'fecha',      label: 'Fecha emisión',     icon: 'bi-calendar',       type: 'date_range' },
                                 { key: 'serie',      label: 'Serie/Secuencial',  icon: 'bi-hash',           type: 'text' },
                                 { key: 'cliente',    label: 'Cliente',           icon: 'bi-person',         type: 'text' },
                                 { key: 'vendedor',   label: 'Vendedor',          icon: 'bi-person-badge',   type: 'text' },
+                                { key: 'responsable',label: 'Resp. traslado',    icon: 'bi-truck',          type: 'text' },
+                                { key: 'total',      label: 'Total',             icon: 'bi-currency-dollar',type: 'number_range' },
                                 { key: 'estado',     label: 'Estado',            icon: 'bi-flag',           type: 'select', options: [
                                     { v: 'Emitida',   l: 'Emitida' },
                                     { v: 'Borrador',  l: 'Borrador' },
@@ -86,6 +89,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             quickFilters: [
                                 { id: 'qf_emitida',   label: 'Emitidas',   mk: () => ({ key: 'estado', op: '=', value: 'Emitida',   display: 'Emitidas' }) },
                                 { id: 'qf_entregada', label: 'Entregadas', mk: () => ({ key: 'estado', op: '=', value: 'Entregada', display: 'Entregadas' }) },
+                                { id: 'qf_hoy',       label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
+                                { id: 'qf_mes',       label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
                             ],
                             onApply: () => { g_paginaActual = 1; cargarGrid(); },
                         }).init();
@@ -267,11 +272,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 document.getElementById('pagination-controls').innerHTML = data.pagination;
                 document.querySelector('.pdf-export-btn').href = data.pdf_url;
                 document.querySelector('.excel-export-btn').href = data.excel_url;
-                
-                if (typeof guardarPreferenciaVista === 'function') {
-                    guardarPreferenciaVista('consignaciones-ventas', '__ordenCol__', g_ordenCol);
-                    guardarPreferenciaVista('consignaciones-ventas', '__ordenDir__', g_ordenDir);
-                }
             }
         } catch(e) {
             console.error(e);

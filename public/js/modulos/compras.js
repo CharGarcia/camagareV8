@@ -490,8 +490,11 @@ function CMG_resetModal() {
     
     if (document.getElementById('tbodyDetalle')) document.getElementById('tbodyDetalle').innerHTML = '';
     if (document.getElementById('mc-container-pagos-sri')) document.getElementById('mc-container-pagos-sri').innerHTML = '';
-    
-    CMG_agregarFormaPagoSRI('', 0);
+
+    // Compra nueva = tipo_registro 'fisica' por defecto (ver arriba); su forma de
+    // pago SRI se preselecciona en '20' (Otros con utilización del sistema
+    // financiero). Sigue siendo editable, es solo el valor inicial.
+    CMG_agregarFormaPagoSRI('20', 0);
 
     if (document.getElementById('mcDiasCredito')) document.getElementById('mcDiasCredito').value = 0;
     if (document.getElementById('mcPlazoSRI')) document.getElementById('mcPlazoSRI').value = 'Días';
