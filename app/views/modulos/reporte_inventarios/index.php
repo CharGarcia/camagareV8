@@ -569,10 +569,10 @@
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
                                     <select id="ri-cv-estado" class="form-select form-select-sm shadow-none border">
-                                        <option value="Entregada" selected>Entregada</option>
+                                        <option value="TODOS" selected>Todos</option>
+                                        <option value="Entregada">Entregada</option>
                                         <option value="Emitida">Emitida</option>
                                         <option value="Anulada">Anulada</option>
-                                        <option value="TODOS">Todos</option>
                                     </select>
                                 </div>
                                 <div class="col-md-2">
@@ -684,14 +684,13 @@
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
                             <tr class="text-secondary">
-                                <th>Producto</th><th>Bodega</th>
+                                <th>Producto</th><th>Bodega</th><th>Lote</th><th>NUP</th>
                                 <th class="text-end">Consignado</th><th class="text-end">Retornado</th><th class="text-end">Facturado</th>
-                                <th class="text-end">Saldo</th><th class="text-end">Costo unit.</th><th class="text-end">Valor a costo</th>
-                                <th class="text-center">Estado</th>
+                                <th class="text-end">Saldo</th>
                             </tr>
                         </thead>
                         <tbody id="ri-cv-modal-tbody">
-                            <tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                            <tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                         </tbody>
                     </table>
                 </div>

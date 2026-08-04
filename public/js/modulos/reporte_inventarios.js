@@ -444,7 +444,7 @@ window.RI_Consignaciones = {
             this.modalInstance = new bootstrap.Modal(document.getElementById('ri-cv-modal-detalle'));
         }
         const tbody = document.getElementById('ri-cv-modal-tbody');
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
         ['secuencial', 'fecha', 'cliente', 'vendedor', 'estado'].forEach(k => {
             document.getElementById('ri-cv-modal-' + k).textContent = '';
         });
@@ -454,7 +454,7 @@ window.RI_Consignaciones = {
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) {
-                    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
                     return;
                 }
                 const c = res.cabecera;
@@ -467,7 +467,7 @@ window.RI_Consignaciones = {
             })
             .catch(err => {
                 console.error(err);
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
             });
     },
 

@@ -3217,11 +3217,12 @@ class MigracionMysqlService
         // Ids válidos de sustento tributario en el sistema nuevo (para no romper la FK; viejo y nuevo comparten ids)
         $sustValidos = [];
         foreach ($pg->query("SELECT id FROM sustento_tributario") as $s) { $sustValidos[(int) $s['id']] = true; }
-        // numero_autorizacion ya usados en la empresa: el viejo a veces repite la MISMA autorización en
-        // varias compras (dato duplicado) y el índice único uq_compras_numaut_activo lo rechaza (23505).
-        // Se conserva el documento pero la 2ª+ ocurrencia va con numero_autorizacion NULL.
+        // Claves ELECTRÓNICAS (49 díg.) ya usadas en la empresa: el viejo a veces repite la MISMA clave en
+        // varias compras (dato duplicado) y el índice único uq_compras_numaut_activo (solo 49 díg.) lo
+        // rechaza (23505). La 2ª+ ocurrencia va con numero_autorizacion NULL. Las FÍSICAS (10 díg.) se
+        // comparten entre documentos del talonario y NO se deduplican, así que no se cargan aquí.
         $authUsadas = [];
-        foreach ($pg->query("SELECT numero_autorizacion FROM compras_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false AND numero_autorizacion IS NOT NULL AND numero_autorizacion <> ''") as $a) {
+        foreach ($pg->query("SELECT numero_autorizacion FROM compras_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false AND numero_autorizacion IS NOT NULL AND length(regexp_replace(numero_autorizacion, '[^0-9]', '', 'g')) = 49") as $a) {
             $authUsadas[(string) $a['numero_autorizacion']] = true;
         }
         // id_comprobante viejo -> código SRI (01 factura, 03 liquidación, 04 NC, 05 ND...). NO todos son facturas.
@@ -3348,7 +3349,11 @@ class MigracionMysqlService
                 foreach ($lineas as $l) { $tsi += (float) $l['subtotal'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
 
                 $aut = self::numAutorizacion($ec['aut_sri']);
-                if ($aut !== null && isset($authUsadas[$aut])) { $aut = null; } // autorización duplicada en el viejo → no repetir (evita 23505)
+                // Solo las autorizaciones ELECTRÓNICAS (clave de 49 dígitos) son únicas por empresa. Las
+                // FÍSICAS (autorización de impresión de 10 dígitos) se comparten legítimamente entre
+                // documentos del mismo talonario → NO se deduplican (el índice único solo aplica a las de 49).
+                $autEsElectronica = ($aut !== null && strlen(preg_replace('/\D/', '', $aut)) === 49);
+                if ($autEsElectronica && isset($authUsadas[$aut])) { $aut = null; } // clave electrónica repetida en el viejo → evita 23505
                 $insCab->execute([
                     ':e' => $idEmpresa, ':prov' => $idProv, ':est' => $est, ':pto' => $pto, ':sec' => $sec,
                     ':aut' => $aut, ':fe' => $fe,
@@ -3359,7 +3364,7 @@ class MigracionMysqlService
                     ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario,
                 ]);
                 $idCompra = (int) $insCab->fetchColumn();
-                if ($aut !== null) { $authUsadas[$aut] = true; }
+                if ($autEsElectronica && $aut !== null) { $authUsadas[$aut] = true; }
 
                 foreach ($lineas as $l) {
                     $base_i = (float) $l['subtotal'] - (float) $l['descuento'];

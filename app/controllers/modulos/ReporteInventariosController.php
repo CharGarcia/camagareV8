@@ -117,7 +117,7 @@ class ReporteInventariosController extends BaseModuloController
     {
         return [
             'agrupar_por'        => $_REQUEST['agrupar_por'] ?? 'NINGUNO',
-            'estado'             => $_REQUEST['estado'] ?? 'Entregada',
+            'estado'             => $_REQUEST['estado'] ?? 'TODOS',
             'id_cliente'         => $_REQUEST['id_cliente']  ?? '',
             'id_producto'        => $_REQUEST['id_producto'] ?? '',
             'id_bodega'          => $_REQUEST['id_bodega']   ?? '',
@@ -374,18 +374,15 @@ class ReporteInventariosController extends BaseModuloController
     /** Fila de línea de producto dentro del modal de detalle de una consignación. */
     private function filaConsignacionDetalleLinea(array $r): string
     {
-        $saldo = (float) ($r['saldo'] ?? 0);
-        $badge = $saldo > 0 ? '<span class="badge bg-warning text-dark">Pendiente</span>' : '<span class="badge bg-success">Liquidado</span>';
         return '<tr>'
             . '<td class="small">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['nup'] ?? '-') . '</td>'
             . '<td class="text-end small">' . number_format((float) ($r['cantidad_consignada'] ?? 0), 2) . '</td>'
             . '<td class="text-end small">' . number_format((float) ($r['cantidad_retornada'] ?? 0), 2) . '</td>'
             . '<td class="text-end small">' . number_format((float) ($r['cantidad_facturada'] ?? 0), 2) . '</td>'
-            . '<td class="text-end small fw-bold">' . number_format($saldo, 2) . '</td>'
-            . '<td class="text-end small">' . number_format((float) ($r['costo_unitario'] ?? 0), 4) . '</td>'
-            . '<td class="text-end small text-primary">' . number_format((float) ($r['valor_saldo'] ?? 0), 2) . '</td>'
-            . '<td class="text-center">' . $badge . '</td>'
+            . '<td class="text-end small fw-bold">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
             . '</tr>';
     }
 
@@ -421,7 +418,7 @@ class ReporteInventariosController extends BaseModuloController
                     'vendedor'      => $cab['vendedor_nombre'] ?? '-',
                     'estado'        => $cab['estado'] ?? '',
                 ],
-                'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 9),
+                'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 8),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

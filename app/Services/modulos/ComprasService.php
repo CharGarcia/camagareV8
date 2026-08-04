@@ -614,8 +614,17 @@ class ComprasService
             throw new \Exception('Ya existe una compra registrada con ese número de comprobante para este proveedor.');
         }
 
+        // El numero_autorizacion solo es único por documento en comprobantes ELECTRÓNICOS
+        // (es la clave de acceso, 49 dígitos). En comprobantes FÍSICOS, el SRI otorga UN
+        // único número de autorización (10 dígitos) para todo un RANGO de secuenciales
+        // (una chequera completa) — por diseño varias compras físicas del mismo proveedor
+        // comparten el mismo numero_autorizacion con distinto secuencial_prov, y eso es
+        // válido. Ahí el duplicado real ya lo cubre existeSecuencial() arriba. Mismo
+        // criterio que el índice uq_compras_numaut_activo (ver
+        // database/compras_numaut_unico_solo_electronicas.sql): solo aplica con 49 dígitos.
         $numAutorizacion = trim((string)($data['numero_autorizacion'] ?? ''));
-        if ($numAutorizacion !== '') {
+        $esClaveElectronica = strlen(preg_replace('/\D/', '', $numAutorizacion)) === 49;
+        if ($numAutorizacion !== '' && $esClaveElectronica) {
             $existeAutorizacion = $this->repository->existeNumeroAutorizacion(
                 (int)$data['id_empresa'],
                 $numAutorizacion,

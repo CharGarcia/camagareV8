@@ -486,7 +486,7 @@ class ReporteInventarioRepository extends BaseRepository
         $where = "cv.id_empresa = :id_empresa AND cv.eliminado = false AND cvd.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
 
-        $estado = $filtros['estado'] ?? 'Entregada';
+        $estado = $filtros['estado'] ?? 'TODOS';
         if ($estado !== '' && strtoupper($estado) !== 'TODOS') {
             $where .= " AND cv.estado = :estado";
             $params[':estado'] = $estado;
@@ -531,6 +531,7 @@ class ReporteInventarioRepository extends BaseRepository
                        cvd.id AS id_detalle, cvd.id_producto,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        cvd.id_bodega, COALESCE(bo.nombre, '-') AS bodega_nombre,
+                       COALESCE(cvd.lote, '-') AS numero_lote, COALESCE(cvd.nup, '-') AS nup,
                        cvd.cantidad AS cantidad_consignada,
                        COALESCE((" . $this->sqlRetornadoCv() . "), 0) AS cantidad_retornada,
                        COALESCE((" . $this->sqlFacturadoCv() . "), 0) AS cantidad_facturada,
