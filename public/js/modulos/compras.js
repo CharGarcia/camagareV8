@@ -1025,9 +1025,9 @@ window.CMG_mostrarBuscadorInline = function(idx) {
                             const btn = document.createElement('button');
                             btn.className = 'list-group-item list-group-item-action py-1 px-2 small';
                             btn.style.fontSize = '0.65rem';
-                            btn.innerHTML = `<div class="d-flex justify-content-between">
+                            btn.innerHTML = `<div class="d-flex justify-content-between align-items-center gap-2">
                                 <span>${_esc(p.nombre)}</span>
-                                <small class="text-muted">(${_esc(p.codigo_principal || '')})</small>
+                                <small class="text-muted font-monospace flex-shrink-0">${_esc(p.codigo_principal || p.codigo || '')}</small>
                             </div>`;
                             btn.onclick = () => {
                                 _idxAVincularInv = idx;
@@ -2258,12 +2258,12 @@ window.mcSincronizarInventario = function(forceReset = false) {
                                     <i class="bi bi-search me-1"></i> Vincular
                                 </button>
                             </div>
-                            <div class="mt-1 d-none buscador-inline-div" style="max-width: 220px;">
+                            <div class="mt-1 d-none buscador-inline-div" style="max-width: 420px;">
                                 <div class="input-group input-group-sm">
                                     <input type="text" class="form-control form-control-xs input-buscar-inline py-0 px-1" placeholder="Buscar código o nombre..." style="font-size: 0.7rem;">
                                     <button class="btn btn-outline-secondary py-0 px-1" type="button" onclick="CMG_cancelarVinculacionInline(${item.index})"><i class="bi bi-x"></i></button>
                                 </div>
-                                <div class="list-group shadow dropdown-predictivo d-none lista-resultados-inline" style="max-height: 200px; overflow-y: auto;"></div>
+                                <div class="list-group shadow dropdown-predictivo d-none lista-resultados-inline" style="max-height: 260px; overflow-y: auto;"></div>
                             </div>
                         </div>` : ''}
                 </td>

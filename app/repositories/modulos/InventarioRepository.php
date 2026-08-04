@@ -289,6 +289,22 @@ class InventarioRepository extends BaseRepository
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    /** Igual que find(), pero incluye movimientos anulados (eliminado=true) — para verlos/habilitarlos. */
+    public function findIncluyendoEliminados(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT k.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
+                       b.nombre AS bodega_nombre, u.nombre AS usuario_nombre
+                FROM inventario_kardex k
+                INNER JOIN productos p ON p.id = k.id_producto
+                INNER JOIN bodegas   b ON b.id = k.id_bodega
+                LEFT JOIN unidades_medida um ON um.id = k.id_medida
+                LEFT JOIN usuarios   u ON u.id = k.created_by
+                WHERE k.id = :id AND k.id_empresa = :e";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     public function getMovimientosPorReferencia(string $tipo, int $id, int $idEmpresa): array
     {
         $sql = "SELECT k.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
@@ -308,7 +324,10 @@ class InventarioRepository extends BaseRepository
     public function getKardex(int $idEmpresa, array $filtros = [], int $page = 1, int $perPage = 50): array
     {
         $params = [':e' => $idEmpresa];
-        $where  = 'WHERE k.id_empresa = :e AND k.eliminado = false AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)';
+        // "Ver anulados" muestra SOLO los movimientos anulados (eliminado=true), como una
+        // vista separada — el listado normal sigue mostrando solo los activos por defecto.
+        $condEliminado = !empty($filtros['ver_anulados']) ? 'k.eliminado = true' : 'k.eliminado = false';
+        $where  = "WHERE k.id_empresa = :e AND $condEliminado AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)";
 
         // Buscador con sintaxis de tokens (texto libre + filtros clave:valor).
         // Ver §9 CLAUDE.md — mismo patrón que Proveedores.

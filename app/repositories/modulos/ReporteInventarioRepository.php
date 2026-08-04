@@ -79,6 +79,45 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar)";
             $params[':buscar'] = '%' . $filtros['buscar'] . '%';
         }
+        // productos_bodegas es un caché de stock total (no desglosa por lote), así que
+        // lote/NUP/caducidad solo restringen qué producto×bodega aparece: se exige que
+        // exista algún movimiento de kardex con ese dato para ese producto y bodega.
+        if (!empty($filtros['numero_lote'])) {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM inventario_kardex k2
+                WHERE k2.id_producto = pb.id_producto AND k2.id_bodega = pb.id_bodega
+                  AND k2.id_empresa = pb.id_empresa AND k2.eliminado = false
+                  AND k2.numero_lote ILIKE :numero_lote
+            )";
+            $params[':numero_lote'] = '%' . $filtros['numero_lote'] . '%';
+        }
+        if (!empty($filtros['nup'])) {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM inventario_kardex k3
+                WHERE k3.id_producto = pb.id_producto AND k3.id_bodega = pb.id_bodega
+                  AND k3.id_empresa = pb.id_empresa AND k3.eliminado = false
+                  AND k3.nup ILIKE :nup
+            )";
+            $params[':nup'] = '%' . $filtros['nup'] . '%';
+        }
+        if (!empty($filtros['fecha_caducidad_desde'])) {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM inventario_kardex k4
+                WHERE k4.id_producto = pb.id_producto AND k4.id_bodega = pb.id_bodega
+                  AND k4.id_empresa = pb.id_empresa AND k4.eliminado = false
+                  AND k4.fecha_caducidad >= :fecha_caducidad_desde
+            )";
+            $params[':fecha_caducidad_desde'] = $filtros['fecha_caducidad_desde'];
+        }
+        if (!empty($filtros['fecha_caducidad_hasta'])) {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM inventario_kardex k5
+                WHERE k5.id_producto = pb.id_producto AND k5.id_bodega = pb.id_bodega
+                  AND k5.id_empresa = pb.id_empresa AND k5.eliminado = false
+                  AND k5.fecha_caducidad <= :fecha_caducidad_hasta
+            )";
+            $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
+        }
 
         return [$where, $params];
     }
@@ -515,6 +554,22 @@ class ReporteInventarioRepository extends BaseRepository
         if (!empty($filtros['fecha_hasta'])) {
             $where .= " AND cv.fecha_emision <= :fecha_hasta";
             $params[':fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (!empty($filtros['numero_lote'])) {
+            $where .= " AND cvd.lote ILIKE :numero_lote";
+            $params[':numero_lote'] = '%' . $filtros['numero_lote'] . '%';
+        }
+        if (!empty($filtros['nup'])) {
+            $where .= " AND cvd.nup ILIKE :nup";
+            $params[':nup'] = '%' . $filtros['nup'] . '%';
+        }
+        if (!empty($filtros['fecha_caducidad_desde'])) {
+            $where .= " AND cvd.fecha_caducidad >= :fecha_caducidad_desde";
+            $params[':fecha_caducidad_desde'] = $filtros['fecha_caducidad_desde'];
+        }
+        if (!empty($filtros['fecha_caducidad_hasta'])) {
+            $where .= " AND cvd.fecha_caducidad <= :fecha_caducidad_hasta";
+            $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
         }
 
         return [$where, $params];

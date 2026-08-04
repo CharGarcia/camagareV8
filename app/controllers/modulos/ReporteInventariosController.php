@@ -79,6 +79,10 @@ class ReporteInventariosController extends BaseModuloController
             'id_marca'     => $_REQUEST['id_marca']     ?? '',
             'id_producto'  => $_REQUEST['id_producto']  ?? '',
             'estado_stock' => $_REQUEST['estado_stock'] ?? '',
+            'numero_lote'  => trim($_REQUEST['numero_lote'] ?? ''),
+            'nup'          => trim($_REQUEST['nup'] ?? ''),
+            'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
+            'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
             'buscar'       => trim($_REQUEST['buscar']  ?? ''),
         ];
     }
@@ -124,6 +128,10 @@ class ReporteInventariosController extends BaseModuloController
             'id_vendedor'        => $_REQUEST['id_vendedor'] ?? '',
             'fecha_desde'        => $_REQUEST['fecha_desde'] ?? '',
             'fecha_hasta'        => $_REQUEST['fecha_hasta'] ?? '',
+            'numero_lote'        => trim($_REQUEST['numero_lote'] ?? ''),
+            'nup'                => trim($_REQUEST['nup'] ?? ''),
+            'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
+            'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
             'incluir_liquidadas' => !empty($_REQUEST['incluir_liquidadas']),
         ];
     }

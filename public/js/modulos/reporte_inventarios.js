@@ -138,6 +138,8 @@ window.RI_Existencias = {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
             id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', agrupar_por: 'ri-ex-agrupar',
+            numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
+            fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });
 
         const tbody = document.getElementById('ri-ex-tbody');
@@ -184,6 +186,8 @@ window.RI_Existencias = {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
             id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', agrupar_por: 'ri-ex-agrupar',
+            numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
+            fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });
         params.set('tab', 'existencias');
         window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params.toString(), '_blank');
@@ -192,6 +196,8 @@ window.RI_Existencias = {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
             id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', agrupar_por: 'ri-ex-agrupar',
+            numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
+            fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });
         params.set('tab', 'existencias');
         window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params.toString(), '_blank');
@@ -479,6 +485,8 @@ window.RI_Consignaciones = {
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
             id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
+            fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
+            numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup',
             estado: 'ri-cv-estado',
             incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
         });
@@ -536,6 +544,8 @@ window.RI_Consignaciones = {
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
             id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
+            fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
+            numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup',
             estado: 'ri-cv-estado',
             incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
         });

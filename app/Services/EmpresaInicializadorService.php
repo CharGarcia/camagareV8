@@ -286,146 +286,21 @@ class EmpresaInicializadorService
     // ─────────────────────────────────────────────────────────────────
 
     /**
-     * Siembra el catálogo por defecto de tipos y unidades de medida
-     * (App\Helpers\CatalogoMedidas). Completa lo que falte sin tocar
-     * ni duplicar lo que la empresa ya tenga:
-     *   - Reutiliza un tipo existente si coincide por código, nombre o sinónimo
-     *     (p. ej. una empresa con "MASA" no recibe otro tipo "PESO").
-     *   - Omite la unidad si su código ya existe en la empresa. El código debe ser
-     *     único a nivel de empresa porque al importar productos la unidad se
-     *     resuelve solo por código.
-     *   - Omite la unidad si ya hay otra con el mismo nombre en ese tipo.
-     *   - Solo marca es_base cuando el tipo aún no tiene unidad base
-     *     (hay un índice único parcial por id_tipo + id_empresa).
+     * Siembra el catálogo por defecto de tipos y unidades de medida.
+     * Delega en UnidadesMedidaService::sembrarCatalogoDefault(), que es
+     * idempotente (completa lo que falte sin tocar ni duplicar lo que la
+     * empresa ya tenga) y es también el método que usa el botón manual del
+     * módulo modulos/unidades-medida.
      */
     private function crearUnidadesMedidaDefault(int $idEmpresa, int $idUsuario): void
     {
         try {
-            // Tipos existentes, indexados por código y por nombre normalizados
-            $stTipos = $this->db->prepare(
-                "SELECT id, codigo, nombre FROM tipo_medida
-                 WHERE id_empresa = :id_empresa AND eliminado = false"
+            $service = new \App\Services\modulos\UnidadesMedidaService(
+                new \App\repositories\modulos\UnidadesMedidaRepository(),
+                new \App\Rules\modulos\UnidadesMedidaRules(),
+                new \App\Services\LogSistemaService()
             );
-            $stTipos->execute([':id_empresa' => $idEmpresa]);
-
-            $tiposPorClave = [];
-            foreach ($stTipos->fetchAll(\PDO::FETCH_ASSOC) as $t) {
-                foreach ([$t['codigo'], $t['nombre']] as $clave) {
-                    $clave = \App\Helpers\CatalogoMedidas::normalizar((string) $clave);
-                    if ($clave !== '' && !isset($tiposPorClave[$clave])) {
-                        $tiposPorClave[$clave] = (int) $t['id'];
-                    }
-                }
-            }
-
-            // Unidades existentes: códigos ocupados en la empresa, nombres por tipo
-            // y qué tipos ya tienen unidad base.
-            $stUnidades = $this->db->prepare(
-                "SELECT id_tipo, codigo, nombre, es_base FROM unidades_medida
-                 WHERE id_empresa = :id_empresa AND eliminado = false"
-            );
-            $stUnidades->execute([':id_empresa' => $idEmpresa]);
-
-            $codigosUsados  = [];
-            $nombresPorTipo = [];
-            $tiposConBase   = [];
-            foreach ($stUnidades->fetchAll(\PDO::FETCH_ASSOC) as $u) {
-                $idTipoExistente = (int) $u['id_tipo'];
-
-                $cod = \App\Helpers\CatalogoMedidas::normalizar((string) $u['codigo']);
-                if ($cod !== '') {
-                    $codigosUsados[$cod] = true;
-                }
-
-                $nom = \App\Helpers\CatalogoMedidas::normalizar((string) $u['nombre']);
-                if ($nom !== '') {
-                    $nombresPorTipo[$idTipoExistente . '|' . $nom] = true;
-                }
-
-                if (\App\Helpers\Booleano::es($u['es_base'])) {
-                    $tiposConBase[$idTipoExistente] = true;
-                }
-            }
-
-            $insTipo = $this->db->prepare(
-                "INSERT INTO tipo_medida (
-                    id_empresa, id_usuario, codigo, nombre, status,
-                    created_by, updated_by, eliminado
-                 ) VALUES (
-                    :id_empresa, :id_usuario, :codigo, :nombre, true,
-                    :id_usuario, :id_usuario, false
-                 ) RETURNING id"
-            );
-
-            $insUnidad = $this->db->prepare(
-                "INSERT INTO unidades_medida (
-                    id_empresa, id_tipo, codigo, nombre, abreviatura, factor_base,
-                    es_base, status, created_by, updated_by, eliminado
-                 ) VALUES (
-                    :id_empresa, :id_tipo, :codigo, :nombre, :abreviatura, :factor_base,
-                    :es_base, true, :id_usuario, :id_usuario, false
-                 )"
-            );
-
-            foreach (\App\Helpers\CatalogoMedidas::getCatalogo() as $tipo) {
-                $claves = array_merge([$tipo['codigo'], $tipo['nombre']], $tipo['sinonimos']);
-
-                $idTipo = null;
-                foreach ($claves as $clave) {
-                    $clave = \App\Helpers\CatalogoMedidas::normalizar((string) $clave);
-                    if ($clave !== '' && isset($tiposPorClave[$clave])) {
-                        $idTipo = $tiposPorClave[$clave];
-                        break;
-                    }
-                }
-
-                if ($idTipo === null) {
-                    $insTipo->execute([
-                        ':id_empresa' => $idEmpresa,
-                        ':id_usuario' => $idUsuario,
-                        ':codigo'     => $tipo['codigo'],
-                        ':nombre'     => $tipo['nombre'],
-                    ]);
-                    $idTipo = (int) $insTipo->fetchColumn();
-
-                    foreach ($claves as $clave) {
-                        $clave = \App\Helpers\CatalogoMedidas::normalizar((string) $clave);
-                        if ($clave !== '') {
-                            $tiposPorClave[$clave] = $idTipo;
-                        }
-                    }
-                }
-
-                foreach ($tipo['unidades'] as $unidad) {
-                    $codNorm = \App\Helpers\CatalogoMedidas::normalizar($unidad['codigo']);
-                    $nomNorm = \App\Helpers\CatalogoMedidas::normalizar($unidad['nombre']);
-
-                    if (isset($codigosUsados[$codNorm]) || isset($nombresPorTipo[$idTipo . '|' . $nomNorm])) {
-                        continue;
-                    }
-
-                    $esBase = $unidad['es_base'] && !isset($tiposConBase[$idTipo]);
-
-                    $insUnidad->execute([
-                        ':id_empresa'  => $idEmpresa,
-                        ':id_tipo'     => $idTipo,
-                        ':codigo'      => $unidad['codigo'],
-                        ':nombre'      => $unidad['nombre'],
-                        ':abreviatura' => $unidad['abreviatura'],
-                        // number_format evita la notación científica de PHP
-                        // para valores como 0.000001 ("1.0E-6").
-                        ':factor_base' => number_format((float) $unidad['factor_base'], 6, '.', ''),
-                        ':es_base'     => \App\Helpers\Booleano::sql($esBase),
-                        ':id_usuario'  => $idUsuario,
-                    ]);
-
-                    $codigosUsados[$codNorm] = true;
-                    $nombresPorTipo[$idTipo . '|' . $nomNorm] = true;
-                    if ($esBase) {
-                        $tiposConBase[$idTipo] = true;
-                    }
-                }
-            }
+            $service->sembrarCatalogoDefault($idEmpresa, $idUsuario);
         } catch (\Throwable $e) {
             // Nunca impedir que se guarde la empresa: en el siguiente guardado
             // se vuelve a intentar y completa lo que falte.

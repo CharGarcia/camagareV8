@@ -368,18 +368,19 @@ class InventarioService
         }
     }
 
+    /** Incluye anulados: la ficha de un movimiento debe poder verse (y habilitarse) aunque esté anulado. */
     public function getById(int $id, int $idEmpresa): ?array
     {
-        return $this->repo->find($id, $idEmpresa);
+        return $this->repo->findIncluyendoEliminados($id, $idEmpresa);
     }
 
-    public function eliminarMovimiento(int $id, int $idEmpresa, int $idUsuario, bool $ignorarRestriccion = false, ?int $idUsuarioNivel = null, bool $permitirNegativo = false): void
+    public function eliminarMovimiento(int $id, int $idEmpresa, int $idUsuario, bool $ignorarRestriccion = false, ?int $idUsuarioNivel = null, bool $permitirNegativo = false, bool $permitirAnularCompra = false): void
     {
         $mov = $this->repo->find($id, $idEmpresa);
         if (!$mov) throw new \Exception("Movimiento no encontrado.");
 
-        // Restricción: No eliminar movimientos vinculados a documentos (Facturas, etc.), excepto Superadmin
-        $this->validarRestriccionMovimiento($mov, $ignorarRestriccion, $idUsuarioNivel);
+        // Restricción: No eliminar movimientos vinculados a documentos (Facturas, etc.)
+        $this->validarRestriccionMovimiento($mov, $ignorarRestriccion, $idUsuarioNivel, $permitirAnularCompra);
 
         $db = \App\core\Database::getConnection();
         $managedTransaction = !$db->inTransaction();
@@ -411,6 +412,51 @@ class InventarioService
             $st->execute([':id' => $id, ':uid' => $idUsuario]);
 
             $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR_MOV', 'inventario_kardex', $id, $mov, null);
+
+            if ($managedTransaction) $db->commit();
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Inverso de eliminarMovimiento(): reactiva un movimiento anulado por error y
+     * reaplica su impacto en el stock. Solo tiene sentido para movimientos que SÍ
+     * están anulados (eliminado=true); la misma excepción de "vinculado a compra"
+     * aplica, para que solo se pueda habilitar lo que se pudo anular.
+     */
+    public function restaurarMovimiento(int $id, int $idEmpresa, int $idUsuario, bool $permitirAnularCompra = false): void
+    {
+        $mov = $this->repo->findIncluyendoEliminados($id, $idEmpresa);
+        if (!$mov) throw new \Exception("Movimiento no encontrado.");
+        if (empty($mov['eliminado'])) throw new \Exception("Este movimiento no está anulado.");
+
+        $this->validarRestriccionMovimiento($mov, false, null, $permitirAnularCompra);
+
+        $db = \App\core\Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) $db->beginTransaction();
+
+        try {
+            // Reaplicar el stock: sumamos de vuelta el impacto que se había revertido
+            $stockActual = $this->repo->getStockActual((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
+            $nuevoStock  = $stockActual + (float)$mov['cantidad'];
+
+            if ($nuevoStock < 0) {
+                throw new \Exception("No se puede habilitar el movimiento porque el stock resultante sería negativo ({$nuevoStock}).");
+            }
+
+            $this->repo->actualizarStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
+
+            $sql = "UPDATE inventario_kardex
+                    SET eliminado = false, deleted_at = NULL, deleted_by = NULL,
+                        updated_at = CURRENT_TIMESTAMP, updated_by = :uid
+                    WHERE id = :id";
+            $st = $db->prepare($sql);
+            $st->execute([':id' => $id, ':uid' => $idUsuario]);
+
+            $this->log->registrar($idUsuario, $idEmpresa, 'HABILITAR_MOV', 'inventario_kardex', $id, $mov, null);
 
             if ($managedTransaction) $db->commit();
         } catch (\Throwable $e) {
@@ -605,12 +651,19 @@ class InventarioService
      *  2. Si el usuario es nivel 3 (Superadmin).
      *  3. Si el documento de referencia (ej. factura) ya ha sido eliminado.
      */
-    private function validarRestriccionMovimiento(array $mov, bool $ignorarRestriccion = false, ?int $nivelUsuario = null): void
+    private function validarRestriccionMovimiento(array $mov, bool $ignorarRestriccion = false, ?int $nivelUsuario = null, bool $permitirAnularCompra = false): void
     {
         if ($ignorarRestriccion === true) return;
 
         $tipo = $mov['referencia_tipo'] ?? null;
         $idRef = (int)($mov['referencia_id'] ?? 0);
+
+        // Excepción explícita: anular/habilitar (NO editar sus datos, eso sigue bloqueado)
+        // un movimiento generado por una compra, directamente desde /modulos/inventario —
+        // sin tener que ir a editar/eliminar la compra para revertirlo.
+        if ($permitirAnularCompra && in_array($tipo, ['compra', 'nota_credito_compra'], true)) {
+            return;
+        }
 
         if (!empty($tipo) && $tipo !== 'ajuste_manual') {
             // Caso especial: Si el documento de origen ya está eliminado, permitimos la limpieza manual del inventario

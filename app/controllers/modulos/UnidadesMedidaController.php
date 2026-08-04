@@ -211,6 +211,49 @@ class UnidadesMedidaController extends BaseModuloController
         exit;
     }
 
+    // ─── SIEMBRA DE CATÁLOGO DEFAULT ────────────────────────────────────────
+
+    /**
+     * Completa en la empresa actual los tipos/unidades del catálogo default
+     * (App\Helpers\CatalogoMedidas) que aún no existan. No modifica ni duplica
+     * lo que la empresa ya tenga registrado.
+     */
+    public function sembrarCatalogoAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $resultado = $this->service->sembrarCatalogoDefault($idEmpresa, $idUsuario);
+
+            $tipos    = $resultado['tipos_creados'];
+            $unidades = $resultado['unidades_creadas'];
+
+            if ($tipos === 0 && $unidades === 0) {
+                $msg = 'La empresa ya tiene todo el catálogo por defecto. No se creó nada nuevo.';
+            } else {
+                $partes = [];
+                if ($tipos > 0)    $partes[] = $tipos . ' tipo' . ($tipos === 1 ? '' : 's') . ' de medida';
+                if ($unidades > 0) $partes[] = $unidades . ' unidad' . ($unidades === 1 ? '' : 'es') . ' de medida';
+                $msg = 'Se crearon ' . implode(' y ', $partes) . ' que faltaban.';
+            }
+
+            echo json_encode([
+                'ok'               => true,
+                'msg'              => $msg,
+                'tipos_creados'    => $tipos,
+                'unidades_creadas' => $unidades,
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     // ─── TIPOS CRUD ─────────────────────────────────────────────────────────
 
     public function storeTipo(): void

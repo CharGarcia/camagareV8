@@ -623,7 +623,7 @@ class FacturaVentaService
                                 (int)$data['id_empresa'],
                                 $idActual,
                                 ($idActual ? 'factura_venta' : null),
-                                !empty($det['lote']) ? (string)$det['lote'] : null
+                                (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? (string)$det['lote'] : null
                             );
                             
                             $cantidadAcumulada = $cantidadesAgregadas[$key];
@@ -852,7 +852,7 @@ class FacturaVentaService
                                 (int)$data['id_empresa'],
                                 $idActual,
                                 ($idActual ? 'factura_venta' : null),
-                                !empty($det['lote']) ? (string)$det['lote'] : null
+                                (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? (string)$det['lote'] : null
                             );
                             
                             $cantidadAcumulada = $cantidadesAgregadas[$key];

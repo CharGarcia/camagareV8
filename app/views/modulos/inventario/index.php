@@ -118,6 +118,11 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
                 });
             </script>
 
+            <div class="form-check form-switch mb-0 ms-1" title="Mostrar solo los movimientos anulados">
+                <input class="form-check-input" type="checkbox" role="switch" id="chkVerAnulados" onchange="window.fetchSearch(1)">
+                <label class="form-check-label small text-muted" for="chkVerAnulados">Ver anulados</label>
+            </div>
+
             <div class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
                 <?php $qStr = http_build_query($filtros); ?>
@@ -232,7 +237,8 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
 
         window.fetchSearch = async (page = 1) => {
             const term = inputBuscar ? inputBuscar.value.trim() : '';
-            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            const verAnulados = document.getElementById('chkVerAnulados')?.checked ? '1' : '';
+            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}&ver_anulados=${verAnulados}`;
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -268,13 +274,13 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
 
         window.eliminarMovimiento = async function(id) {
             const result = await Swal.fire({
-                title: '¿Eliminar movimiento?',
-                text: 'El stock será revertido automáticamente.',
+                title: '¿Anular movimiento?',
+                text: 'El stock será revertido automáticamente. Queda registrado como anulado y se puede habilitar de nuevo si fue un error.',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#dc3545',
                 cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Sí, eliminar',
+                confirmButtonText: 'Sí, anular',
                 cancelButtonText: 'Cancelar'
             });
             if (!result.isConfirmed) return false;
@@ -286,15 +292,49 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
                 });
                 const json = await resp.json();
                 if (json.ok) {
-                    if (typeof window.INV_toast === 'function') window.INV_toast('success', 'Movimiento eliminado');
-                    else Swal.fire({ icon: 'success', title: 'Movimiento eliminado', timer: 1400, showConfirmButton: false });
+                    if (typeof window.INV_toast === 'function') window.INV_toast('success', 'Movimiento anulado');
+                    else Swal.fire({ icon: 'success', title: 'Movimiento anulado', timer: 1400, showConfirmButton: false });
                     window.fetchSearch(window.currentPage);
                     return true;
                 }
-                Swal.fire({ icon: 'error', title: 'Error', text: json.mensaje || 'No se pudo eliminar.' });
+                Swal.fire({ icon: 'error', title: 'Error', text: json.mensaje || 'No se pudo anular.' });
                 return false;
             } catch (e) {
-                console.error('Error al eliminar:', e);
+                console.error('Error al anular:', e);
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión con el servidor.' });
+                return false;
+            }
+        };
+
+        window.habilitarMovimiento = async function(id) {
+            const result = await Swal.fire({
+                title: '¿Habilitar movimiento?',
+                text: 'El stock volverá a aplicarse tal como estaba antes de anularlo.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, habilitar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!result.isConfirmed) return false;
+            try {
+                const resp = await fetch(`${urlBase}/restaurarAjax`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `id=${id}`
+                });
+                const json = await resp.json();
+                if (json.ok) {
+                    if (typeof window.INV_toast === 'function') window.INV_toast('success', 'Movimiento habilitado');
+                    else Swal.fire({ icon: 'success', title: 'Movimiento habilitado', timer: 1400, showConfirmButton: false });
+                    window.fetchSearch(window.currentPage);
+                    return true;
+                }
+                Swal.fire({ icon: 'error', title: 'Error', text: json.mensaje || 'No se pudo habilitar.' });
+                return false;
+            } catch (e) {
+                console.error('Error al habilitar:', e);
                 Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión con el servidor.' });
                 return false;
             }

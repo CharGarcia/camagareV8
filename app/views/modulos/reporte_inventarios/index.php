@@ -136,6 +136,22 @@
                                     <div id="ri-ex-dropdown-producto" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:calc(100% - 1.5rem);max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                                     <small class="text-muted fst-italic" id="ri-ex-producto-seleccionado"></small>
                                 </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Lote</label>
+                                    <input type="text" id="ri-ex-lote" class="form-control form-control-sm shadow-none border" placeholder="Nro. lote">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">NUP</label>
+                                    <input type="text" id="ri-ex-nup" class="form-control form-control-sm shadow-none border" placeholder="NUP">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Caducidad desde</label>
+                                    <input type="date" id="ri-ex-caducidad-desde" class="form-control form-control-sm shadow-none border">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Caducidad hasta</label>
+                                    <input type="date" id="ri-ex-caducidad-hasta" class="form-control form-control-sm shadow-none border">
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -567,6 +583,23 @@
                                     <input type="date" id="ri-cv-fecha-hasta" class="form-control form-control-sm shadow-none border">
                                 </div>
                                 <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Caducidad desde</label>
+                                    <input type="date" id="ri-cv-caducidad-desde" class="form-control form-control-sm shadow-none border">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Caducidad hasta</label>
+                                    <input type="date" id="ri-cv-caducidad-hasta" class="form-control form-control-sm shadow-none border">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Lote</label>
+                                    <input type="text" id="ri-cv-lote" class="form-control form-control-sm shadow-none border" placeholder="Nro. lote">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">NUP</label>
+                                    <input type="text" id="ri-cv-nup" class="form-control form-control-sm shadow-none border" placeholder="NUP">
+                                </div>
+
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
                                     <select id="ri-cv-estado" class="form-select form-select-sm shadow-none border">
                                         <option value="TODOS" selected>Todos</option>
@@ -575,7 +608,7 @@
                                         <option value="Anulada">Anulada</option>
                                     </select>
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
                                     <select id="ri-cv-agrupar" class="form-select form-select-sm shadow-none border">
                                         <option value="NINGUNO">Detallado</option>
@@ -583,13 +616,13 @@
                                         <option value="PRODUCTO">Por Producto</option>
                                     </select>
                                 </div>
-                                <div class="col-md-2 d-flex align-items-end">
+                                <div class="col-md-3 d-flex align-items-end">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="ri-cv-incluir-liquidadas">
                                         <label class="form-check-label small" for="ri-cv-incluir-liquidadas">Incluir liquidadas</label>
                                     </div>
                                 </div>
-                                <div class="col-md-2 d-flex align-items-end">
+                                <div class="col-md-3 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Generar</button>
                                 </div>
                             </form>

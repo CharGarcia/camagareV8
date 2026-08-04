@@ -60,6 +60,7 @@ $toUni     = $totalUni   > 0 ? min($pageUni * $perPage, $totalUni)   : 0;
     <h5 class="mb-0 fw-bold"><i class="bi bi-rulers"></i> <?= htmlspecialchars($titulo) ?></h5>
     <?php if ($perm['crear']): ?>
     <div class="d-flex gap-2">
+        <button type="button" id="btnSembrarCatalogo" class="btn btn-outline-secondary btn-sm px-3" onclick="sembrarCatalogoDefault()" title="Crea en esta empresa los tipos y unidades del catálogo por defecto que aún no existan"><i class="bi bi-magic"></i> Cargar catálogo por defecto</button>
         <button type="button" id="btnNuevoTipo" class="btn btn-outline-primary btn-sm px-3 <?= $tab !== 'tipos' ? 'd-none' : '' ?>" onclick="abrirModalTipoCrear()"><i class="bi bi-plus-lg"></i> Nuevo Tipo</button>
         <button type="button" id="btnNuevaUnidad" class="btn btn-primary btn-sm px-3 <?= $tab !== 'unidades' ? 'd-none' : '' ?>" onclick="abrirModalUnidadCrear()"><i class="bi bi-plus-lg"></i> Nueva Unidad</button>
     </div>
@@ -401,6 +402,52 @@ include 'modal_unidad.php';
                 : 'bi bi-arrow-down-up small text-muted ms-1';
         });
     }
+
+    // ── Sembrar catálogo por defecto ────────────────────────────────────────
+    window.sembrarCatalogoDefault = async function () {
+        const btn = document.getElementById('btnSembrarCatalogo');
+        const confirmar = window.Swal
+            ? (await Swal.fire({
+                title: 'Cargar catálogo por defecto',
+                text: 'Se crearán en esta empresa los tipos y unidades del catálogo por defecto que aún no existan. No se modifica ni duplica lo que ya está registrado. ¿Continuar?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, cargar',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true
+            })).isConfirmed
+            : confirm('¿Cargar el catálogo por defecto? Se crearán solo los tipos/unidades que aún no existan en esta empresa.');
+
+        if (!confirmar) return;
+
+        if (btn) btn.disabled = true;
+        const oldHtml = btn ? btn.innerHTML : '';
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Cargando...';
+
+        try {
+            const resp = await fetch(`${urlBase}/sembrarCatalogoAjax`, { method: 'POST' });
+            const json = await resp.json();
+
+            if (window.Swal) {
+                Swal.fire({ icon: json.ok ? 'success' : 'error', title: json.ok ? 'Catálogo actualizado' : 'Error', text: json.msg || json.error || '' });
+            } else {
+                alert(json.msg || json.error || '');
+            }
+
+            if (json.ok && (json.tipos_creados > 0 || json.unidades_creadas > 0)) {
+                fetchSearchTipos(1);
+                fetchSearchUnidades(1);
+            }
+        } catch (e) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo completar la operación.' });
+            } else {
+                alert('Error de conexión.');
+            }
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+        }
+    };
 
     // Refresco del selector de tipos en el modal de unidades tras crear un tipo nuevo
     window.addEventListener('tipoMedidaGuardado', function () {

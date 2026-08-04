@@ -127,22 +127,15 @@ class InventarioController extends BaseModuloController
             echo '<tr><td colspan="11" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No se encontraron movimientos con los filtros actuales</td></tr>';
         } else {
             foreach ($rows as $row) {
-                $badgeClass = ($row['tipo_movimiento'] === 'entrada') ? 'badge-entrada' : 'badge-salida'; 
+                $badgeClass = ($row['tipo_movimiento'] === 'entrada') ? 'badge-entrada' : 'badge-salida';
                 $label = ($row['tipo_movimiento'] === 'entrada') ? 'ENTRADA' : 'SALIDA';
                 $fecha = date('d-m-Y H:i:s', strtotime($row['fecha_movimiento']));
                 $cad   = $row['fecha_caducidad'] ? date('d-m-Y', strtotime($row['fecha_caducidad'])) : '-';
                 $signo = ($row['tipo_movimiento'] === 'entrada' ? '+' : '-');
                 $color = ($row['tipo_movimiento'] === 'entrada' ? 'text-success' : 'text-danger');
+                $anulado = !empty($row['eliminado']);
 
-                $acciones = '';
-                if ($this->getPermisos()['actualizar']) {
-                    $acciones .= '<button type="button" class="btn btn-outline-primary btn-sm me-1" onclick="editarMovimiento(' . $row['id'] . ')" title="Editar"><i class="bi bi-pencil"></i></button>';
-                }
-                if ($this->getPermisos()['eliminar']) {
-                    $acciones .= '<button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarMovimiento(' . $row['id'] . ')" title="Eliminar"><i class="bi bi-trash"></i></button>';
-                }
-
-                echo '<tr class="inventario-row" onclick="editarMovimiento(' . $row['id'] . ')">
+                echo '<tr class="inventario-row' . ($anulado ? ' opacity-50' : '') . '" onclick="editarMovimiento(' . $row['id'] . ')">
                         <td class="ps-3 small text-nowrap" data-col="fecha_movimiento">' . $fecha . '</td>
                         <td data-col="producto_nombre">
                             <div class="fw-bold text-dark mb-0">' . htmlspecialchars($row['producto_nombre']) . '</div>
@@ -151,6 +144,7 @@ class InventarioController extends BaseModuloController
                         <td class="small" data-col="bodega_nombre">' . htmlspecialchars($row['bodega_nombre']) . '</td>
                         <td class="text-center" data-col="tipo_movimiento">
                             <span class="badge ' . $badgeClass . ' rounded-pill px-2" style="font-size:0.7rem;">' . $label . '</span>
+                            ' . ($anulado ? '<span class="badge bg-secondary rounded-pill px-2 ms-1" style="font-size:0.7rem;"><i class="bi bi-slash-circle me-1"></i>ANULADO</span>' : '') . '
                         </td>
                         <td class="text-end fw-bold" data-col="cantidad">
                             <span class="' . $color . '">' . $signo . number_format(abs((float)$row['cantidad']), 2) . '</span>
@@ -210,6 +204,7 @@ class InventarioController extends BaseModuloController
             'nup'             => $_GET['nup'] ?? $_POST['nup'] ?? '',
             'referencia_tipo' => $_GET['referencia_tipo'] ?? $_POST['referencia_tipo'] ?? '',
             'id_medida'       => $_GET['id_medida'] ?? $_POST['id_medida'] ?? '',
+            'ver_anulados'    => !empty($_GET['ver_anulados'] ?? $_POST['ver_anulados'] ?? ''),
         ];
     }
 
@@ -513,8 +508,31 @@ class InventarioController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            $this->service->eliminarMovimiento($id, $idEmpresa, $idUsuario, false, (int)$_SESSION['nivel']);
-            echo json_encode(['ok' => true, 'mensaje' => 'Movimiento eliminado correctamente.']);
+            // permitirAnularCompra=true: desde este módulo SÍ se permite anular un
+            // traspaso generado por una Compra (pedido explícito); otros documentos
+            // (facturas, recibos, etc.) siguen bloqueados — deben gestionarse desde
+            // su propio módulo.
+            $this->service->eliminarMovimiento($id, $idEmpresa, $idUsuario, false, (int)$_SESSION['nivel'], false, true);
+            echo json_encode(['ok' => true, 'mensaje' => 'Movimiento anulado correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function restaurarAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $this->service->restaurarMovimiento($id, $idEmpresa, $idUsuario, true);
+            echo json_encode(['ok' => true, 'mensaje' => 'Movimiento habilitado correctamente.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

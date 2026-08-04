@@ -164,7 +164,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                         <div>
                             <?php if ($perm['eliminar']): ?>
                                 <button type="button" id="ajuste_btn_eliminar" class="btn btn-outline-danger btn-sm px-3 d-none">
-                                    <i class="bi bi-trash3 me-1"></i> Eliminar
+                                    <i class="bi bi-slash-circle me-1"></i> Anular
+                                </button>
+                                <button type="button" id="ajuste_btn_habilitar" class="btn btn-outline-success btn-sm px-3 d-none">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i> Habilitar
                                 </button>
                             <?php endif; ?>
                         </div>
@@ -244,14 +247,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 form.reset();
                 inputIdMov.value = '';
                 inputIdProd.value = '';
-                resMsg.classList.add('d-none');
+                resMsg.className = 'alert mx-3 mb-3 py-2 small d-none shadow-sm border-0';
                 divIndiv.classList.add('d-none');
                 spanStock.classList.add('d-none');
                 btnGuardar.disabled = false;
+                btnGuardar.classList.remove('d-none');
                 stockActualGlobal = 0;
                 restablecerCampoLote();
                 if (btnEliminar) btnEliminar.classList.add('d-none');
-                
+                if (btnHabilitar) btnHabilitar.classList.add('d-none');
+                form.querySelectorAll('input, select, textarea').forEach(el => el.disabled = false);
+
                 if (id) {
                     modalLabel.innerHTML = `<i class="bi bi-pencil-square me-2"></i>Editar Movimiento`;
                     btnGuardar.innerHTML = `<i class="bi bi-save me-1"></i>Guardar Cambios`;
@@ -297,7 +303,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                                 document.getElementById('ajuste_seriales').value = d.nup;
                             }
 
-                            if (btnEliminar) btnEliminar.classList.remove('d-none');
+                            const estaAnulado = d.eliminado === true || d.eliminado === 't';
+                            if (estaAnulado) {
+                                // Un movimiento anulado no se edita: solo se puede habilitar de vuelta.
+                                if (btnEliminar) btnEliminar.classList.add('d-none');
+                                if (btnHabilitar) btnHabilitar.classList.remove('d-none');
+                                btnGuardar.classList.add('d-none');
+                                form.querySelectorAll('input, select, textarea').forEach(el => el.disabled = true);
+                                resMsg.className = 'alert mx-3 mb-3 py-2 small alert-secondary border-0 shadow-sm';
+                                resMsg.innerHTML = '<i class="bi bi-slash-circle me-1"></i> Este movimiento está <strong>ANULADO</strong> y no afecta el stock actual.';
+                                resMsg.classList.remove('d-none');
+                            } else {
+                                if (btnEliminar) btnEliminar.classList.remove('d-none');
+                                if (btnHabilitar) btnHabilitar.classList.add('d-none');
+                            }
                         }
                     } catch (e) {
                         console.error('Error al cargar datos:', e);
@@ -613,9 +632,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
             btnEliminar.addEventListener('click', async () => {
                 const id = inputIdMov.value;
                 if (!id) return;
-                
+
                 if (typeof window.eliminarMovimiento === 'function') {
                     const ok = await window.eliminarMovimiento(id);
+                    if (ok) modalObj.hide();
+                }
+            });
+        }
+
+        const btnHabilitar = document.getElementById('ajuste_btn_habilitar');
+        if (btnHabilitar) {
+            btnHabilitar.addEventListener('click', async () => {
+                const id = inputIdMov.value;
+                if (!id) return;
+
+                if (typeof window.habilitarMovimiento === 'function') {
+                    const ok = await window.habilitarMovimiento(id);
                     if (ok) modalObj.hide();
                 }
             });

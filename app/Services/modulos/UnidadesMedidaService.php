@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\Helpers\Booleano;
+use App\Helpers\CatalogoMedidas;
 use App\repositories\modulos\UnidadesMedidaRepository;
 use App\Rules\modulos\UnidadesMedidaRules;
 use App\Services\LogSistemaService;
@@ -305,5 +307,147 @@ class UnidadesMedidaService
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    // ─── SIEMBRA DE CATÁLOGO DEFAULT ────────────────────────────────────────
+
+    /**
+     * Siembra el catálogo por defecto de tipos y unidades de medida
+     * (App\Helpers\CatalogoMedidas) en la empresa actual. Completa lo que
+     * falte sin tocar ni duplicar lo que la empresa ya tenga:
+     *   - Reutiliza un tipo existente si coincide por código, nombre o sinónimo
+     *     (p. ej. una empresa con "MASA" no recibe otro tipo "PESO").
+     *   - Omite la unidad si su código ya existe en la empresa. El código debe ser
+     *     único a nivel de empresa porque al importar productos la unidad se
+     *     resuelve solo por código.
+     *   - Omite la unidad si ya hay otra con el mismo nombre en ese tipo.
+     *   - Solo marca es_base cuando el tipo aún no tiene unidad base
+     *     (hay un índice único parcial por id_tipo + id_empresa).
+     * Usado tanto por el botón manual del módulo como por EmpresaInicializadorService
+     * al crear/actualizar una empresa.
+     *
+     * @return array{tipos_creados:int, unidades_creadas:int}
+     */
+    public function sembrarCatalogoDefault(int $idEmpresa, int $idUsuario): array
+    {
+        $tiposPorClave = [];
+        foreach ($this->repository->getTiposParaSiembra($idEmpresa) as $t) {
+            foreach ([$t['codigo'], $t['nombre']] as $clave) {
+                $clave = CatalogoMedidas::normalizar((string) $clave);
+                if ($clave !== '' && !isset($tiposPorClave[$clave])) {
+                    $tiposPorClave[$clave] = (int) $t['id'];
+                }
+            }
+        }
+
+        $codigosUsados  = [];
+        $nombresPorTipo = [];
+        $tiposConBase   = [];
+        foreach ($this->repository->getUnidadesParaSiembra($idEmpresa) as $u) {
+            $idTipoExistente = (int) $u['id_tipo'];
+
+            $cod = CatalogoMedidas::normalizar((string) $u['codigo']);
+            if ($cod !== '') {
+                $codigosUsados[$cod] = true;
+            }
+
+            $nom = CatalogoMedidas::normalizar((string) $u['nombre']);
+            if ($nom !== '') {
+                $nombresPorTipo[$idTipoExistente . '|' . $nom] = true;
+            }
+
+            if (Booleano::es($u['es_base'])) {
+                $tiposConBase[$idTipoExistente] = true;
+            }
+        }
+
+        $tiposCreados    = 0;
+        $unidadesCreadas = 0;
+
+        $this->repository->beginTransaction();
+        try {
+            foreach (CatalogoMedidas::getCatalogo() as $tipo) {
+                $claves = array_merge([$tipo['codigo'], $tipo['nombre']], $tipo['sinonimos']);
+
+                $idTipo = null;
+                foreach ($claves as $clave) {
+                    $clave = CatalogoMedidas::normalizar((string) $clave);
+                    if ($clave !== '' && isset($tiposPorClave[$clave])) {
+                        $idTipo = $tiposPorClave[$clave];
+                        break;
+                    }
+                }
+
+                if ($idTipo === null) {
+                    $idTipo = $this->repository->createTipo([
+                        'id_empresa' => $idEmpresa,
+                        'id_usuario' => $idUsuario,
+                        'codigo'     => $tipo['codigo'],
+                        'nombre'     => $tipo['nombre'],
+                        'status'     => true,
+                        'created_by' => $idUsuario,
+                    ]);
+                    $tiposCreados++;
+
+                    foreach ($claves as $clave) {
+                        $clave = CatalogoMedidas::normalizar((string) $clave);
+                        if ($clave !== '') {
+                            $tiposPorClave[$clave] = $idTipo;
+                        }
+                    }
+                }
+
+                foreach ($tipo['unidades'] as $unidad) {
+                    $codNorm = CatalogoMedidas::normalizar($unidad['codigo']);
+                    $nomNorm = CatalogoMedidas::normalizar($unidad['nombre']);
+
+                    if (isset($codigosUsados[$codNorm]) || isset($nombresPorTipo[$idTipo . '|' . $nomNorm])) {
+                        continue;
+                    }
+
+                    $esBase = $unidad['es_base'] && !isset($tiposConBase[$idTipo]);
+
+                    $this->repository->createUnidad([
+                        'id_empresa'  => $idEmpresa,
+                        'id_tipo'     => $idTipo,
+                        'codigo'      => $unidad['codigo'],
+                        'nombre'      => $unidad['nombre'],
+                        'abreviatura' => $unidad['abreviatura'],
+                        // number_format evita la notación científica de PHP
+                        // para valores como 0.000001 ("1.0E-6").
+                        'factor_base' => number_format((float) $unidad['factor_base'], 6, '.', ''),
+                        'es_base'     => $esBase,
+                        'status'      => true,
+                        'created_by'  => $idUsuario,
+                    ]);
+                    $unidadesCreadas++;
+
+                    $codigosUsados[$codNorm] = true;
+                    $nombresPorTipo[$idTipo . '|' . $nomNorm] = true;
+                    if ($esBase) {
+                        $tiposConBase[$idTipo] = true;
+                    }
+                }
+            }
+
+            if ($tiposCreados > 0 || $unidadesCreadas > 0) {
+                $this->logService->registrar(
+                    $idUsuario,
+                    $idEmpresa,
+                    'sembrar',
+                    'unidades_medida',
+                    null,
+                    null,
+                    ['tipos_creados' => $tiposCreados, 'unidades_creadas' => $unidadesCreadas]
+                );
+            }
+
+            $this->repository->commit();
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+
+        return ['tipos_creados' => $tiposCreados, 'unidades_creadas' => $unidadesCreadas];
     }
 }

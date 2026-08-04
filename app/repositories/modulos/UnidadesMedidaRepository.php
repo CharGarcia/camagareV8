@@ -456,12 +456,40 @@ class UnidadesMedidaRepository extends BaseRepository
 
     public function getActive(int $idEmpresa): array
     {
-        $sql = "SELECT id, id_tipo, nombre, abreviatura 
-                FROM unidades_medida 
-                WHERE id_empresa = :e AND eliminado = false AND status = true 
+        $sql = "SELECT id, id_tipo, nombre, abreviatura
+                FROM unidades_medida
+                WHERE id_empresa = :e AND eliminado = false AND status = true
                 ORDER BY nombre ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ─── SIEMBRA DE CATÁLOGO DEFAULT ────────────────────────────────────────
+
+    /**
+     * Tipos de medida existentes en la empresa (id, código, nombre), usado para
+     * comparar contra App\Helpers\CatalogoMedidas al sembrar lo que falte.
+     */
+    public function getTiposParaSiembra(int $idEmpresa): array
+    {
+        $sql = 'SELECT id, codigo, nombre FROM tipo_medida
+                WHERE id_empresa = :id_empresa AND eliminado = false';
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Unidades de medida existentes en la empresa (id_tipo, código, nombre, es_base),
+     * usado para comparar contra App\Helpers\CatalogoMedidas al sembrar lo que falte.
+     */
+    public function getUnidadesParaSiembra(int $idEmpresa): array
+    {
+        $sql = 'SELECT id_tipo, codigo, nombre, es_base FROM unidades_medida
+                WHERE id_empresa = :id_empresa AND eliminado = false';
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 }
