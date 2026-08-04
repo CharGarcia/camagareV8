@@ -214,7 +214,7 @@ class PermisosModulosController extends Controller
             't'          => !empty($_POST['t']),
         ];
 
-        $ok = $this->modelPermiso->guardarPermisoSubmodulo($idUsuario, $idEmpresa, $idModulo, $idSub, $p);
+        $ok = $this->modelPermiso->guardarPermisoSubmodulo($idUsuario, $idEmpresa, $idModulo, $idSub, $p, $idActual);
 
         // Mantener la vista en sesión sincronizada
         if ($ok && isset($_SESSION['permisos_vista']['modulos'])) {
@@ -311,7 +311,7 @@ class PermisosModulosController extends Controller
             exit;
         }
 
-        $ok = $this->modelPermiso->copiarPermisosUsuario($idUsuarioOrigen, $idEmpresaOrigen, $idUsuarioDestino, $idEmpresaDestino);
+        $ok = $this->modelPermiso->copiarPermisosUsuario($idUsuarioOrigen, $idEmpresaOrigen, $idUsuarioDestino, $idEmpresaDestino, $idActual);
         echo json_encode([
             'ok'    => $ok,
             'error' => $ok ? null : 'Error al copiar los permisos.',
@@ -370,7 +370,7 @@ class PermisosModulosController extends Controller
             $this->redirect(BASE_URL . self::BASE_PATH);
         }
 
-        if ($this->modelPermiso->guardarPermisos($idUsuario, $idEmpresa, $permisos, $idModuloPorSub)) {
+        if ($this->modelPermiso->guardarPermisos($idUsuario, $idEmpresa, $permisos, $idModuloPorSub, $idActual)) {
             $_SESSION['permisos_msg'] = ['success', 'Permisos guardados correctamente.'];
             $usuarioSel = $this->modelEmpresa->getUsuarioPorId($idUsuario);
             $empresas = $this->modelEmpresa->getEmpresasParaPermisos($idUsuario, $idActual, $nivel);

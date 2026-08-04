@@ -26,6 +26,36 @@ class PermisoSubmodulo extends BaseModel
     }
 
     /**
+     * Registra en log_sistema un cambio de permiso sobre modulos_asignados.
+     * $idUsuarioAfectado (dueño del permiso) va dentro de antes/despues porque
+     * el actor de la auditoría es quien hizo el cambio, no el afectado.
+     * Nunca debe romper el guardado si la auditoría falla.
+     */
+    private function auditarPermiso(
+        int $idUsuarioActual,
+        int $idEmpresa,
+        string $accion,
+        int $idSubmodulo,
+        int $idUsuarioAfectado,
+        ?array $antes,
+        ?array $despues
+    ): void {
+        try {
+            (new \App\Services\LogSistemaService())->registrar(
+                $idUsuarioActual,
+                $idEmpresa,
+                $accion,
+                'modulos_asignados',
+                $idSubmodulo,
+                $antes === null ? null : array_merge(['id_usuario' => $idUsuarioAfectado], $antes),
+                $despues === null ? null : array_merge(['id_usuario' => $idUsuarioAfectado], $despues)
+            );
+        } catch (\Throwable $e) {
+            // Silencioso a propósito.
+        }
+    }
+
+    /**
      * Módulos con submódulos según nivel del actual:
      * Super admin: asignados (modulos_asignados) + todos de submodulos_menu.
      * Admin/usuario: solo modulos_asignados (relacionados con submodulos_menu).
@@ -170,7 +200,7 @@ class PermisoSubmodulo extends BaseModel
      * Copia (modo REEMPLAZAR) los permisos de un usuario+empresa origen a un usuario+empresa destino.
      * Borra los permisos previos del destino en esa empresa y replica exactamente los del origen.
      */
-    public function copiarPermisosUsuario(int $idUsuarioOrigen, int $idEmpresaOrigen, int $idUsuarioDestino, int $idEmpresaDestino): bool
+    public function copiarPermisosUsuario(int $idUsuarioOrigen, int $idEmpresaOrigen, int $idUsuarioDestino, int $idEmpresaDestino, int $idUsuarioActual = 0): bool
     {
         $uo = (int) $idUsuarioOrigen;
         $eo = (int) $idEmpresaOrigen;
@@ -181,12 +211,17 @@ class PermisoSubmodulo extends BaseModel
         $origen = $this->query("SELECT id_modulo, id_submodulo, COALESCE(r,0) AS r, COALESCE(w,0) AS w,
                                        COALESCE(u,0) AS u, COALESCE(d,0) AS d, COALESCE(t,0) AS t
                                 FROM modulos_asignados WHERE id_usuario = {$uo} AND id_empresa = {$eo}");
+        // Estado previo del destino, para que la auditoría muestre qué permisos perdió al ser reemplazados.
+        $destinoAntes = $this->query("SELECT id_submodulo, COALESCE(r,0) AS r, COALESCE(w,0) AS w,
+                                       COALESCE(u,0) AS u, COALESCE(d,0) AS d, COALESCE(t,0) AS t
+                                FROM modulos_asignados WHERE id_usuario = {$ud} AND id_empresa = {$ed}");
 
         $this->db->beginTransaction();
         try {
             // Reemplazar: borrar permisos previos del destino en la empresa destino
             $this->execute("DELETE FROM modulos_asignados WHERE id_usuario = {$ud} AND id_empresa = {$ed}");
 
+            $insertados = [];
             foreach ($origen as $row) {
                 $idMod = (int) $row['id_modulo'];
                 $idSub = (int) $row['id_submodulo'];
@@ -196,10 +231,24 @@ class PermisoSubmodulo extends BaseModel
 
                 $this->execute("INSERT INTO modulos_asignados (id_usuario, id_empresa, id_modulo, id_submodulo, r, w, u, d, t)
                     VALUES ({$ud}, {$ed}, {$idMod}, {$idSub}, {$r}, {$w}, {$u}, {$d}, {$t})");
+                $insertados[] = ['id_submodulo' => $idSub, 'r' => $r, 'w' => $w, 'u' => $u, 'd' => $d, 't' => $t];
             }
 
             $this->db->commit();
             $this->invalidarAvisoNuevo($ud, $ed);
+            try {
+                (new \App\Services\LogSistemaService())->registrar(
+                    $idUsuarioActual,
+                    $ed,
+                    'copiar_permisos_usuario',
+                    'modulos_asignados',
+                    null,
+                    ['id_usuario' => $ud, 'submodulos' => $destinoAntes],
+                    ['id_usuario' => $ud, 'id_usuario_origen' => $uo, 'id_empresa_origen' => $eo, 'submodulos' => $insertados]
+                );
+            } catch (\Throwable $e) {
+                // Silencioso a propósito.
+            }
             return true;
         } catch (\Throwable $e) {
             $this->db->rollBack();
@@ -210,7 +259,7 @@ class PermisoSubmodulo extends BaseModel
     /**
      * Guarda (upsert/delete) el permiso de UN solo submódulo. Pensado para guardado inmediato vía AJAX.
      */
-    public function guardarPermisoSubmodulo(int $idUsuario, int $idEmpresa, int $idModulo, int $idSubmodulo, array $p): bool
+    public function guardarPermisoSubmodulo(int $idUsuario, int $idEmpresa, int $idModulo, int $idSubmodulo, array $p, int $idUsuarioActual = 0): bool
     {
         $idU = (int) $idUsuario;
         $idE = (int) $idEmpresa;
@@ -224,17 +273,27 @@ class PermisoSubmodulo extends BaseModel
         $d = !empty($p['eliminar']) ? 1 : 0;
         $t = !empty($p['t']) ? 1 : 0;
 
+        $filaAntes = $this->query("SELECT COALESCE(r,0) AS r, COALESCE(w,0) AS w, COALESCE(u,0) AS u, COALESCE(d,0) AS d, COALESCE(t,0) AS t
+            FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
+        $antes = $filaAntes[0] ?? null;
+        if ($antes !== null) {
+            $antes = ['r' => (int)$antes['r'], 'w' => (int)$antes['w'], 'u' => (int)$antes['u'], 'd' => (int)$antes['d'], 't' => (int)$antes['t']];
+        }
+
         $this->db->beginTransaction();
         try {
             // Si no queda ningún permiso marcado, eliminar la asignación
             if ($r + $w + $u + $d + $t === 0) {
                 $this->execute("DELETE FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
                 $this->db->commit();
+                if ($antes !== null) {
+                    $this->auditarPermiso($idUsuarioActual, $idE, 'quitar_permiso_submodulo', $idS, $idU, $antes, null);
+                }
                 return true;
             }
 
-            $existe = $this->query("SELECT 1 FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
-            if (!empty($existe)) {
+            $existe = $antes !== null;
+            if ($existe) {
                 $this->execute("UPDATE modulos_asignados SET r = {$r}, w = {$w}, u = {$u}, d = {$d}, t = {$t}
                     WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
             } else {
@@ -243,6 +302,8 @@ class PermisoSubmodulo extends BaseModel
             }
             $this->db->commit();
             $this->invalidarAvisoNuevo($idU, $idE);
+            $despues = ['r' => $r, 'w' => $w, 'u' => $u, 'd' => $d, 't' => $t];
+            $this->auditarPermiso($idUsuarioActual, $idE, $existe ? 'actualizar_permiso_submodulo' : 'asignar_permiso_submodulo', $idS, $idU, $antes, $despues);
             return true;
         } catch (\Throwable $e) {
             $this->db->rollBack();
@@ -250,13 +311,17 @@ class PermisoSubmodulo extends BaseModel
         }
     }
 
-    public function guardarPermisos(int $idUsuario, int $idEmpresa, array $permisos, array $idModuloPorSub): bool
+    public function guardarPermisos(int $idUsuario, int $idEmpresa, array $permisos, array $idModuloPorSub, int $idUsuarioActual = 0): bool
     {
         $idU = (int) $idUsuario;
         $idE = (int) $idEmpresa;
+        // Estado previo completo, para poder auditar diffs reales (no solo el resultado final).
+        $existentesAntes = $this->getPermisosDeUsuario($idU, $idE);
+
         $this->db->beginTransaction();
         try {
             $idsAGuardar = [];
+            $cambios = [];
             foreach ($permisos as $idSub => $p) {
                 $idSub = (int) $idSub;
                 if ($idSub <= 0) continue;
@@ -269,8 +334,11 @@ class PermisoSubmodulo extends BaseModel
                 $d = isset($p['eliminar']) && $p['eliminar'] ? 1 : 0;
                 $t = isset($p['t']) && $p['t'] ? 1 : 0;
 
-                $existe = $this->query("SELECT 1 FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idSub}");
-                if (!empty($existe)) {
+                $antes = $existentesAntes[$idSub] ?? null;
+                $despues = ['ver' => $r, 'crear' => $w, 'actualizar' => $u, 'eliminar' => $d, 't' => $t];
+                $existe = $antes !== null;
+
+                if ($existe) {
                     $this->execute("UPDATE modulos_asignados SET r = {$r}, w = {$w}, u = {$u}, d = {$d}, t = {$t}
                         WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idSub}");
                 } else {
@@ -278,18 +346,35 @@ class PermisoSubmodulo extends BaseModel
                         VALUES ({$idU}, {$idE}, {$idMod}, {$idSub}, {$r}, {$w}, {$u}, {$d}, {$t})");
                 }
                 $idsAGuardar[] = $idSub;
+
+                if ($antes !== $despues) {
+                    $cambios[] = [$idSub, $existe ? 'actualizar_permiso_submodulo' : 'asignar_permiso_submodulo', $antes, $despues];
+                }
             }
 
             // Eliminar asignaciones que ya no tienen ningún permiso (filas no incluidas en $permisos)
+            $idsEliminados = [];
             if (!empty($idsAGuardar)) {
                 $idsStr = implode(',', array_map('intval', $idsAGuardar));
+                foreach ($existentesAntes as $idSubExistente => $permExistente) {
+                    if (!in_array($idSubExistente, $idsAGuardar, true)) {
+                        $idsEliminados[] = $idSubExistente;
+                    }
+                }
                 $this->execute("DELETE FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo NOT IN ({$idsStr})");
             } else {
+                $idsEliminados = array_keys($existentesAntes);
                 $this->execute("DELETE FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE}");
+            }
+            foreach ($idsEliminados as $idSubElim) {
+                $cambios[] = [$idSubElim, 'quitar_permiso_submodulo', $existentesAntes[$idSubElim], null];
             }
 
             $this->db->commit();
             $this->invalidarAvisoNuevo($idU, $idE);
+            foreach ($cambios as [$idSubCambio, $accionCambio, $antesCambio, $despuesCambio]) {
+                $this->auditarPermiso($idUsuarioActual, $idE, $accionCambio, $idSubCambio, $idU, $antesCambio, $despuesCambio);
+            }
             return true;
         } catch (\Throwable $e) {
             $this->db->rollBack();

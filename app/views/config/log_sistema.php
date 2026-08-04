@@ -20,11 +20,14 @@ $opcionesFiltros = $opcionesFiltros ?? ['acciones' => [], 'tablas' => [], 'usuar
         padding: 0 4px;
         border-radius: 3px;
     }
-    @media (max-width: 575.98px) {
-        #logFiltros > div { flex: 1 1 100%; }
-        #logFiltros > div .form-select,
-        #logFiltros > div .form-control { width: 100% !important; min-width: 0 !important; }
-        #logFiltros #btnLimpiarFiltros { flex: 1 1 100%; }
+    #logFiltros {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+    #logFiltros > div,
+    #logFiltros > button {
+        flex: 0 0 auto;
     }
 </style>
 
@@ -61,7 +64,7 @@ $opcionesFiltros = $opcionesFiltros ?? ['acciones' => [], 'tablas' => [], 'usuar
         </div>
     </div>
 
-    <div class="px-3 py-2 border-bottom bg-light d-flex flex-wrap align-items-end gap-2" id="logFiltros">
+    <div class="px-3 py-2 border-bottom bg-light d-flex flex-nowrap align-items-end gap-2" id="logFiltros">
         <div>
             <label class="form-label small mb-0 text-muted">Usuario</label>
             <select id="fltUsuario" class="form-select form-select-sm" style="min-width:150px;height:30px;">

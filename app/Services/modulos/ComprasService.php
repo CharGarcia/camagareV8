@@ -48,7 +48,7 @@ class ComprasService
             $data = $this->calcularTotales($data);
             $idCompra = $this->repository->insertCabecera($data);
 
-            $this->guardarDetalles($idCompra, $data['detalles'] ?? [], $idEmpresa, (int)$data['id_proveedor'], $idUsuario);
+            $this->sincronizarDetalles($idCompra, $data['detalles'] ?? []);
             $this->guardarPagos($idCompra, $data['pagos'] ?? []);
             $this->guardarAdicionales($idCompra, $data['adicionales'] ?? []);
 
@@ -435,8 +435,7 @@ class ComprasService
             $this->repository->updateCabecera($id, $data);
 
             // 2. Procesar el resto solo si la cabecera fue exitosa
-            $this->repository->deleteDetalles($id);
-            $this->guardarDetalles($id, $data['detalles'] ?? [], $idEmpresa, (int)$data['id_proveedor'], $idUsuario);
+            $this->sincronizarDetalles($id, $data['detalles'] ?? []);
 
             $this->repository->deletePagos($id);
             $this->guardarPagos($id, $data['pagos'] ?? []);
@@ -529,21 +528,95 @@ class ComprasService
         return $res ? (int) $res['id'] : null;
     }
 
-    private function guardarDetalles(int $idCompra, array $detalles, int $idEmpresa, int $idProveedor, int $idUsuario): void
+    /**
+     * Sincroniza el detalle de la compra con lo que vino del formulario, PRESERVANDO el
+     * id de las líneas existentes (UPDATE en su sitio en vez de borrar todo y reinsertar).
+     * Necesario porque inventario_kardex.referencia_id apunta a compras_detalle.id: si el
+     * id se regenerara en cada guardado, getInventarioStatusAjax "olvidaría" qué ya se
+     * envió a inventario y dejaría reenviar cantidades ya procesadas o quitar la
+     * vinculación de un producto que ya tiene inventario registrado.
+     *
+     * Reglas:
+     *  - Línea nueva (sin id, o con id que ya no existe en esta compra): se inserta.
+     *  - Línea existente: se actualiza EN SU SITIO (mismo id).
+     *  - Línea existente con cantidad ya enviada a inventario: no se puede reducir la
+     *    cantidad por debajo de lo ya enviado, ni cambiar el producto vinculado.
+     *  - Línea que existía y ya no viene en $detalles (el usuario la quitó del form):
+     *    se elimina si no tiene nada procesado; si tiene algo procesado, bloquea todo
+     *    el guardado (debe usarse un Retorno de Compra, no borrar la línea).
+     */
+    private function sincronizarDetalles(int $idCompra, array $detalles): void
     {
+        $actualesPorId = [];
+        foreach ($this->repository->getDetalles($idCompra) as $a) {
+            $actualesPorId[(int) $a['id']] = $a;
+        }
+        $procesado = $this->repository->getCantidadProcesadaPorDetalle($idCompra);
+
+        $idsRecibidos = [];
+
         foreach ($detalles as $det) {
-            $det['id_compra'] = $idCompra;
-            $det['precio_total_sin_impuesto'] = (float)($det['precio_total_sin_impuesto']
-                ?? ((float)($det['cantidad'] ?? 1) * (float)($det['precio_unitario'] ?? 0) - (float)($det['descuento'] ?? 0)));
+            $idExistente = !empty($det['id']) ? (int) $det['id'] : 0;
+            $esExistente = $idExistente > 0 && isset($actualesPorId[$idExistente]);
 
-            $idDetalle = $this->repository->insertDetalle($det);
+            $det['precio_total_sin_impuesto'] = (float) ($det['precio_total_sin_impuesto']
+                ?? ((float) ($det['cantidad'] ?? 1) * (float) ($det['precio_unitario'] ?? 0) - (float) ($det['descuento'] ?? 0)));
 
-            if (!empty($det['impuestos'])) {
-                foreach ($det['impuestos'] as $imp) {
+            if ($esExistente) {
+                $idsRecibidos[] = $idExistente;
+                $cantProcesada = (float) ($procesado[$idExistente] ?? 0.0);
+
+                if ($cantProcesada > 0) {
+                    $nuevaCantidad = (float) ($det['cantidad'] ?? 0);
+                    if ($nuevaCantidad < $cantProcesada - 0.0001) {
+                        throw new \Exception(sprintf(
+                            'No se puede reducir la cantidad de "%s" a %s: ya se enviaron %s a inventario.',
+                            $det['descripcion'] ?? '', $nuevaCantidad, $cantProcesada
+                        ));
+                    }
+
+                    $idProductoActual = !empty($actualesPorId[$idExistente]['id_producto']) ? (int) $actualesPorId[$idExistente]['id_producto'] : null;
+                    $idProductoNuevo  = !empty($det['id_producto']) ? (int) $det['id_producto'] : null;
+                    if ($idProductoNuevo !== $idProductoActual) {
+                        throw new \Exception(sprintf(
+                            'No se puede cambiar el producto vinculado de "%s": ya tiene %s enviado a inventario.',
+                            $det['descripcion'] ?? '', $cantProcesada
+                        ));
+                    }
+                }
+
+                $det['id'] = $idExistente;
+                $this->repository->updateDetalle($det);
+
+                $this->repository->deleteImpuestosDeDetalle($idExistente);
+                foreach ($det['impuestos'] ?? [] as $imp) {
+                    $imp['id_compra_detalle'] = $idExistente;
+                    $this->repository->insertImpuesto($imp);
+                }
+            } else {
+                $det['id_compra'] = $idCompra;
+                $idDetalle = $this->repository->insertDetalle($det);
+                foreach ($det['impuestos'] ?? [] as $imp) {
                     $imp['id_compra_detalle'] = $idDetalle;
                     $this->repository->insertImpuesto($imp);
                 }
             }
+        }
+
+        // Líneas que existían y ya no vinieron: el usuario las quitó del formulario.
+        $idsAEliminar = array_diff(array_keys($actualesPorId), $idsRecibidos);
+        foreach ($idsAEliminar as $idElim) {
+            $cantProcesada = (float) ($procesado[$idElim] ?? 0.0);
+            if ($cantProcesada > 0) {
+                $desc = $actualesPorId[$idElim]['descripcion'] ?? '';
+                throw new \Exception(sprintf(
+                    'No se puede quitar la línea "%s": ya tiene %s enviado a inventario.',
+                    $desc, $cantProcesada
+                ));
+            }
+        }
+        if (!empty($idsAEliminar)) {
+            $this->repository->deleteDetallesPorId($idsAEliminar);
         }
     }
 

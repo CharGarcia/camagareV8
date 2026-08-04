@@ -576,6 +576,65 @@ class ComprasRepository extends BaseRepository
         $this->query("DELETE FROM compras_detalle WHERE id_compra = ?", [$idCompra]);
     }
 
+    /**
+     * Actualiza una línea de detalle EN SU SITIO (mismo id), a diferencia de
+     * deleteDetalles()+insertDetalle(). Necesario para no romper el vínculo con
+     * inventario_kardex.referencia_id, que apunta a este id — ver sincronizarDetalles()
+     * en ComprasService.
+     */
+    public function updateDetalle(array $data): void
+    {
+        $sql = "UPDATE compras_detalle SET
+                    id_producto = ?, codigo_principal = ?, codigo_auxiliar = ?,
+                    descripcion = ?, cantidad = ?, precio_unitario = ?, descuento = ?,
+                    precio_total_sin_impuesto = ?
+                WHERE id = ?";
+        $this->query($sql, [
+            !empty($data['id_producto']) ? (int)$data['id_producto'] : null,
+            $data['codigo_principal'] ?? '',
+            $data['codigo_auxiliar'] ?? null,
+            $data['descripcion'] ?? '',
+            (float) ($data['cantidad'] ?? 1),
+            (float) ($data['precio_unitario'] ?? 0),
+            (float) ($data['descuento'] ?? 0),
+            (float) ($data['precio_total_sin_impuesto'] ?? 0),
+            (int)   $data['id'],
+        ]);
+    }
+
+    public function deleteImpuestosDeDetalle(int $idDetalle): void
+    {
+        $this->query("DELETE FROM compras_detalle_impuestos WHERE id_compra_detalle = ?", [$idDetalle]);
+    }
+
+    /** Elimina líneas puntuales (y sus impuestos) por id — para las que el usuario quitó al editar. */
+    public function deleteDetallesPorId(array $ids): void
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (empty($ids)) return;
+
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $this->query("DELETE FROM compras_detalle_impuestos WHERE id_compra_detalle IN ($ph)", $ids);
+        $this->query("DELETE FROM compras_detalle WHERE id IN ($ph)", $ids);
+    }
+
+    /** [id_compra_detalle => cantidad ya enviada a inventario (viva)] para una compra. */
+    public function getCantidadProcesadaPorDetalle(int $idCompra): array
+    {
+        $sql = "SELECT k.referencia_id AS id_detalle, COALESCE(SUM(k.cantidad), 0) AS cantidad
+                FROM inventario_kardex k
+                JOIN compras_detalle d ON d.id = k.referencia_id
+                WHERE k.referencia_tipo = 'compra' AND k.eliminado = false AND d.id_compra = ?
+                GROUP BY k.referencia_id";
+        $rows = $this->query($sql, [$idCompra])->fetchAll(\PDO::FETCH_ASSOC);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['id_detalle']] = (float) $r['cantidad'];
+        }
+        return $out;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // INSERTS / DELETES — PAGOS
     // ─────────────────────────────────────────────────────────────────────────

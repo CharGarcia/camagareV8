@@ -1333,6 +1333,7 @@ window.CMG_guardar = async function() {
         const ivaVal = neto * tarifa / 100;
         
         detalles.push({
+            id: tr.querySelector('.input-id-detalle')?.value || null,
             id_producto: tr.querySelector('.input-id-producto')?.value || null,
             codigo_principal: tr.querySelector('.input-codigo')?.value || '',
             descripcion: descInput.value.trim(),

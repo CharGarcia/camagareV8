@@ -352,7 +352,28 @@ class EmpresaAsignada extends BaseModel
             return false;
         }
 
+        // Estado previo de los permisos, porque se borran en cascada junto con la asignación de empresa.
+        $permisosAntes = $this->query("SELECT id_submodulo, r, w, u, d, t FROM modulos_asignados WHERE id_usuario = {$idUsu} AND id_empresa = {$idEmp}");
+
         $this->execute("DELETE FROM modulos_asignados WHERE id_usuario = {$idUsu} AND id_empresa = {$idEmp}");
-        return $this->execute("DELETE FROM empresa_asignada WHERE id = {$id}");
+        $ok = $this->execute("DELETE FROM empresa_asignada WHERE id = {$id}");
+
+        if ($ok) {
+            try {
+                (new \App\Services\LogSistemaService())->registrar(
+                    $idActual,
+                    $idEmp,
+                    'quitar_empresa_asignada',
+                    'empresa_asignada',
+                    $id,
+                    ['id_usuario' => $idUsu, 'id_empresa' => $idEmp, 'permisos_submodulos' => $permisosAntes],
+                    null
+                );
+            } catch (\Throwable $e) {
+                // Auditoría no debe bloquear la operación.
+            }
+        }
+
+        return $ok;
     }
 }
