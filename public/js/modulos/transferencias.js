@@ -80,7 +80,7 @@ const TR_CAMPOS_FORM = ['tr-f-tipo', 'tr-f-fecha', 'tr-f-forma', 'tr-f-banco', '
 
 function TR_resetForm() {
     document.getElementById('tr-f-tipo').value = 'AMBOS';
-    document.getElementById('tr-f-fecha').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('tr-f-fecha').value = CMG_fechaLocal();
     document.getElementById('tr-f-forma').value = '';
     document.getElementById('tr-f-banco').value = '';
     document.getElementById('tr-f-obs').value = '';

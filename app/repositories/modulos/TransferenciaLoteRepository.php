@@ -120,10 +120,13 @@ class TransferenciaLoteRepository extends BaseRepository
     public function getDetalle(int $idLote, int $idEmpresa): array
     {
         $st = $this->db->prepare(
-            "SELECT d.*, ec.numero_egreso, b.codigo_banco, b.nombre_banco AS banco_nombre
+            "SELECT d.*, ec.numero_egreso, b.codigo_banco, b.nombre_banco AS banco_nombre,
+                    COALESCE(prov.telefono, emp.telefono) AS telefono
              FROM transferencias_lotes_detalle d
              LEFT JOIN egresos_cabecera ec ON ec.id = d.id_egreso
              LEFT JOIN bancos_ecuador b ON b.id = d.id_banco_ecuador
+             LEFT JOIN proveedores prov ON prov.id = d.id_proveedor
+             LEFT JOIN empleados emp ON emp.id = d.id_empleado
              WHERE d.id_lote = :id AND d.id_empresa = :e AND d.eliminado = false
              ORDER BY d.id ASC"
         );

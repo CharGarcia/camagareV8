@@ -1225,7 +1225,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             recargarSecuenciaCheque();
             // Fecha de cobro por defecto = hoy (si está vacía).
             const fch = document.getElementById('eg-add-pago-fecha-cheque');
-            if (fch && !fch.value) fch.value = new Date().toISOString().slice(0, 10);
+            if (fch && !fch.value) fch.value = CMG_fechaLocal();
             // Nombre por defecto = beneficiario del egreso (editable).
             const benef = document.getElementById('eg-add-pago-benef-cheque');
             const sujeto = (document.getElementById('eg-search-input')?.value || '').trim();
@@ -1587,7 +1587,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('btnPdfEgreso').classList.add('d-none');
         document.getElementById('btnExcelEgreso').classList.add('d-none');
         document.getElementById('btnCorreoEgreso').classList.add('d-none');
-        document.getElementById('eg-input-fecha').value = new Date().toISOString().slice(0,10);
+        document.getElementById('eg-input-fecha').value = CMG_fechaLocal();
         
         // Resetear controles dinámicos de pagos
         document.getElementById('eg-add-pago-forma').value = '';
@@ -1619,7 +1619,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     async function guardarEgreso() {
         const tS = document.getElementById('eg-select-tipo-sujeto').value;
         const inputFec = document.getElementById('eg-input-fecha').value;
-        const hoy = new Date().toISOString().split('T')[0];
+        const hoy = CMG_fechaLocal();
         if (inputFec > hoy) {
             Swal.fire('Fecha Inválida', 'La fecha de emisión no puede ser posterior a la fecha actual.', 'warning');
             return;

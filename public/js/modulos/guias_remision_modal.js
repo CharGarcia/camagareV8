@@ -93,7 +93,7 @@
         document.getElementById('gr-secuencial').value = '';
         document.getElementById('gr-cod-doc-sustento').value = '01';
 
-        const hoy = new Date().toISOString().split('T')[0];
+        const hoy = CMG_fechaLocal();
         document.getElementById('gr-fecha-emision').value = hoy;
         document.getElementById('gr-fecha-inicio').value  = hoy;
         document.getElementById('gr-fecha-fin').value     = hoy;

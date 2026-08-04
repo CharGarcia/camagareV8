@@ -434,7 +434,7 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
         const elMonto = document.getElementById('pago-monto');
         elMonto.value = saldo.toFixed(2);
         elMonto.max   = saldo.toFixed(2);
-        document.getElementById('pago-fecha').value         = new Date().toISOString().slice(0, 10);
+        document.getElementById('pago-fecha').value         = CMG_fechaLocal();
         document.getElementById('pago-observaciones').value = '';
         document.getElementById('pago-secuencial').value    = '';
         document.getElementById('pago-secuencial').classList.remove('border-warning','text-warning');
@@ -559,7 +559,7 @@ function CXP_toggleTipoOp(tipo) {
         if (divFC)  divFC.classList.remove('d-none');
         // Pre-llenar fecha cobro si está vacía
         if (elFC && !elFC.value) {
-            elFC.value = new Date().toISOString().slice(0, 10);
+            elFC.value = CMG_fechaLocal();
         }
     } else {
         if (lblNum) lblNum.textContent = 'Nº Referencia';

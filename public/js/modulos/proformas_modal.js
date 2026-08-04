@@ -93,7 +93,7 @@
         $id('pf_tituloModal').textContent = 'Nueva Proforma';
 
         // Cabecera
-        $id('pf_fecha').value        = new Date().toISOString().slice(0, 10);
+        $id('pf_fecha').value        = CMG_fechaLocal();
         $id('pf_secuencial').value   = '';
         $id('pf_diasVigencia').value = '15';
         $id('pf_vendedor').value     = '';

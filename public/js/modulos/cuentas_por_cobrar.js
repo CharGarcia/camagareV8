@@ -401,7 +401,7 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
     const elMonto = document.getElementById('cobro-monto');
     elMonto.value = saldo.toFixed(2);
     elMonto.max   = saldo.toFixed(2);
-    document.getElementById('cobro-fecha').value         = new Date().toISOString().slice(0,10);
+    document.getElementById('cobro-fecha').value         = CMG_fechaLocal();
     document.getElementById('cobro-observaciones').value = '';
 
     // ── Serie (puntos de emisión) ──────────────────────────────────────────

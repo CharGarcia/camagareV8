@@ -34,7 +34,7 @@
 
     // Helpers de fechas exportados para que los módulos los usen en quickFilters
     const helpers = {
-        ymd: d => d.toISOString().slice(0, 10),
+        ymd: d => CMG_fechaLocal(d),
         hoy: () => new Date(),
         primerDiaMes: d => new Date(d.getFullYear(), d.getMonth(), 1),
         ultimoDiaMes: d => new Date(d.getFullYear(), d.getMonth() + 1, 0),

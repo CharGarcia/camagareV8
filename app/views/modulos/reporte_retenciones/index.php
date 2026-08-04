@@ -195,7 +195,7 @@
         let hasta = mes ? new Date(anio, mes, 0)     : new Date(anio, 11, 31);
         if (hasta > hoy) hasta = hoy;
         if (desde > hasta) desde = hasta;
-        const fmt = d => d.toISOString().slice(0, 10);
+        const fmt = d => CMG_fechaLocal(d);
         $('rr-fecha-desde').value = fmt(desde);
         $('rr-fecha-hasta').value = fmt(hasta);
     }

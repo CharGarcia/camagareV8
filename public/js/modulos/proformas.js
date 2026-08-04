@@ -814,7 +814,7 @@ const PF = (() => {
     }
 
     function _hoy() {
-        return new Date().toISOString().split('T')[0];
+        return CMG_fechaLocal();
     }
 
     function _esc(str) {

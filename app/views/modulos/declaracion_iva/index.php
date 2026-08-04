@@ -817,7 +817,7 @@
             btnEgreso.addEventListener('click', () => {
                 if (!declaracionActual) return;
                 document.getElementById('egresoMontoInfo').innerHTML = `IVA a pagar: <b>$${(parseFloat(declaracionActual.iva_a_pagar) || 0).toLocaleString('en-US', {minimumFractionDigits:2})}</b>`;
-                document.getElementById('egresoFecha').value = new Date().toISOString().slice(0, 10);
+                document.getElementById('egresoFecha').value = CMG_fechaLocal();
                 document.getElementById('egresoProveedorTexto').value = '';
                 document.getElementById('egresoProveedorId').value = '';
                 document.getElementById('egresoNumeroCheque').value = '';

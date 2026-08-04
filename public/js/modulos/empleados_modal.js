@@ -457,7 +457,7 @@
         const optHor = opts.horarios.map(h => `<option value="${h.id}" ${String(data.id_horario) === String(h.id) ? 'selected' : ''}>${esc(h.nombre)}</option>`).join('');
         const optPun = ['<option value="">— Sin punto —</option>'].concat(opts.puntos.map(p => `<option value="${p.id}" ${String(data.id_punto) === String(p.id) ? 'selected' : ''}>${esc(p.nombre)}</option>`)).join('');
         // "Vigente desde" es obligatorio: en filas nuevas se precarga con hoy para no perderlas al guardar.
-        const desdeVal = data.vigente_desde ? String(data.vigente_desde).substring(0, 10) : (nuevoClick ? new Date().toISOString().slice(0, 10) : '');
+        const desdeVal = data.vigente_desde ? String(data.vigente_desde).substring(0, 10) : (nuevoClick ? CMG_fechaLocal() : '');
         const row = document.createElement('tr');
         row.className = 'row-emp';
         row.innerHTML = `

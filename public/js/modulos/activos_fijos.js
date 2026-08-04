@@ -350,7 +350,7 @@
             return;
         }
 
-        document.getElementById('af-fecha-adquisicion').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('af-fecha-adquisicion').value = CMG_fechaLocal();
         precargarContrapartida();
         new bootstrap.Modal(document.getElementById('modalActivoFijo')).show();
     };

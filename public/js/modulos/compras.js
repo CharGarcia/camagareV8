@@ -3009,8 +3009,7 @@ window.CMG_toggleTipoOp = function(tipo) {
         // Fecha cobro por defecto a hoy si esta vacía
         const inputFC = document.getElementById('pagoFechaCobro');
         if (inputFC && !inputFC.value) {
-            const d = new Date();
-            inputFC.value = d.toISOString().split('T')[0];
+            inputFC.value = CMG_fechaLocal();
         }
     } else {
         if (lblNumOp) lblNumOp.textContent = 'Nº Referencia';

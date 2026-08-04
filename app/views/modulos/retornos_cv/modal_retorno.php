@@ -225,7 +225,7 @@
         document.getElementById('ret_estado_badge').className = 'badge bg-secondary bg-opacity-10 text-secondary ms-2';
         document.getElementById('btnEliminarRetorno').classList.add('d-none');
         document.getElementById('ret_estado_wrapper').classList.add('d-none'); // sin estado hasta crear
-        document.getElementById('ret_fecha_retorno').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('ret_fecha_retorno').value = CMG_fechaLocal();
         const selSerie = document.getElementById('ret_select_serie');
         if (selSerie.value) { selSerie.selectedIndex = 0; await retSerieChange(); }
         getModal().show();

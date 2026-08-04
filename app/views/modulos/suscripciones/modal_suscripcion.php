@@ -728,7 +728,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             dt.setMonth(dt.getMonth() + meses);
         }
         
-        document.getElementById('susc_proximo_cobro').value = dt.toISOString().split('T')[0];
+        document.getElementById('susc_proximo_cobro').value = CMG_fechaLocal(dt);
     };
 
     /* ── Forma de cobro ───────────────────────────────────────────────────────── */
@@ -882,7 +882,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         hidCli.value                                             = '';
         inpCli.value                                             = '';
         infoCli.classList.add('d-none');
-        document.getElementById('susc_fecha_inicio').value      = new Date().toISOString().split('T')[0];
+        document.getElementById('susc_fecha_inicio').value      = CMG_fechaLocal();
         document.getElementById('susc_fecha_fin').value         = '';
         document.getElementById('susc_id_periodicidad').value   = '';
         document.getElementById('susc_proximo_cobro').value     = '';

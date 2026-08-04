@@ -76,7 +76,7 @@
     function _reset() {
         $id('cp_id').value = '';
         $id('cp_tituloModal').textContent = 'Nueva Cotización';
-        $id('cp_fecha').value = new Date().toISOString().slice(0, 10);
+        $id('cp_fecha').value = CMG_fechaLocal();
         $id('cp_numero').value = 'Se genera al guardar';
         $id('cp_proyecto').value = '';
         $id('cp_presupuesto').value = '0.00';
@@ -1262,7 +1262,7 @@
                 }
 
                 $id('cpf_idCotizacion').value = id;
-                $id('cpf_fecha').value = new Date().toISOString().slice(0, 10);
+                $id('cpf_fecha').value = CMG_fechaLocal();
 
                 _cpfBloquearSecuencial = false;
                 const selPunto = $id('cpf_punto');

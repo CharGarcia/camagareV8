@@ -295,7 +295,7 @@
         document.getElementById('cam_estado_badge').className = 'badge bg-secondary bg-opacity-10 text-secondary ms-2';
         document.getElementById('btnEliminarCambio').classList.add('d-none');
         document.getElementById('cam_estado_wrapper').classList.add('d-none');
-        document.getElementById('cam_fecha_cambio').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('cam_fecha_cambio').value = CMG_fechaLocal();
         const selSerie = document.getElementById('cam_select_serie');
         if (selSerie.value) { selSerie.selectedIndex = 0; await camSerieChange(); }
         getModal().show();

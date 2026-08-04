@@ -414,7 +414,7 @@
         $('faccv_btn_generar').classList.add('d-none');
         $('faccv_btn_duplicar').classList.add('d-none');
         $('faccv_select_serie').disabled = false;
-        $('faccv_fecha').value = new Date().toISOString().slice(0, 10);
+        $('faccv_fecha').value = CMG_fechaLocal();
         $('faccv_tbody_info').innerHTML = ''; faccvAgregarInfo();
         // Forma de pago por defecto de la empresa (hasta elegir cliente).
         if (window.EMPRESA_CONFIG && EMPRESA_CONFIG.id_forma_pago_sri_def) faccvAplicarFormaPago(EMPRESA_CONFIG.id_forma_pago_sri_def);

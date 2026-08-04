@@ -220,7 +220,7 @@ function nuevoPedido() {
     document.getElementById('estado').value = 'Pendiente';
     
     // Configurar fecha de entrega con la fecha actual por defecto
-    document.getElementById('fecha_entrega').value = new Date().toISOString().substring(0, 10);
+    document.getElementById('fecha_entrega').value = CMG_fechaLocal();
     document.getElementById('hora_inicial_entrega').value = '';
     document.getElementById('hora_maxima_entrega').value = '';
     document.getElementById('id_responsable_entrega').value = '';

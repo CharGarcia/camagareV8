@@ -2748,9 +2748,7 @@ $totalPages = $totalPagesOriginal;
         if (!id) return;
 
         // Validar fecha de emisión antes de continuar
-        const dateLocal = new Date();
-        const hoy = new Date(dateLocal.getTime() - dateLocal.getTimezoneOffset() * 60000)
-                        .toISOString().split('T')[0];
+        const hoy = CMG_fechaLocal();
         if (FV_FECHA_EMISION && FV_FECHA_EMISION !== hoy) {
             const fechaFmt = FV_FECHA_EMISION.split('-').reverse().join('-');
             const hoyFmt   = hoy.split('-').reverse().join('-');
@@ -3210,7 +3208,7 @@ $totalPages = $totalPagesOriginal;
             // 3. Cambiar fecha a hoy
             const fechaInput = document.querySelector('#formFacturaModal [name="fecha_emision"]');
             if (fechaInput) {
-                const hoy = new Date().toISOString().split('T')[0];
+                const hoy = CMG_fechaLocal();
                 fechaInput.value = hoy;
             }
 

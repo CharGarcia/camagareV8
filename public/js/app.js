@@ -2,6 +2,14 @@
  * JavaScript propio del MVC
  */
 
+// Formatea una fecha en YYYY-MM-DD usando el calendario LOCAL del navegador.
+// toISOString() nativo usa UTC: en Ecuador (UTC-5) eso adelanta la fecha un día
+// a partir de las 19:00. Usar siempre esta función para fechas "de hoy" en inputs.
+window.CMG_fechaLocal = function(d) {
+    d = d || new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+};
+
 (function() {
     'use strict';
     document.addEventListener('DOMContentLoaded', function() {

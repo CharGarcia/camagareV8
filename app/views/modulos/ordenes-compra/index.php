@@ -301,7 +301,7 @@ function ocParseDate(str) {
 window.ocAbrirCrear = function() {
     document.getElementById('oc_id').value = '';
     document.getElementById('oc_titulo_modal').textContent = 'Nueva Orden de Compra';
-    document.getElementById('oc_fecha_orden').value = new Date().toISOString().split('T')[0];
+    document.getElementById('oc_fecha_orden').value = CMG_fechaLocal();
     document.getElementById('oc_fecha_recepcion').value = '';
     document.getElementById('oc_observaciones').value   = '';
     document.getElementById('oc_estado').value           = 'borrador';

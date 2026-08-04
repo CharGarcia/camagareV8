@@ -643,7 +643,7 @@ async function SI_abrirModalAnticipo(row = null) {
 
     document.getElementById('si-anti-id').value = row?.id || '';
     sel.value = row?.id_forma_pago || '';
-    document.getElementById('si-anti-fecha').value = row?.fecha_saldo || new Date().toISOString().slice(0,10);
+    document.getElementById('si-anti-fecha').value = row?.fecha_saldo || CMG_fechaLocal();
     document.getElementById('si-anti-saldo').value = row?.saldo_inicial || '';
     document.getElementById('si-anti-obs').value = row?.observaciones || '';
 
@@ -895,7 +895,7 @@ function SI_filtrarConsig(q) {
 
 async function SI_abrirModalConsig(row = null) {
     document.getElementById('si-consig-id').value = row?.id || '';
-    document.getElementById('si-consig-fecha').value = row?.fecha_emision || new Date().toISOString().slice(0,10);
+    document.getElementById('si-consig-fecha').value = row?.fecha_emision || CMG_fechaLocal();
     document.getElementById('si-consig-nro').value = row?.nro_documento || '';
     if (row?.id_cliente) SI_setTercero('consig', row.id_cliente, row.ruc_cliente, row.nombre_cliente); else SI_limpiarTercero('consig');
     if (row?.id_producto) SI_setProducto('consig', row.id_producto, row.producto_codigo, row.producto_nombre); else SI_limpiarProducto('consig');

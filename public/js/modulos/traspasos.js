@@ -91,7 +91,7 @@
         const f = document.getElementById('formTraspasoModal');
         f.reset();
         document.getElementById('trp-input-id').value = '';
-        document.getElementById('trp-input-fecha').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('trp-input-fecha').value = CMG_fechaLocal();
         document.getElementById('trp-input-secuencial').classList.remove('border-danger');
         window.TRP_SECUENCIAL_CONFIGURADO = true;
         document.getElementById('trp-badge-estado').innerHTML = '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary">Registrado</span>';

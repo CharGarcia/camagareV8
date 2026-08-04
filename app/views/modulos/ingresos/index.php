@@ -1765,7 +1765,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('btnExcelIngreso').classList.add('d-none');
         document.getElementById('btnCorreoIngreso').classList.add('d-none');
 
-        document.getElementById('m-input-fecha').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('m-input-fecha').value = CMG_fechaLocal();
 
         docPendientes = [];
         detalleManual = [];
