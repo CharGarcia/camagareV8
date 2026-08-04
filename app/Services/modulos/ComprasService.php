@@ -63,6 +63,7 @@ class ComprasService
             if ($managed) $db->commit();
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
+            $this->relanzarSiDuplicado($e);
             throw $e;
         }
 
@@ -456,6 +457,7 @@ class ComprasService
             if ($managed && $db->inTransaction()) {
                 $db->rollBack();
             }
+            $this->relanzarSiDuplicado($e);
             throw $e;
         }
 
@@ -610,6 +612,35 @@ class ComprasService
 
         if ($existe) {
             throw new \Exception('Ya existe una compra registrada con ese número de comprobante para este proveedor.');
+        }
+
+        $numAutorizacion = trim((string)($data['numero_autorizacion'] ?? ''));
+        if ($numAutorizacion !== '') {
+            $existeAutorizacion = $this->repository->existeNumeroAutorizacion(
+                (int)$data['id_empresa'],
+                $numAutorizacion,
+                $excludeId
+            );
+
+            if ($existeAutorizacion) {
+                throw new \Exception('Ya existe una compra registrada con ese número de autorización/clave de acceso.');
+            }
+        }
+    }
+
+    /**
+     * Traduce la violación del índice único uq_compras_numaut_activo (23505) a un
+     * mensaje amigable. Red de seguridad para la carrera entre el chequeo previo
+     * (verificarSecuencialDuplicado) y el INSERT/UPDATE real.
+     */
+    private function relanzarSiDuplicado(\Throwable $e): void
+    {
+        $msg = $e->getMessage();
+        if ($e->getCode() === '23505'
+            || stripos($msg, 'uq_compras_numaut_activo') !== false
+            || stripos($msg, 'duplicate key') !== false
+            || stripos($msg, 'llave duplicada') !== false) {
+            throw new \Exception('Ya existe una compra registrada con ese número de autorización/clave de acceso.');
         }
     }
 

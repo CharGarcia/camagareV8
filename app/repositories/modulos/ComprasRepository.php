@@ -758,6 +758,22 @@ class ComprasRepository extends BaseRepository
         return (int) $this->query($sql, $params)->fetchColumn() > 0;
     }
 
+    public function existeNumeroAutorizacion(
+        int $idEmpresa,
+        string $numeroAutorizacion,
+        ?int $excluirId = null
+    ): bool {
+        $sql = "SELECT COUNT(*) FROM compras_cabecera
+                WHERE id_empresa = ? AND numero_autorizacion = ?
+                  AND eliminado = FALSE";
+        $params = [$idEmpresa, $numeroAutorizacion];
+        if ($excluirId !== null) {
+            $sql .= " AND id <> ?";
+            $params[] = $excluirId;
+        }
+        return (int) $this->query($sql, $params)->fetchColumn() > 0;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // CATÁLOGOS
     // ─────────────────────────────────────────────────────────────────────────
