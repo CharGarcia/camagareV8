@@ -1377,7 +1377,7 @@ class MigracionMysqlService
         $qmd->execute([$idEmpresa, $entidad]);
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
         if ($esFactura) {
-            $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, updated_at = now(), updated_by = :u WHERE id = :id");
+            $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, estado = 'facturada', updated_at = now(), updated_by = :u WHERE id = :id");
             $updDetBod = $pg->prepare("UPDATE consignaciones_facturas_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_consignacion_factura = :id AND d.id_bodega IS NULL");
         } else {
             $updFacCab = null;
@@ -1388,7 +1388,7 @@ class MigracionMysqlService
         $opFilter = $esFactura ? "operacion = 'FACTURA'" : "operacion LIKE 'DEVOL%'";
 
         if ($esFactura) {
-            $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, numero_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'Facturada', ?, ?, ?, ?) RETURNING id");
+            $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, numero_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'facturada', ?, ?, ?, ?) RETURNING id");
             $insDet = $pg->prepare("INSERT INTO consignaciones_facturas_detalles (id_consignacion_factura, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         } else {
             $insCab = $pg->prepare("INSERT INTO retornos_cv (id_empresa, fecha_retorno, serie, secuencial, id_cliente, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id");
