@@ -624,9 +624,6 @@ class GuiasRemisionController extends BaseModuloController
 
         $detalles = $repo->getDetalles($id);
 
-        // Solo productos físicos (tipo_produccion = '01') — los servicios no se trasladan
-        $detalles = array_values(array_filter($detalles, fn($d) => ($d['tipo_produccion'] ?? '') === '01'));
-
         echo json_encode([
             'ok'       => true,
             'cabecera' => $cab,

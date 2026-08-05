@@ -396,7 +396,7 @@
                 window.GR_actualizarNumeracion();
                 if (!(d.detalles || []).length) {
                     Swal.fire({ toast: true, position: 'top-end', icon: 'warning',
-                        title: 'Esa factura no tiene productos físicos para trasladar (solo servicios).',
+                        title: 'Esa factura no tiene líneas de detalle para agregar.',
                         showConfirmButton: false, timer: 3500, timerProgressBar: true });
                 }
 
