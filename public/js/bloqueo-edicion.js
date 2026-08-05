@@ -23,7 +23,17 @@ const CMG_Bloqueo = (() => {
     const PING_MS = 30000;
 
     async function iniciar({ urlBase, idRegistro, moduloContexto = null, onBloqueado = null, onPerdido = null }) {
-        detener(); // libera cualquier lock previo de esta vista antes de tomar uno nuevo
+        // Ya se tiene EXACTAMENTE este lock (mismo módulo + registro): no soltarlo y volver
+        // a tomarlo. Re-tomar aquí (p. ej. al cambiar la bodega en "Cargar desde Pedido", que
+        // vuelve a llamar iniciar() para el mismo pedido) disparaba un "liberar" viejo sin
+        // esperar en paralelo con el "tomar" nuevo; si el liberar llegaba después al servidor,
+        // borraba el lock recién tomado y el ping siguiente reportaba "perdiste el control"
+        // aunque ningún otro usuario lo hubiera tocado. El ping periódico ya mantiene vivo este.
+        if (activo && activo.urlBase === urlBase && String(activo.idRegistro) === String(idRegistro)) {
+            return { tomado: true, propio: true };
+        }
+
+        await detener(); // libera cualquier lock previo de esta vista antes de tomar uno nuevo
 
         const body = new URLSearchParams({ id_registro: idRegistro });
         if (moduloContexto) body.append('modulo_contexto', moduloContexto);
@@ -61,14 +71,20 @@ const CMG_Bloqueo = (() => {
     }
 
     function detener(liberarEnServidor = true) {
-        if (!activo) return;
+        if (!activo) return Promise.resolve();
         clearInterval(activo.intervalId);
 
+        let promesa = Promise.resolve();
         if (liberarEnServidor) {
             const body = new URLSearchParams({ id_registro: activo.idRegistro });
-            fetch(`${activo.urlBase}/liberarBloqueoAjax`, { method: 'POST', body }).catch(() => {});
+            // Se espera (desde iniciar()) para garantizar que este DELETE llegue al servidor
+            // ANTES del próximo "tomar": si no, puede llegar tarde y borrar el lock recién
+            // tomado (ver comentario en iniciar()). Sigue sin bloquear a quien la llama sin
+            // esperar (p. ej. el cierre del modal), gracias al valor de retorno opcional.
+            promesa = fetch(`${activo.urlBase}/liberarBloqueoAjax`, { method: 'POST', body }).catch(() => {});
         }
         activo = null;
+        return promesa;
     }
 
     return { iniciar, detener };

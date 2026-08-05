@@ -553,13 +553,13 @@ class ConfiguracionContableController extends BaseModuloController
             $opcRepo = new OpcionIngresoEgresoRepository();
 
             // Conceptos atados a un módulo con contabilización propia (COMPRA, LIQUIDACION,
-            // FACTURA_VENTA, RECIBO_VENTA) ya no aceptan una cuenta propia aquí: su cuenta real
-            // se configura en la sección de Adquisiciones/Ventas/Recibos de este mismo módulo
-            // (ver egresos-compras-cxp-contrapartida-faltante).
+            // FACTURA_VENTA, RECIBO_VENTA, ROL) ya no aceptan una cuenta propia aquí: su cuenta
+            // real se configura en la sección de Adquisiciones/Ventas/Recibos/Nómina de este mismo
+            // módulo (ver egresos-compras-cxp-contrapartida-faltante).
             $opcionActual = $opcRepo->getById($idOpcion, $idEmpresa);
             $comportamientoActual = (string) ($opcionActual['comportamiento'] ?? '');
             if ($this->repository->tieneCuentaOficialPorComportamiento($comportamientoActual)) {
-                echo json_encode(['ok' => false, 'error' => 'Este concepto toma su cuenta directamente de la configuración del módulo (Adquisiciones/Ventas/Recibos) — no se puede asignar una cuenta aparte aquí.']);
+                echo json_encode(['ok' => false, 'error' => 'Este concepto toma su cuenta directamente de la configuración del módulo (Adquisiciones/Ventas/Recibos/Nómina) — no se puede asignar una cuenta aparte aquí.']);
                 exit;
             }
 

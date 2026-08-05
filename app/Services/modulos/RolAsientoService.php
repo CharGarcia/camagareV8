@@ -44,6 +44,67 @@ class RolAsientoService
         'Desahucio'         => ['GASTODESAHUCIONOMINA', 'DESAHUCIOPORPAGARNOMINA'],
     ];
 
+    /**
+     * Agrupa los rubros individuales de una línea del rol (rol_detalle_rubro, ya
+     * traídos por RolPagoRepository::getDetalleCompleto()/getLinea()) en los 6
+     * grupos de tipo_asiento='nomina' que reemplazan a los antiguos totales
+     * agregados "Gasto Sueldos y Salarios" (todo ingreso) y "Anticipos y
+     * Descuentos" (todo egreso salvo IESS personal):
+     *
+     *   - sueldo_base:           origen='sueldo'.
+     *   - horas_extra:           origen='novedad', codigo 4/5/6 (nocturna/suplementaria/extraordinaria).
+     *   - ingresos_gravados:     resto de ingresos con aporta_iess=true (rubro_fijo, vacaciones).
+     *   - ingresos_no_gravados:  resto de ingresos con aporta_iess=false (otros ingresos, rubro_fijo,
+     *                            fondos de reserva, décimo 3°/4° mensualizado).
+     *   - anticipos:             novedad codigo 3 (Anticipo) + "Neteo semanas/quincenas del mes"
+     *                            (lo ya pagado en quincena/semana, ver AsientoBuilderService::
+     *                            sumaRolNoMensualPorEgreso — misma cuenta ANTICIPOSDESCUENTOSNOMINA).
+     *   - descuentos:            todo lo demás: descuento directo, préstamos (quirografario,
+     *                            hipotecario, empresa), días no laborados, retención IR, rubro_fijo
+     *                            egreso, y "Descuentos aplicados en quincenas/semanas del mes".
+     *
+     * El aporte IESS personal (origen='iess') se excluye por completo: ya tiene su
+     * propia cuenta (IESSPORPAGARNOMINA), igual que antes.
+     */
+    private function clasificarRubros(array $rubros): array
+    {
+        $grp = [
+            'sueldo_base' => 0.0, 'horas_extra' => 0.0,
+            'ingresos_gravados' => 0.0, 'ingresos_no_gravados' => 0.0,
+            'anticipos' => 0.0, 'descuentos' => 0.0,
+        ];
+        foreach ($rubros as $r) {
+            $tipo    = (string) ($r['tipo'] ?? '');
+            $origen  = (string) ($r['origen'] ?? '');
+            $codigo  = (string) ($r['codigo'] ?? '');
+            $valor   = (float) ($r['valor'] ?? 0);
+            $concepto = (string) ($r['concepto'] ?? '');
+            $aportaIess = in_array($r['aporta_iess'] ?? false, [true, 't', '1', 1], true);
+
+            if ($tipo === 'ingreso') {
+                if ($origen === 'sueldo') {
+                    $grp['sueldo_base'] += $valor;
+                } elseif ($origen === 'novedad' && in_array($codigo, ['4', '5', '6'], true)) {
+                    $grp['horas_extra'] += $valor;
+                } elseif ($aportaIess) {
+                    $grp['ingresos_gravados'] += $valor;
+                } else {
+                    $grp['ingresos_no_gravados'] += $valor;
+                }
+            } elseif ($tipo === 'egreso') {
+                if ($origen === 'iess') {
+                    continue;
+                }
+                if (($origen === 'novedad' && $codigo === '3') || ($origen === 'neteo' && str_starts_with($concepto, 'Neteo'))) {
+                    $grp['anticipos'] += $valor;
+                } else {
+                    $grp['descuentos'] += $valor;
+                }
+            }
+        }
+        return $grp;
+    }
+
     public function __construct(RolPagoRepository $repo, LogSistemaService $log)
     {
         $this->repo = $repo;
@@ -151,8 +212,12 @@ class RolAsientoService
             $nombresPorEmpleado[$idEmp] = $nombre;
             $empOv  = $overridesPorEmpleado[$idEmp];
             $provis = $prov->calcularProvisiones($lin, $salario);
+            $grp    = $this->clasificarRubros($lin['rubros'] ?? []);
 
-            $push('GASTOSUELDOSNOMINA', 'debe', (float) $lin['total_ingresos'], 'Gasto Sueldos y Salarios', $empOv, $idEmp, $nombre);
+            $push('GASTOSUELDOSNOMINA', 'debe', $grp['sueldo_base'], 'Gasto Sueldos y Salarios', $empOv, $idEmp, $nombre);
+            $push('GASTOHORASEXTRASNOMINA', 'debe', $grp['horas_extra'], 'Gasto Horas Extras', $empOv, $idEmp, $nombre);
+            $push('INGRESOSGRAVADOSNOMINA', 'debe', $grp['ingresos_gravados'], 'Ingresos Gravados', $empOv, $idEmp, $nombre);
+            $push('INGRESOSNOGRAVADOSNOMINA', 'debe', $grp['ingresos_no_gravados'], 'Ingresos No Gravados', $empOv, $idEmp, $nombre);
             $push('GASTOAPORTEPATRONALNOMINA', 'debe', (float) $lin['aporte_patronal'], 'Gasto Aporte Patronal IESS', $empOv, $idEmp, $nombre);
             foreach ($provis as $p) {
                 if (!empty($p['incluir']) && $p['valor'] > 0) {
@@ -166,7 +231,8 @@ class RolAsientoService
                     $push(self::PROV_MAP[$p['concepto']][1] ?? '', 'haber', (float) $p['valor'], $p['concepto'] . ' por Pagar', $empOv, $idEmp, $nombre);
                 }
             }
-            $push('ANTICIPOSDESCUENTOSNOMINA', 'haber', (float) $lin['total_egresos'] - (float) $lin['aporte_iess'], 'Anticipos y Descuentos', $empOv, $idEmp, $nombre);
+            $push('ANTICIPOSDESCUENTOSNOMINA', 'haber', $grp['anticipos'], 'Anticipos', $empOv, $idEmp, $nombre);
+            $push('DESCUENTOSNOMINA', 'haber', $grp['descuentos'], 'Descuentos', $empOv, $idEmp, $nombre);
             // Base DEVENGADO: el rol se contabiliza al calcularse, no al pagarse — el
             // líquido a pagar todavía no salió de Bancos, así que se reconoce como
             // pasivo (Sueldos por Pagar), no como salida de caja. El egreso que
@@ -368,16 +434,21 @@ class RolAsientoService
         };
 
         $prov = (new RolProvisionService())->calcularProvisiones($lin, $salario);
+        $grp  = $this->clasificarRubros($lin['rubros'] ?? []);
         $debe = [];
         $haber = [];
 
-        $debe[] = $mk('GASTOSUELDOSNOMINA', 'Gasto Sueldos y Salarios', (float) $lin['total_ingresos']);
+        $debe[] = $mk('GASTOSUELDOSNOMINA', 'Gasto Sueldos y Salarios', $grp['sueldo_base']);
+        $debe[] = $mk('GASTOHORASEXTRASNOMINA', 'Gasto Horas Extras', $grp['horas_extra']);
+        $debe[] = $mk('INGRESOSGRAVADOSNOMINA', 'Ingresos Gravados', $grp['ingresos_gravados']);
+        $debe[] = $mk('INGRESOSNOGRAVADOSNOMINA', 'Ingresos No Gravados', $grp['ingresos_no_gravados']);
         $debe[] = $mk('GASTOAPORTEPATRONALNOMINA', 'Gasto Aporte Patronal IESS', (float) $lin['aporte_patronal']);
         foreach ($prov as $p) if (!empty($p['incluir']) && $p['valor'] > 0) $debe[] = $mk(self::PROV_MAP[$p['concepto']][0] ?? '', 'Gasto ' . $p['concepto'], (float) $p['valor']);
 
         $haber[] = $mk('IESSPORPAGARNOMINA', 'IESS por Pagar', (float) $lin['aporte_iess'] + (float) $lin['aporte_patronal']);
         foreach ($prov as $p) if (!empty($p['incluir']) && $p['valor'] > 0) $haber[] = $mk(self::PROV_MAP[$p['concepto']][1] ?? '', $p['concepto'] . ' por Pagar', (float) $p['valor']);
-        $haber[] = $mk('ANTICIPOSDESCUENTOSNOMINA', 'Anticipos y Descuentos', (float) $lin['total_egresos'] - (float) $lin['aporte_iess']);
+        $haber[] = $mk('ANTICIPOSDESCUENTOSNOMINA', 'Anticipos', $grp['anticipos']);
+        $haber[] = $mk('DESCUENTOSNOMINA', 'Descuentos', $grp['descuentos']);
         $haber[] = $mk('SUELDOSPORPAGARNOMINA', 'Sueldos por Pagar', (float) $lin['neto']);
 
         $debe = array_values(array_filter($debe));

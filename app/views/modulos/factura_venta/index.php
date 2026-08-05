@@ -4970,7 +4970,9 @@ $totalPages = $totalPagesOriginal;
         fvActualizarEstadoBotones(data.estado || 'borrador');
 
         if (typeof window.CMG_Bloqueo !== 'undefined') {
-            window.CMG_Bloqueo.detener(); // libera el lock de la factura anterior, si había uno
+            // Esperado: si no, esta liberación puede llegar al servidor DESPUÉS del "tomar" de
+            // abajo y borrar el lock recién tomado (ver comentario en bloqueo-edicion.js).
+            await window.CMG_Bloqueo.detener(); // libera el lock de la factura anterior, si había uno
             if (esBorrador) {
                 window.CMG_Bloqueo.iniciar({
                     urlBase: `${B_URL}/${RUTA_MODULO}`,

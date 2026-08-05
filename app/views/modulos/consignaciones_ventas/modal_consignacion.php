@@ -166,9 +166,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                     <label class="form-label small fw-bold">Bodega * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cons_id_bodega', 'id_bodega') ?></label>
                                     <select class="form-select form-select-sm" id="cons_id_bodega" name="id_bodega" required>
                                         <option value="">Seleccione...</option>
+                                        <?php
+                                        // Autoselección: si hay una sola bodega, se marca aunque no sea la
+                                        // predeterminada de la empresa (el favorito del usuario, si existe,
+                                        // se aplica después por JS vía aplicarFavoritosModal).
+                                        $unicaBodega = isset($bodegas) && count($bodegas) === 1;
+                                        ?>
                                         <?php if(isset($bodegas)): ?>
                                             <?php foreach ($bodegas as $b): ?>
-                                                <option value="<?= $b['id'] ?>" <?= !empty($b['es_default']) ? 'selected' : '' ?>>
+                                                <option value="<?= $b['id'] ?>" <?= (!empty($b['es_default']) || $unicaBodega) ? 'selected' : '' ?>>
                                                     <?= htmlspecialchars($b['nombre']) ?>
                                                 </option>
                                             <?php endforeach; ?>
@@ -1843,15 +1849,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     let loteHtml = '';
                     let vencHtml = '';
                     let nupHtml = '';
+                    let lotesData = [];
+                    const requiereNup = esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario && !!EMPRESA_CONFIG.obligatorio_nup;
 
                     if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
                         let lotesOptions = '<option value="">Lote...</option>';
                         let vencOptions = '<option value="">Vencimiento...</option>';
-                        
+
                         try {
                             const resL = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${item.id_producto}&id_bodega=${bodegaId}`);
                             const dataL = await resL.json();
                             if (dataL.ok && dataL.data.length > 0) {
+                                lotesData = dataL.data;
                                 dataL.data.forEach(l => {
                                     const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
                                     const c = l.fecha_caducidad || '';
@@ -1876,6 +1885,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         nupHtml = '<span class="text-muted small">—</span>';
                     }
 
+                    // Con NUP obligatorio cada fila representa UNA unidad física (un NUP = una
+                    // unidad): la cantidad por defecto y el máximo permitido son 1, no todo el
+                    // saldo pendiente (se va sacando de a una, cada una con su propio NUP).
+                    const cantidadMax = requiereNup ? Math.min(1, cantPendiente) : cantPendiente;
+                    const cantidadDefault = cantidadMax;
+
                     const tr = document.createElement('tr');
                     tr.dataset.itemId = item.id;
                     tr.dataset.productoId = item.id_producto;
@@ -1888,7 +1903,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         <td class="text-end align-middle small">${parseFloat(item.cantidad_consignada)}</td>
                         <td class="text-end align-middle small fw-bold text-danger">${cantPendiente}</td>
                         <td class="align-middle">
-                            <input type="number" class="form-control form-control-sm item-cantidad text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0" step="any" max="${cantPendiente}" value="${cantPendiente}">
+                            <input type="number" class="form-control form-control-sm item-cantidad text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0" step="any" max="${cantidadMax}" value="${cantidadDefault}" ${requiereNup ? 'oninput="if(parseFloat(this.value)>1){this.value=1;}"' : ''}>
                         </td>
                         <td class="align-middle">
                             <select class="form-select form-select-sm item-lista-precios py-0 px-1" style="font-size: 0.8rem; height: auto;" onchange="const tr = this.closest('tr'); tr.querySelector('.item-precio').value = parseFloat(this.value).toFixed(2);">
@@ -1903,6 +1918,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         <td class="align-middle">${nupHtml}</td>
                     `;
                     tbody.appendChild(tr);
+
+                    // Al elegir un lote, autocompletar la fecha de vencimiento que le corresponde.
+                    const selLoteRow = tr.querySelector('.item-lote');
+                    const selVencRow = tr.querySelector('.item-caducidad');
+                    if (selLoteRow && selVencRow) {
+                        selLoteRow.addEventListener('change', () => {
+                            const match = lotesData.find(l => (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) === selLoteRow.value);
+                            selVencRow.value = match ? (match.fecha_caducidad || '') : '';
+                        });
+                    }
                 }
 
                 document.getElementById('bp_empty_state').classList.add('d-none');
@@ -1938,7 +1963,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         const checkedRows = tbodyItems.querySelectorAll('tr');
         
         let selectedItems = [];
-        
+        let omitidos = [];
+
+        // No todo o nada: solo se agregan las filas COMPLETAS (cantidad válida + lote/caducidad/nup
+        // cuando aplican). Las incompletas se omiten en silencio (se listan al final), en vez de
+        // bloquear la carga de las que sí están listas.
         let validationError = null;
 
         checkedRows.forEach(tr => {
@@ -1951,15 +1980,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 const price = parseFloat(tr.querySelector('.item-precio').value) || 0;
                 const selLista = tr.querySelector('.item-lista-precios');
                 const priceBase = selLista ? parseFloat(selLista.options[0].value) : price;
-                
+
                 const selLote = tr.querySelector('.item-lote');
                 const selCad = tr.querySelector('.item-caducidad');
                 const inpNup = tr.querySelector('.item-nup');
-                
+
                 const lote = selLote ? selLote.value : '';
                 const caducidad = selCad ? selCad.value : '';
                 const nup = inpNup ? inpNup.value.trim() : '';
-                
+
                 const detailObj = loaded.detalles.find(d => d.id === itemDetailId);
                 const maxQty = parseFloat(tr.querySelector('.item-cantidad').max) || 0;
                 if (qty > maxQty) {
@@ -1971,22 +2000,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
                 if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
                     if (EMPRESA_CONFIG.obligatorio_lotes && !lote) {
-                        validationError = `El lote es obligatorio para el producto: ${detailObj.producto_nombre}`;
-                        if (selLote) selLote.focus();
+                        omitidos.push(`${detailObj.producto_nombre} (falta lote)`);
                         return;
                     }
                     if (EMPRESA_CONFIG.obligatorio_caducidad && !caducidad) {
-                        validationError = `La fecha de vencimiento es obligatoria para el producto: ${detailObj.producto_nombre}`;
-                        if (selCad) selCad.focus();
+                        omitidos.push(`${detailObj.producto_nombre} (falta fecha de vencimiento)`);
                         return;
                     }
                     if (EMPRESA_CONFIG.obligatorio_nup && !nup) {
-                        validationError = `El NUP es obligatorio para el producto: ${detailObj.producto_nombre}`;
-                        if (inpNup) inpNup.focus();
+                        omitidos.push(`${detailObj.producto_nombre} (falta NUP)`);
                         return;
                     }
                 }
-                
+
                 selectedItems.push({
                     id_pedido_detalle: itemDetailId,
                     id_producto: idProducto,
@@ -2000,14 +2026,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 });
             }
         });
-        
+
         if (validationError) {
             Swal.fire('Atención', validationError, 'warning');
             return;
         }
-        
+
         if (selectedItems.length === 0) {
-            Swal.fire('Atención', 'Debe configurar una cantidad mayor a cero en al menos un ítem.', 'warning');
+            Swal.fire('Atención', omitidos.length
+                ? 'Ningún ítem tiene la fila completa (lote/vencimiento/NUP). Complete al menos uno para agregarlo.'
+                : 'Debe configurar una cantidad mayor a cero en al menos un ítem.', 'warning');
             return;
         }
 
@@ -2148,13 +2176,21 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             consBuscarPedidoModal.hide();
         }
         
-        Swal.fire({
-            icon: 'success',
-            title: 'Ítems Agregados',
-            text: 'Se han agregado los ítems seleccionados correctamente.',
-            timer: 1500,
-            showConfirmButton: false
-        });
+        if (omitidos.length) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Ítems agregados (con omisiones)',
+                html: `Se agregaron ${selectedItems.length} ítem(s). No se agregaron por tener la fila incompleta:<ul class="text-start small mb-0 mt-2">${omitidos.map(o => `<li>${o}</li>`).join('')}</ul>`,
+            });
+        } else {
+            Swal.fire({
+                icon: 'success',
+                title: 'Ítems Agregados',
+                text: 'Se han agregado los ítems seleccionados correctamente.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        }
     };
 
     function crearVendedorRapido() { Swal.fire('Info', 'Abre modal de vendedor', 'info'); }

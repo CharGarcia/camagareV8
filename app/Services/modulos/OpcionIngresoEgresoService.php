@@ -45,15 +45,29 @@ class OpcionIngresoEgresoService
      * pueda tener guardada aparte este concepto (campo legado, ver
      * egresos-compras-cxp-contrapartida-faltante). Agrega `cuenta_bloqueada` para que la vista
      * deshabilite la edición de ese campo.
+     *
+     * ROL (Nómina) también queda bloqueado, pero sin una única cuenta oficial que mostrar en su
+     * lugar (se reparte entre "Sueldos por Pagar" y "Anticipos" según el tipo de rol — ver
+     * AsientoProgramadoRepository::COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL): en vez de la
+     * cuenta legada que pudiera tener guardada, se agrega `cuentas_oficiales_multiples` con las
+     * cuentas reales (autocompletado de solo lectura, misma idea que la cuenta única de arriba
+     * pero mostrando varias) para que la vista las liste en vez de dejar el campo en blanco.
      */
     private function aplicarCuentaOficial(array $row, int $idEmpresa): array
     {
-        $oficial = $this->programadoRepo->getCuentaOficialPorComportamiento($idEmpresa, (string) ($row['comportamiento'] ?? ''));
-        $row['cuenta_bloqueada'] = $oficial !== null;
+        $comportamiento = (string) ($row['comportamiento'] ?? '');
+        $oficial = $this->programadoRepo->getCuentaOficialPorComportamiento($idEmpresa, $comportamiento);
+        $row['cuenta_bloqueada'] = $oficial !== null || $this->programadoRepo->tieneCuentaOficialPorComportamiento($comportamiento);
+        $row['cuentas_oficiales_multiples'] = [];
         if ($oficial !== null) {
             $row['id_cuenta_contable'] = $oficial['id_cuenta'] ?: null;
             $row['cuenta_codigo']      = $oficial['cuenta_codigo'];
             $row['cuenta_nombre']      = $oficial['cuenta_nombre'];
+        } elseif ($row['cuenta_bloqueada']) {
+            $row['cuentas_oficiales_multiples'] = $this->programadoRepo->getCuentasOficialesMultiplesPorComportamiento($idEmpresa, $comportamiento);
+            $row['id_cuenta_contable'] = null;
+            $row['cuenta_codigo']      = '';
+            $row['cuenta_nombre']      = '';
         }
         return $row;
     }

@@ -330,10 +330,12 @@ class AsientoProgramadoRepository extends BaseRepository
     /**
      * comportamiento (empresa_opciones_ingreso_egreso) => [tipo_asiento, codigo] de la cuenta
      * "oficial" que ese módulo YA usa para su propia Cuenta por Pagar/Cobrar en Configuración
-     * Contable. Solo cubre comportamientos con un documento de origen que genera su propio
-     * asiento (compra, liquidación, factura de venta, recibo de venta); anticipos y préstamos
-     * (ANTICIPO_CLIENTE, ANTICIPO_PROVEEDOR, QUINCENA, PRESTAMO, ROL) no tienen equivalente
-     * porque son la transacción de origen y necesitan su propia cuenta configurable.
+     * Contable. Solo cubre comportamientos con una ÚNICA cuenta oficial resoluble (compra,
+     * liquidación, factura de venta, recibo de venta). ROL también tiene cuenta oficial, pero
+     * repartida entre DOS cuentas de 'nomina' según el tipo de rol (ver
+     * COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL) — no encaja en este mapa de "una sola cuenta".
+     * Anticipos y préstamos (ANTICIPO_CLIENTE, ANTICIPO_PROVEEDOR, QUINCENA, PRESTAMO) sí quedan
+     * fuera de ambos: son la transacción de origen y necesitan su propia cuenta configurable.
      */
     private const COMPORTAMIENTO_CUENTA_OFICIAL = [
         'COMPRA'        => ['adquisiciones_compras', 'PORPAGARFACTURACOMPRA'],
@@ -342,17 +344,32 @@ class AsientoProgramadoRepository extends BaseRepository
         'RECIBO_VENTA'  => ['recibos_venta',         'PORCOBRARRECIBOVENTA'],
     ];
 
-    /** ¿Este comportamiento tiene una cuenta oficial equivalente (ver COMPORTAMIENTO_CUENTA_OFICIAL)? */
+    /**
+     * Comportamientos con cuenta oficial pero SIN una única cuenta resoluble por
+     * getCuentaOficialPorComportamiento(): ROL reparte su monto entre "Sueldos por Pagar" (rol
+     * MENSUAL) y "Anticipos y Descuentos" (rol QUINCENA/SEMANAL), ambas de tipo_asiento='nomina'
+     * — ver AsientoBuilderService::generarAsientoEgreso(), sumaRolMensualPorEgreso() /
+     * sumaRolNoMensualPorEgreso(). Se bloquea su cuenta libre igual que los de
+     * COMPORTAMIENTO_CUENTA_OFICIAL (tieneCuentaOficialPorComportamiento() los une a todos), pero
+     * NO participan en getCuentaOficialPorComportamiento() — no hay una sola cuenta "oficial" que
+     * asignarles ahí, la resolución ya ocurre por su cuenta en generarAsientoEgreso().
+     */
+    private const COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL = ['ROL'];
+
+    /** ¿Este comportamiento tiene cuenta oficial y por tanto su cuenta libre queda bloqueada (ver ambas constantes arriba)? */
     public function tieneCuentaOficialPorComportamiento(string $comportamiento): bool
     {
-        return isset(self::COMPORTAMIENTO_CUENTA_OFICIAL[strtoupper($comportamiento)]);
+        $comportamiento = strtoupper($comportamiento);
+        return isset(self::COMPORTAMIENTO_CUENTA_OFICIAL[$comportamiento])
+            || in_array($comportamiento, self::COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL, true);
     }
 
     /**
      * Resuelve la cuenta "oficial" (Configuración Contable) de un comportamiento de concepto de
      * Ingresos/Egresos. Devuelve null si ese comportamiento no tiene equivalente (sigue usando su
-     * propia cuenta libre); devuelve id_cuenta=0 si SÍ tiene equivalente pero aún no está
-     * configurada en Configuración Contable.
+     * propia cuenta libre) o si tiene cuenta oficial pero repartida en varias cuentas sin una sola
+     * resoluble (ROL — ver COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL); devuelve id_cuenta=0 si SÍ
+     * tiene una única cuenta oficial pero aún no está configurada en Configuración Contable.
      */
     public function getCuentaOficialPorComportamiento(int $idEmpresa, string $comportamiento): ?array
     {
@@ -374,15 +391,48 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
-     * Comportamientos que YA quedan cubiertos automáticamente por otra sección de
-     * Configuración Contable — no tienen una única "cuenta oficial" resoluble como
-     * COMPORTAMIENTO_CUENTA_OFICIAL (ROL reparte su monto entre dos cuentas de
-     * 'nomina' según el tipo de rol — ver AsientoBuilderService::generarAsientoEgreso,
-     * sumaRolMensualPorEgreso/sumaRolNoMensualPorEgreso), así que solo se excluyen del
-     * LISTADO (no se bloquea guardarReglaOpcionAjax): su cuenta libre sigue sirviendo
-     * de respaldo para el remanente no cubierto por esas dos cuentas.
+     * comportamiento => [[etiqueta, tipo_asiento, codigo], ...] para los de
+     * COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL: no tienen una única cuenta oficial, pero sí
+     * varias — se muestran informativamente en Opciones de Ingreso/Egreso (autocompletado de solo
+     * lectura, igual que getCuentaOficialPorComportamiento() para los de una sola cuenta), sin que
+     * ninguna de ellas se use realmente para resolver el asiento (eso ya lo hace
+     * AsientoBuilderService::generarAsientoEgreso() directamente por su cuenta).
      */
-    private const COMPORTAMIENTO_SOLO_OCULTO_LISTADO = ['ROL'];
+    private const COMPORTAMIENTO_CUENTAS_OFICIALES_MULTIPLES = [
+        'ROL' => [
+            ['Rol mensual',       'nomina', 'SUELDOSPORPAGARNOMINA'],
+            ['Quincena / Semana', 'nomina', 'ANTICIPOSDESCUENTOSNOMINA'],
+        ],
+    ];
+
+    /**
+     * Resuelve, solo para mostrar (autocompletado de solo lectura en Opciones de Ingreso/Egreso),
+     * las cuentas oficiales de un comportamiento con varias cuentas (ver
+     * COMPORTAMIENTO_CUENTAS_OFICIALES_MULTIPLES). Array vacío si el comportamiento no aplica.
+     */
+    public function getCuentasOficialesMultiplesPorComportamiento(int $idEmpresa, string $comportamiento): array
+    {
+        $mapas = self::COMPORTAMIENTO_CUENTAS_OFICIALES_MULTIPLES[strtoupper($comportamiento)] ?? [];
+        if (empty($mapas)) {
+            return [];
+        }
+        $resultado = [];
+        foreach ($mapas as [$etiqueta, $tipoAsiento, $codigo]) {
+            $cuenta = ['id_cuenta' => 0, 'cuenta_codigo' => '', 'cuenta_nombre' => ''];
+            foreach ($this->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento) as $r) {
+                if (($r['codigo'] ?? '') === $codigo) {
+                    $cuenta = [
+                        'id_cuenta'     => (int) ($r['id_cuenta'] ?? 0),
+                        'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                    ];
+                    break;
+                }
+            }
+            $resultado[] = ['etiqueta' => $etiqueta] + $cuenta;
+        }
+        return $resultado;
+    }
 
     /**
      * Obtiene las opciones de Ingresos/Egresos (módulo empresa_opciones_ingreso_egreso) activas
@@ -390,16 +440,12 @@ class AsientoProgramadoRepository extends BaseRepository
      * La cuenta se toma del asiento programado si existe; en su defecto, de la cuenta asignada
      * en el propio módulo de opciones (id_cuenta_contable).
      *
-     * Excluye los comportamientos con cuenta oficial propia (COMPORTAMIENTO_CUENTA_OFICIAL):
-     * esos conceptos (Compras, Liquidaciones, Facturas de Venta, Recibos de Venta) ya configuran
-     * su cuenta contable desde la sección propia de ese módulo, y guardarReglaOpcionAjax() rechaza
-     * asignarles una cuenta aquí — mostrarlos en este listado solo confundía al usuario.
-     * También excluye COMPORTAMIENTO_SOLO_OCULTO_LISTADO (ROL): ya no hace falta configurar su
-     * cuenta libre a mano porque el pago de rol la resuelve solo (mensual → Sueldos por Pagar,
-     * quincena/semana → Anticipos y Descuentos), pero a diferencia de los anteriores NO se bloquea
-     * su edición — sigue existiendo como concepto obligatorio para "Generar egresos de nómina"
-     * (ver RolEgresoLoteService) y su cuenta libre es el respaldo si esas dos cuentas no están
-     * configuradas.
+     * Excluye los comportamientos bloqueados (tieneCuentaOficialPorComportamiento): Compras,
+     * Liquidaciones, Facturas de Venta y Recibos de Venta ya configuran su cuenta contable desde
+     * la sección propia de ese módulo; Nómina (ROL) la resuelve sola (mensual → Sueldos por Pagar,
+     * quincena/semana → Anticipos y Descuentos, ver AsientoBuilderService). guardarReglaOpcionAjax()
+     * y OpcionIngresoEgresoService rechazan asignarles una cuenta aparte — mostrarlos en este
+     * listado solo confundía al usuario.
      *
      * @param string $naturaleza 'ingreso' | 'egreso'
      */
@@ -415,7 +461,7 @@ class AsientoProgramadoRepository extends BaseRepository
         ];
         $comportamientosOcultos = array_merge(
             array_keys(self::COMPORTAMIENTO_CUENTA_OFICIAL),
-            self::COMPORTAMIENTO_SOLO_OCULTO_LISTADO
+            self::COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL
         );
         $exclusiones = [];
         foreach ($comportamientosOcultos as $i => $comportamiento) {

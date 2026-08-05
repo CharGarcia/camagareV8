@@ -376,41 +376,14 @@
         fetch(urlBaseGR + '/get-detalle-factura-ajax?id=' + id)
             .then(r => r.json())
             .then(d => {
-                if (!d.ok) return;
+                if (!d.ok) {
+                    Swal.fire({ icon: 'error', title: 'No se pudo cargar la factura', text: d.mensaje || 'Intente nuevamente.' });
+                    return;
+                }
                 const cab = d.cabecera;
 
-                // 0. Datos del documento de sustento (van al XML y al RIDE)
-                const selCod = document.getElementById('gr-cod-doc-sustento');
-                if (selCod) selCod.value = '01'; // factura
-                const inpFechaSust = document.getElementById('gr-fecha-doc-sustento');
-                if (inpFechaSust) inpFechaSust.value = (cab.fecha_emision || '').substring(0, 10);
-                const inpAutSust = document.getElementById('gr-num-aut-doc-sustento');
-                if (inpAutSust) inpAutSust.value = cab.numero_autorizacion || cab.clave_acceso || '';
-
-                // 1. Autocompletar Cliente
-                window.GR_seleccionarCliente(cab.id_cliente, cab.cliente_nombre, cab.cliente_ruc, cab.cliente_direccion || '');
-
-                // 2. Origen (Dirección del establecimiento actual)
-                const selSerie = document.getElementById('gr-serie');
-                if (selSerie) {
-                    const idEst = selSerie.selectedOptions[0]?.dataset.idEst;
-                    // Si GR_establecimientos no está definido, se puede omitir o buscar vía AJAX
-                    if (window.GR_establecimientos) {
-                        const est = window.GR_establecimientos.find(e => parseInt(e.id) === parseInt(idEst));
-                        if (est) document.getElementById('gr-partida').value = est.direccion || '';
-                    }
-                }
-
-                // 3. Destino (Dirección del cliente)
-                document.getElementById('gr-destino').value = cab.cliente_direccion || '';
-
-                // 4. Motivo: Venta
-                document.getElementById('gr-motivo').value = 'Venta';
-
-                // 5. Cód. est. destino: 001
-                document.getElementById('gr-cod-est-destino').value = '001';
-
-                // 6. Cargar Productos
+                // 1. Cargar Productos primero: si algún paso de autocompletado
+                // más abajo falla, los ítems ya quedaron agregados igual.
                 document.getElementById('gr-tbody-detalle').innerHTML = '';
                 (d.detalles || []).forEach(det => {
                     window.GR_agregarLinea({
@@ -421,7 +394,81 @@
                     });
                 });
                 window.GR_actualizarNumeracion();
+                if (!(d.detalles || []).length) {
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'warning',
+                        title: 'Esa factura no tiene productos físicos para trasladar (solo servicios).',
+                        showConfirmButton: false, timer: 3500, timerProgressBar: true });
+                }
+
+                try {
+                    // 0. Datos del documento de sustento (van al XML y al RIDE)
+                    const selCod = document.getElementById('gr-cod-doc-sustento');
+                    if (selCod) selCod.value = '01'; // factura
+                    const inpFechaSust = document.getElementById('gr-fecha-doc-sustento');
+                    if (inpFechaSust) inpFechaSust.value = (cab.fecha_emision || '').substring(0, 10);
+                    const inpAutSust = document.getElementById('gr-num-aut-doc-sustento');
+                    if (inpAutSust) inpAutSust.value = cab.numero_autorizacion || cab.clave_acceso || '';
+
+                    // 2. Autocompletar Cliente (RUC + correo)
+                    window.GR_seleccionarCliente(cab.id_cliente, cab.cliente_nombre, cab.cliente_ruc, cab.cliente_direccion || '', cab.cliente_email || '');
+
+                    // 2b. Información Adicional: RUC y correo del destinatario
+                    window.GR_upsertAdicional('Ruc/Cédula Destinatario', cab.cliente_ruc || '');
+                    window.GR_upsertAdicional('Correo Destinatario', cab.cliente_email || '');
+
+                    // 3. Origen (Dirección del establecimiento actual)
+                    const selSerie = document.getElementById('gr-serie');
+                    if (selSerie) {
+                        const idEst = selSerie.selectedOptions[0]?.dataset.idEst;
+                        // Si GR_establecimientos no está definido, se puede omitir o buscar vía AJAX
+                        if (window.GR_establecimientos) {
+                            const est = window.GR_establecimientos.find(e => parseInt(e.id) === parseInt(idEst));
+                            if (est) document.getElementById('gr-partida').value = est.direccion || '';
+                        }
+                    }
+
+                    // 4. Destino (Dirección del cliente)
+                    document.getElementById('gr-destino').value = cab.cliente_direccion || '';
+
+                    // 5. Motivo: Venta
+                    document.getElementById('gr-motivo').value = 'Venta';
+
+                    // 6. Cód. est. destino: 001
+                    document.getElementById('gr-cod-est-destino').value = '001';
+                } catch (e) {
+                    console.error('GR_seleccionarFacturaSustento: error al autocompletar datos de la factura', e);
+                }
+            })
+            .catch(() => {
+                Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el detalle de la factura.' });
             });
+    };
+
+    /**
+     * Crea o actualiza (por nombre) una fila en la tabla de Información
+     * Adicional. Reutiliza la primera fila vacía si existe, para no dejar
+     * líneas en blanco sueltas cuando se autocompleta desde una factura.
+     */
+    window.GR_upsertAdicional = function (nombre, valor) {
+        if (!valor) return;
+        const tbody = document.getElementById('gr-tbody-adicional');
+        if (!tbody) return;
+
+        let fila = Array.from(tbody.querySelectorAll('tr.row-adicional')).find(tr =>
+            (tr.querySelector('.input-adic-nombre')?.value.trim().toLowerCase() || '') === nombre.toLowerCase());
+
+        if (!fila) {
+            fila = Array.from(tbody.querySelectorAll('tr.row-adicional')).find(tr =>
+                !(tr.querySelector('.input-adic-nombre')?.value.trim()));
+        }
+
+        if (fila) {
+            fila.querySelector('.input-adic-nombre').value = nombre;
+            fila.querySelector('.input-adic-valor').value  = valor;
+        } else {
+            window.GR_agregarAdicionalLinea({ nombre, valor });
+        }
+        window.GR_asegurarLineaAdicional();
     };
 
     window.GR_buscarTransportista = function (q) {

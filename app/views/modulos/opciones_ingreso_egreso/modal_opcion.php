@@ -79,6 +79,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                             <div id="oie-cuenta-bloqueada-nota" class="form-text text-muted d-none" style="font-size: 0.7rem;">
                                 <i class="bi bi-lock-fill me-1"></i>Esta cuenta se configura en <strong>Contabilidad → Configuración Contable</strong>, no aquí.
                             </div>
+                            <div id="oie-cuentas-multiples" class="mt-1 d-none"></div>
                         </div>
 
                         <!-- Col 3: Switch de Estado -->
@@ -148,8 +149,10 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
     let modalInstanciaOIE = null;
 
     // Comportamientos cuya cuenta viene de Configuración Contable (no editable aquí) — debe
-    // coincidir con AsientoProgramadoRepository::COMPORTAMIENTO_CUENTA_OFICIAL.
-    const OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA = ['COMPRA', 'LIQUIDACION', 'FACTURA_VENTA', 'RECIBO_VENTA'];
+    // coincidir con AsientoProgramadoRepository::tieneCuentaOficialPorComportamiento()
+    // (COMPORTAMIENTO_CUENTA_OFICIAL + COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL). ROL (Nómina)
+    // se resuelve solo entre "Sueldos por Pagar" y "Anticipos y Descuentos" según el tipo de rol.
+    const OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA = ['COMPRA', 'LIQUIDACION', 'FACTURA_VENTA', 'RECIBO_VENTA', 'ROL'];
 
     function actualizarBloqueoCuentaOIE(comportamiento) {
         const bloqueada = OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA.includes(comportamiento);
@@ -165,6 +168,32 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
         // El valor de oie-idcuenta no se limpia aquí: el servidor ignora este campo por
         // completo para estos comportamientos (ver OpcionIngresoEgresoService::registrar/
         // actualizar), así que da igual qué traiga cuando el form se envía.
+        renderCuentasMultiplesOIE([]); // se repuebla en el fetch de edición si aplica (ver abrirModalOpcion)
+    }
+
+    /**
+     * Autocompletado de solo lectura para comportamientos con VARIAS cuentas oficiales
+     * (hoy solo ROL: "Sueldos por Pagar" para rol mensual, "Anticipos" para quincena/semana —
+     * ver AsientoProgramadoRepository::getCuentasOficialesMultiplesPorComportamiento()). No
+     * reemplaza el input único (que para estos casos queda deshabilitado y vacío); es
+     * informativo, para que el usuario vea dónde quedó cada cuenta sin tener que ir a
+     * Configuración Contable.
+     */
+    function renderCuentasMultiplesOIE(lista) {
+        const cont = document.getElementById('oie-cuentas-multiples');
+        if (!cont) return;
+        if (!lista || !lista.length) {
+            cont.classList.add('d-none');
+            cont.innerHTML = '';
+            return;
+        }
+        cont.innerHTML = lista.map(c => {
+            const texto = c.cuenta_codigo
+                ? `${c.cuenta_codigo} - ${c.cuenta_nombre}`
+                : '<span class="fst-italic">(sin configurar en Configuración Contable)</span>';
+            return `<div class="small text-muted"><span class="badge bg-secondary bg-opacity-50 me-1">${c.etiqueta}</span>${texto}</div>`;
+        }).join('');
+        cont.classList.remove('d-none');
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -362,6 +391,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                         document.getElementById('oie-nombre').value = d.nombre;
                         document.getElementById('oie-comportamiento').value = d.comportamiento || 'GENERAL';
                         actualizarBloqueoCuentaOIE(d.comportamiento || 'GENERAL');
+                        renderCuentasMultiplesOIE(d.cuentas_oficiales_multiples || []);
 
                         const checkBool = (val) => val === true || val === 't' || val === '1' || val === 1;
                         const resIng = checkBool(d.aplica_ingresos);

@@ -160,6 +160,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                 <td class="small" data-col="cuenta_contable">
                                     <?php if (!empty($r['cuenta_codigo'])): ?>
                                         <code class="fw-bold"><?= $r['cuenta_codigo'] ?></code> - <span class="text-secondary"><?= htmlspecialchars($r['cuenta_nombre']) ?></span>
+                                    <?php elseif (!empty($r['cuentas_oficiales_multiples'])): ?>
+                                        <?php foreach ($r['cuentas_oficiales_multiples'] as $cm): ?>
+                                            <div>
+                                                <span class="badge bg-secondary bg-opacity-50 me-1"><?= htmlspecialchars($cm['etiqueta']) ?></span>
+                                                <?php if (!empty($cm['cuenta_codigo'])): ?>
+                                                    <code class="fw-bold"><?= $cm['cuenta_codigo'] ?></code> - <span class="text-secondary"><?= htmlspecialchars($cm['cuenta_nombre']) ?></span>
+                                                <?php else: ?>
+                                                    <span class="text-muted fst-italic">(sin configurar)</span>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
                                     <?php else: ?>
                                         <span class="text-muted italic">No asignada</span>
                                     <?php endif; ?>
