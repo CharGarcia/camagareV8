@@ -55,6 +55,23 @@ class ProductoRepository extends BaseRepository
             $whereSql .= " AND (p.nombre ILIKE :b OR p.codigo ILIKE :b OR p.codigo_auxiliar ILIKE :b OR p.codigo_barras ILIKE :b)";
             $params[':b'] = '%' . $parsed['texto_libre'] . '%';
         }
+
+        // El buscador envía etiquetas amigables ('activo'/'inactivo', 'bien'/'servicio')
+        // pero p.status es entero (1/0) y p.tipo_produccion guarda códigos ('01'/'02').
+        // Traducir antes de aplicarFiltros() para no comparar contra valores que nunca
+        // van a coincidir (o, en el caso de status, romper el bind a entero).
+        // Mismo patrón que ClienteRepository::getListado().
+        $mapEstado = ['activo' => '1', 'inactivo' => '0'];
+        $mapTipo   = ['bien' => '01', 'servicio' => '02'];
+        $traducciones = ['estado' => $mapEstado, 'status' => $mapEstado, 'tipo' => $mapTipo];
+        foreach ($traducciones as $claveFiltro => $mapa) {
+            if (!isset($parsed['filtros'][$claveFiltro])) continue;
+            $val = $parsed['filtros'][$claveFiltro]['valor'];
+            $parsed['filtros'][$claveFiltro]['valor'] = is_array($val)
+                ? array_map(fn($v) => $mapa[strtolower(trim((string)$v))] ?? $v, $val)
+                : ($mapa[strtolower(trim((string)$val))] ?? $val);
+        }
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
             'texto' => [
                 'nombre'        => 'p.nombre',
@@ -74,7 +91,9 @@ class ProductoRepository extends BaseRepository
             ],
             'numerico' => [
                 'precio'    => 'p.precio_base',
-                'stock'     => 'p.stock',
+                // p.stock no existe: el saldo real se calcula en vivo desde el Kardex
+                // (misma subquery correlacionada que la columna saldo_actual del SELECT).
+                'stock'     => '(SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k WHERE k.id_producto = p.id AND k.id_empresa = p.id_empresa AND k.eliminado = false)',
                 'stock_min' => 'p.stock_minimo',
                 'stock_max' => 'p.stock_maximo',
             ],

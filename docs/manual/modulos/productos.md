@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable
-version: 1.1
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -129,6 +129,11 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.2** — Corregidos los filtros `tipo:`, `estado:`/`status:` y `stock:` del
+  buscador: `tipo:bien`/`tipo:servicio` y `estado:activo`/`estado:inactivo` no
+  encontraban nada (o rompían la búsqueda) porque comparaban la etiqueta
+  amigable directamente contra el código guardado en la base; `stock:` apuntaba
+  a una columna que no existe y producía un error. Los tres ya funcionan.
 - **1.1** — Botón para recalcular el costo desde el Kardex (individual y masivo
   para todo el catálogo). El Excel del listado ahora incluye IVA, ICE, PVP,
   Costo, Margen y Utilidad %, respetando los filtros de búsqueda activos.
