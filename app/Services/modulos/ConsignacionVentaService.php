@@ -85,6 +85,7 @@ class ConsignacionVentaService
 
         $cabecera['detalles']      = $detalles;
         $cabecera['tiene_factura'] = $this->tieneFacturaAsociada($id, $idEmpresa);
+        $cabecera['es_migrada']    = $this->repository->esMigrado($id, $idEmpresa);
         return $cabecera;
     }
 
@@ -533,7 +534,10 @@ class ConsignacionVentaService
         if (($cab['estado'] ?? '') === $nuevoEstado) {
             return; // sin cambios
         }
-        if ($this->tieneFacturaAsociada($id, $idEmpresa)) {
+        // Las consignaciones migradas traen la factura histórica ya vinculada (bridge de
+        // migración, sin asiento ni efecto en inventario real): no debe bloquear la corrección
+        // manual del estado, a diferencia de una factura generada en vivo desde este sistema.
+        if ($this->tieneFacturaAsociada($id, $idEmpresa) && !$this->repository->esMigrado($id, $idEmpresa)) {
             throw new Exception("No se puede cambiar el estado: la consignación tiene una factura asociada.");
         }
 

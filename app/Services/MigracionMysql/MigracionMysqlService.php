@@ -2157,6 +2157,13 @@ class MigracionMysqlService
         $insCab  = $pg->prepare("INSERT INTO pedidos_cabecera (id_empresa, id_cliente, fecha_pedido, estado, observaciones, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '001', '001', ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total) VALUES (?, ?, ?, ?, ?, 0, ?)");
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, producto, cantidad FROM detalle_pedido WHERE id_pedido = :id");
+        // Reconcile (re-migrar): actualiza la cabecera (estado/entrega/observaciones) de los ya migrados
+        // (solo los que insertó la migración, no los nativos) sin tener que "Eliminar migrados".
+        $mapDest = [];
+        $qmd = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'pedidos'");
+        $qmd->execute([$idEmpresa]);
+        foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
+        $updCab = $pg->prepare("UPDATE pedidos_cabecera SET estado = :est, fecha_entrega = :fent, hora_inicial_entrega = :hi, hora_maxima_entrega = :hm, observaciones = :obs, observaciones_internas = :obsi, updated_at = now(), updated_by = :u WHERE id = :id");
 
         $sql = "SELECT id, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
                   FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
@@ -2166,13 +2173,18 @@ class MigracionMysqlService
         while ($ep = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ep['id'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            // status viejo → estado nuevo (confirmado por el usuario): 1=Pendiente, 2=Procesado, 3=Anulado.
+            $est  = ['1' => 'Pendiente', '2' => 'Procesado', '3' => 'Anulado'][(string) $ep['status']] ?? 'Pendiente';
+            if (isset($mapDest[(string) $old])) { // ya migrado: reconciliar estado + entrega (solo insertados)
+                if (!$mapDest[(string) $old]['vin']) {
+                    try { $updCab->execute([':est' => $est, ':fent' => self::fechaCorta($ep['fecha_entrega']), ':hi' => self::nz($ep['hora_entrega_desde']), ':hm' => self::nz($ep['hora_entrega_hasta']), ':obs' => self::nz($ep['observaciones_cliente']), ':obsi' => self::nz($ep['observaciones_interna']), ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
+                    catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
+                }
+                $res['ya_migrados']++; continue;
+            }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ep['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
-
-            // status viejo → estado nuevo (1→Pendiente, 2→Procesado, 3→Facturado). Confirmar significado.
-            $est  = ['1' => 'Pendiente', '2' => 'Procesado', '3' => 'Facturado'][(string) $ep['status']] ?? 'Pendiente';
             $sec  = str_pad(preg_replace('/\D+/', '', (string) $ep['numero_pedido']), 9, '0', STR_PAD_LEFT);
             $fped = self::fechaCorta($ep['datecreated']);
             $fent = self::fechaCorta($ep['fecha_entrega']);

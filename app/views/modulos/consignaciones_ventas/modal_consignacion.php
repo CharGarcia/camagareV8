@@ -482,6 +482,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         const wrapEstado = document.getElementById('cons_estado_wrapper');
         if (wrapEstado) wrapEstado.classList.add('d-none');
         window._CONS_TIENE_FACTURA = false;
+        window._CONS_ES_MIGRADA = false;
         const selEstadoNueva = document.getElementById('cons_estado_selector');
         if (selEstadoNueva) { selEstadoNueva.value = 'Borrador'; selEstadoNueva.dataset.prev = 'Borrador'; selEstadoNueva.disabled = false; selEstadoNueva.title = ''; }
 
@@ -603,8 +604,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (wrapEstado) wrapEstado.classList.remove('d-none');
 
         // Si la consignación tiene una factura asociada, no se puede cambiar el estado.
+        // Excepción: consignaciones migradas (la factura es histórica, del bridge de
+        // migración, sin efecto real en inventario/contabilidad) sí permiten corregir el estado.
         if (selEstado) {
-            const conFactura = !!window._CONS_TIENE_FACTURA;
+            const conFactura = !!window._CONS_TIENE_FACTURA && !window._CONS_ES_MIGRADA;
             selEstado.disabled = conFactura;
             selEstado.title = conFactura ? 'La consignación tiene una factura asociada: no se puede cambiar el estado.' : '';
         }
@@ -728,6 +731,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getDetalleAjax?id=${id}`);
                 const data = await res.json();
                 window._CONS_TIENE_FACTURA = !!(data.data && data.data.tiene_factura);
+                window._CONS_ES_MIGRADA = !!(data.data && data.data.es_migrada);
                 window._CONS_CLIENTE_EMAIL = (data.data && data.data.cliente_email) ? data.data.cliente_email : '';
                 if(data.ok && data.data && data.data.detalles) {
                     const tbody = document.getElementById('cons_detalles_body');

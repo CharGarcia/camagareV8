@@ -187,6 +187,18 @@ class ConsignacionVentaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** ¿La consignación proviene de una migración? (tiene fila en migracion_mysql_map). */
+    public function esMigrado(int $id, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM migracion_mysql_map
+              WHERE entidad = 'consignaciones' AND id_destino = :id AND id_empresa = :e
+              LIMIT 1"
+        );
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
     public function create(array $data): int
     {
         $fields = array_keys($data);
