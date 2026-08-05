@@ -184,6 +184,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 cargarGrid();
             });
         });
+        // Pintar la flecha activa con el orden ya aplicado al cargar la página.
+        actualizarIconosOrden(g_ordenCol, g_ordenDir, 'tablaRetornos');
     });
 
     function actualizarIconosOrden(col, dir, tableId) {

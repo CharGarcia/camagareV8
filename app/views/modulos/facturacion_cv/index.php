@@ -181,6 +181,8 @@ include dirname(__DIR__) . '/clientes/modal_cliente.php';
                 cargarGrid();
             });
         });
+        // Pintar la flecha activa con el orden ya aplicado al cargar la página.
+        actualizarIconosOrden(g_ordenCol, g_ordenDir, 'tablaFacturacion');
     });
 
     function actualizarIconosOrden(col, dir, tableId) {

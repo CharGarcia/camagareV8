@@ -374,6 +374,17 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Comportamientos que YA quedan cubiertos automáticamente por otra sección de
+     * Configuración Contable — no tienen una única "cuenta oficial" resoluble como
+     * COMPORTAMIENTO_CUENTA_OFICIAL (ROL reparte su monto entre dos cuentas de
+     * 'nomina' según el tipo de rol — ver AsientoBuilderService::generarAsientoEgreso,
+     * sumaRolMensualPorEgreso/sumaRolNoMensualPorEgreso), así que solo se excluyen del
+     * LISTADO (no se bloquea guardarReglaOpcionAjax): su cuenta libre sigue sirviendo
+     * de respaldo para el remanente no cubierto por esas dos cuentas.
+     */
+    private const COMPORTAMIENTO_SOLO_OCULTO_LISTADO = ['ROL'];
+
+    /**
      * Obtiene las opciones de Ingresos/Egresos (módulo empresa_opciones_ingreso_egreso) activas
      * que aplican a la naturaleza indicada, cruzadas con su cuenta contable programada.
      * La cuenta se toma del asiento programado si existe; en su defecto, de la cuenta asignada
@@ -383,6 +394,12 @@ class AsientoProgramadoRepository extends BaseRepository
      * esos conceptos (Compras, Liquidaciones, Facturas de Venta, Recibos de Venta) ya configuran
      * su cuenta contable desde la sección propia de ese módulo, y guardarReglaOpcionAjax() rechaza
      * asignarles una cuenta aquí — mostrarlos en este listado solo confundía al usuario.
+     * También excluye COMPORTAMIENTO_SOLO_OCULTO_LISTADO (ROL): ya no hace falta configurar su
+     * cuenta libre a mano porque el pago de rol la resuelve solo (mensual → Sueldos por Pagar,
+     * quincena/semana → Anticipos y Descuentos), pero a diferencia de los anteriores NO se bloquea
+     * su edición — sigue existiendo como concepto obligatorio para "Generar egresos de nómina"
+     * (ver RolEgresoLoteService) y su cuenta libre es el respaldo si esas dos cuentas no están
+     * configuradas.
      *
      * @param string $naturaleza 'ingreso' | 'egreso'
      */
@@ -396,8 +413,12 @@ class AsientoProgramadoRepository extends BaseRepository
             ':id_empresa_ap' => $idEmpresa,
             ':tipo_ref'      => $tipoRef,
         ];
+        $comportamientosOcultos = array_merge(
+            array_keys(self::COMPORTAMIENTO_CUENTA_OFICIAL),
+            self::COMPORTAMIENTO_SOLO_OCULTO_LISTADO
+        );
         $exclusiones = [];
-        foreach (array_keys(self::COMPORTAMIENTO_CUENTA_OFICIAL) as $i => $comportamiento) {
+        foreach ($comportamientosOcultos as $i => $comportamiento) {
             $ph = ":comp_modulo_{$i}";
             $exclusiones[] = $ph;
             $params[$ph] = $comportamiento;

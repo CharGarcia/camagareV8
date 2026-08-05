@@ -3668,8 +3668,6 @@ class AsientoBuilderService
         // ── DEBE (rol MENSUAL, base devengado): la porción del egreso que paga un rol
         //    MENSUAL cancela "Sueldos por Pagar" (la misma cuenta que RolAsientoService
         //    acreditó al contabilizar el rol), no la cuenta genérica del concepto.
-        //    Quincena/Semanal NO entran aquí (siguen la cuenta del concepto: son
-        //    anticipos, no pasivo ya devengado).
         $totalRolMensual = $this->sumaRolMensualPorEgreso($db, $idEgreso);
         if ($totalRolMensual > 0) {
             $idCtaSueldosPorPagar = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', 'SUELDOSPORPAGARNOMINA');
@@ -3681,6 +3679,26 @@ class AsientoBuilderService
                     'referencia_detalle' => 'Sueldos por Pagar (rol mensual)',
                 ];
                 $restante = round($restante - $totalRolMensual, 2);
+            }
+            // Si la cuenta no está configurada, se queda en $restante y cae a la cuenta
+            // del concepto (igual que si la separación no aplicara).
+        }
+
+        // ── DEBE (rol QUINCENA/SEMANAL, anticipo puro): esa porción cancela
+        //    "Anticipos y Descuentos" (la misma cuenta que el rol mensual acredita
+        //    después vía el neteo), no la cuenta genérica del concepto — ver
+        //    sumaRolNoMensualPorEgreso().
+        $totalRolNoMensual = $this->sumaRolNoMensualPorEgreso($db, $idEgreso);
+        if ($totalRolNoMensual > 0) {
+            $idCtaAnticiposDescuentos = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', 'ANTICIPOSDESCUENTOSNOMINA');
+            if ($idCtaAnticiposDescuentos > 0) {
+                $detalles[] = [
+                    'id_cuenta_contable' => $idCtaAnticiposDescuentos,
+                    'debe'               => $totalRolNoMensual,
+                    'haber'              => 0.0,
+                    'referencia_detalle' => 'Anticipos y Descuentos (rol quincena/semana)',
+                ];
+                $restante = round($restante - $totalRolNoMensual, 2);
             }
             // Si la cuenta no está configurada, se queda en $restante y cae a la cuenta
             // del concepto (igual que si la separación no aplicara).
@@ -4053,7 +4071,7 @@ class AsientoBuilderService
      * Suma lo pagado (egresos_detalle.monto_pagado) de un egreso que corresponde
      * puntualmente a un rol MENSUAL (tipo_documento='ROL' cuyo rol_detalle.id_rol
      * es de un rol_cabecera.tipo_rol='MENSUAL'). Quincena/Semanal no cuentan aquí:
-     * siguen la cuenta genérica del concepto (son anticipos).
+     * cancelan "Anticipos y Descuentos" — ver sumaRolNoMensualPorEgreso().
      */
     private function sumaRolMensualPorEgreso(\PDO $db, int $idEgreso): float
     {
@@ -4063,6 +4081,30 @@ class AsientoBuilderService
                              JOIN rol_cabecera rc ON rc.id = rd.id_rol
                              WHERE ed.id_egreso = :id AND ed.tipo_documento = 'ROL'
                                AND rc.tipo_rol = 'MENSUAL' AND ed.eliminado = FALSE");
+        $st->execute([':id' => $idEgreso]);
+        return round((float) $st->fetchColumn(), 2);
+    }
+
+    /**
+     * Suma lo pagado (egresos_detalle.monto_pagado) de un egreso que corresponde
+     * puntualmente a un rol QUINCENA/SEMANAL (tipo_documento='ROL' cuyo
+     * rol_detalle.id_rol es de un rol_cabecera.tipo_rol distinto de MENSUAL).
+     * Ese rol nunca se contabiliza por sí solo (RolAsientoService lo rechaza: "solo
+     * el rol mensual se contabiliza, las quincenas/semanas se netean en el
+     * mensual") — es un anticipo puro. Al pagarlo, cancela la MISMA cuenta
+     * "Anticipos y Descuentos" que el rol mensual acredita después vía el neteo
+     * (RolAsientoService::contabilizar(), código ANTICIPOSDESCUENTOSNOMINA), en vez
+     * de la cuenta genérica del concepto — así no queda un crédito sin contrapartida
+     * ni se duplica el gasto si el concepto estaba configurado como cuenta de gasto.
+     */
+    private function sumaRolNoMensualPorEgreso(\PDO $db, int $idEgreso): float
+    {
+        $st = $db->prepare("SELECT COALESCE(SUM(ed.monto_pagado), 0)
+                             FROM egresos_detalle ed
+                             JOIN rol_detalle rd ON rd.id = ed.id_referencia_documento
+                             JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                             WHERE ed.id_egreso = :id AND ed.tipo_documento = 'ROL'
+                               AND rc.tipo_rol <> 'MENSUAL' AND ed.eliminado = FALSE");
         $st->execute([':id' => $idEgreso]);
         return round((float) $st->fetchColumn(), 2);
     }
