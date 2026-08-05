@@ -1370,10 +1370,10 @@ class MigracionMysqlService
         $mapBod = $this->mapaDe($pg, $idEmpresa, 'bodegas');
         $bodDef = (int) $pg->query("SELECT id FROM bodegas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY id LIMIT 1")->fetchColumn();
         // OJO: encabezado_consignacion.factura_venta es el SECUENCIAL de la factura (NO su id): se busca la
-        // factura por RUC base + serie (= serie_sucursal) + secuencial = factura_venta, y se VERIFICA que el
-        // cliente coincida (id_cli_pro). Si no coincide (dato viejo anómalo), no se enlaza → número en blanco
-        // en vez de mostrar el número de una factura ajena.
-        $oldFacNum = $esFactura ? $mysql->prepare("SELECT id_encabezado_factura, serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = :b AND serie_factura = :serie AND CAST(secuencial_factura AS UNSIGNED) = :fv AND id_cliente = :cli ORDER BY id_encabezado_factura LIMIT 1") : null;
+        // factura por RUC base + serie (= serie_sucursal) + secuencial = factura_venta. NO se filtra por
+        // cliente: en datos viejos el id_cli_pro de la consignación a veces apunta a un cliente de OTRA
+        // empresa (referencia corrupta), pero el secuencial sí identifica la factura correcta (fecha coincide).
+        $oldFacNum = $esFactura ? $mysql->prepare("SELECT id_encabezado_factura, serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = :b AND serie_factura = :serie AND CAST(secuencial_factura AS UNSIGNED) = :fv ORDER BY id_encabezado_factura LIMIT 1") : null;
         // Reconcile (re-migrar): actualiza los ya migrados (solo insertados, no vinculados) sin "Eliminar migrados".
         // La bodega del detalle se toma de la línea de ENTRADA (consignaciones_ventas_detalles) que ya la tiene.
         $mapDest = [];
@@ -1415,7 +1415,7 @@ class MigracionMysqlService
                         if ($esFactura) {
                             $numFac = null; $idFac = null;
                             if ((int) $ec['factura_venta'] > 0) {
-                                $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta'], ':cli' => (int) $ec['id_cli_pro']]);
+                                $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta']]);
                                 $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
                                 if ($ff) {
                                     $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
@@ -1478,7 +1478,7 @@ class MigracionMysqlService
                     // factura_venta = SECUENCIAL de la factura → número real + id real (por RUC+serie+secuencial).
                     $numFac = null; $idFactura = null;
                     if ((int) $ec['factura_venta'] > 0) {
-                        $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta'], ':cli' => (int) $ec['id_cli_pro']]);
+                        $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta']]);
                         $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
                         if ($ff) {
                             $numFac    = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);

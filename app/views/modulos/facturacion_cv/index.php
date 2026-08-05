@@ -58,14 +58,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         containerId: 'fbBuscadorFAC',
                         hiddenInputId: 'b',
                         fields: [
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-hash',   type: 'text' },
-                            { key: 'cliente',    label: 'Cliente',    icon: 'bi-person', type: 'text' },
-                            { key: 'factura',    label: 'Factura',    icon: 'bi-receipt', type: 'text' },
+                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-hash',     type: 'text' },
+                            { key: 'cliente',    label: 'Cliente',    icon: 'bi-person',   type: 'text' },
+                            { key: 'factura',    label: 'Factura',    icon: 'bi-receipt',  type: 'text' },
+                            { key: 'fecha',      label: 'Fecha',      icon: 'bi-calendar', type: 'date_range' },
+                            { key: 'total',      label: 'Total',      icon: 'bi-currency-dollar', type: 'number_range' },
                             { key: 'estado',     label: 'Estado',     icon: 'bi-flag',   type: 'select', options: [
                                 { v: 'borrador',  l: 'Borrador' },
                                 { v: 'facturada', l: 'Facturada' },
                                 { v: 'anulada',   l: 'Anulada' },
                             ]},
+                        ],
+                        quickFilters: [
+                            { id: 'qf_borrador',  label: 'Borradores', mk: () => ({ key: 'estado', op: '=', value: 'borrador',  display: 'Borradores' }) },
+                            { id: 'qf_facturada', label: 'Facturadas', mk: () => ({ key: 'estado', op: '=', value: 'facturada', display: 'Facturadas' }) },
+                            { id: 'qf_mes',       label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
                         ],
                         onApply: () => { g_paginaActual = 1; cargarGrid(); },
                     }).init();
@@ -75,7 +82,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <div class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
                     'fecha'      => 'Fecha',
-                    'secuencial' => 'Número',
+                    'secuencial' => 'Secuencial',
                     'cliente'    => 'Cliente',
                     'factura'    => 'Factura',
                     'total'      => 'Total',
@@ -102,7 +109,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <thead class="table-light">
                     <tr>
                         <th class="ps-3 sortable-header" role="button" data-col="fecha">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" role="button" data-col="secuencial">Número <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-col="secuencial">Secuencial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="factura">Factura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" role="button" data-col="total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -119,7 +126,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         ?>
                             <tr class="factcv-row" role="button" tabindex="0" data-row="<?= $dataJson ?>" onclick="abrirModalFacturacionVer(this)">
                                 <td class="ps-3" data-col="fecha"><?= htmlspecialchars($r['fecha_emision'] ?? '') ?></td>
-                                <td data-col="secuencial" class="fw-bold text-primary"><?= htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></td>
+                                <td data-col="secuencial"><?= htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></td>
                                 <td data-col="cliente" class="text-truncate" style="max-width:230px" title="<?= htmlspecialchars($r['cliente_nombre'] ?? '') ?>"><?= htmlspecialchars($r['cliente_nombre'] ?? '') ?></td>
                                 <td data-col="factura"><?= htmlspecialchars($r['numero_factura'] ?? '—') ?></td>
                                 <td data-col="total" class="text-end"><?= number_format((float)($r['total'] ?? 0), 2) ?></td>

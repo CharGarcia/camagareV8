@@ -173,7 +173,7 @@ class ConsignacionesVentasController extends BaseModuloController
 
                 echo '<tr class="consignacion-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="abrirModalConsignacionVer(this)">
                         <td class="ps-3" data-col="fecha_emision">' . htmlspecialchars($r['fecha_emision'] ?? '') . '</td>
-                        <td data-col="secuencial" class="fw-bold text-primary">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
+                        <td data-col="secuencial">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
                         <td data-col="cliente" class="text-truncate" style="max-width:250px">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
                         <td data-col="vendedor" class="text-truncate" style="max-width:150px">' . htmlspecialchars($r['vendedor_nombre'] ?? '—') . '</td>
                         <td data-col="observaciones" class="text-truncate" style="max-width:200px">' . htmlspecialchars($r['observaciones'] ?? '—') . '</td>

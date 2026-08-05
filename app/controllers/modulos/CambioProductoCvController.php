@@ -136,7 +136,7 @@ class CambioProductoCvController extends BaseModuloController
 
                 echo '<tr class="cambio-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="abrirModalCambioVer(this)">
                         <td class="ps-3" data-col="fecha_cambio">' . htmlspecialchars($r['fecha_cambio'] ?? '') . '</td>
-                        <td data-col="secuencial" class="fw-bold text-primary">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
+                        <td data-col="secuencial">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
                         <td data-col="cliente" class="text-truncate" style="max-width:250px">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
                         <td data-col="motivo" class="text-truncate" style="max-width:220px">' . htmlspecialchars($r['motivo'] ?? '—') . '</td>
                         <td data-col="diferencia" class="text-end pe-3">' . number_format((float)($r['diferencia'] ?? 0), 2) . '</td>

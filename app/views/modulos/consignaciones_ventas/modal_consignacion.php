@@ -2027,6 +2027,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
         }
 
+        // Quitar filas vacías (p. ej. la línea en blanco inicial de "Nueva Consignación")
+        // antes de agregar los ítems del pedido, para no dejar una fila suelta sin producto.
+        document.querySelectorAll('#cons_detalles_body tr.row-detalle-cons').forEach(tr => {
+            const idProd = tr.querySelector('.input-id-producto')?.value || '';
+            const nombre = tr.querySelector('.input-descripcion')?.value || '';
+            if (!idProd && !nombre.trim()) tr.remove();
+        });
+
         for (const item of selectedItems) {
             const tr = agregarFilaConsignacion();
             tr.dataset.idBodega = selectedBodegaId;
