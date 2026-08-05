@@ -2513,6 +2513,13 @@ $totalPages = $totalPagesOriginal;
         const btnAddPago = tabDetalle.querySelector('button[onclick="agregarFormaPago()"]');
         if (btnAddPago) btnAddPago.classList.toggle('d-none', !esBorrador);
 
+        // Botón "+" de descuento rápido por línea: oculto si no es borrador, o si la
+        // empresa ya tiene deshabilitada la edición manual de descuento.
+        const btnsDescuento = tabDetalle.querySelectorAll('button[onclick="abrirModalDescuento(this)"]');
+        btnsDescuento.forEach(btn => {
+            btn.classList.toggle('d-none', !esBorrador || !EMPRESA_CONFIG.editar_descuento_factura);
+        });
+
         // Mostrar/ocultar botones de eliminación de filas (basureros)
         const trashBtns = tabDetalle.querySelectorAll('button.text-danger, button.btn-outline-danger');
         trashBtns.forEach(btn => {
@@ -4191,7 +4198,9 @@ $totalPages = $totalPagesOriginal;
         if (!idProd || !idBod) return;
 
         try {
-            if (contSaldo) contSaldo.classList.remove('d-none');
+            // El saldo por línea no se muestra en pantalla (se sigue calculando/validando
+            // en el servidor); si se necesita volver a mostrarlo, descomentar la línea de abajo.
+            // if (contSaldo) contSaldo.classList.remove('d-none');
             if (lblSaldo) lblSaldo.textContent = '...';
 
             if (selLote) {
@@ -5172,7 +5181,7 @@ $totalPages = $totalPagesOriginal;
                             opt.value = u.id;
                             opt.textContent = u.nombre;
                             opt.dataset.factor = u.factor_base || 1;
-                            if (u.id == d.id_unidad_medida) opt.selected = true;
+                            if (u.id == (d.id_unidad_medida || d.id_medida_base)) opt.selected = true;
                             selMedida.appendChild(opt);
                         });
 

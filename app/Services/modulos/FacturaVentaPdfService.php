@@ -439,7 +439,7 @@ class FacturaVentaPdfService
         $pdf->Cell(16, $lh, 'Telefono:', 0, 0, 'L');
         $pdf->Cell(26, $lh, $cab['cliente_telefono'] ?? '', 0, 0, 'L');
         $pdf->Cell(14, $lh, 'Correo:', 0, 0, 'L');
-        $pdf->Cell($cW - 2 - 15 - 60 - 16 - 26 - 14, $lh, $cab['cliente_email'] ?? '', 0, 1, 'L');
+        $pdf->Cell($cW - 2 - 15 - 60 - 16 - 26 - 14, $lh, $cab['cliente_email'] ?? '', 0, 1, 'L', false, '', 1);
         $yBox += $lh + 2;
 
         // Borde de la caja
@@ -538,7 +538,7 @@ class FacturaVentaPdfService
             // Calcular altura de fila según columnas multilinea
             $nDesc = max(1, (int)ceil($pdf->GetStringWidth($vals['desc']) / ($cols[3]['w'] - 2)));
             $nDeta = max(1, (int)ceil($pdf->GetStringWidth($vals['deta']) / ($cols[4]['w'] - 2)));
-            $ch    = max(5, max($nDesc, $nDeta) * 4.5);
+            $ch    = max(4.2, max($nDesc, $nDeta) * 3.6);
 
             $xCur = $mL;
             $yRow = $pdf->GetY();

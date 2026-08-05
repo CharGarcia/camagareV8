@@ -806,9 +806,12 @@ class FacturaVentaRepository extends BaseRepository
         return $this->db->query("SELECT * FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC")->fetchAll(\PDO::FETCH_ASSOC);
     }
 
-    public function getUnidadesMedida(): array
+    public function getUnidadesMedida(int $idEmpresa): array
     {
-        return $this->db->query("SELECT * FROM unidades_medida WHERE eliminado = false AND status = true ORDER BY nombre ASC")->fetchAll(\PDO::FETCH_ASSOC);
+        $sql = "SELECT * FROM unidades_medida WHERE eliminado = false AND status = true AND id_empresa = :id_empresa ORDER BY nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     public function getImpuestosConfig(): array

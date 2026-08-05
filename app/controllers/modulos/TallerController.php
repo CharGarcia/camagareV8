@@ -1335,7 +1335,7 @@ class TallerController extends BaseModuloController
             'formasPago'    => $this->repository->getFormasPago(),
             'bodegas'       => $this->getBodegas($idEmpresa),
             'tarifasIva'    => $this->repository->getTarifasIva(),
-            'unidades'      => $this->repository->getUnidadesMedida(),
+            'unidades'      => $this->repository->getUnidadesMedida($idEmpresa),
             'departamentos' => $this->service->getDepartamentos($idEmpresa),
             'empleados'     => $this->getEmpleados($idEmpresa),
             'checklistBase' => $this->checklistService->getPlantilla($idEmpresa),

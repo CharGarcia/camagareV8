@@ -83,7 +83,7 @@ class PedidosController extends BaseModuloController {
             'responsables' => $responsables,
             'empresa' => $empresaData,
             'tarifasIva' => $this->repository->getTarifasIva(),
-            'unidades' => $this->repository->getUnidadesMedida(),
+            'unidades' => $this->repository->getUnidadesMedida($idEmpresa),
             'rows' => $rows,
             'total' => $total,
             'page' => $page,

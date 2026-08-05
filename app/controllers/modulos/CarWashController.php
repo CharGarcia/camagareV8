@@ -71,7 +71,7 @@ class CarWashController extends BaseModuloController
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int) $_SESSION['id_usuario'], $idEmpresa, (int) ($_SESSION['nivel'] ?? 1));
         $tarifasIva = $this->repository->getTarifasIva();
-        $unidades   = $this->repository->getUnidadesMedida();
+        $unidades   = $this->repository->getUnidadesMedida($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos.car_wash.index', [
             'titulo'      => 'Servicio Car-Wash',

@@ -94,7 +94,7 @@ class CajaPosController extends BaseModuloController
             'obligatorioNup' => $toBool($estConfig['obligatorio_nup'] ?? false),
             'soloStockPositivo' => $toBool($estConfig['factura_solo_stock_positivo'] ?? false),
             'mostrarUnidadMedida' => $toBool($estConfig['mostrar_unidad_medida'] ?? true),
-            'unidadesMedida' => (new \App\repositories\modulos\FacturaVentaRepository())->getUnidadesMedida(),
+            'unidadesMedida' => (new \App\repositories\modulos\FacturaVentaRepository())->getUnidadesMedida($idEmpresa),
             'limiteConsumidorFinal' => (float) ($estConfig['valor_limite_consumidor_final'] ?? 50),
             'puedeFactura' => \App\Helpers\Permisos::puedeCrear('modulos/factura-venta'),
             'puedeRecibo' => \App\Helpers\Permisos::puedeCrear('modulos/recibo-venta'),

@@ -859,11 +859,24 @@ class ConsignacionVentaService
         $st->execute([':e' => $idEmpresa]);
         $pedidos = $st->fetchAll(\PDO::FETCH_COLUMN);
 
-        // También incluimos aquellos pedidos que antes estaban asociados pero que ahora ya no tienen enlaces 
+        // También incluimos aquellos pedidos que antes estaban asociados pero que ahora ya no tienen enlaces
         // (por ejemplo, porque eliminamos la consignación o le quitamos los ítems)
         // Para estar 100% seguros de no omitir ningún pedido que pudiera volver a 'Pendiente':
-        // Buscamos pedidos que estén actualmente como 'Procesado' en esta empresa para verificar si su condición aún se cumple.
-        $sqlProcesados = "SELECT id FROM pedidos_cabecera WHERE id_empresa = :e AND estado = 'Procesado' AND eliminado = false";
+        // Buscamos pedidos "Procesado" que en algún momento SÍ tuvieron un enlace a una consignación
+        // (activa o ya eliminada). Sin este filtro, un pedido "Procesado" por otra vía —marcado
+        // manualmente por el usuario, o migrado desde el sistema viejo con ese estado histórico y sin
+        // ninguna consignación real en este sistema— siempre da cantidadConsignada=0 y se revertía a
+        // 'Pendiente' cada vez que se guardaba/eliminaba CUALQUIER consignación de la empresa.
+        $sqlProcesados = "
+            SELECT p.id
+            FROM pedidos_cabecera p
+            WHERE p.id_empresa = :e AND p.estado = 'Procesado' AND p.eliminado = false
+              AND EXISTS (
+                  SELECT 1 FROM pedidos_detalle pd
+                  JOIN consignaciones_ventas_detalles cvd ON cvd.id_pedido_detalle = pd.id
+                  WHERE pd.id_pedido = p.id
+              )
+        ";
         $st2 = $db->prepare($sqlProcesados);
         $st2->execute([':e' => $idEmpresa]);
         $procesados = $st2->fetchAll(\PDO::FETCH_COLUMN);

@@ -94,7 +94,7 @@ class ReciboVentaController extends BaseModuloController
             'empresa'     => $empresaData,
             'formasPago'  => $this->repository->getFormasPago(),
             'tarifasIva'  => $this->repository->getTarifasIva(),
-            'unidades'    => $this->repository->getUnidadesMedida(),
+            'unidades'    => $this->repository->getUnidadesMedida($idEmpresa),
             'bodegas'     => $bodegas,
             'vendedores'  => $vendedores,
             'puntos'      => $puntos,

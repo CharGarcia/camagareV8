@@ -432,12 +432,9 @@
                     const inpAutSust = document.getElementById('gr-num-aut-doc-sustento');
                     if (inpAutSust) inpAutSust.value = cab.numero_autorizacion || cab.clave_acceso || '';
 
-                    // 2. Autocompletar Cliente (RUC + correo)
+                    // 2. Autocompletar Cliente (RUC + correo). Actualiza también la línea
+                    // "Correo Destinatario" de Información Adicional (ver GR_seleccionarCliente).
                     window.GR_seleccionarCliente(cab.id_cliente, cab.cliente_nombre, cab.cliente_ruc, cab.cliente_direccion || '', cab.cliente_email || '');
-
-                    // 2b. Información Adicional: RUC y correo del destinatario
-                    window.GR_upsertAdicional('Ruc/Cédula Destinatario', cab.cliente_ruc || '');
-                    window.GR_upsertAdicional('Correo Destinatario', cab.cliente_email || '');
 
                     // 3. Origen (Dirección del establecimiento actual)
                     const selSerie = document.getElementById('gr-serie');
@@ -473,24 +470,30 @@
      * líneas en blanco sueltas cuando se autocompleta desde una factura.
      */
     window.GR_upsertAdicional = function (nombre, valor) {
-        if (!valor) return;
         const tbody = document.getElementById('gr-tbody-adicional');
         if (!tbody) return;
 
-        let fila = Array.from(tbody.querySelectorAll('tr.row-adicional')).find(tr =>
+        // Ya existe la fila (p. ej. "Correo Destinatario" de un cliente anterior):
+        // solo actualizar su valor, incluso a vacío si el nuevo cliente no tiene
+        // correo — así no queda desactualizada al cambiar de cliente.
+        const existente = Array.from(tbody.querySelectorAll('tr.row-adicional')).find(tr =>
             (tr.querySelector('.input-adic-nombre')?.value.trim().toLowerCase() || '') === nombre.toLowerCase());
-
-        if (!fila) {
-            fila = Array.from(tbody.querySelectorAll('tr.row-adicional')).find(tr =>
-                !(tr.querySelector('.input-adic-nombre')?.value.trim()));
+        if (existente) {
+            const inputValor = existente.querySelector('.input-adic-valor');
+            if (inputValor) inputValor.value = valor || '';
+            return;
         }
 
-        if (fila) {
-            fila.querySelector('.input-adic-nombre').value = nombre;
-            fila.querySelector('.input-adic-valor').value  = valor;
-        } else {
-            window.GR_agregarAdicionalLinea({ nombre, valor });
-        }
+        if (!valor) return; // Sin valor y sin fila previa: no crear una fila vacía de más.
+
+        // Reusar la primera fila totalmente vacía (la que deja GR_asegurarLineaAdicional)
+        // para no acumular filas sueltas; se crea vía GR_agregarAdicionalLinea para que
+        // aplique la protección de filas de sistema (sin botón de eliminar).
+        const vacia = Array.from(tbody.querySelectorAll('tr.row-adicional')).find(tr =>
+            !(tr.querySelector('.input-adic-nombre')?.value.trim()) && !(tr.querySelector('.input-adic-valor')?.value.trim()));
+        if (vacia) vacia.remove();
+
+        window.GR_agregarAdicionalLinea({ nombre, valor });
         window.GR_asegurarLineaAdicional();
     };
 
@@ -561,6 +564,13 @@
         if (elCorreoSri) elCorreoSri.value = email || '';
         const elIdentifSri = document.getElementById('gr-sri-identificacion-cliente');
         if (elIdentifSri) elIdentifSri.value = identificacion || '';
+
+        // Información Adicional: el correo del destinatario se mantiene
+        // sincronizado con el cliente actual, sin importar por dónde se
+        // seleccionó (búsqueda manual o factura de sustento).
+        if (typeof window.GR_upsertAdicional === 'function') {
+            window.GR_upsertAdicional('Correo Destinatario', email || '');
+        }
     };
 
     window.GR_agregarLinea = function (data) {
@@ -643,6 +653,9 @@
         if (cntEl) cntEl.textContent = document.querySelectorAll('#gr-tbody-detalle tr.row-detalle').length;
     };
 
+    // Líneas de sistema: no se pueden borrar ni renombrar desde la UI.
+    const GR_ADIC_PROTEGIDOS = ['correo destinatario', 'ruc proveedor'];
+
     window.GR_agregarAdicionalLinea = function (data) {
         const esBorrador = estadoActual === 'borrador';
         const tbody = document.getElementById('gr-tbody-adicional');
@@ -650,17 +663,21 @@
         const tr = document.createElement('tr');
         tr.className = 'row-adicional';
         const ro = esBorrador ? '' : 'readonly';
-        
+
         // Manejar tanto objeto {nombre, valor} como pasar nombre y valor como argumentos (legacy)
         let n = '', v = '';
         if (typeof data === 'object') { n = data.nombre || ''; v = data.valor || ''; }
         else if (arguments.length >= 1) { n = arguments[0] || ''; v = arguments[1] || ''; }
 
+        const esProtegido = GR_ADIC_PROTEGIDOS.includes(n.trim().toLowerCase());
+        if (esProtegido) tr.classList.add('row-adicional-protegida');
+        const roNombre = (ro || esProtegido) ? 'readonly' : '';
+
         tr.innerHTML = `
             <td class="p-0">
                 <input type="text" class="form-control form-control-sm border-0 bg-transparent input-adic-nombre"
                     style="padding:0 4px;height:20px;font-size:0.78rem;" placeholder="Nombre..." maxlength="30"
-                    value="${GR_esc(n)}" ${ro}>
+                    value="${GR_esc(n)}" ${roNombre}>
             </td>
             <td class="p-0">
                 <input type="text" class="form-control form-control-sm border-0 bg-transparent input-adic-valor"
@@ -668,9 +685,11 @@
                     value="${GR_esc(v)}" ${ro}>
             </td>
             <td class="p-0 text-center pe-1">
-                ${esBorrador ? `<button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none"
+                ${esProtegido
+                    ? `<i class="bi bi-lock-fill text-muted" style="font-size:.72rem" title="Campo del sistema: no se puede eliminar"></i>`
+                    : (esBorrador ? `<button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none"
                     onclick="this.closest('tr').remove();" title="Quitar">
-                    <i class="bi bi-x-circle-fill"></i></button>` : ''}
+                    <i class="bi bi-x-circle-fill"></i></button>` : '')}
             </td>`;
         tbody.appendChild(tr);
         if (!n && esBorrador && !suprimirFocoAdic) tr.querySelector('.input-adic-nombre').focus();
