@@ -419,6 +419,46 @@ class ProductosController extends BaseModuloController
         exit;
     }
 
+    public function actualizarCostoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($id <= 0) throw new Exception('ID no válido');
+            $costo = $this->service->actualizarCostoDesdeKardex($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'costo' => $costo]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function actualizarCostoMasivoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        try {
+            $resumen = $this->service->actualizarCostoMasivo($idEmpresa, $idUsuarioFiltro, $idUsuario);
+            echo json_encode(['ok' => true] + $resumen);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function exportPdf(): void
     {
         $this->requireLeer();
@@ -553,7 +593,7 @@ class ProductosController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Precio Base', 'Saldo', 'Unidad', 'Estado'];
+            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Precio Base', 'IVA', 'ICE', 'PVP', 'Costo', 'Margen', 'Utilidad %', 'Saldo', 'Unidad', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
                 // Saldo solo para productos que manejan inventario (suma de todas las bodegas).
@@ -561,13 +601,25 @@ class ProductosController extends BaseModuloController
                 $saldo  = $esInventariable ? number_format((float)($r['saldo_actual'] ?? 0), 2) : '';
                 $unidad = $esInventariable ? (string)($r['abreviatura_medida'] ?? '') : '';
 
+                // Margen = Precio Base - Costo (sin impuestos). Utilidad % = margen sobre el costo (markup).
+                $precioBase   = (float)($r['precio_base'] ?? 0);
+                $costo        = (float)($r['costo_producto'] ?? 0);
+                $margen       = $precioBase - $costo;
+                $utilidadPorc = $costo > 0 ? ($margen / $costo) * 100 : 0;
+
                 $exportData[] = [
                     (string)($r['codigo'] ?? ''),
                     (string)($r['codigo_barras'] ?? ''),
                     (string)($r['nombre'] ?? ''),
                     (string)($r['nombre_categoria'] ?? ''),
                     (string)($r['nombre_marca'] ?? ''),
-                    number_format((float)($r['precio_base'] ?? 0), 2),
+                    number_format($precioBase, 2),
+                    number_format((float)($r['valor_iva'] ?? 0), 2),
+                    number_format((float)($r['valor_ice'] ?? 0), 2),
+                    number_format((float)($r['pvp'] ?? 0), 2),
+                    number_format($costo, 2),
+                    number_format($margen, 2),
+                    number_format($utilidadPorc, 2) . '%',
                     $saldo,
                     $unidad,
                     ((int)($r['status'] ?? 1) === 1 ? 'Activo' : 'Inactivo')

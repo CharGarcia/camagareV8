@@ -310,6 +310,80 @@ class ProductoService
         }
     }
 
+    /** Recalcula el costo de un producto a partir del promedio ponderado de sus entradas en el Kardex. */
+    public function actualizarCostoDesdeKardex(int $id, int $idEmpresa, int $idUsuario): float
+    {
+        $antes = $this->repository->findById($id, $idEmpresa);
+        if (!$antes) throw new Exception('El producto no existe.');
+
+        $costo = $this->repository->calcularCostoPromedioKardex($id, $idEmpresa);
+        if ($costo === null) {
+            throw new Exception('Este producto no tiene entradas registradas en el Kardex.');
+        }
+
+        $this->repository->actualizarCosto($id, $idEmpresa, $costo, $idUsuario);
+
+        $this->logService->registrar(
+            $idUsuario,
+            $idEmpresa,
+            'actualizar',
+            'productos',
+            $id,
+            ['costo_producto' => $antes['costo_producto'] ?? 0],
+            ['costo_producto' => $costo]
+        );
+
+        return $costo;
+    }
+
+    /**
+     * Recalcula el costo de todos los productos inventariables de la empresa
+     * (respetando "registros propios" cuando el usuario no tiene acceso total).
+     */
+    public function actualizarCostoMasivo(int $idEmpresa, ?int $idUsuarioFiltro, int $idUsuario): array
+    {
+        $productos = $this->repository->getInventariablesConCosto($idEmpresa, $idUsuarioFiltro);
+
+        $actualizados = 0;
+        $sinMovimientos = 0;
+
+        $this->repository->beginTransaction();
+        try {
+            foreach ($productos as $p) {
+                $costo = $this->repository->calcularCostoPromedioKardex((int)$p['id'], $idEmpresa);
+                if ($costo === null) {
+                    $sinMovimientos++;
+                    continue;
+                }
+
+                $costoAntes = (float)($p['costo_producto'] ?? 0);
+                if (abs($costoAntes - $costo) > 0.000001) {
+                    $this->repository->actualizarCosto((int)$p['id'], $idEmpresa, $costo, $idUsuario);
+                    $this->logService->registrar(
+                        $idUsuario,
+                        $idEmpresa,
+                        'actualizar',
+                        'productos',
+                        (int)$p['id'],
+                        ['costo_producto' => $costoAntes],
+                        ['costo_producto' => $costo]
+                    );
+                }
+                $actualizados++;
+            }
+            $this->repository->commit();
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+
+        return [
+            'total'           => count($productos),
+            'actualizados'    => $actualizados,
+            'sin_movimientos' => $sinMovimientos,
+        ];
+    }
+
     public function eliminarHomologacion(int $id, int $idEmpresa, int $idUsuario): bool
     {
         $this->repository->beginTransaction();

@@ -5925,11 +5925,12 @@ $totalPages = $totalPagesOriginal;
      */
     async function abrirModalNuevaNCDesdeFV() {
         if (!FV_ID_ACTIVO) return;
-        
+
         // Obtener datos de la factura actual desde el formulario
         const idCliente = document.getElementById('m-id-cliente').value;
         const nombreCliente = document.getElementById('m-search-cliente').value;
         const rucCliente = document.getElementById('m-lbl-cliente-ruc').textContent;
+        const emailCliente = document.getElementById('sri-correo-cliente')?.value || '';
         const establecimiento = (document.getElementById('m-select-puntos').options[document.getElementById('m-select-puntos').selectedIndex].dataset.codEst || '').toString().padStart(3, '0');
         const puntoEmision = (document.getElementById('m-select-puntos').options[document.getElementById('m-select-puntos').selectedIndex].dataset.codPunto || '').toString().padStart(3, '0');
         const secuencial = (document.getElementById('m-input-secuencial').value || '').toString().padStart(9, '0');
@@ -5965,7 +5966,7 @@ $totalPages = $totalPagesOriginal;
             
             // Pre-seleccionar factura y cliente en el modal de NC
             setTimeout(() => {
-                window.NC_seleccionarCliente({ id: idCliente, nombre: nombreCliente, identificacion: rucCliente });
+                window.NC_seleccionarCliente({ id: idCliente, nombre: nombreCliente, identificacion: rucCliente, email: emailCliente });
                 window.NC_seleccionarFactura({
                     id: FV_ID_ACTIVO,
                     establecimiento: establecimiento,

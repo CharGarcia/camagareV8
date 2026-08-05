@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable
-version: 1.0
+version: 1.1
 orden: 10
 estado: activo
 ---
@@ -76,13 +76,31 @@ Estas dos casillas controlan dónde aparece el producto al buscarlo:
 
 Sirven para que quien factura no tenga que ver los insumos internos, y viceversa.
 
+## Costo actual y actualización desde el Kardex
+
+El campo **Costo** de la pestaña Inventario se puede escribir a mano o
+recalcular con el botón **Actualizar desde Kardex**: toma el promedio
+ponderado de todas las entradas registradas en el Kardex del producto (suma
+todas las bodegas) y **guarda el valor de inmediato**, sin esperar a pulsar
+Guardar. Si el producto no tiene entradas en el Kardex, el botón avisa y no
+cambia nada.
+
+Desde el listado, el botón **Actualizar Costos** (junto a PDF/Excel) hace lo
+mismo para **todos los productos inventariables** de la empresa de una sola
+vez, y muestra cuántos se actualizaron y cuántos no tenían movimientos. Un
+usuario sin acceso total solo actualiza los productos que él mismo creó,
+igual que en el listado.
+
 ## Buscar en el listado
 
 Además del texto libre, el buscador acepta filtros `clave:valor`
 (`categoria:Bebidas`, `codigo:0012`), rangos numéricos y negaciones con `-`.
 
 El listado se puede ordenar por cualquier columna, ocultar columnas y **exportar
-a PDF y Excel**. Cada usuario conserva su configuración de columnas.
+a PDF y Excel**. Cada usuario conserva su configuración de columnas. El Excel
+respeta los filtros de búsqueda activos e incluye, además de los datos básicos,
+**IVA, ICE, PVP, Costo, Margen y Utilidad %** de cada producto (Margen = Precio
+Base − Costo; Utilidad % = Margen sobre el Costo).
 
 ## Permisos
 
@@ -111,4 +129,7 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.1** — Botón para recalcular el costo desde el Kardex (individual y masivo
+  para todo el catálogo). El Excel del listado ahora incluye IVA, ICE, PVP,
+  Costo, Margen y Utilidad %, respetando los filtros de búsqueda activos.
 - **1.0** — Versión inicial.

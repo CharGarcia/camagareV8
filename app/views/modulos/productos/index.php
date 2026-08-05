@@ -138,6 +138,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
                 <a id="btnExportPdf" href="<?= $urlBaseProd ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                 <a id="btnExportExcel" href="<?= $urlBaseProd ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <?php if (!empty($perm['actualizar'])): ?>
+                    <button type="button" class="btn btn-outline-primary" onclick="actualizarCostosMasivo()" title="Recalcula el costo de todos los productos inventariables desde el Kardex">
+                        <i class="bi bi-arrow-repeat"></i> Actualizar Costos
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
 

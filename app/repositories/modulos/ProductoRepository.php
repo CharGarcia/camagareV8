@@ -391,25 +391,76 @@ class ProductoRepository extends BaseRepository
     public function getInventarios(int $idProducto, int $idEmpresa): array
     {
         // Obtenemos stock actual sumando el Kardex en tiempo real
-        $sql = "SELECT pb.id_bodega, 
-                       b.nombre AS nombre_bodega, 
-                       pb.stock_minimo, 
+        $sql = "SELECT pb.id_bodega,
+                       b.nombre AS nombre_bodega,
+                       pb.stock_minimo,
                        pb.stock_maximo,
-                       (SELECT COALESCE(SUM(cantidad), 0) 
-                        FROM inventario_kardex 
-                        WHERE id_producto = :id_producto 
-                          AND id_bodega = pb.id_bodega 
-                          AND id_empresa = :id_empresa 
-                          AND eliminado = false) AS stock_actual
+                       (SELECT COALESCE(SUM(cantidad), 0)
+                        FROM inventario_kardex
+                        WHERE id_producto = :id_producto
+                          AND id_bodega = pb.id_bodega
+                          AND id_empresa = :id_empresa
+                          AND eliminado = false) AS stock_actual,
+                       (SELECT CASE WHEN SUM(cantidad) > 0
+                            THEN ROUND(SUM(costo_total)::numeric / SUM(cantidad)::numeric, 6)
+                            ELSE 0 END
+                        FROM inventario_kardex
+                        WHERE id_producto = :id_producto
+                          AND id_bodega = pb.id_bodega
+                          AND id_empresa = :id_empresa
+                          AND tipo_movimiento = 'entrada' AND eliminado = false) AS costo_promedio
                 FROM productos_bodegas pb
                 JOIN bodegas b ON b.id = pb.id_bodega
-                WHERE pb.id_producto = :id_producto 
-                  AND pb.id_empresa = :id_empresa 
-                  AND pb.eliminado = false 
+                WHERE pb.id_producto = :id_producto
+                  AND pb.id_empresa = :id_empresa
+                  AND pb.eliminado = false
                   AND b.eliminado = false";
-        
+
         $st = $this->db->prepare($sql);
         $st->execute([':id_producto' => $idProducto, ':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Costo promedio ponderado del producto a partir de las entradas del Kardex,
+     * consolidando todas las bodegas. Null si no hay entradas registradas.
+     */
+    public function calcularCostoPromedioKardex(int $idProducto, int $idEmpresa): ?float
+    {
+        $sql = "SELECT CASE WHEN SUM(cantidad) > 0
+                    THEN ROUND(SUM(costo_total)::numeric / SUM(cantidad)::numeric, 6)
+                    ELSE NULL END AS costo_promedio
+                FROM inventario_kardex
+                WHERE id_empresa = :e AND id_producto = :p
+                  AND tipo_movimiento = 'entrada' AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':p' => $idProducto]);
+        $valor = $st->fetchColumn();
+        return ($valor === false || $valor === null) ? null : (float) $valor;
+    }
+
+    /** Actualiza únicamente el costo del producto (usado por "Actualizar desde Kardex"). */
+    public function actualizarCosto(int $id, int $idEmpresa, float $costo, int $idUsuario): void
+    {
+        $sql = "UPDATE {$this->table}
+                SET costo_producto = :costo, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':costo' => $costo, ':uid' => $idUsuario, ':id' => $id, ':id_empresa' => $idEmpresa]);
+    }
+
+    /** IDs + costo actual de los productos inventariables de la empresa (para la actualización masiva). */
+    public function getInventariablesConCosto(int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        $whereSql = $this->getBaseWhere($idEmpresa, '', $idUsuarioFiltro);
+        $params = [':id_empresa' => $idEmpresa];
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT id, nombre, costo_producto FROM {$this->table}
+                {$whereSql} AND inventariable = true";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

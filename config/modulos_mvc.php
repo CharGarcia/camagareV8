@@ -42,6 +42,15 @@
 declare(strict_types=1);
 
 return [
+    // Entregas de Consignaciones: resumen de solo lectura (evidencia GPS+firma,
+    // app móvil canal='movil' + registro manual web canal='web'). id_submodulo = 0 →
+    // el usuario registra el submódulo en submodulos_menu por su cuenta (no vía SQL
+    // automático) y aquí queda pendiente de asignar el id real.
+    'modulos/entregas-consignaciones' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // ─── VENTAS (id_modulo = 308) ────────────────────────────────────────────
     'modulos/clientes' => [
         'id_submodulo' => 150, // submodulos_menu.id donde ruta='modulos/clientes'
@@ -539,6 +548,14 @@ return [
         // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
         // ruta = 'modulos/reporte_ingresos_egresos', y actualizar este id_submodulo
         // con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    'modulos/reporte_pedidos' => [
+        // Reporte de Pedidos (mismo diseño que Reporte de Ventas: filtros, agrupaciones,
+        // KPIs, gráfico, PDF/Excel). Registrar el submódulo en submodulos_menu
+        // (id_modulo = 9, Reportes) con ruta = 'modulos/reporte_pedidos', y actualizar
+        // este id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],

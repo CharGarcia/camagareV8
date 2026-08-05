@@ -263,10 +263,16 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
 
                                 <div class="col-md-12 mt-3">
                                     <label class="form-label small fw-bold text-muted mb-1">Costo Actual</label>
-                                    <div class="input-group input-group-sm" style="max-width: 200px;">
-                                        <span class="input-group-text">$</span>
-                                        <input type="number" name="costo_producto" id="prod_costo_producto" class="form-control shadow-none border-secondary-subtle fw-bold" step="0.000001" min="0" value="0.00">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <div class="input-group input-group-sm" style="max-width: 200px;">
+                                            <span class="input-group-text">$</span>
+                                            <input type="number" name="costo_producto" id="prod_costo_producto" class="form-control shadow-none border-secondary-subtle fw-bold" step="0.000001" min="0" value="0.00">
+                                        </div>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btnActualizarCostoKardex" onclick="actualizarCostoDesdeKardex()" title="Recalcula y guarda el costo con el promedio ponderado de las entradas del Kardex">
+                                            <i class="bi bi-arrow-repeat"></i> Actualizar desde Kardex
+                                        </button>
                                     </div>
+                                    <div class="form-text small">Se calcula con el promedio ponderado de las entradas registradas en el Kardex (todas las bodegas).</div>
                                 </div>
                             </div>
                         </div>

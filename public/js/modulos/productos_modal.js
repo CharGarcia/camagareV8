@@ -564,6 +564,7 @@
         document.getElementById('prod_tarifa_iva').value = data.tarifa_iva || 2;
         document.getElementById('prod_id_ice').value = data.id_ice || '';
         document.getElementById('prod_valor_ice').value = parseFloat(data.valor_ice || 0).toFixed(4);
+        document.getElementById('prod_costo_producto').value = parseFloat(data.costo_producto || 0).toFixed(6);
 
         window.toggleInventariableTabs();
         if (typeof window.toggleBienesFields === 'function') window.toggleBienesFields();
@@ -728,6 +729,69 @@
         } catch (e) {
             btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
             swalError('Error de conexión con el servidor.');
+        }
+    };
+
+    window.actualizarCostoDesdeKardex = async function() {
+        const idProd = document.getElementById('prod_id')?.value;
+        if (!idProd) {
+            swalWarning('Guarde el producto primero para poder calcular su costo desde el Kardex.');
+            return;
+        }
+        const btn = document.getElementById('btnActualizarCostoKardex');
+        const btnHtml = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+        try {
+            const resp = await fetch(`${urlBaseProd}/actualizarCostoAjax`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `id=${encodeURIComponent(idProd)}`
+            });
+            const json = await resp.json();
+            if (json.ok) {
+                document.getElementById('prod_costo_producto').value = parseFloat(json.costo).toFixed(6);
+                swalToast('success', 'Costo actualizado y guardado desde el Kardex.');
+                if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+            } else {
+                swalWarning(json.error || 'No se pudo actualizar el costo.');
+            }
+        } catch (e) {
+            swalError('Error de conexión al actualizar el costo.');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+        }
+    };
+
+    window.actualizarCostosMasivo = async function() {
+        const result = await Swal.fire({
+            title: '¿Actualizar el costo de todos los productos?',
+            html: 'Se recalculará el costo de cada producto inventariable con el promedio ponderado de sus entradas en el Kardex. Esta acción se guarda de inmediato.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, actualizar',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!result.isConfirmed) return;
+
+        Swal.fire({ title: 'Actualizando costos...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const resp = await fetch(`${urlBaseProd}/actualizarCostoMasivoAjax`, { method: 'POST' });
+            const json = await resp.json();
+            if (json.ok) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Costos actualizados',
+                    html: `Actualizados: <b>${json.actualizados}</b> de <b>${json.total}</b> productos inventariables.<br>Sin movimientos en Kardex: <b>${json.sin_movimientos}</b>.`,
+                    confirmButtonColor: '#0d6efd'
+                });
+                if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+            } else {
+                swalError(json.error || 'No se pudo actualizar los costos.');
+            }
+        } catch (e) {
+            swalError('Error de conexión al actualizar los costos.');
         }
     };
 

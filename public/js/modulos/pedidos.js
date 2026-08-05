@@ -20,8 +20,25 @@ function pedAvisarSecuencialNoConfigurado(tipo) {
     });
 }
 
+/** Restringe "Hora Máxima" a horas posteriores a "Hora Inicial" (sin precargar su valor). */
+function pedActualizarMinHoraMaxima() {
+    const inputHoraIni = document.getElementById('hora_inicial_entrega');
+    const inputHoraMax = document.getElementById('hora_maxima_entrega');
+    if (!inputHoraIni || !inputHoraMax) return;
+    if (inputHoraIni.value) {
+        inputHoraMax.min = inputHoraIni.value;
+    } else {
+        inputHoraMax.removeAttribute('min');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     PED_fetchSearch(window.currentPage);
+
+    const inputHoraIniGlobal = document.getElementById('hora_inicial_entrega');
+    if (inputHoraIniGlobal) {
+        inputHoraIniGlobal.addEventListener('input', pedActualizarMinHoraMaxima);
+    }
 
     // Buscador principal
     const inputBuscar = document.getElementById('buscar-pedido');
@@ -240,8 +257,10 @@ function nuevoPedido() {
     
     // Configurar fecha de entrega con la fecha actual por defecto
     document.getElementById('fecha_entrega').value = CMG_fechaLocal();
-    document.getElementById('hora_inicial_entrega').value = '';
+    const _ahora = new Date();
+    document.getElementById('hora_inicial_entrega').value = String(_ahora.getHours()).padStart(2, '0') + ':' + String(_ahora.getMinutes()).padStart(2, '0');
     document.getElementById('hora_maxima_entrega').value = '';
+    pedActualizarMinHoraMaxima();
     document.getElementById('id_responsable_entrega').value = '';
     document.getElementById('observaciones').value = '';
     document.getElementById('observaciones_internas').value = '';
@@ -733,6 +752,7 @@ async function editarPedido(id) {
             setVal('fecha_entrega', p.fecha_entrega);
             setVal('hora_inicial_entrega', p.hora_inicial_entrega);
             setVal('hora_maxima_entrega', p.hora_maxima_entrega);
+            pedActualizarMinHoraMaxima();
             setVal('id_responsable_entrega', p.id_responsable_entrega);
             setVal('observaciones', p.observaciones);
             setVal('observaciones_internas', p.observaciones_internas);
