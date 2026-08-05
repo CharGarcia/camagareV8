@@ -599,7 +599,7 @@ class ProductosController extends BaseModuloController
                 // Saldo solo para productos que manejan inventario (suma de todas las bodegas).
                 $esInventariable = in_array((string)($r['inventariable'] ?? ''), ['1', 't', 'true'], true);
                 $saldo  = $esInventariable ? number_format((float)($r['saldo_actual'] ?? 0), 2) : '';
-                $unidad = $esInventariable ? (string)($r['abreviatura_medida'] ?? '') : '';
+                $unidad = $esInventariable ? (string)($r['nombre_medida'] ?? '') : '';
 
                 // Margen = Precio Base - Costo (sin impuestos). Utilidad % = margen sobre el costo (markup).
                 $precioBase   = (float)($r['precio_base'] ?? 0);

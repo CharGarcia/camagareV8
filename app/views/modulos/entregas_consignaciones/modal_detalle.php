@@ -7,7 +7,7 @@
 <script src="<?= rtrim(BASE_URL, '/') ?>/vendor/leaflet/leaflet.js"></script>
 
 <div class="modal fade" id="modalEntregaDetalle" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-light py-3">
                 <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
@@ -39,7 +39,7 @@
                     </div>
                     <div class="col-md-7">
                         <div id="entc_det_mapa" style="height:340px;border-radius:8px;border:1px solid #dee2e6;background:#f8f9fa;display:none;"></div>
-                        <div id="entc_det_sin_gps" class="alert alert-light border small mb-0 h-100 d-flex align-items-center justify-content-center text-muted" style="min-height:340px;">Sin coordenadas GPS registradas para esta entrega.</div>
+                        <div id="entc_det_sin_gps" class="alert alert-light border small mb-0 d-flex align-items-center justify-content-center text-center text-muted" style="height:340px;">Sin coordenadas GPS registradas para esta entrega.</div>
                         <div id="entc_det_gmaps" class="small mt-1 text-end" style="display:none;"><a href="#" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir en Google Maps</a></div>
                     </div>
                 </div>
