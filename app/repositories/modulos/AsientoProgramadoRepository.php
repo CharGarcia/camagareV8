@@ -379,12 +379,30 @@ class AsientoProgramadoRepository extends BaseRepository
      * La cuenta se toma del asiento programado si existe; en su defecto, de la cuenta asignada
      * en el propio módulo de opciones (id_cuenta_contable).
      *
+     * Excluye los comportamientos con cuenta oficial propia (COMPORTAMIENTO_CUENTA_OFICIAL):
+     * esos conceptos (Compras, Liquidaciones, Facturas de Venta, Recibos de Venta) ya configuran
+     * su cuenta contable desde la sección propia de ese módulo, y guardarReglaOpcionAjax() rechaza
+     * asignarles una cuenta aquí — mostrarlos en este listado solo confundía al usuario.
+     *
      * @param string $naturaleza 'ingreso' | 'egreso'
      */
     public function getReglasOpcionesIngresoEgreso(int $idEmpresa, string $naturaleza): array
     {
         $col     = $naturaleza === 'ingreso' ? 'aplica_ingresos' : 'aplica_egresos';
         $tipoRef = $naturaleza === 'ingreso' ? 'opcion_ingreso'  : 'opcion_egreso';
+
+        $params = [
+            ':id_empresa'    => $idEmpresa,
+            ':id_empresa_ap' => $idEmpresa,
+            ':tipo_ref'      => $tipoRef,
+        ];
+        $exclusiones = [];
+        foreach (array_keys(self::COMPORTAMIENTO_CUENTA_OFICIAL) as $i => $comportamiento) {
+            $ph = ":comp_modulo_{$i}";
+            $exclusiones[] = $ph;
+            $params[$ph] = $comportamiento;
+        }
+        $exclusionSql = implode(', ', $exclusiones);
 
         $sql = "SELECT o.id AS id_opcion,
                        o.nombre AS concepto,
@@ -404,13 +422,10 @@ class AsientoProgramadoRepository extends BaseRepository
                   AND o.{$col} = TRUE
                   AND UPPER(o.estado) = 'ACTIVO'
                   AND o.eliminado = FALSE
+                  AND UPPER(o.comportamiento) NOT IN ({$exclusionSql})
                 ORDER BY o.nombre ASC";
         $st = $this->db->prepare($sql);
-        $st->execute([
-            ':id_empresa'    => $idEmpresa,
-            ':id_empresa_ap' => $idEmpresa,
-            ':tipo_ref'      => $tipoRef
-        ]);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

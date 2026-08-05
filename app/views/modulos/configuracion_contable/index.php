@@ -84,6 +84,7 @@ $base = BASE_URL;
                 <select class="form-select form-select-sm border shadow-none" id="tipoAsientoSelector">
                     <option value="" disabled selected>-- Elija un Tipo de Asiento --</option>
                     <option value="ventas_factura">Ventas con Factura (Facturas y notas de crédito)</option>
+                    <option value="factura_reembolso">Factura de Reembolso (Cuenta puente de terceros)</option>
                     <option value="recibos_venta">Recibos de Venta (Recibos y su IVA)</option>
                     <option value="consignacion_venta">Consignaciones en Ventas (Reclasificación de inventario a costo)</option>
                     <option value="adquisiciones_compras">Adquisiciones de Compras/Servicios (Documentos recibidos)</option>

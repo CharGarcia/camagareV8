@@ -1514,6 +1514,23 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+
+        // Toda consignación de venta que YA fue facturada debe quedar 'Entregada' (el módulo exige que una
+        // consignación esté Entregada para poder facturarla). Se mira el DETALLE de la facturación (una
+        // factura puede cubrir VARIAS consignaciones — multi-consignación). No toca anuladas ni ya entregadas.
+        if ($esFactura) {
+            try {
+                $st = $pg->prepare("UPDATE consignaciones_ventas cv SET estado = 'Entregada', updated_at = now(), updated_by = :u
+                    WHERE cv.id_empresa = :e AND cv.eliminado = false AND cv.estado NOT IN ('Entregada', 'Anulada')
+                      AND EXISTS (SELECT 1 FROM consignaciones_facturas_detalles cfd
+                                  JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                                  WHERE cfd.id_consignacion = cv.id AND cf.id_empresa = :e AND cf.eliminado = false)");
+                $st->execute([':u' => $idUsuario, ':e' => $idEmpresa]);
+                $res['consignaciones_entregadas'] = $st->rowCount();
+            } catch (Throwable $ex) {
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+            }
+        }
         return $res;
     }
 
