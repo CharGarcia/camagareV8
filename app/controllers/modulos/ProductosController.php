@@ -593,7 +593,7 @@ class ProductosController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Precio Base', 'IVA', 'ICE', 'PVP', 'Costo', 'Margen', 'Utilidad %', 'Saldo', 'Unidad', 'Estado'];
+            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Tipo IVA', 'Precio Base', 'IVA', 'ICE', 'PVP', 'Costo', 'Margen', 'Utilidad %', 'Saldo', 'Unidad', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
                 // Saldo solo para productos que manejan inventario (suma de todas las bodegas).
@@ -613,6 +613,7 @@ class ProductosController extends BaseModuloController
                     (string)($r['nombre'] ?? ''),
                     (string)($r['nombre_categoria'] ?? ''),
                     (string)($r['nombre_marca'] ?? ''),
+                    (string)($r['nombre_tarifa_iva'] ?? ''),
                     number_format($precioBase, 2),
                     number_format((float)($r['valor_iva'] ?? 0), 2),
                     number_format((float)($r['valor_ice'] ?? 0), 2),
