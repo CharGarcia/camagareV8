@@ -222,11 +222,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 document.getElementById('pagination-controls').innerHTML = data.pagination;
                 document.querySelector('.pdf-export-btn').href = data.pdf_url;
                 document.querySelector('.excel-export-btn').href = data.excel_url;
-
-                if (typeof guardarPreferenciaVista === 'function') {
-                    guardarPreferenciaVista('retornos-cv', '__ordenCol__', g_ordenCol);
-                    guardarPreferenciaVista('retornos-cv', '__ordenDir__', g_ordenDir);
-                }
             }
         } catch (e) {
             console.error(e);

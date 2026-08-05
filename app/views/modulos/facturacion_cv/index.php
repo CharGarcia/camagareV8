@@ -211,10 +211,6 @@ include dirname(__DIR__) . '/clientes/modal_cliente.php';
                 document.getElementById('pagination-controls').innerHTML = data.pagination;
                 document.querySelector('.pdf-export-btn').href = data.pdf_url;
                 document.querySelector('.excel-export-btn').href = data.excel_url;
-                if (typeof guardarPreferenciaVista === 'function') {
-                    guardarPreferenciaVista('facturacion-cv', '__ordenCol__', g_ordenCol);
-                    guardarPreferenciaVista('facturacion-cv', '__ordenDir__', g_ordenDir);
-                }
             }
         } catch (e) {
             console.error(e);
