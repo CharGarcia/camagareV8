@@ -204,6 +204,137 @@ class ConsignacionesVentasController extends BaseModuloController
         exit;
     }
 
+    /** Filas del listado con el filtro/orden actual, sin paginar (para exportar). */
+    private function filasParaExport(): array
+    {
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $buscar     = trim($_GET['b'] ?? '');
+        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
+        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        // perPage = 0 => sin LIMIT (todas las filas que calcen con el filtro actual).
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $data['rows'] ?? [];
+    }
+
+    /** Exporta el listado (con el filtro/orden actual del buscador) a PDF. */
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+            ?>
+            <style>
+                table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:7pt; }
+                th { background:#f2f2f2; border:1px solid #ccc; padding:3px; text-align:left; }
+                td { border:1px solid #ccc; padding:3px; }
+                .r { text-align:right; }
+                h2 { font-family:Arial,sans-serif; font-size:12pt; margin:0 0 2px 0; }
+                .sub { font-family:Arial,sans-serif; font-size:8pt; color:#555; margin-bottom:6px; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="6mm" backright="6mm">
+                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
+                <div class="sub">Listado de Consignaciones en Ventas &mdash; <?= date('d-m-Y H:i:s') ?></div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:9%">Fecha</th>
+                            <th style="width:12%">Secuencial</th>
+                            <th style="width:22%">Cliente</th>
+                            <th style="width:11%">Identificación</th>
+                            <th style="width:16%">Asesor</th>
+                            <th style="width:20%">Observaciones</th>
+                            <th style="width:10%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($rows as $r):
+                        $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                    ?>
+                        <tr>
+                            <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                            <td><?= htmlspecialchars($numero) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_identificacion'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['vendedor_nombre'] ?? '-')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['observaciones'] ?? '')) ?></td>
+                            <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+            <?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Consignaciones_ventas_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    /** Exporta el listado (con el filtro/orden actual del buscador) a Excel. */
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Observaciones', 'Estado'];
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                $exportData[] = [
+                    !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-',
+                    $numero,
+                    (string) ($r['cliente_nombre'] ?? ''),
+                    (string) ($r['cliente_identificacion'] ?? ''),
+                    (string) ($r['vendedor_nombre'] ?? '-'),
+                    (string) ($r['observaciones'] ?? ''),
+                    ucfirst((string) ($r['estado'] ?? '')),
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Consignaciones_ventas', $headers, $exportData, 'Consignaciones en Ventas', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
     public function store(): void
     {
         $this->requireCrear();
