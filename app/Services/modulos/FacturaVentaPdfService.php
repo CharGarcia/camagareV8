@@ -522,6 +522,15 @@ class FacturaVentaPdfService
         $hdrH = 7.6;
         $y += $hdrH;
 
+        // Anchos reales de las columnas multilinea (por key, no por índice: la
+        // posición de 'desc'/'deta' cambia si se oculta la columna "Cód. Auxiliar").
+        $wDesc = 0.0;
+        $wDeta = 0.0;
+        foreach ($cols as $c) {
+            if ($c['key'] === 'desc') $wDesc = (float)$c['w'];
+            if ($c['key'] === 'deta') $wDeta = (float)$c['w'];
+        }
+
         // Filas de detalle
         $pdf->SetFont('helvetica', '', 7);
         $altColor = false;
@@ -551,8 +560,8 @@ class FacturaVentaPdfService
             ];
 
             // Calcular altura de fila según columnas multilinea
-            $nDesc = max(1, (int)ceil($pdf->GetStringWidth($vals['desc']) / ($cols[3]['w'] - 2)));
-            $nDeta = max(1, (int)ceil($pdf->GetStringWidth($vals['deta']) / ($cols[4]['w'] - 2)));
+            $nDesc = max(1, $pdf->getNumLines($vals['desc'], $wDesc));
+            $nDeta = max(1, $pdf->getNumLines($vals['deta'], $wDeta));
             $ch    = max(3.6, max($nDesc, $nDeta) * 3.1);
 
             $xCur = $mL;
