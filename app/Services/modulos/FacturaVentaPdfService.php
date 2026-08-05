@@ -553,7 +553,7 @@ class FacturaVentaPdfService
             // Calcular altura de fila según columnas multilinea
             $nDesc = max(1, (int)ceil($pdf->GetStringWidth($vals['desc']) / ($cols[3]['w'] - 2)));
             $nDeta = max(1, (int)ceil($pdf->GetStringWidth($vals['deta']) / ($cols[4]['w'] - 2)));
-            $ch    = max(4.2, max($nDesc, $nDeta) * 3.6);
+            $ch    = max(3.6, max($nDesc, $nDeta) * 3.1);
 
             $xCur = $mL;
             $yRow = $pdf->GetY();
