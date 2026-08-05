@@ -1369,7 +1369,11 @@ class MigracionMysqlService
         // Bodega del ítem (old id_bodega → nueva) + una por defecto; y el número de la factura vieja.
         $mapBod = $this->mapaDe($pg, $idEmpresa, 'bodegas');
         $bodDef = (int) $pg->query("SELECT id FROM bodegas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY id LIMIT 1")->fetchColumn();
-        $oldFacNum = $esFactura ? $mysql->prepare("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE id_encabezado_factura = :id LIMIT 1") : null;
+        // OJO: encabezado_consignacion.factura_venta es el SECUENCIAL de la factura (NO su id): se busca la
+        // factura por RUC base + serie (= serie_sucursal) + secuencial = factura_venta, y se VERIFICA que el
+        // cliente coincida (id_cli_pro). Si no coincide (dato viejo anómalo), no se enlaza → número en blanco
+        // en vez de mostrar el número de una factura ajena.
+        $oldFacNum = $esFactura ? $mysql->prepare("SELECT id_encabezado_factura, serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = :b AND serie_factura = :serie AND CAST(secuencial_factura AS UNSIGNED) = :fv AND id_cliente = :cli ORDER BY id_encabezado_factura LIMIT 1") : null;
         // Reconcile (re-migrar): actualiza los ya migrados (solo insertados, no vinculados) sin "Eliminar migrados".
         // La bodega del detalle se toma de la línea de ENTRADA (consignaciones_ventas_detalles) que ya la tiene.
         $mapDest = [];
@@ -1377,7 +1381,7 @@ class MigracionMysqlService
         $qmd->execute([$idEmpresa, $entidad]);
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
         if ($esFactura) {
-            $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, estado = 'facturada', updated_at = now(), updated_by = :u WHERE id = :id");
+            $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, id_factura = :idf, estado = 'facturada', updated_at = now(), updated_by = :u WHERE id = :id");
             $updDetBod = $pg->prepare("UPDATE consignaciones_facturas_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_consignacion_factura = :id AND d.id_bodega IS NULL");
         } else {
             $updFacCab = null;
@@ -1409,15 +1413,16 @@ class MigracionMysqlService
                     try {
                         $pg->beginTransaction();
                         if ($esFactura) {
-                            $numFac = null;
+                            $numFac = null; $idFac = null;
                             if ((int) $ec['factura_venta'] > 0) {
-                                $oldFacNum->execute([':id' => (int) $ec['factura_venta']]);
+                                $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta'], ':cli' => (int) $ec['id_cli_pro']]);
                                 $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
-                                if ($ff && trim((string) $ff['serie_factura']) !== '') {
+                                if ($ff) {
                                     $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+                                    $idFac  = $mapFactura[(string) (int) $ff['id_encabezado_factura']] ?? null;
                                 }
                             }
-                            $updFacCab->execute([':nf' => $numFac, ':u' => $idUsuario, ':id' => $dest]);
+                            $updFacCab->execute([':nf' => $numFac, ':idf' => $idFac, ':u' => $idUsuario, ':id' => $dest]);
                         }
                         $updDetBod->execute([':id' => $dest]);
                         $pg->commit();
@@ -1469,15 +1474,15 @@ class MigracionMysqlService
             try {
                 $pg->beginTransaction();
                 if ($esFactura) {
-                    $idFactura = $mapFactura[(string) (int) $ec['factura_venta']] ?? null;
                     $idVend = $mapVend[(string) (int) $ec['responsable']] ?? null;
-                    // Número de la factura (viejo encabezado_factura serie+secuencial → "001-001-000000123")
-                    $numFac = null;
+                    // factura_venta = SECUENCIAL de la factura → número real + id real (por RUC+serie+secuencial).
+                    $numFac = null; $idFactura = null;
                     if ((int) $ec['factura_venta'] > 0) {
-                        $oldFacNum->execute([':id' => (int) $ec['factura_venta']]);
+                        $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta'], ':cli' => (int) $ec['id_cli_pro']]);
                         $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
-                        if ($ff && trim((string) $ff['serie_factura']) !== '') {
-                            $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+                        if ($ff) {
+                            $numFac    = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+                            $idFactura = $mapFactura[(string) (int) $ff['id_encabezado_factura']] ?? null;
                         }
                     }
                     $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $numFac, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idUsuario]);

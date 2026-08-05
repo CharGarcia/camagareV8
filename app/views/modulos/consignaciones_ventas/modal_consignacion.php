@@ -1358,12 +1358,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             return;
         }
         
+        const filasPrecioCero = [];
         for (let i = 0; i < rowElements.length; i++) {
             const tr = rowElements[i];
             const idProd = tr.querySelector('.input-id-producto').value;
             const cant = parseFloat(tr.querySelector('.input-cantidad').value) || 0;
             const precio = parseFloat(tr.querySelector('.input-precio').value) || 0;
-            
+
             if (!idProd) {
                 Swal.fire('Atención', `Hay un producto sin identificar en la fila ${i + 1}. Seleccione un producto del catálogo.`, 'warning').then(() => {
                     const descInput = tr.querySelector('.input-descripcion');
@@ -1394,8 +1395,34 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 });
                 return;
             }
+            if (precio === 0) {
+                filasPrecioCero.push({ i, nombre: tr.querySelector('.input-descripcion')?.value || `Fila ${i + 1}` });
+            }
         }
-        
+
+        // Aviso (no bloqueante): ítem(s) con precio en $0.00, sin contar el descuento.
+        if (filasPrecioCero.length > 0) {
+            const listaHtml = filasPrecioCero.map(f => `<li>${f.nombre || 'Producto sin nombre'}</li>`).join('');
+            const resultado = await Swal.fire({
+                icon: 'warning',
+                title: 'Hay productos con precio en $0.00',
+                html: `Revise, el precio unitario está en <b>$0.00</b> en:<ul class="text-start small mb-0 mt-2">${listaHtml}</ul>`,
+                showCancelButton: true,
+                confirmButtonText: 'Continuar de todos modos',
+                cancelButtonText: 'Revisar',
+                reverseButtons: true
+            });
+            if (!resultado.isConfirmed) {
+                const tr = rowElements[filasPrecioCero[0].i];
+                const precioInput = tr.querySelector('.input-precio');
+                if (precioInput) {
+                    precioInput.focus();
+                    precioInput.select();
+                }
+                return;
+            }
+        }
+
         if (!document.getElementById('cons_secuencial').value) {
             Swal.fire('Atención', 'No hay secuencial válido configurado. Por favor configurar en el módulo Empresa / Secuenciales antes de guardar.', 'warning').then(() => {
                 const secInput = document.getElementById('cons_secuencial');
@@ -1797,6 +1824,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 for (const item of pendingItems) {
                     const cantPendiente = parseFloat(item.cantidad_pendiente) || 0;
                     const pBase = parseFloat(item.precio_base) || 0;
+                    // Los pedidos (módulo Pedidos) no capturan precio por línea (siempre llega en 0):
+                    // si el pedido no trae precio, se usa el precio base del producto.
+                    const precioPedido = (parseFloat(item.precio_unitario) || 0) > 0 ? parseFloat(item.precio_unitario) : pBase;
                     
                     let listaOptions = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
                     if (item.precios_lista && item.precios_lista.length > 0) {
@@ -1862,7 +1892,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             </select>
                         </td>
                         <td class="align-middle">
-                            <input type="number" class="form-control form-control-sm item-precio text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0.00" step="0.01" value="${parseFloat(item.precio_unitario).toFixed(2)}">
+                            <input type="number" class="form-control form-control-sm item-precio text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0.00" step="0.01" value="${precioPedido.toFixed(2)}">
                         </td>
                         <td class="align-middle">${loteHtml}</td>
                         <td class="align-middle">${vencHtml}</td>

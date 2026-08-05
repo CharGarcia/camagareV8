@@ -122,7 +122,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-2 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Generar</button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
                                 </div>
 
                                 <div class="col-md-4 position-relative">
@@ -298,7 +298,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Generar</button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
                                 </div>
                             </form>
                         </div>
@@ -371,7 +371,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-2 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Generar</button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
                                 </div>
                                 <div class="col-md-4 position-relative">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
@@ -486,11 +486,11 @@
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">NUP</label>
                                     <input type="text" id="ri-cv-nup" class="form-control form-control-sm shadow-none border" placeholder="NUP">
                                 </div>
-                                <div class="col-md-2">
+
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">N° Consignación</label>
                                     <input type="text" id="ri-cv-secuencial" class="form-control form-control-sm shadow-none border" placeholder="Ej. 000000010">
                                 </div>
-
                                 <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
                                     <select id="ri-cv-estado" class="form-select form-select-sm shadow-none border">
@@ -500,7 +500,7 @@
                                         <option value="Anulada">Anulada</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
                                     <select id="ri-cv-agrupar" class="form-select form-select-sm shadow-none border">
                                         <option value="NINGUNO">Detallado</option>
@@ -508,14 +508,14 @@
                                         <option value="PRODUCTO">Por Producto</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3 d-flex align-items-end">
+                                <div class="col-md-2 d-flex align-items-end">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="ri-cv-incluir-liquidadas">
                                         <label class="form-check-label small" for="ri-cv-incluir-liquidadas">Incluir liquidadas</label>
                                     </div>
                                 </div>
-                                <div class="col-md-3 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Generar</button>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
                                 </div>
                             </form>
                         </div>

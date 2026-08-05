@@ -23,6 +23,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
     .clickable-row { cursor: pointer; }
     .clickable-row:hover { background-color: rgba(0,0,0,0.03); }
     .dropdown-predictivo { z-index: 2000 !important; }
+    .fp-row-inactivo { color: #adb5bd; background-color: rgba(220, 53, 69, 0.04); }
+    .fp-row-inactivo:hover { background-color: rgba(220, 53, 69, 0.08); }
+    .fp-row-inactivo .text-muted { color: #c9ccd0 !important; }
 </style>
 
 <div class="fp-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -126,7 +129,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                 default   => 'badge-outline-info border-info text-info'
                             };
                         ?>
-                            <tr class="clickable-row" onclick="abrirModalFP(<?= $r['id'] ?>)">
+                            <tr class="clickable-row<?= (empty($r['activo']) || !$r['activo']) ? ' fp-row-inactivo' : '' ?>" onclick="abrirModalFP(<?= $r['id'] ?>)">
                                 <td class="ps-3 fw-medium" data-col="nombre"><?= htmlspecialchars($r['nombre']) ?></td>
                                 <td data-col="tipo"><span class="badge <?= $tipoCls ?> bg-opacity-10 <?= $r['tipo']==='TARJETA'?'text-dark':'text-'.$tipoCls ?> border"><?= $r['tipo'] ?></span></td>
                                 <td data-col="aplica_en"><span class="badge bg-light text-dark border"><?= $r['aplica_en'] ?></span></td>
@@ -149,7 +152,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                     <?php if (!empty($r['activo']) && $r['activo']): ?>
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success">Activo</span>
                                     <?php else: ?>
-                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary">Inactivo</span>
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">Inactivo</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>

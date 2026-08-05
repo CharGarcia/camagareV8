@@ -45,6 +45,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
     .dropdown-predictivo {
         z-index: 2050 !important;
     }
+
+    .oie-row-inactivo {
+        color: #adb5bd;
+        background-color: rgba(220, 53, 69, 0.04);
+    }
+
+    .oie-row-inactivo:hover {
+        background-color: rgba(220, 53, 69, 0.08);
+    }
+
+    .oie-row-inactivo .text-muted,
+    .oie-row-inactivo .text-secondary {
+        color: #c9ccd0 !important;
+    }
 </style>
 
 <div class="mod-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -127,7 +141,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
-                            <tr class="clickable-row" onclick="abrirModalOpcion(<?= $r['id'] ?>)">
+                            <tr class="clickable-row<?= (strtoupper($r['estado'] ?? '') !== 'ACTIVO') ? ' oie-row-inactivo' : '' ?>" onclick="abrirModalOpcion(<?= $r['id'] ?>)">
                                 <td class="ps-3 fw-bold" data-col="nombre"><?= htmlspecialchars($r['nombre']) ?></td>
                                 <td class="text-center" data-col="aplica_ingresos">
                                     <?php if (!empty($r['aplica_ingresos'])): ?>
@@ -157,7 +171,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                     <?php if (strtoupper($r['estado'] ?? '') === 'ACTIVO'): ?>
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success">Activo</span>
                                     <?php else: ?>
-                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary">Inactivo</span>
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">Inactivo</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
