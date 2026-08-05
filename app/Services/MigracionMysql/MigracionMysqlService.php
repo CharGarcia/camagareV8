@@ -1373,7 +1373,7 @@ class MigracionMysqlService
         // factura por RUC base + serie (= serie_sucursal) + secuencial = factura_venta. NO se filtra por
         // cliente: en datos viejos el id_cli_pro de la consignación a veces apunta a un cliente de OTRA
         // empresa (referencia corrupta), pero el secuencial sí identifica la factura correcta (fecha coincide).
-        $oldFacNum = $esFactura ? $mysql->prepare("SELECT id_encabezado_factura, serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = :b AND serie_factura = :serie AND CAST(secuencial_factura AS UNSIGNED) = :fv ORDER BY id_encabezado_factura LIMIT 1") : null;
+        $oldFacNum = $esFactura ? $mysql->prepare("SELECT id_encabezado_factura, serie_factura, secuencial_factura, id_cliente FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = :b AND serie_factura = :serie AND CAST(secuencial_factura AS UNSIGNED) = :fv ORDER BY id_encabezado_factura LIMIT 1") : null;
         // Reconcile (re-migrar): actualiza los ya migrados (solo insertados, no vinculados) sin "Eliminar migrados".
         // La bodega del detalle se toma de la línea de ENTRADA (consignaciones_ventas_detalles) que ya la tiene.
         $mapDest = [];
@@ -1381,7 +1381,7 @@ class MigracionMysqlService
         $qmd->execute([$idEmpresa, $entidad]);
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
         if ($esFactura) {
-            $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, id_factura = :idf, estado = 'facturada', updated_at = now(), updated_by = :u WHERE id = :id");
+            $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, id_factura = :idf, id_cliente = COALESCE(:cli, id_cliente), estado = 'facturada', updated_at = now(), updated_by = :u WHERE id = :id");
             $updDetBod = $pg->prepare("UPDATE consignaciones_facturas_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_consignacion_factura = :id AND d.id_bodega IS NULL");
         } else {
             $updFacCab = null;
@@ -1413,16 +1413,17 @@ class MigracionMysqlService
                     try {
                         $pg->beginTransaction();
                         if ($esFactura) {
-                            $numFac = null; $idFac = null;
+                            $numFac = null; $idFac = null; $cliFac = null;
                             if ((int) $ec['factura_venta'] > 0) {
                                 $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta']]);
                                 $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
                                 if ($ff) {
                                     $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
                                     $idFac  = $mapFactura[(string) (int) $ff['id_encabezado_factura']] ?? null;
+                                    $cliFac = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ff['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg) ?: null;
                                 }
                             }
-                            $updFacCab->execute([':nf' => $numFac, ':idf' => $idFac, ':u' => $idUsuario, ':id' => $dest]);
+                            $updFacCab->execute([':nf' => $numFac, ':idf' => $idFac, ':cli' => $cliFac, ':u' => $idUsuario, ':id' => $dest]);
                         }
                         $updDetBod->execute([':id' => $dest]);
                         $pg->commit();
@@ -1483,6 +1484,10 @@ class MigracionMysqlService
                         if ($ff) {
                             $numFac    = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
                             $idFactura = $mapFactura[(string) (int) $ff['id_encabezado_factura']] ?? null;
+                            // El cliente correcto es el de la FACTURA (el id_cli_pro de la consignación a veces
+                            // es cross-company). Solo se sobrescribe si el de la factura resuelve.
+                            $cliFac = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ff['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
+                            if ($cliFac) { $idCliente = $cliFac; }
                         }
                     }
                     $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $numFac, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idUsuario]);
