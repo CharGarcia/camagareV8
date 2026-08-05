@@ -432,6 +432,10 @@ class FacturaVentaPdfService
         $yBox += $lh + 1;
 
         // Fila 3: Dirección | Teléfono | Correo
+        // El correo puede traer varias direcciones separadas por coma (caso real:
+        // clientes con distintos destinatarios para facturación). En vez de
+        // comprimir el texto en una sola línea (se monta/ilegible), se envuelve en
+        // varias líneas con MultiCell y el recuadro crece según lo que ocupe.
         $pdf->SetFont('helvetica', '', 7.5);
         $pdf->SetXY($mL + 2, $yBox + 1);
         $pdf->Cell(15, $lh, 'Direccion:', 0, 0, 'L');
@@ -439,8 +443,19 @@ class FacturaVentaPdfService
         $pdf->Cell(16, $lh, 'Telefono:', 0, 0, 'L');
         $pdf->Cell(26, $lh, $cab['cliente_telefono'] ?? '', 0, 0, 'L');
         $pdf->Cell(14, $lh, 'Correo:', 0, 0, 'L');
-        $pdf->Cell($cW - 2 - 15 - 60 - 16 - 26 - 14, $lh, $cab['cliente_email'] ?? '', 0, 1, 'L', false, '', 1);
-        $yBox += $lh + 2;
+
+        $correoX = $pdf->GetX();
+        $correoY = $pdf->GetY();
+        $correoW = $cW - 2 - 15 - 60 - 16 - 26 - 14;
+        $correoVal = $cab['cliente_email'] ?? '';
+        $emailLineH = 3.6;
+        $nEmail = max(1, $pdf->getNumLines($correoVal, $correoW));
+
+        $pdf->SetXY($correoX, $correoY);
+        $pdf->MultiCell($correoW, $emailLineH, $correoVal, 0, 'L', false, 1);
+
+        $correoBlockH = max($lh, $nEmail * $emailLineH);
+        $yBox += $correoBlockH + 2;
 
         // Borde de la caja
         $pdf->Rect($mL, $y, $cW, $yBox - $y, 'D');
