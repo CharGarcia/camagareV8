@@ -187,6 +187,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     let GR_sort        = '<?= $ordenCol ?>';
     let GR_dir         = '<?= $ordenDir ?>';
     window.GR_establecimientos = <?= json_encode($establecimientos) ?>;
+    window.GR_decimalesCantidad = <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>;
 
     // Sortable headers
     document.querySelectorAll('.gr-sortable-header').forEach(th => {

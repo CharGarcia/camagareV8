@@ -91,7 +91,7 @@
                                         value="<?= date('Y-m-d') ?>" onchange="GR_ajustarFechas('emision')">
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label">Serie <span class="text-danger">*</span></label>
+                                    <label class="form-label">Serie <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-serie', 'id_punto_emision') ?></label>
                                     <select id="gr-serie" class="form-select form-select-sm" onchange="GR_actualizarSecuencial()">
                                         <?php foreach ($puntos as $p): ?>
                                             <option value="<?= $p['id'] ?>"
@@ -112,7 +112,7 @@
                                 <!-- Fila 2: Tipo documento | Número documento | Fecha del documento -->
                                 <!-- <div class="row g-2 mb-2 align-items-end"> -->
                                 <div class="col-md-2">
-                                    <label class="form-label">Tipo doc. sustento</label>
+                                    <label class="form-label">Tipo doc. sustento <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-cod-doc-sustento', 'cod_doc_sustento') ?></label>
                                     <select id="gr-cod-doc-sustento" class="form-select form-select-sm">
                                         <option value="">- Sin documento sustento -</option>
                                         <option value="01" selected>01 - Factura</option>
@@ -175,7 +175,7 @@
                             <!-- Fila 4: Transportista | Placa | Motivo -->
                             <div class="row g-2 mb-4 align-items-start">
                                 <div class="col-md-4 position-relative">
-                                    <label class="form-label">Transportista <span class="text-danger">*</span></label>
+                                    <label class="form-label">Transportista <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-id-transportista', 'id_transportista') ?></label>
                                     <div class="input-group input-group-sm rounded-pill overflow-hidden border border-secondary border-opacity-10">
                                         <span class="input-group-text bg-white border-0 text-primary px-2"><i class="bi bi-search"></i></span>
                                         <input type="text" class="form-control border-0 px-1" id="gr-search-transportista"
@@ -191,12 +191,12 @@
                                     </div>
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label">Placa <span class="text-danger">*</span></label>
+                                    <label class="form-label">Placa <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-placa', 'placa') ?></label>
                                     <input type="text" id="gr-placa" class="form-control form-control-sm" maxlength="8"
                                         placeholder="ABC-1234" style="text-transform:uppercase">
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Motivo traslado <span class="text-danger">*</span></label>
+                                    <label class="form-label">Motivo traslado <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-motivo', 'motivo_traslado') ?></label>
                                     <input type="text" id="gr-motivo" class="form-control form-control-sm" maxlength="300"
                                         placeholder="Ej: Venta, Traslado, Devolución...">
                                 </div>
@@ -205,12 +205,12 @@
                             <!-- Fila 5: Origen | Destino -->
                             <div class="row g-2 mb-2 align-items-end">
                                 <div class="col-md-6">
-                                    <label class="form-label">Origen <span class="text-danger">*</span></label>
+                                    <label class="form-label">Origen <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-partida', 'direccion_partida') ?></label>
                                     <input type="text" id="gr-partida" class="form-control form-control-sm" maxlength="300"
                                         placeholder="Dirección de partida del traslado">
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Destino <span class="text-danger">*</span></label>
+                                    <label class="form-label">Destino <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-destino', 'direccion_destino') ?></label>
                                     <input type="text" id="gr-destino" class="form-control form-control-sm" maxlength="300"
                                         placeholder="Dirección de llegada del traslado">
                                 </div>
@@ -219,7 +219,7 @@
                             <!-- Fila 6: Ruta | Doc. aduanero | Cód. establecimiento destino -->
                             <div class="row g-2 mb-3 align-items-end">
                                 <div class="col-md-8">
-                                    <label class="form-label">Ruta <span class="text-danger">*</span></label>
+                                    <label class="form-label">Ruta <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-ruta', 'ruta') ?></label>
                                     <input type="text" id="gr-ruta" class="form-control form-control-sm" maxlength="300"
                                         placeholder="Ruta durante el traslado">
                                 </div>

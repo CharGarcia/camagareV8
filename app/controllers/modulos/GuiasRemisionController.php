@@ -521,6 +521,28 @@ class GuiasRemisionController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Un transportista puntual por id — usado para restaurar el favorito de
+     * "Transportista" (campo de búsqueda con id oculto: no basta con fijar el
+     * id, hay que recuperar nombre/identificación/placa para pintar el panel).
+     */
+    public function getTransportistaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { echo json_encode(['ok' => false]); exit; }
+
+        $repo = new \App\repositories\modulos\TransportistaRepository();
+        $t    = $repo->getPorId($id, $idEmpresa);
+
+        echo json_encode($t ? ['ok' => true, 'data' => $t] : ['ok' => false]);
+        exit;
+    }
+
     public function getProductosAjax(): void
     {
         $this->requireLeer();

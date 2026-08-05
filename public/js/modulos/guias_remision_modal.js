@@ -41,7 +41,10 @@
         estadoActual = 'borrador';
         document.getElementById('gr-modal-titulo').textContent = 'Nueva Guía de Remisión';
         document.getElementById('gr-numero-badge').style.display = 'none';
-        
+
+        if (typeof window.aplicarFavoritosModal === 'function') window.aplicarFavoritosModal('#modalGuiaRemision');
+        window.GR_aplicarFavoritoTransportista();
+
         const modalEl = document.getElementById('modalGuiaRemision');
         if (modalEl) {
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
@@ -49,6 +52,26 @@
             window.GR_registrarAutoGuardado();
             window.GR_verificarRespaldo();
         }
+    };
+
+    /**
+     * El favorito de "Transportista" guarda solo el id (campo oculto
+     * gr-id-transportista): aplicarFavoritosModal ya lo fija, pero el input
+     * visible de búsqueda y el panel de info (identificación, placa) se
+     * arman aparte, por eso se completan con una consulta al servidor.
+     */
+    window.GR_aplicarFavoritoTransportista = function () {
+        if (typeof APP_FAVORITOS === 'undefined') return;
+        const idFav = APP_FAVORITOS['id_transportista'];
+        if (!idFav) return;
+        fetch(urlBaseGR + '/get-transportista-ajax?id=' + idFav)
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok && d.data) {
+                    window.GR_seleccionarTransportista(d.data.id, d.data.nombre, d.data.identificacion || '', d.data.placa || '');
+                }
+            })
+            .catch(() => {});
     };
 
     window.GR_abrirEditar = function (data) {
@@ -558,7 +581,7 @@
                 <div class="dropdown-gr-inline position-absolute bg-white border rounded shadow-sm" style="display:none;max-height:200px;overflow-y:auto;top:100%;left:0;width:100%;z-index:2100"></div>
             </td>
             <td class="p-0" style="width:110px">
-                <input type="number" class="input-detalle text-end input-cantidad" step="any" min="0.000001" value="${data?.cantidad || 1}" ${ro}>
+                <input type="number" class="input-detalle text-end input-cantidad" step="any" min="0.000001" value="${GR_formatearCantidad(data?.cantidad)}" ${ro}>
             </td>
             <td class="p-0 text-center align-middle" style="width:36px">
                 ${esBorrador ? `<button type="button" class="btn btn-link p-0 text-danger shadow-none border-0 remove-row-gr"
@@ -1108,6 +1131,13 @@
     function GR_esc(s) {
         if (!s) return '';
         return s.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // Cantidad con la cantidad de decimales configurada por empresa (config/empresa).
+    function GR_formatearCantidad(v) {
+        const dec = Number.isInteger(window.GR_decimalesCantidad) ? window.GR_decimalesCantidad : 2;
+        const n = parseFloat(v);
+        return (isNaN(n) ? 1 : n).toFixed(dec);
     }
 
     function initGrEvents() {
