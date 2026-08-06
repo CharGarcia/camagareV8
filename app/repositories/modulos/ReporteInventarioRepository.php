@@ -345,7 +345,7 @@ class ReporteInventarioRepository extends BaseRepository
                        b.nombre AS bodega_nombre, u.nombre AS usuario_nombre,
                        um.abreviatura AS medida_abreviatura
                 " . $this->fromMovimientos($where) . "
-                ORDER BY k.fecha_movimiento DESC, k.id DESC
+                ORDER BY p.nombre ASC, b.nombre ASC, k.fecha_movimiento ASC, k.id ASC
                 LIMIT 3000";
 
         $st = $this->db->prepare($sql);

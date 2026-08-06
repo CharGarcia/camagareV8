@@ -341,7 +341,8 @@ window.RI_Movimientos = {
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
             th += `<th class="ps-3">Fecha</th><th>Producto</th><th>Bodega</th><th class="text-center">Tipo</th>
-                   <th>Origen</th><th class="text-end">Cantidad</th><th class="text-end">Costo Unit.</th>
+                   <th>Origen</th><th class="text-end">Entradas</th><th class="text-end">Salidas</th><th class="text-end">Saldo</th>
+                   <th class="text-end">Costo Unit.</th>
                    <th>Lote</th><th>Caducidad</th><th class="pe-3">Observaciones</th>`;
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Movimientos</th>
@@ -366,7 +367,7 @@ window.RI_Movimientos = {
         });
 
         const tbody = document.getElementById('ri-mv-tbody');
-        const colSpan = modo === 'NINGUNO' ? 10 : 6;
+        const colSpan = modo === 'NINGUNO' ? 12 : 6;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('movimientos', params, (res) => {

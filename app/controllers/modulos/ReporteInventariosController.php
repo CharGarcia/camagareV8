@@ -205,7 +205,7 @@ class ReporteInventariosController extends BaseModuloController
         $kpis = $this->repository->getMovimientosKpis($idEmpresa, $filtros);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo), $modo === 'NINGUNO' ? 10 : 6),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo), $modo === 'NINGUNO' ? 12 : 6),
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
@@ -320,8 +320,9 @@ class ReporteInventariosController extends BaseModuloController
     {
         if ($modo === 'NINGUNO') {
             $cant = (float) ($r['cantidad'] ?? 0);
-            $signo = $cant >= 0 ? '+' : '-';
-            $color = $cant >= 0 ? 'text-success' : 'text-danger';
+            $entrada = $cant > 0 ? number_format($cant, 2) : '-';
+            $salida = $cant < 0 ? number_format(abs($cant), 2) : '-';
+            $saldo = (float) ($r['stock_posterior'] ?? 0);
             $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '-';
             return '<tr>'
                 . '<td class="small text-nowrap">' . date('d-m-Y H:i', strtotime($r['fecha_movimiento'] ?? '')) . '</td>'
@@ -329,7 +330,9 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . '<td class="text-center small text-uppercase">' . htmlspecialchars($r['tipo_movimiento'] ?? '') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['origen_label'] ?? '') . '</td>'
-                . '<td class="text-end fw-bold"><span class="' . $color . '">' . $signo . number_format(abs($cant), 2) . '</span></td>'
+                . '<td class="text-end text-success">' . $entrada . '</td>'
+                . '<td class="text-end text-danger">' . $salida . '</td>'
+                . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'
                 . '<td class="text-end small">' . number_format((float) ($r['costo_unitario'] ?? 0), 4) . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
                 . '<td class="small">' . $cad . '</td>'
@@ -668,14 +671,17 @@ class ReporteInventariosController extends BaseModuloController
                     default    => $this->repository->getMovimientosDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Fecha', 'Producto', 'Código', 'Bodega', 'Tipo', 'Origen', 'Cantidad', 'Costo Unit.', 'Lote', 'Observaciones'];
-                    $data = array_map(fn($r) => [
-                        date('d-m-Y H:i', strtotime($r['fecha_movimiento'])),
-                        $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? '',
-                        strtoupper($r['tipo_movimiento'] ?? ''), $r['origen_label'] ?? '',
-                        (float) $r['cantidad'], (float) $r['costo_unitario'],
-                        $r['numero_lote'] ?? '', $r['observaciones'] ?? '',
-                    ], $rows);
+                    $headers = ['Fecha', 'Producto', 'Código', 'Bodega', 'Tipo', 'Origen', 'Entradas', 'Salidas', 'Saldo', 'Costo Unit.', 'Lote', 'Observaciones'];
+                    $data = array_map(function ($r) {
+                        $cant = (float) $r['cantidad'];
+                        return [
+                            date('d-m-Y H:i', strtotime($r['fecha_movimiento'])),
+                            $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? '',
+                            strtoupper($r['tipo_movimiento'] ?? ''), $r['origen_label'] ?? '',
+                            $cant > 0 ? $cant : 0, $cant < 0 ? abs($cant) : 0, (float) $r['stock_posterior'],
+                            (float) $r['costo_unitario'], $r['numero_lote'] ?? '', $r['observaciones'] ?? '',
+                        ];
+                    }, $rows);
                 } else {
                     $headers = ['Grupo', 'Movimientos', 'Entradas', 'Salidas', 'Saldo neto', 'Costo total'];
                     $data = array_map(fn($r) => [

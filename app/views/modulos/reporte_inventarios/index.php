@@ -318,7 +318,7 @@
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-mv-thead"></thead>
                             <tbody id="ri-mv-tbody">
-                                <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
