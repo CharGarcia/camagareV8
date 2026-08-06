@@ -257,6 +257,89 @@ class PedidosController extends BaseModuloController {
         }
     }
 
+    /**
+     * Datos del pedido listos para pre-cargar el modal "Nueva Factura" de Facturas
+     * de Venta (botón "Facturar" del pedido). No crea nada: solo arma el payload
+     * con exactamente el mismo shape de cliente/producto que ya usa Factura de
+     * Venta (seleccionarCliente/seleccionarProductoEnFila), para que las reglas de
+     * facturación libre / afecta inventario se validen igual que si el usuario
+     * hubiera escrito la factura a mano.
+     */
+    public function datosParaFacturarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+
+        try {
+            if (!\App\Helpers\Permisos::puedeCrear('modulos/factura-venta')) {
+                echo json_encode(['ok' => false, 'mensaje' => 'No tiene permiso para crear facturas de venta.']);
+                exit;
+            }
+
+            $cabecera = $this->repository->obtenerPorId($id, $idEmpresa);
+            if (!$cabecera) { echo json_encode(['ok' => false, 'mensaje' => 'Pedido no encontrado.']); exit; }
+
+            $estado = $cabecera['estado'] ?? '';
+            if ($estado === 'Procesado') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Este pedido ya está Procesado; no se puede generar otra factura desde él.']);
+                exit;
+            }
+            if ($estado === 'Anulado') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Este pedido está Anulado; no se puede facturar.']);
+                exit;
+            }
+
+            $detalles = $this->repository->obtenerDetalles($id, $idEmpresa);
+            if (empty($detalles)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El pedido no tiene ítems.']);
+                exit;
+            }
+
+            $clienteRepo = new \App\repositories\modulos\ClienteRepository();
+            $cliente = $clienteRepo->getPorId((int) $cabecera['id_cliente'], $idEmpresa);
+            if (!$cliente) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El cliente del pedido ya no existe.']);
+                exit;
+            }
+
+            $productoRepo = new \App\repositories\modulos\ProductoRepository();
+            $lineas = [];
+            $advertencias = [];
+            foreach ($detalles as $d) {
+                $idProducto = (int) ($d['id_producto'] ?? 0);
+                $producto = $idProducto ? $productoRepo->getPorId($idProducto, $idEmpresa) : null;
+                if (!$producto) {
+                    $advertencias[] = 'El producto "' . ($d['producto_nombre'] ?? $idProducto) . '" ya no está disponible para facturar y se omitió.';
+                    continue;
+                }
+                $producto['precios_lista'] = $productoRepo->getPrecios($idProducto, $idEmpresa);
+                $producto['variantes']     = $productoRepo->getVariantes($idProducto, $idEmpresa);
+                $lineas[] = ['producto' => $producto, 'cantidad' => (float) $d['cantidad']];
+            }
+
+            if (empty($lineas)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Ningún producto del pedido está disponible para facturar.']);
+                exit;
+            }
+
+            echo json_encode([
+                'ok'            => true,
+                'numero_pedido' => $cabecera['numero_pedido'] ?? '',
+                'cliente'       => $cliente,
+                'lineas'        => $lineas,
+                'advertencias'  => $advertencias,
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al preparar la factura: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function searchAjax(): void
     {
         $this->requireLeer();

@@ -133,6 +133,28 @@ class ClienteRepository extends BaseRepository
     }
 
     /**
+     * Cliente por id, con los mismos joins/columnas que getListado() (nombre_vendedor,
+     * nombre_tipo_id, etc.) — mismo shape que espera seleccionarCliente() en Factura de Venta.
+     */
+    public function getPorId(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT c.*, v.nombre AS nombre_vendedor,
+                       icv.nombre AS nombre_tipo_id,
+                       p.nombre AS nombre_provincia,
+                       ciu.nombre AS nombre_ciudad
+                FROM {$this->table} c
+                LEFT JOIN vendedores v ON v.id = c.id_vendedor
+                LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = c.tipo_id
+                LEFT JOIN provincia p ON p.codigo = c.provincia
+                LEFT JOIN ciudad ciu ON ciu.codigo = c.ciudad AND ciu.cod_prov = c.provincia
+                WHERE c.id = :id AND c.id_empresa = :id_empresa AND c.eliminado = false";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
      * Verifica si una identificación ya existe en la empresa.
      */
     public function existeIdentificacion(int $idEmpresa, string $tipoId, string $identificacion, ?int $idExcluir = null): bool

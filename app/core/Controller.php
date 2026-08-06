@@ -89,6 +89,7 @@ abstract class Controller
                         $idEmpresa,
                         $nivel
                     );
+                    $menuModulos = $this->aplicarOrdenPersonalizadoMenu($menuModulos, (int) $_SESSION['id_usuario'], $idEmpresa);
                 } catch (\Throwable $e) {
                     $menuModulos = [];
                 }
@@ -101,6 +102,50 @@ abstract class Controller
             'menuModulos' => $menuModulos,
             'idEmpresaFavorita' => $idEmpresaFavorita,
         ];
+    }
+
+    /**
+     * Reordena los módulos de primer nivel del navbar según el orden que el
+     * usuario haya guardado (arrastrar y soltar) para la empresa activa.
+     * Los módulos que aún no estén en la preferencia (nuevos, recién
+     * asignados) se agregan al final en su orden original.
+     */
+    private function aplicarOrdenPersonalizadoMenu(array $menuModulos, int $idUsuario, int $idEmpresa): array
+    {
+        if (empty($menuModulos) || $idUsuario <= 0 || $idEmpresa <= 0) {
+            return $menuModulos;
+        }
+
+        try {
+            $repo = new \App\repositories\UsuarioPreferenciaRepository();
+            $prefs = $repo->obtenerPreferencias($idUsuario, $idEmpresa, 'navbar');
+            $orden = $prefs['__vista__']['__orden_menu__'] ?? [];
+        } catch (\Throwable $e) {
+            return $menuModulos;
+        }
+
+        if (!is_array($orden) || empty($orden)) {
+            return $menuModulos;
+        }
+
+        $porId = [];
+        foreach ($menuModulos as $mod) {
+            $porId[(int) ($mod['id_modulo'] ?? 0)] = $mod;
+        }
+
+        $ordenados = [];
+        foreach ($orden as $idMod) {
+            $idMod = (int) $idMod;
+            if (isset($porId[$idMod])) {
+                $ordenados[] = $porId[$idMod];
+                unset($porId[$idMod]);
+            }
+        }
+        foreach ($porId as $mod) {
+            $ordenados[] = $mod;
+        }
+
+        return $ordenados;
     }
 
     protected function viewWithLayout(string $layout, string $view, array $data = []): void

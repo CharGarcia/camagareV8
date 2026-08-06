@@ -42,6 +42,14 @@
                     <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="emailPedido()" title="Enviar por correo">
                         <i class="bi bi-envelope"></i>
                     </button>
+
+                    <?php if (\App\Helpers\Permisos::puedeCrear('modulos/factura-venta')): ?>
+                    <div class="vr mx-1"></div>
+
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" id="btn-facturar-pedido" onclick="facturarPedido()" title="Generar factura de venta desde este pedido">
+                        <i class="bi bi-receipt me-1"></i>Facturar
+                    </button>
+                    <?php endif; ?>
                 </div>
                 <hr class="text-muted my-3 opacity-25">
 

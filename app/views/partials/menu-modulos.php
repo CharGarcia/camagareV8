@@ -10,13 +10,14 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
         <i class="bi bi-chevron-left"></i>
     </button>
     <div class="cmg-menu-scroll-wrap">
-        <ul class="cmg-menu-list">
+        <ul class="cmg-menu-list" id="cmg-menu-list">
             <?php if (empty($menuModulos)): ?>
             <li class="cmg-menu-item"><span class="cmg-menu-empty text-muted small">Sin módulos asignados</span></li>
             <?php else: ?>
             <?php foreach ($menuModulos as $mod): ?>
-            <li class="cmg-menu-item dropdown cmg-menu-hover">
+            <li class="cmg-menu-item dropdown cmg-menu-hover" data-id-modulo="<?= (int) ($mod['id_modulo'] ?? 0) ?>">
                 <button type="button" class="cmg-menu-modulo-btn" aria-expanded="false" aria-haspopup="true">
+                    <i class="bi bi-grip-vertical cmg-menu-drag-handle" title="Arrastrar para reordenar"></i>
                     <i class="<?= htmlspecialchars(iconoClase($mod['icono_modulo'] ?? '')) ?>"></i>
                     <span><?= htmlspecialchars($mod['nombre_modulo'] ?? '') ?></span>
                     <i class="bi bi-chevron-down cmg-menu-chevron"></i>
@@ -47,6 +48,14 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
     <button type="button" class="cmg-menu-scroll-btn cmg-menu-scroll-right" aria-label="Desplazar derecha">
         <i class="bi bi-chevron-right"></i>
     </button>
+    <?php if (!empty($menuModulos)): ?>
+    <button type="button" id="cmg-menu-reordenar-btn" class="cmg-menu-scroll-btn cmg-menu-reordenar-btn" title="Reordenar módulos" aria-pressed="false">
+        <i class="bi bi-arrows-move"></i>
+    </button>
+    <button type="button" id="cmg-menu-restablecer-btn" class="cmg-menu-scroll-btn cmg-menu-restablecer-btn d-none" title="Restablecer orden original">
+        <i class="bi bi-arrow-counterclockwise"></i>
+    </button>
+    <?php endif; ?>
 </nav>
 
 <script>
@@ -91,6 +100,7 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
         if (!btn || !menu) return;
 
         function showMenu() {
+            if (window.__cmgMenuReordenando) return;
             clearTimeout(hideTimer);
             hideAllMenus();
             var portal = document.getElementById('cmg-dropdown-portal');
@@ -122,6 +132,86 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
         item.addEventListener('mouseleave', hideMenu);
         menu.addEventListener('mouseenter', function() { clearTimeout(hideTimer); });
         menu.addEventListener('mouseleave', hideMenu);
+    });
+})();
+
+(function() {
+    var btnReordenar = document.getElementById('cmg-menu-reordenar-btn');
+    var btnRestablecer = document.getElementById('cmg-menu-restablecer-btn');
+    var nav = document.querySelector('.cmg-menu-modulos');
+    var lista = document.getElementById('cmg-menu-list');
+    if (!btnReordenar || !nav || !lista) return;
+
+    var urlGuardarVista = '<?= rtrim($base, '/') ?>/Preferencias/guardarVistaAjax';
+    var dragEl = null;
+
+    function itemsArray() {
+        return Array.prototype.slice.call(lista.querySelectorAll('.cmg-menu-item[data-id-modulo]'));
+    }
+
+    function activarModoReordenar(activo) {
+        window.__cmgMenuReordenando = activo;
+        nav.classList.toggle('cmg-menu-reordenando', activo);
+        btnReordenar.setAttribute('aria-pressed', activo ? 'true' : 'false');
+        btnReordenar.classList.toggle('active', activo);
+        if (btnRestablecer) btnRestablecer.classList.toggle('d-none', !activo);
+        itemsArray().forEach(function(li) {
+            li.setAttribute('draggable', activo ? 'true' : 'false');
+        });
+    }
+
+    function guardarOrden() {
+        var orden = itemsArray().map(function(li) { return li.dataset.idModulo; });
+        var fd = new FormData();
+        fd.append('modulo', 'navbar');
+        fd.append('vistaPayload', JSON.stringify({ __orden_menu__: orden }));
+        fetch(urlGuardarVista, {
+            method: 'POST', body: fd, credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).catch(function() {});
+    }
+
+    btnReordenar.addEventListener('click', function() {
+        activarModoReordenar(!nav.classList.contains('cmg-menu-reordenando'));
+    });
+
+    if (btnRestablecer) {
+        btnRestablecer.addEventListener('click', function() {
+            var fd = new FormData();
+            fd.append('modulo', 'navbar');
+            fd.append('vistaPayload', JSON.stringify({ __orden_menu__: [] }));
+            fetch(urlGuardarVista, {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).finally(function() { window.location.reload(); });
+        });
+    }
+
+    lista.addEventListener('dragstart', function(e) {
+        var li = e.target.closest('.cmg-menu-item[data-id-modulo]');
+        if (!li || !nav.classList.contains('cmg-menu-reordenando')) { e.preventDefault(); return; }
+        dragEl = li;
+        li.classList.add('cmg-menu-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', li.dataset.idModulo || ''); } catch (err) {}
+    });
+
+    lista.addEventListener('dragover', function(e) {
+        if (!dragEl) return;
+        e.preventDefault();
+        var li = e.target.closest('.cmg-menu-item[data-id-modulo]');
+        if (!li || li === dragEl) return;
+        var rect = li.getBoundingClientRect();
+        var after = (e.clientX - rect.left) > (rect.width / 2);
+        lista.insertBefore(dragEl, after ? li.nextSibling : li);
+    });
+
+    lista.addEventListener('drop', function(e) { e.preventDefault(); });
+
+    lista.addEventListener('dragend', function() {
+        if (dragEl) dragEl.classList.remove('cmg-menu-dragging');
+        dragEl = null;
+        guardarOrden();
     });
 })();
 </script>

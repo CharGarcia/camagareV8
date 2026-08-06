@@ -4082,6 +4082,11 @@ $totalPages = $totalPagesOriginal;
             inCant.focus();
             inCant.select();
         };
+        // Expuesta globalmente: permite pre-llenar una fila desde fuera de este modal
+        // (p. ej. "Facturar desde Pedido") reusando exactamente la misma lógica de
+        // autocompletado (precio, IVA, ICE, variantes, inventariable) que usa la
+        // búsqueda manual de productos, en vez de duplicarla.
+        window.fvSeleccionarProductoEnFila = seleccionarProductoEnFila;
 
         const buscarProducto = async (q, sourceInput) => {
             // ... (keep search logic similar but adjust for no inputCod)
@@ -7541,6 +7546,90 @@ window.fvCancelarPagoNuvei = function(devRef) {
             });
     });
 };
+</script>
+
+<!-- "Facturar desde Pedido": si Pedidos dejó datos en sessionStorage, pre-carga el
+     modal "Nueva Factura" reusando seleccionarCliente()/agregarFila()/
+     fvSeleccionarProductoEnFila() de arriba — mismo camino que el llenado manual,
+     así las reglas de facturación libre / afecta inventario se validan igual. -->
+<script>
+(function () {
+    document.addEventListener('DOMContentLoaded', function () {
+        var payload = null;
+        try {
+            var raw = sessionStorage.getItem('cmg_facturar_desde_pedido');
+            if (!raw) return;
+            sessionStorage.removeItem('cmg_facturar_desde_pedido');
+            payload = JSON.parse(raw);
+        } catch (e) {
+            console.error('Error al leer los datos de "Facturar desde Pedido"', e);
+            return;
+        }
+        if (!payload || !payload.cliente || !Array.isArray(payload.lineas)) return;
+
+        try {
+            var borrador = (typeof FV_STORAGE_KEY !== 'undefined') ? localStorage.getItem(FV_STORAGE_KEY) : null;
+            if (borrador) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Tienes una factura sin guardar',
+                    html: 'No se pudo pre-cargar la factura del pedido <strong>' + (payload.numero_pedido || '') + '</strong> porque hay un borrador de factura pendiente.<br>Guarde o descarte ese borrador y vuelva a intentarlo desde el pedido.',
+                    confirmButtonText: 'Entendido'
+                });
+                return;
+            }
+
+            fvResetearModal();
+            document.getElementById('m-tbodyDetalle').innerHTML = '';
+            modalMain.show();
+
+            document.getElementById('modalNuevaFactura').addEventListener('shown.bs.modal', function onShown() {
+                this.removeEventListener('shown.bs.modal', onShown);
+                try {
+                    seleccionarCliente(payload.cliente);
+
+                    payload.lineas.forEach(function (linea) {
+                        agregarFila();
+                        var filas = document.querySelectorAll('#m-tbodyDetalle .row-detalle');
+                        var fila = filas[filas.length - 1];
+                        if (!fila || typeof window.fvSeleccionarProductoEnFila !== 'function') return;
+                        window.fvSeleccionarProductoEnFila(linea.producto, fila);
+                        var inputCantidad = fila.querySelector('.input-cantidad');
+                        if (inputCantidad) {
+                            inputCantidad.value = linea.cantidad;
+                            calcFila(inputCantidad);
+                        }
+                    });
+
+                    calcTotales();
+
+                    var inputObs = document.getElementById('m-input-observaciones');
+                    if (inputObs && !inputObs.value.trim()) {
+                        inputObs.value = 'Generada desde pedido ' + (payload.numero_pedido || '');
+                    }
+
+                    var mensajeExtra = 'Revise precios e IVA antes de guardar.';
+                    if (payload.advertencias && payload.advertencias.length) {
+                        mensajeExtra += '<br><br><strong>Atención:</strong><ul class="text-start small mb-0">' +
+                            payload.advertencias.map(function (a) { return '<li>' + a + '</li>'; }).join('') + '</ul>';
+                    }
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Factura pre-cargada desde el pedido',
+                        html: mensajeExtra,
+                        confirmButtonText: 'Entendido',
+                        target: document.getElementById('modalNuevaFactura')
+                    });
+                } catch (e) {
+                    console.error('Error al pre-cargar la factura desde el pedido', e);
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Ocurrió un error al pre-cargar los datos del pedido. Verifique la factura antes de guardar.', target: document.getElementById('modalNuevaFactura') });
+                }
+            }, { once: true });
+        } catch (e) {
+            console.error('Error al pre-cargar la factura desde el pedido', e);
+        }
+    });
+})();
 </script>
 
 <?php // Fin de index.php ?>

@@ -521,6 +521,51 @@ async function emailPedido() {
     }
 }
 
+/**
+ * Genera una Factura de Venta a partir de este pedido: pide al servidor el cliente y
+ * los productos ya resueltos (mismo shape que usa Factura de Venta), los deja listos
+ * en sessionStorage y redirige al módulo de Facturas, que los toma al cargar y abre
+ * el modal "Nueva Factura" pre-llenado. No crea la factura por sí sola: el usuario
+ * revisa precios/IVA y guarda desde el formulario normal de Factura de Venta.
+ */
+async function facturarPedido() {
+    const id = document.getElementById('pedido_id').value;
+    if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar el pedido primero.' });
+
+    const estadoActual = document.getElementById('estado').value;
+    if (estadoActual === 'Procesado' || estadoActual === 'Anulado') {
+        return Swal.fire({ icon: 'warning', title: 'No se puede facturar', text: `Este pedido está ${estadoActual}; no se puede generar una factura desde él.`, target: document.getElementById('modalPedido') });
+    }
+
+    const confirmacion = await Swal.fire({
+        icon: 'question',
+        title: 'Generar factura',
+        text: '¿Generar una factura de venta con los datos de este pedido? Podrás revisar precios e IVA antes de guardarla.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, continuar',
+        cancelButtonText: 'Cancelar',
+        target: document.getElementById('modalPedido'),
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    Swal.fire({ title: 'Preparando factura...', allowOutsideClick: false, didOpen: () => Swal.showLoading(), target: document.getElementById('modalPedido') });
+    try {
+        const res = await fetch(`${window.CMG_urlBase}/datosParaFacturarAjax?id=${id}`);
+        const data = await res.json();
+        Swal.close();
+
+        if (!data.ok) {
+            return Swal.fire({ icon: 'error', title: 'No se pudo preparar la factura', text: data.mensaje || 'Error desconocido.', target: document.getElementById('modalPedido') });
+        }
+
+        sessionStorage.setItem('cmg_facturar_desde_pedido', JSON.stringify(data));
+        window.location.href = `${window.BASE_URL}/modulos/factura-venta`;
+    } catch (e) {
+        Swal.close();
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo preparar los datos para facturar.', target: document.getElementById('modalPedido') });
+    }
+}
+
 function validarFechasYHoras() {
     const inputFecha = document.getElementById('fecha_entrega');
     const inputHoraIni = document.getElementById('hora_inicial_entrega');

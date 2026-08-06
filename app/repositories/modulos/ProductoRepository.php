@@ -159,6 +159,37 @@ class ProductoRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Producto por id, con los mismos joins/columnas calculadas que getListado()
+     * (porcentaje_iva_final, codigo_iva_final, etc.) — mismo shape que espera
+     * seleccionarProductoEnFila() en Factura de Venta. Solo productos vendibles y
+     * activos (mismos filtros que getListado($soloOpcion='venta', $soloActivos=true)),
+     * para no facturar algo que ya no se puede vender aunque el id exista.
+     */
+    public function getPorId(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT p.*,
+                       cat.nombre AS nombre_categoria,
+                       mar.nombre AS nombre_marca,
+                       ti.tarifa AS nombre_tarifa_iva,
+                       ti.porcentaje_iva AS porcentaje_iva_final,
+                       ti.codigo AS codigo_iva_final,
+                       ti.status AS status_iva_final,
+                       um.nombre AS nombre_medida,
+                       um.abreviatura AS abreviatura_medida
+                FROM {$this->table} p
+                LEFT JOIN categorias cat ON cat.id = p.id_categoria
+                LEFT JOIN marcas mar ON mar.id = p.id_marca
+                LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+                LEFT JOIN unidades_medida um ON um.id = p.id_medida
+                WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false
+                  AND p.status = 1 AND (p.opciones->>'venta')::boolean = true";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function existeCodigo(int $idEmpresa, string $codigo, ?int $excluirId = null): bool
     {
         // lower(): concuerda con el índice único productos_codigo_unico_idx, de modo

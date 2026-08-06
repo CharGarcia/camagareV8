@@ -468,6 +468,30 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
   display: inline-block;
 }
 
+/* Reordenar módulos del navbar (arrastrar y soltar) */
+.cmg-menu-drag-handle {
+  display: none;
+  cursor: grab;
+  opacity: 0.6;
+  font-size: 0.85rem;
+}
+.cmg-menu-reordenando .cmg-menu-drag-handle {
+  display: inline-flex;
+}
+.cmg-menu-reordenando .cmg-menu-item {
+  cursor: grab;
+}
+.cmg-menu-reordenando .cmg-menu-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+.cmg-menu-item.cmg-menu-dragging {
+  opacity: 0.4;
+}
+.cmg-menu-reordenar-btn.active {
+  background: rgba(13, 110, 253, 0.15);
+  color: var(--cmg-primary, #0d6efd);
+}
+
 /* ---------------------------------------------------------------
    Prevenir zoom automático en iOS/Android al enfocar inputs.
    El navegador hace zoom cuando font-size < 16px. Forzamos 16px
