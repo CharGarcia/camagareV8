@@ -88,6 +88,8 @@ class DecimoCuartoService
 
             $periodos = $this->repo->getPeriodosEmpleado($idEmp, $idEmpresa);
             $dias = $this->calc->diasLaborados($periodos, $periodo['fecha_desde'], $periodo['fecha_hasta']);
+            if ($dias <= 0) continue; // ningún período del empleado cae dentro del rango de esta declaración
+
             $mensualiza = ($emp['decimo_cuarto'] ?? '') === 'mensualiza';
             $valor = $this->calc->valor($sbu, $dias, $mensualiza);
             $totalValor += $valor;

@@ -86,6 +86,8 @@ class DecimoTerceroService
 
             $periodos = $this->repo->getPeriodosEmpleado($idEmp, $idEmpresa);
             $dias = $this->calc->diasLaborados360($periodos, $periodo['fecha_desde'], $periodo['fecha_hasta']);
+            if ($dias <= 0) continue; // ningún período del empleado cae dentro del rango de esta declaración
+
             $totalGanado = $this->repo->getTotalGanadoEmpleado($idEmp, $idEmpresa, $periodo['fecha_desde'], $periodo['fecha_hasta'], $soloIess);
             $mensualiza = ($emp['decimo_tercero'] ?? '') === 'mensualiza';
             $valor = $this->calc->valor($totalGanado, $mensualiza);
