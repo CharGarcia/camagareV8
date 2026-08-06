@@ -52,8 +52,15 @@ class ProductoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $whereSql .= " AND (p.nombre ILIKE :b OR p.codigo ILIKE :b OR p.codigo_auxiliar ILIKE :b OR p.codigo_barras ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['p.nombre', 'p.codigo', 'p.codigo_auxiliar', 'p.codigo_barras'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $whereSql .= " AND {$condicion}";
+            }
         }
 
         // El buscador envía etiquetas amigables ('activo'/'inactivo', 'bien'/'servicio')

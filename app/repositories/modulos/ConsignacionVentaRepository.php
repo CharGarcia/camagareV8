@@ -28,8 +28,15 @@ class ConsignacionVentaRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            $where .= " AND (cv.secuencial ILIKE :b OR c.nombre ILIKE :b OR c.identificacion ILIKE :b OR v.nombre ILIKE :b OR cv.estado ILIKE :b OR cv.observaciones ILIKE :b)";
-            $params[':b'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['cv.secuencial', 'c.nombre', 'c.identificacion', 'v.nombre', 'cv.estado', 'cv.observaciones'],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [

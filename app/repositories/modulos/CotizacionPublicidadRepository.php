@@ -42,15 +42,15 @@ class CotizacionPublicidadRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (
-                c.nombre ILIKE :b
-                OR c.identificacion ILIKE :b
-                OR q.contacto ILIKE :b
-                OR q.proyecto ILIKE :b
-                OR q.observaciones ILIKE :b
-                OR CAST(q.numero AS TEXT) ILIKE :b
-            )";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['c.nombre', 'c.identificacion', 'q.contacto', 'q.proyecto', 'q.observaciones', 'CAST(q.numero AS TEXT)'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [

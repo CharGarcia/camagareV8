@@ -58,8 +58,15 @@ class EntregasConsignacionesRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            $where .= " AND (cv.secuencial ILIKE :b OR c.nombre ILIKE :b OR rt.nombre ILIKE :b OR u.nombre ILIKE :b)";
-            $params[':b'] = "%$textoLibre%";
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['cv.secuencial', 'c.nombre', 'rt.nombre', 'u.nombre'],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         $this->aplicarFiltroProducto($where, $params, $filtros);

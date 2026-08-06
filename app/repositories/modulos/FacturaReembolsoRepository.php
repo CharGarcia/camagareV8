@@ -25,11 +25,15 @@ class FacturaReembolsoRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            $where .= " AND (CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial) ILIKE :buscar
-                          OR c.nombre ILIKE :buscar
-                          OR c.identificacion ILIKE :buscar
-                          OR fr.observaciones ILIKE :buscar)";
-            $params[':buscar'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ["CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial)", 'c.nombre', 'c.identificacion', 'fr.observaciones'],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [

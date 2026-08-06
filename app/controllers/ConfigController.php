@@ -663,6 +663,8 @@ class ConfigController extends Controller
             'eliminar-preview'   => 'eliminarPreviewAjax',
             'eliminar'           => 'eliminarAjax',
             'verificar-existentes' => 'verificarExistentesAjax',
+            'empresas-por-migrar' => 'empresasPorMigrarAjax',
+            'migrar-empresas'    => 'migrarEmpresasAjax',
             default              => 'index',
         };
         if (method_exists($c, $method)) {

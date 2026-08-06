@@ -13,6 +13,45 @@ $base = BASE_URL;
     <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver a Configuración</a>
 </div>
 
+<!-- ① Migrar las empresas del sistema anterior (registro en el nuevo, sin correos) -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 border-bottom-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-building-add text-primary me-2"></i>Registrar empresas del sistema anterior</h6>
+        <button class="btn btn-sm btn-outline-primary" id="btnListarEmpresas"><i class="bi bi-search me-1"></i> Buscar empresas por migrar</button>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Crea en el sistema nuevo las empresas <b>activas</b> del sistema anterior que <b>aún no existen</b> aquí.
+            Se registra <b>una empresa por contribuyente</b> (RUC base) con todos sus establecimientos, su usuario
+            administrador y en ambiente <b>producción</b>. <b>No se envía ningún correo</b>: la invitación del usuario
+            y los documentos legales se enviarán cuando edites y <b>guardes</b> la empresa por primera vez.
+        </p>
+        <div id="empresasMigrarBox" style="display:none;">
+            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <input type="text" class="form-control form-control-sm" id="empFiltro" style="max-width:280px" placeholder="Filtrar por nombre o RUC…">
+                <div><a href="#" class="small me-2" id="empTodas">Todas</a><a href="#" class="small" id="empNinguna">Ninguna</a></div>
+                <span class="small text-muted" id="empContador"></span>
+                <button class="btn btn-sm btn-success ms-auto" id="btnMigrarEmpresas" disabled><i class="bi bi-download me-1"></i> Migrar seleccionadas</button>
+            </div>
+            <div style="max-height:340px;overflow:auto;" class="border rounded">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                        <tr>
+                            <th style="width:38px"><input type="checkbox" id="empChkAll" title="Seleccionar todas las visibles"></th>
+                            <th>Empresa</th>
+                            <th style="width:130px">RUC base</th>
+                            <th style="width:110px" class="text-center">Estab.</th>
+                            <th>Correo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="empTbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="empResultado" class="small mt-2"></div>
+    </div>
+</div>
+
 <div class="row g-4">
     <!-- Paso 1: empresa + qué extraer -->
     <div class="col-lg-5">
@@ -691,6 +730,100 @@ $base = BASE_URL;
             $('btnCfgPrev').click(); // refrescar: ahora saldrán como "Ya configurada"
         } catch (e) {
             $('cfgAplicarMsg').innerHTML = '<span class="text-danger">Error al aplicar.</span>';
+        }
+    });
+
+    // ── ① Registrar empresas del sistema anterior ──
+    let empData = [];
+
+    function empRender() {
+        const q = ($('empFiltro').value || '').trim().toLowerCase();
+        const tb = $('empTbody');
+        tb.innerHTML = '';
+        let visibles = 0;
+        empData.forEach((e, i) => {
+            const hay = (e.nombre + ' ' + e.razon + ' ' + e.base + ' ' + (e.mail || '')).toLowerCase();
+            if (q !== '' && hay.indexOf(q) === -1) return;
+            visibles++;
+            const correo = e.mail
+                ? (e.tiene_mail ? esc(e.mail) : '<span class="text-warning" title="Correo no válido">' + esc(e.mail) + '</span>')
+                : '<span class="text-muted">— sin correo —</span>';
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td><input type="checkbox" class="emp-chk" data-i="' + i + '"></td>' +
+                '<td><span class="fw-semibold">' + esc(e.nombre) + '</span>' +
+                (e.razon && e.razon !== e.nombre ? '<br><span class="text-muted small">' + esc(e.razon) + '</span>' : '') + '</td>' +
+                '<td class="small">' + esc(e.base) + '</td>' +
+                '<td class="text-center small">' + esc(e.ests) + (e.n_est > 1 ? ' <span class="badge bg-secondary">' + e.n_est + '</span>' : '') + '</td>' +
+                '<td class="small">' + correo + '</td>';
+            tb.appendChild(tr);
+        });
+        $('empContador').textContent = visibles + ' de ' + empData.length + ' empresas por migrar';
+        empSync();
+    }
+
+    function empSync() {
+        const marcadas = document.querySelectorAll('.emp-chk:checked').length;
+        $('btnMigrarEmpresas').disabled = marcadas === 0;
+        if (marcadas > 0) $('btnMigrarEmpresas').innerHTML = '<i class="bi bi-download me-1"></i> Migrar ' + marcadas + ' seleccionada(s)';
+        else $('btnMigrarEmpresas').innerHTML = '<i class="bi bi-download me-1"></i> Migrar seleccionadas';
+    }
+
+    $('btnListarEmpresas').addEventListener('click', async () => {
+        const btn = $('btnListarEmpresas');
+        const prev = btn.innerHTML;
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Buscando…';
+        $('empResultado').innerHTML = '';
+        try {
+            const res = await fetch(base + '/config/migrarMysql?action=empresas-por-migrar').then(r => r.json());
+            if (!res.ok) { $('empResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+            empData = res.data || [];
+            $('empresasMigrarBox').style.display = empData.length ? '' : 'none';
+            if (!empData.length) {
+                $('empResultado').innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>No hay empresas activas pendientes de migrar: todas ya existen en el sistema nuevo.</span>';
+            }
+            empRender();
+        } catch (e) {
+            $('empResultado').innerHTML = '<span class="text-danger">Error al consultar el sistema anterior.</span>';
+        } finally {
+            btn.disabled = false; btn.innerHTML = prev;
+        }
+    });
+
+    $('empFiltro').addEventListener('input', empRender);
+    $('empTodas').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.emp-chk').forEach(c => c.checked = true); empSync(); });
+    $('empNinguna').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.emp-chk').forEach(c => c.checked = false); $('empChkAll').checked = false; empSync(); });
+    $('empChkAll').addEventListener('change', function () { document.querySelectorAll('.emp-chk').forEach(c => c.checked = this.checked); empSync(); });
+    $('empTbody').addEventListener('change', (e) => { if (e.target.classList.contains('emp-chk')) empSync(); });
+
+    $('btnMigrarEmpresas').addEventListener('click', async () => {
+        const bases = Array.from(document.querySelectorAll('.emp-chk:checked')).map(c => empData[+c.dataset.i].base);
+        if (!bases.length) return;
+        if (!confirm('¿Registrar ' + bases.length + ' empresa(s) en el sistema nuevo?\n\nNo se enviará ningún correo ahora; la invitación y los documentos legales se enviarán cuando edites y guardes cada empresa.')) return;
+        const btn = $('btnMigrarEmpresas');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando…';
+        $('empResultado').innerHTML = '';
+        try {
+            const body = new FormData();
+            bases.forEach(b => body.append('bases[]', b));
+            const res = await fetch(base + '/config/migrarMysql?action=migrar-empresas', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) { $('empResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+            const d = res.data;
+            let html = '<div class="alert alert-success py-2 mb-2"><b>' + fmt(d.migradas) + '</b> migrada(s)' +
+                (d.omitidas ? ' · <b>' + fmt(d.omitidas) + '</b> omitida(s)' : '') + '.</div>';
+            const errores = (d.detalle || []).filter(x => !x.ok);
+            if (errores.length) {
+                html += '<div class="small"><b>Detalle:</b><ul class="mb-0">';
+                errores.forEach(x => { html += '<li>' + esc(x.base) + (x.nombre ? ' — ' + esc(x.nombre) : '') + ': ' + esc(x.msg) + '</li>'; });
+                html += '</ul></div>';
+            }
+            $('empResultado').innerHTML = html;
+            // Refrescar la lista: las recién migradas ya no deben aparecer.
+            $('btnListarEmpresas').click();
+        } catch (e) {
+            $('empResultado').innerHTML = '<span class="text-danger">Error durante la migración.</span>';
+        } finally {
+            empSync();
         }
     });
 })();

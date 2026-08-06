@@ -1885,48 +1885,53 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         nupHtml = '<span class="text-muted small">—</span>';
                     }
 
-                    // Con NUP obligatorio cada fila representa UNA unidad física (un NUP = una
-                    // unidad): la cantidad por defecto y el máximo permitido son 1, no todo el
-                    // saldo pendiente (se va sacando de a una, cada una con su propio NUP).
-                    const cantidadMax = requiereNup ? Math.min(1, cantPendiente) : cantPendiente;
-                    const cantidadDefault = cantidadMax;
+                    // Con NUP obligatorio cada UNIDAD lleva su propio NUP: si el pedido tiene más
+                    // de 1 pendiente, se despliega una fila por unidad (misma línea de pedido),
+                    // en vez de una sola fila con todo el saldo, para poder llenar cada NUP de una.
+                    const unidades = requiereNup ? Math.max(1, Math.floor(cantPendiente)) : 1;
 
-                    const tr = document.createElement('tr');
-                    tr.dataset.itemId = item.id;
-                    tr.dataset.productoId = item.id_producto;
-                    tr.innerHTML = `
-                        <td class="align-middle">
-                            <div class="fw-bold small text-dark">${item.producto_nombre}</div>
-                            <div class="text-muted" style="font-size: 0.75rem;">${item.producto_codigo}</div>
-                        </td>
-                        <td class="text-end align-middle small">${parseFloat(item.cantidad)}</td>
-                        <td class="text-end align-middle small">${parseFloat(item.cantidad_consignada)}</td>
-                        <td class="text-end align-middle small fw-bold text-danger">${cantPendiente}</td>
-                        <td class="align-middle">
-                            <input type="number" class="form-control form-control-sm item-cantidad text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0" step="any" max="${cantidadMax}" value="${cantidadDefault}" ${requiereNup ? 'oninput="if(parseFloat(this.value)>1){this.value=1;}"' : ''}>
-                        </td>
-                        <td class="align-middle">
-                            <select class="form-select form-select-sm item-lista-precios py-0 px-1" style="font-size: 0.8rem; height: auto;" onchange="const tr = this.closest('tr'); tr.querySelector('.item-precio').value = parseFloat(this.value).toFixed(2);">
-                                    ${listaOptions}
-                            </select>
-                        </td>
-                        <td class="align-middle">
-                            <input type="number" class="form-control form-control-sm item-precio text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0.00" step="0.01" value="${precioPedido.toFixed(2)}">
-                        </td>
-                        <td class="align-middle">${loteHtml}</td>
-                        <td class="align-middle">${vencHtml}</td>
-                        <td class="align-middle">${nupHtml}</td>
-                    `;
-                    tbody.appendChild(tr);
+                    for (let u = 0; u < unidades; u++) {
+                        const cantidadMax = requiereNup ? 1 : cantPendiente;
+                        const cantidadDefault = cantidadMax;
+                        const etiquetaUnidad = unidades > 1 ? ` <span class="text-muted">— Unidad ${u + 1}/${unidades}</span>` : '';
 
-                    // Al elegir un lote, autocompletar la fecha de vencimiento que le corresponde.
-                    const selLoteRow = tr.querySelector('.item-lote');
-                    const selVencRow = tr.querySelector('.item-caducidad');
-                    if (selLoteRow && selVencRow) {
-                        selLoteRow.addEventListener('change', () => {
-                            const match = lotesData.find(l => (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) === selLoteRow.value);
-                            selVencRow.value = match ? (match.fecha_caducidad || '') : '';
-                        });
+                        const tr = document.createElement('tr');
+                        tr.dataset.itemId = item.id;
+                        tr.dataset.productoId = item.id_producto;
+                        tr.innerHTML = `
+                            <td class="align-middle">
+                                <div class="fw-bold small text-dark">${item.producto_nombre}${etiquetaUnidad}</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">${item.producto_codigo}</div>
+                            </td>
+                            <td class="text-end align-middle small">${parseFloat(item.cantidad)}</td>
+                            <td class="text-end align-middle small">${parseFloat(item.cantidad_consignada)}</td>
+                            <td class="text-end align-middle small fw-bold text-danger">${cantPendiente}</td>
+                            <td class="align-middle">
+                                <input type="number" class="form-control form-control-sm item-cantidad text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0" step="any" max="${cantidadMax}" value="${cantidadDefault}" ${requiereNup ? 'oninput="if(parseFloat(this.value)>1){this.value=1;}"' : ''}>
+                            </td>
+                            <td class="align-middle">
+                                <select class="form-select form-select-sm item-lista-precios py-0 px-1" style="font-size: 0.8rem; height: auto;" onchange="const tr = this.closest('tr'); tr.querySelector('.item-precio').value = parseFloat(this.value).toFixed(2);">
+                                        ${listaOptions}
+                                </select>
+                            </td>
+                            <td class="align-middle">
+                                <input type="number" class="form-control form-control-sm item-precio text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0.00" step="0.01" value="${precioPedido.toFixed(2)}">
+                            </td>
+                            <td class="align-middle">${loteHtml}</td>
+                            <td class="align-middle">${vencHtml}</td>
+                            <td class="align-middle">${nupHtml}</td>
+                        `;
+                        tbody.appendChild(tr);
+
+                        // Al elegir un lote, autocompletar la fecha de vencimiento que le corresponde.
+                        const selLoteRow = tr.querySelector('.item-lote');
+                        const selVencRow = tr.querySelector('.item-caducidad');
+                        if (selLoteRow && selVencRow) {
+                            selLoteRow.addEventListener('change', () => {
+                                const match = lotesData.find(l => (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) === selLoteRow.value);
+                                selVencRow.value = match ? (match.fecha_caducidad || '') : '';
+                            });
+                        }
                     }
                 }
 
@@ -2036,6 +2041,27 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             Swal.fire('Atención', omitidos.length
                 ? 'Ningún ítem tiene la fila completa (lote/vencimiento/NUP). Complete al menos uno para agregarlo.'
                 : 'Debe configurar una cantidad mayor a cero en al menos un ítem.', 'warning');
+            return;
+        }
+
+        // NUP único: una unidad física = un NUP. No puede repetirse ni entre las filas de este
+        // lote (p. ej. varias unidades del mismo producto) ni con uno ya cargado en la grilla.
+        const nupsEnGrilla = Array.from(document.querySelectorAll('#cons_detalles_body .input-nup'))
+            .map(el => (el.value || '').trim())
+            .filter(v => v !== '');
+        const vistosEnLote = new Set();
+        const nupsDuplicados = [];
+        for (const it of selectedItems) {
+            const nup = (it.nup || '').trim();
+            if (!nup) continue;
+            if (vistosEnLote.has(nup) || nupsEnGrilla.includes(nup)) {
+                nupsDuplicados.push(`${nup} (${it.original.producto_nombre})`);
+            } else {
+                vistosEnLote.add(nup);
+            }
+        }
+        if (nupsDuplicados.length) {
+            Swal.fire('Atención', `El NUP no puede repetirse (cada unidad debe tener un NUP único). Revise: ${nupsDuplicados.join(', ')}`, 'warning');
             return;
         }
 

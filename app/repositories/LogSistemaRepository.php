@@ -239,14 +239,15 @@ class LogSistemaRepository extends BaseRepository
 
         // Texto libre → busca en acción, tabla, usuario, empresa e IP.
         if ($parsed['texto_libre'] !== '') {
-            $where .= ' AND ('
-                . 'l.accion ILIKE :txt'
-                . ' OR l.tabla_afectada ILIKE :txt'
-                . ' OR u.nombre ILIKE :txt'
-                . ' OR e.nombre_comercial ILIKE :txt'
-                . ' OR l.ip_usuario ILIKE :txt'
-                . ')';
-            $params[':txt'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['l.accion', 'l.tabla_afectada', 'u.nombre', 'e.nombre_comercial', 'l.ip_usuario'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         // Filtros clave:valor

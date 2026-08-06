@@ -42,12 +42,15 @@ class NotaCreditoRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            $where .= " AND (nc.secuencial ILIKE :buscar
-                          OR c.nombre ILIKE :buscar
-                          OR c.identificacion ILIKE :buscar
-                          OR nc.num_doc_modificado ILIKE :buscar
-                          OR nc.motivo ILIKE :buscar)";
-            $params[':buscar'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['nc.secuencial', 'c.nombre', 'c.identificacion', 'nc.num_doc_modificado', 'nc.motivo'],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [

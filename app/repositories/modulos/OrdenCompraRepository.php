@@ -42,8 +42,15 @@ class OrdenCompraRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $whereSql .= " AND (oc.numero_orden ILIKE :b OR p.razon_social ILIKE :b OR p.identificacion ILIKE :b OR oc.observaciones ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['oc.numero_orden', 'p.razon_social', 'p.identificacion', 'oc.observaciones'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $whereSql .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
             'texto' => [

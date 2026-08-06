@@ -202,7 +202,7 @@
 </div>
 
 <!-- Dropdown de autocompletado global flotante como en factura de venta -->
-<div id="m-dropdown-productos-global" class="list-group shadow position-fixed d-none" style="z-index: 9999; min-width: 400px; max-height: 250px; overflow-y: auto; background-color: white;"></div>
+<div id="m-dropdown-productos-global" class="list-group shadow position-fixed d-none" style="z-index: 9999; min-width: 400px; max-height: 250px; overflow-y: auto; overscroll-behavior: contain; background-color: white;"></div>
 
 <!-- Modal Crear Responsable de Traslado -->
 <div class="modal fade" id="modalResponsableTraslado" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">

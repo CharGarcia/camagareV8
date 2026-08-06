@@ -41,8 +41,15 @@ class CargaInventarioRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (CAST(c.numero AS TEXT) ILIKE :b OR c.tipo_movimiento ILIKE :b OR c.estado ILIKE :b OR c.observacion ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['CAST(c.numero AS TEXT)', 'c.tipo_movimiento', 'c.estado', 'c.observacion'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'exacto'   => ['estado' => 'c.estado', 'tipo' => 'c.tipo_movimiento'],

@@ -20,6 +20,8 @@ const RUTAS_IMPLEMENTADAS = new Set([
   'modulos/clientes',
   'modulos/productos',
   'modulos/factura-venta',
+  'modulos/compras',
+  'modulos/dashboard',
 ]);
 
 function soloImplementados(modulos: ModuloMenu[]): ModuloMenu[] {
@@ -66,6 +68,10 @@ export default function MenuScreen() {
       navigation.navigate('ProductosList');
     } else if (sub.ruta === 'modulos/factura-venta') {
       navigation.navigate('FacturasVentaList');
+    } else if (sub.ruta === 'modulos/compras') {
+      navigation.navigate('ComprasList');
+    } else if (sub.ruta === 'modulos/dashboard') {
+      navigation.navigate('Dashboard');
     }
   }
 

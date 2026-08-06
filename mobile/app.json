@@ -1,15 +1,19 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "CaMaGaRe",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.camagare.mobile",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.camagare.mobile",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

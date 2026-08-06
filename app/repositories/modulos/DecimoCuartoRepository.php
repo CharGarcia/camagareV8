@@ -30,8 +30,15 @@ class DecimoCuartoRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (c.region_grupo ILIKE :b OR c.estado ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['c.region_grupo', 'c.estado'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'exacto'   => ['anio' => 'c.anio', 'region' => 'c.region_grupo', 'estado' => 'c.estado'],

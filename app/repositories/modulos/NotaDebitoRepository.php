@@ -44,11 +44,15 @@ class NotaDebitoRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            $where .= " AND (nd.secuencial ILIKE :buscar
-                          OR c.nombre ILIKE :buscar
-                          OR c.identificacion ILIKE :buscar
-                          OR nd.num_doc_modificado ILIKE :buscar)";
-            $params[':buscar'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['nd.secuencial', 'c.nombre', 'c.identificacion', 'nd.num_doc_modificado'],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [

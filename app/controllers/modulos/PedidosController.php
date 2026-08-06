@@ -718,20 +718,22 @@ class PedidosController extends BaseModuloController {
             $buscar = trim($_GET['term'] ?? $_GET['q'] ?? '');
 
             $db = \App\core\Database::getConnection();
+
+            $where  = "p.id_empresa = :id_empresa AND p.eliminado = false AND p.status = 1";
+            $params = [':id_empresa' => $idEmpresa];
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(['p.codigo', 'p.nombre'], $buscar, $params, 'q');
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
+
             $sql = "SELECT p.id, p.codigo, p.nombre
                     FROM productos p
-                    WHERE p.id_empresa = :id_empresa 
-                      AND p.eliminado = false 
-                      AND p.status = 1
-                      AND (p.codigo ILIKE :q OR p.nombre ILIKE :q)
-                    ORDER BY p.nombre ASC 
+                    WHERE {$where}
+                    ORDER BY p.nombre ASC
                     LIMIT 15";
-            
+
             $stmt = $db->prepare($sql);
-            $stmt->execute([
-                ':id_empresa' => $idEmpresa,
-                ':q' => '%' . $buscar . '%'
-            ]);
+            $stmt->execute($params);
             $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
             echo json_encode(['ok' => true, 'data' => $rows]);

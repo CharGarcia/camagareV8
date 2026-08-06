@@ -332,9 +332,15 @@ class ControlBancarioRepository extends BaseRepository
         if (!empty($filtros['buscar'])) {
             $parsed = FiltrosBusqueda::parsear($filtros['buscar']);
             if ($parsed['texto_libre'] !== '') {
-                $whereSql .= " AND (numero_comprobante ILIKE :tl OR concepto ILIKE :tl OR referencia_detalle ILIKE :tl
-                                    OR documento_referencia ILIKE :tl OR nombre_entidad ILIKE :tl OR numero_cheque ILIKE :tl)";
-                $params[':tl'] = '%' . $parsed['texto_libre'] . '%';
+                $condicion = FiltrosBusqueda::condicionTexto(
+                    ['numero_comprobante', 'concepto', 'referencia_detalle', 'documento_referencia', 'nombre_entidad', 'numero_cheque'],
+                    $parsed['texto_libre'],
+                    $params,
+                    'tl'
+                );
+                if ($condicion !== '') {
+                    $whereSql .= " AND {$condicion}";
+                }
             }
             $mapas = [
                 'texto' => [

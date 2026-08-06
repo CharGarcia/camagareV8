@@ -30,8 +30,15 @@ class IngresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (i.numero_ingreso ILIKE :buscar OR i.recibo_de ILIKE :buscar OR c.nombre ILIKE :buscar OR c.identificacion ILIKE :buscar OR i.observaciones ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['i.numero_ingreso', 'i.recibo_de', 'c.nombre', 'c.identificacion', 'i.observaciones'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [

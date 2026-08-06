@@ -30,8 +30,15 @@ class DecimoTerceroRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (c.estado ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['c.estado'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'exacto'   => ['anio' => 'c.anio', 'estado' => 'c.estado'],

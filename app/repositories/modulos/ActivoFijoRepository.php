@@ -36,9 +36,15 @@ class ActivoFijoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (a.nombre ILIKE :buscar OR a.codigo ILIKE :buscar OR cat.nombre ILIKE :buscar
-                          OR p.razon_social ILIKE :buscar OR a.proveedor_texto ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['a.nombre', 'a.codigo', 'cat.nombre', 'p.razon_social', 'a.proveedor_texto'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => ['nombre' => 'a.nombre', 'codigo' => 'a.codigo', 'categoria' => 'cat.nombre', 'proveedor' => 'p.razon_social'],

@@ -19,6 +19,75 @@ namespace App\Helpers;
  */
 class FiltrosBusqueda
 {
+    /** Caché de si la extensión `unaccent` está disponible en esta conexión (una consulta por request). */
+    private static ?bool $unaccentDisponible = null;
+
+    private static function unaccentDisponible(): bool
+    {
+        if (self::$unaccentDisponible === null) {
+            try {
+                $db = \App\core\Database::getConnection();
+                self::$unaccentDisponible = (bool) $db
+                    ->query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'unaccent')")
+                    ->fetchColumn();
+            } catch (\Throwable $e) {
+                self::$unaccentDisponible = false;
+            }
+        }
+        return self::$unaccentDisponible;
+    }
+
+    /**
+     * Envuelve una columna o placeholder con unaccent() si la extensión está
+     * instalada; si no, lo deja tal cual (degradación segura: sin la extensión
+     * la búsqueda sigue funcionando, solo que sensible a tildes).
+     */
+    private static function envolverUnaccent(string $expr): string
+    {
+        return self::unaccentDisponible() ? "unaccent({$expr})" : $expr;
+    }
+
+    /**
+     * Condición SQL ESTÁNDAR para "texto libre": todas las PALABRAS escritas deben
+     * aparecer, en cualquier orden, en alguna de las columnas dadas — insensible a
+     * mayúsculas/minúsculas y (si la extensión `unaccent` está instalada) también a
+     * tildes/diéresis/eñe. Es la forma correcta de armar cualquier buscador de texto
+     * libre en el sistema; no concatenar ILIKE a mano con el texto completo como una
+     * sola frase (eso solo encuentra coincidencias exactas y contiguas: buscar
+     * "kit 256" no encontraría "KIT XXXXHHH 256").
+     *
+     * @param string[] $columnas Columnas o expresiones SQL a buscar (ej. ['c.nombre', 'c.identificacion'])
+     * @param string   $texto    Texto escrito por el usuario (una o varias palabras)
+     * @param array    $params   Se le agregan los parámetros nuevos (por referencia)
+     * @param string   $prefijo  Prefijo único de placeholders (evita choques si se llama más de una vez en la misma consulta)
+     * @return string Fragmento SQL entre paréntesis, listo para concatenar con " AND "; '' si $texto/$columnas viene vacío
+     */
+    public static function condicionTexto(array $columnas, string $texto, array &$params, string $prefijo = 'txt'): string
+    {
+        $texto = trim($texto);
+        if ($texto === '' || empty($columnas)) {
+            return '';
+        }
+
+        $palabras = array_values(array_filter(preg_split('/\s+/u', $texto) ?: [], fn($p) => $p !== ''));
+        if (empty($palabras)) {
+            return '';
+        }
+
+        $condicionesPalabras = [];
+        foreach ($palabras as $i => $palabra) {
+            $ph = ":{$prefijo}_{$i}";
+            $params[$ph] = '%' . $palabra . '%';
+            $condicionesCol = array_map(
+                fn($col) => self::envolverUnaccent($col) . ' ILIKE ' . self::envolverUnaccent($ph),
+                $columnas
+            );
+            $condicionesPalabras[] = '(' . implode(' OR ', $condicionesCol) . ')';
+        }
+
+        return '(' . implode(' AND ', $condicionesPalabras) . ')';
+    }
+
     /**
      * Parsea un string a array estructurado.
      *
@@ -130,10 +199,17 @@ class FiltrosBusqueda
                 $params[$p] = $v;
             }
             $where .= ($neg ? ' AND NOT ' : ' AND ') . "$col IN (" . implode(',', $phs) . ')';
-        } else {
-            $where .= ' AND ' . "$col " . ($neg ? 'NOT ILIKE' : 'ILIKE') . " $ph";
-            $params[$ph] = '%' . (is_array($valor) ? implode(' ', $valor) : $valor) . '%';
+            return;
         }
+
+        // Igual regla que el texto libre: todas las palabras deben aparecer (en
+        // cualquier orden) e insensible a tildes, no la frase completa y pegada.
+        $texto = is_array($valor) ? implode(' ', $valor) : (string) $valor;
+        $condicion = self::condicionTexto([$col], $texto, $params, "f_{$clave}_{$i}");
+        if ($condicion === '') {
+            return;
+        }
+        $where .= ($neg ? ' AND NOT ' : ' AND ') . $condicion;
     }
 
     private static function applyExacto(string &$where, array &$params, string $col, string $clave, int $i, string $op, $valor, bool $neg): void

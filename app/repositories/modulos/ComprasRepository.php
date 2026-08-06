@@ -47,14 +47,21 @@ class ComprasRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            $where .= " AND (
-                CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) ILIKE :buscar
-                OR p.razon_social ILIKE :buscar
-                OR p.identificacion ILIKE :buscar
-                OR c.numero_autorizacion ILIKE :buscar
-                OR c.observaciones ILIKE :buscar
-            )";
-            $params[':buscar'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)",
+                    'p.razon_social',
+                    'p.identificacion',
+                    'c.numero_autorizacion',
+                    'c.observaciones',
+                ],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [

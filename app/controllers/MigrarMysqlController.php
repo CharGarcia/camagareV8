@@ -236,6 +236,41 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /** GET: lista las empresas activas del sistema anterior aún no migradas (agrupadas por RUC base). */
+    public function empresasPorMigrarAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $data = $this->service->listarEmpresasParaMigrar();
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    /** POST: registra en el sistema nuevo las empresas seleccionadas (bases[]). No envía correos. */
+    public function migrarEmpresasAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $bases = $_POST['bases'] ?? [];
+            if (!is_array($bases)) {
+                $bases = array_filter(array_map('trim', explode(',', (string) $bases)));
+            }
+            if (!$bases) {
+                throw new \RuntimeException('No se seleccionó ninguna empresa para migrar.');
+            }
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+            $data = $this->service->migrarEmpresas($bases, $idUsuario);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** Devuelve [idEmpresa, ruc] de la empresa seleccionada. */
     private function resolverEmpresa(): array
     {

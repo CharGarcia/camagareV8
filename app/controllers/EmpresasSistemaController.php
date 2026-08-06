@@ -301,9 +301,16 @@ class EmpresasSistemaController extends Controller
             if ($this->model->actualizar($id, $data)) {
                 $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
                 (new \App\Services\EmpresaInicializadorService())->inicializar($id, $idUsuario);
-                $_SESSION['empresas_msg'] = ['success', 'Empresa actualizada correctamente.'];
+
+                // Empresas registradas por la migración quedan con notificación
+                // pendiente: al primer "guardar" del superadmin se envían la
+                // invitación del usuario administrador y los documentos legales,
+                // y se limpia la marca (una sola vez).
+                $msgNotif = $this->enviarNotificacionesPendientes($id, $idUsuario);
+
+                $_SESSION['empresas_msg'] = ['success', 'Empresa actualizada correctamente.' . $msgNotif];
                 if ($esAjax) {
-                    $this->json(['ok' => true, 'msg' => 'Empresa actualizada correctamente.']);
+                    $this->json(['ok' => true, 'msg' => 'Empresa actualizada correctamente.' . $msgNotif]);
                     return;
                 }
             } else {
@@ -328,6 +335,78 @@ class EmpresasSistemaController extends Controller
         }
 
         $this->redirect(BASE_URL . self::BASE_PATH);
+    }
+
+    /**
+     * Si la empresa quedó marcada `notificacion_pendiente` (registrada por la
+     * migración desde el sistema anterior), envía —una sola vez, al actualizarla—
+     * la invitación de registro al usuario administrador y los documentos legales,
+     * y limpia la marca. No es fatal: cualquier fallo se reporta pero no revierte
+     * la actualización.
+     *
+     * @return string Texto para adjuntar al mensaje de éxito (vacío si no aplica).
+     */
+    private function enviarNotificacionesPendientes(int $idEmpresa, int $idUsuario): string
+    {
+        $db = Database::getConnection();
+        // Asegura la columna (compatibilidad con instalaciones sin la migración aplicada).
+        try {
+            \App\Services\MigracionMysql\MigracionMysqlService::asegurarColumnaNotificacion($db);
+        } catch (\Throwable $e) {
+            return ''; // sin la columna no hay nada pendiente que enviar
+        }
+
+        $st = $db->prepare("SELECT mail, notificacion_pendiente FROM empresas WHERE id = :id LIMIT 1");
+        $st->execute([':id' => $idEmpresa]);
+        $emp = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$emp) { return ''; }
+        $pendiente = in_array($emp['notificacion_pendiente'], [true, 't', '1', 1], true);
+        if (!$pendiente) { return ''; }
+
+        $partes = [];
+
+        // 1) Invitación del usuario administrador: nivel 2, asignado a la empresa,
+        //    aún sin registrarse (conserva token). Se busca por el correo de la empresa.
+        $correoEmp = trim((string) ($emp['mail'] ?? ''));
+        try {
+            $su = $db->prepare(
+                "SELECT u.id, u.nombre, u.mail, u.token
+                   FROM usuarios u
+                   JOIN empresa_asignada ea ON ea.id_usuario = u.id
+                  WHERE ea.id_empresa = :e
+                    AND u.nivel = 2
+                    AND COALESCE(u.token,'') <> ''
+                    AND (:mail = '' OR LOWER(u.mail) = LOWER(:mail))
+                  ORDER BY u.id DESC
+                  LIMIT 1"
+            );
+            $su->execute([':e' => $idEmpresa, ':mail' => $correoEmp]);
+            $usr = $su->fetch(PDO::FETCH_ASSOC);
+            if ($usr && trim((string) $usr['mail']) !== '' && trim((string) $usr['token']) !== '') {
+                $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $urlInvite = $scheme . '://' . $host . rtrim(BASE_URL, '/') . '/registro/index/' . urlencode((string) $usr['mail']) . '/' . (string) $usr['token'];
+                require_once MVC_APP . '/helpers/mail.php';
+                $ok = enviar_correo_nuevo_usuario((string) $usr['nombre'], (string) $usr['mail'], $urlInvite);
+                $partes[] = $ok
+                    ? 'Se envió la invitación de registro a ' . $usr['mail'] . '.'
+                    : 'No se pudo enviar la invitación de registro al usuario.';
+            }
+        } catch (\Throwable $e) {
+            $partes[] = 'No se pudo enviar la invitación de registro: ' . $e->getMessage();
+        }
+
+        // 2) Documentos legales (acuerdo de datos + contrato de uso).
+        $errDocs = (new \App\Services\DocumentosLegalesService())->enviarAEmpresaSinFallar($idEmpresa, $idUsuario);
+        $partes[] = $errDocs === null
+            ? 'Se enviaron los documentos legales.'
+            : 'No se pudieron enviar los documentos legales: ' . $errDocs;
+
+        // 3) Limpiar la marca (aunque algún envío falle, para no reintentar en cada guardado).
+        $db->prepare("UPDATE empresas SET notificacion_pendiente = false WHERE id = :id")
+           ->execute([':id' => $idEmpresa]);
+
+        return ' ' . implode(' ', $partes);
     }
 
     /**

@@ -33,9 +33,15 @@ class LiquidacionCompraRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial) ILIKE :buscar
-                          OR p.razon_social ILIKE :buscar OR p.identificacion ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ["CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)", 'p.razon_social', 'p.identificacion'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [

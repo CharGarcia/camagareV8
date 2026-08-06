@@ -43,8 +43,15 @@ class ErroresSistemaRepository extends BaseRepository
 
         // Texto libre → busca en mensaje, clase, ruta y SQLSTATE.
         if (($parsed['texto_libre'] ?? '') !== '') {
-            $where .= " AND (e.mensaje ILIKE :txt OR e.clase ILIKE :txt OR e.ruta ILIKE :txt OR e.sql_state ILIKE :txt) ";
-            $params[':txt'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['e.mensaje', 'e.clase', 'e.ruta', 'e.sql_state'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion} ";
+            }
         }
 
         // Filtros clave:valor (tipo:fatal, sqlstate:22P02, ruta:factura, etc.).

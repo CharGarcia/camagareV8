@@ -4535,4 +4535,220 @@ class MigracionMysqlService
         if (strlen($d) === 10) return '05'; // Cédula
         return '06';                         // Pasaporte / otro
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // MIGRACIÓN DE LAS EMPRESAS (registro de las empresas activas del sistema
+    // anterior en el nuevo). Se consolida por RUC base (10 díg.): una empresa
+    // por contribuyente + N establecimientos. NO se envía ningún correo: solo
+    // se marca `notificacion_pendiente`. La invitación del usuario nuevo y los
+    // documentos legales se envían cuando el superadmin ACTUALIZA la empresa
+    // (ver EmpresasSistemaController::update()).
+    // ─────────────────────────────────────────────────────────────────
+
+    /** Asegura la columna `notificacion_pendiente` en `empresas` (idempotente). */
+    public static function asegurarColumnaNotificacion(PDO $pg): void
+    {
+        $pg->exec("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS notificacion_pendiente boolean NOT NULL DEFAULT false");
+    }
+
+    /**
+     * Lista las empresas del sistema anterior en estado activo (estado='1')
+     * cuyo RUC base (10 díg.) todavía NO existe en el sistema nuevo. Agrupa por
+     * RUC base: una fila = un contribuyente con todos sus establecimientos.
+     * La matriz es el establecimiento más bajo (no siempre 001).
+     *
+     * @return array<int,array{base:string,ruc:string,nombre:string,razon:string,mail:string,tiene_mail:bool,ests:string,n_est:int}>
+     */
+    public function listarEmpresasParaMigrar(): array
+    {
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        // Bases (RUC 10 díg.) ya presentes en el sistema nuevo → se excluyen.
+        $existentes = [];
+        foreach ($pg->query("SELECT DISTINCT LEFT(ruc,10) AS b FROM empresas WHERE eliminado = false") as $r) {
+            $existentes[(string) $r['b']] = true;
+        }
+
+        // Activas del viejo. Se agrupan en PHP para elegir la MATRIZ = est. más bajo.
+        $rows = $mysql->query(
+            "SELECT id, nombre, nombre_comercial, ruc, mail
+               FROM empresas
+              WHERE estado = '1'
+              ORDER BY ruc"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        $porBase = [];
+        foreach ($rows as $r) {
+            $porBase[substr((string) $r['ruc'], 0, 10)][] = $r;
+        }
+
+        $out = [];
+        foreach ($porBase as $base => $filas) {
+            if (isset($existentes[$base])) { continue; } // ya migrada
+            $matriz = $filas[0]; // ordenadas por ruc ASC ⇒ establecimiento más bajo
+            $ests   = array_map(static fn($f) => substr((string) $f['ruc'], -3), $filas);
+            $mail   = trim((string) ($matriz['mail'] ?? ''));
+            $nombre = trim((string) ($matriz['nombre_comercial'] ?? '')) ?: trim((string) $matriz['nombre']);
+            $out[]  = [
+                'base'       => (string) $base,
+                'ruc'        => (string) $matriz['ruc'],
+                'nombre'     => $nombre,
+                'razon'      => trim((string) $matriz['nombre']),
+                'mail'       => $mail,
+                'tiene_mail' => $mail !== '' && filter_var($mail, FILTER_VALIDATE_EMAIL) !== false,
+                'ests'       => implode(', ', $ests),
+                'n_est'      => count($filas),
+            ];
+        }
+
+        usort($out, static fn($a, $b) => strcasecmp($a['nombre'], $b['nombre']));
+        return $out;
+    }
+
+    /**
+     * Registra en el sistema nuevo las empresas del viejo indicadas por su RUC
+     * base. Por cada base: crea la empresa (matriz = est. más bajo), la
+     * inicializa, agrega sus establecimientos adicionales, crea el usuario
+     * administrador (nivel 2, SIN enviar correo) y la marca `notificacion_pendiente`.
+     * Idempotente: si la base ya existe en el nuevo, se omite.
+     *
+     * @param string[] $basesSeleccionadas  RUC base (10 díg.)
+     * @return array{migradas:int,omitidas:int,detalle:array<int,array<string,mixed>>}
+     */
+    public function migrarEmpresas(array $basesSeleccionadas, int $idUsuario): array
+    {
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        self::asegurarColumnaNotificacion($pg);
+
+        $bases = array_values(array_unique(array_filter(
+            array_map(static fn($b) => preg_replace('/\D+/', '', (string) $b), $basesSeleccionadas),
+            static fn($b) => strlen((string) $b) === 10
+        )));
+
+        $res = ['migradas' => 0, 'omitidas' => 0, 'detalle' => []];
+        if (!$bases) { return $res; }
+
+        $modelEmpresa  = new \App\models\Empresa();
+        $modelUsuario  = new \App\models\Usuario();
+        $asignada      = new \App\models\EmpresaAsignada();
+        $inicializador = new \App\Services\EmpresaInicializadorService();
+
+        foreach ($bases as $base) {
+            $det = ['base' => $base, 'ok' => false, 'nombre' => '', 'establecimientos' => 0, 'usuario' => '', 'msg' => ''];
+            try {
+                // Idempotencia / doble envío: ¿ya existe la base en el nuevo?
+                $chk = $pg->prepare("SELECT 1 FROM empresas WHERE LEFT(ruc,10) = :b AND eliminado = false LIMIT 1");
+                $chk->execute([':b' => $base]);
+                if ($chk->fetchColumn() !== false) {
+                    $res['omitidas']++; $det['msg'] = 'Ya existe en el sistema nuevo.';
+                    $res['detalle'][] = $det; continue;
+                }
+
+                // Establecimientos activos del contribuyente en el viejo.
+                $st = $mysql->prepare(
+                    "SELECT id, nombre, nombre_comercial, ruc, direccion, telefono, tipo,
+                            nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad,
+                            nombre_contador, ruc_contador
+                       FROM empresas
+                      WHERE LEFT(ruc,10) = :b AND estado = '1'
+                      ORDER BY ruc"
+                );
+                $st->execute([':b' => $base]);
+                $filas = $st->fetchAll(PDO::FETCH_ASSOC);
+                if (!$filas) {
+                    $res['omitidas']++; $det['msg'] = 'Sin establecimientos activos en el sistema anterior.';
+                    $res['detalle'][] = $det; continue;
+                }
+
+                $matriz    = $filas[0];
+                $estMatriz = substr((string) $matriz['ruc'], -3);
+                $det['nombre'] = trim((string) ($matriz['nombre_comercial'] ?: $matriz['nombre']));
+
+                // 1) Crear la empresa (matriz). Empresa::crear() ya inserta el
+                //    establecimiento matriz y la bodega Central por defecto.
+                $idEmpresa = $modelEmpresa->crear([
+                    'nombre'           => (string) $matriz['nombre'],
+                    'nombre_comercial' => (string) $matriz['nombre_comercial'],
+                    'ruc'              => (string) $matriz['ruc'],
+                    'establecimiento'  => $estMatriz,
+                    'direccion'        => (string) $matriz['direccion'],
+                    'telefono'         => (string) $matriz['telefono'],
+                    'tipo'             => (string) ($matriz['tipo'] ?: '01'),
+                    'nom_rep_legal'    => (string) $matriz['nom_rep_legal'],
+                    'ced_rep_legal'    => (string) $matriz['ced_rep_legal'],
+                    'mail'             => (string) $matriz['mail'],
+                    'cod_prov'         => (string) $matriz['cod_prov'],
+                    'cod_ciudad'       => (string) $matriz['cod_ciudad'],
+                    'nombre_contador'  => (string) $matriz['nombre_contador'],
+                    'ruc_contador'     => (string) $matriz['ruc_contador'],
+                    'estado'           => '1',
+                    'estado_pago'      => 'pendiente',
+                    'max_usuarios'     => 3,
+                    'id_usuario'       => (string) $idUsuario,
+                ]);
+
+                // Ambiente producción + marca de notificación pendiente (correo al actualizar).
+                $up = $pg->prepare("UPDATE empresas SET tipo_ambiente = 2, notificacion_pendiente = true WHERE id = :id");
+                $up->execute([':id' => $idEmpresa]);
+
+                // Asignar al superadmin que migra (paridad con la creación manual).
+                $asignada->asignar($idEmpresa, $idUsuario, $idUsuario);
+
+                // 2) Inicializar (punto de emisión, unidades, formas de pago, secuenciales, config facturación).
+                $inicializador->inicializar($idEmpresa, $idUsuario);
+
+                // 3) Establecimientos adicionales (los demás; la matriz ya la creó Empresa::crear()).
+                $nEst = 1;
+                foreach ($filas as $f) {
+                    $cod = substr((string) $f['ruc'], -3);
+                    if ($cod === $estMatriz) { continue; }
+                    $ex = $pg->prepare("SELECT 1 FROM empresa_establecimiento WHERE id_empresa = :e AND codigo = :c AND eliminado = false LIMIT 1");
+                    $ex->execute([':e' => $idEmpresa, ':c' => $cod]);
+                    if ($ex->fetchColumn() !== false) { continue; }
+                    $nom = trim((string) ($f['nombre_comercial'] ?: $f['nombre'])) ?: ('Establecimiento ' . $cod);
+                    $ins = $pg->prepare(
+                        "INSERT INTO empresa_establecimiento (id_empresa, codigo, nombre, direccion, tipo, estado, created_by, updated_by, created_at, eliminado)
+                         VALUES (:e, :c, :n, :d, 'Sucursal', 'activo', :u, :u, NOW(), false)"
+                    );
+                    $ins->execute([':e' => $idEmpresa, ':c' => $cod, ':n' => $nom, ':d' => (string) $f['direccion'], ':u' => $idUsuario]);
+                    $nEst++;
+                }
+                $det['establecimientos'] = $nEst;
+
+                // 4) Usuario administrador (nivel 2) SIN enviar correo.
+                $correo = trim((string) $matriz['mail']);
+                if ($correo !== '' && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+                    if ($modelUsuario->existePorCorreo($correo)) {
+                        $det['usuario'] = 'omitido (correo ya registrado)';
+                    } else {
+                        $nombreU = trim((string) $matriz['nom_rep_legal']);
+                        if ($nombreU === '') { $nombreU = trim((string) ($matriz['nombre_comercial'] ?: $matriz['nombre'])) ?: 'Administrador'; }
+                        $u = $modelUsuario->crearPorCorreo($nombreU, $correo, $idUsuario, 2);
+                        $asignada->asignar($idEmpresa, (int) $u['id'], $idUsuario);
+                        $det['usuario'] = 'creado';
+                    }
+                } else {
+                    $det['usuario'] = 'sin correo válido';
+                }
+
+                // 5) Registro en el mapa (trazabilidad; no participa de "Eliminar migrados").
+                $map = $pg->prepare(
+                    "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by, created_at)
+                     VALUES (:e, 'empresa_registro', :orig, :dest, :cn, false, :u, NOW())
+                     ON CONFLICT DO NOTHING"
+                );
+                $map->execute([':e' => $idEmpresa, ':orig' => (int) $matriz['id'], ':dest' => $idEmpresa, ':cn' => $base, ':u' => $idUsuario]);
+
+                $det['ok'] = true; $det['id_destino'] = $idEmpresa; $det['msg'] = 'Migrada.';
+                $res['migradas']++;
+            } catch (Throwable $e) {
+                $det['msg'] = 'Error: ' . $e->getMessage();
+            }
+            $res['detalle'][] = $det;
+        }
+
+        return $res;
+    }
 }

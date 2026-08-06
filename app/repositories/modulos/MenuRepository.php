@@ -31,8 +31,15 @@ class MenuRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (m.nombre ILIKE :b OR c.nombre ILIKE :b OR p.nombre ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['m.nombre', 'c.nombre', 'p.nombre'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => ['nombre' => 'm.nombre', 'categoria' => 'c.nombre', 'producto' => 'p.nombre'],

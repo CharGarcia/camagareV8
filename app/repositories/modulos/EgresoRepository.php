@@ -46,8 +46,15 @@ class EgresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (e.numero_egreso ILIKE :buscar OR p.razon_social ILIKE :buscar OR emp.nombres_apellidos ILIKE :buscar OR e.beneficiario_nombre ILIKE :buscar OR e.observaciones ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['e.numero_egreso', 'p.razon_social', 'emp.nombres_apellidos', 'e.beneficiario_nombre', 'e.observaciones'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [

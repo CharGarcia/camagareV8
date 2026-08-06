@@ -1271,9 +1271,15 @@ class AuditoriaContableRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (i.detalle ILIKE :buscar OR i.modulo_origen ILIKE :buscar
-                          OR i.entidad_nombre ILIKE :buscar OR i.documento_numero ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['i.detalle', 'i.modulo_origen', 'i.entidad_nombre', 'i.documento_numero'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => [

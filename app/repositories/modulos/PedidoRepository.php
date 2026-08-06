@@ -45,8 +45,15 @@ class PedidoRepository {
         }
 
         if ($buscar !== '') {
-            $whereSql .= " AND ((p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) ILIKE :b OR c.nombre ILIKE :b OR rt.nombre ILIKE :b OR p.observaciones ILIKE :b OR p.observaciones_internas ILIKE :b)";
-            $params[':b'] = '%' . $buscar . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ["(p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial)", 'c.nombre', 'rt.nombre', 'p.observaciones', 'p.observaciones_internas'],
+                $buscar,
+                $params,
+                'b'
+            );
+            if ($condicion !== '') {
+                $whereSql .= " AND {$condicion}";
+            }
         }
 
         // 1. Contar total

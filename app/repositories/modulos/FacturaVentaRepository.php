@@ -41,11 +41,15 @@ class FacturaVentaRepository extends BaseRepository
 
         // Texto libre: busca en número, nombre cliente, RUC, observaciones
         if ($textoLibre !== '') {
-            $where .= " AND (CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) ILIKE :buscar
-                          OR c.nombre ILIKE :buscar
-                          OR c.identificacion ILIKE :buscar
-                          OR v.observaciones ILIKE :buscar)";
-            $params[':buscar'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ["CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)", 'c.nombre', 'c.identificacion', 'v.observaciones'],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         // ── Filtro especial: estado de pago (campo CALCULADO, no es columna) ──────

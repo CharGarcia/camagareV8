@@ -48,8 +48,15 @@ class ClienteRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (c.nombre ILIKE :buscar OR c.identificacion ILIKE :buscar OR c.email ILIKE :buscar OR c.telefono ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['c.nombre', 'c.identificacion', 'c.email', 'c.telefono'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         // La columna c.status es entera (1=activo, 0=inactivo) pero el buscador

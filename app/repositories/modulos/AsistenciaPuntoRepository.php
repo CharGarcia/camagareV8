@@ -32,8 +32,15 @@ class AsistenciaPuntoRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (p.nombre ILIKE :b OR p.direccion ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['p.nombre', 'p.direccion'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => ['nombre' => 'p.nombre', 'direccion' => 'p.direccion'],

@@ -31,8 +31,15 @@ class NovedadRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (e.nombres_apellidos ILIKE :b OR e.identificacion ILIKE :b OR n.tipo_nombre ILIKE :b OR n.observacion ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['e.nombres_apellidos', 'e.identificacion', 'n.tipo_nombre', 'n.observacion'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => ['tipo' => 'n.tipo_nombre', 'observacion' => 'n.observacion', 'empleado' => 'e.nombres_apellidos'],

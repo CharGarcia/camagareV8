@@ -105,8 +105,15 @@ class LoginIntentoRepository
         }
 
         if ($parsed['texto_libre'] !== '') {
-            $where .= ' AND (identificador ILIKE :txt OR ip ILIKE :txt)';
-            $params[':txt'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = FiltrosBusqueda::condicionTexto(
+                ['identificador', 'ip'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [

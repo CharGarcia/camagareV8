@@ -356,8 +356,15 @@ class InventarioRepository extends BaseRepository
         // Ver §9 CLAUDE.md — mismo patrón que Proveedores.
         $parsed = \App\Helpers\FiltrosBusqueda::parsear((string)($filtros['buscar'] ?? ''));
         if ($parsed['texto_libre'] !== '') {
-            $where .= ' AND (p.nombre ILIKE :b OR p.codigo ILIKE :b OR k.observaciones ILIKE :b OR b.nombre ILIKE :b)';
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['p.nombre', 'p.codigo', 'k.observaciones', 'b.nombre'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [

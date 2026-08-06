@@ -34,8 +34,15 @@ class OrdenCarWashRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (o.numero_orden ILIKE :b OR o.placa ILIKE :b OR c.nombre ILIKE :b OR c.identificacion ILIKE :b OR o.estado ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['o.numero_orden', 'o.placa', 'c.nombre', 'c.identificacion', 'o.estado'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [

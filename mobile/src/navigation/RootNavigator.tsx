@@ -18,6 +18,10 @@ import ProductoFormScreen from '../screens/ProductoFormScreen';
 import FacturasVentaListScreen from '../screens/FacturasVentaListScreen';
 import FacturaVentaFormScreen from '../screens/FacturaVentaFormScreen';
 import AsistenciaScreen from '../screens/AsistenciaScreen';
+import ComprasListScreen from '../screens/ComprasListScreen';
+import CompraDetailScreen from '../screens/CompraDetailScreen';
+import CompraCargarScreen from '../screens/CompraCargarScreen';
+import DashboardScreen from '../screens/DashboardScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -35,6 +39,10 @@ export type RootStackParamList = {
   ProductoForm: { id?: number } | undefined;
   FacturasVentaList: undefined;
   FacturaVentaForm: { id?: number } | undefined;
+  ComprasList: undefined;
+  CompraDetail: { id: number };
+  CompraCargar: undefined;
+  Dashboard: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -71,6 +79,10 @@ export default function RootNavigator() {
             <Stack.Screen name="ProductoForm" component={ProductoFormScreen} options={{ title: 'Producto' }} />
             <Stack.Screen name="FacturasVentaList" component={FacturasVentaListScreen} options={{ title: 'Facturas de venta' }} />
             <Stack.Screen name="FacturaVentaForm" component={FacturaVentaFormScreen} options={{ title: 'Factura' }} />
+            <Stack.Screen name="ComprasList" component={ComprasListScreen} options={{ title: 'Compras' }} />
+            <Stack.Screen name="CompraDetail" component={CompraDetailScreen} options={{ title: 'Compra' }} />
+            <Stack.Screen name="CompraCargar" component={CompraCargarScreen} options={{ title: 'Nueva compra' }} />
+            <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
           </>
         )}
         {/* Fuera del bloqueo de login a propósito: quien marca asistencia (ej. guardias)

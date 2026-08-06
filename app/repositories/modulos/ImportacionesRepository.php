@@ -46,14 +46,15 @@ class ImportacionesRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            $where .= " AND (
-                p.razon_social ILIKE :buscar
-                OR p.identificacion ILIKE :buscar
-                OR i.referencia_dai ILIKE :buscar
-                OR i.observaciones ILIKE :buscar
-                OR i.numero_importacion ILIKE :buscar
-            )";
-            $params[':buscar'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['p.razon_social', 'p.identificacion', 'i.referencia_dai', 'i.observaciones', 'i.numero_importacion'],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
