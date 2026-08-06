@@ -648,6 +648,14 @@ class EmpleadosController extends BaseModuloController
                     default      => $cap($v),
                 };
             };
+            $decimo = function ($v) use ($cap) {
+                return match ($v) {
+                    'acumula'    => 'Acumula',
+                    'mensualiza' => 'Mensualiza',
+                    'no_recibe'  => 'No recibe',
+                    default      => $cap($v),
+                };
+            };
 
             // Datos generales
             $seccion('DATOS GENERALES');
@@ -672,8 +680,8 @@ class EmpleadosController extends BaseModuloController
             $fila('Horario', $emp['horario_trabajo'] ?? '');
             $fila('Fondos de Reserva', $fondos($emp['fondos_reserva'] ?? ''));
             $fila('Aporta IESS', $siNo($emp['aporta_iess'] ?? false));
-            $fila('Décimo Tercero', $cap($emp['decimo_tercero'] ?? ''));
-            $fila('Décimo Cuarto', $cap($emp['decimo_cuarto'] ?? ''));
+            $fila('Décimo Tercero', $decimo($emp['decimo_tercero'] ?? ''));
+            $fila('Décimo Cuarto', $decimo($emp['decimo_cuarto'] ?? ''));
             $fila('Aporte Personal (%)', number_format((float) ($emp['aporte_personal'] ?? 0), 4));
             $fila('Aporte Patronal (%)', number_format((float) ($emp['aporte_patronal'] ?? 0), 4));
             $fila('Sueldo Base', number_format((float) ($emp['sueldo_base'] ?? 0), 2));
@@ -792,8 +800,8 @@ class EmpleadosController extends BaseModuloController
             ['REGION', 'costa, sierra, oriente, insular'],
             ['APORTA_IESS', 'si, no'],
             ['FONDOS_RESERVA', 'rol, planilla, no_se_paga'],
-            ['DECIMO_TERCERO', 'mensualiza, acumula'],
-            ['DECIMO_CUARTO', 'mensualiza, acumula'],
+            ['DECIMO_TERCERO', 'mensualiza, acumula, no_recibe'],
+            ['DECIMO_CUARTO', 'mensualiza, acumula, no_recibe'],
             ['TIPO_CUENTA', 'ahorros, corriente, virtual'],
             ['BANCO', 'Nombre exacto del banco (ver módulo Bancos)'],
             ['FECHA_NACIMIENTO', 'Formato AAAA-MM-DD'],

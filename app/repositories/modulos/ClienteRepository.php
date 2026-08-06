@@ -201,6 +201,22 @@ class ClienteRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Reactiva un cliente eliminado SIN tocar sus datos (a diferencia de
+     * reactivarYActualizar). Usado por la replicación entre empresas: si el cliente
+     * ya existía en la empresa destino pero estaba eliminado, se reactiva tal cual
+     * estaba en vez de sobrescribirlo con los datos de la empresa origen.
+     */
+    public function reactivarSoloEliminado(int $id, int $idUsuario): void
+    {
+        $sql = "UPDATE {$this->table} SET
+                    eliminado = false,
+                    updated_at = CURRENT_TIMESTAMP, updated_by = :uid
+                WHERE id = :id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':uid' => $idUsuario, ':id' => $id]);
+    }
+
     /** Reactiva (si estaba eliminado) y refresca nombre/email/teléfono de un cliente existente. */
     public function reactivarYActualizar(int $id, array $data): void
     {

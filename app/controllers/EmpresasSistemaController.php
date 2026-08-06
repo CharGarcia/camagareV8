@@ -93,7 +93,7 @@ class EmpresasSistemaController extends Controller
             'establecimiento' => trim($_POST['establecimiento'] ?? ''),
             'direccion' => trim($_POST['direccion'] ?? ''),
             'telefono' => trim($_POST['telefono'] ?? ''),
-            'tipo' => trim($_POST['tipo'] ?? '01'),
+            'tipo' => trim($_POST['tipo'] ?? '1'),
             'nom_rep_legal' => trim($_POST['nom_rep_legal'] ?? ''),
             'ced_rep_legal' => trim($_POST['ced_rep_legal'] ?? ''),
             'mail' => trim($_POST['mail'] ?? ''),

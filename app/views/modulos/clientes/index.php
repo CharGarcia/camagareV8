@@ -110,6 +110,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="btnExportPdf" href="<?= $urlBaseClientes ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                 <a id="btnExportExcel" href="<?= $urlBaseClientes ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
                 <a href="<?= $urlBaseClientes ?>/mapa" class="btn btn-outline-secondary" title="Mapa de clientes"><i class="bi bi-map"></i> Mapa</a>
+                <?php if ($perm['crear']): ?>
+                    <button type="button" class="btn btn-outline-primary d-none" id="btnCopiarClientesEmpresa" title="Copiar todos los clientes a otra empresa" onclick="abrirModalCopiarClientesEmpresa()">
+                        <i class="bi bi-arrow-left-right"></i> Copiar a otra empresa
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -170,6 +175,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_cliente.php'; ?>
+
+<!-- Modal: Copiar todos los clientes a otra empresa -->
+<div class="modal fade" id="modalCopiarClientesEmpresa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold"><i class="bi bi-arrow-left-right text-primary me-2"></i>Copiar clientes a otra empresa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-primary bg-primary bg-opacity-10 py-2 px-3 small border-primary border-opacity-25 mb-3">
+                    <i class="bi bi-info-circle-fill me-1"></i>
+                    Copia todos los clientes activos de esta empresa hacia la empresa que elija. Si un cliente ya existe allí (misma identificación), no se duplica ni se sobrescribe.
+                </div>
+                <label for="copiarClientesEmpresaSelect" class="form-label small fw-bold">Empresa destino</label>
+                <select class="form-select form-select-sm" id="copiarClientesEmpresaSelect">
+                    <option value="">-- Seleccione --</option>
+                </select>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-3" id="btnConfirmarCopiarClientes" onclick="confirmarCopiarClientesEmpresa()">
+                    <i class="bi bi-arrow-left-right me-1"></i> Copiar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="<?= $base ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
 
 <script>

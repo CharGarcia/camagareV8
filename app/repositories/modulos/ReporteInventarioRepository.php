@@ -137,7 +137,16 @@ class ReporteInventarioRepository extends BaseRepository
                            WHERE k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
                              AND k.id_empresa = pb.id_empresa AND k.eliminado = false
                            ORDER BY k.fecha_movimiento DESC, k.id DESC LIMIT 1
-                       ), 0) AS costo_unitario
+                       ), 0) AS costo_unitario,
+                       COALESCE((
+                           SELECT SUM(cvd.cantidad
+                                      - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
+                                      - COALESCE((" . $this->sqlFacturadoCv() . "), 0))
+                           FROM consignaciones_ventas_detalles cvd
+                           INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                           WHERE cvd.id_producto = pb.id_producto AND cvd.id_bodega = pb.id_bodega
+                             AND cvd.id_empresa = pb.id_empresa AND cvd.eliminado = false AND cv.eliminado = false
+                       ), 0) AS consignado
                 FROM productos_bodegas pb
                 INNER JOIN productos p ON p.id = pb.id_producto AND p.id_empresa = pb.id_empresa
                 INNER JOIN bodegas b ON b.id = pb.id_bodega
@@ -152,6 +161,7 @@ class ReporteInventarioRepository extends BaseRepository
     {
         return "
             SELECT t.*, (t.stock_actual * t.costo_unitario) AS valor_total,
+                   (t.stock_actual + t.consignado) AS stock_total,
                    CASE
                        WHEN t.stock_actual <= 0 THEN 'QUIEBRE'
                        WHEN t.stock_minimo > 0 AND t.stock_actual <= t.stock_minimo THEN 'ALERTA'
@@ -165,7 +175,7 @@ class ReporteInventarioRepository extends BaseRepository
     /** Columnas permitidas para ordenar el detalle de existencias (whitelist anti-inyección). */
     private const SORT_COLUMNAS_EXISTENCIAS = [
         'producto_nombre', 'categoria_nombre', 'bodega_nombre',
-        'stock_actual', 'stock_minimo', 'stock_maximo', 'costo_unitario', 'valor_total',
+        'stock_actual', 'consignado', 'stock_total', 'stock_minimo', 'stock_maximo', 'costo_unitario', 'valor_total',
     ];
 
     public function getExistenciasDetalle(int $idEmpresa, array $filtros): array
@@ -194,6 +204,8 @@ class ReporteInventarioRepository extends BaseRepository
         $sql = "SELECT * FROM (
                     SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo,
                            SUM(stock_actual) AS stock_actual,
+                           SUM(consignado) AS consignado,
+                           SUM(stock_actual + consignado) AS stock_total,
                            SUM(stock_minimo) AS stock_minimo,
                            SUM(stock_maximo) AS stock_maximo,
                            SUM(valor_total) AS valor_total,

@@ -385,7 +385,7 @@ function estadoPagoBadge($estado) {
                             <div id="crear-fact-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
                             <div class="form-text">Busca entre los <strong>clientes de la empresa controladora</strong>. Si eliges uno, esa selección manda (ficha sin montos); si lo dejas vacío, se usa la regla por RUC propio.</div>
                         </div>
-                        <input type="hidden" name="tipo" value="01">
+                        <input type="hidden" name="tipo" value="1">
                         <input type="hidden" name="nom_rep_legal" value="">
                         <input type="hidden" name="ced_rep_legal" value="">
                         <input type="hidden" name="nombre_contador" value="">

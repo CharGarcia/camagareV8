@@ -140,6 +140,144 @@ class ClienteService
     }
 
     /**
+     * Replica un cliente (ya guardado en su empresa de origen) hacia varias empresas
+     * destino del mismo usuario. Por cada empresa: crea, reactiva o deja intacto
+     * (nunca sobrescribe uno ya activo — ver replicarClienteEnEmpresa()).
+     *
+     * @param array $datosOrigen Ficha ya persistida del cliente origen (findById/getListado).
+     * @param int[] $idsEmpresaDestino Empresas ya validadas (asignadas al usuario + permiso de crear).
+     * @return array<int,array{estado:string,id?:int,mensaje?:string}> resultado por id_empresa
+     */
+    public function replicarEnEmpresas(array $datosOrigen, array $idsEmpresaDestino, int $idUsuario): array
+    {
+        $resultado = [];
+        foreach ($idsEmpresaDestino as $idEmpresaDestino) {
+            $idEmpresaDestino = (int) $idEmpresaDestino;
+            try {
+                $resultado[$idEmpresaDestino] = $this->replicarClienteEnEmpresa($datosOrigen, $idEmpresaDestino, $idUsuario);
+            } catch (Exception $e) {
+                $resultado[$idEmpresaDestino] = ['estado' => 'error', 'mensaje' => $e->getMessage()];
+            }
+        }
+        return $resultado;
+    }
+
+    /**
+     * Replica TODOS los clientes (no eliminados) de una empresa origen hacia una
+     * empresa destino. Pensado para el botón masivo "Copiar clientes a otra empresa".
+     *
+     * @return array{creados:int,reactivados:int,omitidos:int,errores:int,total:int}
+     */
+    public function replicarTodosAEmpresa(int $idEmpresaOrigen, int $idEmpresaDestino, int $idUsuario, ?int $idUsuarioFiltro = null): array
+    {
+        $clientes = $this->repository->getListado($idEmpresaOrigen, '', 1, 0, 'nombre', 'ASC', $idUsuarioFiltro)['rows'];
+
+        $contadores = ['creados' => 0, 'reactivados' => 0, 'omitidos' => 0, 'errores' => 0, 'total' => count($clientes)];
+        foreach ($clientes as $cliente) {
+            try {
+                $r = $this->replicarClienteEnEmpresa($cliente, $idEmpresaDestino, $idUsuario);
+                $contadores[match ($r['estado']) {
+                    'creado'     => 'creados',
+                    'reactivado' => 'reactivados',
+                    default      => 'omitidos',
+                }]++;
+            } catch (Exception $e) {
+                $contadores['errores']++;
+            }
+        }
+        return $contadores;
+    }
+
+    /**
+     * Núcleo de la replicación: crea, reactiva (sin tocar datos) o deja intacto un
+     * cliente en la empresa destino, según exista o no por (tipo_id + identificación).
+     * Nunca sobrescribe uno que ya esté activo ahí — evita pisar ediciones que el
+     * usuario ya haya hecho en esa empresa.
+     *
+     * No copia catálogos que son por-empresa (vendedor, forma de cobro, concepto de
+     * ingreso predeterminado): esos IDs pertenecen a la empresa origen y no tienen
+     * sentido en la destino, así que quedan sin asignar para configurarse allí.
+     *
+     * @return array{estado:string,id:int}  estado: creado | reactivado | omitido
+     */
+    public function replicarClienteEnEmpresa(array $datosOrigen, int $idEmpresaDestino, int $idUsuario): array
+    {
+        $tipoId = (string) ($datosOrigen['tipo_id'] ?? '');
+        $identificacion = (string) ($datosOrigen['identificacion'] ?? '');
+        if ($tipoId === '' || $identificacion === '') {
+            throw new Exception('El cliente no tiene identificación válida para replicar.');
+        }
+
+        $existente = $this->repository->findByIdentificacion($idEmpresaDestino, $identificacion);
+
+        if ($existente && empty($existente['eliminado'])) {
+            return ['estado' => 'omitido', 'id' => (int) $existente['id']];
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            if ($existente) {
+                $id = (int) $existente['id'];
+                $this->repository->reactivarSoloEliminado($id, $idUsuario);
+                $this->logService->registrar(
+                    $idUsuario,
+                    $idEmpresaDestino,
+                    'reactivar_replicado',
+                    'clientes',
+                    $id,
+                    $existente,
+                    ['eliminado' => false, 'origen_empresa' => $datosOrigen['id_empresa'] ?? null]
+                );
+                $this->repository->commit();
+                return ['estado' => 'reactivado', 'id' => $id];
+            }
+
+            $nuevo = [
+                'id_empresa'      => $idEmpresaDestino,
+                'id_usuario'      => $idUsuario,
+                'nombre'          => $datosOrigen['nombre'] ?? '',
+                'tipo_id'         => $tipoId,
+                'identificacion'  => $identificacion,
+                'telefono'        => $datosOrigen['telefono'] ?? null,
+                'email'           => $datosOrigen['email'] ?? '',
+                'direccion'       => $datosOrigen['direccion'] ?? null,
+                'plazo'           => $datosOrigen['plazo'] ?? 0,
+                'provincia'       => $datosOrigen['provincia'] ?? null,
+                'ciudad'          => $datosOrigen['ciudad'] ?? null,
+                'status'          => $datosOrigen['status'] ?? 1,
+                // Catálogos por-empresa: nunca se copian tal cual (ver docblock del método).
+                'id_vendedor'                             => null,
+                'id_forma_pago_sri'                        => $datosOrigen['id_forma_pago_sri'] ?? null, // catálogo global SRI
+                'id_forma_cobro_predeterminada'            => null,
+                'tipo_operacion_bancaria_predeterminada'   => null,
+                'monto_minimo_auto_cobro'                  => null,
+                'monto_maximo_auto_cobro'                  => null,
+                'id_ingreso_concepto_predeterminado'       => null,
+                'latitud'                                  => null,
+                'longitud'                                 => null,
+            ];
+
+            $this->rules->validar($nuevo);
+
+            $id = $this->repository->create($nuevo);
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresaDestino,
+                'crear_replicado',
+                'clientes',
+                $id,
+                null,
+                $nuevo + ['origen_empresa' => $datosOrigen['id_empresa'] ?? null]
+            );
+            $this->repository->commit();
+            return ['estado' => 'creado', 'id' => $id];
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * Proxy para el repositorio para listados.
      */
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array

@@ -76,9 +76,9 @@ class EmpleadoImportService
         if (!in_array($fondos, ['rol', 'planilla', 'no_se_paga'], true)) $fondos = 'no_se_paga';
 
         $dt = strtolower(trim((string) ($f[16] ?? '')));
-        $dt = $dt === 'mensualiza' ? 'mensualiza' : 'acumula';
+        $dt = in_array($dt, ['mensualiza', 'no_recibe'], true) ? $dt : 'acumula';
         $dc = strtolower(trim((string) ($f[17] ?? '')));
-        $dc = $dc === 'mensualiza' ? 'mensualiza' : 'acumula';
+        $dc = in_array($dc, ['mensualiza', 'no_recibe'], true) ? $dc : 'acumula';
 
         $tipoCuenta = strtolower(trim((string) ($f[19] ?? '')));
         if (!in_array($tipoCuenta, ['ahorros', 'corriente', 'virtual'], true)) $tipoCuenta = '';

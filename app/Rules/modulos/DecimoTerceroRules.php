@@ -22,13 +22,6 @@ class DecimoTerceroRules
         }
     }
 
-    public function validarRecalculo(array $cabecera, bool $tienePagos): void
-    {
-        if ($tienePagos) {
-            throw new Exception('Ya se registraron pagos (Egresos) sobre esta declaración; no se puede recalcular.');
-        }
-    }
-
     public function validarExportacion(array $cabecera): void
     {
         if (($cabecera['estado'] ?? '') !== 'calculado') {

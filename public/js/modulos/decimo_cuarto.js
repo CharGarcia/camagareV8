@@ -51,24 +51,43 @@
     }
 
     // ─── Ver / detalle ───────────────────────────────────────────────────────
+    // Al abrir un décimo ya generado, se recalcula automáticamente (mismo año/región)
+    // para reflejar cambios recientes en empleados/períodos antes de mostrar el detalle.
     window.abrirModalVer = async function (tr) {
         const rowData = (tr instanceof HTMLElement) ? JSON.parse(tr.dataset.row) : tr;
         const id = rowData.id;
         if (!id) return;
         $('dc_det_id').value = id;
+        $('dc_det_titulo').textContent = 'Actualizando...';
         getModalDetalle().show();
+
+        let avisoRecalculo = '';
+        try {
+            const fdCalc = new FormData();
+            fdCalc.append('anio', rowData.anio);
+            fdCalc.append('region_grupo', rowData.region_grupo);
+            const respCalc = await fetch(`${urlModulo}/calcularAjax`, { method: 'POST', body: fdCalc });
+            const jsonCalc = await respCalc.json();
+            if (jsonCalc.ok) {
+                window.dispatchEvent(new CustomEvent('decimoCuartoActualizado'));
+            } else {
+                avisoRecalculo = jsonCalc.error || 'No se pudo actualizar automáticamente.';
+            }
+        } catch (e) {
+            avisoRecalculo = 'No se pudo actualizar automáticamente (sin conexión).';
+        }
 
         try {
             const resp = await fetch(`${urlModulo}/getDetalleAjax?id=${id}`);
             const res = await resp.json();
             if (!res.ok) return;
             const totalPagado = (res.detalle || []).reduce((s, f) => s + (parseFloat(f.monto_pagado) || 0), 0);
-            pintarResumen(res.cabecera, totalPagado);
+            pintarResumen(res.cabecera, totalPagado, avisoRecalculo);
             pintarEmpleados(res.detalle);
         } catch (e) {}
     };
 
-    function pintarResumen(c, totalPagado) {
+    function pintarResumen(c, totalPagado, avisoRecalculo) {
         const region = c.region_grupo === 'sierra_amazonia' ? 'Sierra / Amazonía' : 'Costa / Insular';
         $('dc_det_titulo').textContent = `${c.anio} — ${region}`;
         $('dc_r_anio').textContent = c.anio;
@@ -83,6 +102,16 @@
         const tienePagos = totalPagado > 0;
         const btnAnular = $('btnAnularDc');
         if (btnAnular) btnAnular.classList.toggle('d-none', tienePagos);
+
+        const avisoEl = $('dc_aviso_recalculo');
+        if (avisoEl) {
+            if (avisoRecalculo) {
+                avisoEl.textContent = avisoRecalculo;
+                avisoEl.classList.remove('d-none');
+            } else {
+                avisoEl.classList.add('d-none');
+            }
+        }
     }
 
     function tipoPagoSelect(valorActual, idDetalle) {

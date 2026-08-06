@@ -36,7 +36,8 @@ class ComprasRules
         $idEmpresa = (int)($data['id_empresa'] ?? 0);
         $empModel  = new \App\models\Empresa();
         $empData   = $empModel->getPorId($idEmpresa);
-        $esPersonaNatural = (($empData['tipo'] ?? '01') === '01');
+        // Catálogo tipo_empresa: 1 = Persona Natural, 2 = Persona Natural Obligada a llevar contabilidad.
+        $esPersonaNatural = in_array((string) ($empData['tipo'] ?? '1'), ['1', '2'], true);
 
         if (!$esPersonaNatural) {
             if (empty($data['id_sustento_tributario'])) {

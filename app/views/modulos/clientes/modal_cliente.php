@@ -352,6 +352,22 @@ if (!defined('LEAFLET_LOADED')) {
                         </div>
 
                     </div>
+
+                    <!-- Replicar en otras empresas del usuario (solo si tiene 2+ empresas) -->
+                    <div class="d-none border-top px-3 py-2 bg-light" id="cliente_replicar_wrap">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="cliente_replicar_toggle">
+                            <label class="form-check-label small fw-bold" for="cliente_replicar_toggle">
+                                <i class="bi bi-building-fill-check me-1"></i>Aplicar también en otras empresas
+                            </label>
+                        </div>
+                        <div class="d-none mt-2" id="cliente_replicar_lista_wrap">
+                            <div class="small text-muted mb-1">
+                                Si el cliente ya existe en la empresa (misma identificación), no se duplica ni se sobrescribe.
+                            </div>
+                            <div id="cliente_replicar_lista" class="d-flex flex-wrap gap-3"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="modal-footer justify-content-between bg-light border-top p-2">

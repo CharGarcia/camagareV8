@@ -612,6 +612,165 @@
         );
     };
 
+    // ─── Replicar cliente en otras empresas del usuario ─────────────────────
+    let empresasDestinoCache = null;
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    async function cargarEmpresasDestino() {
+        if (empresasDestinoCache) return empresasDestinoCache;
+        try {
+            const resp = await fetch(urlBaseClientes + '/empresasDestinoAjax');
+            const json = await resp.json();
+            empresasDestinoCache = json.ok ? (json.data || []) : [];
+        } catch (e) {
+            empresasDestinoCache = [];
+        }
+        return empresasDestinoCache;
+    }
+
+    function pintarReplicarLista(empresas) {
+        const wrap = document.getElementById('cliente_replicar_wrap');
+        const lista = document.getElementById('cliente_replicar_lista');
+        if (!wrap || !lista) return;
+
+        if (!empresas.length) {
+            wrap.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
+
+        wrap.classList.remove('d-none');
+        lista.innerHTML = empresas.map(e => `
+            <div class="form-check">
+                <input class="form-check-input cliente-replicar-check" type="checkbox" name="ids_empresa_destino[]" value="${e.id_empresa}" id="cliente_replicar_emp_${e.id_empresa}">
+                <label class="form-check-label small" for="cliente_replicar_emp_${e.id_empresa}">${escapeHtml(e.texto)}</label>
+            </div>
+        `).join('');
+    }
+
+    function resetReplicarUI() {
+        const toggle = document.getElementById('cliente_replicar_toggle');
+        const listaWrap = document.getElementById('cliente_replicar_lista_wrap');
+        if (toggle) toggle.checked = false;
+        if (listaWrap) listaWrap.classList.add('d-none');
+        document.querySelectorAll('.cliente-replicar-check').forEach(chk => chk.checked = false);
+    }
+
+    /** Prepara la sección "Aplicar también en otras empresas" del modal de ficha. */
+    async function inicializarReplicarUI() {
+        const empresas = await cargarEmpresasDestino();
+        pintarReplicarLista(empresas);
+        resetReplicarUI();
+        // De paso, muestra/oculta el botón masivo del listado (si existe en esta vista).
+        const btnMasivo = document.getElementById('btnCopiarClientesEmpresa');
+        if (btnMasivo) btnMasivo.classList.toggle('d-none', empresas.length === 0);
+    }
+
+    function nombreEmpresaDestino(id) {
+        const emp = (empresasDestinoCache || []).find(e => String(e.id_empresa) === String(id));
+        return escapeHtml(emp ? emp.texto : ('Empresa #' + id));
+    }
+
+    /** Arma el HTML resumen de la replicación individual (respuesta de store/update). */
+    function resumenReplicado(replicado) {
+        if (!replicado) return '';
+        const grupos = { creado: [], reactivado: [], omitido: [], sin_permiso: [], error: [] };
+        Object.entries(replicado).forEach(([id, r]) => {
+            const grupo = grupos[r.estado];
+            if (grupo) grupo.push(nombreEmpresaDestino(id) + (r.estado === 'error' && r.mensaje ? ` (${escapeHtml(r.mensaje)})` : ''));
+        });
+
+        let html = '';
+        if (grupos.creado.length) html += `<div class="small text-success mb-1"><i class="bi bi-check-circle me-1"></i>Creado en: ${grupos.creado.join(', ')}</div>`;
+        if (grupos.reactivado.length) html += `<div class="small text-primary mb-1"><i class="bi bi-arrow-clockwise me-1"></i>Reactivado en: ${grupos.reactivado.join(', ')}</div>`;
+        if (grupos.omitido.length) html += `<div class="small text-muted mb-1"><i class="bi bi-dash-circle me-1"></i>Ya existía (sin cambios) en: ${grupos.omitido.join(', ')}</div>`;
+        if (grupos.sin_permiso.length) html += `<div class="small text-warning mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Sin permiso en: ${grupos.sin_permiso.join(', ')}</div>`;
+        if (grupos.error.length) html += `<div class="small text-danger mb-1"><i class="bi bi-x-circle me-1"></i>Error en: ${grupos.error.join(', ')}</div>`;
+        return html;
+    }
+
+    // ─── Modal masivo: copiar TODOS los clientes a otra empresa ─────────────
+    window.abrirModalCopiarClientesEmpresa = async function () {
+        const modalEl = document.getElementById('modalCopiarClientesEmpresa');
+        if (!modalEl || typeof bootstrap === 'undefined') return;
+
+        const sel = document.getElementById('copiarClientesEmpresaSelect');
+        const empresas = await cargarEmpresasDestino();
+        if (sel) {
+            sel.innerHTML = '<option value="">-- Seleccione --</option>' +
+                empresas.map(e => `<option value="${e.id_empresa}">${escapeHtml(e.texto)}</option>`).join('');
+        }
+        new bootstrap.Modal(modalEl).show();
+    };
+
+    window.confirmarCopiarClientesEmpresa = async function () {
+        const sel = document.getElementById('copiarClientesEmpresaSelect');
+        const idEmpresaDestino = sel ? sel.value : '';
+        if (!idEmpresaDestino) {
+            Swal.fire({ icon: 'warning', title: 'Seleccione una empresa destino.' });
+            return;
+        }
+        const empresaTexto = escapeHtml(sel.options[sel.selectedIndex]?.text || '');
+
+        const confirmacion = await Swal.fire({
+            icon: 'question',
+            title: '¿Copiar todos los clientes?',
+            html: `Se copiarán los clientes de esta empresa hacia <b>${empresaTexto}</b>.<br>Los que ya existan allí (misma identificación) no se duplican ni se sobrescriben.`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, copiar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d'
+        });
+        if (!confirmacion.isConfirmed) return;
+
+        const btn = document.getElementById('btnConfirmarCopiarClientes');
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Copiando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('id_empresa_destino', idEmpresaDestino);
+            const resp = await fetch(urlBaseClientes + '/replicarTodosAjax', { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudo copiar.' });
+                return;
+            }
+
+            const modalEl = document.getElementById('modalCopiarClientesEmpresa');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
+            }
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Copia completada',
+                html: `
+                    <div class="small text-start">
+                        <div>Total revisados: <b>${json.total}</b></div>
+                        <div class="text-success">Creados: <b>${json.creados}</b></div>
+                        <div class="text-primary">Reactivados: <b>${json.reactivados}</b></div>
+                        <div class="text-muted">Ya existían (sin cambios): <b>${json.omitidos}</b></div>
+                        ${json.errores ? `<div class="text-danger">Errores: <b>${json.errores}</b></div>` : ''}
+                    </div>
+                `
+            });
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo comunicar con el servidor.' });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
+    };
+
     // ─── Reset formulario ────────────────────────────────────────────────────
     function resetFormulario() {
         const form = document.getElementById('formCliente');
@@ -688,6 +847,7 @@
         document.getElementById('formCliente').action = urlBaseClientes + '/store';
 
         await cargarCatalogos();
+        await inicializarReplicarUI();
         if (typeof window.aplicarFavoritosModal === 'function') {
             window.aplicarFavoritosModal('#modalCliente');
         }
@@ -797,6 +957,7 @@
         if (!data) return;
 
         await cargarCatalogos();
+        await inicializarReplicarUI();
 
         const setT = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ''; };
 
@@ -1051,6 +1212,16 @@
     };
 
     function initEvents() {
+        // Botón masivo del listado: solo visible si el usuario tiene otras empresas
+        // donde crear clientes. Se evalúa ya al cargar la página (no solo al abrir
+        // el modal de ficha), para que no dependa de que el usuario lo abra primero.
+        const btnMasivo = document.getElementById('btnCopiarClientesEmpresa');
+        if (btnMasivo) {
+            cargarEmpresasDestino().then(empresas => {
+                btnMasivo.classList.toggle('d-none', empresas.length === 0);
+            });
+        }
+
         const form = document.getElementById('formCliente');
         if (form) {
             form.addEventListener('submit', async (e) => {
@@ -1085,6 +1256,13 @@
                             timer: 2200,
                             showConfirmButton: false
                         });
+
+                        const htmlReplicado = resumenReplicado(json.replicado);
+                        if (htmlReplicado) {
+                            setTimeout(() => {
+                                Swal.fire({ icon: 'info', title: 'Replicación en otras empresas', html: htmlReplicado, confirmButtonText: 'Entendido' });
+                            }, 400);
+                        }
                     } else {
                         Swal.fire({
                             icon: 'error',
@@ -1135,6 +1313,17 @@
 
         const inpPlazo = document.getElementById('cliente_plazo');
         if (inpPlazo) inpPlazo.addEventListener('input', cliActualizarReglaFechaCheque);
+
+        const replicarToggle = document.getElementById('cliente_replicar_toggle');
+        if (replicarToggle) {
+            replicarToggle.addEventListener('change', () => {
+                const listaWrap = document.getElementById('cliente_replicar_lista_wrap');
+                if (listaWrap) listaWrap.classList.toggle('d-none', !replicarToggle.checked);
+                if (!replicarToggle.checked) {
+                    document.querySelectorAll('.cliente-replicar-check').forEach(chk => chk.checked = false);
+                }
+            });
+        }
 
         // Tab Ubicación: inicializar/actualizar mapa cuando el contenedor ya es visible
         const tabUbicBtn = document.getElementById('tab-ubicacion-btn');

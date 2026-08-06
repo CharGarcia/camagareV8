@@ -1241,7 +1241,6 @@ class ComprasController extends BaseModuloController
 
                 if (!$det) throw new \Exception("Detalle de compra #{$idDetalle} no encontrado.");
 
-                $cantidadComprada = (float)$det['cantidad'];
                 $idProducto = (int)$item['id_producto'];
 
                 if ($idProducto <= 0) {
@@ -1272,17 +1271,10 @@ class ComprasController extends BaseModuloController
                     throw new \Exception("El NUP (Serial) es OBLIGATORIO para '{$nombreAMostrar}' según la configuración.");
                 }
 
-                // 3. Validar saldo pendiente (No exceder lo comprado)
-                $sqlSum = "SELECT ROUND(COALESCE(SUM(cantidad), 0), 2) FROM inventario_kardex 
-                           WHERE referencia_tipo = 'compra' AND referencia_id = ? AND eliminado = false";
-                $stSum = $db->prepare($sqlSum);
-                $stSum->execute([$idDetalle]);
-                $yaProcesado = (float)$stSum->fetchColumn();
-
-                if (($yaProcesado + $cantEnviar) > ($cantidadComprada + 0.0001)) {
-                    $disponible = max(0, $cantidadComprada - $yaProcesado);
-                    throw new \Exception("Excede lo comprado para '{$nombreAMostrar}'. Comprado: {$cantidadComprada}, Procesado: {$yaProcesado}, Disponible: {$disponible}.");
-                }
+                // 3. Ya NO se valida "no exceder lo comprado": cd.cantidad no distingue unidad de
+                // medida (p. ej. "4" puede ser 4 cajas) y compararla en crudo contra lo que se
+                // procesa en unidades del producto daba falsos positivos. Queda a criterio del
+                // usuario la cantidad que ingresa al procesar el inventario.
 
                 // 4. Calcular stock actual para trazabilidad en Kardex
                 $sqlStock = "SELECT ROUND(COALESCE(SUM(cantidad), 0), 2) FROM inventario_kardex 

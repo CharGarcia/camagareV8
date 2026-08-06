@@ -17,6 +17,7 @@
                 </ul>
 
                 <div class="tab-content p-3">
+                    <div class="alert alert-warning small py-2 px-3 mb-3 d-none" id="dc_aviso_recalculo"></div>
                     <div class="tab-pane fade show active" id="dcTabResumen">
                         <div class="row g-2 small">
                             <div class="col-md-3"><span class="text-muted d-block">Año</span><b id="dc_r_anio">—</b></div>

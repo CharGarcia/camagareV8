@@ -36,6 +36,21 @@ class Empresa extends BaseModel
     }
 
     /**
+     * Todas las empresas activas del sistema, mismo shape que getEmpresasAsignadas()
+     * (id_empresa, ruc, nombre, nombre_comercial, establecimiento). Solo para nivel 3
+     * (superadmin): no depende de empresa_asignada porque ese nivel tiene acceso total
+     * sin necesitar registro ahí.
+     */
+    public function getTodasActivas(): array
+    {
+        $sql = "SELECT id AS id_empresa, ruc, nombre, nombre_comercial, establecimiento
+                FROM empresas
+                WHERE estado = '1' AND eliminado = false
+                ORDER BY nombre_comercial, nombre";
+        return $this->query($sql);
+    }
+
+    /**
      * Lista empresas para el módulo empresas del sistema.
      * SuperAdmin: todas. Admin: solo las que tiene asignadas.
      */
@@ -201,7 +216,7 @@ class Empresa extends BaseModel
         $ruc = $this->escape(trim($data['ruc'] ?? ''));
         $direccion = $this->escape(trim($data['direccion'] ?? ''));
         $telefono = $this->escape(trim($data['telefono'] ?? ''));
-        $tipo = $this->escape(trim($data['tipo'] ?? '01'));
+        $tipo = $this->escape(trim($data['tipo'] ?? '1'));
         $nomRepLegal = $this->escape(trim($data['nom_rep_legal'] ?? ''));
         $cedRepLegal = $this->escape(trim($data['ced_rep_legal'] ?? ''));
         $mail = $this->escape(trim($data['mail'] ?? ''));

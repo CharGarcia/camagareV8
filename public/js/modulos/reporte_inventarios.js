@@ -234,14 +234,17 @@ window.RI_Existencias = {
             th += th2('Producto', 'producto_nombre', 'ps-3')
                 + th2('Categoría', 'categoria_nombre')
                 + th2('Bodega', 'bodega_nombre')
+                + th2('Consignación', 'consignado', 'text-end')
                 + th2('Stock', 'stock_actual', 'text-end')
+                + th2('Stock Total', 'stock_total', 'text-end')
                 + th2('Mínimo', 'stock_minimo', 'text-end')
                 + th2('Máximo', 'stock_maximo', 'text-end')
                 + th2('Costo Unit.', 'costo_unitario', 'text-end')
                 + th2('Valor total', 'valor_total', 'text-end pe-3');
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Productos</th>
-                   <th class="text-end">Stock</th><th class="text-end">Mínimo</th>
+                   <th class="text-end">Consignación</th><th class="text-end">Stock</th><th class="text-end">Stock Total</th>
+                   <th class="text-end">Mínimo</th>
                    <th class="text-end">Costo Unit.</th><th class="text-end pe-3">Valor total</th>`;
         }
         th += '</tr>';
@@ -274,7 +277,7 @@ window.RI_Existencias = {
         }
 
         const tbody = document.getElementById('ri-ex-tbody');
-        const colSpan = modo === 'NINGUNO' ? 8 : 6;
+        const colSpan = modo === 'NINGUNO' ? 10 : 8;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('existencias', params, (res) => {

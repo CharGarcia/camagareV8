@@ -305,6 +305,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                     <select class="form-select form-select-sm shadow-none" name="decimo_tercero" id="emp_decimo_tercero">
                                         <option value="acumula">Acumula</option>
                                         <option value="mensualiza">Mensualiza</option>
+                                        <option value="no_recibe">No recibe</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
@@ -312,6 +313,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                     <select class="form-select form-select-sm shadow-none" name="decimo_cuarto" id="emp_decimo_cuarto">
                                         <option value="acumula">Acumula</option>
                                         <option value="mensualiza">Mensualiza</option>
+                                        <option value="no_recibe">No recibe</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">

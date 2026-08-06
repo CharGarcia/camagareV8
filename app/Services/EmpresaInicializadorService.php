@@ -138,17 +138,21 @@ class EmpresaInicializadorService
 
     /**
      * Crea las formas de pago "Tarjeta" (tipo TARJETA, tarjeta física/datáfono,
-     * aplica a Ingresos y Egresos), "Payphone" (tipo PAYPHONE, cobro online,
-     * solo aplica a Ingresos) y "Nuvei" (tipo NUVEI, cobro online, solo aplica
-     * a Ingresos) por defecto, si no existen. Cada una se verifica de forma
-     * independiente por tipo, igual que crearAnticiposDefault().
+     * aplica a Ingresos y Egresos, activa desde el inicio), "Payphone" (tipo
+     * PAYPHONE, cobro online, solo aplica a Ingresos) y "Nuvei" (tipo NUVEI,
+     * cobro online, solo aplica a Ingresos) por defecto, si no existen. Payphone
+     * y Nuvei se crean INACTIVAS: requieren credenciales/config propias de la
+     * empresa antes de poder cobrar, así que el usuario las activa manualmente
+     * cuando las configure (ver [[nuvei-link-pago-whatsapp]] / módulo Payphone).
+     * Cada una se verifica de forma independiente por tipo, igual que
+     * crearAnticiposDefault().
      */
     private function crearFormasPagoTarjetaOnline(int $idEmpresa, int $idUsuario): void
     {
         $formas = [
-            ['nombre' => 'Tarjeta',  'tipo' => 'TARJETA',  'aplica_en' => 'AMBAS',   'modalidad' => 'AMBAS'],
-            ['nombre' => 'Payphone', 'tipo' => 'PAYPHONE', 'aplica_en' => 'INGRESO', 'modalidad' => null],
-            ['nombre' => 'Nuvei',    'tipo' => 'NUVEI',    'aplica_en' => 'INGRESO', 'modalidad' => null],
+            ['nombre' => 'Tarjeta',  'tipo' => 'TARJETA',  'aplica_en' => 'AMBAS',   'modalidad' => 'AMBAS', 'activo' => true],
+            ['nombre' => 'Payphone', 'tipo' => 'PAYPHONE', 'aplica_en' => 'INGRESO', 'modalidad' => null,    'activo' => false],
+            ['nombre' => 'Nuvei',    'tipo' => 'NUVEI',    'aplica_en' => 'INGRESO', 'modalidad' => null,    'activo' => false],
         ];
 
         $check = $this->db->prepare(
@@ -160,7 +164,7 @@ class EmpresaInicializadorService
             "INSERT INTO empresa_formas_pago (
                 id_empresa, nombre, tipo, aplica_en, modalidad_tarjeta, activo, created_by, created_at, eliminado
              ) VALUES (
-                :id_empresa, :nombre, :tipo, :aplica_en, :modalidad, true, :created_by, CURRENT_TIMESTAMP, false
+                :id_empresa, :nombre, :tipo, :aplica_en, :modalidad, :activo, :created_by, CURRENT_TIMESTAMP, false
              )"
         );
 
@@ -175,6 +179,7 @@ class EmpresaInicializadorService
                 ':tipo'       => $f['tipo'],
                 ':aplica_en'  => $f['aplica_en'],
                 ':modalidad'  => $f['modalidad'],
+                ':activo'     => $f['activo'] ? 'true' : 'false',
                 ':created_by' => $idUsuario,
             ]);
         }
@@ -427,7 +432,8 @@ class EmpresaInicializadorService
      * empresa. Si ya existe uno (tiene un secuencial activo de ese tipo), lo reutiliza;
      * si no, crea un punto nuevo con el siguiente código libre del establecimiento
      * (nunca el 001, que es el de Facturas de venta — mismo codDoc SRI, no pueden
-     * compartir punto).
+     * compartir punto). Se crea INACTIVO: el módulo de Reembolso no se usa en todas
+     * las empresas, así que el usuario lo activa manualmente cuando lo necesite.
      */
     private function obtenerOCrearPuntoEmisionReembolso(int $idEmpresa, int $idEstablecimiento, int $idUsuario): int
     {
@@ -454,7 +460,7 @@ class EmpresaInicializadorService
                 logo_ruta, estado, created_by, updated_by
              ) VALUES (
                 :id_empresa, :id_est, 'Reembolso', :codigo,
-                '', 'activo', :usuario, :usuario
+                '', 'inactivo', :usuario, :usuario
              ) RETURNING id"
         );
         $stmt->execute([
@@ -598,7 +604,13 @@ class EmpresaInicializadorService
 
     /**
      * Aplica la configuración de facturación predeterminada al establecimiento,
-     * solo si aún no ha sido configurada (editar_precio_factura IS NULL).
+     * solo si aún no ha sido configurada. Se usa id_forma_pago_sri_def IS NULL
+     * como marca de "nunca configurado": a diferencia de editar_precio_factura
+     * (que tiene DEFAULT 'true' en la columna y por eso NUNCA es NULL desde el
+     * INSERT en Empresa::crear, lo que hacía que este método se saltara siempre
+     * y jamás aplicara la forma de pago SRI / límite consumidor final por
+     * defecto), id_forma_pago_sri_def no tiene default y permanece NULL hasta
+     * que este método o el usuario lo fijan.
      *
      * Activa: editar precio, editar IVA, editar descuento.
      * Forma de pago SRI: código '20'.
@@ -607,13 +619,13 @@ class EmpresaInicializadorService
     private function configurarFacturacion(int $idEstablecimiento, int $idUsuario): void
     {
         $res = $this->db->prepare(
-            "SELECT editar_precio_factura FROM empresa_establecimiento
+            "SELECT id_forma_pago_sri_def FROM empresa_establecimiento
              WHERE id = :id AND eliminado = false"
         );
         $res->execute([':id' => $idEstablecimiento]);
         $row = $res->fetch(\PDO::FETCH_ASSOC);
 
-        if (!$row || $row['editar_precio_factura'] !== null) {
+        if (!$row || $row['id_forma_pago_sri_def'] !== null) {
             return;
         }
 

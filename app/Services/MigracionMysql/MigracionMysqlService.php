@@ -45,7 +45,6 @@ class MigracionMysqlService
         'compras'           => ['label' => 'Compras',                          'tabla' => 'encabezado_compra',          'fecha' => 'fecha_compra',   'tipo' => 'documento'],
         'ingresos'          => ['label' => 'Cobros (ingresos)',                 'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'INGRESO'"],
         'egresos'           => ['label' => 'Pagos (egresos)',                   'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'EGRESO'"],
-        'inventario'        => ['label' => 'Inventario (kardex)',               'tabla' => 'inventarios',                'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'contabilidad'      => ['label' => 'Contabilidad (asientos)',            'tabla' => 'encabezado_diario',          'fecha' => 'fecha_asiento',  'tipo' => 'documento'],
         'proformas'         => ['label' => 'Proformas (cotizaciones)',           'tabla' => 'encabezado_proforma',        'fecha' => 'fecha_proforma', 'tipo' => 'documento'],
         'pedidos'           => ['label' => 'Pedidos',                          'tabla' => 'encabezado_pedido',          'fecha' => 'datecreated',    'tipo' => 'documento'],
@@ -53,6 +52,10 @@ class MigracionMysqlService
         'consignaciones_fact' => ['label' => 'Facturación de consignación',       'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion = 'FACTURA'"],
         'consignaciones_ret' => ['label' => 'Retornos de consignación',           'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion LIKE 'DEVOL%'"],
         'cambios_producto'  => ['label' => 'Cambios de productos',               'tabla' => 'cambio_productos_facturados', 'fecha' => 'fecha_cambio',  'tipo' => 'documento'],
+        // Inventario va al FINAL: es el libro (kardex) que consolida los movimientos de todos los
+        // documentos. Al migrarlo después de consignaciones/retornos, sus movimientos migrados se
+        // ENLAZAN a esos documentos (referencia_tipo/id) desde la primera pasada. Ver migrarInventario().
+        'inventario'        => ['label' => 'Inventario (kardex)',               'tabla' => 'inventarios',                'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
     ];
 
     /** Segundos estimados por registro según tipo (aprox., calibrado en pruebas). */
@@ -2259,15 +2262,20 @@ class MigracionMysqlService
             throw new \RuntimeException('La empresa no tiene bodegas activas; cree una antes de migrar inventario.');
         }
 
-        $qStock = $pg->prepare("SELECT COALESCE(SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE -cantidad END), 0) FROM inventario_kardex WHERE id_empresa = ? AND id_producto = ? AND id_bodega = ? AND eliminado = false");
+        // Convención canónica del sistema (nativa): inventario_kardex.cantidad va CON SIGNO (entrada +,
+        // salida −). El stock corriente = SUM(cantidad) directo — igual que getStockActual() y el reporte de
+        // movimientos, que clasifican entrada/salida por el SIGNO de cantidad, no por tipo_movimiento.
+        $qStock = $pg->prepare("SELECT COALESCE(SUM(cantidad), 0) FROM inventario_kardex WHERE id_empresa = ? AND id_producto = ? AND id_bodega = ? AND eliminado = false");
         // La unidad del kardex (id_medida) sale de la del producto (el listado usa k.id_medida sin fallback
         // al producto). Guard por si el esquema no tuviera la columna (el repo nativo también la verifica).
         $tieneMedida = (bool) $pg->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'inventario_kardex' AND column_name = 'id_medida'")->fetchColumn();
         $medStmt = $pg->prepare("SELECT id_medida FROM productos WHERE id = ? LIMIT 1");
         $medCache = [];
+        // referencia_tipo/referencia_id ahora son parámetros: los movimientos de consignación/retorno
+        // migrados se ENLAZAN a su documento (CONSIGNACION_VENTA/RETORNO_CV); el resto queda 'migracion'.
         $ins = $pg->prepare($tieneMedida
-            ? "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, id_medida, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, fecha_caducidad, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
-            : "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, fecha_caducidad, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            ? "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, id_medida, tipo_movimiento, referencia_tipo, referencia_id, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, fecha_caducidad, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+            : "INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, referencia_id, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, fecha_caducidad, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         // El kardex migrado por sí solo no alimenta productos_bodegas (el reporte de Existencias/
         // Valorización lee de ahí, no del kardex): sin este upsert el stock migrado queda invisible
         // en esas dos pestañas aunque el Kardex sí lo muestre.
@@ -2277,12 +2285,43 @@ class MigracionMysqlService
                 DO UPDATE SET stock_actual = EXCLUDED.stock_actual, updated_by = EXCLUDED.updated_by,
                               updated_at = CURRENT_TIMESTAMP, eliminado = false");
         $stock  = [];
+        // Enlace de los movimientos de consignación/retorno al documento migrado. El texto viejo
+        // `referencia` trae el número ("Consignación en venta N: 4" / "Retorno consignación en venta N: 4");
+        // ese número = clave_natural en el mapa (numero_consignacion de la ENTRADA / del DEVOL). El stock
+        // NO cambia (ya sale del propio kardex): solo se enlaza referencia_tipo/id para trazabilidad y para
+        // que el módulo de consignaciones reconozca la salida/entrada como suya (reversos, reportes).
+        $mapConsigNum = [];
+        $qcn = $pg->prepare("SELECT clave_natural, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'consignaciones'");
+        $qcn->execute([$idEmpresa]);
+        foreach ($qcn->fetchAll(PDO::FETCH_ASSOC) as $m) { $mapConsigNum[(string) $m['clave_natural']] = (int) $m['id_destino']; }
+        $mapRetNum = [];
+        $qrn = $pg->prepare("SELECT clave_natural, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'consignaciones_ret'");
+        $qrn->execute([$idEmpresa]);
+        foreach ($qrn->fetchAll(PDO::FETCH_ASSOC) as $m) { $mapRetNum[(string) $m['clave_natural']] = (int) $m['id_destino']; }
+        // Clasifica la referencia vieja → [referencia_tipo, referencia_id]; ['migracion', null] si no aplica
+        // o si el documento aún no está migrado (se enlaza al re-migrar Inventario, vía el reconcile).
+        $clasificarRef = static function ($texto) use ($mapConsigNum, $mapRetNum): array {
+            $t = (string) $texto;
+            if (preg_match('/^\s*Consignaci.n en venta N[^0-9]*([0-9]+)/iu', $t, $m)) {
+                $id = $mapConsigNum[$m[1]] ?? null;
+                if ($id) { return ['CONSIGNACION_VENTA', $id]; }
+            } elseif (preg_match('/^\s*Retorno consignaci.n en venta N[^0-9]*([0-9]+)/iu', $t, $m)) {
+                $id = $mapRetNum[$m[1]] ?? null;
+                if ($id) { return ['RETORNO_CV', $id]; }
+            }
+            return ['migracion', null];
+        };
+
         // Reconcile (re-migrar): en vez de saltar los ya migrados, actualiza su fecha_caducidad (y refresca
-        // la unidad). Así re-migrar CORRIGE la caducidad sin tener que "Eliminar migrados" primero.
+        // la unidad) y ENLAZA su referencia_tipo/id si corresponde. Así re-migrar CORRIGE la caducidad y el
+        // enlace a consignación/retorno sin tener que "Eliminar migrados" primero (no degrada lo ya enlazado).
         $mapInv = $this->mapaDe($pg, $idEmpresa, 'inventario');
+        // Reconcile actualiza también el SIGNO de cantidad (migraciones viejas la guardaban positiva en salidas):
+        // re-migrar Inventario corrige el signo sin "Eliminar migrados". No toca stock_anterior/posterior (son
+        // niveles absolutos, ya correctos) ni productos_bodegas.
         $updRec = $pg->prepare($tieneMedida
-            ? "UPDATE inventario_kardex SET fecha_caducidad = :cad, id_medida = COALESCE((SELECT id_medida FROM productos WHERE id = inventario_kardex.id_producto), id_medida), updated_at = now(), updated_by = :u WHERE id = :id"
-            : "UPDATE inventario_kardex SET fecha_caducidad = :cad, updated_at = now(), updated_by = :u WHERE id = :id");
+            ? "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, id_medida = COALESCE((SELECT id_medida FROM productos WHERE id = inventario_kardex.id_producto), id_medida), referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id"
+            : "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id");
 
         $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote, fecha_vencimiento
                   FROM inventarios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
@@ -2292,10 +2331,16 @@ class MigracionMysqlService
         while ($iv = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $iv['id_inventario'];
-            // Ya migrado: reconciliar la fecha_caducidad (regla del cero) sin recomputar el stock.
+            // Ya migrado: reconciliar el SIGNO de cantidad, la fecha_caducidad (regla del cero) y el enlace
+            // consignación/retorno, sin recomputar el stock. Si no clasifica, :rt/:rid van null y COALESCE
+            // conserva lo existente.
             if (isset($mapInv[(string) $old])) {
                 $cadR = self::caducidadODef($iv['fecha_vencimiento'], $iv['fecha_registro']);
-                try { $updRec->execute([':cad' => $cadR, ':u' => $idUsuario, ':id' => (int) $mapInv[(string) $old]]); }
+                [$rtR, $ridR] = $clasificarRef($iv['referencia']);
+                $entR  = strtoupper(trim((string) $iv['operacion'])) === 'ENTRADA';
+                $magR  = $entR ? (float) $iv['cantidad_entrada'] : (float) $iv['cantidad_salida'];
+                $cantR = $entR ? $magR : -$magR;
+                try { $updRec->execute([':cant' => $cantR, ':cad' => $cadR, ':rt' => ($rtR === 'migracion' ? null : $rtR), ':rid' => $ridR, ':u' => $idUsuario, ':id' => (int) $mapInv[(string) $old]]); }
                 catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
                 $res['ya_migrados']++;
                 continue;
@@ -2326,7 +2371,11 @@ class MigracionMysqlService
                 if ($tieneMedida) { $movParams[] = $idMed; }
                 // Fecha de caducidad: vencimiento, o la fecha del movimiento si viene en cero (ningún ítem sin caducidad).
                 $cad = self::caducidadODef($iv['fecha_vencimiento'], $iv['fecha_registro']);
-                array_push($movParams, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), $cad, self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario);
+                // Enlace al documento de consignación/retorno (o 'migracion' + null si no aplica).
+                [$refTipo, $refId] = $clasificarRef($iv['referencia']);
+                // cantidad CON SIGNO (entrada +, salida −); costo_total siempre positivo (magnitud), como el nativo.
+                $cantSigned = $esEntrada ? $cant : -$cant;
+                array_push($movParams, $esEntrada ? 'entrada' : 'salida', $refTipo, $refId, substr((string) $iv['fecha_registro'], 0, 19), $cantSigned, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), $cad, self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario);
                 $ins->execute($movParams);
                 $kid = (int) $ins->fetchColumn();
 
@@ -4675,7 +4724,7 @@ class MigracionMysqlService
                     'establecimiento'  => $estMatriz,
                     'direccion'        => (string) $matriz['direccion'],
                     'telefono'         => (string) $matriz['telefono'],
-                    'tipo'             => (string) ($matriz['tipo'] ?: '01'),
+                    'tipo'             => (string) ($matriz['tipo'] ?: '1'),
                     'nom_rep_legal'    => (string) $matriz['nom_rep_legal'],
                     'ced_rep_legal'    => (string) $matriz['ced_rep_legal'],
                     'mail'             => (string) $matriz['mail'],

@@ -65,9 +65,12 @@ class RolProvisionService
             'nota' => $nota,
         ];
 
+        $dtIncluir = !in_array($dtMode, ['mensualiza', 'no_recibe'], true);
+        $dcIncluir = !in_array($dcMode, ['mensualiza', 'no_recibe'], true);
+
         return [
-            $mk('Décimo Tercero', $base / 12, $dtMode !== 'mensualiza', $dtMode === 'mensualiza' ? 'Pagado en rol' : 'Provisión mensual'),
-            $mk('Décimo Cuarto', $sbu / 12 * $factorDC, $dcMode !== 'mensualiza', $dcMode === 'mensualiza' ? 'Pagado en rol' : 'Provisión mensual'),
+            $mk('Décimo Tercero', $base / 12, $dtIncluir, $dtMode === 'mensualiza' ? 'Pagado en rol' : ($dtMode === 'no_recibe' ? 'No aplica' : 'Provisión mensual')),
+            $mk('Décimo Cuarto', $sbu / 12 * $factorDC, $dcIncluir, $dcMode === 'mensualiza' ? 'Pagado en rol' : ($dcMode === 'no_recibe' ? 'No aplica' : 'Provisión mensual')),
             $mk('Vacaciones', $base / 24, true, 'Provisión mensual'),
             $mk('Fondos de Reserva', $base * $pctFR / 100, $frIncluir, $frPagadoEnRol ? 'Pagado en rol' : ($frMode === 'no_se_paga' ? 'No aplica' : 'Provisión mensual')),
             $mk('Desahucio', $base * 0.25 / 12, true, 'Provisión mensual'),

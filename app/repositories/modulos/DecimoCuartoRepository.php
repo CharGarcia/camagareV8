@@ -93,10 +93,38 @@ class DecimoCuartoRepository extends BaseRepository
         return $this->lastInsertId();
     }
 
-    public function limpiarDetalle(int $idCabecera): void
+    /** Borra el detalle de la cabecera, salvo los empleados en $excluirEmpleados (ya pagados: no se tocan). */
+    public function limpiarDetalle(int $idCabecera, array $excluirEmpleados = []): void
     {
-        $st = $this->db->prepare("DELETE FROM decimo_cuarto_detalle WHERE id_cabecera = :id");
+        if (empty($excluirEmpleados)) {
+            $st = $this->db->prepare("DELETE FROM decimo_cuarto_detalle WHERE id_cabecera = :id");
+            $st->execute([':id' => $idCabecera]);
+            return;
+        }
+        $ph = [];
+        $params = [':id' => $idCabecera];
+        foreach (array_values($excluirEmpleados) as $i => $idEmp) {
+            $key = ":ex{$i}";
+            $ph[] = $key;
+            $params[$key] = $idEmp;
+        }
+        $sql = "DELETE FROM decimo_cuarto_detalle WHERE id_cabecera = :id AND id_empleado NOT IN (" . implode(',', $ph) . ")";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+    }
+
+    /** IDs de empleado (de esta cabecera) que ya tienen al menos un pago (Egreso) registrado. */
+    public function getEmpleadosPagados(int $idCabecera): array
+    {
+        $sql = "SELECT DISTINCT dcd.id_empleado
+                FROM decimo_cuarto_detalle dcd
+                INNER JOIN egresos_detalle d ON d.id_referencia_documento = dcd.id
+                INNER JOIN egresos_cabecera e ON e.id = d.id_egreso
+                WHERE dcd.id_cabecera = :id AND d.tipo_documento = 'DECIMO_CUARTO'
+                  AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE";
+        $st = $this->db->prepare($sql);
         $st->execute([':id' => $idCabecera]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function actualizarTotales(int $idCabecera, int $totalEmpleados, float $totalValor, string $estado): void
@@ -229,6 +257,7 @@ class DecimoCuartoRepository extends BaseRepository
                        valor_retencion_judicial, id_banco_ecuador, tipo_cuenta, numero_cuenta
                 FROM empleados
                 WHERE id_empresa = :id_empresa AND eliminado = false AND estado = 'activo'
+                  AND (decimo_cuarto IS NULL OR decimo_cuarto <> 'no_recibe')
                   AND region IN (" . implode(',', $ph) . ")";
         $st = $this->db->prepare($sql);
         $st->execute($params);

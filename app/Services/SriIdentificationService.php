@@ -133,7 +133,7 @@ class SriIdentificationService
             'cod_ciudad' => '',
             'telefono' => '',
             'mail' => '',
-            'tipo' => '04', // Persona natural
+            'tipo' => '1', // catálogo tipo_empresa: 1 = Persona Natural (una cédula siempre lo es)
         ];
     }
 
@@ -262,7 +262,7 @@ class SriIdentificationService
                         'cod_ciudad' => $cli['ciudad'],
                         'telefono' => $cli['telefono'],
                         'mail' => $cli['email'],
-                        'tipo' => strlen($cli['identificacion']) === 13 ? '01' : '04',
+                        'tipo' => $this->tipoPorIdentificacion($cli['identificacion']),
                     ],
                 ];
             }
@@ -289,7 +289,7 @@ class SriIdentificationService
                         'cod_ciudad' => $prov['ciudad'],
                         'telefono' => $prov['telefono'],
                         'mail' => $prov['email'],
-                        'tipo' => strlen($prov['identificacion']) === 13 ? '01' : '04',
+                        'tipo' => $this->tipoPorIdentificacion($prov['identificacion']),
                     ],
                 ];
             }
@@ -300,14 +300,45 @@ class SriIdentificationService
         return null;
     }
 
+    /**
+     * Mapea el "tipoContribuyente" que devuelve el servicio de consulta al id
+     * del catálogo `tipo_empresa` (1=Persona Natural, 2=Persona Natural Obligada
+     * a llevar contabilidad, 3=Sociedad, 4=Contribuyente especial, 5=Sector
+     * público), que es el que realmente usa el selector "Tipo de Contribuyente"
+     * en modulos/empresa. Antes devolvía '01'/'04'/'05'/'06'/'07' (una mezcla con
+     * los códigos de tipoIdentificacion del XML del SRI, sin relación con este
+     * catálogo): al compararse por igualdad débil con el id del <option> (entero
+     * 1-5), esos valores o no calzaban con ninguna opción o calzaban con la
+     * opción equivocada (ej. '05' == 5 seleccionaba "Sector público" en vez de
+     * "Sociedad"). Ver [[empresa-inicializador-defaults]].
+     */
     private function mapearTipoContribuyente(string $tipo): string
     {
         return match (strtoupper($tipo)) {
-            '04', 'PERSONA NATURAL' => '04',
-            '05', 'SOCIEDAD' => '05',
-            '06', 'EMPRESA UNIPERSONAL' => '06',
-            '07', 'ESTABLECIMIENTO' => '07',
-            default => '01',
+            '04', 'PERSONA NATURAL' => '1',
+            '05', 'SOCIEDAD' => '3',
+            '06', 'EMPRESA UNIPERSONAL' => '3',
+            '07', 'ESTABLECIMIENTO' => '1',
+            default => '1',
+        };
+    }
+
+    /**
+     * Heurística cuando no hay "tipoContribuyente" del SRI (búsqueda local en
+     * clientes/proveedores): cédula (10 dígitos) siempre es persona natural.
+     * Para RUC (13 dígitos), el tercer dígito define el tipo (regla oficial del
+     * SRI): '6' = sector público, '9' = sociedad privada/extranjera, '0'-'5' =
+     * persona natural.
+     */
+    private function tipoPorIdentificacion(string $identificacion): string
+    {
+        if (strlen($identificacion) !== 13) {
+            return '1';
+        }
+        return match ($identificacion[2]) {
+            '6' => '5',
+            '9' => '3',
+            default => '1',
         };
     }
 

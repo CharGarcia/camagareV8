@@ -64,8 +64,8 @@ class DecimoTerceroExportService
         foreach ($detalle as $d) {
             $filas[] = [
                 $d['identificacion'],
-                $d['nombres'],
-                $d['apellidos'],
+                $this->limpiarTexto($d['nombres']),
+                $this->limpiarTexto($d['apellidos']),
                 $d['sexo'],
                 $d['codigo_ocupacion'],
                 number_format((float) $d['total_ganado'], 2, '.', ''),
@@ -89,5 +89,26 @@ class DecimoTerceroExportService
     {
         if (is_bool($v)) return $v;
         return in_array(strtolower((string) $v), ['1', 't', 'true'], true);
+    }
+
+    /**
+     * El sistema del Ministerio del Trabajo rechaza el archivo si trae tildes, ñ u
+     * otros caracteres especiales (aunque el CSV vaya en Windows-1252, que sí los
+     * soporta). Se transliteran a su equivalente ASCII antes de armar la fila.
+     */
+    private function limpiarTexto(?string $s): string
+    {
+        if ($s === null || $s === '') return '';
+        static $mapa = [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n',
+            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U', 'Ü' => 'U', 'Ñ' => 'N',
+            'à' => 'a', 'è' => 'e', 'ì' => 'i', 'ò' => 'o', 'ù' => 'u',
+            'À' => 'A', 'È' => 'E', 'Ì' => 'I', 'Ò' => 'O', 'Ù' => 'U',
+            'â' => 'a', 'ê' => 'e', 'î' => 'i', 'ô' => 'o', 'û' => 'u',
+            'Â' => 'A', 'Ê' => 'E', 'Î' => 'I', 'Ô' => 'O', 'Û' => 'U',
+            'ç' => 'c', 'Ç' => 'C',
+        ];
+        $limpio = strtr($s, $mapa);
+        return preg_replace('/[^\x20-\x7E]/', '', $limpio) ?? $limpio;
     }
 }

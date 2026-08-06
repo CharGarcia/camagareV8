@@ -47,11 +47,11 @@ class EmpleadoRules
             throw new Exception('Opción de fondos de reserva no válida.');
         }
 
-        if (!empty($data['decimo_tercero']) && !in_array($data['decimo_tercero'], ['mensualiza', 'acumula'])) {
+        if (!empty($data['decimo_tercero']) && !in_array($data['decimo_tercero'], ['mensualiza', 'acumula', 'no_recibe'])) {
             throw new Exception('Opción de décimo tercero no válida.');
         }
 
-        if (!empty($data['decimo_cuarto']) && !in_array($data['decimo_cuarto'], ['mensualiza', 'acumula'])) {
+        if (!empty($data['decimo_cuarto']) && !in_array($data['decimo_cuarto'], ['mensualiza', 'acumula', 'no_recibe'])) {
             throw new Exception('Opción de décimo cuarto no válida.');
         }
 

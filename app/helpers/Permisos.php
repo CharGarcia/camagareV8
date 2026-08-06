@@ -44,12 +44,29 @@ class Permisos
     {
         $idU = (int) ($_SESSION['id_usuario'] ?? 0);
         $idE = (int) ($_SESSION['id_empresa'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        return self::porRutaEnEmpresa($pathMvc, $idE, $idU, $nivel);
+    }
+
+    /**
+     * Igual que porRuta(), pero para una empresa arbitraria (no necesariamente la
+     * empresa activa en sesión). Usado por flujos que escriben en OTRA empresa del
+     * mismo usuario (p. ej. replicar un cliente hacia otra empresa asignada):
+     * el permiso de "crear" debe validarse contra la empresa destino, no la actual.
+     *
+     * @return array{ver:bool,crear:bool,actualizar:bool,eliminar:bool,todo:bool,id_submodulo:?int}
+     */
+    public static function porRutaEnEmpresa(string $pathMvc, int $idEmpresa, ?int $idUsuario = null, ?int $nivel = null): array
+    {
+        $idU = $idUsuario ?? (int) ($_SESSION['id_usuario'] ?? 0);
+        $idE = (int) $idEmpresa;
+        $nv  = $nivel ?? (int) ($_SESSION['nivel'] ?? 1);
+
         $key = $pathMvc . '|' . $idU . '|' . $idE;
         if (isset(self::$cache[$key])) {
             return self::$cache[$key];
         }
 
-        $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $todos = [
             'ver' => true, 'crear' => true, 'actualizar' => true,
             'eliminar' => true, 'todo' => true,
@@ -58,7 +75,7 @@ class Permisos
         // Nivel 3 (superadmin): acceso total incondicional. NO depende de modulos_asignados
         // — ni de que no exista fila, ni de lo que esa fila diga si existiera. Se resuelve
         // antes de tocar el modelo/BD para no quedar nunca sujeto a datos de permisos.
-        if ($nivel >= 3) {
+        if ($nv >= 3) {
             return self::$cache[$key] = $todos + ['id_submodulo' => null];
         }
 

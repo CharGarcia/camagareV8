@@ -181,7 +181,7 @@ class ReporteInventariosController extends BaseModuloController
         $kpis = $this->repository->getExistenciasKpis($idEmpresa, $filtros);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $modo === 'NINGUNO' ? 8 : 6),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $modo === 'NINGUNO' ? 10 : 8),
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
@@ -294,7 +294,9 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['categoria_nombre'] ?? '') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
+                . '<td class="text-end small text-info">' . number_format((float) ($r['consignado'] ?? 0), 2) . '</td>'
                 . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
+                . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['stock_total'] ?? 0), 2) . '</td>'
                 . '<td class="text-end small text-muted">' . number_format($stockMinimo, 2) . '</td>'
                 . '<td class="text-end small text-muted">' . number_format($stockMaximo, 2) . '</td>'
                 . '<td class="text-end">' . $costo . '</td>'
@@ -305,7 +307,9 @@ class ReporteInventariosController extends BaseModuloController
         return '<tr>'
             . '<td class="fw-bold">' . htmlspecialchars((string) ($r['nombre_grupo'] ?? '')) . '</td>'
             . '<td class="text-center">' . (int) ($r['cantidad_productos'] ?? 0) . '</td>'
+            . '<td class="text-end small text-info">' . number_format((float) ($r['consignado'] ?? 0), 2) . '</td>'
             . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
+            . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['stock_total'] ?? 0), 2) . '</td>'
             . '<td class="text-end small text-muted">' . number_format((float) ($r['stock_minimo'] ?? 0), 2) . '</td>'
             . '<td class="text-end">' . $costo . '</td>'
             . '<td class="text-end fw-bold text-primary">' . $valor . '</td>'
@@ -733,17 +737,17 @@ class ReporteInventariosController extends BaseModuloController
                     default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Producto', 'Código', 'Categoría', 'Bodega', 'Stock', 'Mínimo', 'Máximo', 'Costo Unit.', 'Valor total', 'Estado'];
+                    $headers = ['Producto', 'Código', 'Categoría', 'Bodega', 'Consignación', 'Stock', 'Stock Total', 'Mínimo', 'Máximo', 'Costo Unit.', 'Valor total', 'Estado'];
                     $data = array_map(fn($r) => [
                         $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['categoria_nombre'] ?? '', $r['bodega_nombre'] ?? '',
-                        (float) $r['stock_actual'], (float) $r['stock_minimo'], (float) $r['stock_maximo'],
+                        (float) $r['consignado'], (float) $r['stock_actual'], (float) $r['stock_total'], (float) $r['stock_minimo'], (float) $r['stock_maximo'],
                         (float) $r['costo_unitario'], (float) $r['valor_total'], $r['estado_stock'] ?? '',
                     ], $rows);
                 } else {
-                    $headers = ['Grupo', 'Productos', 'Stock', 'Costo Unit.', 'Valor total'];
+                    $headers = ['Grupo', 'Productos', 'Consignación', 'Stock', 'Stock Total', 'Costo Unit.', 'Valor total'];
                     $data = array_map(fn($r) => [
                         (string) $r['nombre_grupo'], (int) $r['cantidad_productos'],
-                        (float) $r['stock_actual'], (float) $r['costo_unitario'], (float) $r['valor_total'],
+                        (float) $r['consignado'], (float) $r['stock_actual'], (float) $r['stock_total'], (float) $r['costo_unitario'], (float) $r['valor_total'],
                     ], $rows);
                 }
                 return [$headers, $data, 'Existencias de Inventario'];

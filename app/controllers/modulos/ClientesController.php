@@ -436,12 +436,15 @@ class ClientesController extends BaseModuloController
             // cerrarse, y los módulos que crean clientes al vuelo (pedidos, car wash,
             // facturación CV) la consumen desde el evento 'clienteGuardado'.
             $guardado = (new ClienteRepository())->findById($id, $data['id_empresa']);
+            $datosGuardados = $guardado ?: array_merge($data, ['id' => $id]);
+            $replicado = $this->replicarSiCorresponde($datosGuardados);
 
             echo json_encode([
                 'ok'   => true,
                 'msg'  => 'Cliente creado correctamente.',
                 'id'   => $id,
-                'data' => $guardado ?: array_merge($data, ['id' => $id]),
+                'data' => $datosGuardados,
+                'replicado' => $replicado,
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -473,13 +476,141 @@ class ClientesController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
 
             $guardado = (new ClienteRepository())->findById($id, $idEmpresa);
+            $datosGuardados = $guardado ?: array_merge($data, ['id' => $id, 'id_empresa' => $idEmpresa]);
+            $replicado = $this->replicarSiCorresponde($datosGuardados);
 
             echo json_encode([
                 'ok'   => true,
                 'msg'  => 'Cliente actualizado correctamente.',
                 'id'   => $id,
-                'data' => $guardado ?: array_merge($data, ['id' => $id]),
+                'data' => $datosGuardados,
+                'replicado' => $replicado,
             ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ─── REPLICACIÓN ENTRE EMPRESAS ────────────────────────────────────────────
+
+    /**
+     * Empresas del usuario actual donde podría replicar un cliente (todas las
+     * asignadas, o todas las activas si es nivel 3), EXCLUYENDO la empresa activa.
+     */
+    private function empresasCandidatas(): array
+    {
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $idEmpresaActual = (int) $_SESSION['id_empresa'];
+
+        $model = new \App\models\Empresa();
+        $todas = $nivel >= 3 ? $model->getTodasActivas() : $model->getEmpresasAsignadas($idUsuario);
+
+        return array_values(array_filter($todas, fn($e) => (int) $e['id_empresa'] !== $idEmpresaActual));
+    }
+
+    public function empresasDestinoAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $data = array_map(fn($e) => [
+                'id_empresa' => (int) $e['id_empresa'],
+                'texto'      => ($e['establecimiento'] ?? '001') . ' - ' . (!empty($e['nombre_comercial']) ? $e['nombre_comercial'] : $e['nombre']),
+            ], $this->empresasCandidatas());
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * De la lista de empresas destino que pidió el usuario, filtra a las que
+     * realmente son candidatas (asignadas al usuario / nivel 3) Y donde tiene
+     * permiso de crear clientes. Las que no cumplen se reportan como 'sin_permiso'
+     * en vez de simplemente ignorarse, para que la UI pueda avisar.
+     *
+     * @return array{permitidas:int[], resultado:array<int,array{estado:string}>}
+     */
+    private function filtrarEmpresasDestinoPermitidas(array $idsSolicitadas): array
+    {
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $candidatasIds = array_map(fn($e) => (int) $e['id_empresa'], $this->empresasCandidatas());
+
+        $permitidas = [];
+        $resultado = [];
+        foreach (array_unique(array_map('intval', $idsSolicitadas)) as $idEmp) {
+            if ($idEmp <= 0 || !in_array($idEmp, $candidatasIds, true)) {
+                $resultado[$idEmp] = ['estado' => 'sin_permiso'];
+                continue;
+            }
+            $permiso = \App\Helpers\Permisos::porRutaEnEmpresa(self::RUTA_MODULO, $idEmp, $idUsuario, $nivel);
+            if (empty($permiso['crear'])) {
+                $resultado[$idEmp] = ['estado' => 'sin_permiso'];
+                continue;
+            }
+            $permitidas[] = $idEmp;
+        }
+
+        return ['permitidas' => $permitidas, 'resultado' => $resultado];
+    }
+
+    /** Replica el cliente recién guardado hacia las empresas destino marcadas en el formulario (si las hay). */
+    private function replicarSiCorresponde(array $datosOrigen): ?array
+    {
+        $idsSolicitadas = $_POST['ids_empresa_destino'] ?? [];
+        if (!is_array($idsSolicitadas) || empty($idsSolicitadas)) {
+            return null;
+        }
+
+        $filtro = $this->filtrarEmpresasDestinoPermitidas($idsSolicitadas);
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $resultado = $filtro['resultado'];
+        if (!empty($filtro['permitidas'])) {
+            $resultado += $this->service->replicarEnEmpresas($datosOrigen, $filtro['permitidas'], $idUsuario);
+        }
+        return $resultado;
+    }
+
+    /**
+     * Botón masivo: copia TODOS los clientes de la empresa activa hacia una empresa
+     * destino elegida por el usuario. No duplica (mismo criterio que la replicación
+     * individual): solo crea los que faltan o reactiva los que estaban eliminados.
+     */
+    public function replicarTodosAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+            exit;
+        }
+
+        $idEmpresaDestino = (int) ($_POST['id_empresa_destino'] ?? 0);
+        $idEmpresaOrigen = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($idEmpresaDestino <= 0) {
+                throw new \Exception('Seleccione la empresa destino.');
+            }
+            $filtro = $this->filtrarEmpresasDestinoPermitidas([$idEmpresaDestino]);
+            if (empty($filtro['permitidas'])) {
+                throw new \Exception('No tiene permiso para crear clientes en la empresa destino, o no la tiene asignada.');
+            }
+
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? $idUsuario : null;
+
+            $contadores = $this->service->replicarTodosAEmpresa($idEmpresaOrigen, $idEmpresaDestino, $idUsuario, $idUsuarioFiltro);
+            echo json_encode(['ok' => true] + $contadores);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

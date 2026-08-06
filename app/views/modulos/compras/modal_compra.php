@@ -114,8 +114,9 @@
 
               <!-- Fila 2 -->
               <?php
-              $tipoEmp = $empresa['tipo'] ?? '01';
-              $esPersonaNatural = ($tipoEmp == '01' || $tipoEmp == '1');
+              $tipoEmp = (string) ($empresa['tipo'] ?? '1');
+              // Catálogo tipo_empresa: 1 = Persona Natural, 2 = Persona Natural Obligada a llevar contabilidad.
+              $esPersonaNatural = in_array($tipoEmp, ['1', '2'], true);
               $dNonePN = $esPersonaNatural ? 'd-none' : '';
               ?>
               <!-- Sustento Tributario -->
