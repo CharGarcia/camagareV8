@@ -192,7 +192,7 @@ class FacturaVentaRepository extends BaseRepository
                 LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
                 LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
                 $where
-                ORDER BY $ordenExpr $ordenDir
+                ORDER BY $ordenExpr $ordenDir" . ($ordenCol !== 'id' ? ", v.id $ordenDir" : "") . "
                 " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
 
         $rows = $this->query($sql, $params)->fetchAll();
