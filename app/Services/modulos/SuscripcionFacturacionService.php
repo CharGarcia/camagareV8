@@ -208,6 +208,12 @@ class SuscripcionFacturacionService
             if ($managedTransaction) {
                 $db->commit();
             }
+            // Verificación defensiva: si el commit "tuvo éxito" pero el documento no
+            // quedó realmente en la BD (p. ej. anomalía de infraestructura/pooler),
+            // que falle de forma visible en vez de reportar éxito con un id fantasma.
+            if ($this->facturaService->getPorId($idFactura, $idEmpresa) === null) {
+                throw new \RuntimeException("La factura #{$idFactura} de la suscripción #{$susc['id']} no persistió tras el commit (inTransaction=" . ($db->inTransaction() ? '1' : '0') . ").");
+            }
             return ['id_factura' => $idFactura, 'id_recibo' => null, 'tipo' => 'factura', 'importe' => $importe];
         }
 
@@ -226,6 +232,9 @@ class SuscripcionFacturacionService
         $idRecibo = $this->reciboService->crear($documentoData);
         if ($managedTransaction) {
             $db->commit();
+        }
+        if ($this->reciboService->getPorId($idRecibo, $idEmpresa) === null) {
+            throw new \RuntimeException("El recibo #{$idRecibo} de la suscripción #{$susc['id']} no persistió tras el commit (inTransaction=" . ($db->inTransaction() ? '1' : '0') . ").");
         }
         return ['id_factura' => null, 'id_recibo' => $idRecibo, 'tipo' => 'recibo', 'importe' => $importe];
         } catch (\Throwable $e) {

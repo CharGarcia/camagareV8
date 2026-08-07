@@ -691,6 +691,7 @@ class SuscripcionesController extends BaseModuloController
                 } catch (\Throwable $e) {
                     $errorMsgs[] = "Suscripcion {$idSusc}: " . $e->getMessage();
                     $errores++;
+                    \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__ . '#suscripcion_' . $idSusc]);
                 }
             }
 
