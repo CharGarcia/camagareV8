@@ -142,6 +142,10 @@ class SuscripcionesHandler extends BaseHandler
                 } catch (\Throwable $e) {
                     // La factura falló: NO se avanzó la fecha → se reintenta en la próxima corrida.
                     $errores++;
+                    \App\Services\ErrorLogService::registrar($e, [
+                        'ruta'   => static::class,
+                        'accion' => 'generarFacturacion#suscripcion_' . $idSusc,
+                    ]);
                     break; // pasar a la siguiente suscripción
                 }
             }

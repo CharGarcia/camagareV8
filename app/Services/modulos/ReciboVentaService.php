@@ -640,6 +640,9 @@ class ReciboVentaService
             if ($managedTransaction) {
                 $db->commit();
             }
+            // crear() no generó el XML porque esta llamada fue anidada (no controló su propia
+            // transacción): se hace aquí, ya con la factura confirmada.
+            $facturaService->generarYGuardarXml($idFactura, $empresaConfig);
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();

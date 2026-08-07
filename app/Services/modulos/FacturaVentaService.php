@@ -418,7 +418,17 @@ class FacturaVentaService
      * @param int   $idVenta      ID de la factura reciÃ©n guardada
      * @param array $empresaConfig Fila de la tabla empresas (ya cargada en el servicio)
      */
-    private function generarYGuardarXml(int $idVenta, array $empresaConfig): void
+    /**
+     * Genera el XML y lo persiste en detalle_xml. Pública porque un llamador que
+     * anida crear()/actualizar() dentro de su PROPIA transacción (p. ej.
+     * SuscripcionFacturacionService) debe invocarla él mismo DESPUÉS de su propio
+     * commit — ver el guard `$managedTransaction` en crear()/actualizar() más abajo:
+     * si esta instancia no fue quien controló la transacción, no la llama por su cuenta
+     * (la llamaría todavía dentro de la transacción abierta del llamador, y cualquier
+     * fallo aquí dejaría la transacción abortada, haciendo que el COMMIT posterior del
+     * llamador no persista nada sin lanzar error).
+     */
+    public function generarYGuardarXml(int $idVenta, array $empresaConfig): void
     {
         try {
             // Cargar datos actualizados desde BD
@@ -772,8 +782,11 @@ class FacturaVentaService
 
             if ($managedTransaction) $db->commit();
 
-            // Generar XML y persistir en detalle_xml FUERA de la transacciÃ³n principal
-            $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
+            // Generar XML y persistir en detalle_xml FUERA de la transacción principal. Solo
+            // si esta llamada controló la transacción (ver comentario en la firma del método).
+            if ($managedTransaction) {
+                $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
+            }
 
             // El asiento contable YA NO se genera al guardar/actualizar. Se genera cuando se
             // corre la sincronización de contabilidad (SincronizadorAsientosService), que toma
@@ -1005,8 +1018,13 @@ class FacturaVentaService
             throw $e;
         }
 
-        // Generar XML y persistir en detalle_xml FUERA de la transacciÃ³n principal
-        $this->generarYGuardarXml($idVenta, $data['empresa_config'] ?? []);
+        // Generar XML y persistir en detalle_xml FUERA de la transacción principal. Solo si
+        // ESTA llamada controló la transacción (managedTransaction): si está anidada dentro de
+        // la transacción de otro Service, ese Service debe llamar generarYGuardarXml() él mismo
+        // después de SU commit (ver comentario en la firma del método).
+        if ($managedTransaction) {
+            $this->generarYGuardarXml($idVenta, $data['empresa_config'] ?? []);
+        }
 
         // El asiento contable YA NO se genera al crear la factura. Se genera cuando se corre
         // la sincronización de contabilidad (SincronizadorAsientosService), que toma las

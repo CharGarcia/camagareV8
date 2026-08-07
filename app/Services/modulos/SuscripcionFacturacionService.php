@@ -214,6 +214,10 @@ class SuscripcionFacturacionService
             if ($this->facturaService->getPorId($idFactura, $idEmpresa) === null) {
                 throw new \RuntimeException("La factura #{$idFactura} de la suscripción #{$susc['id']} no persistió tras el commit (inTransaction=" . ($db->inTransaction() ? '1' : '0') . ").");
             }
+            // crear() no generó el XML porque esta llamada fue anidada (no controló su propia
+            // transacción): se hace aquí, ya con la factura confirmada y fuera de cualquier
+            // transacción abierta (ver comentario en FacturaVentaService::generarYGuardarXml()).
+            $this->facturaService->generarYGuardarXml($idFactura, $empresaConfig);
             return ['id_factura' => $idFactura, 'id_recibo' => null, 'tipo' => 'factura', 'importe' => $importe];
         }
 
