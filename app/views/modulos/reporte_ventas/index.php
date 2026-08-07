@@ -7,9 +7,9 @@
     .rv-scroll thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 </style>
 
-<div class="container-fluid py-4 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
+<div class="container-fluid py-2 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
     <!-- ── Cabecera ── -->
-    <div class="rv-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="rv-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
         <div>
             <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-bar-graph me-2 text-primary"></i>Reporte de Ventas</h5>
             <small class="text-muted">Análisis detallado de ventas por cliente, producto y fecha</small>

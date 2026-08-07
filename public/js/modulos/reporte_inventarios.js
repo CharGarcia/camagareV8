@@ -591,6 +591,87 @@ window.RI_Consignaciones = {
 };
 
 // ════════════════════════════════════════════════════════════════════
+// PESTAÑA 5: AUDITORÍA
+// ════════════════════════════════════════════════════════════════════
+window.RI_Auditoria = {
+    limpiarProducto() {
+        RI_limpiarBusqueda('ri-au-search-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado');
+        this.generar();
+    },
+
+    generar() {
+        const params = RI_paramsFromIds({
+            id_bodega: 'ri-au-bodega', id_producto: 'ri-au-id-producto', buscar: 'ri-au-buscar',
+        });
+
+        const tbody = document.getElementById('ri-au-tbody');
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+
+        RI_fetchGenerar('auditoria', params, (res) => {
+            tbody.innerHTML = res.rows;
+            const info = document.getElementById('ri-au-info-total');
+            const total = (res.kpis && res.kpis.total_discrepancias) || 0;
+            info.textContent = total > 0
+                ? `${total} discrepancia${total === 1 ? '' : 's'} encontrada${total === 1 ? '' : 's'}`
+                : 'Sin discrepancias — el stock cacheado coincide con el Kardex.';
+        }, (msg) => {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">${msg}</td></tr>`;
+        });
+    },
+
+    corregir(btn) {
+        const d = btn.dataset;
+        const cacheado = parseFloat(d.cacheado || 0);
+        const real = parseFloat(d.real || 0);
+
+        const ejecutar = () => {
+            btn.disabled = true;
+            const params = new URLSearchParams({ id_producto: d.idProducto, id_bodega: d.idBodega });
+            fetch(BASE_URL + '/' + RUTA_MODULO + '/corregirStockAuditoriaAjax', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                body: params.toString(),
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok) {
+                    btn.disabled = false;
+                    if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'No se pudo corregir', text: res.error || 'Error desconocido' });
+                    else alert(res.error || 'Error desconocido');
+                    return;
+                }
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({ icon: 'success', title: 'Stock corregido', timer: 1500, showConfirmButton: false });
+                }
+                window.RI_Auditoria.generar();
+            })
+            .catch(err => {
+                btn.disabled = false;
+                console.error(err);
+                if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo corregir el stock.' });
+                else alert('No se pudo corregir el stock.');
+            });
+        };
+
+        const mensaje = `<p class="mb-2">${d.productoNombre} — ${d.bodegaNombre}</p>
+            <p class="mb-0">Cacheado: <b>${cacheado}</b> &rarr; Real (Kardex): <b>${real}</b></p>`;
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: '¿Corregir stock?',
+                html: mensaje,
+                showCancelButton: true,
+                confirmButtonText: 'Sí, corregir',
+                cancelButtonText: 'Cancelar',
+            }).then(result => { if (result.isConfirmed) ejecutar(); });
+        } else if (confirm('¿Corregir stock de ' + cacheado + ' a ' + real + '?')) {
+            ejecutar();
+        }
+    },
+};
+
+// ════════════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function () {
@@ -608,4 +689,5 @@ document.addEventListener('DOMContentLoaded', function () {
     RI_setupAutocomplete('ri-va-search-producto', 'ri-va-dropdown-producto', 'ri-va-id-producto', 'ri-va-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Valorizacion.generar());
     RI_setupAutocomplete('ri-cv-search-producto', 'ri-cv-dropdown-producto', 'ri-cv-id-producto', 'ri-cv-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Consignaciones.generar());
     RI_setupAutocomplete('ri-cv-search-cliente', 'ri-cv-dropdown-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado', '/getClientesAjax?q=', () => window.RI_Consignaciones.generar());
+    RI_setupAutocomplete('ri-au-search-producto', 'ri-au-dropdown-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Auditoria.generar());
 });

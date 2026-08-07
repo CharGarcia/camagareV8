@@ -8,10 +8,12 @@ use App\repositories\BaseRepository;
 use PDO;
 
 /**
- * Repositorio de solo lectura para el Reporte de Inventarios (4 pestañas:
- * Existencias, Movimientos/Kardex, Valorización, Consignaciones). No escribe
- * en ninguna tabla. Sigue el mismo patrón (Controller → Repository, sin
- * Service) que ReporteVentasRepository / ReporteComprasRepository.
+ * Repositorio del Reporte de Inventarios (5 pestañas: Existencias,
+ * Movimientos/Kardex, Valorización, Consignaciones, Auditoría). Sigue el
+ * mismo patrón (Controller → Repository, sin Service) que
+ * ReporteVentasRepository / ReporteComprasRepository. Es de solo lectura
+ * salvo por corregirStockAuditoria(), la única escritura del módulo (corrige
+ * productos_bodegas.stock_actual para que coincida con el kardex real).
  */
 class ReporteInventarioRepository extends BaseRepository
 {
@@ -763,5 +765,73 @@ class ReporteInventarioRepository extends BaseRepository
             'clientes_con_saldo'     => (int) ($row['clientes_con_saldo'] ?? 0),
             'consignaciones_activas' => (int) ($row['consignaciones_activas'] ?? 0),
         ];
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // PESTAÑA 5 — AUDITORÍA (stock cacheado vs. real del kardex)
+    // ════════════════════════════════════════════════════════════════════
+
+    /** Producto×bodega donde productos_bodegas.stock_actual no coincide con la suma real del kardex. */
+    public function getAuditoriaStock(int $idEmpresa, array $filtros): array
+    {
+        $where = "pb.id_empresa = :id_empresa AND pb.eliminado = false
+                   AND p.eliminado = false AND p.inventariable = true AND b.eliminado = false";
+        $params = [':id_empresa' => $idEmpresa];
+
+        if (!empty($filtros['id_bodega'])) {
+            $where .= " AND pb.id_bodega = :id_bodega";
+            $params[':id_bodega'] = (int) $filtros['id_bodega'];
+        }
+        if (!empty($filtros['id_producto'])) {
+            $where .= " AND pb.id_producto = :id_producto";
+            $params[':id_producto'] = (int) $filtros['id_producto'];
+        }
+        if (!empty($filtros['buscar'])) {
+            $where .= " AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar)";
+            $params[':buscar'] = '%' . $filtros['buscar'] . '%';
+        }
+
+        $sql = "SELECT * FROM (
+                    SELECT pb.id_producto, pb.id_bodega,
+                           p.codigo AS producto_codigo, p.nombre AS producto_nombre,
+                           b.nombre AS bodega_nombre,
+                           pb.stock_actual AS cacheado,
+                           COALESCE((
+                               SELECT SUM(k.cantidad) FROM inventario_kardex k
+                               WHERE k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
+                                 AND k.id_empresa = pb.id_empresa AND k.eliminado = false
+                           ), 0) AS real_kardex
+                    FROM productos_bodegas pb
+                    INNER JOIN productos p ON p.id = pb.id_producto AND p.id_empresa = pb.id_empresa
+                    INNER JOIN bodegas b ON b.id = pb.id_bodega
+                    WHERE {$where}
+                ) t
+                WHERE cacheado <> real_kardex
+                ORDER BY ABS(cacheado - real_kardex) DESC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Corrige productos_bodegas.stock_actual para que coincida con la suma real del kardex. Devuelve [antes, despues]. */
+    public function corregirStockAuditoria(int $idProducto, int $idBodega, int $idEmpresa, int $userId): array
+    {
+        $st = $this->db->prepare("SELECT stock_actual FROM productos_bodegas
+                                   WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e AND eliminado = false");
+        $st->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+        $antes = (float) ($st->fetchColumn() ?: 0);
+
+        $stReal = $this->db->prepare("SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k
+                                       WHERE k.id_producto = :p AND k.id_bodega = :b AND k.id_empresa = :e AND k.eliminado = false");
+        $stReal->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+        $real = (float) $stReal->fetchColumn();
+
+        $stUpd = $this->db->prepare("UPDATE productos_bodegas
+                                      SET stock_actual = :real, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                                      WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e");
+        $stUpd->execute([':real' => $real, ':uid' => $userId, ':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+
+        return ['antes' => $antes, 'despues' => $real];
     }
 }

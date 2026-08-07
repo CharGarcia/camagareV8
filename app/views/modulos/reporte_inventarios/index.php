@@ -3,14 +3,14 @@
 
 <style>
     .ri-header { flex-shrink: 0; }
-    .ri-ex-scroll, .ri-mv-scroll, .ri-va-scroll, .ri-cv-scroll { max-height: 500px; overflow-y: auto; }
-    .ri-ex-scroll thead th, .ri-mv-scroll thead th, .ri-va-scroll thead th, .ri-cv-scroll thead th {
+    .ri-ex-scroll, .ri-mv-scroll, .ri-va-scroll, .ri-cv-scroll, .ri-au-scroll { max-height: 500px; overflow-y: auto; }
+    .ri-ex-scroll thead th, .ri-mv-scroll thead th, .ri-va-scroll thead th, .ri-cv-scroll thead th, .ri-au-scroll thead th {
         position: sticky; top: 0; z-index: 10; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6;
     }
     /* Texto largo: se envuelve dentro de la celda y la fila crece, en vez de
        recortarse con ellipsis (a diferencia del estándar de listados con
        cmg-table-card, que sí usa ellipsis de una línea). */
-    .ri-ex-scroll table td, .ri-mv-scroll table td, .ri-va-scroll table td, .ri-cv-scroll table td {
+    .ri-ex-scroll table td, .ri-mv-scroll table td, .ri-va-scroll table td, .ri-cv-scroll table td, .ri-au-scroll table td {
         white-space: normal !important;
         word-break: break-word;
     }
@@ -26,12 +26,12 @@
     .ri-nav-tabs .nav-link.active { border-bottom: 3px solid var(--bs-primary); }
 </style>
 
-<div class="container-fluid py-4 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
+<div class="container-fluid py-2 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
     <!-- ── Cabecera ── -->
-    <div class="ri-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="ri-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
         <div>
             <h5 class="mb-0 fw-bold"><i class="bi bi-boxes me-2 text-primary"></i>Reporte de Inventarios</h5>
-            <small class="text-muted">Existencias, movimientos, valorización y consignaciones</small>
+            <small class="text-muted">Existencias, movimientos, valorización, consignaciones y auditoría</small>
         </div>
     </div>
 
@@ -55,6 +55,11 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="ri-tab-consignaciones-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-consignaciones" type="button" role="tab">
                 <i class="bi bi-truck me-1"></i>Consignaciones
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="ri-tab-auditoria-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-auditoria" type="button" role="tab">
+                <i class="bi bi-shield-check me-1"></i>Auditoría
             </button>
         </li>
     </ul>
@@ -537,6 +542,83 @@
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-cv-thead"></thead>
                             <tbody id="ri-cv-tbody">
+                                <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════ -->
+        <!-- PESTAÑA 5: AUDITORÍA -->
+        <!-- ════════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="ri-tab-auditoria" role="tabpanel">
+            <div class="alert alert-warning py-2 px-3 small mb-3">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Compara el stock cacheado (<code>productos_bodegas.stock_actual</code>) contra el saldo real calculado
+                en vivo desde el Kardex. Solo se muestran los que difieren. Antes de "Corregir" confirma que el Kardex
+                está completo para ese producto/bodega (idealmente con un conteo físico).
+            </div>
+            <div class="accordion mb-3 shadow-sm border-0" id="ri-au-accordion">
+                <div class="accordion-item border-0 rounded-3">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button bg-white text-dark py-2 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#ri-au-collapse">
+                            <i class="bi bi-funnel me-2 text-primary"></i><span class="fw-bold small">Filtros — Auditoría</span>
+                        </button>
+                    </h2>
+                    <div id="ri-au-collapse" class="accordion-collapse collapse show">
+                        <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
+                            <form id="ri-au-form" onsubmit="event.preventDefault(); window.RI_Auditoria.generar();" class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Bodega</label>
+                                    <select id="ri-au-bodega" class="form-select form-select-sm shadow-none border">
+                                        <option value="">Todas</option>
+                                        <?php foreach (($bodegas ?? []) as $b): ?><option value="<?= (int) $b['id'] ?>"><?= htmlspecialchars($b['nombre']) ?></option><?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 position-relative">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control border-start-0 px-1 shadow-none" id="ri-au-search-producto" placeholder="Buscar producto..." autocomplete="off">
+                                        <button type="button" class="btn btn-outline-secondary" title="Limpiar" onclick="window.RI_Auditoria.limpiarProducto();"><i class="bi bi-x-lg"></i></button>
+                                    </div>
+                                    <input type="hidden" id="ri-au-id-producto">
+                                    <div id="ri-au-dropdown-producto" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:calc(100% - 1.5rem);max-height:250px;overflow-y:auto;margin-top:2px;"></div>
+                                    <small class="text-muted fst-italic" id="ri-au-producto-seleccionado"></small>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Buscar</label>
+                                    <input type="text" id="ri-au-buscar" class="form-control form-control-sm shadow-none border" placeholder="Nombre o código...">
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
+                <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span class="text-muted small fw-medium" id="ri-au-info-total">&nbsp;</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="ri-au-scroll w-100">
+                        <table class="table table-hover table-sm mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Bodega</th>
+                                    <th class="text-end">Cacheado</th>
+                                    <th class="text-end">Real (Kardex)</th>
+                                    <th class="text-end">Diferencia</th>
+                                    <th class="text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ri-au-tbody">
                                 <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>

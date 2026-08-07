@@ -141,6 +141,15 @@ class ReporteInventariosController extends BaseModuloController
         ];
     }
 
+    private function getFiltrosAuditoria(): array
+    {
+        return [
+            'id_bodega'   => $_REQUEST['id_bodega']   ?? '',
+            'id_producto' => $_REQUEST['id_producto'] ?? '',
+            'buscar'      => trim($_REQUEST['buscar'] ?? ''),
+        ];
+    }
+
     // ────────────────────────────────────────────────────────────────
     // GENERAR (AJAX) — dispatcher por pestaña
     // ────────────────────────────────────────────────────────────────
@@ -157,6 +166,7 @@ class ReporteInventariosController extends BaseModuloController
                 'movimientos'    => $this->generarMovimientos($idEmpresa),
                 'valorizacion'   => $this->generarValorizacion($idEmpresa),
                 'consignaciones' => $this->generarConsignaciones($idEmpresa),
+                'auditoria'      => $this->generarAuditoria($idEmpresa),
                 default          => $this->generarExistencias($idEmpresa),
             };
 
@@ -252,6 +262,19 @@ class ReporteInventariosController extends BaseModuloController
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
+        ];
+    }
+
+    private function generarAuditoria(int $idEmpresa): array
+    {
+        $filtros = $this->getFiltrosAuditoria();
+        $rows = $this->repository->getAuditoriaStock($idEmpresa, $filtros);
+
+        return [
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r), 6),
+            'rawData'    => $rows,
+            'kpis'       => ['total_discrepancias' => count($rows)],
+            'agrupacion' => 'NINGUNO',
         ];
     }
 
@@ -396,6 +419,31 @@ class ReporteInventariosController extends BaseModuloController
             . '</tr>';
     }
 
+    private function filaAuditoria(array $r): string
+    {
+        $cacheado = (float) ($r['cacheado'] ?? 0);
+        $real = (float) ($r['real_kardex'] ?? 0);
+        $diferencia = $cacheado - $real;
+        $colorDif = $diferencia > 0 ? 'text-danger' : 'text-warning';
+        return '<tr>'
+            . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['producto_codigo'] ?? '') . '</small></td>'
+            . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
+            . '<td class="text-end">' . number_format($cacheado, 2) . '</td>'
+            . '<td class="text-end fw-bold">' . number_format($real, 2) . '</td>'
+            . '<td class="text-end fw-bold ' . $colorDif . '">' . ($diferencia > 0 ? '+' : '') . number_format($diferencia, 2) . '</td>'
+            . '<td class="text-center">'
+            . '<button type="button" class="btn btn-sm btn-outline-primary" title="Corregir: dejar el caché igual al kardex real"'
+            . ' onclick="window.RI_Auditoria.corregir(this)"'
+            . ' data-id-producto="' . (int) ($r['id_producto'] ?? 0) . '"'
+            . ' data-id-bodega="' . (int) ($r['id_bodega'] ?? 0) . '"'
+            . ' data-producto-nombre="' . htmlspecialchars($r['producto_nombre'] ?? '', ENT_QUOTES) . '"'
+            . ' data-bodega-nombre="' . htmlspecialchars($r['bodega_nombre'] ?? '', ENT_QUOTES) . '"'
+            . ' data-cacheado="' . $cacheado . '" data-real="' . $real . '"'
+            . '><i class="bi bi-check2-circle me-1"></i>Corregir</button>'
+            . '</td>'
+            . '</tr>';
+    }
+
     /** Fila de línea de producto dentro del modal de detalle de una consignación. */
     private function filaConsignacionDetalleLinea(array $r): string
     {
@@ -536,6 +584,37 @@ class ReporteInventariosController extends BaseModuloController
             $service->ajusteManual($data, $idEmpresa, $idUsuario);
 
             echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Auditoría: deja productos_bodegas.stock_actual igual a la suma real del kardex. */
+    public function corregirStockAuditoriaAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $idProducto = (int) ($_REQUEST['id_producto'] ?? 0);
+            $idBodega = (int) ($_REQUEST['id_bodega'] ?? 0);
+
+            if ($idProducto <= 0 || $idBodega <= 0) {
+                throw new \InvalidArgumentException('Producto o bodega no válidos.');
+            }
+
+            $resultado = $this->repository->corregirStockAuditoria($idProducto, $idBodega, $idEmpresa, $idUsuario);
+
+            (new LogSistemaService())->registrar(
+                $idUsuario, $idEmpresa, 'corregir_stock_auditoria', 'productos_bodegas', $idProducto,
+                ['stock_actual' => $resultado['antes']],
+                ['stock_actual' => $resultado['despues']]
+            );
+
+            echo json_encode(['ok' => true, 'stock_actual' => $resultado['despues']]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

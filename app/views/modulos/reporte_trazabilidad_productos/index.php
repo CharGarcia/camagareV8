@@ -11,9 +11,9 @@
     .tzp-linea.documento td:first-child { border-left: 3px dashed #6c757d; }
 </style>
 
-<div class="container-fluid py-4 px-0 px-md-3" id="modulo-<?php echo basename($rutaModulo); ?>">
+<div class="container-fluid py-2 px-0 px-md-3" id="modulo-<?php echo basename($rutaModulo); ?>">
     <!-- ── Cabecera ── -->
-    <div class="tzp-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="tzp-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
         <div>
             <h5 class="mb-0 fw-bold"><i class="bi bi-diagram-3 me-2 text-primary"></i>Trazabilidad de Productos</h5>
             <small class="text-muted">Historial completo de un producto: catálogo, inventario, compras, ventas, consignaciones, pedidos, proformas, órdenes de compra y guías de remisión</small>
