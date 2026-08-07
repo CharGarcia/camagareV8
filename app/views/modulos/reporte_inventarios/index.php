@@ -253,7 +253,9 @@
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Origen</label>
                                     <select id="ri-mv-origen" class="form-select form-select-sm shadow-none border">
                                         <option value="">Todos</option>
+                                        <option value="ajuste_manual">Ajuste manual</option>
                                         <?php foreach (($origenes ?? []) as $o): ?>
+                                            <?php if ((string) $o === 'ajuste_manual') continue; ?>
                                             <option value="<?= htmlspecialchars((string) $o) ?>"><?= htmlspecialchars(\App\repositories\modulos\ReporteInventarioRepository::labelOrigen((string) $o)) ?></option>
                                         <?php endforeach; ?>
                                     </select>
