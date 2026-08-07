@@ -667,4 +667,27 @@ return [
         'id_submodulo' => 38,
         'legacy_rutas' => [],
     ],
+
+    // ─── ALUMNOS (centro infantil / escuela / colegio) ─────────────────────
+    'modulos/alumnos' => [
+        // Registrar el submódulo en submodulos_menu con ruta = 'modulos/alumnos'
+        // y actualizar este id_submodulo con el id real. Asignar permisos en
+        // /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    'modulos/alumnos-campus' => [
+        // Catálogo de campus/sedes, con alta rápida desde el modal de Alumno.
+        // Registrar el submódulo en submodulos_menu con
+        // ruta = 'modulos/alumnos-campus' y actualizar este id_submodulo.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    'modulos/alumnos-niveles' => [
+        // Catálogo de niveles/cursos, con alta rápida desde el modal de Alumno.
+        // Registrar el submódulo en submodulos_menu con
+        // ruta = 'modulos/alumnos-niveles' y actualizar este id_submodulo.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
 ];
