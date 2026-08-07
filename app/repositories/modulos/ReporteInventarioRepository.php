@@ -127,11 +127,19 @@ class ReporteInventarioRepository extends BaseRepository
     {
         return "
             SELECT * FROM (
-                SELECT pb.id_producto, pb.id_bodega, pb.stock_actual, pb.stock_minimo, pb.stock_maximo,
+                SELECT pb.id_producto, pb.id_bodega, pb.stock_minimo, pb.stock_maximo,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        p.id_categoria, COALESCE(cat.nombre, 'Sin categoría') AS categoria_nombre,
                        p.id_marca, COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,
                        b.nombre AS bodega_nombre,
+                       -- Stock en vivo: suma corrida del kardex, no el pb.stock_actual cacheado
+                       -- (puede desincronizarse si algo externo toca productos_bodegas sin pasar
+                       -- por el kardex — mismo motivo que el Saldo de Movimientos).
+                       COALESCE((
+                           SELECT SUM(k.cantidad) FROM inventario_kardex k
+                           WHERE k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
+                             AND k.id_empresa = pb.id_empresa AND k.eliminado = false
+                       ), 0) AS stock_actual,
                        COALESCE((
                            SELECT k.costo_unitario FROM inventario_kardex k
                            WHERE k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
