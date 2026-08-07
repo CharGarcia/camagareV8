@@ -699,9 +699,14 @@ class SuscripcionesController extends BaseModuloController
                 return;
             }
 
+            $mensaje = "Se generaron $generadas documento(s) correctamente.";
+            if ($errores > 0) {
+                $mensaje .= " Hubo $errores con error: " . implode(' | ', $errorMsgs);
+            }
+
             echo json_encode([
                 'ok'      => true,
-                'mensaje' => "Se generaron $generadas documento(s) correctamente." . ($errores > 0 ? " (Hubo $errores con error)." : ''),
+                'mensaje' => $mensaje,
             ], JSON_INVALID_UTF8_SUBSTITUTE);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
