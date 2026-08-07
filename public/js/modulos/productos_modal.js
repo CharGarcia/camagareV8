@@ -521,6 +521,7 @@
         }
 
         if (typeof window.aplicarFavoritosModal === 'function') window.aplicarFavoritosModal();
+        await inicializarReplicarUI();
         getModal()?.show();
     };
 
@@ -585,7 +586,193 @@
         if (cId) cId.value = '';
 
         fetchDetalleExtra(data.id);
+        await inicializarReplicarUI();
         getModal()?.show();
+    };
+
+    // ─── Replicar producto en otras empresas del usuario ────────────────────
+    // TomSelect (ya cargado globalmente vía partials/scripts.php) para poder
+    // buscar entre muchas empresas en vez de pintar un checkbox por cada una.
+    let empresasDestinoCache = null;
+    let tsReplicarEmpresas = null;
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    async function cargarEmpresasDestino() {
+        if (empresasDestinoCache) return empresasDestinoCache;
+        try {
+            const resp = await fetch(urlBaseProd + '/empresasDestinoAjax');
+            const json = await resp.json();
+            empresasDestinoCache = json.ok ? (json.data || []) : [];
+        } catch (e) {
+            empresasDestinoCache = [];
+        }
+        return empresasDestinoCache;
+    }
+
+    function pintarReplicarLista(empresas) {
+        const wrap = document.getElementById('prod_replicar_wrap');
+        const sel = document.getElementById('prod_replicar_select');
+        if (!wrap || !sel) return;
+
+        if (!empresas.length) {
+            wrap.classList.add('d-none');
+            return;
+        }
+        wrap.classList.remove('d-none');
+
+        if (!tsReplicarEmpresas && typeof TomSelect !== 'undefined') {
+            tsReplicarEmpresas = new TomSelect(sel, {
+                plugins: ['remove_button'],
+                placeholder: 'Busque y agregue empresas...',
+                valueField: 'id_empresa',
+                labelField: 'texto',
+                searchField: ['texto'],
+                options: empresas,
+                items: [],
+                maxOptions: null,
+            });
+        } else if (tsReplicarEmpresas) {
+            tsReplicarEmpresas.clearOptions();
+            tsReplicarEmpresas.addOptions(empresas);
+        }
+    }
+
+    function resetReplicarUI() {
+        const toggle = document.getElementById('prod_replicar_toggle');
+        const listaWrap = document.getElementById('prod_replicar_lista_wrap');
+        if (toggle) toggle.checked = false;
+        if (listaWrap) listaWrap.classList.add('d-none');
+        if (tsReplicarEmpresas) tsReplicarEmpresas.clear(true);
+    }
+
+    /** Prepara la sección "Aplicar también en otras empresas" del modal de ficha. */
+    async function inicializarReplicarUI() {
+        const empresas = await cargarEmpresasDestino();
+        pintarReplicarLista(empresas);
+        resetReplicarUI();
+        // De paso, muestra/oculta el botón masivo del listado (si existe en esta vista).
+        const btnMasivo = document.getElementById('btnCopiarProductosEmpresa');
+        if (btnMasivo) btnMasivo.classList.toggle('d-none', empresas.length === 0);
+    }
+
+    function nombreEmpresaDestino(id) {
+        const emp = (empresasDestinoCache || []).find(e => String(e.id_empresa) === String(id));
+        return escapeHtml(emp ? emp.texto : ('Empresa #' + id));
+    }
+
+    /** Arma el HTML resumen de la replicación individual (respuesta de store/update). */
+    function resumenReplicado(replicado) {
+        if (!replicado) return '';
+        const grupos = { creado: [], reactivado: [], omitido: [], sin_permiso: [], error: [] };
+        Object.entries(replicado).forEach(([id, r]) => {
+            const grupo = grupos[r.estado];
+            if (grupo) grupo.push(nombreEmpresaDestino(id) + (r.estado === 'error' && r.mensaje ? ` (${escapeHtml(r.mensaje)})` : ''));
+        });
+
+        let html = '';
+        if (grupos.creado.length) html += `<div class="small text-success mb-1"><i class="bi bi-check-circle me-1"></i>Creado en: ${grupos.creado.join(', ')}</div>`;
+        if (grupos.reactivado.length) html += `<div class="small text-primary mb-1"><i class="bi bi-arrow-clockwise me-1"></i>Reactivado en: ${grupos.reactivado.join(', ')}</div>`;
+        if (grupos.omitido.length) html += `<div class="small text-muted mb-1"><i class="bi bi-dash-circle me-1"></i>Ya existía (sin cambios) en: ${grupos.omitido.join(', ')}</div>`;
+        if (grupos.sin_permiso.length) html += `<div class="small text-warning mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Sin permiso en: ${grupos.sin_permiso.join(', ')}</div>`;
+        if (grupos.error.length) html += `<div class="small text-danger mb-1"><i class="bi bi-x-circle me-1"></i>Error en: ${grupos.error.join(', ')}</div>`;
+        return html;
+    }
+
+    // ─── Modal masivo: copiar TODOS los productos a otra empresa ────────────
+    let tsCopiarEmpresa = null;
+
+    window.abrirModalCopiarProductosEmpresa = async function () {
+        const modalEl = document.getElementById('modalCopiarProductosEmpresa');
+        if (!modalEl || typeof bootstrap === 'undefined') return;
+
+        const sel = document.getElementById('copiarProductosEmpresaSelect');
+        const empresas = await cargarEmpresasDestino();
+
+        if (!tsCopiarEmpresa && sel && typeof TomSelect !== 'undefined') {
+            tsCopiarEmpresa = new TomSelect(sel, {
+                placeholder: 'Busque la empresa destino...',
+                valueField: 'id_empresa',
+                labelField: 'texto',
+                searchField: ['texto'],
+                maxOptions: null,
+            });
+        }
+        if (tsCopiarEmpresa) {
+            tsCopiarEmpresa.clearOptions();
+            tsCopiarEmpresa.addOptions(empresas);
+            tsCopiarEmpresa.clear(true);
+        }
+
+        new bootstrap.Modal(modalEl).show();
+    };
+
+    window.confirmarCopiarProductosEmpresa = async function () {
+        const idEmpresaDestino = tsCopiarEmpresa
+            ? tsCopiarEmpresa.getValue()
+            : (document.getElementById('copiarProductosEmpresaSelect')?.value || '');
+        if (!idEmpresaDestino) {
+            Swal.fire({ icon: 'warning', title: 'Seleccione una empresa destino.' });
+            return;
+        }
+        const empresaTexto = nombreEmpresaDestino(idEmpresaDestino); // ya viene escapado
+
+        const confirmacion = await Swal.fire({
+            icon: 'question',
+            title: '¿Copiar todos los productos?',
+            html: `Se copiarán los productos de esta empresa hacia <b>${empresaTexto}</b>.<br>Los que ya existan allí (mismo código) no se duplican ni se sobrescriben.`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, copiar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d'
+        });
+        if (!confirmacion.isConfirmed) return;
+
+        const btn = document.getElementById('btnConfirmarCopiarProductos');
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Copiando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('id_empresa_destino', idEmpresaDestino);
+            const resp = await fetch(urlBaseProd + '/replicarTodosAjax', { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudo copiar.' });
+                return;
+            }
+
+            const modalEl = document.getElementById('modalCopiarProductosEmpresa');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
+            }
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Copia completada',
+                html: `
+                    <div class="small text-start">
+                        <div>Total revisados: <b>${json.total}</b></div>
+                        <div class="text-success">Creados: <b>${json.creados}</b></div>
+                        <div class="text-primary">Reactivados: <b>${json.reactivados}</b></div>
+                        <div class="text-muted">Ya existían (sin cambios): <b>${json.omitidos}</b></div>
+                        ${json.errores ? `<div class="text-danger">Errores: <b>${json.errores}</b></div>` : ''}
+                    </div>
+                `
+            });
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo comunicar con el servidor.' });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
     };
 
     // ─── Helpers SweetAlert ────────────────────────────────────────────────────
@@ -721,6 +908,13 @@
                     swalToast('success', json.msg || 'Guardado correctamente.');
                     if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
                     document.dispatchEvent(new CustomEvent('productoGuardado', { detail: json }));
+
+                    const htmlReplicado = resumenReplicado(json.replicado);
+                    if (htmlReplicado) {
+                        setTimeout(() => {
+                            Swal.fire({ icon: 'info', title: 'Replicación en otras empresas', html: htmlReplicado, confirmButtonText: 'Entendido' });
+                        }, 600);
+                    }
                 }, 500);
             } else {
                 btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
@@ -881,6 +1075,29 @@
                 select.add(new Option(mar.nombre, mar.id));
             }
             select.value = mar.id;
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Botón masivo del listado: solo visible si el usuario tiene otras empresas
+        // donde crear productos. Se evalúa ya al cargar la página (no solo al abrir
+        // el modal de ficha), para que no dependa de que el usuario lo abra primero.
+        const btnMasivo = document.getElementById('btnCopiarProductosEmpresa');
+        if (btnMasivo) {
+            cargarEmpresasDestino().then(empresas => {
+                btnMasivo.classList.toggle('d-none', empresas.length === 0);
+            });
+        }
+
+        const replicarToggle = document.getElementById('prod_replicar_toggle');
+        if (replicarToggle) {
+            replicarToggle.addEventListener('change', () => {
+                const listaWrap = document.getElementById('prod_replicar_lista_wrap');
+                if (listaWrap) listaWrap.classList.toggle('d-none', !replicarToggle.checked);
+                if (!replicarToggle.checked && tsReplicarEmpresas) {
+                    tsReplicarEmpresas.clear(true);
+                }
+            });
         }
     });
 

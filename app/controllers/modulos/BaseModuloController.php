@@ -86,6 +86,85 @@ abstract class BaseModuloController extends Controller
         return $this->permisosModuloPorRuta($this->getRutaModulo());
     }
 
+    // ─── Replicación de registros entre empresas del mismo usuario ────────────
+    // Compartido por los módulos que ofrecen "aplicar también en otras empresas"
+    // (Clientes, Productos, …). La lógica de qué copiar/omitir es específica de
+    // cada Service; esto solo resuelve QUÉ empresas son destinos válidos.
+
+    /**
+     * Empresas del usuario actual donde podría replicar un registro de este
+     * módulo (todas las asignadas, o todas las activas si es nivel 3),
+     * EXCLUYENDO la empresa activa.
+     */
+    protected function empresasCandidatasReplicacion(): array
+    {
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $idEmpresaActual = (int) $_SESSION['id_empresa'];
+
+        $model = new \App\models\Empresa();
+        $todas = $nivel >= 3 ? $model->getTodasActivas() : $model->getEmpresasAsignadas($idUsuario);
+
+        return array_values(array_filter($todas, fn($e) => (int) $e['id_empresa'] !== $idEmpresaActual));
+    }
+
+    /**
+     * De la lista de empresas destino que pidió el usuario, filtra a las que
+     * realmente son candidatas (asignadas al usuario / nivel 3) Y donde tiene
+     * permiso de crear en la ruta MVC de este módulo. Las que no cumplen se
+     * reportan como 'sin_permiso' en vez de simplemente ignorarse, para que la
+     * UI pueda avisar.
+     *
+     * @return array{permitidas:int[], resultado:array<int,array{estado:string}>}
+     */
+    protected function filtrarEmpresasDestinoPermitidas(array $idsSolicitadas): array
+    {
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $candidatasIds = array_map(fn($e) => (int) $e['id_empresa'], $this->empresasCandidatasReplicacion());
+
+        $permitidas = [];
+        $resultado = [];
+        foreach (array_unique(array_map('intval', $idsSolicitadas)) as $idEmp) {
+            if ($idEmp <= 0 || !in_array($idEmp, $candidatasIds, true)) {
+                $resultado[$idEmp] = ['estado' => 'sin_permiso'];
+                continue;
+            }
+            $permiso = \App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $idEmp, $idUsuario, $nivel);
+            if (empty($permiso['crear'])) {
+                $resultado[$idEmp] = ['estado' => 'sin_permiso'];
+                continue;
+            }
+            $permitidas[] = $idEmp;
+        }
+
+        return ['permitidas' => $permitidas, 'resultado' => $resultado];
+    }
+
+    /**
+     * Responde JSON con las empresas candidatas para el selector de replicación
+     * (checkboxes del modal / selector del botón masivo). Uso típico:
+     *   public function empresasDestinoAjax(): void {
+     *       $this->requireCrear();
+     *       $this->empresasDestinoAjaxResponse();
+     *   }
+     */
+    protected function empresasDestinoAjaxResponse(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $data = array_map(fn($e) => [
+                'id_empresa' => (int) $e['id_empresa'],
+                'texto'      => ($e['establecimiento'] ?? '001') . ' - ' . (!empty($e['nombre_comercial']) ? $e['nombre_comercial'] : $e['nombre']),
+            ], $this->empresasCandidatasReplicacion());
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'empresasDestinoAjax']);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /**
      * AJAX: Obtiene el historial de cambios de un registro.
      */

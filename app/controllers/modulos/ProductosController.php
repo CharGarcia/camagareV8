@@ -648,7 +648,11 @@ class ProductosController extends BaseModuloController
 
         try {
             $id = $this->service->crear($data);
-            echo json_encode(['ok' => true, 'msg' => 'Producto creado correctamente.', 'id' => $id]);
+
+            $guardado = (new ProductoRepository())->findById($id, $data['id_empresa']);
+            $replicado = $this->replicarSiCorresponde($guardado ?: array_merge($data, ['id' => $id]));
+
+            echo json_encode(['ok' => true, 'msg' => 'Producto creado correctamente.', 'id' => $id, 'replicado' => $replicado]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -671,7 +675,74 @@ class ProductosController extends BaseModuloController
         try {
             if ($id <= 0) throw new Exception('ID inválido.');
             $this->service->actualizar($id, $idEmpresa, $data);
-            echo json_encode(['ok' => true, 'msg' => 'Producto actualizado correctamente.']);
+
+            $guardado = (new ProductoRepository())->findById($id, $idEmpresa);
+            $replicado = $this->replicarSiCorresponde($guardado ?: array_merge($data, ['id' => $id]));
+
+            echo json_encode(['ok' => true, 'msg' => 'Producto actualizado correctamente.', 'replicado' => $replicado]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ─── REPLICACIÓN ENTRE EMPRESAS ────────────────────────────────────────────
+    // empresasCandidatasReplicacion() / filtrarEmpresasDestinoPermitidas() viven
+    // en BaseModuloController (compartidas con Clientes y futuros módulos).
+
+    public function empresasDestinoAjax(): void
+    {
+        $this->requireCrear();
+        $this->empresasDestinoAjaxResponse();
+    }
+
+    /** Replica el producto recién guardado hacia las empresas destino marcadas en el formulario (si las hay). */
+    private function replicarSiCorresponde(array $datosOrigen): ?array
+    {
+        $idsSolicitadas = $_POST['ids_empresa_destino'] ?? [];
+        if (!is_array($idsSolicitadas) || empty($idsSolicitadas)) {
+            return null;
+        }
+
+        $filtro = $this->filtrarEmpresasDestinoPermitidas($idsSolicitadas);
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $resultado = $filtro['resultado'];
+        if (!empty($filtro['permitidas'])) {
+            $resultado += $this->service->replicarEnEmpresas($datosOrigen, $filtro['permitidas'], $idUsuario);
+        }
+        return $resultado;
+    }
+
+    /**
+     * Botón masivo: copia TODOS los productos de la empresa activa hacia una
+     * empresa destino elegida por el usuario. No duplica: solo crea los que
+     * faltan o reactiva los que estaban eliminados.
+     */
+    public function replicarTodosAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresaDestino = (int) ($_POST['id_empresa_destino'] ?? 0);
+        $idEmpresaOrigen = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($idEmpresaDestino <= 0) {
+                throw new Exception('Seleccione la empresa destino.');
+            }
+            $filtro = $this->filtrarEmpresasDestinoPermitidas([$idEmpresaDestino]);
+            if (empty($filtro['permitidas'])) {
+                throw new Exception('No tiene permiso para crear productos en la empresa destino, o no la tiene asignada.');
+            }
+
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? $idUsuario : null;
+
+            $contadores = $this->service->replicarTodosAEmpresa($idEmpresaOrigen, $idEmpresaDestino, $idUsuario, $idUsuarioFiltro);
+            echo json_encode(['ok' => true] + $contadores);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

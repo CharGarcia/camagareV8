@@ -633,24 +633,36 @@
         return empresasDestinoCache;
     }
 
+    // TomSelect (ya cargado globalmente vía partials/scripts.php) para poder
+    // buscar entre muchas empresas en vez de pintar un checkbox por cada una.
+    let tsReplicarEmpresas = null;
+
     function pintarReplicarLista(empresas) {
         const wrap = document.getElementById('cliente_replicar_wrap');
-        const lista = document.getElementById('cliente_replicar_lista');
-        if (!wrap || !lista) return;
+        const sel = document.getElementById('cliente_replicar_select');
+        if (!wrap || !sel) return;
 
         if (!empresas.length) {
             wrap.classList.add('d-none');
-            lista.innerHTML = '';
             return;
         }
-
         wrap.classList.remove('d-none');
-        lista.innerHTML = empresas.map(e => `
-            <div class="form-check">
-                <input class="form-check-input cliente-replicar-check" type="checkbox" name="ids_empresa_destino[]" value="${e.id_empresa}" id="cliente_replicar_emp_${e.id_empresa}">
-                <label class="form-check-label small" for="cliente_replicar_emp_${e.id_empresa}">${escapeHtml(e.texto)}</label>
-            </div>
-        `).join('');
+
+        if (!tsReplicarEmpresas && typeof TomSelect !== 'undefined') {
+            tsReplicarEmpresas = new TomSelect(sel, {
+                plugins: ['remove_button'],
+                placeholder: 'Busque y agregue empresas...',
+                valueField: 'id_empresa',
+                labelField: 'texto',
+                searchField: ['texto'],
+                options: empresas,
+                items: [],
+                maxOptions: null,
+            });
+        } else if (tsReplicarEmpresas) {
+            tsReplicarEmpresas.clearOptions();
+            tsReplicarEmpresas.addOptions(empresas);
+        }
     }
 
     function resetReplicarUI() {
@@ -658,7 +670,7 @@
         const listaWrap = document.getElementById('cliente_replicar_lista_wrap');
         if (toggle) toggle.checked = false;
         if (listaWrap) listaWrap.classList.add('d-none');
-        document.querySelectorAll('.cliente-replicar-check').forEach(chk => chk.checked = false);
+        if (tsReplicarEmpresas) tsReplicarEmpresas.clear(true);
     }
 
     /** Prepara la sección "Aplicar también en otras empresas" del modal de ficha. */
@@ -695,27 +707,42 @@
     }
 
     // ─── Modal masivo: copiar TODOS los clientes a otra empresa ─────────────
+    let tsCopiarEmpresa = null;
+
     window.abrirModalCopiarClientesEmpresa = async function () {
         const modalEl = document.getElementById('modalCopiarClientesEmpresa');
         if (!modalEl || typeof bootstrap === 'undefined') return;
 
         const sel = document.getElementById('copiarClientesEmpresaSelect');
         const empresas = await cargarEmpresasDestino();
-        if (sel) {
-            sel.innerHTML = '<option value="">-- Seleccione --</option>' +
-                empresas.map(e => `<option value="${e.id_empresa}">${escapeHtml(e.texto)}</option>`).join('');
+
+        if (!tsCopiarEmpresa && sel && typeof TomSelect !== 'undefined') {
+            tsCopiarEmpresa = new TomSelect(sel, {
+                placeholder: 'Busque la empresa destino...',
+                valueField: 'id_empresa',
+                labelField: 'texto',
+                searchField: ['texto'],
+                maxOptions: null,
+            });
         }
+        if (tsCopiarEmpresa) {
+            tsCopiarEmpresa.clearOptions();
+            tsCopiarEmpresa.addOptions(empresas);
+            tsCopiarEmpresa.clear(true);
+        }
+
         new bootstrap.Modal(modalEl).show();
     };
 
     window.confirmarCopiarClientesEmpresa = async function () {
-        const sel = document.getElementById('copiarClientesEmpresaSelect');
-        const idEmpresaDestino = sel ? sel.value : '';
+        const idEmpresaDestino = tsCopiarEmpresa
+            ? tsCopiarEmpresa.getValue()
+            : (document.getElementById('copiarClientesEmpresaSelect')?.value || '');
         if (!idEmpresaDestino) {
             Swal.fire({ icon: 'warning', title: 'Seleccione una empresa destino.' });
             return;
         }
-        const empresaTexto = escapeHtml(sel.options[sel.selectedIndex]?.text || '');
+        const empresaTexto = nombreEmpresaDestino(idEmpresaDestino); // ya viene escapado
 
         const confirmacion = await Swal.fire({
             icon: 'question',
@@ -1319,8 +1346,8 @@
             replicarToggle.addEventListener('change', () => {
                 const listaWrap = document.getElementById('cliente_replicar_lista_wrap');
                 if (listaWrap) listaWrap.classList.toggle('d-none', !replicarToggle.checked);
-                if (!replicarToggle.checked) {
-                    document.querySelectorAll('.cliente-replicar-check').forEach(chk => chk.checked = false);
+                if (!replicarToggle.checked && tsReplicarEmpresas) {
+                    tsReplicarEmpresas.clear(true);
                 }
             });
         }

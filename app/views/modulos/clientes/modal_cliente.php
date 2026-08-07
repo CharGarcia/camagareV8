@@ -363,9 +363,9 @@ if (!defined('LEAFLET_LOADED')) {
                         </div>
                         <div class="d-none mt-2" id="cliente_replicar_lista_wrap">
                             <div class="small text-muted mb-1">
-                                Si el cliente ya existe en la empresa (misma identificación), no se duplica ni se sobrescribe.
+                                Busque y agregue las empresas donde aplicar este cliente. Si ya existe allí (misma identificación), no se duplica ni se sobrescribe.
                             </div>
-                            <div id="cliente_replicar_lista" class="d-flex flex-wrap gap-3"></div>
+                            <select class="form-select form-select-sm" id="cliente_replicar_select" name="ids_empresa_destino[]" multiple></select>
                         </div>
                     </div>
                 </div>

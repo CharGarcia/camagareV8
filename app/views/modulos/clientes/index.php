@@ -190,9 +190,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     Copia todos los clientes activos de esta empresa hacia la empresa que elija. Si un cliente ya existe allí (misma identificación), no se duplica ni se sobrescribe.
                 </div>
                 <label for="copiarClientesEmpresaSelect" class="form-label small fw-bold">Empresa destino</label>
-                <select class="form-select form-select-sm" id="copiarClientesEmpresaSelect">
-                    <option value="">-- Seleccione --</option>
-                </select>
+                <select class="form-select form-select-sm" id="copiarClientesEmpresaSelect"></select>
             </div>
             <div class="modal-footer bg-light border-top p-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>

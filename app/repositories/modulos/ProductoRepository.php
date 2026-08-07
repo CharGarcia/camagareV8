@@ -213,6 +213,38 @@ class ProductoRepository extends BaseRepository
         return (bool) $st->fetchColumn();
     }
 
+    /**
+     * Busca por código + empresa, INCLUYENDO eliminados (para que la replicación
+     * entre empresas reactive en vez de duplicar). Case-insensitive, mismo criterio
+     * que existeCodigo().
+     */
+    public function findByCodigo(int $idEmpresa, string $codigo): ?array
+    {
+        $sql = "SELECT * FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND lower(codigo) = lower(:codigo)
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':codigo' => trim($codigo)]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Reactiva un producto eliminado SIN tocar sus datos (a diferencia de un
+     * update completo). Usado por la replicación entre empresas: si el producto
+     * ya existía en la empresa destino pero estaba eliminado, se reactiva tal
+     * cual estaba en vez de sobrescribirlo con los datos de la empresa origen.
+     */
+    public function reactivarSoloEliminado(int $id, int $idUsuario): void
+    {
+        $sql = "UPDATE {$this->table} SET
+                    eliminado = false,
+                    updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':uid' => $idUsuario, ':id' => $id]);
+    }
+
     public function create(array $data): int
     {
         $sql = "INSERT INTO {$this->table} (

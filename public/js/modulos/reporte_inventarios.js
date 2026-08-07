@@ -137,6 +137,16 @@ window.RI_Existencias = {
         selCategoria.dataset.original = d.idCategoria || '';
         selCategoria.dataset.originalLabel = selCategoria.selectedOptions[0] ? selCategoria.selectedOptions[0].textContent : 'Sin categoría';
 
+        const selAdjBodega = document.getElementById('ri-ex-adj-bodega');
+        selAdjBodega.innerHTML = Array.from(document.getElementById('ri-ex-bodega').options).slice(1).map(o => o.outerHTML).join('');
+        selAdjBodega.value = d.idBodega;
+
+        document.getElementById('ri-ex-adj-tipo').value = '';
+        document.getElementById('ri-ex-adj-cantidad').value = '';
+        document.getElementById('ri-ex-adj-costo').value = d.costoUnitario || 0;
+        document.getElementById('ri-ex-adj-lote').value = '';
+        document.getElementById('ri-ex-adj-observaciones').value = '';
+
         if (!this.modalEditarInstance) {
             this.modalEditarInstance = new bootstrap.Modal(document.getElementById('ri-ex-modal-editar'));
         }
@@ -149,6 +159,12 @@ window.RI_Existencias = {
         const minEl = document.getElementById('ri-ex-edit-minimo');
         const maxEl = document.getElementById('ri-ex-edit-maximo');
         const catEl = document.getElementById('ri-ex-edit-categoria');
+        const adjBodegaEl = document.getElementById('ri-ex-adj-bodega');
+        const adjTipoEl = document.getElementById('ri-ex-adj-tipo');
+        const adjCantidadEl = document.getElementById('ri-ex-adj-cantidad');
+        const adjCostoEl = document.getElementById('ri-ex-adj-costo');
+        const adjLoteEl = document.getElementById('ri-ex-adj-lote');
+        const adjObsEl = document.getElementById('ri-ex-adj-observaciones');
 
         const nuevoMin = parseFloat(minEl.value || 0);
         const nuevoMax = parseFloat(maxEl.value || 0);
@@ -156,14 +172,21 @@ window.RI_Existencias = {
         const original_max = parseFloat(maxEl.dataset.original || 0);
         const cambioMinMax = nuevoMin !== original_min || nuevoMax !== original_max;
         const cambioCategoria = catEl.value !== (catEl.dataset.original || '');
+        const cantidadAjuste = parseFloat(adjCantidadEl.value || 0);
+        const hayAjuste = !!adjTipoEl.value && cantidadAjuste > 0;
 
-        if (!cambioMinMax && !cambioCategoria) {
+        if (!cambioMinMax && !cambioCategoria && !hayAjuste) {
             this.modalEditarInstance.hide();
             return;
         }
         if (nuevoMax > 0 && nuevoMax < nuevoMin) {
             if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Datos inválidos', text: 'El máximo no puede ser menor que el mínimo.' });
             else alert('El máximo no puede ser menor que el mínimo.');
+            return;
+        }
+        if (adjTipoEl.value && cantidadAjuste <= 0) {
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Datos inválidos', text: 'Ingresa una cantidad mayor a cero para el ajuste.' });
+            else alert('Ingresa una cantidad mayor a cero para el ajuste.');
             return;
         }
 
@@ -175,6 +198,11 @@ window.RI_Existencias = {
         if (cambioCategoria) {
             const nuevaLabel = catEl.selectedOptions[0] ? catEl.selectedOptions[0].textContent : 'Sin categoría';
             resumen += `<li>Categoría: <b>${catEl.dataset.originalLabel}</b> &rarr; <b>${nuevaLabel}</b></li>`;
+        }
+        if (hayAjuste) {
+            const bodegaLabel = adjBodegaEl.selectedOptions[0] ? adjBodegaEl.selectedOptions[0].textContent : '';
+            const tipoLabel = adjTipoEl.value === 'entrada' ? 'Entrada' : 'Salida';
+            resumen += `<li>Ajuste de inventario: <b>${tipoLabel}</b> de <b>${cantidadAjuste}</b> en bodega <b>${bodegaLabel}</b></li>`;
         }
         resumen += '</ul>';
 
@@ -192,6 +220,17 @@ window.RI_Existencias = {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
                     body: new URLSearchParams({ id_producto: idProducto, id_categoria: catEl.value }).toString(),
+                }).then(r => r.json()));
+            }
+            if (hayAjuste) {
+                llamadas.push(fetch(BASE_URL + '/' + RUTA_MODULO + '/ajustarInventarioAjax', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams({
+                        id_producto: idProducto, id_bodega: adjBodegaEl.value, tipo_movimiento: adjTipoEl.value,
+                        cantidad: cantidadAjuste, costo_unitario: adjCostoEl.value || 0,
+                        numero_lote: adjLoteEl.value || '', observaciones: adjObsEl.value || '',
+                    }).toString(),
                 }).then(r => r.json()));
             }
 

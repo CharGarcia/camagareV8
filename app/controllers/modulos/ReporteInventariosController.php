@@ -12,6 +12,8 @@ use App\repositories\modulos\MarcaRepository;
 use App\repositories\modulos\VendedorRepository;
 use App\repositories\modulos\ProductoRepository;
 use App\repositories\modulos\ClienteRepository;
+use App\Services\modulos\InventarioService;
+use App\Services\LogSistemaService;
 use App\models\Empresa;
 
 class ReporteInventariosController extends BaseModuloController
@@ -290,6 +292,7 @@ class ReporteInventariosController extends BaseModuloController
                 . ' data-stock-minimo="' . $stockMinimo . '"'
                 . ' data-stock-maximo="' . $stockMaximo . '"'
                 . ' data-id-categoria="' . $idCategoriaActual . '"'
+                . ' data-costo-unitario="' . (float) ($r['costo_unitario'] ?? 0) . '"'
                 . '>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['categoria_nombre'] ?? '') . '</td>'
@@ -491,6 +494,48 @@ class ReporteInventariosController extends BaseModuloController
             }
 
             echo json_encode(['ok' => true, 'categoria_nombre' => $categoriaNombre]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Ajuste manual de inventario (entrada/salida) desde el modal de edición de Existencias.
+     *  Reutiliza InventarioService::ajusteManual() — la misma lógica de negocio (kardex,
+     *  costeo, validación de stock, auditoría) que usa el módulo de Inventario. */
+    public function ajustarInventarioAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            $data = [
+                'id_producto'     => (int) ($_REQUEST['id_producto'] ?? 0),
+                'id_bodega'       => (int) ($_REQUEST['id_bodega'] ?? 0),
+                'tipo_movimiento' => $_REQUEST['tipo_movimiento'] ?? '',
+                'cantidad'        => (float) ($_REQUEST['cantidad'] ?? 0),
+                'costo_unitario'  => (float) ($_REQUEST['costo_unitario'] ?? 0),
+                'observaciones'   => trim($_REQUEST['observaciones'] ?? '') ?: 'Ajuste manual',
+                'numero_lote'     => trim($_REQUEST['numero_lote'] ?? '') ?: null,
+            ];
+
+            if ($data['id_producto'] <= 0 || $data['id_bodega'] <= 0) {
+                throw new \InvalidArgumentException('Producto o bodega no válidos.');
+            }
+            if (!in_array($data['tipo_movimiento'], ['entrada', 'salida'], true)) {
+                throw new \InvalidArgumentException('Tipo de ajuste no válido.');
+            }
+            if ($data['cantidad'] <= 0) {
+                throw new \InvalidArgumentException('La cantidad debe ser mayor a cero.');
+            }
+
+            $service = new InventarioService(new InventarioRepository(), new LogSistemaService());
+            $service->ajusteManual($data, $idEmpresa, $idUsuario);
+
+            echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

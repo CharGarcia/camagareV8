@@ -494,70 +494,13 @@ class ClientesController extends BaseModuloController
     }
 
     // ─── REPLICACIÓN ENTRE EMPRESAS ────────────────────────────────────────────
-
-    /**
-     * Empresas del usuario actual donde podría replicar un cliente (todas las
-     * asignadas, o todas las activas si es nivel 3), EXCLUYENDO la empresa activa.
-     */
-    private function empresasCandidatas(): array
-    {
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $nivel = (int) ($_SESSION['nivel'] ?? 1);
-        $idEmpresaActual = (int) $_SESSION['id_empresa'];
-
-        $model = new \App\models\Empresa();
-        $todas = $nivel >= 3 ? $model->getTodasActivas() : $model->getEmpresasAsignadas($idUsuario);
-
-        return array_values(array_filter($todas, fn($e) => (int) $e['id_empresa'] !== $idEmpresaActual));
-    }
+    // empresasCandidatasReplicacion() / filtrarEmpresasDestinoPermitidas() viven
+    // en BaseModuloController (compartidas con Productos y futuros módulos).
 
     public function empresasDestinoAjax(): void
     {
         $this->requireCrear();
-        header('Content-Type: application/json; charset=utf-8');
-        try {
-            $data = array_map(fn($e) => [
-                'id_empresa' => (int) $e['id_empresa'],
-                'texto'      => ($e['establecimiento'] ?? '001') . ' - ' . (!empty($e['nombre_comercial']) ? $e['nombre_comercial'] : $e['nombre']),
-            ], $this->empresasCandidatas());
-            echo json_encode(['ok' => true, 'data' => $data]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    /**
-     * De la lista de empresas destino que pidió el usuario, filtra a las que
-     * realmente son candidatas (asignadas al usuario / nivel 3) Y donde tiene
-     * permiso de crear clientes. Las que no cumplen se reportan como 'sin_permiso'
-     * en vez de simplemente ignorarse, para que la UI pueda avisar.
-     *
-     * @return array{permitidas:int[], resultado:array<int,array{estado:string}>}
-     */
-    private function filtrarEmpresasDestinoPermitidas(array $idsSolicitadas): array
-    {
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $nivel = (int) ($_SESSION['nivel'] ?? 1);
-        $candidatasIds = array_map(fn($e) => (int) $e['id_empresa'], $this->empresasCandidatas());
-
-        $permitidas = [];
-        $resultado = [];
-        foreach (array_unique(array_map('intval', $idsSolicitadas)) as $idEmp) {
-            if ($idEmp <= 0 || !in_array($idEmp, $candidatasIds, true)) {
-                $resultado[$idEmp] = ['estado' => 'sin_permiso'];
-                continue;
-            }
-            $permiso = \App\Helpers\Permisos::porRutaEnEmpresa(self::RUTA_MODULO, $idEmp, $idUsuario, $nivel);
-            if (empty($permiso['crear'])) {
-                $resultado[$idEmp] = ['estado' => 'sin_permiso'];
-                continue;
-            }
-            $permitidas[] = $idEmp;
-        }
-
-        return ['permitidas' => $permitidas, 'resultado' => $resultado];
+        $this->empresasDestinoAjaxResponse();
     }
 
     /** Replica el cliente recién guardado hacia las empresas destino marcadas en el formulario (si las hay). */

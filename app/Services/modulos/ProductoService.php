@@ -147,6 +147,164 @@ class ProductoService
         }
     }
 
+    /**
+     * Replica un producto (ya guardado en su empresa de origen) hacia varias
+     * empresas destino del mismo usuario. Por cada empresa: crea, reactiva o
+     * deja intacto (nunca sobrescribe uno ya activo — ver replicarProductoEnEmpresa()).
+     *
+     * @param array $datosOrigen Fila ya persistida del producto origen (findById/getListado).
+     * @param int[] $idsEmpresaDestino Empresas ya validadas (asignadas al usuario + permiso de crear).
+     * @return array<int,array{estado:string,id?:int,mensaje?:string}> resultado por id_empresa
+     */
+    public function replicarEnEmpresas(array $datosOrigen, array $idsEmpresaDestino, int $idUsuario): array
+    {
+        $resultado = [];
+        foreach ($idsEmpresaDestino as $idEmpresaDestino) {
+            $idEmpresaDestino = (int) $idEmpresaDestino;
+            try {
+                $resultado[$idEmpresaDestino] = $this->replicarProductoEnEmpresa($datosOrigen, $idEmpresaDestino, $idUsuario);
+            } catch (Exception $e) {
+                $resultado[$idEmpresaDestino] = ['estado' => 'error', 'mensaje' => $e->getMessage()];
+            }
+        }
+        return $resultado;
+    }
+
+    /**
+     * Replica TODOS los productos (no eliminados) de una empresa origen hacia
+     * una empresa destino. Pensado para el botón masivo "Copiar a otra empresa".
+     *
+     * @return array{creados:int,reactivados:int,omitidos:int,errores:int,total:int}
+     */
+    public function replicarTodosAEmpresa(int $idEmpresaOrigen, int $idEmpresaDestino, int $idUsuario, ?int $idUsuarioFiltro = null): array
+    {
+        $productos = $this->repository->getListado($idEmpresaOrigen, '', 1, 0, 'nombre', 'ASC', $idUsuarioFiltro)['rows'];
+
+        $contadores = ['creados' => 0, 'reactivados' => 0, 'omitidos' => 0, 'errores' => 0, 'total' => count($productos)];
+        foreach ($productos as $producto) {
+            try {
+                $r = $this->replicarProductoEnEmpresa($producto, $idEmpresaDestino, $idUsuario);
+                $contadores[match ($r['estado']) {
+                    'creado'     => 'creados',
+                    'reactivado' => 'reactivados',
+                    default      => 'omitidos',
+                }]++;
+            } catch (Exception $e) {
+                $contadores['errores']++;
+            }
+        }
+        return $contadores;
+    }
+
+    /**
+     * Núcleo de la replicación: crea, reactiva (sin tocar datos) o deja intacto
+     * un producto en la empresa destino, según exista o no por código. Nunca
+     * sobrescribe uno que ya esté activo ahí.
+     *
+     * No copia catálogos que son por-empresa (categoría, marca, unidad de medida,
+     * tipo de medida, ICE configurado en la empresa): esos IDs pertenecen a la
+     * empresa origen y no tienen sentido en la destino, así que quedan sin
+     * asignar para configurarse allí (para "bien" sin unidad se aplica la medida
+     * default de la empresa destino, igual que en crear()). Tampoco copia
+     * inventarios, precios, componentes ni variantes: dependen de bodegas u
+     * otros productos que son propios de cada empresa.
+     *
+     * @return array{estado:string,id:int} estado: creado | reactivado | omitido
+     */
+    public function replicarProductoEnEmpresa(array $datosOrigen, int $idEmpresaDestino, int $idUsuario): array
+    {
+        $codigo = trim((string) ($datosOrigen['codigo'] ?? ''));
+        if ($codigo === '') {
+            throw new Exception('El producto no tiene código válido para replicar.');
+        }
+
+        $existente = $this->repository->findByCodigo($idEmpresaDestino, $codigo);
+
+        if ($existente && empty($existente['eliminado'])) {
+            return ['estado' => 'omitido', 'id' => (int) $existente['id']];
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            if ($existente) {
+                $id = (int) $existente['id'];
+                $this->repository->reactivarSoloEliminado($id, $idUsuario);
+                $this->logService->registrar(
+                    $idUsuario,
+                    $idEmpresaDestino,
+                    'reactivar_replicado',
+                    'productos',
+                    $id,
+                    $existente,
+                    ['eliminado' => false, 'origen_empresa' => $datosOrigen['id_empresa'] ?? null]
+                );
+                $this->repository->commit();
+                return ['estado' => 'reactivado', 'id' => $id];
+            }
+
+            $tipoProduccion = !empty($datosOrigen['tipo_produccion']) ? trim((string) $datosOrigen['tipo_produccion']) : '01';
+            $inventariable = $tipoProduccion === '02' ? false : !empty($datosOrigen['inventariable']);
+
+            $idMedida = null;
+            $idTipoMedida = null;
+            if ($tipoProduccion === '01') {
+                $default = $this->repository->getMedidaDefaultUnidad($idEmpresaDestino);
+                if ($default) {
+                    $idMedida = $default['id_medida'];
+                    $idTipoMedida = $default['id_tipo_medida'];
+                }
+            }
+
+            $nuevo = [
+                'id_empresa'      => $idEmpresaDestino,
+                'id_usuario'      => $idUsuario,
+                'codigo'          => $codigo,
+                'nombre'          => $datosOrigen['nombre'] ?? '',
+                'codigo_auxiliar' => $datosOrigen['codigo_auxiliar'] ?? '',
+                'codigo_barras'   => $datosOrigen['codigo_barras'] ?? '',
+                'precio_base'     => $datosOrigen['precio_base'] ?? 0,
+                'tipo_produccion' => $tipoProduccion,
+                'tarifa_iva'      => $datosOrigen['tarifa_iva'] ?? 2, // catálogo global, se copia tal cual
+                'status'          => $datosOrigen['status'] ?? 1,
+                'inventariable'   => $inventariable,
+                'costo_producto'  => $datosOrigen['costo_producto'] ?? 0,
+                'stock_minimo'    => $datosOrigen['stock_minimo'] ?? 0,
+                'stock_maximo'    => $datosOrigen['stock_maximo'] ?? 0,
+                'imagen'          => $datosOrigen['imagen'] ?? null,
+                'opciones'        => $datosOrigen['opciones'] ?? '{"compra":true,"venta":true}',
+                // Datos descriptivos del ICE (no son FK) se copian; el id_ice sí
+                // es por-empresa (empresa_ice) y no se copia.
+                'valor_ice'       => $datosOrigen['valor_ice'] ?? null,
+                'codigo_ice'      => $datosOrigen['codigo_ice'] ?? null,
+                'nombre_ice'      => $datosOrigen['nombre_ice'] ?? null,
+                // Catálogos por-empresa: nunca se copian tal cual (ver docblock del método).
+                'id_categoria'    => null,
+                'id_marca'        => null,
+                'id_ice'          => null,
+                'id_medida'       => $idMedida,
+                'id_tipo_medida'  => $idTipoMedida,
+            ];
+
+            $this->rules->validar($nuevo);
+
+            $id = $this->repository->create($nuevo);
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresaDestino,
+                'crear_replicado',
+                'productos',
+                $id,
+                null,
+                $nuevo + ['origen_empresa' => $datosOrigen['id_empresa'] ?? null]
+            );
+            $this->repository->commit();
+            return ['estado' => 'creado', 'id' => $id];
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
         $antes = $this->repository->getDetalleCompleto($id, $idEmpresa);

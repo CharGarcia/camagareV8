@@ -591,7 +591,7 @@
 <!-- MODAL: EDITAR MÍNIMO/MÁXIMO/CATEGORÍA (Existencias) -->
 <!-- ════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="ri-ex-modal-editar" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header py-2">
                 <h6 class="modal-title fw-bold mb-0">
@@ -618,6 +618,39 @@
                     <div class="col-md-12">
                         <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Categoría</label>
                         <select class="form-select form-select-sm" id="ri-ex-edit-categoria"></select>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+                <div class="fw-bold small text-uppercase text-muted mb-2"><i class="bi bi-box-seam me-1"></i>Ajustar inventario</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Bodega</label>
+                        <select class="form-select form-select-sm" id="ri-ex-adj-bodega"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Tipo</label>
+                        <select class="form-select form-select-sm" id="ri-ex-adj-tipo">
+                            <option value="">— Sin ajuste —</option>
+                            <option value="entrada">Entrada</option>
+                            <option value="salida">Salida</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Cantidad</label>
+                        <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="ri-ex-adj-cantidad">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Costo unitario</label>
+                        <input type="number" step="0.0001" min="0" class="form-control form-control-sm" id="ri-ex-adj-costo">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Lote</label>
+                        <input type="text" class="form-control form-control-sm" id="ri-ex-adj-lote" placeholder="Opcional">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Observaciones</label>
+                        <input type="text" class="form-control form-control-sm" id="ri-ex-adj-observaciones" placeholder="Ajuste manual">
                     </div>
                 </div>
             </div>
