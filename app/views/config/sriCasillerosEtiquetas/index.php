@@ -13,14 +13,7 @@ $buscar = $buscar ?? '';
 $valoresDefecto = $valoresDefecto ?? ['siguiente_orden' => 1, 'ultima_seccion' => '400'];
 $msg = $_SESSION['sri_etiquetas_msg'] ?? null;
 unset($_SESSION['sri_etiquetas_msg']);
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/sri-casilleros-etiquetas?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .sri-row { cursor: pointer; }
@@ -50,18 +43,12 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas" class="sri-etiquetas-buscador mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
+<div class="sri-etiquetas-buscador mb-3">
     <div class="input-group input-group-sm" style="max-width: 380px;">
         <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar en sección, concepto, casilleros u orden..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
+        <input type="text" id="input-buscar-sri" class="form-control" placeholder="Buscar en sección, concepto, casilleros u orden..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
     </div>
-</form>
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -69,76 +56,17 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3" data-col="seccion"><?= thSort($base, 'seccion', 'Sección', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th data-col="descripcion" class="sri-desc-cell"><?= thSort($base, 'descripcion', 'Concepto (Fila)', $ordenCol, $ordenDir, $buscar) ?></th>
+                        <th class="ps-3 sortable-header" data-sort="seccion" role="button">Sección <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sri-desc-cell sortable-header" data-sort="descripcion" role="button">Concepto (Fila) <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center">Casillero Bruto</th>
                         <th class="text-center">Casillero Neto</th>
                         <th class="text-center">Casillero Impuesto</th>
-                        <th class="text-center"><?= thSort($base, 'orden', 'Orden', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
+                        <th class="text-center sortable-header" data-sort="orden" role="button">Orden <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $id = (int)$r['id'];
-                    $c_seccion = htmlspecialchars($r['seccion'] ?? '');
-                    $c_desc = htmlspecialchars($r['descripcion'] ?? '');
-                    $c_bruto = htmlspecialchars($r['casillero_bruto'] ?? '');
-                    $c_neto = htmlspecialchars($r['casillero_neto'] ?? '');
-                    $c_impuesto = htmlspecialchars($r['casillero_impuesto'] ?? '');
-                    $c_orden = htmlspecialchars((string)($r['orden'] ?? '0'));
-                    $c_indent = htmlspecialchars((string)($r['indent'] ?? '0'));
-                    $c_bold = !empty($r['bold']);
-                    $c_editable = !empty($r['editable']);
-                    $c_tipo = htmlspecialchars($r['tipo'] ?? 'valor');
-
-                    $rj = htmlspecialchars(json_encode([
-                        'id' => $id,
-                        'seccion' => $c_seccion,
-                        'descripcion' => $c_desc,
-                        'casillero_bruto' => $c_bruto,
-                        'casillero_neto' => $c_neto,
-                        'casillero_impuesto' => $c_impuesto,
-                        'formula_bruto' => $r['formula_bruto'] ?? '',
-                        'formula_neto' => $r['formula_neto'] ?? '',
-                        'formula_impuesto' => $r['formula_impuesto'] ?? '',
-                        'orden' => $c_orden,
-                        'indent' => $c_indent,
-                        'bold' => $c_bold,
-                        'editable' => $c_editable,
-                        'tipo' => $c_tipo,
-                        'fuente_valor' => htmlspecialchars($r['fuente_valor'] ?? 'documentos')
-                    ]), ENT_QUOTES, 'UTF-8');
-                    ?>
-                    <tr class="sri-row" role="button" tabindex="0" data-json="<?= $rj ?>" onclick="abrirModalEditar(this)">
-                        <td class="ps-3" data-col="seccion"><?= $c_seccion ?></td>
-                        <td class="sri-desc-cell" data-col="descripcion" title="<?= $c_desc ?>">
-                            <?php if ($c_bold): ?><strong><?= $c_desc ?></strong><?php else: ?><?= $c_desc ?><?php endif; ?>
-                            <?php if ($c_tipo === 'titulo'): ?> <span class="badge bg-info text-dark">TITULO</span> <?php endif; ?>
-                        </td>
-                        <td class="text-center">
-                            <?php if($c_bruto): ?><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25"><?= $c_bruto ?></span><?php endif; ?>
-                        </td>
-                        <td class="text-center">
-                            <?php if($c_neto): ?><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><?= $c_neto ?></span><?php endif; ?>
-                        </td>
-                        <td class="text-center">
-                            <?php if($c_impuesto): ?><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><?= $c_impuesto ?></span><?php endif; ?>
-                        </td>
-                        <td class="text-center"><?= $c_orden ?></td>
-                        <td class="text-center pe-3" onclick="event.stopPropagation()">
-                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 border-0" onclick="confirmarEliminar(<?= $id ?>, '<?= htmlspecialchars(addslashes($c_desc)) ?>')" title="Eliminar">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodySri"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay filas registradas o no coinciden con la búsqueda.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -334,4 +262,52 @@ function confirmarEliminar(id, desc) {
         document.getElementById('formDelete').submit();
     }
 }
+
+(function() {
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Las filas usan
+    // onclick inline, así que no hace falta re-vincular eventos tras
+    // reemplazar el tbody. Mismo patrón que ASIENTOTIPO_cargarListado
+    // (public/js/modulos/asientos_tipo_modal.js).
+    var base = '<?= $base ?>';
+    var timer = null;
+    window.SRI_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.SRI_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.SRI_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-sri');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodySri');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="7" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/sri-casilleros-etiquetas-search?b=' + encodeURIComponent(b) + '&sort=' + window.SRI_currentSort + '&dir=' + window.SRI_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-sri');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                SRI_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('sri-casilleros-etiquetas', function(col, dir) {
+            window.SRI_currentSort = col;
+            window.SRI_currentDir = dir;
+            SRI_cargarListado();
+        }, { col: window.SRI_currentSort, dir: window.SRI_currentDir });
+    }
+})();
 </script>

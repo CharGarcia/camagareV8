@@ -11,14 +11,7 @@ $ordenDir = $ordenDir ?? 'asc';
 $buscar = $buscar ?? '';
 $msg = $_SESSION['tarifa_iva_msg'] ?? null;
 unset($_SESSION['tarifa_iva_msg']);
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/tarifa-iva?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .tarifa-row { cursor: pointer; }
@@ -44,18 +37,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/tarifa-iva" class="mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar código, tarifa o porcentaje..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/tarifa-iva?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 320px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-tarifaiva" class="form-control" placeholder="Buscar código, tarifa o porcentaje..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -63,37 +48,14 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSort($base, 'codigo', 'Código', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'tarifa', 'Tarifa', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th class="text-center"><?= thSort($base, 'porcentaje_iva', '% IVA', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
-                        <th class="text-center"><?= thSort($base, 'status', 'Estado', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
+                        <th class="sortable-header" data-sort="codigo" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="tarifa" role="button">Tarifa <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="porcentaje_iva" role="button">% IVA <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php $id = (int)($r['id'] ?? 0); $status = (int)($r['status'] ?? 1); ?>
-                    <tr class="tarifa-row" role="button" tabindex="0" data-id="<?= $id ?>"
-                        data-codigo="<?= htmlspecialchars($r['codigo'] ?? '') ?>"
-                        data-tarifa="<?= htmlspecialchars($r['tarifa'] ?? '') ?>"
-                        data-porcentaje="<?= (int)($r['porcentaje_iva'] ?? 0) ?>"
-                        data-status="<?= $status ?>">
-                        <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
-                        <td><?= htmlspecialchars($r['tarifa'] ?? '') ?></td>
-                        <td class="text-center"><?= (int)($r['porcentaje_iva'] ?? 0) ?>%</td>
-                        <td class="text-center">
-                            <?php if ($status): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyTarifaIva"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay tarifas IVA registradas.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -183,22 +145,76 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 
 <script>
 (function() {
+    var base = '<?= $base ?>';
     var modal = document.getElementById('modalEditarTarifa');
     var form = modal ? modal.querySelector('form') : null;
-    if (!modal || !form) return;
 
-    document.querySelectorAll('.tarifa-row').forEach(function(row) {
-        row.addEventListener('click', function() {
-            form.querySelector('#edit-id').value = this.dataset.id || '';
-            form.querySelector('#edit-codigo').value = this.dataset.codigo || '';
-            form.querySelector('#edit-tarifa').value = this.dataset.tarifa || '';
-            form.querySelector('#edit-porcentaje_iva').value = this.dataset.porcentaje || '0';
-            form.querySelector('#edit-status').value = this.dataset.status || '1';
-            new bootstrap.Modal(modal).show();
+    function abrirModalTarifa(row) {
+        if (!modal || !form) return;
+        form.querySelector('#edit-id').value = row.dataset.id || '';
+        form.querySelector('#edit-codigo').value = row.dataset.codigo || '';
+        form.querySelector('#edit-tarifa').value = row.dataset.tarifa || '';
+        form.querySelector('#edit-porcentaje_iva').value = row.dataset.porcentaje || '0';
+        form.querySelector('#edit-status').value = row.dataset.status || '1';
+        new bootstrap.Modal(modal).show();
+    }
+
+    // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+    // AJAX, por lo que el listener va en el tbody (contenedor fijo).
+    var tbodyTarifaIva = document.getElementById('tbodyTarifaIva');
+    if (tbodyTarifaIva) {
+        tbodyTarifaIva.addEventListener('click', function(e) {
+            var row = e.target.closest('.tarifa-row');
+            if (row) abrirModalTarifa(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+        tbodyTarifaIva.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.tarifa-row');
+            if (row) { e.preventDefault(); abrirModalTarifa(row); }
         });
-    });
+    }
+
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timer = null;
+    window.TARIFAIVA_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.TARIFAIVA_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.TARIFAIVA_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-tarifaiva');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyTarifaIva');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/tarifa-iva-search?b=' + encodeURIComponent(b) + '&sort=' + window.TARIFAIVA_currentSort + '&dir=' + window.TARIFAIVA_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-tarifaiva');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                TARIFAIVA_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('tarifa-iva', function(col, dir) {
+            window.TARIFAIVA_currentSort = col;
+            window.TARIFAIVA_currentDir = dir;
+            TARIFAIVA_cargarListado();
+        }, { col: window.TARIFAIVA_currentSort, dir: window.TARIFAIVA_currentDir });
+    }
 })();
 </script>

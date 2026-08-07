@@ -46,10 +46,87 @@ class CombosSubmodulosController extends Controller
         $this->viewWithLayout('layouts.main', 'config.combosSubmodulos.index', [
             'titulo' => 'Combos de Submódulos',
             'rows' => $rows,
+            'rowsHtml' => $this->renderFilasHtml($rows),
             'buscar' => $buscar,
             'modulosCatalogo' => $modulosCatalogo,
             'msg' => $msg,
         ]);
+    }
+
+    /**
+     * AJAX: listado de combos (tabla), para búsqueda en tiempo real sin
+     * recargar la página. Mismo patrón que ConfigController::asientosTipoListAjax.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(3);
+        header('Content-Type: application/json');
+
+        $buscar = trim($_GET['buscar'] ?? $_POST['buscar'] ?? '');
+        $rows = $this->model->getAll($buscar);
+        foreach ($rows as &$r) {
+            $r['items'] = $this->model->getItems((int) $r['id']);
+        }
+        unset($r);
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $this->renderFilasHtml($rows),
+        ]);
+        exit;
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por searchAjax.
+     */
+    private function renderFilasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-box-seam fs-3 d-block mb-2"></i>No hay combos registrados o no coinciden con la búsqueda.</td></tr>';
+        }
+        $base = BASE_URL;
+        $html = '';
+        foreach ($rows as $r) {
+            $id = (int) $r['id'];
+            $c_nombre = htmlspecialchars($r['nombre'] ?? '');
+            $c_desc = htmlspecialchars($r['descripcion'] ?? '');
+            $c_total = (int) ($r['total_submodulos'] ?? 0);
+            $c_precio = $r['precio'] !== null ? number_format((float) $r['precio'], 2) : null;
+            $c_activo = !empty($r['activo']);
+            $c_color = htmlspecialchars($r['clase_color'] ?? 'primary');
+            $items = $r['items'] ?? [];
+            $listaSubmodulos = array_map(static fn ($it) => $it['nombre_submodulo'] ?? '', $items);
+
+            $rj = htmlspecialchars(json_encode([
+                'id' => $id,
+                'nombre' => $r['nombre'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'precio' => $r['precio'],
+                'clase_color' => $r['clase_color'] ?? 'primary',
+                'orden' => (int) ($r['orden'] ?? 0),
+                'activo' => $c_activo,
+                'items' => array_map(static fn ($it) => [
+                    'id_modulo' => (int) $it['id_modulo'],
+                    'id_submodulo' => (int) $it['id_submodulo'],
+                ], $items),
+            ]), ENT_QUOTES, 'UTF-8');
+
+            $html .= '<tr class="combos-row" role="button" tabindex="0" data-json="' . $rj . '" onclick="abrirModalEditarCombo(this)">';
+            $html .= '<td class="ps-3"><span class="badge bg-' . $c_color . '">' . $c_nombre . '</span></td>';
+            $html .= '<td class="combos-desc-cell" title="' . $c_desc . '">' . $c_desc . '</td>';
+            $html .= '<td class="text-center" title="' . htmlspecialchars(implode(', ', $listaSubmodulos)) . '"><span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">' . $c_total . '</span></td>';
+            $html .= '<td class="text-center">' . ($c_precio !== null ? '$' . $c_precio : '<span class="text-muted">—</span>') . '</td>';
+            $html .= '<td class="text-center">' . ($c_activo ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>' : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>') . '</td>';
+            $html .= '<td class="text-center pe-3" onclick="event.stopPropagation()">'
+                . '<form method="POST" action="' . $base . '/config/combos-submodulos?action=eliminar" class="d-inline" onsubmit="return confirm(\'¿Eliminar el combo &quot;' . addslashes($c_nombre) . '&quot;?\');">'
+                . '<input type="hidden" name="id" value="' . $id . '">'
+                . '<button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1 border-0" title="Eliminar"><i class="bi bi-trash"></i></button>'
+                . '</form></td>';
+            $html .= '</tr>';
+        }
+        return $html;
     }
 
     private function agruparCatalogoPorModulo(array $catalogo): array

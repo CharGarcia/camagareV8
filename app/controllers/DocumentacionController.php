@@ -210,9 +210,12 @@ class DocumentacionController extends Controller
             $ordenDir = 'ASC';
         }
 
+        $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+
         $this->view('documentacion.gestion', [
             'titulo'      => 'Gestión del Manual del Sistema',
-            'rows'        => $this->model->getAll($ordenCol, $ordenDir, $buscar),
+            'rows'        => $rows,
+            'rowsHtml'    => $this->renderFilasGestionHtml($rows),
             'categorias'  => $this->model->getCategorias(),
             'videos'      => $this->model->getVideosDisponibles(),
             'sinResultado' => $this->model->getBusquedasSinResultado(30),
@@ -220,6 +223,100 @@ class DocumentacionController extends Controller
             'ordenDir'    => $ordenDir,
             'buscar'      => $buscar,
         ]);
+    }
+
+    /**
+     * AJAX: listado de artículos del manual (tabla), para búsqueda y
+     * ordenamiento en tiempo real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax.
+     */
+    public function gestionSearch(): void
+    {
+        $this->prepararJson();
+        $this->requireAuth();
+        $this->requireSuperadmin();
+
+        $ordenCol = trim((string) ($_GET['sort'] ?? $_POST['sort'] ?? 'categoria'));
+        $ordenDir = strtoupper(trim((string) ($_GET['dir'] ?? $_POST['dir'] ?? 'ASC')));
+        $buscar   = trim((string) ($_GET['b'] ?? $_POST['b'] ?? ''));
+        if (!in_array($ordenCol, Documentacion::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'categoria';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+
+        $this->json([
+            'ok' => true,
+            'rows' => $this->renderFilasGestionHtml($rows),
+        ]);
+    }
+
+    private function badgeVisibilidad(string $v): string
+    {
+        return match ($v) {
+            'superadmin' => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Superadmin</span>',
+            'admin'      => '<span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25">Admin</span>',
+            default      => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Todos</span>',
+        };
+    }
+
+    private function badgeEstado(string $e): string
+    {
+        return match ($e) {
+            'borrador' => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Borrador</span>',
+            'obsoleto' => '<span class="badge bg-dark bg-opacity-10 text-dark border border-dark border-opacity-25">Obsoleto</span>',
+            default    => '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Activo</span>',
+        };
+    }
+
+    private function fmtFechaGestion($v): string
+    {
+        if (empty($v)) {
+            return '-';
+        }
+        $ts = strtotime((string) $v);
+        return $ts ? date('d-m-Y H:i:s', $ts) : '-';
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por gestionSearchAjax.
+     */
+    private function renderFilasGestionHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="11" class="text-center text-muted py-4">Todavía no hay artículos. Cree el primero con «Nuevo artículo».</td></tr>';
+        }
+        $base = rtrim(BASE_URL ?? '', '/');
+        $html = '';
+        foreach ($rows as $r) {
+            $html .= '<tr class="dg-row" data-id="' . (int) $r['id'] . '">';
+            $html .= '<td class="text-center">' . (int) $r['orden'] . '</td>';
+            $html .= '<td><div class="fw-medium">' . htmlspecialchars((string) $r['titulo']) . '</div><div class="dg-slug">' . htmlspecialchars((string) $r['slug']) . '</div></td>';
+            $html .= '<td>' . htmlspecialchars((string) ($r['categoria'] ?? '')) . '</td>';
+            $html .= '<td>' . htmlspecialchars((string) ($r['tipo'] ?? '')) . '</td>';
+            $html .= '<td class="text-center">' . $this->badgeVisibilidad((string) ($r['visibilidad'] ?? 'todos')) . '</td>';
+            $html .= '<td class="text-center">' . $this->badgeEstado((string) ($r['estado'] ?? 'activo')) . '</td>';
+            $html .= '<td class="text-center">';
+            if ((($r['origen'] ?? 'manual')) === 'archivo') {
+                $html .= '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" title="' . htmlspecialchars((string) ($r['archivo_origen'] ?? '')) . '">Archivo</span>';
+            } else {
+                $html .= '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Pantalla</span>';
+            }
+            $html .= '</td>';
+            $html .= '<td class="text-center">' . (int) ($r['vistas'] ?? 0) . '</td>';
+            $html .= '<td class="text-center text-nowrap"><span class="text-success"><i class="bi bi-hand-thumbs-up"></i> ' . (int) ($r['utiles'] ?? 0) . '</span> <span class="text-danger ms-2"><i class="bi bi-hand-thumbs-down"></i> ' . (int) ($r['no_utiles'] ?? 0) . '</span></td>';
+            $html .= '<td class="text-nowrap small">' . $this->fmtFechaGestion($r['updated_at'] ?? null) . '</td>';
+            $html .= '<td class="text-end text-nowrap">'
+                . '<a href="' . $base . '/documentacion?slug=' . urlencode((string) $r['slug']) . '" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm py-0 px-1" title="Ver en el manual"><i class="bi bi-eye"></i></a> '
+                . '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 dg-editar" title="Editar"><i class="bi bi-pencil"></i></button>'
+                . '</td>';
+            $html .= '</tr>';
+        }
+        return $html;
     }
 
     /** JSON de un artículo para precargar el modal de edición. */

@@ -30,21 +30,8 @@ unset($_SESSION['provincia_ciudad_msg']);
 
 $urlBase = rtrim($base, '/') . '/config/provincia-ciudad';
 $urlCiudades = $urlBase . '/ciudades';
-
-function thSort($urlBase, $tab, $col, $label, $ordenCol, $ordenDir, $buscar, $filtro = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $params = [];
-    if ($col !== 'nombre') $params['sort_' . $tab] = $col;
-    if ($dir !== 'asc') $params['dir_' . $tab] = $dir;
-    if ($tab === 'prov' && $buscar !== '') $params['b_prov'] = $buscar;
-    if ($tab === 'ciud') {
-        if ($buscar !== '') $params['b_ciud'] = $buscar;
-        if ($filtro !== '') $params['f_prov'] = $filtro;
-    }
-    $base = ($tab === 'ciud') ? rtrim($urlBase, '/') . '/ciudades' : $urlBase;
-    $url = empty($params) ? $base : $base . '?' . http_build_query($params);
-    return '<a href="' . htmlspecialchars($url) . '" class="text-decoration-none" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsProvinciasHtml = $rowsProvinciasHtml ?? '';
+$rowsCiudadesHtml = $rowsCiudadesHtml ?? '';
 ?>
 <style>
 .provincia-ciudad-scroll { max-height: calc(100dvh - 320px); overflow-y: auto; }
@@ -80,103 +67,51 @@ function thSort($urlBase, $tab, $col, $label, $ordenCol, $ordenDir, $buscar, $fi
 
         <div class="tab-content" id="tabsProvinciaCiudadContent">
                 <div class="tab-pane fade <?= $tabActivo === 'provincias' ? 'show active' : '' ?>" id="pane-provincias" role="tabpanel">
-                <form method="GET" action="<?= $urlBase ?>" class="mb-3 form-provincia-ciudad">
-            <?php if ($ordenColProv !== 'nombre' || $ordenDirProv !== 'asc'): ?>
-            <input type="hidden" name="sort_prov" value="<?= htmlspecialchars($ordenColProv) ?>">
-            <input type="hidden" name="dir_prov" value="<?= htmlspecialchars($ordenDirProv) ?>">
-            <?php endif; ?>
-            <?php if ($buscarCiud !== ''): ?><input type="hidden" name="b_ciud" value="<?= htmlspecialchars($buscarCiud) ?>"><?php endif; ?>
-            <?php if ($filtroProv !== ''): ?><input type="hidden" name="f_prov" value="<?= htmlspecialchars($filtroProv) ?>"><?php endif; ?>
-            <?php if ($ordenColCiud !== 'nombre' || $ordenDirCiud !== 'asc'): ?>
-            <input type="hidden" name="sort_ciud" value="<?= htmlspecialchars($ordenColCiud) ?>">
-            <input type="hidden" name="dir_ciud" value="<?= htmlspecialchars($ordenDirCiud) ?>">
-            <?php endif; ?>
-            <div class="d-flex gap-2 flex-wrap align-items-center">
-                <div class="input-group input-group-sm" style="max-width: 280px;">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b_prov" class="form-control" placeholder="Buscar provincia..." value="<?= htmlspecialchars($buscarProv) ?>">
-                    <button type="submit" class="btn btn-outline-primary">Buscar</button>
+                <div class="mb-3 d-flex gap-2 flex-wrap align-items-center">
+                    <div class="input-group input-group-sm" style="max-width: 280px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="input-buscar-prov" class="form-control" placeholder="Buscar provincia..." value="<?= htmlspecialchars($buscarProv) ?>" autocomplete="off">
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevaProvincia"><i class="bi bi-plus-lg"></i> Nueva provincia</button>
                 </div>
-                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevaProvincia"><i class="bi bi-plus-lg"></i> Nueva provincia</button>
-                </div>
-                </form>
-                <div class="provincia-ciudad-scroll border rounded mt-2">
+                <div id="provScrollWrap" class="provincia-ciudad-scroll border rounded mt-2">
                     <table class="table table-hover table-sm mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th><?= thSort($urlBase, 'prov', 'codigo', 'Código', $ordenColProv, $ordenDirProv, $buscarProv) ?></th>
-                                <th><?= thSort($urlBase, 'prov', 'nombre', 'Nombre', $ordenColProv, $ordenDirProv, $buscarProv) ?></th>
+                                <th class="sortable-header" data-sort="codigo" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                                <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <?php foreach ($rowsProvincias as $r): ?>
-                            <tr class="prov-row" role="button" tabindex="0"
-                                data-codigo="<?= htmlspecialchars($r['codigo'] ?? '') ?>"
-                                data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>">
-                                <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
-                                <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
+                        <tbody id="tbodyProv"><?= $rowsProvinciasHtml ?></tbody>
                     </table>
-                    <?php if (empty($rowsProvincias)): ?>
-                    <p class="text-muted text-center py-4 mb-0">No hay provincias registradas.</p>
-                    <?php endif; ?>
                 </div>
             </div>
 
             <div class="tab-pane fade <?= $tabActivo === 'ciudades' ? 'show active' : '' ?>" id="pane-ciudades" role="tabpanel">
-        <form method="GET" action="<?= $urlCiudades ?>" class="mb-3 form-provincia-ciudad">
-            <?php if ($ordenColCiud !== 'nombre' || $ordenDirCiud !== 'asc'): ?>
-            <input type="hidden" name="sort_ciud" value="<?= htmlspecialchars($ordenColCiud) ?>">
-            <input type="hidden" name="dir_ciud" value="<?= htmlspecialchars($ordenDirCiud) ?>">
-            <?php endif; ?>
-            <?php if ($buscarProv !== ''): ?><input type="hidden" name="b_prov" value="<?= htmlspecialchars($buscarProv) ?>"><?php endif; ?>
-            <?php if ($ordenColProv !== 'nombre' || $ordenDirProv !== 'asc'): ?>
-            <input type="hidden" name="sort_prov" value="<?= htmlspecialchars($ordenColProv) ?>">
-            <input type="hidden" name="dir_prov" value="<?= htmlspecialchars($ordenDirProv) ?>">
-            <?php endif; ?>
-            <div class="d-flex gap-2 flex-wrap align-items-center">
-                <select name="f_prov" class="form-select form-select-sm" style="max-width: 200px;">
-                    <option value="">Todas las provincias</option>
-                    <?php foreach ($provinciasParaSelect as $p): ?>
-                    <option value="<?= htmlspecialchars($p['codigo'] ?? '') ?>" <?= ($filtroProv === ($p['codigo'] ?? '')) ? 'selected' : '' ?>><?= htmlspecialchars($p['nombre'] ?? '') ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <div class="input-group input-group-sm" style="max-width: 280px;">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b_ciud" class="form-control" placeholder="Buscar ciudad..." value="<?= htmlspecialchars($buscarCiud) ?>">
-                    <button type="submit" class="btn btn-outline-primary">Buscar</button>
+                <div class="mb-3 d-flex gap-2 flex-wrap align-items-center">
+                    <select id="select-filtro-prov" class="form-select form-select-sm" style="max-width: 200px;">
+                        <option value="">Todas las provincias</option>
+                        <?php foreach ($provinciasParaSelect as $p): ?>
+                        <option value="<?= htmlspecialchars($p['codigo'] ?? '') ?>" <?= ($filtroProv === ($p['codigo'] ?? '')) ? 'selected' : '' ?>><?= htmlspecialchars($p['nombre'] ?? '') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="input-group input-group-sm" style="max-width: 280px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="input-buscar-ciud" class="form-control" placeholder="Buscar ciudad..." value="<?= htmlspecialchars($buscarCiud) ?>" autocomplete="off">
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevaCiudad"><i class="bi bi-plus-lg"></i> Nueva ciudad</button>
                 </div>
-                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevaCiudad"><i class="bi bi-plus-lg"></i> Nueva ciudad</button>
-                </div>
-                </form>
-                <div class="provincia-ciudad-scroll border rounded mt-2">
+                <div id="ciudScrollWrap" class="provincia-ciudad-scroll border rounded mt-2">
                     <table class="table table-hover table-sm mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th><?= thSort($urlBase, 'ciud', 'codigo', 'Código', $ordenColCiud, $ordenDirCiud, $buscarCiud, $filtroProv) ?></th>
-                                <th><?= thSort($urlBase, 'ciud', 'nombre', 'Nombre', $ordenColCiud, $ordenDirCiud, $buscarCiud, $filtroProv) ?></th>
-                                <th><?= thSort($urlBase, 'ciud', 'cod_prov', 'Provincia', $ordenColCiud, $ordenDirCiud, $buscarCiud, $filtroProv) ?></th>
+                                <th class="sortable-header" data-sort="codigo" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                                <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                                <th class="sortable-header" data-sort="cod_prov" role="button">Provincia <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <?php foreach ($rowsCiudades as $r): ?>
-                            <tr class="ciud-row" role="button" tabindex="0"
-                                data-codigo="<?= htmlspecialchars($r['codigo'] ?? '') ?>"
-                                data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>"
-                                data-cod-prov="<?= htmlspecialchars($r['cod_prov'] ?? '') ?>"
-                                data-nombre-provincia="<?= htmlspecialchars($r['nombre_provincia'] ?? '') ?>">
-                                <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
-                                <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                                <td><?= htmlspecialchars($r['nombre_provincia'] ?? $r['cod_prov'] ?? '') ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
+                        <tbody id="tbodyCiud"><?= $rowsCiudadesHtml ?></tbody>
                     </table>
-                    <?php if (empty($rowsCiudades)): ?>
-                    <p class="text-muted text-center py-4 mb-0">No hay ciudades registradas.</p>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -322,43 +257,116 @@ function thSort($urlBase, $tab, $col, $label, $ordenCol, $ordenDir, $buscar, $fi
 
 <script>
 (function() {
-    // Quitar parámetros vacíos de la URL al enviar formularios
-    document.querySelectorAll('.form-provincia-ciudad').forEach(function(form) {
-        form.addEventListener('submit', function() {
-            form.querySelectorAll('input, select').forEach(function(el) {
-                if (el.value === '' && el.name) el.removeAttribute('name');
-            });
-        });
-    });
-
+    var base = '<?= $base ?>';
     var modalProv = document.getElementById('modalEditarProvincia');
     var modalCiud = document.getElementById('modalEditarCiudad');
-    if (!modalProv || !modalCiud) return;
 
-    document.querySelectorAll('.prov-row').forEach(function(row) {
-        row.addEventListener('click', function() {
-            document.getElementById('edit-prov-codigo-actual').value = this.dataset.codigo || '';
-            document.getElementById('edit-prov-codigo').value = this.dataset.codigo || '';
-            document.getElementById('edit-prov-nombre').value = this.dataset.nombre || '';
-            new bootstrap.Modal(modalProv).show();
+    function abrirModalProv(row) {
+        if (!modalProv) return;
+        document.getElementById('edit-prov-codigo-actual').value = row.dataset.codigo || '';
+        document.getElementById('edit-prov-codigo').value = row.dataset.codigo || '';
+        document.getElementById('edit-prov-nombre').value = row.dataset.nombre || '';
+        new bootstrap.Modal(modalProv).show();
+    }
+    var tbodyProv = document.getElementById('tbodyProv');
+    if (tbodyProv) {
+        tbodyProv.addEventListener('click', function(e) {
+            var row = e.target.closest('.prov-row');
+            if (row) abrirModalProv(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+        tbodyProv.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.prov-row');
+            if (row) { e.preventDefault(); abrirModalProv(row); }
         });
-    });
+    }
 
-    document.querySelectorAll('.ciud-row').forEach(function(row) {
-        row.addEventListener('click', function() {
-            document.getElementById('edit-ciud-codigo-actual').value = this.dataset.codigo || '';
-            document.getElementById('edit-ciud-cod-prov-actual').value = this.dataset.codProv || '';
-            document.getElementById('edit-ciud-codigo').value = this.dataset.codigo || '';
-            document.getElementById('edit-ciud-nombre').value = this.dataset.nombre || '';
-            document.getElementById('edit-ciud-cod-prov').value = this.dataset.codProv || '';
-            new bootstrap.Modal(modalCiud).show();
+    function abrirModalCiud(row) {
+        if (!modalCiud) return;
+        document.getElementById('edit-ciud-codigo-actual').value = row.dataset.codigo || '';
+        document.getElementById('edit-ciud-cod-prov-actual').value = row.dataset.codProv || '';
+        document.getElementById('edit-ciud-codigo').value = row.dataset.codigo || '';
+        document.getElementById('edit-ciud-nombre').value = row.dataset.nombre || '';
+        document.getElementById('edit-ciud-cod-prov').value = row.dataset.codProv || '';
+        new bootstrap.Modal(modalCiud).show();
+    }
+    var tbodyCiud = document.getElementById('tbodyCiud');
+    if (tbodyCiud) {
+        tbodyCiud.addEventListener('click', function(e) {
+            var row = e.target.closest('.ciud-row');
+            if (row) abrirModalCiud(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+        tbodyCiud.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.ciud-row');
+            if (row) { e.preventDefault(); abrirModalCiud(row); }
         });
-    });
+    }
+
+    // Búsqueda y orden en tiempo real (pestaña Provincias): reemplazan solo
+    // la tabla vía AJAX, sin recargar la página. Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timerProv = null;
+    window.PROV_currentSort = '<?= htmlspecialchars($ordenColProv) ?>';
+    window.PROV_currentDir = '<?= htmlspecialchars($ordenDirProv) ?>';
+    window.PROV_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-prov');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyProv');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="2" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        fetch(base + '/config/provincia-ciudad-provincias-search?b_prov=' + encodeURIComponent(b) + '&sort_prov=' + window.PROV_currentSort + '&dir_prov=' + window.PROV_currentDir, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows; })
+            .catch(function() { if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="2" class="text-center text-danger py-4">Error al cargar.</td></tr>'; });
+    };
+    var inputBuscarProv = document.getElementById('input-buscar-prov');
+    if (inputBuscarProv) {
+        inputBuscarProv.addEventListener('input', function() {
+            clearTimeout(timerProv);
+            timerProv = setTimeout(function() { PROV_cargarListado(); }, 400);
+        });
+    }
+    if (window.CMG_initSort && document.getElementById('tbodyProv')) {
+        window.CMG_initSort('provincia-ciudad-provincias', function(col, dir) {
+            window.PROV_currentSort = col;
+            window.PROV_currentDir = dir;
+            PROV_cargarListado();
+        }, { col: window.PROV_currentSort, dir: window.PROV_currentDir, container: '#provScrollWrap' });
+    }
+
+    // Búsqueda, filtro por provincia y orden en tiempo real (pestaña Ciudades).
+    var timerCiud = null;
+    window.CIUD_currentSort = '<?= htmlspecialchars($ordenColCiud) ?>';
+    window.CIUD_currentDir = '<?= htmlspecialchars($ordenDirCiud) ?>';
+    window.CIUD_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-ciud');
+        var selectProv = document.getElementById('select-filtro-prov');
+        var b = inputB ? inputB.value.trim() : '';
+        var fProv = selectProv ? selectProv.value : '';
+        var tbodyEl = document.getElementById('tbodyCiud');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="3" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        fetch(base + '/config/provincia-ciudad-ciudades-search?b_ciud=' + encodeURIComponent(b) + '&f_prov=' + encodeURIComponent(fProv) + '&sort_ciud=' + window.CIUD_currentSort + '&dir_ciud=' + window.CIUD_currentDir, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows; })
+            .catch(function() { if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-4">Error al cargar.</td></tr>'; });
+    };
+    var inputBuscarCiud = document.getElementById('input-buscar-ciud');
+    if (inputBuscarCiud) {
+        inputBuscarCiud.addEventListener('input', function() {
+            clearTimeout(timerCiud);
+            timerCiud = setTimeout(function() { CIUD_cargarListado(); }, 400);
+        });
+    }
+    var selectFiltroProv = document.getElementById('select-filtro-prov');
+    if (selectFiltroProv) {
+        selectFiltroProv.addEventListener('change', function() { CIUD_cargarListado(); });
+    }
+    if (window.CMG_initSort && document.getElementById('tbodyCiud')) {
+        window.CMG_initSort('provincia-ciudad-ciudades', function(col, dir) {
+            window.CIUD_currentSort = col;
+            window.CIUD_currentDir = dir;
+            CIUD_cargarListado();
+        }, { col: window.CIUD_currentSort, dir: window.CIUD_currentDir, container: '#ciudScrollWrap' });
+    }
 })();
 </script>

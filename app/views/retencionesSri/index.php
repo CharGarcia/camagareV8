@@ -12,20 +12,7 @@ $buscar = $buscar ?? '';
 $msg = $_SESSION['retenciones_msg'] ?? null;
 unset($_SESSION['retenciones_msg']);
 
-function fmtFecha(?string $f): string {
-    if ($f === null || $f === '' || $f === '0000-00-00' || $f === '0000-00-00 00:00:00') return '';
-    $d = @strtotime($f);
-    if (!$d || $d <= 0) return '';
-    return date('d-m-Y', $d);
-}
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/retenciones-sri?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .retencion-row { cursor: pointer; }
@@ -52,18 +39,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/retenciones-sri" class="mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar en código, descripción, impuesto..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/retenciones-sri?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 320px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-retenciones" class="form-control" placeholder="Buscar en código, descripción, impuesto..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -71,54 +50,18 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSort($base, 'codigo_ret', 'Código', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'concepto_ret', 'Descripción', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th class="text-end"><?= thSort($base, 'porcentaje_ret', '%', $ordenCol, $ordenDir, $buscar, 'text-end d-inline-block') ?></th>
-                        <th><?= thSort($base, 'impuesto_ret', 'Impuesto', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'cod_anexo_ret', 'Cód. ATS', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th class="text-center"><?= thSort($base, 'status', 'Estado', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
-                        <th><?= thSort($base, 'desde', 'Desde', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'hasta', 'Hasta', $ordenCol, $ordenDir, $buscar) ?></th>
+                        <th class="sortable-header" data-sort="codigo_ret" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="concepto_ret" role="button">Descripción <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-end sortable-header" data-sort="porcentaje_ret" role="button">% <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="impuesto_ret" role="button">Impuesto <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="cod_anexo_ret" role="button">Cód. ATS <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="desde" role="button">Desde <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="hasta" role="button">Hasta <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $id = (int)($r['id'] ?? $r['id_ret'] ?? 0);
-                    $status = (int)($r['status'] ?? 1);
-                    $desde = $r['desde'] ?? '';
-                    $hasta = $r['hasta'] ?? '';
-                    ?>
-                    <tr class="retencion-row" role="button" tabindex="0" data-id="<?= $id ?>"
-                        data-codigo="<?= htmlspecialchars($r['codigo_ret'] ?? '') ?>"
-                        data-concepto="<?= htmlspecialchars($r['concepto_ret'] ?? '') ?>"
-                        data-porcentaje="<?= htmlspecialchars($r['porcentaje_ret'] ?? '') ?>"
-                        data-impuesto="<?= htmlspecialchars($r['impuesto_ret'] ?? 'RENTA') ?>"
-                        data-codanexo="<?= htmlspecialchars($r['cod_anexo_ret'] ?? '') ?>"
-                        data-status="<?= $status ?>"
-                        data-desde="<?= htmlspecialchars($desde) ?>"
-                        data-hasta="<?= htmlspecialchars($hasta) ?>">
-                        <td><code><?= htmlspecialchars($r['codigo_ret'] ?? '') ?></code></td>
-                        <td><?= htmlspecialchars($r['concepto_ret'] ?? '') ?></td>
-                        <td class="text-end"><?= htmlspecialchars($r['porcentaje_ret'] ?? '') ?></td>
-                        <td><span class="badge bg-secondary"><?= htmlspecialchars($r['impuesto_ret'] ?? '') ?></span></td>
-                        <td><?= htmlspecialchars($r['cod_anexo_ret'] ?? '') ?></td>
-                        <td class="text-center">
-                            <?php if ($status): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><?= htmlspecialchars(fmtFecha($desde) ?: '-') ?></td>
-                        <td><?= htmlspecialchars(fmtFecha($hasta) ?: '-') ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyRetenciones"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay retenciones registradas.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -257,29 +200,80 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
         if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
         return s;
     }
+    var base = '<?= $base ?>';
     var modal = document.getElementById('modalEditarRetencion');
     var form = modal ? modal.querySelector('form') : null;
-    if (!modal || !form) return;
 
-    document.querySelectorAll('.retencion-row').forEach(function(row) {
-        row.addEventListener('click', function() {
-            form.querySelector('#edit-id').value = this.dataset.id || '';
-            form.querySelector('#edit-codigo_ret').value = this.dataset.codigo || '';
-            form.querySelector('#edit-concepto_ret').value = this.dataset.concepto || '';
-            form.querySelector('#edit-porcentaje_ret').value = this.dataset.porcentaje || '';
-            form.querySelector('#edit-impuesto_ret').value = this.dataset.impuesto || 'RENTA';
-            form.querySelector('#edit-cod_anexo_ret').value = this.dataset.codanexo || '';
-            form.querySelector('#edit-status').value = this.dataset.status || '1';
-            form.querySelector('#edit-desde').value = toYyyyMmDd(this.dataset.desde || '');
-            form.querySelector('#edit-hasta').value = toYyyyMmDd(this.dataset.hasta || '');
-            new bootstrap.Modal(modal).show();
+    function abrirModalRetencion(row) {
+        if (!modal || !form) return;
+        form.querySelector('#edit-id').value = row.dataset.id || '';
+        form.querySelector('#edit-codigo_ret').value = row.dataset.codigo || '';
+        form.querySelector('#edit-concepto_ret').value = row.dataset.concepto || '';
+        form.querySelector('#edit-porcentaje_ret').value = row.dataset.porcentaje || '';
+        form.querySelector('#edit-impuesto_ret').value = row.dataset.impuesto || 'RENTA';
+        form.querySelector('#edit-cod_anexo_ret').value = row.dataset.codanexo || '';
+        form.querySelector('#edit-status').value = row.dataset.status || '1';
+        form.querySelector('#edit-desde').value = toYyyyMmDd(row.dataset.desde || '');
+        form.querySelector('#edit-hasta').value = toYyyyMmDd(row.dataset.hasta || '');
+        new bootstrap.Modal(modal).show();
+    }
+
+    // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+    // AJAX, por lo que el listener va en el tbody (contenedor fijo).
+    var tbodyRetenciones = document.getElementById('tbodyRetenciones');
+    if (tbodyRetenciones) {
+        tbodyRetenciones.addEventListener('click', function(e) {
+            var row = e.target.closest('.retencion-row');
+            if (row) abrirModalRetencion(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                this.click();
-            }
+        tbodyRetenciones.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.retencion-row');
+            if (row) { e.preventDefault(); abrirModalRetencion(row); }
         });
-    });
+    }
+
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timer = null;
+    window.RETENCIONES_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.RETENCIONES_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.RETENCIONES_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-retenciones');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyRetenciones');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/retenciones-sri-search?b=' + encodeURIComponent(b) + '&sort=' + window.RETENCIONES_currentSort + '&dir=' + window.RETENCIONES_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-retenciones');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                RETENCIONES_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('retenciones-sri', function(col, dir) {
+            window.RETENCIONES_currentSort = col;
+            window.RETENCIONES_currentDir = dir;
+            RETENCIONES_cargarListado();
+        }, { col: window.RETENCIONES_currentSort, dir: window.RETENCIONES_currentDir });
+    }
 })();
 </script>

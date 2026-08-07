@@ -11,14 +11,7 @@ $ordenDir = $ordenDir ?? 'asc';
 $buscar = $buscar ?? '';
 $msg = $_SESSION['impuestos_ventas_msg'] ?? null;
 unset($_SESSION['impuestos_ventas_msg']);
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/impuestos-ventas?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .impuesto-venta-row { cursor: pointer; }
@@ -44,18 +37,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/impuestos-ventas" class="mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar código o nombre..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/impuestos-ventas?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 320px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-impventas" class="form-control" placeholder="Buscar código o nombre..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -63,41 +48,14 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSort($base, 'codigo', 'Código', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'nombre', 'Nombre', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th class="text-center"><?= thSort($base, 'status', 'Estado', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
+                        <th class="sortable-header" data-sort="codigo" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end" style="width: 80px;">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php $id = (int)($r['id'] ?? $r['id_impuesto_venta'] ?? 0); $status = (int)($r['status'] ?? 1); ?>
-                    <tr class="impuesto-venta-row" role="button" tabindex="0" data-id="<?= $id ?>"
-                        data-codigo="<?= htmlspecialchars($r['codigo'] ?? '') ?>"
-                        data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>"
-                        data-status="<?= $status ?>">
-                        <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
-                        <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                        <td class="text-center">
-                            <?php if ($status): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-end">
-                            <form method="POST" action="<?= $base ?>/config/impuestosVentasDelete" class="d-inline" onsubmit="return confirm('¿Eliminar este impuesto de venta?');" onclick="event.stopPropagation();">
-                                <input type="hidden" name="id" value="<?= $id ?>">
-                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1" title="Eliminar"><i class="bi bi-trash"></i></button>
-                            </form>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyImpVentas"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay impuestos de ventas registrados.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -220,19 +178,29 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 
     if (modalEditar) {
         var formEditar = modalEditar.querySelector('#form-editar-impuesto-venta');
-        document.querySelectorAll('.impuesto-venta-row').forEach(function(row) {
-            row.addEventListener('click', function() {
-                ocultarMsgForm('editar-impuesto-venta-msg');
-                formEditar.querySelector('#edit-id').value = this.dataset.id || '';
-                formEditar.querySelector('#edit-codigo').value = this.dataset.codigo || '';
-                formEditar.querySelector('#edit-nombre').value = this.dataset.nombre || '';
-                formEditar.querySelector('#edit-status').value = this.dataset.status || '1';
-                new bootstrap.Modal(modalEditar).show();
+        var tbodyImpVentas = document.getElementById('tbodyImpVentas');
+        function abrirModalImpVenta(row) {
+            ocultarMsgForm('editar-impuesto-venta-msg');
+            formEditar.querySelector('#edit-id').value = row.dataset.id || '';
+            formEditar.querySelector('#edit-codigo').value = row.dataset.codigo || '';
+            formEditar.querySelector('#edit-nombre').value = row.dataset.nombre || '';
+            formEditar.querySelector('#edit-status').value = row.dataset.status || '1';
+            new bootstrap.Modal(modalEditar).show();
+        }
+        // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+        // AJAX, por lo que el listener va en el tbody (contenedor fijo).
+        if (tbodyImpVentas) {
+            tbodyImpVentas.addEventListener('click', function(e) {
+                if (e.target.closest('form, button')) return;
+                var row = e.target.closest('.impuesto-venta-row');
+                if (row) abrirModalImpVenta(row);
             });
-            row.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+            tbodyImpVentas.addEventListener('keydown', function(e) {
+                if ((e.key !== 'Enter' && e.key !== ' ') || e.target.closest('form, button')) return;
+                var row = e.target.closest('.impuesto-venta-row');
+                if (row) { e.preventDefault(); abrirModalImpVenta(row); }
             });
-        });
+        }
         if (formEditar) {
             formEditar.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -261,6 +229,49 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                     .catch(function() { if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; } });
             });
         }
+    }
+
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timer = null;
+    window.IMPVENTAS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.IMPVENTAS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.IMPVENTAS_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-impventas');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyImpVentas');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/impuestos-ventas-search?b=' + encodeURIComponent(b) + '&sort=' + window.IMPVENTAS_currentSort + '&dir=' + window.IMPVENTAS_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-impventas');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                IMPVENTAS_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('impuestos-ventas', function(col, dir) {
+            window.IMPVENTAS_currentSort = col;
+            window.IMPVENTAS_currentDir = dir;
+            IMPVENTAS_cargarListado();
+        }, { col: window.IMPVENTAS_currentSort, dir: window.IMPVENTAS_currentDir });
     }
 })();
 </script>

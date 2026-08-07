@@ -4759,6 +4759,38 @@ $totalPages = $totalPagesOriginal;
         }
     }
 
+    /**
+     * Inserta o actualiza la fila fija del RUC del proveedor del sistema en info adicional
+     * (Res. NAC-DGERCGC26-00000027 — App\Helpers\SriProveedorHelper). No editable ni eliminable:
+     * el valor lo fuerza el servidor desde la configuración global en cada guardado, así que
+     * editarlo en el modal no tendría efecto. Se identifica con data-tipo="ruc-proveedor".
+     */
+    function actualizarInfoRucProveedor(valor) {
+        const tbody = document.getElementById('m-tbody-info-adicional');
+        let fila = tbody.querySelector('tr[data-tipo="ruc-proveedor"]');
+
+        if (!valor) {
+            if (fila) fila.remove();
+            return;
+        }
+
+        if (fila) {
+            fila.querySelector('.input-info-detalle').value = valor;
+        } else {
+            const tr = document.createElement('tr');
+            tr.className = 'row-info-adicional';
+            tr.dataset.tipo = 'ruc-proveedor';
+            tr.innerHTML = `
+                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" value="RUC Proveedor" readonly></td>
+                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" value="${valor}" readonly></td>
+                <td class="p-0 text-center pe-1">
+                    <span class="text-muted small" title="Requisito SRI (Res. NAC-DGERCGC26-00000027) — no editable"><i class="bi bi-lock-fill"></i></span>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+    }
+
     window.agregarInfoAdicional = function() {
         const tbody = document.getElementById('m-tbody-info-adicional');
         const tr = document.createElement('tr');
@@ -5358,7 +5390,7 @@ $totalPages = $totalPagesOriginal;
             if (tbodyInfo) {
                 // Nombres de las filas fijas gestionadas automÃ¡ticamente (no se insertan como libres)
                 // 'correo' se mantiene por compatibilidad con registros anteriores
-                const NOMBRES_FIJOS = ['cajero', 'vendedor', 'correo del cliente', 'correo'];
+                const NOMBRES_FIJOS = ['cajero', 'vendedor', 'correo del cliente', 'correo', 'ruc proveedor'];
                 tbodyInfo.querySelectorAll('tr:not([data-tipo])').forEach(tr => tr.remove());
                 json.info_adicional.forEach(ia => {
                     // Saltar entradas que corresponden a filas fijas para evitar duplicados
@@ -5385,6 +5417,10 @@ $totalPages = $totalPagesOriginal;
                     return n === 'correo del cliente' || n === 'correo';
                 });
                 if (correoGuardado) actualizarInfoCorreoCliente(correoGuardado.valor || '');
+
+                // Actualizar el valor de la fila fija del RUC del proveedor si viene guardado
+                const rucProveedorGuardado = json.info_adicional.find(ia => (ia.nombre || '').toLowerCase().trim() === 'ruc proveedor');
+                if (rucProveedorGuardado) actualizarInfoRucProveedor(rucProveedorGuardado.valor || '');
             }
 
             // â”€â”€ Propina â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

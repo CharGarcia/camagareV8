@@ -42,11 +42,82 @@ class CorreosConfigController extends Controller
         $this->viewWithLayout('layouts.main', 'correosConfig.index', [
             'titulo' => 'Configuración de correos',
             'rows' => $rows,
+            'rowsHtml' => $this->renderFilasHtml($rows),
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'buscar' => $buscar,
             'codigosSugeridos' => CorreoConfig::CODIGOS_SUGERIDOS,
         ]);
+    }
+
+    /**
+     * AJAX: listado de configuraciones de correo (tabla), para búsqueda y
+     * ordenamiento en tiempo real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'codigo');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        if (!in_array($ordenCol, CorreoConfig::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'codigo';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $this->renderFilasHtml($rows),
+        ]);
+        exit;
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por searchAjax.
+     */
+    private function renderFilasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-envelope-at fs-3 d-block mb-2"></i>No hay configuraciones de correo. Cree una para recuperar contraseña, notificaciones, cobros, etc.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $id = (int) ($r['id'] ?? $r['id_correo_config'] ?? 0);
+            $status = (int) ($r['status'] ?? 1);
+            $html .= '<tr class="correo-row" role="button" tabindex="0" data-id="' . $id . '"'
+                . ' data-codigo="' . htmlspecialchars($r['codigo'] ?? '') . '"'
+                . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '"'
+                . ' data-email="' . htmlspecialchars($r['email'] ?? '') . '"'
+                . ' data-nombre-remitente="' . htmlspecialchars($r['nombre_remitente'] ?? '') . '"'
+                . ' data-host-smtp="' . htmlspecialchars($r['host_smtp'] ?? '') . '"'
+                . ' data-puerto-smtp="' . htmlspecialchars((string) ($r['puerto_smtp'] ?? '587')) . '"'
+                . ' data-usuario-smtp="' . htmlspecialchars($r['usuario_smtp'] ?? '') . '"'
+                . ' data-encryption="' . htmlspecialchars($r['encryption'] ?? 'tls') . '"'
+                . ' data-status="' . $status . '">';
+            $html .= '<td><code>' . htmlspecialchars($r['codigo'] ?? '') . '</code></td>';
+            $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
+            $html .= '<td><small>' . htmlspecialchars($r['email'] ?? '') . '</small></td>';
+            $html .= '<td><small>' . (($r['host_smtp'] ?? '') !== '' ? htmlspecialchars($r['host_smtp']) : '-') . '</small></td>';
+            $html .= '<td class="text-center">' . ((int) ($r['puerto_smtp'] ?? 0) ?: '-') . '</td>';
+            $html .= '<td><span class="badge bg-secondary">' . (($r['encryption'] ?? '') !== '' ? htmlspecialchars($r['encryption']) : 'none') . '</span></td>';
+            $html .= '<td class="text-center">' . ($status ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>') . '</td>';
+            $html .= '<td class="text-end">'
+                . '<form method="POST" action="' . BASE_URL . '/config/correosConfigDelete" class="d-inline" onsubmit="return confirm(&quot;¿Eliminar esta configuración de correo?&quot;);" onclick="event.stopPropagation();">'
+                . '<input type="hidden" name="id" value="' . $id . '">'
+                . '<button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1" title="Eliminar"><i class="bi bi-trash"></i></button>'
+                . '</form></td>';
+            $html .= '</tr>';
+        }
+        return $html;
     }
 
     public function store(): void

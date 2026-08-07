@@ -197,27 +197,22 @@
           .catch(function () { body.innerHTML = '<div class="text-danger text-center py-4">Error de conexión.</div>'; });
     }
 
-    // Delegación de eventos en la tabla
+    // Delegación de eventos en la tabla: las filas se reemplazan en cada
+    // búsqueda/orden en tiempo real (ver script inline de la vista), así que
+    // el listener va en el tbody (contenedor fijo), no en cada <tr>.
     document.getElementById('btn-nuevo-video').addEventListener('click', abrirNuevo);
 
-    Array.prototype.forEach.call(document.querySelectorAll('.vg-row'), function (tr) {
-        tr.querySelector('.vg-editar').addEventListener('click', function (e) {
-            e.stopPropagation();
+    var tbodyVideos = document.getElementById('tbodyVideos');
+    if (tbodyVideos) {
+        tbodyVideos.addEventListener('click', function (e) {
+            var tr = e.target.closest('.vg-row');
+            if (!tr) return;
+            if (e.target.closest('.vg-editar')) { abrirEditar(tr); return; }
+            if (e.target.closest('.vg-eliminar')) { eliminar(tr.dataset.id); return; }
+            if (e.target.closest('.vg-ver-vistas')) { verVistas(tr); return; }
             abrirEditar(tr);
         });
-        tr.querySelector('.vg-eliminar').addEventListener('click', function (e) {
-            e.stopPropagation();
-            eliminar(tr.dataset.id);
-        });
-        var verBtn = tr.querySelector('.vg-ver-vistas');
-        if (verBtn) {
-            verBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                verVistas(tr);
-            });
-        }
-        tr.addEventListener('click', function () { abrirEditar(tr); });
-    });
+    }
 
     // Botón eliminar dentro del modal de edición
     el.btnEliminar.addEventListener('click', function () {

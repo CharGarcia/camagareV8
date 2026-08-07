@@ -206,10 +206,97 @@ class VideosAyudaController extends Controller
         $this->view('videosAyuda.gestion', [
             'titulo'   => 'Gestión de videos de ayuda',
             'rows'     => $rows,
+            'rowsHtml' => $this->renderFilasHtml($rows),
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'buscar'   => $buscar,
         ]);
+    }
+
+    /**
+     * AJAX: listado de videos de ayuda (tabla), para búsqueda y ordenamiento
+     * en tiempo real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax.
+     */
+    public function gestionSearch(): void
+    {
+        $this->prepararJson();
+        $this->requireAuth();
+        $this->requireSuperadmin();
+
+        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'orden');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        if (!in_array($ordenCol, VideoAyuda::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'orden';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+
+        $this->json([
+            'ok' => true,
+            'rows' => $this->renderFilasHtml($rows),
+        ]);
+    }
+
+    private function fmtTamano($bytes): string
+    {
+        $b = (float) $bytes;
+        if ($b <= 0) {
+            return '-';
+        }
+        $u = ['B', 'KB', 'MB', 'GB'];
+        $i = 0;
+        while ($b >= 1024 && $i < count($u) - 1) {
+            $b /= 1024;
+            $i++;
+        }
+        return number_format($b, $b < 10 && $i > 0 ? 1 : 0) . ' ' . $u[$i];
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por gestionSearch.
+     */
+    private function renderFilasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="8" class="text-center text-muted py-5">Aún no hay videos de ayuda. Use "Subir video" para agregar el primero.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $id = (int) $r['id'];
+            $activo = ($r['estado'] ?? 'activo') === 'activo';
+            $html .= '<tr class="vg-row"'
+                . ' data-id="' . $id . '"'
+                . ' data-titulo="' . htmlspecialchars($r['titulo'] ?? '') . '"'
+                . ' data-descripcion="' . htmlspecialchars($r['descripcion'] ?? '') . '"'
+                . ' data-categoria="' . htmlspecialchars($r['categoria'] ?? '') . '"'
+                . ' data-etiquetas="' . htmlspecialchars($r['etiquetas'] ?? '') . '"'
+                . ' data-orden="' . (int) ($r['orden'] ?? 0) . '"'
+                . ' data-estado="' . htmlspecialchars($r['estado'] ?? 'activo') . '"'
+                . ' data-archivo="' . htmlspecialchars($r['nombre_original'] ?? '') . '">';
+            $html .= '<td class="text-center text-muted">' . (int) ($r['orden'] ?? 0) . '</td>';
+            $html .= '<td><div class="fw-medium">' . htmlspecialchars($r['titulo'] ?? '') . '</div>';
+            if (!empty($r['nombre_original'])) {
+                $html .= '<small class="text-muted"><i class="bi bi-film me-1"></i>' . htmlspecialchars($r['nombre_original']) . '</small>';
+            }
+            $html .= '</td>';
+            $html .= '<td>' . ((string) ($r['categoria'] ?? '') !== '' ? htmlspecialchars($r['categoria']) : '<span class="text-muted">—</span>') . '</td>';
+            $html .= '<td class="text-center">' . ($activo ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>' : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>') . '</td>';
+            $html .= '<td class="text-center"><button type="button" class="btn btn-sm p-0 border-0 bg-transparent vg-ver-vistas" title="Ver quién ha visto"><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25"><i class="bi bi-eye me-1"></i>' . (int) ($r['vistas'] ?? 0) . '</span></button></td>';
+            $html .= '<td class="text-center"><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" title="Me gusta"><i class="bi bi-heart-fill me-1"></i>' . (int) ($r['likes'] ?? 0) . '</span></td>';
+            $html .= '<td class="text-end text-muted small">' . $this->fmtTamano($r['tamano_bytes'] ?? 0) . '</td>';
+            $html .= '<td class="text-end">'
+                . '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 vg-editar" title="Editar"><i class="bi bi-pencil"></i></button> '
+                . '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-1 vg-eliminar" title="Eliminar"><i class="bi bi-trash"></i></button>'
+                . '</td>';
+            $html .= '</tr>';
+        }
+        return $html;
     }
 
     public function store(): void

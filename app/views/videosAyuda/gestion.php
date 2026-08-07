@@ -14,6 +14,7 @@ $rows = $rows ?? [];
 $ordenCol = $ordenCol ?? 'orden';
 $ordenDir = $ordenDir ?? 'asc';
 $buscar = $buscar ?? '';
+$rowsHtml = $rowsHtml ?? '';
 
 // Límite efectivo de subida del servidor = min(upload_max_filesize, post_max_size).
 $iniABytes = static function (string $v): int {
@@ -41,14 +42,6 @@ $fmtTam = static function ($bytes): string {
     return number_format($b, $b < 10 && $i > 0 ? 1 : 0) . ' ' . $u[$i];
 };
 
-$thSort = static function (string $col, string $label) use ($base, $ordenCol, $ordenDir, $buscar): string {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = $base . '/videos-ayuda/gestion?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $flecha = '';
-    if ($ordenCol === $col) $flecha = strtolower($ordenDir) === 'asc' ? ' <i class="bi bi-caret-up-fill small"></i>' : ' <i class="bi bi-caret-down-fill small"></i>';
-    return '<a href="' . htmlspecialchars($url) . '" class="text-decoration-none text-reset">' . htmlspecialchars($label) . $flecha . '</a>';
-};
 ?><!DOCTYPE html>
 <html lang="es">
 <head>
@@ -82,18 +75,10 @@ $thSort = static function (string $col, string $label) use ($base, $ordenCol, $o
 
     <!-- Barra de herramientas -->
     <div class="vg-toolbar d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 py-2">
-        <form method="GET" action="<?= $base ?>/videos-ayuda/gestion" class="m-0">
-            <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-            <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-            <div class="input-group input-group-sm" style="max-width: 320px;">
-                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="text" name="b" class="form-control" placeholder="Buscar por título o categoría..." value="<?= htmlspecialchars($buscar) ?>">
-                <button type="submit" class="btn btn-outline-primary">Buscar</button>
-                <?php if ($buscar !== ''): ?>
-                <a href="<?= $base ?>/videos-ayuda/gestion" class="btn btn-outline-secondary">Limpiar</a>
-                <?php endif; ?>
-            </div>
-        </form>
+        <div class="input-group input-group-sm" style="max-width: 320px;">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" id="input-buscar-vg" class="form-control" placeholder="Buscar por título o categoría..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+        </div>
         <button type="button" class="btn btn-primary btn-sm" id="btn-nuevo-video">
             <i class="bi bi-cloud-upload me-1"></i>Subir video
         </button>
@@ -106,67 +91,18 @@ $thSort = static function (string $col, string $label) use ($base, $ordenCol, $o
                 <table class="table table-hover table-sm mb-0 align-middle">
                     <thead>
                         <tr>
-                            <th class="text-center" style="width:70px;"><?= $thSort('orden', 'Orden') ?></th>
-                            <th><?= $thSort('titulo', 'Título') ?></th>
-                            <th><?= $thSort('categoria', 'Categoría') ?></th>
-                            <th class="text-center"><?= $thSort('estado', 'Estado') ?></th>
-                            <th class="text-center"><?= $thSort('vistas', 'Vistas') ?></th>
-                            <th class="text-center"><?= $thSort('likes', 'Likes') ?></th>
-                            <th class="text-end"><?= $thSort('tamano_bytes', 'Tamaño') ?></th>
+                            <th class="text-center sortable-header" data-sort="orden" role="button" style="width:70px;">Orden <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="titulo" role="button">Título <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="categoria" role="button">Categoría <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="vistas" role="button">Vistas <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center">Likes</th>
+                            <th class="text-end sortable-header" data-sort="tamano_bytes" role="button">Tamaño <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-end" style="width:90px;">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php foreach ($rows as $r): ?>
-                        <?php $id = (int) $r['id']; $activo = ($r['estado'] ?? 'activo') === 'activo'; ?>
-                        <tr class="vg-row"
-                            data-id="<?= $id ?>"
-                            data-titulo="<?= htmlspecialchars($r['titulo'] ?? '') ?>"
-                            data-descripcion="<?= htmlspecialchars($r['descripcion'] ?? '') ?>"
-                            data-categoria="<?= htmlspecialchars($r['categoria'] ?? '') ?>"
-                            data-etiquetas="<?= htmlspecialchars($r['etiquetas'] ?? '') ?>"
-                            data-orden="<?= (int) ($r['orden'] ?? 0) ?>"
-                            data-estado="<?= htmlspecialchars($r['estado'] ?? 'activo') ?>"
-                            data-archivo="<?= htmlspecialchars($r['nombre_original'] ?? '') ?>">
-                            <td class="text-center text-muted"><?= (int) ($r['orden'] ?? 0) ?></td>
-                            <td>
-                                <div class="fw-medium"><?= htmlspecialchars($r['titulo'] ?? '') ?></div>
-                                <?php if (!empty($r['nombre_original'])): ?>
-                                <small class="text-muted"><i class="bi bi-film me-1"></i><?= htmlspecialchars($r['nombre_original']) ?></small>
-                                <?php endif; ?>
-                            </td>
-                            <td><?= htmlspecialchars($r['categoria'] ?? '') ?: '<span class="text-muted">—</span>' ?></td>
-                            <td class="text-center">
-                                <?php if ($activo): ?>
-                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>
-                                <?php else: ?>
-                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="text-center">
-                                <button type="button" class="btn btn-sm p-0 border-0 bg-transparent vg-ver-vistas" title="Ver quién ha visto">
-                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
-                                        <i class="bi bi-eye me-1"></i><?= (int) ($r['vistas'] ?? 0) ?>
-                                    </span>
-                                </button>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" title="Me gusta">
-                                    <i class="bi bi-heart-fill me-1"></i><?= (int) ($r['likes'] ?? 0) ?>
-                                </span>
-                            </td>
-                            <td class="text-end text-muted small"><?= $fmtTam($r['tamano_bytes'] ?? 0) ?></td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 vg-editar" title="Editar"><i class="bi bi-pencil"></i></button>
-                                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1 vg-eliminar" title="Eliminar"><i class="bi bi-trash"></i></button>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
+                    <tbody id="tbodyVideos"><?= $rowsHtml ?></tbody>
                 </table>
-                <?php if (empty($rows)): ?>
-                <p class="text-muted text-center py-5 mb-0">Aún no hay videos de ayuda. Use "Subir video" para agregar el primero.</p>
-                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -264,11 +200,58 @@ $thSort = static function (string $col, string $label) use ($base, $ordenCol, $o
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="<?= $base ?>/js/favoritos.js?v=<?= time() ?>"></script>
     <script>
         window.VA_BASE = '<?= $base ?>';
         window.VA_MAX_UPLOAD = <?= (int) $limiteEfectivo ?>;
         window.VA_MAX_UPLOAD_TXT = '<?= htmlspecialchars($fmtTam($limiteEfectivo), ENT_QUOTES) ?>';
     </script>
     <script src="<?= $base ?>/js/videos-ayuda.js?v=<?= time() ?>"></script>
+    <script>
+    (function () {
+        // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX,
+        // sin recargar la página (el input nunca pierde el foco). Mismo
+        // patrón que ASIENTOTIPO_cargarListado
+        // (public/js/modulos/asientos_tipo_modal.js).
+        var base = '<?= $base ?>';
+        var timer = null;
+        window.VG_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+        window.VG_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+        window.VG_cargarListado = function () {
+            var inputB = document.getElementById('input-buscar-vg');
+            var b = inputB ? inputB.value.trim() : '';
+            var tbodyEl = document.getElementById('tbodyVideos');
+            if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+            fetch(base + '/videos-ayuda/gestion-search?b=' + encodeURIComponent(b) + '&sort=' + window.VG_currentSort + '&dir=' + window.VG_currentDir, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+                })
+                .catch(function () {
+                    if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+                });
+        };
+
+        var inputBuscarVg = document.getElementById('input-buscar-vg');
+        if (inputBuscarVg) {
+            inputBuscarVg.addEventListener('input', function () {
+                clearTimeout(timer);
+                timer = setTimeout(function () { VG_cargarListado(); }, 400);
+            });
+        }
+
+        if (window.CMG_initSort) {
+            window.CMG_initSort('videos-ayuda-gestion', function (col, dir) {
+                window.VG_currentSort = col;
+                window.VG_currentDir = dir;
+                VG_cargarListado();
+            }, { col: window.VG_currentSort, dir: window.VG_currentDir });
+        }
+    })();
+    </script>
 </body>
 </html>

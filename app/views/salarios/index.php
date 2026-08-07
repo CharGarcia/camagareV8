@@ -11,14 +11,7 @@ $ordenDir = $ordenDir ?? 'desc';
 $buscar = $buscar ?? '';
 $msg = $_SESSION['salarios_msg'] ?? null;
 unset($_SESSION['salarios_msg']);
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/salarios?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .salario-row { cursor: pointer; }
@@ -44,18 +37,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/salarios" class="mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar por año o SBU..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/salarios?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 320px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-salarios" class="form-control" placeholder="Buscar por año o SBU..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -63,8 +48,8 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSort($base, 'ano', 'Año', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th class="text-end"><?= thSort($base, 'sbu', 'SBU', $ordenCol, $ordenDir, $buscar, 'text-end d-inline-block') ?></th>
+                        <th class="sortable-header" data-sort="ano" role="button">Año <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-end sortable-header" data-sort="sbu" role="button">SBU <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end">Factor Hora normal</th>
                         <th class="text-end">H. nocturna %</th>
                         <th class="text-end">H. suplem. %</th>
@@ -74,71 +59,12 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                         <th class="text-end">Aporte patr. %</th>
                         <th class="text-end">Aporte pers. %</th>
                         <th class="text-end">Adicional % (secap-iece)</th>
-                        <th class="text-center"><?= thSort($base, 'status', 'Estado', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
+                        <th class="text-center sortable-header" data-sort="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end" style="width: 80px;">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $id = (int)($r['id'] ?? $r['id_salario'] ?? 0);
-                    $status = (int)($r['status'] ?? 1);
-                    $ano = (int)($r['ano'] ?? date('Y'));
-                    $sbu = (float)($r['sbu'] ?? 0);
-                    $horaNormal = (float)($r['hora_normal'] ?? 0);
-                    $horaNocturna = (float)($r['hora_nocturna'] ?? 0);
-                    $horaSuplementaria = (float)($r['hora_suplementaria'] ?? 0);
-                    $horaExtraordinaria = (float)($r['hora_extraordinaria'] ?? 0);
-                    $fondoReserva = (float)($r['fondo_reserva'] ?? 0);
-                    $aportePersonal = (float)($r['aporte_personal'] ?? 0);
-                    $aportePatronal = (float)($r['aporte_patronal'] ?? 0);
-                    $extConyugue = (float)($r['ext_conyugue'] ?? 0);
-                    $adicional = (float)($r['adicional'] ?? 0);
-                    ?>
-                    <tr class="salario-row" role="button" tabindex="0" data-id="<?= $id ?>"
-                        data-ano="<?= $ano ?>"
-                        data-sbu="<?= $sbu ?>"
-                        data-hora-normal="<?= $horaNormal ?>"
-                        data-hora-nocturna="<?= $horaNocturna ?>"
-                        data-hora-suplementaria="<?= $horaSuplementaria ?>"
-                        data-hora-extraordinaria="<?= $horaExtraordinaria ?>"
-                        data-fondo-reserva="<?= $fondoReserva ?>"
-                        data-aporte-personal="<?= $aportePersonal ?>"
-                        data-aporte-patronal="<?= $aportePatronal ?>"
-                        data-ext-conyugue="<?= $extConyugue ?>"
-                        data-adicional="<?= $adicional ?>"
-                        data-status="<?= $status ?>">
-                        <td><strong><?= $ano ?></strong></td>
-                        <td class="text-end"><?= number_format($sbu, 2, ',', '.') ?></td>
-                        <td class="text-end"><?= number_format($horaNormal, 2, ',', '.') ?></td>
-                        <td class="text-end"><?= number_format($horaNocturna, 2, ',', '.') ?>%</td>
-                        <td class="text-end"><?= number_format($horaSuplementaria, 2, ',', '.') ?>%</td>
-                        <td class="text-end"><?= number_format($horaExtraordinaria, 2, ',', '.') ?>%</td>
-                        <td class="text-end"><?= number_format($fondoReserva, 2, ',', '.') ?>%</td>
-                        <td class="text-end"><?= number_format($extConyugue, 2, ',', '.') ?>%</td>
-                        <td class="text-end"><?= number_format($aportePatronal, 2, ',', '.') ?>%</td>
-                        <td class="text-end"><?= number_format($aportePersonal, 2, ',', '.') ?>%</td>
-                        <td class="text-end"><?= number_format($adicional, 2, ',', '.') ?>%</td>
-                        <td class="text-center">
-                            <?php if ($status): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-end">
-                            <form method="POST" action="<?= $base ?>/config/salariosDelete" class="d-inline" onsubmit="return confirm('¿Eliminar esta configuración de salarios para el año <?= $ano ?>?');" onclick="event.stopPropagation();">
-                                <input type="hidden" name="id" value="<?= $id ?>">
-                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1" title="Eliminar"><i class="bi bi-trash"></i></button>
-                            </form>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodySalarios"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay salarios configurados.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -342,28 +268,38 @@ $anosOptions = range($currentYear + 2, $currentYear - 5);
 
     if (modalEditar) {
         var formEditar = modalEditar.querySelector('#form-editar-salario');
-        document.querySelectorAll('.salario-row').forEach(function(row) {
-            row.addEventListener('click', function() {
-                ocultarMsgForm('editar-salario-msg');
-                formEditar.querySelector('#edit-id').value = this.dataset.id || '';
-                formEditar.querySelector('#edit-ano').value = this.dataset.ano || '';
-                formEditar.querySelector('#edit-sbu').value = this.dataset.sbu || '0';
-                formEditar.querySelector('#edit-hora-normal').value = this.dataset.horaNormal || '0';
-                formEditar.querySelector('#edit-hora-nocturna').value = this.dataset.horaNocturna || '0';
-                formEditar.querySelector('#edit-hora-suplementaria').value = this.dataset.horaSuplementaria || '0';
-                formEditar.querySelector('#edit-hora-extraordinaria').value = this.dataset.horaExtraordinaria || '0';
-                formEditar.querySelector('#edit-fondo-reserva').value = this.dataset.fondoReserva || '0';
-                formEditar.querySelector('#edit-aporte-personal').value = this.dataset.aportePersonal || '0';
-                formEditar.querySelector('#edit-aporte-patronal').value = this.dataset.aportePatronal || '0';
-                formEditar.querySelector('#edit-ext-conyugue').value = this.dataset.extConyugue || '0';
-                formEditar.querySelector('#edit-adicional').value = this.dataset.adicional || '0';
-                formEditar.querySelector('#edit-status').value = this.dataset.status || '1';
-                new bootstrap.Modal(modalEditar).show();
+        var tbodySalarios = document.getElementById('tbodySalarios');
+        function abrirModalSalario(row) {
+            ocultarMsgForm('editar-salario-msg');
+            formEditar.querySelector('#edit-id').value = row.dataset.id || '';
+            formEditar.querySelector('#edit-ano').value = row.dataset.ano || '';
+            formEditar.querySelector('#edit-sbu').value = row.dataset.sbu || '0';
+            formEditar.querySelector('#edit-hora-normal').value = row.dataset.horaNormal || '0';
+            formEditar.querySelector('#edit-hora-nocturna').value = row.dataset.horaNocturna || '0';
+            formEditar.querySelector('#edit-hora-suplementaria').value = row.dataset.horaSuplementaria || '0';
+            formEditar.querySelector('#edit-hora-extraordinaria').value = row.dataset.horaExtraordinaria || '0';
+            formEditar.querySelector('#edit-fondo-reserva').value = row.dataset.fondoReserva || '0';
+            formEditar.querySelector('#edit-aporte-personal').value = row.dataset.aportePersonal || '0';
+            formEditar.querySelector('#edit-aporte-patronal').value = row.dataset.aportePatronal || '0';
+            formEditar.querySelector('#edit-ext-conyugue').value = row.dataset.extConyugue || '0';
+            formEditar.querySelector('#edit-adicional').value = row.dataset.adicional || '0';
+            formEditar.querySelector('#edit-status').value = row.dataset.status || '1';
+            new bootstrap.Modal(modalEditar).show();
+        }
+        // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+        // AJAX, por lo que el listener va en el tbody (contenedor fijo).
+        if (tbodySalarios) {
+            tbodySalarios.addEventListener('click', function(e) {
+                if (e.target.closest('form, button')) return;
+                var row = e.target.closest('.salario-row');
+                if (row) abrirModalSalario(row);
             });
-            row.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+            tbodySalarios.addEventListener('keydown', function(e) {
+                if ((e.key !== 'Enter' && e.key !== ' ') || e.target.closest('form, button')) return;
+                var row = e.target.closest('.salario-row');
+                if (row) { e.preventDefault(); abrirModalSalario(row); }
             });
-        });
+        }
         if (formEditar) {
             formEditar.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -392,6 +328,49 @@ $anosOptions = range($currentYear + 2, $currentYear - 5);
                     .catch(function() { if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; } });
             });
         }
+    }
+
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timer = null;
+    window.SALARIOS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.SALARIOS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.SALARIOS_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-salarios');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodySalarios');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="12" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/salarios-search?b=' + encodeURIComponent(b) + '&sort=' + window.SALARIOS_currentSort + '&dir=' + window.SALARIOS_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="12" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-salarios');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                SALARIOS_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('salarios', function(col, dir) {
+            window.SALARIOS_currentSort = col;
+            window.SALARIOS_currentDir = dir;
+            SALARIOS_cargarListado();
+        }, { col: window.SALARIOS_currentSort, dir: window.SALARIOS_currentDir });
     }
 })();
 </script>

@@ -11,14 +11,7 @@ $ordenDir = $ordenDir ?? 'asc';
 $buscar = $buscar ?? '';
 $msg = $_SESSION['identificadores_comprador_vendedor_msg'] ?? null;
 unset($_SESSION['identificadores_comprador_vendedor_msg']);
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/identificadores-comprador-vendedor?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .identificador-row { cursor: pointer; }
@@ -44,18 +37,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/identificadores-comprador-vendedor" class="mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar código, nombre o tipo..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/identificadores-comprador-vendedor?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 320px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-identificadores" class="form-control" placeholder="Buscar código, nombre o tipo..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -63,50 +48,15 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSort($base, 'codigo', 'Código', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'nombre', 'Nombre', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'tipo', 'Tipo', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th class="text-center"><?= thSort($base, 'status', 'Estado', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
+                        <th class="sortable-header" data-sort="codigo" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="tipo" role="button">Tipo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end" style="width: 80px;">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php $id = (int)($r['id'] ?? $r['id_identificador_comprador_vendedor'] ?? 0); $status = (int)($r['status'] ?? 1); $tipo = (int)($r['tipo'] ?? 1); ?>
-                    <tr class="identificador-row" role="button" tabindex="0" data-id="<?= $id ?>"
-                        data-codigo="<?= htmlspecialchars($r['codigo'] ?? '') ?>"
-                        data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>"
-                        data-tipo="<?= htmlspecialchars($tipo) ?>"
-                        data-status="<?= $status ?>">
-                        <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
-                        <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                        <td>
-                            <?php if ($tipo === 2): ?>
-                            <span class="badge bg-primary"><i class="bi bi-shop"></i> Vendedor</span>
-                            <?php else: ?>
-                            <span class="badge bg-info"><i class="bi bi-cart-check"></i> Comprador</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-center">
-                            <?php if ($status): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-end">
-                            <form method="POST" action="<?= $base ?>/config/identificadoresCompradorVendedorDelete" class="d-inline" onsubmit="return confirm('¿Eliminar este identificador?');" onclick="event.stopPropagation();">
-                                <input type="hidden" name="id" value="<?= $id ?>">
-                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1" title="Eliminar"><i class="bi bi-trash"></i></button>
-                            </form>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyIdentificadores"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay identificadores registrados.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -243,20 +193,30 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 
     if (modalEditar) {
         var formEditar = modalEditar.querySelector('#form-editar-identificador');
-        document.querySelectorAll('.identificador-row').forEach(function(row) {
-            row.addEventListener('click', function() {
-                ocultarMsgForm('editar-identificador-msg');
-                formEditar.querySelector('#edit-id').value = this.dataset.id || '';
-                formEditar.querySelector('#edit-codigo').value = this.dataset.codigo || '';
-                formEditar.querySelector('#edit-nombre').value = this.dataset.nombre || '';
-                formEditar.querySelector('#edit-tipo').value = this.dataset.tipo || '1';
-                formEditar.querySelector('#edit-status').value = this.dataset.status || '1';
-                new bootstrap.Modal(modalEditar).show();
+        var tbodyIdentificadores = document.getElementById('tbodyIdentificadores');
+        function abrirModalIdentificador(row) {
+            ocultarMsgForm('editar-identificador-msg');
+            formEditar.querySelector('#edit-id').value = row.dataset.id || '';
+            formEditar.querySelector('#edit-codigo').value = row.dataset.codigo || '';
+            formEditar.querySelector('#edit-nombre').value = row.dataset.nombre || '';
+            formEditar.querySelector('#edit-tipo').value = row.dataset.tipo || '1';
+            formEditar.querySelector('#edit-status').value = row.dataset.status || '1';
+            new bootstrap.Modal(modalEditar).show();
+        }
+        // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+        // AJAX, por lo que el listener va en el tbody (contenedor fijo).
+        if (tbodyIdentificadores) {
+            tbodyIdentificadores.addEventListener('click', function(e) {
+                if (e.target.closest('form, button')) return;
+                var row = e.target.closest('.identificador-row');
+                if (row) abrirModalIdentificador(row);
             });
-            row.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+            tbodyIdentificadores.addEventListener('keydown', function(e) {
+                if ((e.key !== 'Enter' && e.key !== ' ') || e.target.closest('form, button')) return;
+                var row = e.target.closest('.identificador-row');
+                if (row) { e.preventDefault(); abrirModalIdentificador(row); }
             });
-        });
+        }
         if (formEditar) {
             formEditar.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -285,6 +245,49 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                     .catch(function() { if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; } });
             });
         }
+    }
+
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timer = null;
+    window.IDENTIF_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.IDENTIF_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.IDENTIF_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-identificadores');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyIdentificadores');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/identificadores-comprador-vendedor-search?b=' + encodeURIComponent(b) + '&sort=' + window.IDENTIF_currentSort + '&dir=' + window.IDENTIF_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-identificadores');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                IDENTIF_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('identificadores-comprador-vendedor', function(col, dir) {
+            window.IDENTIF_currentSort = col;
+            window.IDENTIF_currentDir = dir;
+            IDENTIF_cargarListado();
+        }, { col: window.IDENTIF_currentSort, dir: window.IDENTIF_currentDir });
     }
 })();
 </script>

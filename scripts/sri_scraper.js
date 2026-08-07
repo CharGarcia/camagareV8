@@ -765,7 +765,10 @@ async function esperarConsultaAsistida(ctx, timeoutMs) {
 // Selectores del contenedor de error estándar de Keycloak. Son estables entre versiones/idiomas
 // (a diferencia del texto del mensaje, que puede cambiar de redacción sin previo aviso): Keycloak
 // SIEMPRE marca el error de login con uno de estos elementos, sin importar qué diga adentro.
-const SELECTORES_ERROR_KEYCLOAK = '#input-error, .kc-feedback-text, #kc-error-message, .alert-error';
+// NOTA: ".alert-error" se sacó a propósito — es una clase genérica de Bootstrap/Keycloak que el
+// portal del SRI reutiliza para avisos que no son de credenciales (mantenimiento, mensajes
+// generales, etc.), y coincidir con ella disparaba falsos "credenciales inválidas".
+const SELECTORES_ERROR_KEYCLOAK = '#input-error, .kc-feedback-text, #kc-error-message';
 
 async function detectaErrorKeycloakDOM(page) {
     return page.evaluate((sel) => {
@@ -798,19 +801,23 @@ async function loginKeycloak(page, usuario, clave) {
     const finEspera = Date.now() + 20000;
     while (Date.now() < finEspera) {
         await pausa(600);
-        const txt = await page.evaluate(() => document.body.innerText.toLowerCase()).catch(() => '');
-        const errorDom = await detectaErrorKeycloakDOM(page);
-        if (detectaCredencialesInvalidas(txt) || errorDom) {
-            await screenshot(page, 'ERROR_credenciales_invalidas');
-            emitirCredencialesInvalidas((errorDom || txt).substring(0, 300));
-        }
 
         const formularioVisible = await page.evaluate(() => {
             const btn = document.querySelector('#kc-login');
             return btn ? (btn.offsetParent !== null) : false;
         }).catch(() => false);
 
+        // Ya navegamos fuera de la pantalla de login (éxito): no seguir buscando errores de
+        // credenciales en el DOM del portal de destino, donde estos mismos selectores pueden
+        // coincidir con avisos que no tienen nada que ver con el login.
         if (!formularioVisible) return;
+
+        const txt = await page.evaluate(() => document.body.innerText.toLowerCase()).catch(() => '');
+        const errorDom = await detectaErrorKeycloakDOM(page);
+        if (detectaCredencialesInvalidas(txt) || errorDom) {
+            await screenshot(page, 'ERROR_credenciales_invalidas');
+            emitirCredencialesInvalidas((errorDom || txt).substring(0, 300));
+        }
     }
 
     // Se agotó la espera y el formulario de login SIGUE visible: un login correcto siempre

@@ -42,10 +42,68 @@ class TarifaIvaController extends Controller
         $this->viewWithLayout('layouts.main', 'tarifaIva.index', [
             'titulo' => 'Tarifas IVA',
             'rows' => $rows,
+            'rowsHtml' => $this->renderFilasHtml($rows),
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'buscar' => $buscar,
         ]);
+    }
+
+    /**
+     * AJAX: listado de tarifas IVA (tabla), para búsqueda y ordenamiento en
+     * tiempo real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'porcentaje_iva');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        if (!in_array($ordenCol, TarifaIva::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'porcentaje_iva';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $this->renderFilasHtml($rows),
+        ]);
+        exit;
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por searchAjax.
+     */
+    private function renderFilasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-percent fs-3 d-block mb-2"></i>No hay tarifas IVA registradas.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $id = (int) ($r['id'] ?? 0);
+            $status = (int) ($r['status'] ?? 1);
+            $html .= '<tr class="tarifa-row" role="button" tabindex="0" data-id="' . $id . '"'
+                . ' data-codigo="' . htmlspecialchars($r['codigo'] ?? '') . '"'
+                . ' data-tarifa="' . htmlspecialchars($r['tarifa'] ?? '') . '"'
+                . ' data-porcentaje="' . (int) ($r['porcentaje_iva'] ?? 0) . '"'
+                . ' data-status="' . $status . '">';
+            $html .= '<td><code>' . htmlspecialchars($r['codigo'] ?? '') . '</code></td>';
+            $html .= '<td>' . htmlspecialchars($r['tarifa'] ?? '') . '</td>';
+            $html .= '<td class="text-center">' . (int) ($r['porcentaje_iva'] ?? 0) . '%</td>';
+            $html .= '<td class="text-center">' . ($status ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>') . '</td>';
+            $html .= '</tr>';
+        }
+        return $html;
     }
 
     public function update(): void

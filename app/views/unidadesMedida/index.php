@@ -27,24 +27,8 @@ $msg = $_SESSION['unidades_msg'] ?? null;
 unset($_SESSION['unidades_msg']);
 
 $urlBase = rtrim($base, '/') . '/config/unidades-medida';
-
-function thSortTipo($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar) {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $params = ['tab' => 'tipos'];
-    if ($col !== 'nombre') $params['sort_tipo'] = $col;
-    if ($dir !== 'asc') $params['dir_tipo'] = $dir;
-    if ($buscar !== '') $params['b_tipo'] = $buscar;
-    return '<a href="' . htmlspecialchars($urlBase . '?' . http_build_query($params)) . '" class="text-decoration-none" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
-function thSortUni($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $filtro) {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $params = ['tab' => 'unidades'];
-    if ($col !== 'nombre') $params['sort_uni'] = $col;
-    if ($dir !== 'asc') $params['dir_uni'] = $dir;
-    if ($buscar !== '') $params['b_uni'] = $buscar;
-    if ($filtro !== null && $filtro > 0) $params['f_tipo'] = $filtro;
-    return '<a href="' . htmlspecialchars($urlBase . '?' . http_build_query($params)) . '" class="text-decoration-none" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsTiposHtml = $rowsTiposHtml ?? '';
+$rowsUnidadesHtml = $rowsUnidadesHtml ?? '';
 ?>
 <style>
 .unidades-scroll { max-height: calc(100dvh - 320px); overflow-y: auto; }
@@ -79,68 +63,38 @@ function thSortUni($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $filtr
         </ul>
 
         <?php if ($tab === 'tipos'): ?>
-        <form method="GET" action="<?= $urlBase ?>" class="mb-3">
-            <input type="hidden" name="tab" value="tipos">
-            <?php if ($ordenColTipo !== 'nombre' || $ordenDirTipo !== 'asc'): ?>
-            <input type="hidden" name="sort_tipo" value="<?= htmlspecialchars($ordenColTipo) ?>">
-            <input type="hidden" name="dir_tipo" value="<?= htmlspecialchars($ordenDirTipo) ?>">
-            <?php endif; ?>
+        <div class="mb-3">
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <div class="input-group input-group-sm" style="max-width: 280px;">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b_tipo" class="form-control" placeholder="Buscar tipo..." value="<?= htmlspecialchars($buscarTipo) ?>">
-                    <button type="submit" class="btn btn-outline-primary">Buscar</button>
+                    <input type="text" id="input-buscar-tipo" class="form-control" placeholder="Buscar tipo..." value="<?= htmlspecialchars($buscarTipo) ?>" autocomplete="off">
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoTipo"><i class="bi bi-plus-lg"></i> Nuevo tipo</button>
             </div>
-        </form>
+        </div>
         <div class="unidades-scroll">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSortTipo($urlBase, 'codigo', 'Código', $ordenColTipo, $ordenDirTipo, $buscarTipo) ?></th>
-                        <th><?= thSortTipo($urlBase, 'nombre', 'Nombre', $ordenColTipo, $ordenDirTipo, $buscarTipo) ?></th>
+                        <th class="sortable-header" data-sort="codigo" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th>Descripción</th>
-                        <th class="text-center"><?= thSortTipo($urlBase, 'estado', 'Estado', $ordenColTipo, $ordenDirTipo, $buscarTipo) ?></th>
+                        <th class="text-center sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rowsTipos as $r): ?>
-                    <?php $estado = (int)($r['estado'] ?? 1); ?>
-                    <tr class="tipo-row" data-id="<?= (int)($r['id'] ?? 0) ?>"
-                        data-codigo="<?= htmlspecialchars($r['codigo'] ?? '') ?>"
-                        data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>"
-                        data-descripcion="<?= htmlspecialchars($r['descripcion'] ?? '') ?>"
-                        data-estado="<?= $estado ?>">
-                        <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
-                        <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                        <td class="small text-muted"><?= htmlspecialchars($r['descripcion'] ?? '') ?></td>
-                        <td class="text-center">
-                            <?php if ($estado): ?><span class="badge bg-success">Activo</span><?php else: ?><span class="badge bg-secondary">Inactivo</span><?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyTipos"><?= $rowsTiposHtml ?></tbody>
             </table>
-            <?php if (empty($rowsTipos)): ?><p class="text-muted text-center py-4 mb-0">No hay tipos de unidad.</p><?php endif; ?>
         </div>
         <?php endif; ?>
 
         <?php if ($tab === 'unidades'): ?>
-        <form method="GET" action="<?= $urlBase ?>" class="mb-3">
-            <input type="hidden" name="tab" value="unidades">
-            <?php if ($ordenColUni !== 'nombre' || $ordenDirUni !== 'asc'): ?>
-            <input type="hidden" name="sort_uni" value="<?= htmlspecialchars($ordenColUni) ?>">
-            <input type="hidden" name="dir_uni" value="<?= htmlspecialchars($ordenDirUni) ?>">
-            <?php endif; ?>
-            <?php if ($filtroTipo): ?><input type="hidden" name="f_tipo" value="<?= (int)$filtroTipo ?>"><?php endif; ?>
+        <div class="mb-3">
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <div class="input-group input-group-sm" style="max-width: 280px;">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b_uni" class="form-control" placeholder="Buscar unidad..." value="<?= htmlspecialchars($buscarUni) ?>">
-                    <button type="submit" class="btn btn-outline-primary">Buscar</button>
+                    <input type="text" id="input-buscar-uni" class="form-control" placeholder="Buscar unidad..." value="<?= htmlspecialchars($buscarUni) ?>" autocomplete="off">
                 </div>
-                <select name="f_tipo" class="form-select form-select-sm" style="max-width: 200px;" onchange="this.form.submit()">
+                <select id="select-filtro-tipo" class="form-select form-select-sm" style="max-width: 200px;">
                     <option value="">Todos los tipos</option>
                     <?php foreach ($tiposParaSelect as $t): ?>
                     <option value="<?= (int)$t['id'] ?>" <?= $filtroTipo === (int)$t['id'] ? 'selected' : '' ?>><?= htmlspecialchars($t['nombre'] ?? $t['codigo'] ?? '') ?></option>
@@ -148,43 +102,21 @@ function thSortUni($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $filtr
                 </select>
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevaUnidad"><i class="bi bi-plus-lg"></i> Nueva unidad</button>
             </div>
-        </form>
+        </div>
         <div class="unidades-scroll">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSortUni($urlBase, 'codigo', 'Código', $ordenColUni, $ordenDirUni, $buscarUni, $filtroTipo) ?></th>
-                        <th><?= thSortUni($urlBase, 'nombre', 'Nombre', $ordenColUni, $ordenDirUni, $buscarUni, $filtroTipo) ?></th>
-                        <th><?= thSortUni($urlBase, 'abreviatura', 'Abreviatura', $ordenColUni, $ordenDirUni, $buscarUni, $filtroTipo) ?></th>
+                        <th class="sortable-header" data-sort="codigo" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="abreviatura" role="button">Abreviatura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th>Tipo</th>
                         <th class="text-end">Factor base</th>
-                        <th class="text-center"><?= thSortUni($urlBase, 'estado', 'Estado', $ordenColUni, $ordenDirUni, $buscarUni, $filtroTipo) ?></th>
+                        <th class="text-center sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rowsUnidades as $r): ?>
-                    <?php $estado = (int)($r['estado'] ?? 1); $esBase = (int)($r['es_base'] ?? 0); ?>
-                    <tr class="unidad-row" data-id="<?= (int)($r['id'] ?? 0) ?>"
-                        data-id-tipo="<?= (int)($r['id_tipo'] ?? 0) ?>"
-                        data-codigo="<?= htmlspecialchars($r['codigo'] ?? '') ?>"
-                        data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>"
-                        data-abreviatura="<?= htmlspecialchars($r['abreviatura'] ?? '') ?>"
-                        data-es-base="<?= $esBase ?>"
-                        data-factor-base="<?= htmlspecialchars($r['factor_base'] ?? '1') ?>"
-                        data-estado="<?= $estado ?>">
-                        <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
-                        <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['abreviatura'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['tipo_nombre'] ?? '') ?></td>
-                        <td class="text-end"><?= $esBase ? '<span class="badge bg-info">Base</span>' : htmlspecialchars($r['factor_base'] ?? '1') ?></td>
-                        <td class="text-center">
-                            <?php if ($estado): ?><span class="badge bg-success">Activo</span><?php else: ?><span class="badge bg-secondary">Inactivo</span><?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyUnidades"><?= $rowsUnidadesHtml ?></tbody>
             </table>
-            <?php if (empty($rowsUnidades)): ?><p class="text-muted text-center py-4 mb-0">No hay unidades de medida.</p><?php endif; ?>
         </div>
         <?php endif; ?>
     </div>
@@ -395,36 +327,123 @@ function thSortUni($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $filtr
 
 <script>
 (function() {
+    var base = '<?= $base ?>';
+
     var modalTipo = document.getElementById('modalEditarTipo');
     var formTipo = modalTipo ? modalTipo.querySelector('form') : null;
-    if (modalTipo && formTipo) {
-        document.querySelectorAll('.tipo-row').forEach(function(row) {
-            row.addEventListener('click', function() {
-                formTipo.querySelector('#edit-tipo-id').value = this.dataset.id || '';
-                formTipo.querySelector('#edit-tipo-codigo').value = this.dataset.codigo || '';
-                formTipo.querySelector('#edit-tipo-nombre').value = this.dataset.nombre || '';
-                formTipo.querySelector('#edit-tipo-descripcion').value = this.dataset.descripcion || '';
-                formTipo.querySelector('#edit-tipo-estado').checked = this.dataset.estado === '1';
-                new bootstrap.Modal(modalTipo).show();
-            });
+    function abrirModalTipo(row) {
+        if (!modalTipo || !formTipo) return;
+        formTipo.querySelector('#edit-tipo-id').value = row.dataset.id || '';
+        formTipo.querySelector('#edit-tipo-codigo').value = row.dataset.codigo || '';
+        formTipo.querySelector('#edit-tipo-nombre').value = row.dataset.nombre || '';
+        formTipo.querySelector('#edit-tipo-descripcion').value = row.dataset.descripcion || '';
+        formTipo.querySelector('#edit-tipo-estado').checked = row.dataset.estado === '1';
+        new bootstrap.Modal(modalTipo).show();
+    }
+    var tbodyTipos = document.getElementById('tbodyTipos');
+    if (tbodyTipos) {
+        tbodyTipos.addEventListener('click', function(e) {
+            var row = e.target.closest('.tipo-row');
+            if (row) abrirModalTipo(row);
+        });
+        tbodyTipos.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.tipo-row');
+            if (row) { e.preventDefault(); abrirModalTipo(row); }
         });
     }
+
     var modalUni = document.getElementById('modalEditarUnidad');
     var formUni = modalUni ? modalUni.querySelector('form') : null;
-    if (modalUni && formUni) {
-        document.querySelectorAll('.unidad-row').forEach(function(row) {
-            row.addEventListener('click', function() {
-                formUni.querySelector('#edit-uni-id').value = this.dataset.id || '';
-                formUni.querySelector('#edit-uni-id-tipo').value = this.dataset.idTipo || '';
-                formUni.querySelector('#edit-uni-codigo').value = this.dataset.codigo || '';
-                formUni.querySelector('#edit-uni-nombre').value = this.dataset.nombre || '';
-                formUni.querySelector('#edit-uni-abreviatura').value = this.dataset.abreviatura || '';
-                formUni.querySelector('#edit-uni-es-base').checked = this.dataset.esBase === '1';
-                formUni.querySelector('#edit-uni-factor-base').value = this.dataset.factorBase || '1';
-                formUni.querySelector('#edit-uni-estado').checked = this.dataset.estado === '1';
-                new bootstrap.Modal(modalUni).show();
-            });
+    function abrirModalUnidad(row) {
+        if (!modalUni || !formUni) return;
+        formUni.querySelector('#edit-uni-id').value = row.dataset.id || '';
+        formUni.querySelector('#edit-uni-id-tipo').value = row.dataset.idTipo || '';
+        formUni.querySelector('#edit-uni-codigo').value = row.dataset.codigo || '';
+        formUni.querySelector('#edit-uni-nombre').value = row.dataset.nombre || '';
+        formUni.querySelector('#edit-uni-abreviatura').value = row.dataset.abreviatura || '';
+        formUni.querySelector('#edit-uni-es-base').checked = row.dataset.esBase === '1';
+        formUni.querySelector('#edit-uni-factor-base').value = row.dataset.factorBase || '1';
+        formUni.querySelector('#edit-uni-estado').checked = row.dataset.estado === '1';
+        new bootstrap.Modal(modalUni).show();
+    }
+    var tbodyUnidades = document.getElementById('tbodyUnidades');
+    if (tbodyUnidades) {
+        tbodyUnidades.addEventListener('click', function(e) {
+            var row = e.target.closest('.unidad-row');
+            if (row) abrirModalUnidad(row);
         });
+        tbodyUnidades.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.unidad-row');
+            if (row) { e.preventDefault(); abrirModalUnidad(row); }
+        });
+    }
+
+    // Búsqueda y orden en tiempo real (pestaña Tipos de unidad): reemplazan
+    // solo la tabla vía AJAX, sin recargar la página. Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timerTipo = null;
+    window.UTIPO_currentSort = '<?= htmlspecialchars($ordenColTipo) ?>';
+    window.UTIPO_currentDir = '<?= htmlspecialchars($ordenDirTipo) ?>';
+    window.UTIPO_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-tipo');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyTipos');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        fetch(base + '/config/unidades-medida-tipos-search?b_tipo=' + encodeURIComponent(b) + '&sort_tipo=' + window.UTIPO_currentSort + '&dir_tipo=' + window.UTIPO_currentDir, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows; })
+            .catch(function() { if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-4">Error al cargar.</td></tr>'; });
+    };
+    var inputBuscarTipo = document.getElementById('input-buscar-tipo');
+    if (inputBuscarTipo) {
+        inputBuscarTipo.addEventListener('input', function() {
+            clearTimeout(timerTipo);
+            timerTipo = setTimeout(function() { UTIPO_cargarListado(); }, 400);
+        });
+    }
+    if (window.CMG_initSort && document.getElementById('tbodyTipos')) {
+        window.CMG_initSort('unidades-medida-tipos', function(col, dir) {
+            window.UTIPO_currentSort = col;
+            window.UTIPO_currentDir = dir;
+            UTIPO_cargarListado();
+        }, { col: window.UTIPO_currentSort, dir: window.UTIPO_currentDir });
+    }
+
+    // Búsqueda, filtro por tipo y orden en tiempo real (pestaña Unidades de medida).
+    var timerUni = null;
+    window.UUNI_currentSort = '<?= htmlspecialchars($ordenColUni) ?>';
+    window.UUNI_currentDir = '<?= htmlspecialchars($ordenDirUni) ?>';
+    window.UUNI_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-uni');
+        var selectTipo = document.getElementById('select-filtro-tipo');
+        var b = inputB ? inputB.value.trim() : '';
+        var fTipo = selectTipo ? selectTipo.value : '';
+        var tbodyEl = document.getElementById('tbodyUnidades');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        fetch(base + '/config/unidades-medida-unidades-search?b_uni=' + encodeURIComponent(b) + '&f_tipo=' + encodeURIComponent(fTipo) + '&sort_uni=' + window.UUNI_currentSort + '&dir_uni=' + window.UUNI_currentDir, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows; })
+            .catch(function() { if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error al cargar.</td></tr>'; });
+    };
+    var inputBuscarUni = document.getElementById('input-buscar-uni');
+    if (inputBuscarUni) {
+        inputBuscarUni.addEventListener('input', function() {
+            clearTimeout(timerUni);
+            timerUni = setTimeout(function() { UUNI_cargarListado(); }, 400);
+        });
+    }
+    var selectFiltroTipo = document.getElementById('select-filtro-tipo');
+    if (selectFiltroTipo) {
+        selectFiltroTipo.addEventListener('change', function() { UUNI_cargarListado(); });
+    }
+    if (window.CMG_initSort && document.getElementById('tbodyUnidades')) {
+        window.CMG_initSort('unidades-medida-unidades', function(col, dir) {
+            window.UUNI_currentSort = col;
+            window.UUNI_currentDir = dir;
+            UUNI_cargarListado();
+        }, { col: window.UUNI_currentSort, dir: window.UUNI_currentDir });
     }
 })();
 </script>

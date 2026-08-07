@@ -8,6 +8,7 @@ $rows = $rows ?? [];
 $buscar = $buscar ?? '';
 $modulosCatalogo = $modulosCatalogo ?? [];
 $msg = $msg ?? null;
+$rowsHtml = $rowsHtml ?? '';
 
 $colores = ['primary', 'secondary', 'success', 'info', 'warning', 'danger', 'dark'];
 ?>
@@ -36,16 +37,10 @@ $colores = ['primary', 'secondary', 'success', 'info', 'warning', 'danger', 'dar
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/combos-submodulos" class="mb-3">
-    <div class="input-group input-group-sm" style="max-width: 380px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="buscar" class="form-control" placeholder="Buscar combo por nombre o descripción..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/combos-submodulos" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 380px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-combos" class="form-control" placeholder="Buscar combo por nombre o descripción..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -61,62 +56,8 @@ $colores = ['primary', 'secondary', 'success', 'info', 'warning', 'danger', 'dar
                         <th class="text-center pe-3">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $id = (int) $r['id'];
-                    $c_nombre = htmlspecialchars($r['nombre'] ?? '');
-                    $c_desc = htmlspecialchars($r['descripcion'] ?? '');
-                    $c_total = (int) ($r['total_submodulos'] ?? 0);
-                    $c_precio = $r['precio'] !== null ? number_format((float) $r['precio'], 2) : null;
-                    $c_activo = !empty($r['activo']);
-                    $c_color = htmlspecialchars($r['clase_color'] ?? 'primary');
-                    $items = $r['items'] ?? [];
-                    $listaSubmodulos = array_map(static fn ($it) => $it['nombre_submodulo'] ?? '', $items);
-
-                    $rj = htmlspecialchars(json_encode([
-                        'id' => $id,
-                        'nombre' => $r['nombre'] ?? '',
-                        'descripcion' => $r['descripcion'] ?? '',
-                        'precio' => $r['precio'],
-                        'clase_color' => $r['clase_color'] ?? 'primary',
-                        'orden' => (int) ($r['orden'] ?? 0),
-                        'activo' => $c_activo,
-                        'items' => array_map(static fn ($it) => [
-                            'id_modulo' => (int) $it['id_modulo'],
-                            'id_submodulo' => (int) $it['id_submodulo'],
-                        ], $items),
-                    ]), ENT_QUOTES, 'UTF-8');
-                    ?>
-                    <tr class="combos-row" role="button" tabindex="0" data-json="<?= $rj ?>" onclick="abrirModalEditarCombo(this)">
-                        <td class="ps-3"><span class="badge bg-<?= $c_color ?>"><?= $c_nombre ?></span></td>
-                        <td class="combos-desc-cell" title="<?= $c_desc ?>"><?= $c_desc ?></td>
-                        <td class="text-center" title="<?= htmlspecialchars(implode(', ', $listaSubmodulos)) ?>">
-                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25"><?= $c_total ?></span>
-                        </td>
-                        <td class="text-center"><?= $c_precio !== null ? '$' . $c_precio : '<span class="text-muted">—</span>' ?></td>
-                        <td class="text-center">
-                            <?php if ($c_activo): ?>
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-center pe-3" onclick="event.stopPropagation()">
-                            <form method="POST" action="<?= $base ?>/config/combos-submodulos?action=eliminar" class="d-inline" onsubmit="return confirm('¿Eliminar el combo &quot;<?= addslashes($c_nombre) ?>&quot;?');">
-                                <input type="hidden" name="id" value="<?= $id ?>">
-                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1 border-0" title="Eliminar">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyCombos"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay combos registrados o no coinciden con la búsqueda.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -267,5 +208,43 @@ document.getElementById('formCombo').addEventListener('submit', function(e) {
             bloque.style.display = algunaVisible ? '' : 'none';
         });
     });
+})();
+
+(function() {
+    // Búsqueda en tiempo real: reemplaza solo la tabla vía AJAX, sin recargar
+    // la página (el input nunca pierde el foco). Las filas usan onclick
+    // inline, así que no hace falta re-vincular eventos tras reemplazar el
+    // tbody. Mismo patrón que ASIENTOTIPO_cargarListado
+    // (public/js/modulos/asientos_tipo_modal.js).
+    var base = '<?= $base ?>';
+    var timer = null;
+
+    window.COMBOS_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-combos');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyCombos');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/combos-submodulos?action=search&buscar=' + encodeURIComponent(b), {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-combos');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                COMBOS_cargarListado();
+            }, 400);
+        });
+    }
 })();
 </script>

@@ -17,6 +17,7 @@ $etiquetasTipoArchivo = [
     'txt_delimitado' => 'TXT delimitado',
     'txt_ancho_fijo' => 'TXT ancho fijo',
 ];
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 <style>
@@ -47,16 +48,10 @@ $etiquetasTipoArchivo = [
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= $base ?>/config/transferencia-formatos" class="mb-3">
-    <div class="input-group input-group-sm" style="max-width: 360px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar por nombre o banco..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= $base ?>/config/transferencia-formatos" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 360px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-tf" class="form-control" placeholder="Buscar por nombre o banco..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -72,48 +67,7 @@ $etiquetasTipoArchivo = [
                         <th class="text-center pe-3">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $f): ?>
-                    <tr>
-                        <td class="ps-3">
-                            <?= htmlspecialchars($f['nombre']) ?>
-                            <?php if (!empty($f['clase_formatter'])): ?>
-                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 ms-1" title="<?= htmlspecialchars($f['clase_formatter']) ?>">clase PHP</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><?= htmlspecialchars($f['nombre_banco'] ?? 'Genérico') ?></td>
-                        <td><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25"><?= htmlspecialchars($etiquetasTipoArchivo[$f['tipo_archivo']] ?? $f['tipo_archivo']) ?></span></td>
-                        <td class="text-center"><?= count($f['campos'] ?? []) ?></td>
-                        <td class="text-center">
-                            <?php if ($f['estado'] === 'activo'): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-center pe-3">
-                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 border-0" title="Editar"
-                                onclick='TF_abrirModalEditar(<?= json_encode($f, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <a href="<?= $base ?>/config/transferenciaFormatos<?= $f['estado'] === 'activo' ? 'Desactivar' : 'Activar' ?>?id=<?= (int) $f['id'] ?>"
-                               class="btn btn-sm btn-outline-<?= $f['estado'] === 'activo' ? 'secondary' : 'success' ?> py-0 px-1 border-0"
-                               title="<?= $f['estado'] === 'activo' ? 'Desactivar' : 'Activar' ?>">
-                                <i class="bi bi-<?= $f['estado'] === 'activo' ? 'pause-circle' : 'play-circle' ?>"></i>
-                            </a>
-                            <a href="<?= $base ?>/config/transferenciaFormatosDelete?id=<?= (int) $f['id'] ?>"
-                               class="btn btn-sm btn-outline-danger py-0 px-1 border-0" title="Eliminar"
-                               onclick="return confirm('¿Eliminar este formato?');"><i class="bi bi-trash"></i></a>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($rows)): ?>
-                    <tr><td colspan="6" class="text-center text-muted py-5">
-                        <i class="bi bi-inbox d-block mb-2" style="font-size:1.5rem;"></i>
-                        No hay formatos configurados.
-                    </td></tr>
-                    <?php endif; ?>
-                </tbody>
+                <tbody id="tbodyTF"><?= $rowsHtml ?></tbody>
             </table>
         </div>
     </div>
@@ -227,3 +181,42 @@ window.TF_STORE_URL = '<?= $base ?>/config/transferenciaFormatosStore';
 window.TF_UPDATE_URL = '<?= $base ?>/config/transferenciaFormatosUpdate';
 </script>
 <script src="<?= $base ?>/js/transferenciaFormatos.js?v=<?= time() ?>"></script>
+<script>
+(function() {
+    // Búsqueda en tiempo real: reemplaza solo la tabla vía AJAX, sin recargar
+    // la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    // Los botones de fila usan onclick inline, así que no hace falta
+    // re-vincular eventos tras reemplazar el tbody.
+    var base = '<?= $base ?>';
+    var timer = null;
+
+    window.TF_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-tf');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyTF');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/transferencia-formatos-search?b=' + encodeURIComponent(b), {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-tf');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                TF_cargarListado();
+            }, 400);
+        });
+    }
+})();
+</script>

@@ -85,6 +85,7 @@ class ConfigController extends Controller
             'update'   => 'update',
             'eliminar' => 'eliminar',
             'aplicar'  => 'aplicar',
+            'search'   => 'searchAjax',
             default    => 'index',
         };
         if (method_exists($c, $method)) {
@@ -126,6 +127,11 @@ class ConfigController extends Controller
         (new RetencionesSriController())->index();
     }
 
+    public function retencionesSriSearch(): void
+    {
+        (new RetencionesSriController())->searchAjax();
+    }
+
     public function retencionesSriUpdate(): void
     {
         (new RetencionesSriController())->update();
@@ -159,6 +165,11 @@ class ConfigController extends Controller
     public function transferenciaFormatos(): void
     {
         (new TransferenciaFormatoController())->index();
+    }
+
+    public function transferenciaFormatosSearch(): void
+    {
+        (new TransferenciaFormatoController())->searchAjax();
     }
 
     public function transferenciaFormatosStore(): void
@@ -211,6 +222,11 @@ class ConfigController extends Controller
         (new TarifaIvaController())->index();
     }
 
+    public function tarifaIvaSearch(): void
+    {
+        (new TarifaIvaController())->searchAjax();
+    }
+
     public function tarifaIvaStore(): void
     {
         (new TarifaIvaController())->store();
@@ -224,6 +240,11 @@ class ConfigController extends Controller
     public function comprobantesAutorizados(): void
     {
         (new ComprobantesAutorizadosController())->index();
+    }
+
+    public function comprobantesAutorizadosSearch(): void
+    {
+        (new ComprobantesAutorizadosController())->searchAjax();
     }
 
     public function comprobantesAutorizadosStore(): void
@@ -246,6 +267,11 @@ class ConfigController extends Controller
         (new FormasPagoSriController())->index();
     }
 
+    public function formasPagoSriSearch(): void
+    {
+        (new FormasPagoSriController())->searchAjax();
+    }
+
     public function formasPagoSriStore(): void
     {
         (new FormasPagoSriController())->store();
@@ -264,6 +290,11 @@ class ConfigController extends Controller
     public function sustentoTributario(): void
     {
         (new SustentoTributarioController())->index();
+    }
+
+    public function sustentoTributarioSearch(): void
+    {
+        (new SustentoTributarioController())->searchAjax();
     }
 
     public function sustentoTributarioStore(): void
@@ -286,6 +317,11 @@ class ConfigController extends Controller
         (new TiposEmpresaController())->index();
     }
 
+    public function tiposEmpresaSearch(): void
+    {
+        (new TiposEmpresaController())->searchAjax();
+    }
+
     public function tiposEmpresaStore(): void
     {
         (new TiposEmpresaController())->store();
@@ -306,6 +342,11 @@ class ConfigController extends Controller
         (new TiposRegimenController())->index();
     }
 
+    public function tiposRegimenSearch(): void
+    {
+        (new TiposRegimenController())->searchAjax();
+    }
+
     public function tiposRegimenStore(): void
     {
         (new TiposRegimenController())->store();
@@ -324,6 +365,16 @@ class ConfigController extends Controller
     public function unidadesMedida(): void
     {
         (new UnidadesMedidaController())->index();
+    }
+
+    public function unidadesMedidaTiposSearch(): void
+    {
+        (new UnidadesMedidaController())->tiposSearchAjax();
+    }
+
+    public function unidadesMedidaUnidadesSearch(): void
+    {
+        (new UnidadesMedidaController())->unidadesSearchAjax();
     }
 
     public function unidadesMedidaTipoStore(): void
@@ -351,6 +402,11 @@ class ConfigController extends Controller
         (new ImpuestosVentasController())->index();
     }
 
+    public function impuestosVentasSearch(): void
+    {
+        (new ImpuestosVentasController())->searchAjax();
+    }
+
     public function impuestosVentasStore(): void
     {
         (new ImpuestosVentasController())->store();
@@ -369,6 +425,11 @@ class ConfigController extends Controller
     public function identificadoresCompradorVendedor(): void
     {
         (new IdentificadoresCompradorVendedorController())->index();
+    }
+
+    public function identificadoresCompradorVendedorSearch(): void
+    {
+        (new IdentificadoresCompradorVendedorController())->searchAjax();
     }
 
     public function identificadoresCompradorVendedorStore(): void
@@ -396,6 +457,11 @@ class ConfigController extends Controller
         (new SalariosController())->index();
     }
 
+    public function salariosSearch(): void
+    {
+        (new SalariosController())->searchAjax();
+    }
+
     public function salariosStore(): void
     {
         (new SalariosController())->store();
@@ -414,6 +480,11 @@ class ConfigController extends Controller
     public function correosConfig(): void
     {
         (new CorreosConfigController())->index();
+    }
+
+    public function correosConfigSearch(): void
+    {
+        (new CorreosConfigController())->searchAjax();
     }
 
     public function correosConfigStore(): void
@@ -436,6 +507,11 @@ class ConfigController extends Controller
         (new TiposNovedadesNominaController())->index();
     }
 
+    public function tiposNovedadesNominaSearch(): void
+    {
+        (new TiposNovedadesNominaController())->searchAjax();
+    }
+
     public function tiposNovedadesNominaStore(): void
     {
         (new TiposNovedadesNominaController())->store();
@@ -454,6 +530,11 @@ class ConfigController extends Controller
     public function iconosFontawesome(): void
     {
         (new IconosFontawesomeController())->index();
+    }
+
+    public function iconosFontawesomeSearch(): void
+    {
+        (new IconosFontawesomeController())->searchAjax();
     }
 
     public function iconosFontawesomeUpdate(): void
@@ -566,6 +647,16 @@ class ConfigController extends Controller
         (new ProvinciaCiudadController())->index();
     }
 
+    public function provinciaCiudadProvinciasSearch(): void
+    {
+        (new ProvinciaCiudadController())->provinciasSearchAjax();
+    }
+
+    public function provinciaCiudadCiudadesSearch(): void
+    {
+        (new ProvinciaCiudadController())->ciudadesSearchAjax();
+    }
+
     public function importadorExcel(): void
     {
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
@@ -605,6 +696,11 @@ class ConfigController extends Controller
     public function sriCasillerosEtiquetas(): void
     {
         (new SriCasillerosEtiquetasController())->index();
+    }
+
+    public function sriCasillerosEtiquetasSearch(): void
+    {
+        (new SriCasillerosEtiquetasController())->searchAjax();
     }
 
     public function sriCasillerosEtiquetasStore(): void

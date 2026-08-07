@@ -13,15 +13,7 @@ $ordenDir = $ordenDir ?? 'asc';
 $buscar = $buscar ?? '';
 $msg = $_SESSION['iconos_msg'] ?? null;
 unset($_SESSION['iconos_msg']);
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/iconos-fontawesome?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
-
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .icono-row { cursor: pointer; }
@@ -49,18 +41,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/iconos-fontawesome" class="mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar por nombre..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/iconos-fontawesome?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 320px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-iconos" class="form-control" placeholder="Buscar por nombre..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -69,31 +53,12 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                 <thead class="table-light">
                     <tr>
                         <th class="icon-preview"></th>
-                        <th><?= thSort($base, 'nombre_icono', 'Nombre del icono', $ordenCol, $ordenDir, $buscar) ?></th>
+                        <th class="sortable-header" data-sort="nombre_icono" role="button">Nombre del icono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end" style="width: 5rem;">Uso</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $id = (int)($r['id'] ?? $r['id_icono'] ?? 0);
-                    $nombreIcono = $r['nombre_icono'] ?? '';
-                    $refs = (int) ($refsMap[$id] ?? 0);
-                    $cls = iconoClase($nombreIcono);
-                    ?>
-                    <tr class="icono-row" role="button" tabindex="0" data-id="<?= $id ?>" data-nombre="<?= htmlspecialchars($nombreIcono) ?>" data-refs="<?= $refs ?>">
-                        <td class="icon-preview">
-                            <i class="<?= htmlspecialchars($cls) ?>" title="<?= htmlspecialchars($nombreIcono) ?>"></i>
-                        </td>
-                        <td><code><?= htmlspecialchars($nombreIcono) ?></code></td>
-                        <td class="text-end small text-muted"><?= $refs ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyIconos"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay iconos registrados.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -160,33 +125,41 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 
 <script>
 (function() {
+    var base = '<?= $base ?>';
     var modal = document.getElementById('modalEditarIcono');
     var form = modal ? modal.querySelector('form') : null;
-    if (!modal || !form) return;
 
     var formDel = document.getElementById('formEliminarIcono');
     var delId = document.getElementById('del-id');
     var btnEliminar = document.getElementById('btn-eliminar-icono');
 
-    document.querySelectorAll('.icono-row').forEach(function(row) {
-        row.addEventListener('click', function() {
-            form.querySelector('#edit-id').value = this.dataset.id || '';
-            form.querySelector('#edit-nombre_icono').value = this.dataset.nombre || '';
-            if (delId) delId.value = this.dataset.id || '';
-            var refs = parseInt(this.dataset.refs || '0', 10);
-            if (btnEliminar) {
-                btnEliminar.disabled = refs > 0;
-                btnEliminar.title = refs > 0 ? 'No se puede eliminar: está en uso en módulos o submódulos del menú.' : 'Eliminar este icono';
-            }
-            new bootstrap.Modal(modal).show();
+    function abrirModalIcono(row) {
+        if (!modal || !form) return;
+        form.querySelector('#edit-id').value = row.dataset.id || '';
+        form.querySelector('#edit-nombre_icono').value = row.dataset.nombre || '';
+        if (delId) delId.value = row.dataset.id || '';
+        var refs = parseInt(row.dataset.refs || '0', 10);
+        if (btnEliminar) {
+            btnEliminar.disabled = refs > 0;
+            btnEliminar.title = refs > 0 ? 'No se puede eliminar: está en uso en módulos o submódulos del menú.' : 'Eliminar este icono';
+        }
+        new bootstrap.Modal(modal).show();
+    }
+
+    // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+    // AJAX, por lo que el listener va en el tbody (contenedor fijo).
+    var tbodyIconos = document.getElementById('tbodyIconos');
+    if (tbodyIconos) {
+        tbodyIconos.addEventListener('click', function(e) {
+            var row = e.target.closest('.icono-row');
+            if (row) abrirModalIcono(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                this.click();
-            }
+        tbodyIconos.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.icono-row');
+            if (row) { e.preventDefault(); abrirModalIcono(row); }
         });
-    });
+    }
 
     if (formDel && btnEliminar) {
         formDel.addEventListener('submit', function(e) {
@@ -199,6 +172,49 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                 return false;
             }
         });
+    }
+
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timer = null;
+    window.ICONOS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.ICONOS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.ICONOS_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-iconos');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyIconos');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="3" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/iconos-fontawesome-search?b=' + encodeURIComponent(b) + '&sort=' + window.ICONOS_currentSort + '&dir=' + window.ICONOS_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-iconos');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                ICONOS_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('iconos-fontawesome', function(col, dir) {
+            window.ICONOS_currentSort = col;
+            window.ICONOS_currentDir = dir;
+            ICONOS_cargarListado();
+        }, { col: window.ICONOS_currentSort, dir: window.ICONOS_currentDir });
     }
 })();
 </script>

@@ -20,38 +20,7 @@ $sinResultado = $sinResultado ?? [];
 $ordenCol     = $ordenCol ?? 'categoria';
 $ordenDir     = $ordenDir ?? 'asc';
 $buscar       = $buscar ?? '';
-
-$thSort = static function (string $col, string $label) use ($base, $ordenCol, $ordenDir, $buscar): string {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = $base . '/documentacion/gestion?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') {
-        $url .= '&b=' . urlencode($buscar);
-    }
-    $flecha = '';
-    if ($ordenCol === $col) {
-        $flecha = strtolower($ordenDir) === 'asc'
-            ? ' <i class="bi bi-caret-up-fill small"></i>'
-            : ' <i class="bi bi-caret-down-fill small"></i>';
-    }
-    return '<a href="' . htmlspecialchars($url) . '" class="text-decoration-none text-reset">'
-         . htmlspecialchars($label) . $flecha . '</a>';
-};
-
-$badgeVisibilidad = static function (string $v): string {
-    return match ($v) {
-        'superadmin' => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Superadmin</span>',
-        'admin'      => '<span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25">Admin</span>',
-        default      => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Todos</span>',
-    };
-};
-
-$badgeEstado = static function (string $e): string {
-    return match ($e) {
-        'borrador' => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Borrador</span>',
-        'obsoleto' => '<span class="badge bg-dark bg-opacity-10 text-dark border border-dark border-opacity-25">Obsoleto</span>',
-        default    => '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Activo</span>',
-    };
-};
+$rowsHtml     = $rowsHtml ?? '';
 
 $fmtFecha = static function ($v): string {
     if (empty($v)) {
@@ -99,19 +68,11 @@ $fmtFecha = static function ($v): string {
 
     <!-- Barra de herramientas -->
     <div class="dg-toolbar d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 py-2">
-        <form method="GET" action="<?= $base ?>/documentacion/gestion" class="m-0">
-            <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-            <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-            <div class="input-group input-group-sm" style="max-width: 340px;">
-                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="text" name="b" class="form-control" placeholder="Buscar por título, dirección o categoría…"
-                       value="<?= htmlspecialchars($buscar) ?>">
-                <button type="submit" class="btn btn-outline-primary">Buscar</button>
-                <?php if ($buscar !== ''): ?>
-                <a href="<?= $base ?>/documentacion/gestion" class="btn btn-outline-secondary">Limpiar</a>
-                <?php endif; ?>
-            </div>
-        </form>
+        <div class="input-group input-group-sm" style="max-width: 340px;">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" id="input-buscar-dg" class="form-control" placeholder="Buscar por título, dirección o categoría…"
+                   value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+        </div>
 
         <div class="d-flex align-items-center gap-2">
             <button type="button" class="btn btn-outline-success btn-sm" id="btn-doctor"
@@ -141,66 +102,20 @@ $fmtFecha = static function ($v): string {
                 <table class="table table-hover table-sm mb-0 align-middle">
                     <thead>
                         <tr>
-                            <th class="text-center" style="width:64px;"><?= $thSort('orden', 'Orden') ?></th>
-                            <th><?= $thSort('titulo', 'Título') ?></th>
-                            <th><?= $thSort('categoria', 'Categoría') ?></th>
-                            <th><?= $thSort('tipo', 'Tipo') ?></th>
-                            <th class="text-center"><?= $thSort('visibilidad', 'Visibilidad') ?></th>
-                            <th class="text-center"><?= $thSort('estado', 'Estado') ?></th>
-                            <th class="text-center"><?= $thSort('origen', 'Origen') ?></th>
-                            <th class="text-center"><?= $thSort('vistas', 'Lecturas') ?></th>
+                            <th class="text-center sortable-header" data-sort="orden" role="button" style="width:64px;">Orden <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="titulo" role="button">Título <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="categoria" role="button">Categoría <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="tipo" role="button">Tipo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="visibilidad" role="button">Visibilidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="origen" role="button">Origen <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="vistas" role="button">Lecturas <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-center">Valoración</th>
-                            <th><?= $thSort('updated_at', 'Actualizado') ?></th>
+                            <th class="sortable-header" data-sort="updated_at" role="button">Actualizado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-end" style="width:90px;">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
-                    <?php if (empty($rows)): ?>
-                        <tr>
-                            <td colspan="11" class="text-center text-muted py-4">
-                                Todavía no hay artículos. Cree el primero con «Nuevo artículo».
-                            </td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($rows as $r): ?>
-                        <tr class="dg-row" data-id="<?= (int) $r['id'] ?>">
-                            <td class="text-center"><?= (int) $r['orden'] ?></td>
-                            <td>
-                                <div class="fw-medium"><?= htmlspecialchars((string) $r['titulo']) ?></div>
-                                <div class="dg-slug"><?= htmlspecialchars((string) $r['slug']) ?></div>
-                            </td>
-                            <td><?= htmlspecialchars((string) ($r['categoria'] ?? '')) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['tipo'] ?? '')) ?></td>
-                            <td class="text-center"><?= $badgeVisibilidad((string) ($r['visibilidad'] ?? 'todos')) ?></td>
-                            <td class="text-center"><?= $badgeEstado((string) ($r['estado'] ?? 'activo')) ?></td>
-                            <td class="text-center">
-                                <?php if (($r['origen'] ?? 'manual') === 'archivo'): ?>
-                                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"
-                                          title="<?= htmlspecialchars((string) ($r['archivo_origen'] ?? '')) ?>">Archivo</span>
-                                <?php else: ?>
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Pantalla</span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="text-center"><?= (int) ($r['vistas'] ?? 0) ?></td>
-                            <td class="text-center text-nowrap">
-                                <span class="text-success"><i class="bi bi-hand-thumbs-up"></i> <?= (int) ($r['utiles'] ?? 0) ?></span>
-                                <span class="text-danger ms-2"><i class="bi bi-hand-thumbs-down"></i> <?= (int) ($r['no_utiles'] ?? 0) ?></span>
-                            </td>
-                            <td class="text-nowrap small"><?= $fmtFecha($r['updated_at'] ?? null) ?></td>
-                            <td class="text-end text-nowrap">
-                                <a href="<?= $base ?>/documentacion?slug=<?= urlencode((string) $r['slug']) ?>"
-                                   target="_blank" rel="noopener"
-                                   class="btn btn-outline-primary btn-sm py-0 px-1" title="Ver en el manual">
-                                    <i class="bi bi-eye"></i>
-                                </a>
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 dg-editar" title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                    </tbody>
+                    <tbody id="tbodyDg"><?= $rowsHtml ?></tbody>
                 </table>
             </div>
         </div>
@@ -448,6 +363,7 @@ $fmtFecha = static function ($v): string {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <script src="<?= $base ?>/js/favoritos.js?v=<?= time() ?>"></script>
     <script>
     (function () {
         var base = '<?= $base ?>';
@@ -540,19 +456,20 @@ $fmtFecha = static function ($v): string {
             modal.show();
         });
 
-        Array.prototype.forEach.call(document.querySelectorAll('.dg-editar'), function (btn) {
-            btn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                cargar(this.closest('tr').getAttribute('data-id'));
-            });
-        });
-
-        Array.prototype.forEach.call(document.querySelectorAll('.dg-row'), function (tr) {
-            tr.addEventListener('click', function (e) {
+        // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+        // AJAX, por lo que el listener va en el tbody (contenedor fijo).
+        var tbodyDg = document.getElementById('tbodyDg');
+        if (tbodyDg) {
+            tbodyDg.addEventListener('click', function (e) {
+                if (e.target.closest('.dg-editar')) {
+                    cargar(e.target.closest('tr').getAttribute('data-id'));
+                    return;
+                }
                 if (e.target.closest('a') || e.target.closest('button')) { return; }
-                cargar(this.getAttribute('data-id'));
+                var tr = e.target.closest('.dg-row');
+                if (tr) cargar(tr.getAttribute('data-id'));
             });
-        });
+        }
 
         document.getElementById('a-slug').addEventListener('input', revisarAvisoConfig);
         document.getElementById('a-ruta-modulo').addEventListener('input', revisarAvisoConfig);
@@ -771,6 +688,48 @@ $fmtFecha = static function ($v): string {
                 })
                 .catch(function () { toast('No se pudo eliminar.', 'danger'); });
         });
+
+        // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX,
+        // sin recargar la página (el input nunca pierde el foco). Mismo
+        // patrón que ASIENTOTIPO_cargarListado
+        // (public/js/modulos/asientos_tipo_modal.js).
+        var dgTimer = null;
+        window.DG_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+        window.DG_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+        window.DG_cargarListado = function () {
+            var inputB = document.getElementById('input-buscar-dg');
+            var b = inputB ? inputB.value.trim() : '';
+            var tbodyEl = document.getElementById('tbodyDg');
+            if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="11" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+            fetch(base + '/documentacion/gestion-search?b=' + encodeURIComponent(b) + '&sort=' + window.DG_currentSort + '&dir=' + window.DG_currentDir, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+                })
+                .catch(function () {
+                    if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+                });
+        };
+
+        var inputBuscarDg = document.getElementById('input-buscar-dg');
+        if (inputBuscarDg) {
+            inputBuscarDg.addEventListener('input', function () {
+                clearTimeout(dgTimer);
+                dgTimer = setTimeout(function () { DG_cargarListado(); }, 400);
+            });
+        }
+
+        if (window.CMG_initSort) {
+            window.CMG_initSort('documentacion-gestion', function (col, dir) {
+                window.DG_currentSort = col;
+                window.DG_currentDir = dir;
+                DG_cargarListado();
+            }, { col: window.DG_currentSort, dir: window.DG_currentDir });
+        }
     })();
     </script>
 </body>

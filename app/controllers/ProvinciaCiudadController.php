@@ -60,6 +60,8 @@ class ProvinciaCiudadController extends Controller
             'titulo' => 'Provincias y ciudades',
             'rowsProvincias' => $rowsProvincias,
             'rowsCiudades' => $rowsCiudades,
+            'rowsProvinciasHtml' => $this->renderFilasProvinciasHtml($rowsProvincias),
+            'rowsCiudadesHtml' => $this->renderFilasCiudadesHtml($rowsCiudades),
             'provinciasParaSelect' => $provinciasParaSelect,
             'ordenColProv' => $ordenColProv,
             'ordenDirProv' => $ordenDirProv,
@@ -69,6 +71,103 @@ class ProvinciaCiudadController extends Controller
             'buscarCiud' => $buscarCiud,
             'filtroProv' => $filtroProv,
         ]);
+    }
+
+    /**
+     * AJAX: listado de provincias (tabla), para búsqueda y ordenamiento en
+     * tiempo real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax.
+     */
+    public function provinciasSearchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $ordenCol = trim($_GET['sort_prov'] ?? $_POST['sort_prov'] ?? 'nombre');
+        $ordenDir = strtoupper(trim($_GET['dir_prov'] ?? $_POST['dir_prov'] ?? 'ASC'));
+        $buscar = trim($_GET['b_prov'] ?? $_POST['b_prov'] ?? '');
+        if (!in_array($ordenCol, Provincia::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'nombre';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $rows = $this->modelProvincia->getAll($ordenCol, $ordenDir, $buscar);
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $this->renderFilasProvinciasHtml($rows),
+        ]);
+        exit;
+    }
+
+    /**
+     * AJAX: listado de ciudades (tabla), para búsqueda, filtro por provincia
+     * y ordenamiento en tiempo real sin recargar la página.
+     */
+    public function ciudadesSearchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $ordenCol = trim($_GET['sort_ciud'] ?? $_POST['sort_ciud'] ?? 'nombre');
+        $ordenDir = strtoupper(trim($_GET['dir_ciud'] ?? $_POST['dir_ciud'] ?? 'ASC'));
+        $buscar = trim($_GET['b_ciud'] ?? $_POST['b_ciud'] ?? '');
+        $filtroProv = trim($_GET['f_prov'] ?? $_POST['f_prov'] ?? '');
+        if (!in_array($ordenCol, Ciudad::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'nombre';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $rows = $this->modelCiudad->getAll($ordenCol, $ordenDir, $buscar, $filtroProv !== '' ? $filtroProv : null);
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $this->renderFilasCiudadesHtml($rows),
+        ]);
+        exit;
+    }
+
+    private function renderFilasProvinciasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="2" class="text-center py-4 text-muted">No hay provincias registradas.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $html .= '<tr class="prov-row" role="button" tabindex="0"'
+                . ' data-codigo="' . htmlspecialchars($r['codigo'] ?? '') . '"'
+                . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '">';
+            $html .= '<td><code>' . htmlspecialchars($r['codigo'] ?? '') . '</code></td>';
+            $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
+            $html .= '</tr>';
+        }
+        return $html;
+    }
+
+    private function renderFilasCiudadesHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="3" class="text-center py-4 text-muted">No hay ciudades registradas.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $html .= '<tr class="ciud-row" role="button" tabindex="0"'
+                . ' data-codigo="' . htmlspecialchars($r['codigo'] ?? '') . '"'
+                . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '"'
+                . ' data-cod-prov="' . htmlspecialchars($r['cod_prov'] ?? '') . '"'
+                . ' data-nombre-provincia="' . htmlspecialchars($r['nombre_provincia'] ?? '') . '">';
+            $html .= '<td><code>' . htmlspecialchars($r['codigo'] ?? '') . '</code></td>';
+            $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($r['nombre_provincia'] ?? $r['cod_prov'] ?? '') . '</td>';
+            $html .= '</tr>';
+        }
+        return $html;
     }
 
     public function provinciaStore(): void
