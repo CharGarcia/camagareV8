@@ -575,7 +575,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
         }
         
-        document.getElementById('cons_secuencial').value = row.serie + '-' + row.secuencial;
+        document.getElementById('cons_secuencial').value = row.secuencial;
         document.getElementById('cons_serie_hidden').value = row.serie;
         document.getElementById('cons_establecimiento').value = row.establecimiento;
         document.getElementById('cons_punto_emision').value = row.punto_emision;

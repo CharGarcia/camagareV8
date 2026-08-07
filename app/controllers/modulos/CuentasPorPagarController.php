@@ -332,40 +332,53 @@ class CuentasPorPagarController extends BaseModuloController
 
         $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
 
-        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="cuentas_por_pagar_' . date('Ymd_His') . '.xls"');
-        header('Cache-Control: max-age=0');
-        echo "\xEF\xBB\xBF"; // BOM UTF-8
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
 
-        $headers = ['Tipo', 'Documento', 'Proveedor', 'RUC', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Pagado', 'NC/Ret.', 'Saldo', 'Estado'];
-        echo implode("\t", $headers) . "\n";
+            $headers = ['Tipo', 'Documento', 'Proveedor', 'RUC', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Pagado', 'Saldo', 'Estado'];
 
-        foreach ($filas as $r) {
-            $dias     = (int)($r['dias_vencido'] ?? 0);
-            $saldo    = (float)$r['saldo'];
-            $estadoCxP = $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE');
-            $ncRet = number_format((float)($r['total_nc'] ?? 0) + (float)($r['total_retenido'] ?? 0), 2);
-            echo implode("\t", [
-                match ($r['tipo_fuente']) {
-                    'SALDO_INICIAL' => 'Saldo inicial',
-                    'LIQUIDACION'   => 'Liquidación',
-                    'IMPORTACION'   => 'Importación',
-                    default         => 'Factura',
-                },
-                $r['numero_documento'] ?? '',
-                $r['proveedor_nombre'] ?? '',
-                $r['proveedor_ruc']    ?? '',
-                $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
-                $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
-                $dias > 0 ? $dias : 0,
-                number_format((float)$r['total'], 2),
-                number_format((float)$r['total_pagado'], 2),
-                $ncRet,
-                number_format($saldo, 2),
-                $estadoCxP,
-            ]) . "\n";
+            $exportData = [];
+            foreach ($filas as $r) {
+                $dias      = (int)($r['dias_vencido'] ?? 0);
+                $saldo     = (float)$r['saldo'];
+                $estadoCxP = $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE');
+                $abonos    = (float)($r['total_pagado'] ?? 0);
+                $nc        = (float)($r['total_nc'] ?? 0);
+                $ret       = (float)($r['total_retenido'] ?? 0);
+                $exportData[] = [
+                    match ($r['tipo_fuente']) {
+                        'SALDO_INICIAL' => 'Saldo inicial',
+                        'LIQUIDACION'   => 'Liquidación',
+                        'IMPORTACION'   => 'Importación',
+                        default         => 'Factura',
+                    },
+                    (string)($r['numero_documento'] ?? ''),
+                    (string)($r['proveedor_nombre'] ?? ''),
+                    (string)($r['proveedor_ruc'] ?? ''),
+                    $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                    $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                    $dias > 0 ? $dias : 0,
+                    number_format((float)$r['total'], 2),
+                    number_format($abonos, 2),
+                    number_format($nc, 2),
+                    number_format($ret, 2),
+                    number_format($abonos + $nc + $ret, 2),
+                    number_format($saldo, 2),
+                    $estadoCxP,
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('cuentas_por_pagar', $headers, $exportData, 'Cuentas por Pagar', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            if (!headers_sent()) {
+                $_SESSION['cuentas_por_pagar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . $this->getRutaModulo());
+            }
+            exit;
         }
-        exit;
     }
 
     // ─────────────────────────────────────────────────────────────────────

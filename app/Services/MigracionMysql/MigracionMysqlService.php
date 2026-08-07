@@ -1258,15 +1258,17 @@ class MigracionMysqlService
         $qmd->execute([$idEmpresa]);
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
         $updEntrega = $pg->prepare("UPDATE consignaciones_ventas SET fecha_entrega = :fe, hora_entrega_desde = :hd, hora_entrega_hasta = :hh, updated_at = now(), updated_by = :u WHERE id = :id");
+        // Reconcile de la caducidad por línea (re-migrar rellena fecha_caducidad sin "Eliminar migrados").
+        $updDetCad  = $pg->prepare("UPDATE consignaciones_ventas_detalles SET fecha_caducidad = :cad, updated_at = now() WHERE id_consignacion = :cons AND id_producto = :prod AND COALESCE(lote,'') = COALESCE(:lote,'')");
 
-        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
+        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare(
             "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id"
         );
         $insDet = $pg->prepare(
-            "INSERT INTO consignaciones_ventas_detalles (id_consignacion, id_empresa, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO consignaciones_ventas_detalles (id_consignacion, id_empresa, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup, fecha_caducidad)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
 
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, fecha_entrega, hora_entrega_desde, hora_entrega_hasta
@@ -1277,11 +1279,21 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_consignacion'];
-            if (isset($mapDest[(string) $old])) { // ya migrada: reconciliar fecha/hora de entrega (solo insertadas)
+            if (isset($mapDest[(string) $old])) { // ya migrada: reconciliar fecha/hora de entrega + caducidad del detalle (solo insertadas)
                 if (!$mapDest[(string) $old]['vin']) {
+                    $dest = $mapDest[(string) $old]['id'];
                     $hd = self::nz($ec['hora_entrega_desde']); if ($hd === '00:00:00') { $hd = null; }
                     $hh = self::nz($ec['hora_entrega_hasta']); if ($hh === '00:00:00') { $hh = null; }
-                    try { $updEntrega->execute([':fe' => self::fechaCorta($ec['fecha_entrega']), ':hd' => $hd, ':hh' => $hh, ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
+                    try {
+                        $updEntrega->execute([':fe' => self::fechaCorta($ec['fecha_entrega']), ':hd' => $hd, ':hh' => $hh, ':u' => $idUsuario, ':id' => $dest]);
+                        // Caducidad por línea: se casa por (producto, lote) contra el detalle viejo (sin crear productos).
+                        $detStmt->execute([':cu' => (string) $ec['codigo_unico'], ':base' => $base]);
+                        foreach ($detStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                            $idProdR = $mapProd[(string) (int) $d['id_producto']] ?? ($prodPorCod[(string) $d['codigo_producto']] ?? null);
+                            if (!$idProdR) { continue; }
+                            $updDetCad->execute([':cad' => self::caducidadODef($d['vencimiento'], $ec['fecha_consignacion']), ':cons' => $dest, ':prod' => $idProdR, ':lote' => self::nz($d['lote'])]);
+                        }
+                    }
                     catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
                 }
                 $res['ya_migrados']++; continue;
@@ -1320,7 +1332,9 @@ class MigracionMysqlService
                     $pu   = (float) $d['precio'];
                     $st   = round($cant * $pu, 2);
                     $idBod = ((int) $d['id_bodega'] > 0) ? ($mapBod[(string) (int) $d['id_bodega']] ?? null) : null;
-                    $insDet->execute([$idCons, $idEmpresa, $idProd, $cant, $pu, $st, $st, $idBod, self::nz($d['lote']), self::nz($d['nup'])]);
+                    // Caducidad por línea (regla del cero: si el vencimiento viene en cero/nulo, la fecha de la consignación).
+                    $cadDet = self::caducidadODef($d['vencimiento'], $ec['fecha_consignacion']);
+                    $insDet->execute([$idCons, $idEmpresa, $idProd, $cant, $pu, $st, $st, $idBod, self::nz($d['lote']), self::nz($d['nup']), $cadDet]);
                 }
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCons, ':cn' => (string) $ec['numero_consignacion'], ':vin' => 'f', ':cb' => $idUsuario]);

@@ -215,7 +215,7 @@ function CXC_filaHtml(r) {
             <td style="font-size:.78rem;white-space:nowrap;">${fEmision}</td>
             <td style="font-size:.78rem;white-space:nowrap;">${fVenc}</td>
             <td class="text-end" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(r.total)}</td>
-            <td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(r.total_cobrado)}</td>
+            <td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(CXC_totalCobrado(r))}</td>
             <td class="text-end fw-bold pe-3" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
             <td class="text-center" style="overflow:hidden;white-space:nowrap;">${badgeHtml}</td>
             <td class="text-center">
@@ -262,7 +262,7 @@ function CXC_renderAgrupado(filas) {
         }
         g.items.push(r);
         g.total   += parseFloat(r.total)         || 0;
-        g.cobrado += parseFloat(r.total_cobrado) || 0;
+        g.cobrado += CXC_totalCobrado(r);
         g.saldo   += parseFloat(r.saldo)         || 0;
     }
     const grupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
@@ -1035,6 +1035,11 @@ function CXC_exportarPDF() {
 ════════════════════════════════════════════════════ */
 function CXC_fmt(v) {
     return parseFloat(v || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* "Cobrado" = abonos en efectivo/banco + retenciones + notas de crédito aplicadas */
+function CXC_totalCobrado(r) {
+    return (parseFloat(r.total_cobrado) || 0) + (parseFloat(r.total_retenido) || 0) + (parseFloat(r.total_nc) || 0);
 }
 
 function CXC_fmtFecha(s) {

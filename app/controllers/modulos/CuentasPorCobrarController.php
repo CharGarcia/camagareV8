@@ -1086,12 +1086,15 @@ $plantillasFiltradas = [];
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
 
-            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Cobrado', 'Saldo', 'Estado'];
+            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
 
             $exportData = [];
             foreach ($filas as $r) {
                 $dias = (int)($r['dias_vencido'] ?? 0);
                 $estadoCxC = $dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE';
+                $abonos = (float)($r['total_cobrado'] ?? 0);
+                $nc     = (float)($r['total_nc'] ?? 0);
+                $ret    = (float)($r['total_retenido'] ?? 0);
                 $exportData[] = [
                     (string)($r['numero_factura'] ?? ''),
                     $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
@@ -1101,7 +1104,10 @@ $plantillasFiltradas = [];
                     $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
                     $dias > 0 ? $dias : 0,
                     number_format((float)$r['total'], 2),
-                    number_format((float)$r['total_cobrado'], 2),
+                    number_format($abonos, 2),
+                    number_format($nc, 2),
+                    number_format($ret, 2),
+                    number_format($abonos + $nc + $ret, 2),
                     number_format((float)$r['saldo'], 2),
                     $estadoCxC,
                 ];
@@ -1143,7 +1149,8 @@ $plantillasFiltradas = [];
             foreach ($filas as $r) {
                 $dias = (int)($r['dias_vencido'] ?? 0);
                 $ts   = (float)$r['total'];
-                $tc   = (float)$r['total_cobrado'];
+                // "Cobrado" = abonos + retenciones + notas de crédito aplicadas
+                $tc   = (float)($r['total_cobrado'] ?? 0) + (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
                 $tsal = (float)$r['saldo'];
                 $totalTotal   += $ts;
                 $totalCobrado += $tc;
