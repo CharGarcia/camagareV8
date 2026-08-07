@@ -1276,70 +1276,47 @@ class ComprasController extends BaseModuloController
                 // procesa en unidades del producto daba falsos positivos. Queda a criterio del
                 // usuario la cantidad que ingresa al procesar el inventario.
 
-                // 4. Calcular stock actual para trazabilidad en Kardex
-                $sqlStock = "SELECT ROUND(COALESCE(SUM(cantidad), 0), 2) FROM inventario_kardex 
-                             WHERE id_empresa = ? AND id_producto = ? AND id_bodega = ? AND eliminado = false";
-                $stStock = $db->prepare($sqlStock);
-                $stStock->execute([$idEmpresa, $idProducto, (int)$item['id_bodega']]);
-                $stockAnt = (float)$stStock->fetchColumn();
+                // 4. Bloquear producto/bodega y calcular stock actual (en vivo, desde el Kardex)
+                // para trazabilidad. El lock evita que dos compras procesándose a la vez
+                // (o una compra + otro movimiento) del mismo producto/bodega lean el mismo
+                // stock de partida y una sobreescriba el resultado de la otra en el caché.
+                $idBodegaItem = (int)$item['id_bodega'];
+                $invRepo->lockStock($idProducto, $idBodegaItem, $idEmpresa);
+                $stockAnt = $invRepo->getStockActual($idProducto, $idBodegaItem, $idEmpresa);
                 $stockPost = $stockAnt + $cantEnviar;
 
-                // 5. Registrar movimiento en Kardex DIRECTO
-                // tipo_ambiente se toma del ambiente actual de la empresa: el listado
+                // 5. Registrar movimiento en Kardex vía el Repository (no SQL directo):
+                // tipo_ambiente se toma del ambiente actual de la empresa; el listado
                 // del kardex filtra por él y, con el DEFAULT ('1'), las entradas de una
                 // empresa en producción ('2') quedaban invisibles en Inventario.
-                $sqlInsK = "INSERT INTO inventario_kardex (
-                                id_empresa, id_producto, id_bodega, id_medida, tipo_movimiento,
-                                referencia_tipo, referencia_id, fecha_movimiento, cantidad, costo_unitario, costo_total,
-                                stock_anterior, stock_posterior, numero_lote, fecha_caducidad, nup,
-                                observaciones, created_by, updated_by, eliminado, tipo_ambiente
-                            ) VALUES (
-                                ?, ?, ?, ?, 'entrada',
-                                'compra', ?, CURRENT_TIMESTAMP, ?, ?, ?,
-                                ?, ?, ?, ?, ?,
-                                ?, ?, ?, false,
-                                (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
-                            ) RETURNING id";
-
                 $loteVal = !empty($item['lote']) ? $item['lote'] : null;
                 $cadVal  = !empty($item['caducidad']) ? $item['caducidad'] : null;
                 $nupVal  = !empty($item['nup']) ? $item['nup'] : null;
                 $medVal  = !empty($item['id_medida']) ? (int)$item['id_medida'] : null;
 
-                $stInsK = $db->prepare($sqlInsK);
-                $stInsK->execute([
-                    $idEmpresa,
-                    $idProducto,
-                    (int)$item['id_bodega'],
-                    $medVal,
-                    $idDetalle,
-                    $cantEnviar,
-                    (float)$item['costo'],
-                    round($cantEnviar * (float)$item['costo'], 2),
-                    $stockAnt,
-                    $stockPost,
-                    $loteVal,
-                    $cadVal,
-                    $nupVal,
-                    $obsBase . " (Item: " . $idDetalle . ")",
-                    $idUsuario,
-                    $idUsuario,
-                    $idEmpresa   // → tipo_ambiente (subconsulta del ambiente de la empresa)
+                $idKardex = $invRepo->registrarMovimiento([
+                    'id_empresa'      => $idEmpresa,
+                    'id_producto'     => $idProducto,
+                    'id_bodega'       => $idBodegaItem,
+                    'tipo_movimiento' => 'entrada',
+                    'referencia_tipo' => 'compra',
+                    'referencia_id'   => $idDetalle,
+                    'cantidad'        => $cantEnviar,
+                    'costo_unitario'  => (float)$item['costo'],
+                    'costo_total'     => round($cantEnviar * (float)$item['costo'], 2),
+                    'stock_anterior'  => $stockAnt,
+                    'stock_posterior' => $stockPost,
+                    'numero_lote'     => $loteVal,
+                    'fecha_caducidad' => $cadVal,
+                    'nup'             => $nupVal,
+                    'id_medida'       => $medVal,
+                    'observaciones'   => $obsBase . " (Item: " . $idDetalle . ")",
+                    'id_usuario'      => $idUsuario,
                 ]);
-                $idKardex = (int)$stInsK->fetchColumn();
                 error_log("KARDEX INSERTADO: ID $idKardex, Producto $idProducto, Cantidad $cantEnviar");
 
                 // 6. Actualizar stock en productos_bodegas (Caché)
-                $sqlPB = "INSERT INTO productos_bodegas (id_empresa, id_producto, id_bodega, stock_actual, created_by, updated_by, eliminado)
-                          VALUES (?, ?, ?, ?, ?, ?, false)
-                          ON CONFLICT (id_producto, id_bodega) 
-                          DO UPDATE SET 
-                             stock_actual = EXCLUDED.stock_actual,
-                             updated_by = EXCLUDED.updated_by,
-                             updated_at = CURRENT_TIMESTAMP,
-                             eliminado = false";
-                $stPB = $db->prepare($sqlPB);
-                $stPB->execute([$idEmpresa, $idProducto, (int)$item['id_bodega'], $stockPost, $idUsuario, $idUsuario]);
+                $invRepo->actualizarStock($idProducto, $idBodegaItem, $idEmpresa, $stockPost, $idUsuario);
 
                 // 7. Vincular permanentemente el producto en el detalle de la compra
                 $sqlUpd = "UPDATE compras_detalle SET id_producto = ? WHERE id = ?";

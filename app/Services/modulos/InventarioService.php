@@ -200,6 +200,7 @@ class InventarioService
         $excludeTipo = $extra['exclude_tipo'] ?? null;
         $lote        = $extra['lote']         ?? null;
 
+        $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa, $excludeId, $excludeTipo, $lote);
         $stockPosterior = $stockActual - $cantidad;
 
@@ -302,6 +303,7 @@ class InventarioService
             }
 
             // Validación de stock para salidas
+            $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
             $stockActualTotal = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
             if ($tipo === 'salida') {
                 if ($totalQty > $stockActualTotal) {
@@ -388,6 +390,7 @@ class InventarioService
 
         try {
             // Revertir el stock: restamos el impacto original
+            $this->repo->lockStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
             $stockActual = $this->repo->getStockActual((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
             $nuevoStock  = $stockActual - (float)$mov['cantidad'];
 
@@ -440,6 +443,7 @@ class InventarioService
 
         try {
             // Reaplicar el stock: sumamos de vuelta el impacto que se había revertido
+            $this->repo->lockStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
             $stockActual = $this->repo->getStockActual((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
             $nuevoStock  = $stockActual + (float)$mov['cantidad'];
 
@@ -487,6 +491,7 @@ class InventarioService
         $isInventariable = ($prodData['inventariable'] === true || $prodData['inventariable'] === 'true' || $prodData['inventariable'] == 1);
         if (!$isInventariable) return;
 
+        $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual  = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $stockPost    = $stockActual + $cantidad;
         $costoUnit    = $this->repo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
@@ -551,6 +556,7 @@ class InventarioService
             }
 
             // 1. Revertir impacto anterior
+            $this->repo->lockStock((int)$movOld['id_producto'], (int)$movOld['id_bodega'], $idEmpresa);
             $stockActual = $this->repo->getStockActual((int)$movOld['id_producto'], (int)$movOld['id_bodega'], $idEmpresa);
             $stockBase   = $stockActual - (float)$movOld['cantidad'];
 

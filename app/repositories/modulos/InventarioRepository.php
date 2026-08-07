@@ -122,6 +122,20 @@ class InventarioRepository extends BaseRepository
         return (float) ($st->fetchColumn() ?: 0);
     }
 
+    /**
+     * Bloqueo transaccional (se libera solo al COMMIT/ROLLBACK) por producto+bodega.
+     * DEBE llamarse antes de leer el stock (getStockActual/getStockCache) en cualquier
+     * secuencia que luego escriba (registrarMovimiento + actualizarStock), para que dos
+     * movimientos concurrentes del mismo producto/bodega no lean el mismo stock de partida
+     * y uno sobreescriba silenciosamente el resultado del otro en productos_bodegas.stock_actual.
+     */
+    public function lockStock(int $idProducto, int $idBodega, int $idEmpresa): void
+    {
+        $sql = "SELECT pg_advisory_xact_lock(hashtext('stock:' || :e || ':' || :p || ':' || :b))";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega]);
+    }
+
     public function actualizarStock(int $idProducto, int $idBodega, int $idEmpresa, float $nuevoStock, int $userId): void
     {
         $sql = "INSERT INTO productos_bodegas (id_empresa, id_producto, id_bodega, stock_actual, created_by, updated_by)

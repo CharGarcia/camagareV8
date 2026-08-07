@@ -548,6 +548,7 @@ class CambioProductoCvService
         if (!$this->afectaInventario($det, $empresaConfig)) return;
 
         $idProducto  = (int) $det['id_producto'];
+        $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $delta       = ($tipo === 'entrada') ? $cant : -$cant;
         $nuevoStock  = $stockActual + $delta;

@@ -669,6 +669,7 @@ class ConsignacionFacturaService
         if ($cant <= 0 || $idBodega <= 0) return;
 
         $idProducto  = (int) $d['id_producto'];
+        $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $nuevoStock  = $stockActual + $cant;
         $costoUnit   = $this->repository->getCostoUnitarioConsignacion((int) $d['id_consignacion'], $idProducto);

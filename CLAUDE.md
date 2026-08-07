@@ -144,6 +144,30 @@ eliminado (boolean), deleted_at, deleted_by
 
 - Usar transacciones en **todos** los procesos que escriben datos. Si algo falla, revertir **todo** (rollback).
 
+**Concurrencia: bloquear todo "leer → calcular → escribir" sobre un valor compartido**
+- Regla general, para **todo el sistema** (no solo inventario): si un flujo hace *leer un valor
+  agregado o cacheado → calcular el nuevo valor en PHP → escribirlo*, esa secuencia completa
+  **debe** ir protegida por un bloqueo transaccional, dentro de la misma transacción, **antes**
+  de la lectura. Sin esto, dos procesos concurrentes sobre la misma clave (mismo producto/bodega,
+  mismo punto de emisión, mismo lo-que-sea) pueden leer el mismo valor de partida y el que escribe
+  último sobreescribe silenciosamente el resultado del otro — el detalle (kardex, líneas, etc.)
+  puede quedar completo, pero el valor cacheado/derivado queda desfasado. Este patrón ya causó una
+  desincronización sistémica entre `productos_bodegas.stock_actual` y `inventario_kardex`
+  (ver `docs/manual/modulos/reporte-inventarios.md`, pestaña Auditoría).
+- **Mecanismo estándar**: `SELECT pg_advisory_xact_lock(hashtext('clave:' || ...))` — se libera solo
+  al COMMIT/ROLLBACK de la transacción en curso, no requiere `UNLOCK` manual. Usar una clave de texto
+  específica del recurso (`'stock:' || id_empresa || ':' || id_producto || ':' || id_bodega`,
+  `'pedido_secuencial:' || id_punto || ':' || id_ambiente`, etc.) para no bloquear recursos que no
+  se relacionan entre sí.
+- **No reinventar el candado**: si el recurso es el stock de un producto/bodega, usar
+  `InventarioRepository::lockStock($idProducto, $idBodega, $idEmpresa)` — llamarlo **antes** de
+  `getStockActual()`/`getStockCache()` en cualquier flujo nuevo que luego escriba
+  `registrarMovimiento()` + `actualizarStock()`. Otros ejemplos ya existentes del mismo mecanismo:
+  `ComandaRepository` (`comanda_num`), `PedidoService` (`pedido_secuencial`).
+- **Nunca duplicar en SQL crudo dentro de un controller** la lógica que ya vive en un
+  Repository/Service (rompe además la regla de §3): si hace falta escribir stock, usar
+  `InventarioRepository`/`InventarioService`, no reescribir el `INSERT`/`UPDATE` a mano.
+
 ---
 
 ## 9. Estándar de UI/UX

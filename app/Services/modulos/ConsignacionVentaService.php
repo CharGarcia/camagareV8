@@ -178,6 +178,8 @@ class ConsignacionVentaService
                     ':idpd' => empty($det['id_pedido_detalle']) ? null : (int)$det['id_pedido_detalle']
                 ]);
 
+                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+
                 // Controlar stock de acuerdo a la configuración de facturación
                 $soloStockPos = (($data['empresa_config']['facturacion_inventario'] ?? true) === 'true' || ($data['empresa_config']['facturacion_inventario'] ?? true) === true);
                 $repoProd = new \App\repositories\modulos\ProductoRepository();
@@ -277,6 +279,7 @@ class ConsignacionVentaService
             // 1. Reversar inventario de los detalles anteriores
             $detallesAntiguos = $this->repository->getDetalles($id, $idEmpresa);
             foreach ($detallesAntiguos as $det) {
+                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
                 $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
                 $nuevoStock = $stockActual + $det['cantidad'];
 
@@ -333,6 +336,8 @@ class ConsignacionVentaService
                     ':idb' => $det['id_bodega'],
                     ':idpd' => empty($det['id_pedido_detalle']) ? null : (int)$det['id_pedido_detalle']
                 ]);
+
+                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
 
                 // Controlar stock de acuerdo a la configuración de facturación
                 $soloStockPos = (($data['empresa_config']['facturacion_inventario'] ?? true) === 'true' || ($data['empresa_config']['facturacion_inventario'] ?? true) === true);
@@ -455,6 +460,7 @@ class ConsignacionVentaService
             // Reversar el inventario
             $detalles = $this->repository->getDetalles($id, $idEmpresa);
             foreach ($detalles as $det) {
+                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
                 $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
                 $nuevoStock = $stockActual + $det['cantidad'];
 

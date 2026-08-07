@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones
-version: 1.2
+version: 1.3
 orden: 40
 estado: activo
 ---
@@ -22,7 +22,7 @@ para valorar lo que hay en almacén.
   (columnas Entradas, Salidas y Saldo, en orden cronológico).
 - Valor del inventario según el costo registrado.
 - Consignaciones vigentes/entregadas, a nivel de cabecera con detalle por línea.
-- Auditoría: diferencias entre el stock cacheado y el saldo real del kardex.
+- Auditoría: diferencias entre el stock guardado y el saldo real del kardex.
 
 ## Cómo se calcula el stock (saldo en vivo)
 
@@ -52,19 +52,32 @@ Disponible en **PDF** y **Excel**. Para el conteo, el PDF es el más práctico.
 
 ## Pestaña Auditoría
 
-Compara, para cada producto y bodega, el stock **cacheado**
+Compara, para cada producto y bodega, el stock **guardado**
 (`productos_bodegas.stock_actual`) contra el **real** (la suma en vivo del
 kardex). Solo se listan las combinaciones que difieren.
 
-El botón **Corregir** de cada fila deja el stock cacheado igual al real del
+El botón **Corregir** de cada fila deja el stock guardado igual al real del
 kardex — es la única acción de escritura del módulo. Antes de corregir,
 confirme que el kardex de ese producto/bodega está completo; si el kardex
-tiene movimientos faltantes, "corregir" solo iguala el caché a un kardex
+tiene movimientos faltantes, "corregir" solo iguala el guardado a un kardex
 incompleto, no repara el dato real. Ante la duda, un conteo físico es la única
 forma de saber el stock verdadero.
 
 Toda corrección queda registrada en la auditoría del sistema
 (`log_sistema`), con el valor anterior y el nuevo.
+
+### Por qué aparecen discrepancias
+
+Además de migraciones incompletas, la causa más frecuente es una condición de
+carrera: dos movimientos del mismo producto/bodega procesándose casi al mismo
+tiempo (dos ventas simultáneas, una compra mientras se hace un ajuste, etc.)
+podían leer el mismo stock de partida y uno sobrescribía silenciosamente el
+resultado del otro en el caché — aunque el kardex sí quedaba completo. Se
+corrigió con un bloqueo por producto/bodega (`InventarioRepository::lockStock()`)
+en todos los puntos donde se lee el stock antes de escribirlo (ventas,
+compras, consignaciones, retornos, cambios de producto y ajustes manuales).
+Los productos con discrepancias que ya existían antes de esta corrección
+siguen apareciendo aquí hasta que se corrigen manualmente.
 
 ## Errores frecuentes
 
@@ -82,6 +95,10 @@ Toda corrección queda registrada en la auditoría del sistema
 
 ## Historial de cambios
 
+- **1.3** — Corregida la causa raíz más frecuente de las discrepancias que
+  detecta Auditoría: una condición de carrera al escribir el stock guardado
+  cuando dos movimientos del mismo producto/bodega se procesaban casi al
+  mismo tiempo. Ver "Por qué aparecen discrepancias" arriba.
 - **1.2** — Nueva pestaña **Auditoría** para revisar y corregir diferencias
   entre el stock cacheado y el kardex. El saldo de Movimientos y el stock de
   Existencias ahora se calculan siempre en vivo desde el kardex, en lugar de

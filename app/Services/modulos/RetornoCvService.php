@@ -152,6 +152,7 @@ class RetornoCvService
 
                 // Entrada de inventario (espejo de la salida de la consignación).
                 if ($this->afectaInventario($consLinea, $empresaConfig) && $idBodega > 0) {
+                    $this->inventarioRepo->lockStock((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
                     $stockActual = $this->inventarioRepo->getStockActual((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
                     $nuevoStock  = $stockActual + $cant;
 
@@ -568,6 +569,7 @@ class RetornoCvService
         if (!$this->afectaInventario($det, $empresaConfig)) return;
 
         $idProducto  = (int) $det['id_producto'];
+        $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $delta       = ($tipo === 'entrada') ? $cant : -$cant;
         $nuevoStock  = $stockActual + $delta;
