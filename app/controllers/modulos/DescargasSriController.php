@@ -551,12 +551,11 @@ class DescargasSriController extends Controller
      * usuario pulsó "Generar descarga del SRI"; así la extensión no inicia sesión sola cuando el
      * usuario abre el portal del SRI por su cuenta más tarde.
      *
-     * USO ÚNICO: apenas se entregan, se apaga la ventana de login (desactivarLoginAuto). Si el
-     * SRI rechaza el login (p. ej. clave desactualizada) y recarga la pantalla, la extensión se
-     * vuelve a inyectar pero ya no encuentra marca vigente y no reintenta — evita que un reintento
-     * automático en cada recarga agote los 3 intentos que permite el SRI antes de bloquear el
-     * usuario. La ventana amplia de registro (180 min, usada al enviar comprobantes) no se ve
-     * afectada: desactivarLoginAuto solo envejece la marca 10 min, por debajo de esa ventana.
+     * NOTA: la ventana de 5 min NO se apaga aquí. El SRI encadena DOS logins de Keycloak seguidos
+     * en la misma pestaña (app-tuportal-internet y, segundos después, app-sri-claves-angular), y la
+     * extensión pide credenciales una vez por cada pantalla — apagar la ventana en la primera
+     * entrega deja sin credenciales a la segunda pantalla y el login se queda ahí colgado. El
+     * apagado (desactivarLoginAuto) se hace en agenteRegistrarClavesAjax, tras enviar comprobantes.
      */
     public function agenteLoginPendienteAjax(): void
     {
@@ -577,11 +576,6 @@ class DescargasSriController extends Controller
             echo json_encode(['ok' => false, 'error' => 'No hay una descarga pendiente. Pulsa "Generar descarga del SRI" en el sistema.']);
             exit;
         }
-
-        // Consumir la ventana de login de inmediato: esta es la ÚNICA entrega de credenciales
-        // para este clic en "Generar descarga del SRI", sin importar si el login que sigue
-        // tiene éxito o falla.
-        $model->desactivarLoginAuto((int) $usuario['id']);
 
         $config = (new SriConfigDescarga())->getPorEmpresa($idEmpresa);
         if (!$config || empty($config['sri_usuario'])) {

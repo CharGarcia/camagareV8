@@ -800,6 +800,20 @@ function escHtml(str) {
 // Marca la empresa activa como "pendiente de login" y abre el portal del SRI.
 // La extensión detecta el login, escribe RUC+clave y navega a Comprobantes recibidos.
 function generarDescargaSri() {
+    Swal.fire({
+        title: 'Antes de continuar',
+        text: 'Si cambiaste la clave del SRI recientemente, actualízala primero en la configuración de esta empresa. Si la clave guardada en el sistema no coincide con la del SRI, el login fallará y el SRI puede bloquear al usuario tras varios intentos incorrectos.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Ya está actualizada, continuar',
+        cancelButtonText: 'Cancelar',
+    }).then((result) => {
+        if (!result.isConfirmed) return;
+        ejecutarGenerarDescargaSri();
+    });
+}
+
+function ejecutarGenerarDescargaSri() {
     const btn = document.getElementById('btnGenerarDescargaSri');
     if (btn) btn.disabled = true;
     fetch(`${BASE_URL}/modulos/descargas_sri/marcarLoginPendienteAjax`, { method: 'POST' })
