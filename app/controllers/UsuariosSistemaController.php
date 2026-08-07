@@ -68,6 +68,7 @@ class UsuariosSistemaController extends Controller
         $this->viewWithLayout('layouts.main', 'usuariosSistema.index', [
             'titulo' => 'Usuarios del sistema',
             'rows' => $rows,
+            'rowsHtml' => $this->renderFilasHtml($rows),
             'total' => $total,
             'page' => $page,
             'totalPages' => $totalPages,
@@ -81,6 +82,123 @@ class UsuariosSistemaController extends Controller
             'empresasParaCrear' => $empresasParaCrear,
             'idEmpresaActual' => $idEmpresaActual,
         ]);
+    }
+
+    /**
+     * AJAX: listado de usuarios (tabla + paginación), para búsqueda y ordenamiento
+     * en tiempo real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax / AsignarEmpresasController::searchAjax.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
+        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $perPage = 20;
+
+        if (!in_array($ordenCol, Usuario::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'nombre';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $rows = $result['rows'];
+        $total = $result['total'];
+        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+        $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $to = $total > 0 ? min($page * $perPage, $total) : 0;
+
+        $rowsHtml = $this->renderFilasHtml($rows);
+
+        ob_start();
+        if ($totalPages > 1) {
+            $prevDisabled = ($page <= 1) ? 'disabled' : '';
+            $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
+            echo '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $prevDisabled . ' onclick="USRSIS_cambiarPagina(' . ($page - 1) . ')" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>'
+               . '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $nextDisabled . ' onclick="USRSIS_cambiarPagina(' . ($page + 1) . ')" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>';
+        }
+        $paginationHtml = ob_get_clean();
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $rowsHtml,
+            'pagination' => $paginationHtml,
+            'info' => "$from-$to/$total",
+            'totalPages' => $totalPages,
+        ]);
+        exit;
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por searchAjax, para no
+     * duplicar el marcado.
+     */
+    private function renderFilasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay usuarios registrados.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $html .= $this->renderFilaUsuario($r);
+        }
+        return $html;
+    }
+
+    /**
+     * Renderiza una fila <tr> de la tabla de usuarios.
+     */
+    private function renderFilaUsuario(array $r): string
+    {
+        $nivelU = (int) ($r['nivel'] ?? 1);
+        $estado = (int) ($r['estado'] ?? 1);
+        $empresas = $r['empresas'] ?? [];
+        $rv = $r['registrado'] ?? false;
+        $registrado = ($rv === true || $rv === 't' || $rv === '1' || $rv === 1 || $rv === 'true');
+        $nivelTexto = $nivelU >= 3 ? 'Super Admin' : ($nivelU >= 2 ? 'Administrador' : 'Usuario');
+        $nivelClase = $nivelU >= 3 ? 'danger' : ($nivelU >= 2 ? 'info' : 'secondary');
+
+        $html = '<tr class="usuario-row" role="button" tabindex="0"'
+            . ' data-id="' . (int) ($r['id'] ?? 0) . '"'
+            . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '"'
+            . ' data-cedula="' . htmlspecialchars($r['cedula'] ?? '') . '"'
+            . ' data-mail="' . htmlspecialchars($r['mail'] ?? '') . '"'
+            . ' data-nivel="' . $nivelU . '"'
+            . ' data-estado="' . $estado . '"'
+            . ' data-empresas="' . count($empresas) . '"'
+            . ' data-token="' . htmlspecialchars($r['token'] ?? '') . '">';
+        $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
+        $html .= '<td><code>' . htmlspecialchars($r['cedula'] ?? '') . '</code></td>';
+        $html .= '<td>' . htmlspecialchars($r['mail'] ?? '-') . '</td>';
+        $html .= '<td><span class="badge bg-' . $nivelClase . '">' . $nivelTexto . '</span></td>';
+        $html .= '<td>';
+        if (!$registrado) {
+            $html .= '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning" title="El usuario aún no ha completado su registro">'
+                . '<i class="bi bi-hourglass-split"></i> Pendiente registro</span>'
+                . '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 ms-1"'
+                . ' title="Reenviar correo de invitación a ' . htmlspecialchars($r['mail'] ?? '') . '"'
+                . ' onclick="event.stopPropagation(); reenviarInvitacionUsuario(' . (int) ($r['id'] ?? 0) . ', this);">'
+                . '<i class="bi bi-send"></i></button>';
+        } elseif ($estado) {
+            $html .= '<span class="badge bg-success">Activo</span>';
+        } else {
+            $html .= '<span class="badge bg-secondary">Inactivo</span>';
+        }
+        $html .= '</td>';
+        $html .= '<td class="text-center"><span class="badge bg-light text-dark">' . count($empresas) . '</span></td>';
+        $html .= '</tr>';
+
+        return $html;
     }
 
     public function update(): void

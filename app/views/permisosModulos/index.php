@@ -110,9 +110,12 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             </div>
             <div id="paso2" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'block' : 'none' ?>;">
                 <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label small">Usuario</label>
-                        <input type="text" id="usuario-texto" class="form-control bg-light" readonly value="<?= htmlspecialchars(($usuarioSel['nombre'] ?? '') . ' (' . ($usuarioSel['cedula'] ?? '') . ')') ?>">
+                    <div class="col-12 d-flex align-items-end gap-2">
+                        <div class="flex-grow-1">
+                            <label class="form-label small">Usuario</label>
+                            <input type="text" id="usuario-texto" class="form-control bg-light" readonly value="<?= htmlspecialchars(($usuarioSel['nombre'] ?? '') . ' (' . ($usuarioSel['cedula'] ?? '') . ')') ?>">
+                        </div>
+                        <button type="button" id="btn-anterior" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Empezar de nuevo</button>
                     </div>
                 </div>
                 <div class="row g-3 mt-1 align-items-end">
@@ -125,9 +128,8 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                         </select>
                         <div id="empresa-msg" class="text-danger small mt-1 d-none"><i class="bi bi-exclamation-circle"></i> Debe seleccionar una empresa.</div>
                     </div>
-                    <div class="col-md-4 d-flex align-items-end gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i> Mostrar módulos</button>
-                        <button type="button" id="btn-anterior" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Empezar de nuevo</button>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-eye"></i> Mostrar módulos</button>
                     </div>
                 </div>
             </div>

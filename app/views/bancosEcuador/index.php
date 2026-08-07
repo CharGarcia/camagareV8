@@ -11,14 +11,7 @@ $ordenDir = $ordenDir ?? 'asc';
 $buscar = $buscar ?? '';
 $msg = $_SESSION['bancos_msg'] ?? null;
 unset($_SESSION['bancos_msg']);
-
-function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $url = rtrim($base, '/') . '/config/bancos-ecuador?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
-    $cls = trim('text-decoration-none ' . $align);
-    return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
 .banco-row { cursor: pointer; }
@@ -45,18 +38,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/bancos-ecuador" class="mb-3">
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar en código, nombre, spi, sci..." value="<?= htmlspecialchars($buscar) ?>">
-        <button type="submit" class="btn btn-outline-primary">Buscar</button>
-        <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/bancos-ecuador?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
-        <?php endif; ?>
-    </div>
-</form>
+<div class="input-group input-group-sm mb-3" style="max-width: 320px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" id="input-buscar-bancos" class="form-control" placeholder="Buscar en código, nombre, spi, sci..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+</div>
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
@@ -64,43 +49,15 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSort($base, 'codigo_banco', 'Código', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'nombre_banco', 'Nombre', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'spi', 'SPI', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'sci', 'SCI', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th class="text-center"><?= thSort($base, 'status', 'Estado', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
+                        <th class="sortable-header" data-sort="codigo_banco" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre_banco" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="spi" role="button">SPI <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="sci" role="button">SCI <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $id = (int)($r['id'] ?? $r['id_bancos'] ?? 0);
-                    $status = (int)($r['status'] ?? 1);
-                    ?>
-                    <tr class="banco-row" role="button" tabindex="0" data-id="<?= $id ?>"
-                        data-codigo="<?= htmlspecialchars($r['codigo_banco'] ?? '') ?>"
-                        data-nombre="<?= htmlspecialchars($r['nombre_banco'] ?? '') ?>"
-                        data-spi="<?= htmlspecialchars($r['spi'] ?? '') ?>"
-                        data-sci="<?= htmlspecialchars($r['sci'] ?? '') ?>"
-                        data-status="<?= $status ?>">
-                        <td><code><?= htmlspecialchars($r['codigo_banco'] ?? '') ?></code></td>
-                        <td><?= htmlspecialchars($r['nombre_banco'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['spi'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['sci'] ?? '') ?></td>
-                        <td class="text-center">
-                            <?php if ($status): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyBancos"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay bancos registrados.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -198,26 +155,80 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 
 <script>
 (function() {
+    var base = '<?= $base ?>';
     var modal = document.getElementById('modalEditarBanco');
     var form = modal ? modal.querySelector('form') : null;
-    if (!modal || !form) return;
 
-    document.querySelectorAll('.banco-row').forEach(function(row) {
-        row.addEventListener('click', function() {
-            form.querySelector('#edit-id').value = this.dataset.id || '';
-            form.querySelector('#edit-codigo_banco').value = this.dataset.codigo || '';
-            form.querySelector('#edit-nombre_banco').value = this.dataset.nombre || '';
-            form.querySelector('#edit-spi').value = this.dataset.spi || '';
-            form.querySelector('#edit-sci').value = this.dataset.sci || '';
-            form.querySelector('#edit-status').value = this.dataset.status || '1';
-            new bootstrap.Modal(modal).show();
+    function abrirModalBanco(row) {
+        if (!modal || !form) return;
+        form.querySelector('#edit-id').value = row.dataset.id || '';
+        form.querySelector('#edit-codigo_banco').value = row.dataset.codigo || '';
+        form.querySelector('#edit-nombre_banco').value = row.dataset.nombre || '';
+        form.querySelector('#edit-spi').value = row.dataset.spi || '';
+        form.querySelector('#edit-sci').value = row.dataset.sci || '';
+        form.querySelector('#edit-status').value = row.dataset.status || '1';
+        new bootstrap.Modal(modal).show();
+    }
+
+    // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden
+    // AJAX, por lo que el listener va en el tbody (contenedor fijo), no en cada <tr>.
+    var tbodyBancos = document.getElementById('tbodyBancos');
+    if (tbodyBancos) {
+        tbodyBancos.addEventListener('click', function(e) {
+            var row = e.target.closest('.banco-row');
+            if (row) abrirModalBanco(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
+        tbodyBancos.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.banco-row');
+            if (row) {
                 e.preventDefault();
-                this.click();
+                abrirModalBanco(row);
             }
         });
-    });
+    }
+
+    // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX, sin
+    // recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var timer = null;
+    window.BANCOS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+    window.BANCOS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+
+    window.BANCOS_cargarListado = function() {
+        var inputB = document.getElementById('input-buscar-bancos');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyBancos');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/bancos-ecuador-search?b=' + encodeURIComponent(b) + '&sort=' + window.BANCOS_currentSort + '&dir=' + window.BANCOS_currentDir, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && tbodyEl) tbodyEl.innerHTML = data.rows;
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    var inputBuscar = document.getElementById('input-buscar-bancos');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                BANCOS_cargarListado();
+            }, 400);
+        });
+    }
+
+    if (window.CMG_initSort) {
+        window.CMG_initSort('bancos-ecuador', function(col, dir) {
+            window.BANCOS_currentSort = col;
+            window.BANCOS_currentDir = dir;
+            BANCOS_cargarListado();
+        }, { col: window.BANCOS_currentSort, dir: window.BANCOS_currentDir });
+    }
 })();
 </script>

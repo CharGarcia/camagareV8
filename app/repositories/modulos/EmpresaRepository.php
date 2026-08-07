@@ -91,8 +91,15 @@ class EmpresaRepository extends BaseModel
             'agente_retencion', 'tipo_emision', 'cancelar_renovacion', 'obligado_contabilidad',
         ];
 
+        // Columnas INTEGER: una cadena vacía debe guardarse como NULL, nunca como ''
+        $integerCols = ['id_tipo_regimen', 'tipo_ambiente'];
+
         foreach ($data as $k => $v) {
             if (in_array($k, $allowed, true)) {
+                if (in_array($k, $integerCols, true) && ($v === '' || $v === null)) {
+                    $sets[] = "{$k} = NULL";
+                    continue;
+                }
                 $val = $this->escape((string) $v);
                 $sets[] = "{$k} = '{$val}'";
             }

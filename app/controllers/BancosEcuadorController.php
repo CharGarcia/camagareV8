@@ -42,10 +42,70 @@ class BancosEcuadorController extends Controller
         $this->viewWithLayout('layouts.main', 'bancosEcuador.index', [
             'titulo' => 'Bancos Ecuador',
             'rows' => $rows,
+            'rowsHtml' => $this->renderFilasHtml($rows),
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'buscar' => $buscar,
         ]);
+    }
+
+    /**
+     * AJAX: listado de bancos (tabla), para búsqueda y ordenamiento en tiempo
+     * real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre_banco');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        if (!in_array($ordenCol, BancoEcuador::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'nombre_banco';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $this->renderFilasHtml($rows),
+        ]);
+        exit;
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por searchAjax.
+     */
+    private function renderFilasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>No hay bancos registrados.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $id = (int) ($r['id'] ?? $r['id_bancos'] ?? 0);
+            $status = (int) ($r['status'] ?? 1);
+            $html .= '<tr class="banco-row" role="button" tabindex="0" data-id="' . $id . '"'
+                . ' data-codigo="' . htmlspecialchars($r['codigo_banco'] ?? '') . '"'
+                . ' data-nombre="' . htmlspecialchars($r['nombre_banco'] ?? '') . '"'
+                . ' data-spi="' . htmlspecialchars($r['spi'] ?? '') . '"'
+                . ' data-sci="' . htmlspecialchars($r['sci'] ?? '') . '"'
+                . ' data-status="' . $status . '">';
+            $html .= '<td><code>' . htmlspecialchars($r['codigo_banco'] ?? '') . '</code></td>';
+            $html .= '<td>' . htmlspecialchars($r['nombre_banco'] ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($r['spi'] ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($r['sci'] ?? '') . '</td>';
+            $html .= '<td class="text-center">' . ($status ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>') . '</td>';
+            $html .= '</tr>';
+        }
+        return $html;
     }
 
     public function update(): void

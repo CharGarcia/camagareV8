@@ -56,13 +56,15 @@ class EmpresasSistemaController extends Controller
 
         $empresasLista = $this->model->getListaParaSelect();
         $idAdminSuscripciones = $this->model->getIdAdministradoraSuscripciones();
+        $estadoDocs = (new \App\Services\DocumentosLegalesService())->getEstadoPorEmpresa();
 
         $this->viewWithLayout('layouts.main', 'empresasSistema.index', [
             'titulo' => 'Empresas del sistema',
             'fullWidth' => true,
-            'estadoDocs' => (new \App\Services\DocumentosLegalesService())->getEstadoPorEmpresa(),
+            'estadoDocs' => $estadoDocs,
             'combosSubmodulos' => (new \App\models\ComboSubmodulo())->getActivos(),
             'rows' => $rows,
+            'rowsHtml' => $this->renderFilasHtml($rows, $estadoDocs, $nivel),
             'total' => $total,
             'page' => $page,
             'totalPages' => $totalPages,
@@ -74,6 +76,168 @@ class EmpresasSistemaController extends Controller
             'empresasLista' => $empresasLista,
             'idAdminSuscripciones' => $idAdminSuscripciones,
         ]);
+    }
+
+    /**
+     * AJAX: listado de empresas (tabla + paginación), para búsqueda y ordenamiento
+     * en tiempo real sin recargar la página. Mismo patrón que
+     * ConfigController::asientosTipoListAjax / UsuariosSistemaController::searchAjax.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
+        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $perPage = 20;
+
+        if (!in_array($ordenCol, Empresa::COLUMNAS_ORDEN, true)) {
+            $ordenCol = 'nombre_comercial';
+        }
+        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
+            $ordenDir = 'ASC';
+        }
+
+        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $rows = $result['rows'];
+        $total = $result['total'];
+        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+        $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $to = $total > 0 ? min($page * $perPage, $total) : 0;
+
+        $estadoDocs = (new \App\Services\DocumentosLegalesService())->getEstadoPorEmpresa();
+        $rowsHtml = $this->renderFilasHtml($rows, $estadoDocs, $nivel);
+
+        ob_start();
+        if ($totalPages > 1) {
+            $prevDisabled = ($page <= 1) ? 'disabled' : '';
+            $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
+            echo '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $prevDisabled . ' onclick="EMPSIS_cambiarPagina(' . ($page - 1) . ')" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>'
+               . '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $nextDisabled . ' onclick="EMPSIS_cambiarPagina(' . ($page + 1) . ')" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>';
+        }
+        $paginationHtml = ob_get_clean();
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $rowsHtml,
+            'pagination' => $paginationHtml,
+            'info' => "$from-$to/$total",
+            'totalPages' => $totalPages,
+        ]);
+        exit;
+    }
+
+    /**
+     * Renderiza el <tbody> completo (filas o mensaje de "sin resultados").
+     * Usado tanto por la carga inicial (vista) como por searchAjax, para no
+     * duplicar el marcado.
+     */
+    private function renderFilasHtml(array $rows, array $estadoDocs, int $nivel): string
+    {
+        $colspan = $nivel >= 3 ? 11 : 10;
+        if (empty($rows)) {
+            return '<tr><td colspan="' . $colspan . '" class="text-center py-5 text-muted"><i class="bi bi-building fs-3 d-block mb-2"></i>No hay empresas registradas.</td></tr>';
+        }
+        $html = '';
+        foreach ($rows as $r) {
+            $html .= $this->renderFilaEmpresa($r, $estadoDocs, $nivel);
+        }
+        return $html;
+    }
+
+    /**
+     * Renderiza una fila <tr> de la tabla de empresas.
+     */
+    private function renderFilaEmpresa(array $r, array $estadoDocs, int $nivel): string
+    {
+        $usuarios = $r['usuarios'] ?? [];
+        $estado = $r['estado'] ?? '1';
+        $id = (int) ($r['id'] ?? 0);
+
+        $html = '<tr class="empresa-row" role="button" tabindex="0"'
+            . ' data-id="' . $id . '"'
+            . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '"'
+            . ' data-nombre-comercial="' . htmlspecialchars($r['nombre_comercial'] ?? '') . '"'
+            . ' data-ruc="' . htmlspecialchars($r['ruc'] ?? '') . '"'
+            . ' data-establecimiento="' . htmlspecialchars($r['establecimiento'] ?? '') . '"'
+            . ' data-direccion="' . htmlspecialchars($r['direccion'] ?? '') . '"'
+            . ' data-telefono="' . htmlspecialchars($r['telefono'] ?? '') . '"'
+            . ' data-mail="' . htmlspecialchars($r['mail'] ?? '') . '"'
+            . ' data-nom-rep-legal="' . htmlspecialchars($r['nom_rep_legal'] ?? '') . '"'
+            . ' data-ced-rep-legal="' . htmlspecialchars($r['ced_rep_legal'] ?? '') . '"'
+            . ' data-cod-prov="' . htmlspecialchars($r['cod_prov'] ?? '') . '"'
+            . ' data-cod-ciudad="' . htmlspecialchars($r['cod_ciudad'] ?? '') . '"'
+            . ' data-nombre-contador="' . htmlspecialchars($r['nombre_contador'] ?? '') . '"'
+            . ' data-ruc-contador="' . htmlspecialchars($r['ruc_contador'] ?? '') . '"'
+            . ' data-estado="' . htmlspecialchars($estado) . '"'
+            . ' data-valor-cobro="' . htmlspecialchars((string) ($r['valor_cobro'] ?? '')) . '"'
+            . ' data-periodo-vigencia-desde="' . htmlspecialchars($r['periodo_vigencia_desde'] ?? '') . '"'
+            . ' data-periodo-vigencia-hasta="' . htmlspecialchars($r['periodo_vigencia_hasta'] ?? '') . '"'
+            . ' data-estado-pago="' . htmlspecialchars($r['estado_pago'] ?? 'pendiente') . '"'
+            . ' data-obligado-contabilidad="' . htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') . '"'
+            . ' data-operadora-transporte="' . ((($r['factura_operadora_transporte'] ?? 'false') === 'true' || ($r['factura_operadora_transporte'] ?? false) === true) ? 'true' : 'false') . '"'
+            . ' data-max-usuarios="' . (int) ($r['max_usuarios'] ?? 3) . '"'
+            . ' data-id-empresa-suscripciones="' . (int) ($r['id_empresa_suscripciones'] ?? 0) . '"'
+            . ' data-es-administradora="' . (!empty($r['es_administradora_suscripciones']) ? '1' : '0') . '"'
+            . ' data-id-cliente-facturado="' . (int) ($r['id_cliente_facturado'] ?? 0) . '"'
+            . ' data-id-suscripcion="' . (int) ($r['id_suscripcion'] ?? 0) . '"'
+            . ' data-ctrl-label="' . htmlspecialchars(trim(($r['ctrl_nombre'] ?? '') . (!empty($r['ctrl_ruc']) ? ' — ' . $r['ctrl_ruc'] . ' (' . ($r['ctrl_estab'] ?? '') . ')' : ''))) . '"'
+            . ' data-fact-label="' . htmlspecialchars(trim(($r['cli_nombre'] ?? '') . (!empty($r['cli_identificacion']) ? ' — ' . $r['cli_identificacion'] : ''))) . '"'
+            . ' data-usuarios="' . count($usuarios) . '">';
+
+        $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '-') . '</td>';
+        $html .= '<td>' . htmlspecialchars($r['nombre_comercial'] ?? '-') . '</td>';
+        $html .= '<td><code>' . htmlspecialchars($r['ruc'] ?? '') . '</code></td>';
+        $html .= '<td class="text-center"><code>' . htmlspecialchars($r['establecimiento'] ?? '001') . '</code></td>';
+        $html .= '<td class="text-truncate" style="max-width: 180px;">' . htmlspecialchars($r['direccion'] ?? '-') . '</td>';
+        $html .= '<td>' . htmlspecialchars($r['nombre_provincia'] ?? '-') . '</td>';
+        $html .= '<td>' . htmlspecialchars($r['nombre_ciudad'] ?? '-') . '</td>';
+        $html .= '<td>' . ($estado === '1' ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>') . '</td>';
+
+        $maxUsu = (int) ($r['max_usuarios'] ?? 3);
+        $cntUsu = count($usuarios);
+        $clsUsu = $cntUsu >= $maxUsu ? 'bg-danger' : 'bg-light text-dark';
+        $html .= '<td class="text-center"><span class="badge ' . $clsUsu . '" title="' . $cntUsu . ' de ' . $maxUsu . ' permitidos">' . $cntUsu . '/' . $maxUsu . '</span></td>';
+
+        $ed = $estadoDocs[$id] ?? null;
+        if ($ed === null) {
+            $docTit = 'No se han enviado los documentos legales a esta empresa.';
+            $docBadge = 'bg-danger';
+            $docTxt = 'Sin enviar';
+            $docIco = 'x-circle-fill';
+            $docBtn = 'btn-danger';
+        } elseif (($ed['estado'] ?? '') === 'aceptado') {
+            $docTit = 'Documentos ACEPTADOS el ' . date('d-m-Y H:i:s', strtotime((string) $ed['aceptado_at']));
+            $docBadge = 'bg-success';
+            $docTxt = 'Aceptado';
+            $docIco = 'check-circle-fill';
+            $docBtn = 'btn-success';
+        } else {
+            $docTit = 'Enviados el ' . date('d-m-Y H:i:s', strtotime((string) $ed['enviado_at'])) . ', pendientes de aceptación.';
+            $docBadge = 'bg-warning text-dark';
+            $docTxt = 'Pendiente';
+            $docIco = 'hourglass-split';
+            $docBtn = 'btn-warning';
+        }
+        $html .= '<td class="text-center"><span class="badge ' . $docBadge . '" title="' . htmlspecialchars($docTit) . '" style="font-size:.72rem;"><i class="bi bi-' . $docIco . ' me-1"></i>' . $docTxt . '</span></td>';
+
+        if ($nivel >= 3) {
+            $accion = $ed === null ? 'enviar' : 'reenviar';
+            $html .= '<td class="text-center" onclick="event.stopPropagation()">'
+                . '<button class="btn btn-sm ' . $docBtn . '" title="' . htmlspecialchars($docTit) . ' Clic para ' . $accion . '." onclick="enviarDocumentosLegales(' . $id . ', this)"><i class="bi bi-envelope-fill"></i></button> '
+                . '<button class="btn btn-sm btn-outline-danger" onclick="eliminarEmpresa(' . $id . ')" title="Eliminar empresa"><i class="bi bi-trash"></i></button>'
+                . '</td>';
+        }
+
+        $html .= '</tr>';
+
+        return $html;
     }
 
     public function store(): void

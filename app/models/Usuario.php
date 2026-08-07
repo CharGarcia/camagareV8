@@ -573,7 +573,12 @@ class Usuario extends BaseModel
 
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (u.nombre LIKE '%{$b}%' OR u.cedula LIKE '%{$b}%' OR u.mail LIKE '%{$b}%')";
+            // Nivel y Estado se buscan por su texto tal como se muestran en la tabla
+            // (Nivel: Usuario/Administrador/Super Admin; Estado: Activo/Inactivo/Pendiente registro).
+            $nivelTexto = "(CASE WHEN u.nivel >= 3 THEN 'Super Admin' WHEN u.nivel >= 2 THEN 'Administrador' ELSE 'Usuario' END)";
+            $estadoTexto = "(CASE WHEN NOT (u.registrado OR COALESCE(u.cedula,'') <> substr(md5(COALESCE(u.mail,'')), 1, 15)) THEN 'Pendiente registro' WHEN u.estado = 1 THEN 'Activo' ELSE 'Inactivo' END)";
+            $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula ILIKE '%{$b}%' OR u.mail ILIKE '%{$b}%'
+                OR {$nivelTexto} ILIKE '%{$b}%' OR {$estadoTexto} ILIKE '%{$b}%')";
         }
 
         $countSql = "SELECT COUNT(DISTINCT u.id) AS total FROM {$from} {$where}";

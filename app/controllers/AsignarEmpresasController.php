@@ -31,8 +31,8 @@ class AsignarEmpresasController extends Controller
 
         $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
-        $buscar = trim($_GET['b'] ?? '');
-        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $buscar = trim($_POST['b'] ?? $_GET['b'] ?? '');
+        $page = max(1, (int) ($_POST['page'] ?? $_GET['page'] ?? 1));
 
         $data = $this->model->getUsuariosAsignables($idActual, $nivel, $buscar, $page, self::PER_PAGE);
         $totalPages = (int) ceil($data['total'] / self::PER_PAGE);
@@ -53,6 +53,64 @@ class AsignarEmpresasController extends Controller
             'nivel' => $nivel,
             'limiteUsuarios' => $limiteUsuarios,
         ]);
+    }
+
+    /**
+     * AJAX: listado de usuarios asignables (tabla + paginación), para búsqueda en tiempo real
+     * sin recargar la página. Mismo patrón que ConfigController::asientosTipoListAjax.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
+
+        $data = $this->model->getUsuariosAsignables($idActual, $nivel, $buscar, $page, self::PER_PAGE);
+        $rows = $data['rows'];
+        $total = $data['total'];
+        $totalPages = (int) ceil($total / self::PER_PAGE);
+
+        ob_start();
+        if (empty($rows)) {
+            echo '<tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay usuarios para asignar.</td></tr>';
+        } else {
+            foreach ($rows as $r) {
+                $tipo = (int) ($r['nivel'] ?? 1) >= 2 ? 'Administrador' : 'Usuario';
+                echo '<tr class="row-usuario" role="button" tabindex="0" style="cursor:pointer"'
+                    . ' data-id="' . (int) ($r['id_usuario'] ?? 0) . '"'
+                    . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '">'
+                    . '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>'
+                    . '<td>' . htmlspecialchars($r['cedula'] ?? '') . '</td>'
+                    . '<td><span class="badge bg-' . ($tipo === 'Administrador' ? 'info' : 'secondary') . '">' . $tipo . '</span></td>'
+                    . '<td><span class="badge bg-light text-dark">' . (int) ($r['total_empresas'] ?? 0) . '</span></td>'
+                    . '</tr>';
+            }
+        }
+        $rowsHtml = ob_get_clean();
+
+        ob_start();
+        if ($totalPages > 1) {
+            echo '<ul class="pagination pagination-sm mb-0 justify-content-center">';
+            for ($i = 1; $i <= $totalPages; $i++) {
+                $active = $i === $page ? ' active' : '';
+                echo '<li class="page-item' . $active . '"><button type="button" class="page-link" onclick="ASIGEMP_cambiarPagina(' . $i . ')">' . $i . '</button></li>';
+            }
+            echo '</ul>';
+        }
+        $paginationHtml = ob_get_clean();
+
+        echo json_encode([
+            'ok' => true,
+            'rows' => $rowsHtml,
+            'pagination' => $paginationHtml,
+            'total' => $total,
+        ]);
+        exit;
     }
 
     /**

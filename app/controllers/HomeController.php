@@ -21,8 +21,10 @@ class HomeController extends Controller
 
         if (empty($_SESSION['id_empresa'])) {
             $model = new Empresa();
+            $nivelUsuario = (int) ($_SESSION['nivel'] ?? 1);
             try {
-                $empresas = $model->getEmpresasAsignadas((int) $_SESSION['id_usuario']);
+                // Nivel 3 (superadmin): acceso total, no depende de empresa_asignada.
+                $empresas = $nivelUsuario >= 3 ? $model->getTodasActivas() : $model->getEmpresasAsignadas((int) $_SESSION['id_usuario']);
             } catch (\Throwable $e) {
                 $empresas = [];
             }

@@ -26,6 +26,7 @@ class ConfigController extends Controller
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
         $c = new AsignarEmpresasController();
         $method = match ($sub) {
+            'search' => 'searchAjax',
             'empresasUsuario' => 'empresasUsuarioJson',
             'empresasDisponibles' => 'empresasDisponiblesJson',
             'asignar' => 'asignar',
@@ -138,6 +139,11 @@ class ConfigController extends Controller
     public function bancosEcuador(): void
     {
         (new BancosEcuadorController())->index();
+    }
+
+    public function bancosEcuadorSearch(): void
+    {
+        (new BancosEcuadorController())->searchAjax();
     }
 
     public function bancosEcuadorUpdate(): void
@@ -485,11 +491,17 @@ class ConfigController extends Controller
         (new UsuariosSistemaController())->reenviarInvitacion();
     }
 
+    public function usuariosSistemaSearch(): void
+    {
+        (new UsuariosSistemaController())->searchAjax();
+    }
+
     public function empresasSistema(): void
     {
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
         $c = new EmpresasSistemaController();
         $method = match ($sub) {
+            'search' => 'searchAjax',
             'usuariosEmpresa' => 'usuariosEmpresaJson',
             'establecimientosEmpresa' => 'establecimientosEmpresaJson',
             'updateEstablecimiento' => 'updateEstablecimiento',

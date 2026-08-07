@@ -24,30 +24,8 @@ $urlRecuperar = rtrim(BASE_URL, '/') . '/auth/enviar-correo-recuperar';
 $empresasParaCrear = $empresasParaCrear ?? [];
 $idEmpresaActual = $idEmpresaActual ?? 0;
 
-function nivelTexto(int $n): string
-{
-    return match ($n) {
-        3 => 'Super Admin',
-        2 => 'Administrador',
-        default => 'Usuario',
-    };
-}
-
 $urlBaseUsuarios = rtrim($base, '/') . '/config/usuarios-sistema';
-
-function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $page, $align = '')
-{
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $cls = trim('btn btn-link p-0 text-decoration-none ' . $align);
-    $html = '<form method="POST" action="' . htmlspecialchars($urlBase) . '" class="d-inline">';
-    $html .= '<input type="hidden" name="sort" value="' . htmlspecialchars($col) . '">';
-    $html .= '<input type="hidden" name="dir" value="' . $dir . '">';
-    $html .= '<input type="hidden" name="page" value="' . (int)$page . '">';
-    $html .= '<input type="hidden" name="b" value="' . htmlspecialchars($buscar) . '">';
-    $html .= '<button type="submit" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</button>';
-    $html .= '</form>';
-    return $html;
-}
+$rowsHtml = $rowsHtml ?? '';
 ?>
 <style>
     .usuarios-sistema-header {
@@ -155,46 +133,17 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
 <?php endif; ?>
 
 <div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
-    <form method="POST" action="<?= $urlBaseUsuarios ?>" class="d-flex align-items-center gap-2">
-        <input type="hidden" name="page" value="1">
-        <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-        <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-        <div class="input-group input-group-sm" style="max-width: 320px;">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" name="b" class="form-control" placeholder="Buscar por nombre, cédula o correo..." value="<?= htmlspecialchars($buscar) ?>">
-            <button type="submit" class="btn btn-outline-primary">Buscar</button>
-            <?php if ($buscar !== '' || $page > 1): ?>
-                <a href="<?= $urlBaseUsuarios ?>" class="btn btn-outline-secondary" title="Volver a página 1 sin filtros">Limpiar</a>
-            <?php endif; ?>
+    <div class="input-group input-group-sm" style="max-width: 320px;">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input type="text" id="input-buscar-usuarios" class="form-control" placeholder="Buscar por nombre, cédula, correo, nivel o estado..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+    </div>
+    <div class="d-flex align-items-center gap-2" id="usrSisPagWrap">
+        <span class="text-muted small" id="usrSisPagInfo"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
+        <div id="usrSisPagBtns" class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="USRSIS_cambiarPagina(<?= $page - 1 ?>)" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="USRSIS_cambiarPagina(<?= $page + 1 ?>)" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
         </div>
-    </form>
-    <?php if ($total > 0): ?>
-        <div class="d-flex align-items-center gap-2">
-            <span class="text-muted small"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
-            <?php if ($page <= 1): ?>
-                <button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
-            <?php else: ?>
-                <form method="POST" action="<?= $urlBaseUsuarios ?>" class="d-inline">
-                    <input type="hidden" name="page" value="<?= $page - 1 ?>">
-                    <input type="hidden" name="b" value="<?= htmlspecialchars($buscar) ?>">
-                    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-                    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
-                </form>
-            <?php endif; ?>
-            <?php if ($page >= $totalPages): ?>
-                <button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
-            <?php else: ?>
-                <form method="POST" action="<?= $urlBaseUsuarios ?>" class="d-inline">
-                    <input type="hidden" name="page" value="<?= $page + 1 ?>">
-                    <input type="hidden" name="b" value="<?= htmlspecialchars($buscar) ?>">
-                    <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-                    <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
-                </form>
-            <?php endif; ?>
-        </div>
-    <?php endif; ?>
+    </div>
 </div>
 
 <div class="card cmg-table-card">
@@ -203,63 +152,16 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSortUsuarios($urlBaseUsuarios, 'nombre', 'Nombre', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortUsuarios($urlBaseUsuarios, 'cedula', 'Cédula', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortUsuarios($urlBaseUsuarios, 'mail', 'Correo', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortUsuarios($urlBaseUsuarios, 'nivel', 'Nivel', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortUsuarios($urlBaseUsuarios, 'estado', 'Estado', $ordenCol, $ordenDir, $buscar, $page) ?></th>
+                        <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="cedula" role="button">Cédula <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="mail" role="button">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nivel" role="button">Nivel <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center">Empresas</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                        <?php
-                        $nivelU = (int)($r['nivel'] ?? 1);
-                        $estado = (int)($r['estado'] ?? 1);
-                        $empresas = $r['empresas'] ?? [];
-                        // `registrado` viene de Postgres como boolean ('t'/'f'/true/false).
-                        // Pendiente de registro = NO registrado (el `token` no sirve para
-                        // esto porque también se usa en recuperación de contraseña).
-                        $rv = $r['registrado'] ?? false;
-                        $registrado = ($rv === true || $rv === 't' || $rv === '1' || $rv === 1 || $rv === 'true');
-                        ?>
-                        <tr class="usuario-row" role="button" tabindex="0"
-                            data-id="<?= (int)($r['id'] ?? 0) ?>"
-                            data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>"
-                            data-cedula="<?= htmlspecialchars($r['cedula'] ?? '') ?>"
-                            data-mail="<?= htmlspecialchars($r['mail'] ?? '') ?>"
-                            data-nivel="<?= $nivelU ?>"
-                            data-estado="<?= $estado ?>"
-                            data-empresas="<?= count($empresas) ?>"
-                            data-token="<?= htmlspecialchars($r['token'] ?? '') ?>">
-                            <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                            <td><code><?= htmlspecialchars($r['cedula'] ?? '') ?></code></td>
-                            <td><?= htmlspecialchars($r['mail'] ?? '-') ?></td>
-                            <td><span class="badge bg-<?= $nivelU >= 3 ? 'danger' : ($nivelU >= 2 ? 'info' : 'secondary') ?>"><?= nivelTexto($nivelU) ?></span></td>
-                            <td>
-                                <?php if (!$registrado): ?>
-                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning" title="El usuario aún no ha completado su registro">
-                                        <i class="bi bi-hourglass-split"></i> Pendiente registro
-                                    </span>
-                                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 ms-1"
-                                        title="Reenviar correo de invitación a <?= htmlspecialchars($r['mail'] ?? '') ?>"
-                                        onclick="event.stopPropagation(); reenviarInvitacionUsuario(<?= (int)($r['id'] ?? 0) ?>, this);">
-                                        <i class="bi bi-send"></i>
-                                    </button>
-                                <?php elseif ($estado): ?>
-                                    <span class="badge bg-success">Activo</span>
-                                <?php else: ?>
-                                    <span class="badge bg-secondary">Inactivo</span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="text-center"><span class="badge bg-light text-dark"><?= count($empresas) ?></span></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyUsuarios"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-                <p class="text-muted text-center py-4 mb-0">No hay usuarios registrados.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -402,10 +304,12 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                     <div class="tab-pane fade" id="pane-empresas" role="tabpanel">
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
-                                <label class="form-label small">Agregar empresa</label>
-                                <select id="select-empresa-usuario" class="form-select form-select-sm">
-                                    <option value="">Cargando...</option>
-                                </select>
+                                <label for="input-empresa-usuario" class="form-label small">Agregar empresa</label>
+                                <div class="position-relative">
+                                    <input type="text" id="input-empresa-usuario" class="form-control form-control-sm" placeholder="Buscar empresa por nombre o RUC..." autocomplete="off">
+                                    <input type="hidden" id="select-empresa-usuario" value="">
+                                    <div id="dropdown-empresa-usuario" class="list-group position-absolute shadow-sm" style="z-index:1060; max-height:220px; overflow:auto; display:none; width:100%;"></div>
+                                </div>
                             </div>
                             <div class="col-md-6 d-flex align-items-end">
                                 <button type="button" class="btn btn-sm btn-primary" id="btn-agregar-empresa-usuario">
@@ -551,7 +455,7 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
             bootstrap.Tab.getInstance(document.getElementById('tab-general')) || new bootstrap.Tab(document.getElementById('tab-general'));
             document.getElementById('tab-general').click();
             cargarEmpresas();
-            cargarEmpresasDisponibles();
+            limpiarBuscadorEmpresaUsuario();
             cargarEmpresasParaResponsables();
             new bootstrap.Modal(modal).show();
         }
@@ -665,17 +569,24 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
             });
         }
 
-        document.querySelectorAll('.usuario-row').forEach(function(row) {
-            row.addEventListener('click', function(e) {
-                if (!e.target.closest('a')) abrirModalUsuario(this);
+        // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden/página
+        // AJAX, por lo que el listener va en el tbody (contenedor fijo), no en cada <tr>.
+        var tbodyUsuarios = document.getElementById('tbodyUsuarios');
+        if (tbodyUsuarios) {
+            tbodyUsuarios.addEventListener('click', function(e) {
+                if (e.target.closest('a, button')) return;
+                var row = e.target.closest('.usuario-row');
+                if (row) abrirModalUsuario(row);
             });
-            row.addEventListener('keydown', function(e) {
-                if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a')) {
+            tbodyUsuarios.addEventListener('keydown', function(e) {
+                if ((e.key !== 'Enter' && e.key !== ' ') || e.target.closest('a, button')) return;
+                var row = e.target.closest('.usuario-row');
+                if (row) {
                     e.preventDefault();
-                    abrirModalUsuario(this);
+                    abrirModalUsuario(row);
                 }
             });
-        });
+        }
 
         function cargarEmpresas() {
             tbody.innerHTML = '<tr><td colspan="3" class="text-center">Cargando...</td></tr>';
@@ -722,30 +633,77 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                 });
         }
 
-        function cargarEmpresasDisponibles() {
-            selectEmpresa.innerHTML = '<option value="">Cargando...</option>';
-            fetch(base + '/config/asignar-empresas?action=empresasDisponibles&id_usuario=' + idUsuario)
-                .then(function(r) {
-                    return r.json();
-                })
-                .then(function(data) {
-                    selectEmpresa.innerHTML = '<option value="">Seleccione empresa...</option>';
-                    (data.empresas || []).forEach(function(e) {
-                        var o = document.createElement('option');
-                        o.value = e.id_empresa;
-                        o.textContent = (e.nombre_comercial || '') + ' (' + (e.ruc || '') + ')';
-                        selectEmpresa.appendChild(o);
+        // Buscador tipo "chip" de empresas disponibles: mismo patrón que
+        // setupTypeahead() en app/views/modulos/mayores/index.php.
+        var inputEmpresaUsuario = document.getElementById('input-empresa-usuario');
+        var dropdownEmpresaUsuario = document.getElementById('dropdown-empresa-usuario');
+
+        function setupTypeaheadEmpresa(inputEl, dropdownEl, hiddenEl, fetchFn, renderLabel) {
+            var debounceTimer;
+            inputEl.addEventListener('keydown', function(e) {
+                if ((e.key === 'Backspace' || e.key === 'Delete') && hiddenEl.value !== '') {
+                    e.preventDefault();
+                    hiddenEl.value = '';
+                    inputEl.value = '';
+                    dropdownEl.style.display = 'none';
+                    dropdownEl.innerHTML = '';
+                }
+            });
+            inputEl.addEventListener('input', function() {
+                hiddenEl.value = '';
+                clearTimeout(debounceTimer);
+                var q = inputEl.value.trim();
+                if (q.length < 1) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
+                debounceTimer = setTimeout(function() {
+                    fetchFn(q).then(function(items) {
+                        if (!items || !items.length) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
+                        dropdownEl.innerHTML = items.map(function(it) {
+                            var label = renderLabel(it);
+                            return '<a href="#" class="list-group-item list-group-item-action py-1 px-2 small" data-id="' + it.id_empresa + '" data-label="' + label.replace(/"/g, '&quot;') + '">' + label + '</a>';
+                        }).join('');
+                        dropdownEl.style.display = 'block';
+                    }).catch(function() {
+                        dropdownEl.innerHTML = '<span class="list-group-item text-danger small">Error al buscar.</span>';
+                        dropdownEl.style.display = 'block';
                     });
-                })
-                .catch(function() {
-                    selectEmpresa.innerHTML = '<option value="">Error</option>';
-                });
+                }, 300);
+            });
+            dropdownEl.addEventListener('click', function(e) {
+                var a = e.target.closest('a[data-id]');
+                if (!a) return;
+                e.preventDefault();
+                hiddenEl.value = a.dataset.id;
+                inputEl.value = a.dataset.label;
+                dropdownEl.style.display = 'none';
+            });
+            document.addEventListener('click', function(e) {
+                if (e.target !== inputEl && !dropdownEl.contains(e.target)) dropdownEl.style.display = 'none';
+            });
+        }
+
+        setupTypeaheadEmpresa(
+            inputEmpresaUsuario,
+            dropdownEmpresaUsuario,
+            selectEmpresa,
+            function(q) {
+                return fetch(base + '/config/asignar-empresas?action=empresasDisponibles&id_usuario=' + idUsuario + '&q=' + encodeURIComponent(q))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) { return data.empresas || []; });
+            },
+            function(e) { return (e.nombre_comercial || '') + ' (' + (e.ruc || '') + ')'; }
+        );
+
+        function limpiarBuscadorEmpresaUsuario() {
+            inputEmpresaUsuario.value = '';
+            selectEmpresa.value = '';
+            dropdownEmpresaUsuario.style.display = 'none';
+            dropdownEmpresaUsuario.innerHTML = '';
         }
 
         document.getElementById('btn-agregar-empresa-usuario').addEventListener('click', function() {
             var idEmp = selectEmpresa.value;
             if (!idEmp) {
-                alert('Seleccione una empresa');
+                alert('Busque y seleccione una empresa de la lista.');
                 return;
             }
             var f = document.createElement('form');
@@ -1072,6 +1030,68 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                     btn.disabled = false;
                 });
             });
+        }
+    })();
+
+    // Búsqueda, orden y paginación en tiempo real: reemplazan solo la tabla vía
+    // AJAX, sin recargar la página (el input nunca pierde el foco). Mismo patrón
+    // que ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    (function() {
+        var base = '<?= $base ?>';
+        var timer = null;
+        window.USRSIS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+        window.USRSIS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+        window.USRSIS_currentPage = <?= (int) $page ?>;
+
+        window.USRSIS_cargarListado = function(page) {
+            page = page || 1;
+            window.USRSIS_currentPage = page;
+            var inputB = document.getElementById('input-buscar-usuarios');
+            var b = inputB ? inputB.value.trim() : '';
+            var tbodyEl = document.getElementById('tbodyUsuarios');
+            if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+            fetch(base + '/config/usuarios-sistema-search?b=' + encodeURIComponent(b) + '&page=' + page + '&sort=' + window.USRSIS_currentSort + '&dir=' + window.USRSIS_currentDir, {
+                    credentials: 'same-origin'
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.ok) return;
+                    if (tbodyEl) tbodyEl.innerHTML = data.rows;
+                    var info = document.getElementById('usrSisPagInfo');
+                    if (info) info.textContent = data.info;
+                    var btns = document.getElementById('usrSisPagBtns');
+                    if (btns) btns.innerHTML = data.pagination || (
+                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Anterior"><i class="fas fa-angle-left"></i></button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>'
+                    );
+                })
+                .catch(function() {
+                    if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+                });
+        };
+
+        window.USRSIS_cambiarPagina = function(page) {
+            if (page < 1) return;
+            USRSIS_cargarListado(page);
+        };
+
+        var inputBuscar = document.getElementById('input-buscar-usuarios');
+        if (inputBuscar) {
+            inputBuscar.addEventListener('input', function() {
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    USRSIS_cargarListado(1);
+                }, 400);
+            });
+        }
+
+        if (window.CMG_initSort) {
+            window.CMG_initSort('usuarios-sistema', function(col, dir) {
+                window.USRSIS_currentSort = col;
+                window.USRSIS_currentDir = dir;
+                USRSIS_cargarListado(1);
+            }, { col: window.USRSIS_currentSort, dir: window.USRSIS_currentDir });
         }
     })();
 

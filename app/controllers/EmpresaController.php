@@ -59,8 +59,9 @@ class EmpresaController extends Controller
 
         try {
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $nivel = (int) ($_SESSION['nivel'] ?? 1);
             $model = new Empresa();
-            $empresas = $model->getEmpresasAsignadas($idUsuario);
+            $empresas = $nivel >= 3 ? $model->getTodasActivas() : $model->getEmpresasAsignadas($idUsuario);
 
             $resultado = [];
             foreach ($empresas as $emp) {

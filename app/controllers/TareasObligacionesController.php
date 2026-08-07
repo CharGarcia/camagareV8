@@ -72,7 +72,8 @@ class TareasObligacionesController extends Controller
         $idEmpresaFavorita = null;
 
         try {
-            $empresas = $empresasModel->getEmpresasAsignadas($idUsuario);
+            // Nivel 3 (superadmin): acceso total, no depende de empresa_asignada.
+            $empresas = $nivel >= 3 ? $empresasModel->getTodasActivas() : $empresasModel->getEmpresasAsignadas($idUsuario);
         } catch (\Throwable $e) {
             $empresas = [];
         }

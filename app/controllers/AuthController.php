@@ -98,12 +98,20 @@ class AuthController extends Controller
         $_SESSION['nombre']     = $user['nombre'];
         $_SESSION['id_usuario'] = $user['id'];
 
-        $empresasLogin = $model->getEmpresasAsignadasParaLogin($_SESSION['id_usuario']);
-        $numEmpresas   = (int) ($empresasLogin['numrows'] ?? 0);
+        $nivelUsuario = (int) $user['nivel'];
+
+        // Nivel 3 (superadmin): acceso total, no depende de empresa_asignada.
+        if ($nivelUsuario >= 3) {
+            $empresasActivas = (new \App\models\Empresa())->getTodasActivas();
+            $numEmpresas     = count($empresasActivas);
+        } else {
+            $empresasLogin = $model->getEmpresasAsignadasParaLogin($_SESSION['id_usuario']);
+            $numEmpresas   = (int) ($empresasLogin['numrows'] ?? 0);
+        }
 
         if ($numEmpresas === 0) {
             // Solo SuperAdmin puede entrar sin empresa (crear la primera en Configuración → Empresas)
-            if ((int) $user['nivel'] !== 3) {
+            if ($nivelUsuario !== 3) {
                 unset($_SESSION['id_usuario'], $_SESSION['nivel'], $_SESSION['nombre']);
                 if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['error' => 'sin_empresa', 'msg' => 'El usuario no tiene empresas asignadas.']); exit; }
                 $this->redirect(BASE_URL . '/?error=2');
@@ -112,14 +120,30 @@ class AuthController extends Controller
         } else {
             $favId = (int) ($user['id_empresa_favorita'] ?? 0);
             $emp   = null;
-            if ($favId > 0) {
-                $emp = $model->getEmpresaAsignadaEspecifica((int) $user['id'], $favId);
-            }
 
-            if (!$emp) {
-                $emp = ($numEmpresas === 1)
-                    ? ['id_empresa' => $empresasLogin['id_empresa'], 'ruc_empresa' => $empresasLogin['ruc_empresa']]
-                    : $model->getPrimeraEmpresaAsignada((int) $user['id']);
+            if ($nivelUsuario >= 3) {
+                if ($favId > 0) {
+                    foreach ($empresasActivas as $e) {
+                        if ((int) $e['id_empresa'] === $favId) {
+                            $emp = ['id_empresa' => (int) $e['id_empresa'], 'ruc_empresa' => $e['ruc']];
+                            break;
+                        }
+                    }
+                }
+                if (!$emp) {
+                    $primera = $empresasActivas[0];
+                    $emp = ['id_empresa' => (int) $primera['id_empresa'], 'ruc_empresa' => $primera['ruc']];
+                }
+            } else {
+                if ($favId > 0) {
+                    $emp = $model->getEmpresaAsignadaEspecifica((int) $user['id'], $favId);
+                }
+
+                if (!$emp) {
+                    $emp = ($numEmpresas === 1)
+                        ? ['id_empresa' => $empresasLogin['id_empresa'], 'ruc_empresa' => $empresasLogin['ruc_empresa']]
+                        : $model->getPrimeraEmpresaAsignada((int) $user['id']);
+                }
             }
 
             if ($emp) {

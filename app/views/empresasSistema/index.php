@@ -20,19 +20,7 @@ $to = $total > 0 ? min($page * $perPage, $total) : 0;
 $msg = $_SESSION['empresas_msg'] ?? null;
 unset($_SESSION['empresas_msg']);
 $urlBaseEmpresas = rtrim($base, '/') . '/config/empresas-sistema';
-
-function thSortEmpresas($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $page, $align = '') {
-    $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
-    $cls = trim('btn btn-link p-0 text-decoration-none ' . $align);
-    $html = '<form method="POST" action="' . htmlspecialchars($urlBase) . '" class="d-inline">';
-    $html .= '<input type="hidden" name="sort" value="' . htmlspecialchars($col) . '">';
-    $html .= '<input type="hidden" name="dir" value="' . $dir . '">';
-    $html .= '<input type="hidden" name="page" value="' . (int)$page . '">';
-    $html .= '<input type="hidden" name="b" value="' . htmlspecialchars($buscar) . '">';
-    $html .= '<button type="submit" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</button>';
-    $html .= '</form>';
-    return $html;
-}
+$rowsHtml = $rowsHtml ?? '';
 
 function estadoPagoBadge($estado) {
     $estado = $estado ?? 'pendiente';
@@ -83,45 +71,17 @@ function estadoPagoBadge($estado) {
 <?php endif; ?>
 
 <div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
-    <form id="form-buscar-empresas" method="POST" action="<?= $urlBaseEmpresas ?>" class="d-flex align-items-center gap-2">
-        <input type="hidden" name="page" value="1">
-        <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-        <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-        <div class="input-group input-group-sm" style="max-width: 320px;">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" id="input-buscar-empresas" name="b" class="form-control" placeholder="Buscar por razón social, RUC, establecimiento..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-            <?php if ($buscar !== '' || $page > 1): ?>
-            <a href="<?= $urlBaseEmpresas ?>" class="btn btn-outline-secondary" title="Limpiar búsqueda"><i class="bi bi-x"></i></a>
-            <?php endif; ?>
-        </div>
-    </form>
-    <?php if ($total > 0): ?>
-    <div class="d-flex align-items-center gap-2">
-        <span class="text-muted small"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
-        <?php if ($page <= 1): ?>
-        <button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
-        <?php else: ?>
-        <form method="POST" action="<?= $urlBaseEmpresas ?>" class="d-inline">
-            <input type="hidden" name="page" value="<?= $page - 1 ?>">
-            <input type="hidden" name="b" value="<?= htmlspecialchars($buscar) ?>">
-            <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-            <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-            <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
-        </form>
-        <?php endif; ?>
-        <?php if ($page >= $totalPages): ?>
-        <button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
-        <?php else: ?>
-        <form method="POST" action="<?= $urlBaseEmpresas ?>" class="d-inline">
-            <input type="hidden" name="page" value="<?= $page + 1 ?>">
-            <input type="hidden" name="b" value="<?= htmlspecialchars($buscar) ?>">
-            <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-            <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-            <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
-        </form>
-        <?php endif; ?>
+    <div class="input-group input-group-sm" style="max-width: 320px;">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input type="text" id="input-buscar-empresas" class="form-control" placeholder="Buscar por razón social, RUC, establecimiento..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
     </div>
-    <?php endif; ?>
+    <div class="d-flex align-items-center gap-2" id="empSisPagWrap">
+        <span class="text-muted small" id="empSisPagInfo"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
+        <div id="empSisPagBtns" class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="EMPSIS_cambiarPagina(<?= $page - 1 ?>)" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="EMPSIS_cambiarPagina(<?= $page + 1 ?>)" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
+        </div>
+    </div>
 </div>
 
 <div class="card cmg-table-card">
@@ -130,123 +90,21 @@ function estadoPagoBadge($estado) {
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre', 'Razón social', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre_comercial', 'Nombre comercial', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'ruc', 'RUC', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'establecimiento', 'Est.', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'direccion', 'Dirección', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre_provincia', 'Provincia', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre_ciudad', 'Ciudad', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'estado', 'Estado', $ordenCol, $ordenDir, $buscar, $page) ?></th>
+                        <th class="sortable-header" data-sort="nombre" role="button">Razón social <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre_comercial" role="button">Nombre comercial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="ruc" role="button">RUC <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="establecimiento" role="button">Est. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="direccion" role="button">Dirección <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre_provincia" role="button">Provincia <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="nombre_ciudad" role="button">Ciudad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center">Usuarios</th>
                         <th class="text-center">Documentos</th>
                         <?php if ($nivel >= 3): ?><th class="text-center">Acciones</th><?php endif; ?>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $usuarios = $r['usuarios'] ?? [];
-                    $estado = $r['estado'] ?? '1';
-                    ?>
-                    <tr class="empresa-row" role="button" tabindex="0"
-                        data-id="<?= (int)($r['id'] ?? 0) ?>"
-                        data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>"
-                        data-nombre-comercial="<?= htmlspecialchars($r['nombre_comercial'] ?? '') ?>"
-                        data-ruc="<?= htmlspecialchars($r['ruc'] ?? '') ?>"
-                        data-establecimiento="<?= htmlspecialchars($r['establecimiento'] ?? '') ?>"
-                        data-direccion="<?= htmlspecialchars($r['direccion'] ?? '') ?>"
-                        data-telefono="<?= htmlspecialchars($r['telefono'] ?? '') ?>"
-                        data-mail="<?= htmlspecialchars($r['mail'] ?? '') ?>"
-                        data-nom-rep-legal="<?= htmlspecialchars($r['nom_rep_legal'] ?? '') ?>"
-                        data-ced-rep-legal="<?= htmlspecialchars($r['ced_rep_legal'] ?? '') ?>"
-                        data-cod-prov="<?= htmlspecialchars($r['cod_prov'] ?? '') ?>"
-                        data-cod-ciudad="<?= htmlspecialchars($r['cod_ciudad'] ?? '') ?>"
-                        data-nombre-contador="<?= htmlspecialchars($r['nombre_contador'] ?? '') ?>"
-                        data-ruc-contador="<?= htmlspecialchars($r['ruc_contador'] ?? '') ?>"
-                        data-estado="<?= htmlspecialchars($estado) ?>"
-                        data-valor-cobro="<?= htmlspecialchars($r['valor_cobro'] ?? '') ?>"
-                        data-periodo-vigencia-desde="<?= htmlspecialchars($r['periodo_vigencia_desde'] ?? '') ?>"
-                        data-periodo-vigencia-hasta="<?= htmlspecialchars($r['periodo_vigencia_hasta'] ?? '') ?>"
-                        data-estado-pago="<?= htmlspecialchars($r['estado_pago'] ?? 'pendiente') ?>"
-                        data-obligado-contabilidad="<?= htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') ?>"
-                        data-operadora-transporte="<?= (($r['factura_operadora_transporte'] ?? 'false') === 'true' || ($r['factura_operadora_transporte'] ?? false) === true) ? 'true' : 'false' ?>"
-                        data-max-usuarios="<?= (int)($r['max_usuarios'] ?? 3) ?>"
-                        data-id-empresa-suscripciones="<?= (int)($r['id_empresa_suscripciones'] ?? 0) ?>"
-                        data-es-administradora="<?= !empty($r['es_administradora_suscripciones']) ? '1' : '0' ?>"
-                        data-id-cliente-facturado="<?= (int)($r['id_cliente_facturado'] ?? 0) ?>"
-                        data-id-suscripcion="<?= (int)($r['id_suscripcion'] ?? 0) ?>"
-                        data-ctrl-label="<?= htmlspecialchars(trim(($r['ctrl_nombre'] ?? '') . (!empty($r['ctrl_ruc']) ? ' — ' . $r['ctrl_ruc'] . ' (' . ($r['ctrl_estab'] ?? '') . ')' : ''))) ?>"
-                        data-fact-label="<?= htmlspecialchars(trim(($r['cli_nombre'] ?? '') . (!empty($r['cli_identificacion']) ? ' — ' . $r['cli_identificacion'] : ''))) ?>"
-                        data-usuarios="<?= count($usuarios) ?>">
-                        <td><?= htmlspecialchars($r['nombre'] ?? '-') ?></td>
-                        <td><?= htmlspecialchars($r['nombre_comercial'] ?? '-') ?></td>
-                        <td><code><?= htmlspecialchars($r['ruc'] ?? '') ?></code></td>
-                        <td class="text-center"><code><?= htmlspecialchars($r['establecimiento'] ?? '001') ?></code></td>
-                        <td class="text-truncate" style="max-width: 180px;"><?= htmlspecialchars($r['direccion'] ?? '-') ?></td>
-                        <td><?= htmlspecialchars($r['nombre_provincia'] ?? '-') ?></td>
-                        <td><?= htmlspecialchars($r['nombre_ciudad'] ?? '-') ?></td>
-                        <td>
-                            <?php if ($estado === '1'): ?>
-                            <span class="badge bg-success">Activo</span>
-                            <?php else: ?>
-                            <span class="badge bg-secondary">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <?php
-                        $maxUsu  = (int)($r['max_usuarios'] ?? 3);
-                        $cntUsu  = count($usuarios);
-                        $clsUsu  = $cntUsu >= $maxUsu ? 'bg-danger' : 'bg-light text-dark';
-                        ?>
-                        <td class="text-center">
-                            <span class="badge <?= $clsUsu ?>" title="<?= $cntUsu ?> de <?= $maxUsu ?> permitidos">
-                                <?= $cntUsu ?>/<?= $maxUsu ?>
-                            </span>
-                        </td>
-                        <?php
-                        // Estado de los documentos legales (acuerdo de datos + contrato de uso)
-                        $ed = ($estadoDocs ?? [])[(int)$r['id']] ?? null;
-                        if ($ed === null) {
-                            $docTit   = 'No se han enviado los documentos legales a esta empresa.';
-                            $docBadge = 'bg-danger';
-                            $docTxt   = 'Sin enviar';
-                            $docIco   = 'x-circle-fill';
-                            $docBtn   = 'btn-danger';
-                        } elseif (($ed['estado'] ?? '') === 'aceptado') {
-                            $docTit   = 'Documentos ACEPTADOS el ' . date('d-m-Y H:i:s', strtotime((string)$ed['aceptado_at']));
-                            $docBadge = 'bg-success';
-                            $docTxt   = 'Aceptado';
-                            $docIco   = 'check-circle-fill';
-                            $docBtn   = 'btn-success';
-                        } else {
-                            $docTit   = 'Enviados el ' . date('d-m-Y H:i:s', strtotime((string)$ed['enviado_at'])) . ', pendientes de aceptación.';
-                            $docBadge = 'bg-warning text-dark';
-                            $docTxt   = 'Pendiente';
-                            $docIco   = 'hourglass-split';
-                            $docBtn   = 'btn-warning';
-                        }
-                        ?>
-                        <td class="text-center">
-                            <span class="badge <?= $docBadge ?>" title="<?= htmlspecialchars($docTit) ?>" style="font-size:.72rem;">
-                                <i class="bi bi-<?= $docIco ?> me-1"></i><?= $docTxt ?>
-                            </span>
-                        </td>
-                        <?php if ($nivel >= 3): ?>
-                        <td class="text-center" onclick="event.stopPropagation()">
-                            <button class="btn btn-sm <?= $docBtn ?>" title="<?= htmlspecialchars($docTit) ?> Clic para <?= $ed === null ? 'enviar' : 'reenviar' ?>."
-                                    onclick="enviarDocumentosLegales(<?= $r['id'] ?>, this)">
-                                <i class="bi bi-envelope-fill"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="eliminarEmpresa(<?= $r['id'] ?>)" title="Eliminar empresa"><i class="bi bi-trash"></i></button>
-                        </td>
-                        <?php endif; ?>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="tbodyEmpresas"><?= $rowsHtml ?></tbody>
             </table>
-            <?php if (empty($rows)): ?>
-            <p class="text-muted text-center py-4 mb-0">No hay empresas registradas.</p>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -527,10 +385,12 @@ function estadoPagoBadge($estado) {
                     <div class="tab-pane fade" id="pane-empresas-usuarios" role="tabpanel">
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
-                                <label class="form-label small">Agregar usuario</label>
-                                <select id="select-usuario-empresa" class="form-select form-select-sm">
-                                    <option value="">Cargando...</option>
-                                </select>
+                                <label for="input-usuario-empresa" class="form-label small">Agregar usuario</label>
+                                <div class="position-relative">
+                                    <input type="text" id="input-usuario-empresa" class="form-control form-control-sm" placeholder="Buscar usuario por nombre o cédula..." autocomplete="off">
+                                    <input type="hidden" id="select-usuario-empresa" value="">
+                                    <div id="dropdown-usuario-empresa" class="list-group position-absolute shadow-sm" style="z-index:1060; max-height:220px; overflow:auto; display:none; width:100%;"></div>
+                                </div>
                             </div>
                             <div class="col-md-6 d-flex align-items-end">
                                 <button type="button" class="btn btn-sm btn-primary" id="btn-agregar-usuario-empresa">
@@ -850,27 +710,78 @@ function estadoPagoBadge($estado) {
         cargarSuscripcionesCliente(el.dataset.idSuscripcion || '');
         document.getElementById('tab-empresas-general').click();
         cargarUsuarios();
-        cargarUsuariosDisponibles();
+        limpiarBuscadorUsuarioEmpresa();
         cargarDocumentos();
         cargarEstablecimientos();
         new bootstrap.Modal(modal).show();
     }
 
-    function cargarUsuariosDisponibles() {
-        var select = document.getElementById('select-usuario-empresa');
-        select.innerHTML = '<option value="">Cargando...</option>';
-        fetch(base + '/config/empresas-sistema?action=usuariosDisponiblesEmpresa&id_empresa=' + idEmpresa)
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                select.innerHTML = '<option value="">Seleccione usuario...</option>';
-                (data.usuarios || []).forEach(function(u) {
-                    var o = document.createElement('option');
-                    o.value = u.id_usuario;
-                    o.textContent = (u.nombre || '') + ' (' + (u.cedula || '') + ')';
-                    select.appendChild(o);
+    // Buscador tipo "chip" de usuarios disponibles: mismo patrón que
+    // setupTypeahead() en app/views/modulos/mayores/index.php.
+    var inputUsuarioEmpresa = document.getElementById('input-usuario-empresa');
+    var dropdownUsuarioEmpresa = document.getElementById('dropdown-usuario-empresa');
+    var selectUsuarioEmpresa = document.getElementById('select-usuario-empresa');
+
+    function setupTypeaheadUsuarioEmpresa(inputEl, dropdownEl, hiddenEl, fetchFn, renderLabel) {
+        var debounceTimer;
+        inputEl.addEventListener('keydown', function(e) {
+            if ((e.key === 'Backspace' || e.key === 'Delete') && hiddenEl.value !== '') {
+                e.preventDefault();
+                hiddenEl.value = '';
+                inputEl.value = '';
+                dropdownEl.style.display = 'none';
+                dropdownEl.innerHTML = '';
+            }
+        });
+        inputEl.addEventListener('input', function() {
+            hiddenEl.value = '';
+            clearTimeout(debounceTimer);
+            var q = inputEl.value.trim();
+            if (q.length < 1) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
+            debounceTimer = setTimeout(function() {
+                fetchFn(q).then(function(items) {
+                    if (!items || !items.length) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
+                    dropdownEl.innerHTML = items.map(function(it) {
+                        var label = renderLabel(it);
+                        return '<a href="#" class="list-group-item list-group-item-action py-1 px-2 small" data-id="' + it.id_usuario + '" data-label="' + label.replace(/"/g, '&quot;') + '">' + label + '</a>';
+                    }).join('');
+                    dropdownEl.style.display = 'block';
+                }).catch(function() {
+                    dropdownEl.innerHTML = '<span class="list-group-item text-danger small">Error al buscar.</span>';
+                    dropdownEl.style.display = 'block';
                 });
-            })
-            .catch(function() { select.innerHTML = '<option value="">Error</option>'; });
+            }, 300);
+        });
+        dropdownEl.addEventListener('click', function(e) {
+            var a = e.target.closest('a[data-id]');
+            if (!a) return;
+            e.preventDefault();
+            hiddenEl.value = a.dataset.id;
+            inputEl.value = a.dataset.label;
+            dropdownEl.style.display = 'none';
+        });
+        document.addEventListener('click', function(e) {
+            if (e.target !== inputEl && !dropdownEl.contains(e.target)) dropdownEl.style.display = 'none';
+        });
+    }
+
+    setupTypeaheadUsuarioEmpresa(
+        inputUsuarioEmpresa,
+        dropdownUsuarioEmpresa,
+        selectUsuarioEmpresa,
+        function(q) {
+            return fetch(base + '/config/empresas-sistema?action=usuariosDisponiblesEmpresa&id_empresa=' + idEmpresa + '&q=' + encodeURIComponent(q))
+                .then(function(r) { return r.json(); })
+                .then(function(data) { return data.usuarios || []; });
+        },
+        function(u) { return (u.nombre || '') + ' (' + (u.cedula || '') + ')'; }
+    );
+
+    function limpiarBuscadorUsuarioEmpresa() {
+        inputUsuarioEmpresa.value = '';
+        selectUsuarioEmpresa.value = '';
+        dropdownUsuarioEmpresa.style.display = 'none';
+        dropdownUsuarioEmpresa.innerHTML = '';
     }
 
     /**
@@ -1135,20 +1046,27 @@ function estadoPagoBadge($estado) {
     });
     document.getElementById('tab-empresas-usuarios').addEventListener('shown.bs.tab', function() {
         cargarUsuarios();
-        cargarUsuariosDisponibles();
+        limpiarBuscadorUsuarioEmpresa();
     });
 
-    document.querySelectorAll('.empresa-row').forEach(function(row) {
-        row.addEventListener('click', function(e) {
-            if (!e.target.closest('a')) abrirModalEmpresa(this);
+    // Delegación de eventos: las filas se reemplazan en cada búsqueda/orden/página
+    // AJAX, por lo que el listener va en el tbody (contenedor fijo), no en cada <tr>.
+    var tbodyEmpresas = document.getElementById('tbodyEmpresas');
+    if (tbodyEmpresas) {
+        tbodyEmpresas.addEventListener('click', function(e) {
+            if (e.target.closest('a, button')) return;
+            var row = e.target.closest('.empresa-row');
+            if (row) abrirModalEmpresa(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a')) {
+        tbodyEmpresas.addEventListener('keydown', function(e) {
+            if ((e.key !== 'Enter' && e.key !== ' ') || e.target.closest('a, button')) return;
+            var row = e.target.closest('.empresa-row');
+            if (row) {
                 e.preventDefault();
-                abrirModalEmpresa(this);
+                abrirModalEmpresa(row);
             }
         });
-    });
+    }
 
     function cargarUsuarios() {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center">Cargando...</td></tr>';
@@ -1179,14 +1097,14 @@ function estadoPagoBadge($estado) {
                 } else {
                     tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Sin usuarios asignados</td></tr>';
                 }
-                cargarUsuariosDisponibles();
+                limpiarBuscadorUsuarioEmpresa();
             })
             .catch(function() { tbody.innerHTML = '<tr><td colspan="5" class="text-danger">Error al cargar</td></tr>'; });
     }
 
     document.getElementById('btn-agregar-usuario-empresa').addEventListener('click', function() {
         var idUsuario = document.getElementById('select-usuario-empresa').value;
-        if (!idUsuario) { alert('Seleccione un usuario'); return; }
+        if (!idUsuario) { alert('Busque y seleccione un usuario de la lista.'); return; }
         var f = document.createElement('form');
         f.method = 'POST';
         f.action = base + '/config/asignar-empresas';
@@ -1380,18 +1298,66 @@ function estadoPagoBadge($estado) {
         });
     }
 
-    // Búsqueda inmediata con debounce
+    // Búsqueda, orden y paginación en tiempo real: reemplazan solo la tabla vía
+    // AJAX, sin recargar la página (el input nunca pierde el foco). Mismo patrón
+    // que ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
     (function() {
-        var inputBuscar = document.getElementById('input-buscar-empresas');
-        var formBuscar  = document.getElementById('form-buscar-empresas');
-        if (!inputBuscar || !formBuscar) return;
         var timer = null;
-        inputBuscar.addEventListener('input', function() {
-            clearTimeout(timer);
-            timer = setTimeout(function() {
-                formBuscar.submit();
-            }, 400);
-        });
+        window.EMPSIS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+        window.EMPSIS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+        window.EMPSIS_currentPage = <?= (int) $page ?>;
+
+        window.EMPSIS_cargarListado = function(page) {
+            page = page || 1;
+            window.EMPSIS_currentPage = page;
+            var inputB = document.getElementById('input-buscar-empresas');
+            var b = inputB ? inputB.value.trim() : '';
+            var tbodyEl = document.getElementById('tbodyEmpresas');
+            var colspan = <?= $nivel >= 3 ? 11 : 10 ?>;
+            if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="' + colspan + '" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+            fetch(base + '/config/empresas-sistema?action=search&b=' + encodeURIComponent(b) + '&page=' + page + '&sort=' + window.EMPSIS_currentSort + '&dir=' + window.EMPSIS_currentDir, {
+                    credentials: 'same-origin'
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.ok) return;
+                    if (tbodyEl) tbodyEl.innerHTML = data.rows;
+                    var info = document.getElementById('empSisPagInfo');
+                    if (info) info.textContent = data.info;
+                    var btns = document.getElementById('empSisPagBtns');
+                    if (btns) btns.innerHTML = data.pagination || (
+                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Anterior"><i class="fas fa-angle-left"></i></button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>'
+                    );
+                })
+                .catch(function() {
+                    if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="' + colspan + '" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+                });
+        };
+
+        window.EMPSIS_cambiarPagina = function(page) {
+            if (page < 1) return;
+            EMPSIS_cargarListado(page);
+        };
+
+        var inputBuscar = document.getElementById('input-buscar-empresas');
+        if (inputBuscar) {
+            inputBuscar.addEventListener('input', function() {
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    EMPSIS_cargarListado(1);
+                }, 400);
+            });
+        }
+
+        if (window.CMG_initSort) {
+            window.CMG_initSort('empresas-sistema', function(col, dir) {
+                window.EMPSIS_currentSort = col;
+                window.EMPSIS_currentDir = dir;
+                EMPSIS_cargarListado(1);
+            }, { col: window.EMPSIS_currentSort, dir: window.EMPSIS_currentDir });
+        }
     })();
 
     window.eliminarEmpresa = function(id) {

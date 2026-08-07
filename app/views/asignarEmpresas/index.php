@@ -64,22 +64,21 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
 <?php endif; ?>
 
 <div class="card mb-3">
-    <div class="card-body py-2">
-        <form method="GET" action="<?= $base ?>/config/asignar-empresas" class="row g-2 align-items-center">
-            <div class="col-auto flex-grow-1">
-                <div class="input-group input-group-sm">
-                    <input type="text" name="b" class="form-control" placeholder="Buscar por nombre o cédula..." value="<?= htmlspecialchars($buscar) ?>" style="max-width:280px">
-                    <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search"></i></button>
-                </div>
-            </div>
-        </form>
+    <div class="card-body py-2 d-flex align-items-center gap-2 flex-wrap">
+        <div class="input-group input-group-sm" style="max-width:320px">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" id="asigEmpInputBuscar" class="form-control" placeholder="Buscar por nombre, cédula o tipo..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+        </div>
+        <?php if ($nivel < 3): ?>
+        <span class="text-muted small">Solo se muestran los usuarios asignados a sus empresas.</span>
+        <?php endif; ?>
     </div>
 </div>
 
 <div class="card cmg-table-card">
-    <div class="card-body">
+    <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover table-sm">
+            <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
                         <th>Usuario</th>
@@ -88,47 +87,39 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                         <th>Empresas</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php
-                    $tipo = (int)($r['nivel'] ?? 1) >= 2 ? 'Administrador' : 'Usuario';
-                    ?>
-                    <tr class="row-usuario" role="button" tabindex="0" style="cursor:pointer"
-                        data-id="<?= (int)($r['id_usuario'] ?? 0) ?>"
-                        data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>">
-                        <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['cedula'] ?? '') ?></td>
-                        <td><span class="badge bg-<?= $tipo === 'Administrador' ? 'info' : 'secondary' ?>"><?= $tipo ?></span></td>
-                        <td><span class="badge bg-light text-dark"><?= (int)($r['total_empresas'] ?? 0) ?></span></td>
-                    </tr>
-                    <?php endforeach; ?>
+                <tbody id="tbodyAsigEmp">
+                    <?php if (empty($rows)): ?>
+                    <tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay usuarios para asignar.</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($rows as $r): ?>
+                        <?php $tipo = (int)($r['nivel'] ?? 1) >= 2 ? 'Administrador' : 'Usuario'; ?>
+                        <tr class="row-usuario" role="button" tabindex="0" style="cursor:pointer"
+                            data-id="<?= (int)($r['id_usuario'] ?? 0) ?>"
+                            data-nombre="<?= htmlspecialchars($r['nombre'] ?? '') ?>">
+                            <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($r['cedula'] ?? '') ?></td>
+                            <td><span class="badge bg-<?= $tipo === 'Administrador' ? 'info' : 'secondary' ?>"><?= $tipo ?></span></td>
+                            <td><span class="badge bg-light text-dark"><?= (int)($r['total_empresas'] ?? 0) ?></span></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
-
-        <?php if (empty($rows)): ?>
-        <div class="text-center py-5 text-muted">
-            <i class="bi bi-people" style="font-size:2rem"></i>
-            <p class="mb-0 mt-2">No hay usuarios para asignar</p>
-            <?php if ($nivel < 3): ?>
-            <p class="small">Los administradores ven solo los usuarios asignados a las empresas que tienen acceso.</p>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
     </div>
-    <?php if ($totalPages > 1): ?>
-    <div class="card-footer py-2">
+    <div class="card-footer py-2" id="paginacionAsigEmp">
+        <?php if ($totalPages > 1): ?>
         <nav>
             <ul class="pagination pagination-sm mb-0 justify-content-center">
                 <?php for ($i = 1; $i <= $totalPages; $i++): ?>
                 <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                    <a class="page-link" href="<?= $base ?>/config/asignar-empresas?page=<?= $i ?><?= $buscar ? '&b=' . urlencode($buscar) : '' ?>"><?= $i ?></a>
+                    <button type="button" class="page-link" onclick="ASIGEMP_cambiarPagina(<?= $i ?>)"><?= $i ?></button>
                 </li>
                 <?php endfor; ?>
             </ul>
         </nav>
+        <?php endif; ?>
     </div>
-    <?php endif; ?>
 </div>
 
 <!-- Modal Crear Usuario -->
@@ -212,17 +203,23 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
         new bootstrap.Modal(modal).show();
     }
 
-    document.querySelectorAll('.row-usuario').forEach(function(row) {
-        row.addEventListener('click', function(e) {
-            abrirModalUsuario(this);
+    // Delegación de eventos: las filas se reemplazan en cada búsqueda AJAX,
+    // por lo que el listener va en el tbody (contenedor fijo), no en cada <tr>.
+    var tbodyAsigEmp = document.getElementById('tbodyAsigEmp');
+    if (tbodyAsigEmp) {
+        tbodyAsigEmp.addEventListener('click', function(e) {
+            var row = e.target.closest('.row-usuario');
+            if (row) abrirModalUsuario(row);
         });
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
+        tbodyAsigEmp.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = e.target.closest('.row-usuario');
+            if (row) {
                 e.preventDefault();
-                abrirModalUsuario(this);
+                abrirModalUsuario(row);
             }
         });
-    });
+    }
 
     function cargarEmpresas() {
         tbody.innerHTML = '<tr><td colspan="3" class="text-center">Cargando...</td></tr>';
@@ -269,6 +266,48 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                 });
             })
             .catch(function() { selectEmpresa.innerHTML = '<option value="">Error</option>'; });
+    }
+
+    // Búsqueda en tiempo real: reemplaza solo la tabla y la paginación vía AJAX,
+    // sin recargar la página (el input nunca pierde el foco). Mismo patrón que
+    // ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    var asigEmpTimer = null;
+    window.ASIGEMP_cargarListado = function(page) {
+        page = page || 1;
+        var inputB = document.getElementById('asigEmpInputBuscar');
+        var b = inputB ? inputB.value.trim() : '';
+        var tbodyEl = document.getElementById('tbodyAsigEmp');
+        if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+
+        fetch(base + '/config/asignar-empresas?action=search&b=' + encodeURIComponent(b) + '&page=' + page, {
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    if (tbodyEl) tbodyEl.innerHTML = data.rows;
+                    var pag = document.getElementById('paginacionAsigEmp');
+                    if (pag) pag.innerHTML = data.pagination;
+                }
+            })
+            .catch(function() {
+                if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-4">Error al cargar.</td></tr>';
+            });
+    };
+
+    window.ASIGEMP_cambiarPagina = function(page) {
+        if (page < 1) return;
+        ASIGEMP_cargarListado(page);
+    };
+
+    var asigEmpInputBuscar = document.getElementById('asigEmpInputBuscar');
+    if (asigEmpInputBuscar) {
+        asigEmpInputBuscar.addEventListener('input', function() {
+            clearTimeout(asigEmpTimer);
+            asigEmpTimer = setTimeout(function() {
+                ASIGEMP_cargarListado(1);
+            }, 400);
+        });
     }
 
     document.getElementById('btn-agregar-empresa').addEventListener('click', function() {

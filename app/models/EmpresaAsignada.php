@@ -39,7 +39,9 @@ class EmpresaAsignada extends BaseModel
 
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (u.nombre LIKE '%{$b}%' OR u.cedula LIKE '%{$b}%')";
+            // Tipo se busca por su texto tal como se muestra en la tabla (Administrador/Usuario).
+            $tipoTexto = "(CASE WHEN u.nivel >= 2 THEN 'Administrador' ELSE 'Usuario' END)";
+            $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula ILIKE '%{$b}%' OR {$tipoTexto} ILIKE '%{$b}%')";
         }
 
         $countSql = "SELECT COUNT(DISTINCT u.id) AS total FROM {$from} {$where}";

@@ -200,9 +200,11 @@ class AuthController extends ApiBaseController
     {
         $this->requireAuthApi();
         $idUsuario = (int) $_SESSION['id_usuario'];
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
 
         $model = new Empresa();
-        $asignadas = $model->getEmpresasAsignadas($idUsuario);
+        // Nivel 3 (superadmin): acceso total, no depende de empresa_asignada.
+        $asignadas = $nivel >= 3 ? $model->getTodasActivas() : $model->getEmpresasAsignadas($idUsuario);
 
         $resultado = array_map(static function (array $e): array {
             return [
@@ -256,14 +258,32 @@ class AuthController extends ApiBaseController
      */
     private function resolverEmpresaInicial(Usuario $model, int $idUsuario, int $nivel, int $idEmpresaFavorita): array
     {
+        // Nivel 3 (superadmin): acceso total, no depende de empresa_asignada.
+        if ($nivel >= 3) {
+            $empresasActivas = (new Empresa())->getTodasActivas();
+            $numEmpresas = count($empresasActivas);
+
+            if ($numEmpresas === 0) {
+                return [null, false, false];
+            }
+            if ($numEmpresas === 1) {
+                return [(int) $empresasActivas[0]['id_empresa'], false, false];
+            }
+            if ($idEmpresaFavorita > 0) {
+                foreach ($empresasActivas as $e) {
+                    if ((int) $e['id_empresa'] === $idEmpresaFavorita) {
+                        return [(int) $e['id_empresa'], true, false];
+                    }
+                }
+            }
+            return [null, true, false];
+        }
+
         $empresasLogin = $model->getEmpresasAsignadasParaLogin($idUsuario);
         $numEmpresas = (int) ($empresasLogin['numrows'] ?? 0);
 
         if ($numEmpresas === 0) {
-            if ($nivel !== 3) {
-                return [null, false, true];
-            }
-            return [null, false, false];
+            return [null, false, true];
         }
 
         if ($numEmpresas === 1) {

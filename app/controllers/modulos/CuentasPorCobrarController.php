@@ -1082,32 +1082,41 @@ $plantillasFiltradas = [];
 
         $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
 
-        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="cuentas_por_cobrar_' . date('Ymd_His') . '.xls"');
-        header('Cache-Control: max-age=0');
-        echo "\xEF\xBB\xBF"; // BOM UTF-8
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
 
-        $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Cobrado', 'Saldo', 'Estado'];
-        echo implode("\t", $headers) . "\n";
+            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Cobrado', 'Saldo', 'Estado'];
 
-        foreach ($filas as $r) {
-            $dias = (int)($r['dias_vencido'] ?? 0);
-            $estadoCxC = $dias > 0 ? "VENCIDA ({$dias} días)" : ($dias <= 0 ? 'VIGENTE' : '');
-            echo implode("\t", [
-                $r['numero_factura'] ?? '',
-                $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
-                $r['cliente_nombre'] ?? '',
-                $r['cliente_ruc']    ?? '',
-                $r['fecha_emision']  ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
-                $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
-                $dias > 0 ? $dias : 0,
-                number_format((float)$r['total'], 2),
-                number_format((float)$r['total_cobrado'], 2),
-                number_format((float)$r['saldo'], 2),
-                $estadoCxC,
-            ]) . "\n";
+            $exportData = [];
+            foreach ($filas as $r) {
+                $dias = (int)($r['dias_vencido'] ?? 0);
+                $estadoCxC = $dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE';
+                $exportData[] = [
+                    (string)($r['numero_factura'] ?? ''),
+                    $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
+                    (string)($r['cliente_nombre'] ?? ''),
+                    (string)($r['cliente_ruc'] ?? ''),
+                    $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                    $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                    $dias > 0 ? $dias : 0,
+                    number_format((float)$r['total'], 2),
+                    number_format((float)$r['total_cobrado'], 2),
+                    number_format((float)$r['saldo'], 2),
+                    $estadoCxC,
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('cuentas_por_cobrar', $headers, $exportData, 'Cuentas por Cobrar', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            if (!headers_sent()) {
+                $_SESSION['cuentas_por_cobrar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . $this->getRutaModulo());
+            }
+            exit;
         }
-        exit;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1139,37 +1148,37 @@ $plantillasFiltradas = [];
                 $totalTotal   += $ts;
                 $totalCobrado += $tc;
                 $totalSaldo   += $tsal;
-                $color = $dias > 0 ? 'color:#dc3545;' : '';
-                $badge = $dias > 0 ? "<small style='color:#dc3545;font-weight:bold;'> ({$dias}d vencida)</small>" : "<small style='color:#198754;'>Vigente</small>";
+                $badge = $dias > 0 ? "<small style='font-weight:bold;'> ({$dias}d vencida)</small>" : "<small>Vigente</small>";
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
                 $origenTxt = $this->getOrigenLabel($r['origen'] ?? 'FACTURA');
-                $filaHtml .= "<tr style='{$color}'>
+                $filaHtml .= "<tr>
                     <td style='width:13%;'>" . htmlspecialchars($r['numero_factura'] ?? '') . "</td>
                     <td class='text-center' style='width:9%;'>{$origenTxt}</td>
                     <td style='width:24%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>
                     <td class='text-center' style='width:11%;'>{$fEmis}</td>
                     <td class='text-center' style='width:16%;'>{$fVenc} {$badge}</td>
                     <td class='text-end' style='width:9%;'>\$" . number_format($ts, 2) . "</td>
-                    <td class='text-end' style='width:9%;color:#198754;'>\$" . number_format($tc, 2) . "</td>
-                    <td class='text-end' style='width:9%;{$color}font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
+                    <td class='text-end' style='width:9%;'>\$" . number_format($tc, 2) . "</td>
+                    <td class='text-end' style='width:9%;font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
                 </tr>";
             }
 
             ob_start();
             ?>
             <style>
-                body { font-family: Arial, sans-serif; font-size: 8pt; }
+                body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; color: #000; }
+                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
-                .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
-                .header p  { margin: 0; font-size: 7.5pt; color: #777; }
-                .stats-box { text-align: center; padding: 5px; }
+                .header h3 { margin: 0 0 2px 0; font-size: 10pt; }
+                .header p  { margin: 0; font-size: 7.5pt; }
+                table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
+                .stat-lbl  { font-size: 7.5pt; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
@@ -1181,20 +1190,20 @@ $plantillasFiltradas = [];
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
-                        <div>Facturas</div>
-                        <div class="stat-val"><?= $stats['total_facturas'] ?></div>
+                        <span class="stat-lbl">Facturas</span><br/>
+                        <span class="stat-val"><?= $stats['total_facturas'] ?></span>
                     </td>
                     <td class="stats-box" style="width:25%;">
-                        <div>Saldo Total</div>
-                        <div class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></div>
+                        <span class="stat-lbl">Saldo Total</span><br/>
+                        <span class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></span>
                     </td>
-                    <td class="stats-box" style="width:25%;color:#dc3545;">
-                        <div>Vencido</div>
-                        <div class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></div>
+                    <td class="stats-box" style="width:25%;">
+                        <span class="stat-lbl">Vencido</span><br/>
+                        <span class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></span>
                     </td>
-                    <td class="stats-box" style="width:25%;color:#198754;">
-                        <div>Al Día</div>
-                        <div class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></div>
+                    <td class="stats-box" style="width:25%;">
+                        <span class="stat-lbl">Al Día</span><br/>
+                        <span class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></span>
                     </td>
                 </tr>
             </table>
@@ -1218,8 +1227,8 @@ $plantillasFiltradas = [];
                     <tr style="background:#f8f9fa;font-weight:bold;">
                         <td colspan="5" class="text-end" style="width:73%;">TOTALES:</td>
                         <td class="text-end" style="width:9%;">$<?= number_format($totalTotal, 2) ?></td>
-                        <td class="text-end" style="width:9%;color:#198754;">$<?= number_format($totalCobrado, 2) ?></td>
-                        <td class="text-end" style="width:9%;color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
+                        <td class="text-end" style="width:9%;">$<?= number_format($totalCobrado, 2) ?></td>
+                        <td class="text-end" style="width:9%;">$<?= number_format($totalSaldo, 2) ?></td>
                     </tr>
                 </tfoot>
             </table>

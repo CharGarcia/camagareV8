@@ -36,11 +36,13 @@ abstract class Controller
         $idEmpresaFavorita = null;
         if (isset($_SESSION['id_usuario'])) {
             $idUsuario = (int) $_SESSION['id_usuario'];
+            $nivelUsuario = (int) ($_SESSION['nivel'] ?? 1);
             $model = new \App\models\Empresa();
             $usuarioModel = new \App\models\Usuario();
 
             try {
-                $empresas = $model->getEmpresasAsignadas($idUsuario);
+                // Nivel 3 (superadmin): acceso total, no depende de empresa_asignada.
+                $empresas = $nivelUsuario >= 3 ? $model->getTodasActivas() : $model->getEmpresasAsignadas($idUsuario);
                 // Si no hay empresas pero la sesión tiene id_empresa, obtener solo esa
                 if (empty($empresas) && isset($_SESSION['id_empresa']) && (int)$_SESSION['id_empresa'] > 0) {
                     $empresa = $model->getPorId((int)$_SESSION['id_empresa']);
