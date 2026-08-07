@@ -232,7 +232,7 @@ class EgresoRepository extends BaseRepository
                 pagado_pre AS (
                     SELECT d.tipo_documento, d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
                     FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
-                    WHERE d.tipo_documento IN ('PRESTAMO7','PRESTAMO8','PRESTAMO9')
+                    WHERE d.tipo_documento = 'PRESTAMO9'
                       AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                     GROUP BY d.tipo_documento, d.id_referencia_documento
                 ),
@@ -275,6 +275,10 @@ class EgresoRepository extends BaseRepository
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '3'
                   AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
                 UNION ALL
+                -- Solo el préstamo tipo 9 (Préstamo Empresa) requiere desembolso por egreso:
+                -- el 7 (Quirografario) y el 8 (Hipotecario) los desembolsa el IESS/banco
+                -- directo al empleado, no la empresa, así que su cuota descuenta directo en
+                -- el rol sin pasar por aquí (ver CatalogoNovedades::CODS_PRESTAMO).
                 SELECT ('PRESTAMO' || n.tipo_codigo) AS tipo_doc_bd, n.id_empleado AS id,
                        MAX(n.tipo_nombre) || ' (desembolso)' AS numero_documento,
                        MIN(n.fecha) AS fecha_emision,
@@ -285,7 +289,7 @@ class EgresoRepository extends BaseRepository
                 FROM novedades n
                 LEFT JOIN pagado_pre pp ON pp.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND pp.id_referencia_documento = n.id_empleado
                 WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
-                  AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo IN ('7','8','9')
+                  AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '9'
                 GROUP BY n.id_empleado, n.tipo_codigo, pp.total_pagado
                 HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
                 UNION ALL
@@ -596,7 +600,7 @@ class EgresoRepository extends BaseRepository
                     pagado_pre AS (
                         SELECT d.tipo_documento, d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
                         FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
-                        WHERE d.tipo_documento IN ('PRESTAMO7','PRESTAMO8','PRESTAMO9')
+                        WHERE d.tipo_documento = 'PRESTAMO9'
                           AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                           $excluirSql
                         GROUP BY d.tipo_documento, d.id_referencia_documento
@@ -660,6 +664,9 @@ class EgresoRepository extends BaseRepository
                           $filtroAnt
                         UNION ALL
                         -- PRÉSTAMOS AGRUPADOS: una línea por empleado+tipo = desembolso (suma de cuotas).
+                        -- Solo tipo 9 (Préstamo Empresa): el 7 (Quirografario) y el 8 (Hipotecario)
+                        -- los desembolsa el IESS/banco directo, no la empresa (ver
+                        -- CatalogoNovedades::CODS_PRESTAMO).
                         SELECT ('PRESTAMO' || n.tipo_codigo) AS tipo_doc_bd,
                                n.id_empleado AS id,
                                MAX(n.tipo_nombre) || ' (desembolso)' AS numero_documento,
@@ -676,7 +683,7 @@ class EgresoRepository extends BaseRepository
                         LEFT  JOIN pagado_pre pp ON pp.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND pp.id_referencia_documento = n.id_empleado
                         WHERE n.id_empresa = :id_empresa
                           AND n.eliminado = FALSE AND n.estado = 'activo'
-                          AND n.tipo_codigo IN ('7','8','9')
+                          AND n.tipo_codigo = '9'
                           AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                           $filtroPre
                         GROUP BY n.id_empleado, n.tipo_codigo, emp.id, emp.nombres_apellidos, emp.identificacion, pp.total_pagado

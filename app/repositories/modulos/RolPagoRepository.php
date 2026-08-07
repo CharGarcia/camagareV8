@@ -835,9 +835,19 @@ class RolPagoRepository extends BaseRepository
                       AND p.fecha_ingreso <= :fin_mes
                       AND (p.fecha_salida IS NULL OR p.fecha_salida >= :inicio_mes)
                   )
+                  AND NOT EXISTS (
+                    -- No avisar si el rol es ANTERIOR al período vigente (el abierto, sin
+                    -- fecha_salida) del empleado: si ese período vigente empieza DESPUÉS
+                    -- de este mes, el rol es de antes de que el empleado trabajara aquí —
+                    -- no es un dato faltante que el usuario deba corregir, es esperado.
+                    SELECT 1 FROM empleado_periodos pv
+                    WHERE pv.id_empleado = e.id AND pv.eliminado = false
+                      AND pv.fecha_salida IS NULL
+                      AND pv.fecha_ingreso > :fin_mes2
+                  )
                 ORDER BY e.nombres_apellidos";
         $st = $this->db->prepare($sql);
-        $st->execute([':emp' => $idEmpresa, ':inicio_mes' => $inicioMes, ':fin_mes' => $finMes]);
+        $st->execute([':emp' => $idEmpresa, ':inicio_mes' => $inicioMes, ':fin_mes' => $finMes, ':fin_mes2' => $finMes]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

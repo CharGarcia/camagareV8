@@ -279,7 +279,7 @@ class ReciboVentaService
                 $idEmpresa, $idUsuario, "Recibo # $numRecibo", false, self::REF_TIPO
             );
 
-            $db->commit();
+            if ($managedTransaction) $db->commit();
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;
@@ -351,7 +351,7 @@ class ReciboVentaService
                 $idEmpresa, $idUsuario, "Recibo # $numRecibo", true, self::REF_TIPO
             );
 
-            $db->commit();
+            if ($managedTransaction) $db->commit();
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;

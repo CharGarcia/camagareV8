@@ -151,10 +151,12 @@ class Usuario extends BaseModel
 
     /**
      * Apaga el INGRESO AUTOMÁTICO al SRI sin cortar el registro de claves: envejece la marca 10 min
-     * (valor entre la ventana corta del login y la amplia del registro) para que la próxima apertura
-     * del portal ya NO inicie sesión sola, pero el usuario pueda seguir enviando comprobantes. Se
-     * llama al enviar comprobantes: en ese punto el usuario ya está dentro del SRI y no debe volver a
-     * loguearse solo si reabre el portal por su cuenta.
+     * (valor entre la ventana corta del login [5 min] y la amplia del registro [180 min]) para que
+     * la ventana de login quede vencida pero la de registro siga vigente. Se llama justo al entregar
+     * las credenciales en agenteLoginPendienteAjax(), para que ese sea el ÚNICO intento de login
+     * automático por cada clic en "Generar descarga del SRI": si el SRI rechaza el login y recarga
+     * la pantalla, la extensión ya no encuentra marca vigente y no reintenta (evita agotar los 3
+     * intentos que permite el SRI antes de bloquear al usuario).
      */
     public function desactivarLoginAuto(int $idUsuario): void
     {

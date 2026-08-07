@@ -762,6 +762,18 @@ async function esperarConsultaAsistida(ctx, timeoutMs) {
     return 'timeout';
 }
 
+// Selectores del contenedor de error estándar de Keycloak. Son estables entre versiones/idiomas
+// (a diferencia del texto del mensaje, que puede cambiar de redacción sin previo aviso): Keycloak
+// SIEMPRE marca el error de login con uno de estos elementos, sin importar qué diga adentro.
+const SELECTORES_ERROR_KEYCLOAK = '#input-error, .kc-feedback-text, #kc-error-message, .alert-error';
+
+async function detectaErrorKeycloakDOM(page) {
+    return page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        return el ? (el.textContent || '').trim() : null;
+    }, SELECTORES_ERROR_KEYCLOAK).catch(() => null);
+}
+
 async function loginKeycloak(page, usuario, clave) {
     await page.waitForSelector('#usuario', { timeout: 15000, state: 'visible' }).catch(() => {});
 
@@ -787,9 +799,10 @@ async function loginKeycloak(page, usuario, clave) {
     while (Date.now() < finEspera) {
         await pausa(600);
         const txt = await page.evaluate(() => document.body.innerText.toLowerCase()).catch(() => '');
-        if (detectaCredencialesInvalidas(txt)) {
+        const errorDom = await detectaErrorKeycloakDOM(page);
+        if (detectaCredencialesInvalidas(txt) || errorDom) {
             await screenshot(page, 'ERROR_credenciales_invalidas');
-            emitirCredencialesInvalidas(txt.substring(0, 300));
+            emitirCredencialesInvalidas((errorDom || txt).substring(0, 300));
         }
 
         const formularioVisible = await page.evaluate(() => {
@@ -799,8 +812,19 @@ async function loginKeycloak(page, usuario, clave) {
 
         if (!formularioVisible) return;
     }
+
+    // Se agotó la espera y el formulario de login SIGUE visible: un login correcto siempre
+    // redirige fuera de esta pantalla mucho antes de 20s, así que esto casi siempre es una
+    // clave incorrecta cuyo mensaje no coincidió con ningún selector/frase conocida (p. ej. el
+    // SRI cambió el texto o el DOM). Tratarlo también como credenciales inválidas: es preferible
+    // bloquear el reintento automático (el usuario lo desbloquea reingresando la clave) a seguir
+    // reintentando sin control en cada corrida y agotar los 3 intentos que permite el SRI.
     await screenshot(page, 'ERROR_login_timeout');
-    throw new Error('Login timeout.');
+    const txtFinal = await page.evaluate(() => document.body.innerText).catch(() => '');
+    emitirCredencialesInvalidas(
+        'El formulario de login del SRI siguió visible tras la espera (posible clave incorrecta '
+        + 'con mensaje no reconocido). Detalle: ' + txtFinal.substring(0, 300)
+    );
 }
 
 async function resolverContexto(page) {

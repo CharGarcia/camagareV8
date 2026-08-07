@@ -280,7 +280,10 @@ class EgresoService
             }
 
             // (c) Desembolso de préstamo pagado/anulado → regenerar los roles de TODAS las cuotas
-            //     de ese empleado+tipo (el desembolso habilita el descuento de las cuotas).
+            //     de ese empleado+tipo (el desembolso habilita el descuento de las cuotas). Solo
+            //     el tipo 9 (Préstamo Empresa) pasa por desembolso de egreso (ver
+            //     CatalogoNovedades::CODS_PRESTAMO); el filtro queda igual por si hay egresos
+            //     históricos de 7/8 de antes de este cambio.
             $st3 = $db->prepare("SELECT DISTINCT n.aplica_en, n.periodo_anio, n.periodo_mes
                                  FROM egresos_detalle ed
                                  JOIN novedades n ON n.id_empleado = ed.id_referencia_documento

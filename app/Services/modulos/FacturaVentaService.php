@@ -770,7 +770,7 @@ class FacturaVentaService
                 true // esEdicion
             );
 
-            $db->commit();
+            if ($managedTransaction) $db->commit();
 
             // Generar XML y persistir en detalle_xml FUERA de la transacciÃ³n principal
             $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
@@ -999,7 +999,7 @@ class FacturaVentaService
                 !empty($data['omitir_validacion_stock'])
             );
 
-            $db->commit();
+            if ($managedTransaction) $db->commit();
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;
