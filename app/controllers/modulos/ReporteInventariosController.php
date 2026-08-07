@@ -325,7 +325,7 @@ class ReporteInventariosController extends BaseModuloController
             $cant = (float) ($r['cantidad'] ?? 0);
             $entrada = $cant > 0 ? number_format($cant, 2) : '-';
             $salida = $cant < 0 ? number_format(abs($cant), 2) : '-';
-            $saldo = (float) ($r['stock_posterior'] ?? 0);
+            $saldo = (float) ($r['saldo'] ?? 0);
             $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '-';
             return '<tr>'
                 . '<td class="small text-nowrap">' . date('d-m-Y H:i', strtotime($r['fecha_movimiento'] ?? '')) . '</td>'
@@ -723,7 +723,7 @@ class ReporteInventariosController extends BaseModuloController
                             date('d-m-Y H:i', strtotime($r['fecha_movimiento'])),
                             $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? '',
                             strtoupper($r['tipo_movimiento'] ?? ''), $r['origen_label'] ?? '',
-                            $cant > 0 ? $cant : 0, $cant < 0 ? abs($cant) : 0, (float) $r['stock_posterior'],
+                            $cant > 0 ? $cant : 0, $cant < 0 ? abs($cant) : 0, (float) $r['saldo'],
                             (float) $r['costo_unitario'], $r['numero_lote'] ?? '', $r['observaciones'] ?? '',
                         ];
                     }, $rows);

@@ -338,8 +338,20 @@ class ReporteInventarioRepository extends BaseRepository
     public function getMovimientosDetalle(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
+        // El "Saldo" NO se lee de k.stock_posterior (es un valor cacheado en cada fila que
+        // puede quedar desincronizado si algo externo toca productos_bodegas sin pasar por
+        // el kardex). En su lugar se calcula en vivo: suma corrida de "cantidad" (entradas
+        // positivas, salidas negativas) por producto+bodega, en orden cronológico, sobre las
+        // filas que cumplen los filtros actuales. Nota: si se filtra por rango de fechas, el
+        // saldo corrido arranca desde la primera fila visible en ese rango, no desde el inicio
+        // absoluto del historial (igual que una suma acumulada sobre un rango filtrado).
         $sql = "SELECT k.id, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo, k.referencia_id,
-                       k.cantidad, k.costo_unitario, k.costo_total, k.stock_anterior, k.stock_posterior,
+                       k.cantidad, k.costo_unitario, k.costo_total,
+                       SUM(k.cantidad) OVER (
+                           PARTITION BY k.id_producto, k.id_bodega
+                           ORDER BY k.fecha_movimiento, k.id
+                           ROWS UNBOUNDED PRECEDING
+                       ) AS saldo,
                        k.numero_lote, k.fecha_caducidad, k.nup, k.observaciones,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        b.nombre AS bodega_nombre, u.nombre AS usuario_nombre,
