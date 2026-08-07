@@ -653,6 +653,15 @@ class DeclaracionIvaService
         $est = str_pad((string) $pRow['est'], 3, '0', STR_PAD_LEFT);
         $pto = str_pad((string) $pRow['pto'], 3, '0', STR_PAD_LEFT);
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (EgresoService::registrar()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secSvc = new \App\Services\SecuencialService();
         $sec    = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
         $numero = $est . '-' . $pto . '-' . str_pad((string) $sec, 9, '0', STR_PAD_LEFT);
@@ -696,7 +705,17 @@ class DeclaracionIvaService
         $this->repository->marcarEgreso($idDeclaracion, $idEmpresa, $idEgreso, $idUsuario);
         $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_EGRESO', 'declaracion_iva_cabecera', $idDeclaracion, null, ['id_egreso' => $idEgreso]);
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return $idEgreso;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     private function armarPagoEgreso(int $idForma, float $monto, string $tipoOp, string $numeroCheque, string $fechaCobro, string $fechaEmision): array

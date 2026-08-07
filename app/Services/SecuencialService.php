@@ -44,6 +44,13 @@ class SecuencialService
      */
     public function obtenerSiguienteSecuencial(int $idPuntoEmision, string $tipoDocumento): array
     {
+        // Bloqueo por punto de emisión + tipo de documento: evita que dos documentos
+        // emitidos casi al mismo tiempo calculen el mismo "siguiente número" (ver
+        // CLAUDE.md §8). Solo protege de verdad si el llamador ya abrió su transacción
+        // ANTES de llegar aquí y no la cierra hasta insertar la cabecera del documento
+        // (pg_advisory_xact_lock se libera al COMMIT/ROLLBACK, no antes).
+        $this->repository->lockSecuencial($idPuntoEmision, $tipoDocumento);
+
         // 1. Obtener configuración del secuencial inicial
         $config = $this->repository->getConfigSecuencial($idPuntoEmision, $tipoDocumento);
         // ¿Existe realmente una configuración de secuencial para este punto+tipo?

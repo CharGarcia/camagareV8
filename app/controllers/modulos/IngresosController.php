@@ -517,7 +517,11 @@ class IngresosController extends BaseModuloController
                 throw new \Exception('Punto de emisión no válido.');
             }
 
-            // 3. Obtener siguiente secuencial
+            // 3. Obtener siguiente secuencial. Se abre la transacción ANTES de calcularlo y se
+            // mantiene hasta el INSERT final (IngresoService::crear()) para que el lock que toma
+            // obtenerSiguienteSecuencial() (pg_advisory_xact_lock, se libera solo al COMMIT/ROLLBACK)
+            // realmente evite que dos cobros casi simultáneos calculen el mismo secuencial (CLAUDE.md §8).
+            $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
             $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos');
 
@@ -594,8 +598,10 @@ class IngresosController extends BaseModuloController
             ];
 
             $idIngreso = $this->service->crear($payload);
+            $db->commit();
             echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
+            if (isset($db) && $db->inTransaction()) $db->rollBack();
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }

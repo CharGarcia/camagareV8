@@ -88,6 +88,27 @@ class GuiaRemisionRepository extends BaseRepository
         return ['rows' => $this->query($sql, $params)->fetchAll(), 'total' => (int) $total];
     }
 
+    /**
+     * Guías de remisión del rango de fechas para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    {
+        $where = "WHERE g.id_empresa = :id_empresa AND g.eliminado = false
+                   AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                   AND g.fecha_emision BETWEEN :desde AND :hasta";
+        $params = [':id_empresa' => $idEmpresa, ':desde' => $fechaDesde, ':hasta' => $fechaHasta];
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND g.id_usuario = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT g.id, g.establecimiento, g.punto_emision, g.secuencial, g.fecha_emision, g.estado
+                FROM guias_remision_cabecera g
+                $where
+                ORDER BY g.fecha_emision ASC, g.id ASC";
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getPorId(int $id): ?array
     {
         $sql = "SELECT g.*,

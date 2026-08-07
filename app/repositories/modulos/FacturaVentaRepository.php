@@ -201,6 +201,29 @@ class FacturaVentaRepository extends BaseRepository
     }
 
     /**
+     * Facturas del rango de fechas para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    {
+        $where = "WHERE v.id_empresa = :id_empresa AND v.eliminado = false
+                   AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                   AND v.fecha_emision BETWEEN :desde AND :hasta";
+        $params = [':id_empresa' => $idEmpresa, ':desde' => $fechaDesde, ':hasta' => $fechaHasta];
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND v.id_usuario = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT v.id, v.establecimiento, v.punto_emision, v.secuencial, v.fecha_emision, v.estado
+                FROM ventas_cabecera v
+                $where
+                ORDER BY v.fecha_emision ASC, v.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Facturas autorizadas/aprobadas de un cliente, para seleccionarlas como
      * documento a modificar en una Nota de Crédito. Filtro opcional de texto
      * sobre el número de comprobante (establecimiento-punto-secuencial).

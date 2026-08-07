@@ -115,6 +115,16 @@ $defaults = [
     // (Windows: C:\xampp\php\php.exe si existe; en otro caso 'php' del PATH).
     // Si el worker no arranca solo, indique aquí la ruta absoluta al ejecutable.
     'sri_lote_php_bin' => '',
+
+    // Descargas Masivas (modulos/descargas-masivas): límite de documentos por
+    // descarga. No hay límite de rango de fechas; se acota por CANTIDAD de
+    // documentos encontrados (un año con pocos documentos es tan válido como un
+    // día con muchos). 'xml' tiene un tope más alto porque solo lee detalle_xml
+    // ya persistido (barato); 'pdf' y 'ambos' generan el PDF con TCPDF (más lento).
+    'descargas_masivas' => [
+        'max_documentos_pdf' => 500,
+        'max_documentos_xml' => 2000,
+    ],
 ];
 
 // ── config/local.php (no versionado) ─────────────────────────────────────────

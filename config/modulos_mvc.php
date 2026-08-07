@@ -236,6 +236,16 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Descargas Masivas: PDF y/o XML de varios documentos de un mismo tipo
+    // (rango de fechas) comprimidos en un ZIP. Genera en el momento, no guarda
+    // nada. Registrar el submódulo en submodulos_menu (id_modulo = 11,
+    // Documentos) con ruta = 'modulos/descargas-masivas', y actualizar este
+    // id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+    'modulos/descargas-masivas' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/transportistas' => [
         'id_submodulo' => 177,
         'legacy_rutas' => [],

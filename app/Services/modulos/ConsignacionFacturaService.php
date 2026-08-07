@@ -183,8 +183,12 @@ class ConsignacionFacturaService
         $idUsuario = (int) $data['id_usuario'];
 
         $db = Database::getConnection();
+        // managed=false cuando ya hay una transacción abierta por el llamador (p. ej.
+        // duplicar(), que necesita mantener el lock del secuencial hasta este INSERT):
+        // evita el error de PDO al anidar beginTransaction() (CLAUDE.md §8).
+        $managed = !$db->inTransaction();
         try {
-            $db->beginTransaction();
+            if ($managed) $db->beginTransaction();
 
             [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null);
 
@@ -220,10 +224,10 @@ class ConsignacionFacturaService
             }
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR_FACTURACION_CV', 'consignaciones_facturas', $idDoc, null, ['total' => $tot['total']]);
-            $db->commit();
+            if ($managed) $db->commit();
             return $idDoc;
         } catch (\Throwable $e) {
-            if ($db->inTransaction()) $db->rollBack();
+            if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
     }
@@ -314,7 +318,17 @@ class ConsignacionFacturaService
             throw new Exception('El documento de origen no tiene punto de emisión; no se puede duplicar.');
         }
 
-        // Nuevo secuencial propio para el punto de emisión.
+        // Nuevo secuencial propio para el punto de emisión. Se abre la transacción ANTES de
+        // calcularlo y se mantiene hasta el INSERT final ($this->crear() más abajo, que se
+        // engancha a esta misma transacción): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $repoSec = new \App\repositories\SecuencialRepository();
         $cfgSec  = $repoSec->getConfigSecuencial($idPunto, 'Facturacion consignaciones ventas');
         if (empty($cfgSec['id'])) {
@@ -370,7 +384,18 @@ class ConsignacionFacturaService
 
         $newId = $this->crear($data);
         $this->logService->registrar($idUsuario, $idEmpresa, 'DUPLICAR_FACTURACION_CV', 'consignaciones_facturas', $newId, ['origen' => $idDoc], null);
+
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return $newId;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -544,7 +569,17 @@ class ConsignacionFacturaService
         // 2.1 Asiento inverso del reingreso (no fatal).
         $this->procesarAsientoReingresoSeguro($idDoc, $idEmpresa, $idUsuario, $numDoc, $doc['cliente_nombre'] ?? 'Cliente');
 
-        // 3. Crear la factura de venta NORMAL, facturada al cliente del documento.
+        // 3. Crear la factura de venta NORMAL, facturada al cliente del documento. Se abre la
+        // transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT final
+        // (FacturaVentaService::crear() más abajo): el lock de obtenerSiguienteSecuencial() se
+        // libera solo al COMMIT/ROLLBACK (CLAUDE.md §8). Es una transacción independiente de la
+        // del reingreso (paso 2, ya cerrada) y de la del enlace (paso 4, tolerante a fallos).
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $sec = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturas de venta');
         $secuencial = $sec['formateado'];
         $numFactura = ($doc['establecimiento'] ?? '') . '-' . ($doc['punto_emision'] ?? '') . '-' . $secuencial;
@@ -617,8 +652,21 @@ class ConsignacionFacturaService
         try {
             $idFactura = $facturaService->crear($payload);
         } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
             $this->revertirReingreso($idDoc, $idEmpresa, $idUsuario, false); // deshacer reingreso, no cambiar estado
             throw new Exception('No se pudo generar la factura: ' . $e->getMessage());
+        }
+
+        if ($managedTransaction) {
+            $db->commit();
+        }
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
         }
 
         // 4. Enlazar y marcar facturada.

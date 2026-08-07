@@ -121,6 +121,30 @@ class RetencionVentaRepository extends BaseRepository
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
     }
 
+    /**
+     * Retenciones de venta del rango de fechas para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     * No filtra por estado: la tabla no tiene esa columna (ver origen 'manual'/'electronico').
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    {
+        $where = "WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                   AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                   AND r.fecha_emision BETWEEN :desde AND :hasta";
+        $params = [':id_empresa' => $idEmpresa, ':desde' => $fechaDesde, ':hasta' => $fechaHasta];
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND r.created_by = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT r.id, r.establecimiento, r.punto_emision, r.secuencial, r.fecha_emision
+                FROM retencion_venta_cabecera r
+                $where
+                ORDER BY r.fecha_emision ASC, r.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ── Obtener por ID ───────────────────────────────────────────
 
     public function getPorId(int $id, int $idEmpresa = 0): ?array

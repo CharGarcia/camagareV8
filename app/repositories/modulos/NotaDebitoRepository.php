@@ -126,6 +126,29 @@ class NotaDebitoRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Notas de débito del rango de fechas para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    {
+        $where = "WHERE nd.id_empresa = :id_empresa AND nd.eliminado = false
+                   AND nd.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                   AND nd.fecha_emision BETWEEN :desde AND :hasta";
+        $params = [':id_empresa' => $idEmpresa, ':desde' => $fechaDesde, ':hasta' => $fechaHasta];
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND nd.id_usuario = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT nd.id, nd.establecimiento, nd.punto_emision, nd.secuencial, nd.fecha_emision, nd.estado
+                FROM nota_debito_cabecera nd
+                $where
+                ORDER BY nd.fecha_emision ASC, nd.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getPorId(int $id): ?array
     {
         $sql = "SELECT nd.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,

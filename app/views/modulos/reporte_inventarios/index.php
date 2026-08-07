@@ -591,6 +591,14 @@
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Buscar</label>
                                     <input type="text" id="ri-au-buscar" class="form-control form-control-sm shadow-none border" placeholder="Nombre o código...">
                                 </div>
+                                <?php if ((int) ($_SESSION['nivel'] ?? 1) === 3): ?>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="ri-au-todas-empresas">
+                                        <label class="form-check-label small" for="ri-au-todas-empresas">Todas las empresas</label>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
                                 <div class="col-md-2 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
                                 </div>
@@ -603,11 +611,14 @@
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span class="text-muted small fw-medium" id="ri-au-info-total">&nbsp;</span>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="ri-au-btn-corregir-todo" style="display:none;" onclick="window.RI_Auditoria.corregirTodo();">
+                        <i class="bi bi-check2-all me-1"></i>Corregir todo
+                    </button>
                 </div>
                 <div class="card-body p-0">
                     <div class="ri-au-scroll w-100">
                         <table class="table table-hover table-sm mb-0 align-middle">
-                            <thead class="table-light">
+                            <thead class="table-light" id="ri-au-thead">
                                 <tr>
                                     <th>Producto</th>
                                     <th>Bodega</th>

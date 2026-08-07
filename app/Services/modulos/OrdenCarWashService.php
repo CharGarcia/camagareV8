@@ -455,7 +455,16 @@ class OrdenCarWashService
         $importeTotal = round($totalSinImp + $ivaTotal, 2);
         if ($idBodegaExtra > 0) $idBodega = $idBodegaExtra;
 
-        // Secuencial propio del documento (Factura o Recibo) para el mismo punto.
+        // Secuencial propio del documento (Factura o Recibo) para el mismo punto. Se abre la
+        // transacción ANTES de calcularlo y se mantiene hasta el INSERT final (crear() más
+        // abajo): el lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK
+        // (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
         $tipoDocSec = ($tipo === 'FACTURA') ? 'Facturas de venta' : 'Recibos de venta';
         $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec);
         $secuencial = $sec['formateado'];
@@ -515,7 +524,13 @@ class OrdenCarWashService
                 );
                 $idDoc = $svc->crear($payload);
             }
+            if ($managedTransaction) {
+                $db->commit();
+            }
         } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
             // Si falla la emisión, restauramos la salida de inventario de la orden.
             try {
                 $this->aplicarSalidaInventario(
@@ -529,7 +544,6 @@ class OrdenCarWashService
         }
 
         // Marcar la orden como facturada con el documento generado.
-        $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
         try {

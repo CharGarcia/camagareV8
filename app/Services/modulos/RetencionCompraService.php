@@ -77,7 +77,14 @@ class RetencionCompraService
         $data = $this->calcularTotales($data);
         error_log("RetencionCompraService::crear - Total calculado: " . ($data['total_retenido'] ?? 'N/A') . " - Lineas: " . count($data['lineas'] ?? []));
 
-        // Generar secuencial y clave de acceso
+        // Generar secuencial y clave de acceso. Se abre la transacción ANTES de calcular el
+        // secuencial y se mantiene hasta el INSERT final: el lock de obtenerSiguienteSecuencial()
+        // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+
+        try {
         $data = $this->prepararSecuencialYClaveAcceso($data);
 
         // Validar que el secuencial no esté duplicado (igual que factura de venta)
@@ -88,11 +95,6 @@ class RetencionCompraService
         // lo llevan y los ya emitidos no se alteran (ver XmlRetencionCompraService).
         $data['ruc_proveedor_sistema'] = \App\Helpers\SriProveedorHelper::rucProveedor() ?: null;
 
-        $db = Database::getConnection();
-        $managed = !$db->inTransaction();
-        if ($managed) $db->beginTransaction();
-
-        try {
             $idRetencion = $this->repository->insertCabecera($data);
 
             $this->guardarLineas($idRetencion, $data['lineas'] ?? [], $idEmpresa, $data);
@@ -138,18 +140,21 @@ class RetencionCompraService
         // Calcular totales
         $data = $this->calcularTotales($data);
 
-        // Regenerar clave de acceso conservando el código numérico original
+        // Regenerar clave de acceso conservando el código numérico original. Se abre la
+        // transacción ANTES de calcular el secuencial y se mantiene hasta el UPDATE final: el
+        // lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
         $codigoNumerico = ClaveAccesoService::extraerCodigoNumerico($cabecera['clave_acceso'] ?? '');
-        $data = $this->prepararSecuencialYClaveAcceso($data, $codigoNumerico);
-
-        // Validar que el secuencial no esté duplicado, excluyendo la propia retención
-        $this->validarSecuencial($data, $id);
 
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
 
         try {
+            $data = $this->prepararSecuencialYClaveAcceso($data, $codigoNumerico);
+
+            // Validar que el secuencial no esté duplicado, excluyendo la propia retención
+            $this->validarSecuencial($data, $id);
+
             $this->repository->updateCabecera($id, $idEmpresa, $data);
 
             // Reemplazar líneas

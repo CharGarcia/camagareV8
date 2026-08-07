@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\Services\SecuencialService;
+use App\core\Database;
 
 /**
  * Genera el documento de venta de una suscripción (Factura de Venta o Recibo de
@@ -130,6 +131,17 @@ class SuscripcionFacturacionService
         // propio secuencial en el mismo punto de emisión.
         $esRecibo   = ($susc['tipo_comprobante'] ?? 'factura') === 'recibo';
         $tipoSec    = $esRecibo ? 'Recibos de venta' : 'Facturas de venta';
+
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (FacturaVentaService::crear() / ReciboVentaService::crear()): el lock de
+        // obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secRes     = $this->secService->obtenerSiguienteSecuencial((int)$estabConfig['id_punto_emision'], $tipoSec);
         $secuencial = $secRes['formateado'];
 
@@ -193,6 +205,9 @@ class SuscripcionFacturacionService
 
         if (!$esRecibo) {
             $idFactura = $this->facturaService->crear($documentoData);
+            if ($managedTransaction) {
+                $db->commit();
+            }
             return ['id_factura' => $idFactura, 'id_recibo' => null, 'tipo' => 'factura', 'importe' => $importe];
         }
 
@@ -209,7 +224,16 @@ class SuscripcionFacturacionService
         $documentoData['pagos'][0]['unidad_tiempo'] = 'dias';
 
         $idRecibo = $this->reciboService->crear($documentoData);
+        if ($managedTransaction) {
+            $db->commit();
+        }
         return ['id_factura' => null, 'id_recibo' => $idRecibo, 'tipo' => 'recibo', 'importe' => $importe];
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     private const MESES = [

@@ -168,7 +168,15 @@ class PagoAutomaticoProveedorService
         $codEstab = (string) $pto['estab'];
         $codPunto = (string) $pto['punto'];
 
-        // Secuencial correlativo del sistema
+        // Secuencial correlativo del sistema. Se abre la transacción ANTES de calcularlo y se
+        // mantiene hasta el INSERT final (EgresoService::registrar()): el lock de
+        // obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $managedTransaction = !$this->db->inTransaction();
+        if ($managedTransaction) {
+            $this->db->beginTransaction();
+        }
+
+        try {
         $secService = new \App\Services\SecuencialService();
         $resSec = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
         if (empty($resSec['secuencial'])) {
@@ -240,12 +248,22 @@ class PagoAutomaticoProveedorService
 
         $idEgreso = $egresoService->registrar($dataEgreso);
 
+        if ($managedTransaction) {
+            $this->db->commit();
+        }
+
         return [
             'id_egreso'     => $idEgreso,
             'numero_egreso' => $numeroEgreso,
             'numero_cheque' => $numeroCheque,
             'fecha_cobro'   => $fechaCobro,
         ];
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────

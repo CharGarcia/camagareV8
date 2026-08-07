@@ -159,6 +159,21 @@ class SecuencialRepository
     }
 
     /**
+     * Bloqueo transaccional (se libera solo al COMMIT/ROLLBACK) por punto de emisión + tipo de
+     * documento. DEBE llamarse antes de calcular el siguiente secuencial (obtenerSiguienteSecuencial),
+     * dentro de la MISMA transacción que luego inserta la cabecera del documento — igual que
+     * InventarioRepository::lockStock() (ver CLAUDE.md §8). Sin esto, dos documentos emitidos casi
+     * al mismo tiempo pueden calcular el mismo "siguiente número" antes de que ninguno lo inserte.
+     * No hace falta id_empresa: id_punto_emision ya es único por sí solo.
+     */
+    public function lockSecuencial(int $idPuntoEmision, string $tipoDocumento): void
+    {
+        $sql = "SELECT pg_advisory_xact_lock(hashtext('secuencial:' || :p || ':' || :t))";
+        $st = $this->db->prepare($sql);
+        $st->execute([':p' => $idPuntoEmision, ':t' => $tipoDocumento]);
+    }
+
+    /**
      * Obtiene la configuración del secuencial para un punto de emisión y tipo de documento.
      * Retorna el secuencial_inicial configurado.
      */

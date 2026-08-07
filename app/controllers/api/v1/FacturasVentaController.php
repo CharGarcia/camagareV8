@@ -902,6 +902,10 @@ class FacturasVentaController extends ApiBaseController
             $this->jsonError('SIN_PUNTO_EMISION', 'No hay un punto de emisión activo para registrar el cobro.', 422);
         }
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db->beginTransaction();
         $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
         $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
 
@@ -959,7 +963,9 @@ class FacturasVentaController extends ApiBaseController
         try {
             $ingresoService = new IngresoService(new IngresoRepository(), new IngresoRules(), new LogSistemaService());
             $idIngreso = $ingresoService->crear($payload);
+            $db->commit();
         } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
             $this->jsonError('ERROR_GUARDAR', $e->getMessage(), 422);
         }
 

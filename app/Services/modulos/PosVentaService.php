@@ -163,6 +163,15 @@ class PosVentaService
             $tipoDocumento = 'RECIBO';
         }
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (FacturaVentaService::crear() / ReciboVentaService::crear()): el lock de
+        // obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $managedTransaction = !$this->db->inTransaction();
+        if ($managedTransaction) {
+            $this->db->beginTransaction();
+        }
+
+        try {
         $tipoDocSec = $tipoDocumento === 'FACTURA' ? 'Facturas de venta' : 'Recibos de venta';
         $sec = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, $tipoDocSec);
         $secuencial = $sec['formateado'];
@@ -237,6 +246,15 @@ class PosVentaService
                 $this->logService
             );
             $idDoc = $svc->crear($payload);
+        }
+        if ($managedTransaction) {
+            $this->db->commit();
+        }
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
         }
 
         $this->logService->registrar(
@@ -333,6 +351,16 @@ class PosVentaService
         $stCli->execute([':id' => $idCliente, ':id_empresa' => $idEmpresa]);
         $nombreCliente = (string) ($stCli->fetchColumn() ?: 'Consumidor Final');
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8). Independiente de la transacción de la venta
+        // (el llamador ya tolera que esto falle sin revertir la venta).
+        $managedTransaction = !$this->db->inTransaction();
+        if ($managedTransaction) {
+            $this->db->beginTransaction();
+        }
+
+        try {
         $secIngreso = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Ingresos');
         $secuencialIngreso = $secIngreso['formateado'];
         $numeroIngreso = $puntoInfo['cod_establecimiento'] . '-' . $puntoInfo['codigo_punto'] . '-' . $secuencialIngreso;
@@ -374,7 +402,17 @@ class PosVentaService
         ];
 
         $ingresoService = new IngresoService(new IngresoRepository(), new IngresoRules(), $this->logService);
-        return $ingresoService->crear($payload);
+        $idIngreso = $ingresoService->crear($payload);
+        if ($managedTransaction) {
+            $this->db->commit();
+        }
+        return $idIngreso;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     private function getPuntoEmisionInfo(int $idPuntoEmision): ?array

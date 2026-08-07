@@ -771,13 +771,20 @@ class ReporteInventarioRepository extends BaseRepository
     // PESTAÑA 5 — AUDITORÍA (stock cacheado vs. real del kardex)
     // ════════════════════════════════════════════════════════════════════
 
-    /** Producto×bodega donde productos_bodegas.stock_actual no coincide con la suma real del kardex. */
-    public function getAuditoriaStock(int $idEmpresa, array $filtros): array
+    /**
+     * Producto×bodega donde productos_bodegas.stock_actual no coincide con la suma real del kardex.
+     * $idEmpresa = null → TODAS las empresas (solo para nivel 3; el controller es quien filtra el
+     * acceso, este método no vuelve a validarlo). En modo global se incluye el nombre de la empresa.
+     */
+    public function getAuditoriaStock(?int $idEmpresa, array $filtros): array
     {
-        $where = "pb.id_empresa = :id_empresa AND pb.eliminado = false
-                   AND p.eliminado = false AND p.inventariable = true AND b.eliminado = false";
-        $params = [':id_empresa' => $idEmpresa];
+        $where = "pb.eliminado = false AND p.eliminado = false AND p.inventariable = true AND b.eliminado = false";
+        $params = [];
 
+        if ($idEmpresa !== null) {
+            $where .= " AND pb.id_empresa = :id_empresa";
+            $params[':id_empresa'] = $idEmpresa;
+        }
         if (!empty($filtros['id_bodega'])) {
             $where .= " AND pb.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
@@ -792,7 +799,8 @@ class ReporteInventarioRepository extends BaseRepository
         }
 
         $sql = "SELECT * FROM (
-                    SELECT pb.id_producto, pb.id_bodega,
+                    SELECT pb.id_empresa, pb.id_producto, pb.id_bodega,
+                           e.nombre AS empresa_nombre,
                            p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                            b.nombre AS bodega_nombre,
                            pb.stock_actual AS cacheado,
@@ -804,6 +812,7 @@ class ReporteInventarioRepository extends BaseRepository
                     FROM productos_bodegas pb
                     INNER JOIN productos p ON p.id = pb.id_producto AND p.id_empresa = pb.id_empresa
                     INNER JOIN bodegas b ON b.id = pb.id_bodega
+                    INNER JOIN empresas e ON e.id = pb.id_empresa
                     WHERE {$where}
                 ) t
                 WHERE cacheado <> real_kardex
@@ -817,21 +826,45 @@ class ReporteInventarioRepository extends BaseRepository
     /** Corrige productos_bodegas.stock_actual para que coincida con la suma real del kardex. Devuelve [antes, despues]. */
     public function corregirStockAuditoria(int $idProducto, int $idBodega, int $idEmpresa, int $userId): array
     {
-        $st = $this->db->prepare("SELECT stock_actual FROM productos_bodegas
-                                   WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e AND eliminado = false");
-        $st->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
-        $antes = (float) ($st->fetchColumn() ?: 0);
+        // pg_advisory_xact_lock solo se libera al COMMIT/ROLLBACK: hace falta una transacción
+        // explícita para que el candado siga tomado durante las 3 sentencias siguientes (si no,
+        // en modo autocommit cada sentencia es su propia transacción y el candado no protege nada).
+        $managedTransaction = !$this->db->inTransaction();
+        if ($managedTransaction) {
+            $this->db->beginTransaction();
+        }
 
-        $stReal = $this->db->prepare("SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k
-                                       WHERE k.id_producto = :p AND k.id_bodega = :b AND k.id_empresa = :e AND k.eliminado = false");
-        $stReal->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
-        $real = (float) $stReal->fetchColumn();
+        try {
+            // Mismo candado que usa el resto del sistema para leer-antes-de-escribir stock (ver
+            // CLAUDE.md §8): evita corregir sobre un valor que un movimiento concurrente está
+            // recalculando en este mismo instante.
+            (new InventarioRepository())->lockStock($idProducto, $idBodega, $idEmpresa);
 
-        $stUpd = $this->db->prepare("UPDATE productos_bodegas
-                                      SET stock_actual = :real, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
-                                      WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e");
-        $stUpd->execute([':real' => $real, ':uid' => $userId, ':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+            $st = $this->db->prepare("SELECT stock_actual FROM productos_bodegas
+                                       WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e AND eliminado = false");
+            $st->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+            $antes = (float) ($st->fetchColumn() ?: 0);
 
-        return ['antes' => $antes, 'despues' => $real];
+            $stReal = $this->db->prepare("SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k
+                                           WHERE k.id_producto = :p AND k.id_bodega = :b AND k.id_empresa = :e AND k.eliminado = false");
+            $stReal->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+            $real = (float) $stReal->fetchColumn();
+
+            $stUpd = $this->db->prepare("UPDATE productos_bodegas
+                                          SET stock_actual = :real, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                                          WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e");
+            $stUpd->execute([':real' => $real, ':uid' => $userId, ':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+
+            if ($managedTransaction) {
+                $this->db->commit();
+            }
+
+            return ['antes' => $antes, 'despues' => $real];
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
     }
 }

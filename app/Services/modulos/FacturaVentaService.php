@@ -121,7 +121,15 @@ class FacturaVentaService
             return null;
         }
 
-        // Secuencial de ingreso
+        // Secuencial de ingreso. Se abre la transacción ANTES de calcularlo y se mantiene hasta
+        // el INSERT final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se
+        // libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secuencialService = new \App\Services\SecuencialService();
         $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
 
@@ -194,7 +202,17 @@ class FacturaVentaService
         // Vincular para idempotencia
         $ppRepo->vincularIngreso((string) $trans['client_transaction_id'], (int) $idIngreso);
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return (int) $idIngreso;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -267,7 +285,15 @@ class FacturaVentaService
             return null;
         }
 
-        // Secuencial de ingreso
+        // Secuencial de ingreso. Se abre la transacción ANTES de calcularlo y se mantiene hasta
+        // el INSERT final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se
+        // libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secuencialService = new \App\Services\SecuencialService();
         $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
 
@@ -340,7 +366,17 @@ class FacturaVentaService
         // Vincular para idempotencia
         $nvRepo->vincularIngreso((string) $trans['dev_reference'], (int) $idIngreso);
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return (int) $idIngreso;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     private function getInventarioService(): InventarioService

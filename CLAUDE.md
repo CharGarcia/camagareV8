@@ -162,8 +162,14 @@ eliminado (boolean), deleted_at, deleted_by
 - **No reinventar el candado**: si el recurso es el stock de un producto/bodega, usar
   `InventarioRepository::lockStock($idProducto, $idBodega, $idEmpresa)` — llamarlo **antes** de
   `getStockActual()`/`getStockCache()` en cualquier flujo nuevo que luego escriba
-  `registrarMovimiento()` + `actualizarStock()`. Otros ejemplos ya existentes del mismo mecanismo:
-  `ComandaRepository` (`comanda_num`), `PedidoService` (`pedido_secuencial`).
+  `registrarMovimiento()` + `actualizarStock()`. Si el recurso es el secuencial de un documento
+  (factura, ingreso, egreso, etc.), el candado ya vive **dentro** de
+  `SecuencialService::obtenerSiguienteSecuencial()` (vía `SecuencialRepository::lockSecuencial()`)
+  — no hay que llamarlo aparte, pero sí hay que **abrir la transacción del llamador ANTES** de
+  invocar `obtenerSiguienteSecuencial()` y mantenerla abierta hasta el `INSERT`/`UPDATE` final
+  (el candado se libera solo al COMMIT/ROLLBACK; si no hay transacción abierta en ese momento, no
+  protege nada). Otros ejemplos ya existentes del mismo mecanismo: `ComandaRepository`
+  (`comanda_num`), `PedidoService` (`pedido_secuencial`).
 - **Nunca duplicar en SQL crudo dentro de un controller** la lógica que ya vive en un
   Repository/Service (rompe además la regla de §3): si hace falta escribir stock, usar
   `InventarioRepository`/`InventarioService`, no reescribir el `INSERT`/`UPDATE` a mano.

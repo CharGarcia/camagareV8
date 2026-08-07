@@ -433,6 +433,17 @@ class ConciliacionCobrosService
             throw new \Exception('El monto a aplicar (' . number_format($montoCobrar, 2) . ') supera el saldo pendiente actual (' . number_format($saldoAnterior, 2) . ') del documento ' . $doc['numero_documento'] . '.');
         }
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8). Cada línea sigue siendo independiente (su
+        // propia transacción), tal como espera generarIngresos().
+        $db = \App\core\Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secuencialService = new SecuencialService();
         $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
 
@@ -481,7 +492,17 @@ class ConciliacionCobrosService
             ],
         ];
 
-        return $this->ingresoService->crear($payload);
+        $idIngreso = $this->ingresoService->crear($payload);
+        if ($managedTransaction) {
+            $db->commit();
+        }
+        return $idIngreso;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**

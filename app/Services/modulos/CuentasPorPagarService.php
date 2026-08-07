@@ -8,6 +8,7 @@ use App\repositories\modulos\EgresoRepository;
 use App\Rules\modulos\EgresoRules;
 use App\Services\LogSistemaService;
 use App\Services\SecuencialService;
+use App\core\Database;
 
 /**
  * Registro de pagos a proveedores (Cuentas por Pagar).
@@ -101,6 +102,16 @@ class CuentasPorPagarService
             default        => 'COMPRA',
         };
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (EgresoService::registrar()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secuencialService = new SecuencialService();
         $secRes = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
         $secuencial = $secRes['formateado'];
@@ -154,6 +165,10 @@ class CuentasPorPagarService
         $egresoService = new EgresoService(new EgresoRepository(), new EgresoRules(), $this->log);
         $idEgreso = $egresoService->registrar($payload);
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         $nuevoSaldo = $saldo - $monto;
 
         return [
@@ -164,6 +179,12 @@ class CuentasPorPagarService
             'pagado'        => $nuevoSaldo <= 0.001,
             'doc'           => $doc,
         ];
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
 }

@@ -218,6 +218,16 @@ class CobroAutomaticoClienteService
             throw new \Exception('No se localizó punto de emisión activo.');
         }
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = \App\core\Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $resSec = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id_punto'], 'Ingresos');
         if (empty($resSec['secuencial'])) {
             throw new \Exception('Error al reservar secuencial correlativo.');
@@ -274,11 +284,21 @@ class CobroAutomaticoClienteService
         $ingresoService = new IngresoService($this->ingresoRepo, new IngresoRules(), new LogSistemaService());
         $idIngreso = $ingresoService->crear($payload);
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return [
             'id_ingreso'     => $idIngreso,
             'numero_ingreso' => $numeroIngreso,
             'fecha_cobro'    => $fechaCobro,
         ];
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**

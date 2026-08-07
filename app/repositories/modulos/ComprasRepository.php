@@ -159,6 +159,29 @@ class ComprasRepository extends BaseRepository
         return ['rows' => $rows, 'total' => (int) $total];
     }
 
+    /**
+     * Compras del rango de fechas para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     * No filtra por estado: en Compras esa columna quedó fija en 'registrado' (ver getPorId/getListado).
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    {
+        $where = "WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                   AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                   AND c.fecha_emision BETWEEN :desde AND :hasta";
+        $params = [':id_empresa' => $idEmpresa, ':desde' => $fechaDesde, ':hasta' => $fechaHasta];
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND c.created_by = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT c.id, c.establecimiento_prov AS establecimiento, c.punto_emision_prov AS punto_emision,
+                       c.secuencial_prov AS secuencial, c.fecha_emision
+                FROM compras_cabecera c
+                $where
+                ORDER BY c.fecha_emision ASC, c.id ASC";
+        return $this->query($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // OBTENER POR ID
     // ─────────────────────────────────────────────────────────────────────────

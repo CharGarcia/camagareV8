@@ -594,28 +594,50 @@ window.RI_Consignaciones = {
 // PESTAÑA 5: AUDITORÍA
 // ════════════════════════════════════════════════════════════════════
 window.RI_Auditoria = {
+    ultimoTotal: 0,
+
     limpiarProducto() {
         RI_limpiarBusqueda('ri-au-search-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado');
         this.generar();
     },
 
-    generar() {
-        const params = RI_paramsFromIds({
+    dibujarCabecera(global) {
+        let th = '<tr>';
+        if (global) th += '<th>Empresa</th>';
+        th += `<th>Producto</th><th>Bodega</th><th class="text-end">Guardado</th>
+               <th class="text-end">Real (Kardex)</th><th class="text-end">Diferencia</th>
+               <th class="text-center">Acción</th></tr>`;
+        document.getElementById('ri-au-thead').innerHTML = th;
+    },
+
+    _filtros() {
+        return RI_paramsFromIds({
             id_bodega: 'ri-au-bodega', id_producto: 'ri-au-id-producto', buscar: 'ri-au-buscar',
+            todas_empresas: 'ri-au-todas-empresas',
         });
+    },
+
+    generar() {
+        const params = this._filtros();
+        const colSpan = document.getElementById('ri-au-todas-empresas')?.checked ? 7 : 6;
 
         const tbody = document.getElementById('ri-au-tbody');
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('auditoria', params, (res) => {
+            this.dibujarCabecera(!!res.global);
             tbody.innerHTML = res.rows;
             const info = document.getElementById('ri-au-info-total');
             const total = (res.kpis && res.kpis.total_discrepancias) || 0;
+            this.ultimoTotal = total;
             info.textContent = total > 0
-                ? `${total} discrepancia${total === 1 ? '' : 's'} encontrada${total === 1 ? '' : 's'}`
+                ? `${total} discrepancia${total === 1 ? '' : 's'} encontrada${total === 1 ? '' : 's'}${res.global ? ' (todas las empresas)' : ''}`
                 : 'Sin discrepancias — el stock guardado coincide con el Kardex.';
+
+            const btnTodo = document.getElementById('ri-au-btn-corregir-todo');
+            if (btnTodo) btnTodo.style.display = total > 0 ? '' : 'none';
         }, (msg) => {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">${msg}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
         });
     },
 
@@ -626,7 +648,7 @@ window.RI_Auditoria = {
 
         const ejecutar = () => {
             btn.disabled = true;
-            const params = new URLSearchParams({ id_producto: d.idProducto, id_bodega: d.idBodega });
+            const params = new URLSearchParams({ id_producto: d.idProducto, id_bodega: d.idBodega, id_empresa: d.idEmpresa || '' });
             fetch(BASE_URL + '/' + RUTA_MODULO + '/corregirStockAuditoriaAjax', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
@@ -653,7 +675,8 @@ window.RI_Auditoria = {
             });
         };
 
-        const mensaje = `<p class="mb-2">${d.productoNombre} — ${d.bodegaNombre}</p>
+        const empresaLinea = d.empresaNombre ? `<p class="mb-1 text-muted small">${d.empresaNombre}</p>` : '';
+        const mensaje = `${empresaLinea}<p class="mb-2">${d.productoNombre} — ${d.bodegaNombre}</p>
             <p class="mb-0">Guardado: <b>${cacheado}</b> &rarr; Real (Kardex): <b>${real}</b></p>`;
 
         if (typeof Swal !== 'undefined') {
@@ -666,6 +689,61 @@ window.RI_Auditoria = {
                 cancelButtonText: 'Cancelar',
             }).then(result => { if (result.isConfirmed) ejecutar(); });
         } else if (confirm('¿Corregir stock de ' + cacheado + ' a ' + real + '?')) {
+            ejecutar();
+        }
+    },
+
+    corregirTodo() {
+        const total = this.ultimoTotal || 0;
+        if (total <= 0) return;
+        const todas = document.getElementById('ri-au-todas-empresas')?.checked;
+        const alcance = todas ? 'de <b>todas las empresas</b>' : 'de esta empresa';
+
+        const ejecutar = () => {
+            const btn = document.getElementById('ri-au-btn-corregir-todo');
+            btn.disabled = true;
+            const params = this._filtros();
+            params.set('tab', 'auditoria');
+            fetch(BASE_URL + '/' + RUTA_MODULO + '/corregirTodoAuditoriaAjax', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                body: params.toString(),
+            })
+            .then(r => r.json())
+            .then(res => {
+                btn.disabled = false;
+                if (!res.ok) {
+                    if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'No se pudo corregir', text: res.error || 'Error desconocido' });
+                    else alert(res.error || 'Error desconocido');
+                    return;
+                }
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({ icon: 'success', title: `${res.corregidas} corregidas`, timer: 1800, showConfirmButton: false });
+                }
+                window.RI_Auditoria.generar();
+            })
+            .catch(err => {
+                btn.disabled = false;
+                console.error(err);
+                if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo corregir el stock.' });
+                else alert('No se pudo corregir el stock.');
+            });
+        };
+
+        const mensaje = `<p class="mb-0">Vas a corregir <b>${total}</b> discrepancia${total === 1 ? '' : 's'} ${alcance},
+            dejando el stock guardado igual al del Kardex en cada una. Confirma que el Kardex está completo
+            antes de continuar — si le faltan movimientos, esto solo iguala el guardado a un Kardex incompleto.</p>`;
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: '¿Corregir todo?',
+                html: mensaje,
+                showCancelButton: true,
+                confirmButtonText: 'Sí, corregir todo',
+                cancelButtonText: 'Cancelar',
+            }).then(result => { if (result.isConfirmed) ejecutar(); });
+        } else if (confirm(`¿Corregir ${total} discrepancias ${alcance}?`)) {
             ejecutar();
         }
     },

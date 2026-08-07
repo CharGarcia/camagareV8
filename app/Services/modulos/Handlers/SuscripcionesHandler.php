@@ -568,6 +568,15 @@ class SuscripcionesHandler extends BaseHandler
         $monto  = round((float) $res['importe'], 2);
         $numDoc = $doc['establecimiento'] . '-' . $doc['punto_emision'] . '-' . $doc['secuencial'];
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secuencialService = new SecuencialService();
         $secRes            = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
         $numeroIngreso      = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT) . '-'
@@ -622,7 +631,17 @@ class SuscripcionesHandler extends BaseHandler
             $nvRepo->vincularIngreso($devReference, (int) $idIngreso);
         }
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return (int) $idIngreso;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**

@@ -577,6 +577,15 @@ class ReciboVentaService
         $propina      = round((float) ($recibo['propina'] ?? 0), 2);
         $importeTotal = round($totalSinImp + $ivaTotal + $totalIce + $propina, 2);
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (FacturaVentaService::crear() más abajo): el lock de obtenerSiguienteSecuencial()
+        // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
         // ── 2. Secuencial propio de facturas para el mismo punto de emisión ──
         $sec = (new \App\Services\SecuencialService())
             ->obtenerSiguienteSecuencial((int) $recibo['id_punto_emision'], 'Facturas de venta');
@@ -628,7 +637,13 @@ class ReciboVentaService
         $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idRecibo, $idEmpresa, $idUsuario);
         try {
             $idFactura = $facturaService->crear($payload);
+            if ($managedTransaction) {
+                $db->commit();
+            }
         } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
             try {
                 $this->getInventarioService()->procesarSalidaPorVenta(
                     $idRecibo, $detFactura, (int) $recibo['id_establecimiento'],
@@ -641,7 +656,6 @@ class ReciboVentaService
         }
 
         // ── 5. Factura creada: finalizar el recibo (cobros + asiento) y marcarlo facturado ──
-        $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
         try {
@@ -729,6 +743,15 @@ class ReciboVentaService
             ];
         }
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final ($this->crear() más abajo): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = \App\core\Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
         // ── Secuencial PROPIO de recibos para el mismo punto de emisión ──
         $sec = (new \App\Services\SecuencialService())
             ->obtenerSiguienteSecuencial((int)$factura['id_punto_emision'], 'Recibos de venta');
@@ -792,7 +815,13 @@ class ReciboVentaService
 
         try {
             $idRecibo = $this->crear($payload);
+            if ($managedTransaction) {
+                $db->commit();
+            }
         } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
             if ($eliminarFactura) {
                 // Restaurar el inventario de la factura que revertimos.
                 try {

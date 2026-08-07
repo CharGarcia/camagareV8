@@ -1125,6 +1125,15 @@ class TallerOrdenService
         // El documento se numera con SU propio secuencial, que también debe estar
         // configurado en Empresa. Sin él la factura nacería con una numeración
         // inventada que después choca con la del módulo de ventas.
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (crear() más abajo): el lock de obtenerSiguienteSecuencial() se libera solo al
+        // COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
         $tipoDocSec = ($tipo === 'FACTURA') ? 'Facturas de venta' : 'Recibos de venta';
         $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec);
         if (($sec['configurado'] ?? false) === false) {
@@ -1196,7 +1205,13 @@ class TallerOrdenService
                 );
                 $idDoc = $svc->crear($payload);
             }
+            if ($managedTransaction) {
+                $db->commit();
+            }
         } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
             // Si falla la emisión, restauramos el consumo de la orden.
             try {
                 $this->reaplicarInventarioOrden($idOrden, $idEmpresa, $idUsuario);
@@ -1206,7 +1221,6 @@ class TallerOrdenService
             throw $e;
         }
 
-        $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
         try {

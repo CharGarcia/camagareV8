@@ -694,7 +694,10 @@ class FirmasElectronicasController extends BaseModuloController
             $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
             if (!$punto) throw new \Exception('No hay puntos de emisión configurados para esta empresa.');
 
-            // Secuencial
+            // Secuencial. Se abre la transacción ANTES de calcularlo y se mantiene hasta el
+            // INSERT final (FacturaVentaService::crear()): el lock de obtenerSiguienteSecuencial()
+            // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+            $db->beginTransaction();
             $secInfo = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial((int)$punto['id'], 'Facturas de venta');
 
             // Producto con IVA
@@ -768,6 +771,8 @@ class FirmasElectronicasController extends BaseModuloController
             $db->prepare("UPDATE firmas_electronicas SET id_factura = :if, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND id_empresa = :ie")
                ->execute([':if' => $idFactura, ':id' => $idFirma, ':ie' => $idEmpresa]);
 
+            $db->commit();
+
             echo json_encode([
                 'ok'                      => true,
                 'msg'                     => 'Factura generada correctamente.',
@@ -780,6 +785,7 @@ class FirmasElectronicasController extends BaseModuloController
                 'url'                     => BASE_URL . '/modulos/factura-venta',
             ]);
         } catch (\Throwable $e) {
+            if (isset($db) && $db->inTransaction()) $db->rollBack();
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones
-version: 1.3
+version: 1.4
 orden: 40
 estado: activo
 ---
@@ -66,6 +66,20 @@ forma de saber el stock verdadero.
 Toda corrección queda registrada en la auditoría del sistema
 (`log_sistema`), con el valor anterior y el nuevo.
 
+**Corregir todo**: además del botón por fila, hay un botón **Corregir todo** en la
+cabecera de la tabla que corrige de una vez todas las discrepancias visibles con
+los filtros actuales (respeta bodega/producto/búsqueda si están puestos). Pide
+confirmación mostrando cuántas va a corregir antes de ejecutar. Cada corrección
+individual queda igual de auditada en `log_sistema` que si se hiciera fila por
+fila.
+
+**Todas las empresas** (solo Nivel 3): un superadministrador ve un check
+"Todas las empresas" en los filtros; al marcarlo, la Auditoría (y el botón
+Corregir todo) deja de limitarse a la empresa activa en sesión y muestra/corrige
+las discrepancias de **todo el sistema**, con una columna Empresa adicional.
+Los demás niveles no ven este check y siempre quedan limitados a su propia
+empresa, sin importar qué se envíe en la petición.
+
 ### Por qué aparecen discrepancias
 
 Además de migraciones incompletas, la causa más frecuente es una condición de
@@ -95,6 +109,9 @@ siguen apareciendo aquí hasta que se corrigen manualmente.
 
 ## Historial de cambios
 
+- **1.4** — Botón **Corregir todo** en Auditoría (corrige de una vez todas las
+  discrepancias filtradas) y check **Todas las empresas** para Nivel 3 (audita
+  y corrige el sistema completo, no solo la empresa activa).
 - **1.3** — Corregida la causa raíz más frecuente de las discrepancias que
   detecta Auditoría: una condición de carrera al escribir el stock guardado
   cuando dos movimientos del mismo producto/bodega se procesaban casi al

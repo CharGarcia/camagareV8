@@ -896,6 +896,10 @@ class ReciboVentaController extends BaseModuloController
                 throw new \Exception('Punto de emisión no válido.');
             }
 
+            // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el
+            // INSERT final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial()
+            // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+            $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
             $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos');
 
@@ -961,8 +965,10 @@ class ReciboVentaController extends BaseModuloController
             );
 
             $idIngreso = $ingresoService->crear($payload);
+            $db->commit();
             echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
+            if (isset($db) && $db->inTransaction()) $db->rollBack();
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }

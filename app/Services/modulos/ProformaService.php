@@ -46,21 +46,24 @@ class ProformaService
         // valor enviado por el navegador (el campo es readonly / vista previa y puede
         // llegar desfasado, provocando números salteados o duplicados). Así lo mostrado
         // y lo guardado siempre coinciden con el verdadero "siguiente disponible".
-        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Proformas');
-        $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
-        $data['secuencial'] = $secuencial;
-
-        if ($this->repository->existeSecuencial($idEmpresa, $idEstab, $idPunto, $secuencial)) {
-            throw new \RuntimeException("El secuencial {$secuencial} ya está en uso. Recargue e intente nuevamente.");
-        }
-
+        // Se abre la transacción ANTES de calcularlo y se mantiene hasta el INSERT final: el
+        // lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
         $db = Database::getConnection();
-        $db->beginTransaction();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
         try {
+            $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Proformas');
+            $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
+            $data['secuencial'] = $secuencial;
+
+            if ($this->repository->existeSecuencial($idEmpresa, $idEstab, $idPunto, $secuencial)) {
+                throw new \RuntimeException("El secuencial {$secuencial} ya está en uso. Recargue e intente nuevamente.");
+            }
+
             $idProforma = $this->repository->insertCabecera($data);
             $this->guardarDetalles($idProforma, $data['detalles']);
             $this->guardarInfoAdicional($idProforma, $data['info_adicional'] ?? []);
-            $db->commit();
+            if ($managed) $db->commit();
 
             try {
                 $this->log->registrar(
@@ -76,7 +79,7 @@ class ProformaService
 
             return $idProforma;
         } catch (\Throwable $e) {
-            $db->rollBack();
+            if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
     }
@@ -339,9 +342,6 @@ class ProformaService
         $punto   = $puntos[0];
         $idPunto = (int) $punto['id'];
 
-        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturas de venta');
-        $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
-
         $nivel      = (int) ($_SESSION['nivel'] ?? 1);
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas    = $bodegaRepo->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
@@ -358,6 +358,19 @@ class ProformaService
                 'faltantes'          => $faltantes,
             ];
         }
+
+        // Secuencial. Se abre la transacción ANTES de calcularlo y se mantiene hasta el INSERT
+        // final (FacturaVentaService::crear() más abajo): el lock de obtenerSiguienteSecuencial()
+        // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
+        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturas de venta');
+        $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
 
         // ── Mapear detalles (precios y descuentos tal cual de la proforma) ──
         $detallesFac = [];
@@ -444,14 +457,23 @@ class ProformaService
             'pagos'               => $pagos,
         ];
 
-        // crear() maneja su propia transacción, inventario, XML y asiento; por eso NO se
-        // envuelve aquí. La factura queda en estado 'borrador' para revisión/emisión.
+        // crear() detecta la transacción ya abierta arriba y se engancha a ella (no hace su
+        // propio commit/rollback). La factura queda en estado 'borrador' para revisión/emisión.
         $facService = new FacturaVentaService(
             $facturaRepo,
             new \App\Rules\modulos\FacturaVentaRules(),
             new LogSistemaService()
         );
         $idFactura = $facService->crear($dataFactura);
+        if ($managedTransaction) {
+            $db->commit();
+        }
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
 
         // Enlazar la proforma con la factura (estado = convertida)
         $this->repository->marcarConvertida($id, $idFactura, $idUsuario);
@@ -526,9 +548,6 @@ class ProformaService
         $punto   = $puntos[0];
         $idPunto = (int) $punto['id'];
 
-        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Recibos de venta');
-        $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
-
         $nivel      = (int) ($_SESSION['nivel'] ?? 1);
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas    = $bodegaRepo->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
@@ -539,6 +558,19 @@ class ProformaService
         if (!empty($faltantes)) {
             return ['stock_insuficiente' => true, 'faltantes' => $faltantes];
         }
+
+        // Secuencial. Se abre la transacción ANTES de calcularlo y se mantiene hasta el INSERT
+        // final (ReciboVentaService::crear() más abajo): el lock de obtenerSiguienteSecuencial()
+        // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
+        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Recibos de venta');
+        $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
 
         // ── Mapear detalles con asignación FEFO de lote/caducidad/NUP (igual que factura) ──
         $detallesRec = [];
@@ -626,14 +658,23 @@ class ProformaService
             'info_adicional'      => $infoAdic,
         ];
 
-        // crear() maneja su propia transacción, inventario y asiento. El recibo queda
-        // en 'borrador' para revisión/emisión.
+        // crear() detecta la transacción ya abierta arriba y se engancha a ella (no hace su
+        // propio commit/rollback). El recibo queda en 'borrador' para revisión/emisión.
         $recService = new ReciboVentaService(
             new \App\repositories\modulos\ReciboVentaRepository(),
             new \App\Rules\modulos\ReciboVentaRules(),
             new LogSistemaService()
         );
         $idRecibo = $recService->crear($dataRecibo);
+        if ($managedTransaction) {
+            $db->commit();
+        }
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
 
         try {
             $this->log->registrar(

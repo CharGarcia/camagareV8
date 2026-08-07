@@ -837,6 +837,16 @@ class SaldosInicialesService
         $codEst = str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
         $codPto = str_pad((string)($punto['punto']           ?? '001'), 3, '0', STR_PAD_LEFT);
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secuencialService = new \App\Services\SecuencialService();
         $secRes     = $secuencialService->obtenerSiguienteSecuencial((int)$datos['id_punto_emision'], 'Ingresos');
         $secuencial = $secRes['formateado'];
@@ -894,12 +904,22 @@ class SaldosInicialesService
 
         $saldoActualizado = $this->repo->getCxcPorId($idSaldo, $idEmpresa);
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return [
             'id_ingreso'     => $idIngreso,
             'numero_ingreso' => $numDoc,
             'nuevo_saldo'    => number_format((float)$saldoActualizado['saldo_pendiente'], 2, '.', ''),
             'pagado'         => (float)$saldoActualizado['saldo_pendiente'] <= 0.001,
         ];
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public function registrarPagoCxp(int $idSaldo, int $idEmpresa, int $idUsuario, array $datos): array
@@ -921,6 +941,16 @@ class SaldosInicialesService
         $codEst = str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
         $codPto = str_pad((string)($punto['punto']           ?? '001'), 3, '0', STR_PAD_LEFT);
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (EgresoService::registrar()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
         $secuencialService = new \App\Services\SecuencialService();
         $secRes     = $secuencialService->obtenerSiguienteSecuencial((int)$datos['id_punto_emision'], 'Egresos');
         $secuencial = $secRes['formateado'];
@@ -978,11 +1008,21 @@ class SaldosInicialesService
 
         $saldoActualizado = $this->repo->getCxpPorId($idSaldo, $idEmpresa);
 
+        if ($managedTransaction) {
+            $db->commit();
+        }
+
         return [
             'id_egreso'     => $idEgreso,
             'numero_egreso' => $numDoc,
             'nuevo_saldo'   => number_format((float)$saldoActualizado['saldo_pendiente'], 2, '.', ''),
             'pagado'        => (float)$saldoActualizado['saldo_pendiente'] <= 0.001,
         ];
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 }

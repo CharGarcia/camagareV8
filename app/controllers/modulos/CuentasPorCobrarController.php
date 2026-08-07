@@ -233,8 +233,12 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
+        $db = \App\core\Database::getConnection();
         try {
-            // Obtener siguiente secuencial mediante SecuencialService
+            // Obtener siguiente secuencial mediante SecuencialService. Se abre la transacción
+            // ANTES de calcularlo y se mantiene hasta el INSERT final (IngresoService::crear()):
+            // el lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+            $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
             $secRes    = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
             $secuencial = $secRes['formateado'];
@@ -292,6 +296,7 @@ class CuentasPorCobrarController extends BaseModuloController
             );
 
             $idIngreso = $ingresoService->crear($payload);
+            $db->commit();
 
             $nuevoSaldo = $saldo - $monto;
             $this->jsonSuccess([
@@ -302,6 +307,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'pagada'         => $nuevoSaldo <= 0.001,
             ]);
         } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
             error_log('[CxC registrarCobro] ' . $e->getMessage());
             $this->jsonError('Error al registrar el cobro: ' . $e->getMessage());
         }
@@ -439,8 +445,12 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
+        $db = \App\core\Database::getConnection();
         try {
-            // Obtener siguiente secuencial mediante SecuencialService
+            // Obtener siguiente secuencial mediante SecuencialService. Se abre la transacción
+            // ANTES de calcularlo y se mantiene hasta el INSERT final (IngresoService::crear()):
+            // el lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+            $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
             $secRes     = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
             $secuencial = $secRes['formateado'];
@@ -498,6 +508,7 @@ class CuentasPorCobrarController extends BaseModuloController
             );
 
             $idIngreso = $ingresoService->crear($payload);
+            $db->commit();
 
             $nuevoSaldo = $saldo - $monto;
             $this->jsonSuccess([
@@ -508,6 +519,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'pagada'         => $nuevoSaldo <= 0.001,
             ]);
         } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
             error_log('[CxC registrarCobroRecibo] ' . $e->getMessage());
             $this->jsonError('Error al registrar el cobro: ' . $e->getMessage());
         }

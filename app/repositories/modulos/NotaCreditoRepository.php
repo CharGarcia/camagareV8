@@ -128,6 +128,29 @@ class NotaCreditoRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Notas de crédito del rango de fechas para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    {
+        $where = "WHERE nc.id_empresa = :id_empresa AND nc.eliminado = false
+                   AND nc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                   AND nc.fecha_emision BETWEEN :desde AND :hasta";
+        $params = [':id_empresa' => $idEmpresa, ':desde' => $fechaDesde, ':hasta' => $fechaHasta];
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND nc.id_usuario = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT nc.id, nc.establecimiento, nc.punto_emision, nc.secuencial, nc.fecha_emision, nc.estado
+                FROM notas_credito_cabecera nc
+                $where
+                ORDER BY nc.fecha_emision ASC, nc.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getPorId(int $id): ?array
     {
         $sql = "SELECT nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
