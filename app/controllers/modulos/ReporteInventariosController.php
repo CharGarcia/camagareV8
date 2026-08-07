@@ -432,7 +432,7 @@ class ReporteInventariosController extends BaseModuloController
             . '<td class="text-end fw-bold">' . number_format($real, 2) . '</td>'
             . '<td class="text-end fw-bold ' . $colorDif . '">' . ($diferencia > 0 ? '+' : '') . number_format($diferencia, 2) . '</td>'
             . '<td class="text-center">'
-            . '<button type="button" class="btn btn-sm btn-outline-primary" title="Corregir: dejar el caché igual al kardex real"'
+            . '<button type="button" class="btn btn-sm btn-outline-primary" title="Corregir: dejar el stock guardado igual al del kardex"'
             . ' onclick="window.RI_Auditoria.corregir(this)"'
             . ' data-id-producto="' . (int) ($r['id_producto'] ?? 0) . '"'
             . ' data-id-bodega="' . (int) ($r['id_bodega'] ?? 0) . '"'

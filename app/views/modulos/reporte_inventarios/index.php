@@ -556,9 +556,8 @@
         <div class="tab-pane fade" id="ri-tab-auditoria" role="tabpanel">
             <div class="alert alert-warning py-2 px-3 small mb-3">
                 <i class="bi bi-exclamation-triangle me-1"></i>
-                Compara el stock cacheado (<code>productos_bodegas.stock_actual</code>) contra el saldo real calculado
-                en vivo desde el Kardex. Solo se muestran los que difieren. Antes de "Corregir" confirma que el Kardex
-                está completo para ese producto/bodega (idealmente con un conteo físico).
+                Muestra los productos donde el stock guardado no coincide con la suma real de entradas y salidas del Kardex.
+                Antes de corregir, confirma que no falten movimientos por registrar (idealmente con un conteo físico).
             </div>
             <div class="accordion mb-3 shadow-sm border-0" id="ri-au-accordion">
                 <div class="accordion-item border-0 rounded-3">
@@ -612,7 +611,7 @@
                                 <tr>
                                     <th>Producto</th>
                                     <th>Bodega</th>
-                                    <th class="text-end">Cacheado</th>
+                                    <th class="text-end">Guardado</th>
                                     <th class="text-end">Real (Kardex)</th>
                                     <th class="text-end">Diferencia</th>
                                     <th class="text-center">Acción</th>

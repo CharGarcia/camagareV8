@@ -613,7 +613,7 @@ window.RI_Auditoria = {
             const total = (res.kpis && res.kpis.total_discrepancias) || 0;
             info.textContent = total > 0
                 ? `${total} discrepancia${total === 1 ? '' : 's'} encontrada${total === 1 ? '' : 's'}`
-                : 'Sin discrepancias — el stock cacheado coincide con el Kardex.';
+                : 'Sin discrepancias — el stock guardado coincide con el Kardex.';
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">${msg}</td></tr>`;
         });
@@ -654,7 +654,7 @@ window.RI_Auditoria = {
         };
 
         const mensaje = `<p class="mb-2">${d.productoNombre} — ${d.bodegaNombre}</p>
-            <p class="mb-0">Cacheado: <b>${cacheado}</b> &rarr; Real (Kardex): <b>${real}</b></p>`;
+            <p class="mb-0">Guardado: <b>${cacheado}</b> &rarr; Real (Kardex): <b>${real}</b></p>`;
 
         if (typeof Swal !== 'undefined') {
             Swal.fire({
