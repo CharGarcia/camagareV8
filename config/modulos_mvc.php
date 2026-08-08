@@ -119,6 +119,14 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Servicio Externo (mantenimiento de equipos en el sitio del cliente).
+    // Actualizar id_submodulo con el id real que retorne 20260808_menu_servicio_externo.sql
+    // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/servicio-externo';).
+    'modulos/servicio-externo' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // Taller Mecánico — órdenes de trabajo que recorren los departamentos del
     // taller (diagnóstico, mecánica, enderezada, pintura, armado…). Incluye el
     // tablero y la pantalla de estación para las tablets de cada departamento.

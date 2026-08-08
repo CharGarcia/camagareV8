@@ -15,11 +15,21 @@ class EmpresaRepository extends BaseModel
                        tipo, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, estado,
                        cancelar_renovacion, obligado_contabilidad, id_empresa_suscripciones, id_cliente_facturado, id_suscripcion,
                        COALESCE(max_usuarios, 3) AS max_usuarios,
-                       COALESCE(usa_liquidacion_diferida_iva, false) AS usa_liquidacion_diferida_iva
+                       COALESCE(usa_liquidacion_diferida_iva, false) AS usa_liquidacion_diferida_iva,
+                       COALESCE(es_demo, false) AS es_demo
                 FROM empresas
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
         return $res[0] ?? null;
+    }
+
+    /** true si la empresa está marcada como demo (ver EmpresaService::saveEmisor). */
+    public function esDemo(int $idEmpresa): bool
+    {
+        $id = (int) $idEmpresa;
+        $sql = "SELECT COALESCE(es_demo, false) FROM empresas WHERE id = {$id} AND eliminado = false";
+        $res = $this->query($sql);
+        return !empty($res[0]) && filter_var(reset($res[0]), FILTER_VALIDATE_BOOLEAN);
     }
 
     public function getEmpresasByRuc(string $ruc): array

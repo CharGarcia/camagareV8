@@ -218,6 +218,19 @@ class EmpresaService
             'agente_retencion', 'tipo_emision'
         ];
         $filtered = array_intersect_key($data, array_flip($fields));
+
+        // Empresa demo (p. ej. la cuenta de prueba para revisores de Apple/Google):
+        // nunca debe poder pasar a Producción, sin importar quién lo intente ni
+        // qué envíe el formulario — refuerzo del lado servidor, no solo deshabilitar
+        // el <select> en la vista.
+        if (array_key_exists('tipo_ambiente', $filtered)
+            && (string) $filtered['tipo_ambiente'] !== '1'
+            && $this->repository->esDemo($idEmpresa)) {
+            throw new \InvalidArgumentException(
+                'Esta empresa está marcada como demo y no puede cambiar a ambiente de Producción.'
+            );
+        }
+
         return $this->repository->updateEmpresa($idEmpresa, $filtered);
     }
 

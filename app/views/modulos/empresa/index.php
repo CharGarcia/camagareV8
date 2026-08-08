@@ -519,10 +519,17 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">Tipo Ambiente</label>
-                            <select name="tipo_ambiente" class="form-select form-select-sm">
+                            <?php $esDemo = filter_var($empresa['es_demo'] ?? false, FILTER_VALIDATE_BOOLEAN); ?>
+                            <select name="tipo_ambiente" class="form-select form-select-sm" <?= $esDemo ? 'disabled' : '' ?> title="<?= $esDemo ? 'Empresa demo: no se puede cambiar a Producción.' : '' ?>">
                                 <option value="1" <?= ($empresa['tipo_ambiente'] == 1) ? 'selected' : '' ?>>Pruebas</option>
                                 <option value="2" <?= ($empresa['tipo_ambiente'] == 2) ? 'selected' : '' ?>>Producción</option>
                             </select>
+                            <?php if ($esDemo): ?>
+                                <input type="hidden" name="tipo_ambiente" value="1">
+                                <div class="form-text text-warning-emphasis">
+                                    <i class="bi bi-shield-lock me-1"></i>Empresa demo: siempre queda en Pruebas.
+                                </div>
+                            <?php endif; ?>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">Agente de Retención</label>

@@ -71,6 +71,18 @@ trait PermisoModuloTrait
      */
     protected function requirePermisoModulo(string $pathMvc, string $letra): void
     {
+        // Empresa demo (cuenta de prueba para revisores de Apple/Google Play):
+        // nunca puede eliminar nada, sin importar qué permiso 'd' tenga asignado
+        // el usuario ni en qué módulo — refuerzo centralizado, un solo punto para
+        // todos los controladores (web y API). Nivel 3 queda exento: el superadmin
+        // real sigue pudiendo administrar/limpiar los datos de la empresa demo.
+        if ($letra === 'd' && (int) ($_SESSION['nivel'] ?? 0) < 3 && $this->empresaActualEsDemo()) {
+            if ($this->esAjaxRequest()) {
+                $this->json(['ok' => false, 'error' => 'Esta es una empresa de demostración: no se permite eliminar registros.'], 403);
+            }
+            $this->redirect(rtrim(BASE_URL, '/') . '/home/index');
+        }
+
         $mapLetra = ['r' => 'ver', 'w' => 'crear', 'u' => 'actualizar', 'd' => 'eliminar'];
         $key = $mapLetra[$letra] ?? 'ver';
         $p = $this->permisosModuloPorRuta($pathMvc);
@@ -81,5 +93,19 @@ trait PermisoModuloTrait
             $this->json(['ok' => false, 'error' => 'No tiene permiso para esta acción.'], 403);
         }
         $this->redirect(rtrim(BASE_URL, '/') . '/home/index');
+    }
+
+    /** Cachea por request: la empresa activa no cambia a media petición. */
+    private function empresaActualEsDemo(): bool
+    {
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        if ($idEmpresa <= 0) {
+            return false;
+        }
+        static $cache = [];
+        if (!array_key_exists($idEmpresa, $cache)) {
+            $cache[$idEmpresa] = (new \App\repositories\modulos\EmpresaRepository())->esDemo($idEmpresa);
+        }
+        return $cache[$idEmpresa];
     }
 }
