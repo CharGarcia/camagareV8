@@ -51,6 +51,14 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Reasignar establecimiento: cambia la sucursal propia (id_establecimiento) de documentos
+    // ya registrados (compras / retenciones de venta) en lote. id_submodulo = 0 → el usuario
+    // registra el submódulo en submodulos_menu por su cuenta y asigna el id real aquí.
+    'modulos/reasignar-establecimiento' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // ─── VENTAS (id_modulo = 308) ────────────────────────────────────────────
     'modulos/clientes' => [
         'id_submodulo' => 150, // submodulos_menu.id donde ruta='modulos/clientes'

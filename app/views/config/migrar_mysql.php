@@ -335,11 +335,32 @@ $base = BASE_URL;
             if (ex.ok) existentes = ex.data || {};
         } catch (e) { /* sin verificación: se continúa igual */ }
 
+        // Guardarraíl: el RUC de esta empresa ¿ya se migró bajo OTRO establecimiento? El origen se
+        // trae por RUC (no por establecimiento), así que repetirlo duplicaría todo el histórico.
+        let hermana = null;
+        try {
+            const b = new URLSearchParams();
+            b.append('id_empresa', idEmpresa);
+            const rh = await fetch(base + '/config/migrarMysql?action=verificar-ruc-migrado', { method: 'POST', body: b }).then(r => r.json());
+            if (rh.ok) hermana = rh.hermana || null;
+        } catch (e) { /* sin verificación: se continúa igual */ }
+
         let avisoHtml = '';
+        if (hermana) {
+            avisoHtml +=
+                `<div class="alert alert-danger text-start small mt-2 mb-0">
+                    <b><i class="bi bi-exclamation-octagon me-1"></i>¡Atención, RUC ya migrado!</b>
+                    Este RUC ya tiene datos migrados bajo el establecimiento <b>${hermana.establecimiento}</b> (${hermana.nombre}).
+                    La base anterior se consulta por RUC completo, sin distinguir establecimiento: migrar aquí también
+                    <b>traerá y duplicará TODO el histórico</b> que ya se migró en ese otro establecimiento.
+                    Si de verdad quiere continuar, hágalo con conocimiento de causa.
+                 </div>`;
+        }
+
         const entExist = Object.keys(existentes);
         if (entExist.length) {
             const filas = entExist.map(k => `<tr><td class="text-start">${existentes[k].label}</td><td class="text-end fw-bold text-warning">${fmt(existentes[k].nativos)}</td></tr>`).join('');
-            avisoHtml =
+            avisoHtml +=
                 `<div class="alert alert-warning text-start small mt-2 mb-0">
                     <b><i class="bi bi-exclamation-triangle me-1"></i>Atención:</b> estos módulos YA tienen registros que <b>no</b> provienen de la migración:
                     <table class="table table-sm mb-1 mt-1"><tbody>${filas}</tbody></table>
@@ -347,17 +368,18 @@ $base = BASE_URL;
                  </div>`;
         }
 
+        const hayAviso = !!hermana || entExist.length > 0;
         const ambTxt = ambiente === '2' ? 'PRODUCCIÓN' : (ambiente === '1' ? 'PRUEBAS' : 'desconocido');
         const ambCls = ambiente === '2' ? 'text-danger' : 'text-success';
         const conf = await Swal.fire({
-            title: '¿Migrar los datos seleccionados?',
+            title: hermana ? '¿Migrar de todas formas? (RUC ya migrado)' : '¿Migrar los datos seleccionados?',
             html: `Se traerán <b>${entidades.length}</b> tipo(s) de dato desde la base anterior.<br>
                    Ambiente de la empresa (destino): <b class="${ambCls}">${ambTxt}</b>${ambiente ? ' (' + ambiente + ')' : ''}<br>
                    <span class="text-muted small">Es idempotente: no duplica lo ya migrado. Los documentos se marcan con este ambiente.</span>
                    ${avisoHtml}`,
-            icon: entExist.length ? 'warning' : 'question', showCancelButton: true,
-            confirmButtonText: entExist.length ? 'Entiendo, migrar de todas formas' : 'Sí, migrar',
-            cancelButtonText: 'Cancelar', confirmButtonColor: entExist.length ? '#fd7e14' : '#198754'
+            icon: hermana ? 'error' : (entExist.length ? 'warning' : 'question'), showCancelButton: true,
+            confirmButtonText: hayAviso ? 'Entiendo, migrar de todas formas' : 'Sí, migrar',
+            cancelButtonText: 'Cancelar', confirmButtonColor: hermana ? '#dc3545' : (entExist.length ? '#fd7e14' : '#198754')
         });
         if (!conf.isConfirmed) return;
 

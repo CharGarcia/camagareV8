@@ -543,7 +543,11 @@ class DocumentoAutomatedRegisterService
                 'autorizacion_desde' => $secuencial,
                 'autorizacion_hasta' => $secuencial,
                 'fecha_caducidad' => $fechaEmision,
-                'tipo_ambiente' => $ambiente
+                'tipo_ambiente' => $ambiente,
+                // El XML no trae "nuestro" establecimiento (estab/ptoEmi son del PROVEEDOR
+                // que emitió el documento); se atribuye al establecimiento activo desde donde
+                // se está cargando el documento (mismo criterio que insertarRetencionVenta()).
+                'id_establecimiento' => $this->empresaRepo->getPrimerEstablecimientoId($idEmpresa),
             ]);
 
             // 1.5 Información Adicional
@@ -1370,6 +1374,10 @@ class DocumentoAutomatedRegisterService
             'origen'         => 'electronico',
             'detalle_xml'    => $xmlString,
             'tipo_ambiente'  => $ambiente,
+            // El XML no trae "nuestro" establecimiento (estab/ptoEmi son del CLIENTE que
+            // emitió la retención); se atribuye al establecimiento activo desde donde se
+            // está cargando el documento (mismo criterio que generarRetencionAutomatica()).
+            'id_establecimiento' => $this->empresaRepo->getPrimerEstablecimientoId($idEmpresa),
         ];
 
         // Insertar siempre como nuevo registro.

@@ -308,6 +308,39 @@ class MigracionMysqlService
         return $out;
     }
 
+    /**
+     * Guardarraíl: ¿el RUC de $idEmpresa ya tiene datos migrados bajo OTRA fila de `empresas`
+     * (mismo RUC, distinto establecimiento)? El origen se filtra por los primeros 10 dígitos del
+     * RUC (ver $base en analizar()), sin distinguir establecimiento — así que dos filas de
+     * `empresas` con el mismo RUC traen exactamente el mismo histórico del sistema viejo. El
+     * anti-reproceso (migracion_mysql_map, docExistente) está scoped por id_empresa, no por RUC,
+     * así que migrar el mismo RUC dos veces bajo filas distintas duplica todo el histórico sin
+     * que nada lo detecte. Se usa como aviso previo (UI), no bloquea el endpoint de migrar.
+     *
+     * @return array{id:int,establecimiento:string,nombre:string}|null Datos de la empresa hermana
+     *         con migración ya existente, o null si no hay ninguna.
+     */
+    public function empresaHermanaConMigracion(int $idEmpresa, string $ruc): ?array
+    {
+        $pg   = Database::getConnection();
+        $base = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        if ($base === '') { return null; }
+
+        $st = $pg->prepare(
+            "SELECT e.id, e.establecimiento, COALESCE(NULLIF(e.nombre_comercial,''), e.nombre) AS nombre
+               FROM empresas e
+              WHERE e.id <> :actual
+                AND e.eliminado = false
+                AND LEFT(regexp_replace(e.ruc, '[^0-9]', '', 'g'), 10) = :base
+                AND EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = e.id)
+              ORDER BY e.establecimiento ASC
+              LIMIT 1"
+        );
+        $st->execute([':actual' => $idEmpresa, ':base' => $base]);
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+        return $r ?: null;
+    }
+
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
     private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'cuentas_bancarias', 'formas_pago'];
 
@@ -3415,9 +3448,15 @@ class MigracionMysqlService
             $mapComprobante[(int) $cc2['id_comprobante']] = trim((string) $cc2['codigo_comprobante']);
         }
 
+        // Establecimiento propio por defecto = MATRIZ (menor código). Las compras las emite el
+        // proveedor (su serie va en *_prov); nuestra atribución de sucursal se inicia en la matriz y
+        // se corrige luego con el módulo "Reasignar establecimiento". Los demás documentos migrados
+        // ya fijan id_establecimiento; compras faltaba (quedaba NULL).
+        $idEstMatriz = (int) $pg->query("SELECT id FROM empresa_establecimiento WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY codigo ASC LIMIT 1")->fetchColumn() ?: null;
+
         $insCab = $pg->prepare(
-            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_comprobante, documento_modificado, id_sustento_tributario, autorizacion_desde, autorizacion_hasta, fecha_caducidad, deducible, tipo_ambiente, id_usuario, created_by)
-             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, :treg, :tcomp, :docmod, :sust, :ad, :ah, :fcad, :ded, :amb, :u, :cb) RETURNING id"
+            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_comprobante, documento_modificado, id_sustento_tributario, autorizacion_desde, autorizacion_hasta, fecha_caducidad, deducible, tipo_ambiente, id_usuario, created_by, id_establecimiento)
+             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, :treg, :tcomp, :docmod, :sust, :ad, :ah, :fcad, :ded, :amb, :u, :cb, :idest) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO compras_detalle (id_compra, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -3433,7 +3472,7 @@ class MigracionMysqlService
         $delDetImp = $pg->prepare("DELETE FROM compras_detalle_impuestos WHERE id_compra_detalle IN (SELECT id FROM compras_detalle WHERE id_compra = ?)");
         $delDet    = $pg->prepare("DELETE FROM compras_detalle WHERE id_compra = ?");
         // Al re-correr: actualiza el ambiente y los datos tributarios de una compra ya migrada, según la empresa actual
-        $updCab = $pg->prepare("UPDATE compras_cabecera SET numero_autorizacion = :aut, tipo_ambiente = :amb, tipo_comprobante = :tcomp, documento_modificado = :docmod, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
+        $updCab = $pg->prepare("UPDATE compras_cabecera SET numero_autorizacion = :aut, tipo_ambiente = :amb, tipo_comprobante = :tcomp, documento_modificado = :docmod, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, id_establecimiento = COALESCE(id_establecimiento, :idest), updated_at = now(), updated_by = :u WHERE id = :id");
         // Formas de pago SRI de la compra: viejo formas_pago_compras → nuevo compras_pagos (enlaza por codigo_documento)
         $fpStmt  = $mysql->prepare("SELECT forma_pago, total_pago, plazo_pago, tiempo_pago FROM formas_pago_compras WHERE codigo_documento = :cd");
         $insPago = $pg->prepare("INSERT INTO compras_pagos (id_compra, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
@@ -3482,7 +3521,7 @@ class MigracionMysqlService
                 $autRec = ($autEsElectronica && isset($authUsadas[$aut]) && $authUsadas[$aut] !== $idExist) ? null : $aut;
                 try {
                     $pg->beginTransaction();
-                    $updCab->execute([':aut' => $autRec, ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
+                    $updCab->execute([':aut' => $autRec, ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':idest' => $idEstMatriz, ':u' => $idUsuario, ':id' => $idExist]);
                     if ($autEsElectronica && $autRec !== null) { $authUsadas[$aut] = $idExist; }
                     // Rehacer detalle + impuestos desde el cuerpo viejo: corrige el IVA de corridas
                     // viejas que usaban `impuesto` (siempre '2'=12%) en vez de `det_impuesto`.
@@ -3549,7 +3588,7 @@ class MigracionMysqlService
                     ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
                     ':obs' => null, ':treg' => $treg, ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
                     ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':ded' => $ded,
-                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario,
+                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario, ':idest' => $idEstMatriz,
                 ]);
                 $idCompra = (int) $insCab->fetchColumn();
                 if ($autEsElectronica && $autIns !== null) { $authUsadas[$aut] = $idCompra; }

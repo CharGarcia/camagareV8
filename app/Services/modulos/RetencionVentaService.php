@@ -40,6 +40,13 @@ class RetencionVentaService
         // inserción caía al default fijo '1' y el registro quedaba invisible.
         $data['tipo_ambiente'] = $this->resolverAmbiente($data, $idEmpresa);
 
+        // El documento del cliente no trae "nuestro" establecimiento; si no viene ya
+        // resuelto (ej. desde el registro automático del SRI), se atribuye al
+        // establecimiento activo de la empresa (mismo criterio que el registro por XML).
+        if (empty($data['id_establecimiento'])) {
+            $data['id_establecimiento'] = (new \App\repositories\modulos\EmpresaRepository())->getPrimerEstablecimientoId($idEmpresa);
+        }
+
         // Validar duplicado por número del cliente (dentro del mismo ambiente)
         $this->validarDuplicado($idEmpresa, $data);
 

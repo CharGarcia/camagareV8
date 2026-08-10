@@ -197,6 +197,26 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /**
+     * POST: guardarraíl — ¿el RUC de la empresa seleccionada ya tiene datos migrados bajo OTRA
+     * fila de `empresas` (mismo RUC, distinto establecimiento)? El origen (BD vieja) se trae por
+     * RUC, no por establecimiento, así que migrar el mismo RUC dos veces bajo filas distintas
+     * duplicaría todo el histórico sin que el anti-reproceso (scoped por id_empresa) lo detecte.
+     * Solo avisa; no bloquea el endpoint de migrar.
+     */
+    public function verificarRucMigradoAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa, $ruc] = $this->resolverEmpresa();
+            $hermana = $this->service->empresaHermanaConMigracion($idEmpresa, $ruc);
+            echo json_encode(['ok' => true, 'hermana' => $hermana], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** POST: cuántos registros ELIMINARÍA por entidad (para la confirmación previa). No borra nada. */
     public function eliminarPreviewAjax(): void
     {

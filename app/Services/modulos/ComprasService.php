@@ -45,6 +45,13 @@ class ComprasService
             $idEmpresa = (int) $data['id_empresa'];
             $idUsuario = (int) $data['id_usuario'];
 
+            // El documento del proveedor no trae "nuestro" establecimiento; si no viene ya
+            // resuelto (ej. desde el registro automático del SRI), se atribuye al
+            // establecimiento activo de la empresa (mismo criterio que el registro por XML).
+            if (empty($data['id_establecimiento'])) {
+                $data['id_establecimiento'] = (new \App\repositories\modulos\EmpresaRepository())->getPrimerEstablecimientoId($idEmpresa);
+            }
+
             $data = $this->calcularTotales($data);
             $idCompra = $this->repository->insertCabecera($data);
 

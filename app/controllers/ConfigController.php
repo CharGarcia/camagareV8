@@ -771,6 +771,7 @@ class ConfigController extends Controller
             'eliminar-preview'   => 'eliminarPreviewAjax',
             'eliminar'           => 'eliminarAjax',
             'verificar-existentes' => 'verificarExistentesAjax',
+            'verificar-ruc-migrado' => 'verificarRucMigradoAjax',
             'empresas-por-migrar' => 'empresasPorMigrarAjax',
             'migrar-empresas'    => 'migrarEmpresasAjax',
             default              => 'index',
