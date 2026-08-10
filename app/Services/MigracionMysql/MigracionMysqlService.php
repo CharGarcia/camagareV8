@@ -3866,6 +3866,11 @@ class MigracionMysqlService
             $old = (int) $ec['id_encabezado_retencion'];
             $idRetExist = $mapRet[(string) $old] ?? null;
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
+            if (!$idCliente) {
+                // El id_cliente viejo es 0/roto (agente de retención no enlazado), pero la clave de acceso
+                // (aut_sri, 49 díg.) trae el RUC del EMISOR = el cliente. Se recupera de ahí.
+                $idCliente = $this->resolverClientePorClaveAcceso($ec['aut_sri'], $cliPorIdent, $mapCliente, $idEmpresa, $idUsuario, $mysql, $pg);
+            }
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_retencion']);
@@ -4264,6 +4269,53 @@ class MigracionMysqlService
             if (!$id) { return null; }
         }
         $provPorIdent[$ident] = $id;
+        return $id;
+    }
+
+    /**
+     * RUC del emisor embebido en la clave de acceso SRI (49 díg.): posiciones 11–23 (offset 10, largo 13).
+     * Estructura: 8 fecha + 2 tipoComprobante + 13 RUC + 1 ambiente + 6 serie + 9 secuencial + 8 código + 1 emisión + 1 verificador.
+     */
+    private static function rucDeClaveAcceso($autSri): ?string
+    {
+        $clave = preg_replace('/\D+/', '', (string) $autSri);
+        if (strlen($clave) !== 49) { return null; }
+        $ruc = substr($clave, 10, 13);
+        return preg_match('/^\d{13}$/', $ruc) ? $ruc : null;
+    }
+
+    /**
+     * Fallback para retenciones de VENTA cuyo id_cliente viejo es 0/roto: el emisor del comprobante
+     * (el agente de retención = el cliente) está en la clave de acceso. Se recupera su RUC de ahí y se
+     * resuelve/crea el cliente. Reusa resolverOCrearCliente cuando el RUC existe en `clientes` viejo
+     * (para traer nombre/datos); si no, crea uno mínimo con la identificación de la clave.
+     */
+    private function resolverClientePorClaveAcceso($autSri, array &$cliPorIdent, array $mapCliente, int $idEmpresa, int $idUsuario, PDO $mysql, PDO $pg): ?int
+    {
+        $ruc = self::rucDeClaveAcceso($autSri);
+        if ($ruc === null) { return null; }
+        if (isset($cliPorIdent[$ruc])) { return $cliPorIdent[$ruc]; }
+
+        // ¿Existe un cliente viejo con ese RUC? → resolver normal (trae nombre/datos + dedup + caché).
+        $st = $mysql->prepare("SELECT id FROM clientes WHERE TRIM(ruc) = :r ORDER BY id LIMIT 1");
+        $st->execute([':r' => $ruc]);
+        $oldId = (int) $st->fetchColumn();
+        if ($oldId > 0) {
+            return $this->resolverOCrearCliente($cliPorIdent, $mapCliente, $oldId, $idEmpresa, $idUsuario, $mysql, $pg);
+        }
+
+        // Sin cliente viejo con ese RUC: crear uno mínimo (identificación desde la clave).
+        try {
+            $ins = $pg->prepare("INSERT INTO clientes (id_empresa, id_usuario, nombre, tipo_id, identificacion, status, created_by) VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING id");
+            $ins->execute([$idEmpresa, $idUsuario, $ruc, self::inferirTipoId($ruc), $ruc, $idUsuario]);
+            $id = (int) $ins->fetchColumn();
+        } catch (Throwable $e) {
+            $q = $pg->prepare("SELECT id FROM clientes WHERE id_empresa = ? AND identificacion = ? LIMIT 1");
+            $q->execute([$idEmpresa, $ruc]);
+            $id = (int) $q->fetchColumn();
+            if (!$id) { return null; }
+        }
+        $cliPorIdent[$ruc] = $id;
         return $id;
     }
 

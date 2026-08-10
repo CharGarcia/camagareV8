@@ -112,8 +112,9 @@ class DocumentoAutomatedRegisterService
             $claveAcceso = (string) $it->claveAcceso;
             $rucEmisor   = trim((string) $it->ruc);
 
-            // 0. Verificar si el documento está en la lista de ignorados
-            if ($this->ignoradoRepo->existeClave($claveAcceso, $idEmpresa)) {
+            // 0. Verificar si el documento está en la lista de ignorados (a nivel de RUC:
+            // un establecimiento hermano que ya lo marcó como ignorado también lo excluye aquí)
+            if ($this->ignoradoRepo->existeClaveEnGrupo($claveAcceso, $this->getIdsEmpresaMismoRuc($idEmpresa))) {
                 return [
                     'ok' => false,
                     'error' => "Documento ignorado por el usuario (Lista Negra).",
@@ -1470,13 +1471,32 @@ class DocumentoAutomatedRegisterService
      * @param ?string $tipoAmbiente '1'=pruebas | '2'=producción. Si se pasa, solo cuenta registros del mismo ambiente.
      *                               Garantiza que un documento de pruebas no bloquee el registro del mismo en producción.
      */
+    /** Cache por request de los ids de empresas que comparten RUC (evita repetir el query por cada documento del lote). */
+    private array $idsEmpresaMismoRucCache = [];
+
+    /**
+     * IDs de todas las empresas (activas) que comparten el mismo RUC que $idEmpresa, incluida
+     * ella misma. Un mismo RUC puede tener varias filas en `empresas` (una por establecimiento)
+     * y el SRI no distingue establecimiento al listar comprobantes, así que la deduplicación
+     * debe alcanzar a todo el grupo, no solo a la fila activa.
+     */
+    private function getIdsEmpresaMismoRuc(int $idEmpresa): array
+    {
+        if (!isset($this->idsEmpresaMismoRucCache[$idEmpresa])) {
+            $this->idsEmpresaMismoRucCache[$idEmpresa] = $this->empresaRepo->getIdsEmpresaMismoRuc($idEmpresa);
+        }
+        return $this->idsEmpresaMismoRucCache[$idEmpresa];
+    }
+
     private function existeEnTabla(string $tabla, string $campo, string $valor, int $idEmpresa, bool $incluirEliminados = false, ?string $tipoAmbiente = null): bool
     {
         try {
             $db = Database::getConnection();
             $whereEliminado = $incluirEliminados ? "" : " AND eliminado = false";
             $whereAmbiente  = '';
-            $params         = [$valor, $idEmpresa];
+            $idsGrupo       = $this->getIdsEmpresaMismoRuc($idEmpresa);
+            $placeholders   = implode(',', array_fill(0, count($idsGrupo), '?'));
+            $params         = array_merge([$valor], $idsGrupo);
 
             if ($tipoAmbiente !== null) {
                 // Verificar que la tabla tiene columna tipo_ambiente antes de filtrar
@@ -1487,7 +1507,7 @@ class DocumentoAutomatedRegisterService
                 }
             }
 
-            $sql = "SELECT id FROM $tabla WHERE $campo = ? AND id_empresa = ? $whereEliminado $whereAmbiente LIMIT 1";
+            $sql = "SELECT id FROM $tabla WHERE $campo = ? AND id_empresa IN ($placeholders) $whereEliminado $whereAmbiente LIMIT 1";
             $st  = $db->prepare($sql);
             $st->execute($params);
             return (bool) $st->fetch();

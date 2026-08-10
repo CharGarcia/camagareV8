@@ -63,3 +63,29 @@ export async function cargarCompraPorAutorizacion(numeroAutorizacion: string) {
   const resp = await api.post('/compras/cargar-por-autorizacion', { numero_autorizacion: numeroAutorizacion });
   return resp.data.data as CargaAutorizacionResultado;
 }
+
+export type FormaPago = { id: number; nombre: string; comportamiento?: string | null };
+export type ConceptoEgreso = { id: number; nombre: string; comportamiento?: string | null };
+export type PuntoEmision = { id_punto: number; punto: string; id_estab: number; estab: string };
+
+export async function obtenerDependenciasPago() {
+  const resp = await api.get('/compras/dependencias-pago');
+  return resp.data.data as { formas_pago: FormaPago[]; conceptos: ConceptoEgreso[]; puntos: PuntoEmision[] };
+}
+
+export type RegistrarPagoInput = {
+  id_compra: number;
+  monto_pagar: number;
+  id_punto_emision: number;
+  id_forma_pago: number;
+  id_egreso_concepto?: number;
+  fecha_emision?: string;
+  tipo_operacion_bancaria?: string;
+  numero_operacion?: string;
+  observaciones?: string;
+};
+
+export async function registrarPagoCompra(input: RegistrarPagoInput) {
+  const resp = await api.post('/compras/registrar-pago', input);
+  return resp.data.data as { id_egreso: number; numero_egreso: string; saldo_restante: number };
+}

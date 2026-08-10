@@ -6,6 +6,7 @@ namespace App\Services\modulos;
 
 use App\models\SriConfigDescarga;
 use App\models\SriDescargaAutoLog;
+use App\repositories\modulos\EmpresaRepository;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\SriService;
 use Exception;
@@ -59,7 +60,12 @@ class SriDescargaAutomaticaService
 
     private array $debugLog = [];
 
-    public function __construct() { }
+    private EmpresaRepository $empresaRepo;
+
+    public function __construct()
+    {
+        $this->empresaRepo = new EmpresaRepository();
+    }
 
     // ─────────────────────────────────────────────
     // PUNTO DE ENTRADA PRINCIPAL
@@ -571,27 +577,34 @@ class SriDescargaAutomaticaService
         $tipoAmbiente = (string)($stAmb->fetchColumn() ?: '2'); // default producción
         $this->debugLog[] = "tipo_ambiente activo empresa #{$idEmpresa}: {$tipoAmbiente}";
 
+        // Empresas que comparten el mismo RUC (mismo contribuyente, distinto establecimiento):
+        // el SRI no distingue establecimiento comprador en "Comprobantes Recibidos" ni
+        // establecimiento propio en "Comprobantes Emitidos" al listar por RUC, así que hay
+        // que deduplicar contra TODAS las filas del grupo, no solo contra la fila activa.
+        $idsGrupo     = $this->empresaRepo->getIdsEmpresaMismoRuc($idEmpresa);
+        $placeholders = implode(',', array_fill(0, count($idsGrupo), '?'));
+
         // Tablas operativas con clave y su columna tipo_ambiente
         // Los documentos_ignorados_sri se excluyen siempre sin filtro de ambiente
         $consultas = [
-            "SELECT clave_acceso        AS clave FROM ventas_cabecera            WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
-            "SELECT numero_autorizacion AS clave FROM compras_cabecera            WHERE id_empresa = :id AND eliminado = false AND numero_autorizacion IS NOT NULL    AND tipo_ambiente = :amb",
-            "SELECT clave_acceso        AS clave FROM liquidaciones_cabecera      WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
-            "SELECT clave_acceso        AS clave FROM retencion_compra_cabecera   WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
-            "SELECT clave_acceso        AS clave FROM notas_credito_cabecera      WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
-            "SELECT clave_acceso        AS clave FROM retencion_venta_cabecera    WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
-            "SELECT clave_acceso        AS clave FROM nota_debito_cabecera        WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
+            "SELECT clave_acceso        AS clave FROM ventas_cabecera            WHERE id_empresa IN ($placeholders) AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = ?",
+            "SELECT numero_autorizacion AS clave FROM compras_cabecera            WHERE id_empresa IN ($placeholders) AND eliminado = false AND numero_autorizacion IS NOT NULL    AND tipo_ambiente = ?",
+            "SELECT clave_acceso        AS clave FROM liquidaciones_cabecera      WHERE id_empresa IN ($placeholders) AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = ?",
+            "SELECT clave_acceso        AS clave FROM retencion_compra_cabecera   WHERE id_empresa IN ($placeholders) AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = ?",
+            "SELECT clave_acceso        AS clave FROM notas_credito_cabecera      WHERE id_empresa IN ($placeholders) AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = ?",
+            "SELECT clave_acceso        AS clave FROM retencion_venta_cabecera    WHERE id_empresa IN ($placeholders) AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = ?",
+            "SELECT clave_acceso        AS clave FROM nota_debito_cabecera        WHERE id_empresa IN ($placeholders) AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = ?",
         ];
 
-        // Ignorados aplica a todos los ambientes (es una lista negra global de la empresa)
-        $consultaIgnorados = "SELECT clave_acceso AS clave FROM documentos_ignorados_sri WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL";
+        // Ignorados aplica a todos los ambientes (es una lista negra global del grupo RUC)
+        $consultaIgnorados = "SELECT clave_acceso AS clave FROM documentos_ignorados_sri WHERE id_empresa IN ($placeholders) AND eliminado = false AND clave_acceso IS NOT NULL";
 
         $claves = [];
 
         foreach ($consultas as $sql) {
             try {
                 $st = $db->prepare($sql);
-                $st->execute([':id' => $idEmpresa, ':amb' => $tipoAmbiente]);
+                $st->execute([...$idsGrupo, $tipoAmbiente]);
                 foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $c) {
                     if (!empty($c)) $claves[] = $c;
                 }
@@ -602,7 +615,7 @@ class SriDescargaAutomaticaService
 
         try {
             $st = $db->prepare($consultaIgnorados);
-            $st->execute([':id' => $idEmpresa]);
+            $st->execute($idsGrupo);
             foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $c) {
                 if (!empty($c)) $claves[] = $c;
             }
@@ -997,16 +1010,19 @@ class SriDescargaAutomaticaService
         string    $origen = 'agente',
         ?callable $onProgress = null
     ): array {
-        // Serialización por empresa. Dos lotes solapados (dos envíos de la extensión, doble clic o
-        // reintento) intentarían registrar las mismas claves al mismo tiempo y crearían duplicados,
+        // Serialización por RUC (no por empresa/establecimiento). Dos lotes solapados (dos envíos
+        // de la extensión, doble clic, reintento, o dos establecimientos del mismo RUC descargando
+        // a la vez) intentarían registrar las mismas claves al mismo tiempo y crearían duplicados,
         // porque el chequeo de existencia y el INSERT no son atómicos y estas tablas no siempre
         // tienen índice UNIQUE de respaldo. El endpoint del agente no usa sesión PHP, así que nada
-        // más los serializa. Este advisory lock impide que dos registros de la misma empresa corran
-        // a la vez; si ya hay uno en curso, se rechaza en lugar de duplicar.
+        // más los serializa. Se bloquea por RUC (no por id_empresa) porque el SRI no distingue
+        // establecimiento: dos filas de `empresas` con el mismo RUC deben tratarse como un solo
+        // flujo de descarga. Si ya hay uno en curso, se rechaza en lugar de duplicar.
         $db     = \App\core\Database::getConnection();
         $lockNs = 815; // namespace del lock "registro SRI de claves"
-        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, ?)');
-        $stLock->execute([$lockNs, $idEmpresa]);
+        $ruc    = (string) ($this->empresaRepo->getRucPorId($idEmpresa) ?? $idEmpresa);
+        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, hashtext(?))');
+        $stLock->execute([$lockNs, $ruc]);
         if (!$stLock->fetchColumn()) {
             return [
                 'ok'       => false,
@@ -1017,7 +1033,7 @@ class SriDescargaAutomaticaService
         try {
             return $this->registrarClavesLote($claves, $idEmpresa, $idUsuario, $origen, $onProgress);
         } finally {
-            $db->prepare('SELECT pg_advisory_unlock(?, ?)')->execute([$lockNs, $idEmpresa]);
+            $db->prepare('SELECT pg_advisory_unlock(?, hashtext(?))')->execute([$lockNs, $ruc]);
         }
     }
 
@@ -1176,11 +1192,13 @@ class SriDescargaAutomaticaService
         int    $idUsuario = 0,
         string $origen = 'agente'
     ): array {
-        // Mismo advisory lock que registrarClaves(): serializa lotes solapados por empresa.
+        // Mismo advisory lock que registrarClaves(): serializa lotes solapados por RUC
+        // (no por empresa/establecimiento — ver comentario en registrarClaves()).
         $db     = \App\core\Database::getConnection();
         $lockNs = 815;
-        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, ?)');
-        $stLock->execute([$lockNs, $idEmpresa]);
+        $ruc    = (string) ($this->empresaRepo->getRucPorId($idEmpresa) ?? $idEmpresa);
+        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, hashtext(?))');
+        $stLock->execute([$lockNs, $ruc]);
         if (!$stLock->fetchColumn()) {
             return [
                 'ok'       => false,
@@ -1191,7 +1209,7 @@ class SriDescargaAutomaticaService
         try {
             return $this->registrarXmlsLote($items, $idEmpresa, $idUsuario, $origen);
         } finally {
-            $db->prepare('SELECT pg_advisory_unlock(?, ?)')->execute([$lockNs, $idEmpresa]);
+            $db->prepare('SELECT pg_advisory_unlock(?, hashtext(?))')->execute([$lockNs, $ruc]);
         }
     }
 

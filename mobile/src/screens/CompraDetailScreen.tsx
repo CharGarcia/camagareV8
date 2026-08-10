@@ -1,32 +1,36 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { CompraDetalle, obtenerCompra } from '../api/compras';
 import { mensajeError } from '../api/client';
 
 export default function CompraDetailScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'CompraDetail'>>();
   const [compra, setCompra] = useState<CompraDetalle | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let activo = true;
-    (async () => {
-      try {
-        const data = await obtenerCompra(params.id);
-        if (activo) setCompra(data);
-      } catch (err) {
-        if (activo) setError(mensajeError(err, 'No se pudo cargar la compra.'));
-      } finally {
-        if (activo) setCargando(false);
-      }
-    })();
-    return () => {
-      activo = false;
-    };
-  }, [params.id]);
+  useFocusEffect(
+    useCallback(() => {
+      let activo = true;
+      (async () => {
+        try {
+          const data = await obtenerCompra(params.id);
+          if (activo) setCompra(data);
+        } catch (err) {
+          if (activo) setError(mensajeError(err, 'No se pudo cargar la compra.'));
+        } finally {
+          if (activo) setCargando(false);
+        }
+      })();
+      return () => {
+        activo = false;
+      };
+    }, [params.id])
+  );
 
   if (cargando) {
     return <ActivityIndicator size="large" color="#0d6efd" style={{ marginTop: 40 }} />;
@@ -37,6 +41,10 @@ export default function CompraDetailScreen() {
 
   const numero = `${compra.establecimiento_prov}-${compra.punto_emision_prov}-${compra.secuencial_prov}`;
   const fecha = compra.fecha_emision ? new Date(compra.fecha_emision).toLocaleDateString('es-EC') : '';
+  const saldo = Math.max(
+    0,
+    Number(compra.importe_total) - Number(compra.total_pagado) - Number(compra.total_nc) - Number(compra.total_retencion)
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
@@ -59,6 +67,14 @@ export default function CompraDetailScreen() {
         <Fila label="Pagado" valor={compra.total_pagado} />
         {Number(compra.total_nc) > 0 ? <Fila label="Notas de crédito" valor={compra.total_nc} /> : null}
         {Number(compra.total_retencion) > 0 ? <Fila label="Retenido" valor={compra.total_retencion} /> : null}
+
+        {saldo > 0 ? (
+          <TouchableOpacity style={styles.botonPago} onPress={() => navigation.navigate('CompraPago', { id: compra.id })}>
+            <Text style={styles.botonPagoTexto}>Registrar pago (saldo: ${saldo.toFixed(2)})</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.pagadoCompleto}>Compra pagada en su totalidad.</Text>
+        )}
       </View>
 
       <View style={styles.card}>
@@ -117,4 +133,7 @@ const styles = StyleSheet.create({
   },
   detalleNombre: { fontSize: 13, fontWeight: '600' },
   detalleTotal: { fontSize: 13, fontWeight: '700', color: '#333' },
+  botonPago: { backgroundColor: '#0d6efd', borderRadius: 8, paddingVertical: 12, marginTop: 12, alignItems: 'center' },
+  botonPagoTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  pagadoCompleto: { color: '#198754', fontWeight: '600', fontSize: 13, marginTop: 12, textAlign: 'center' },
 });

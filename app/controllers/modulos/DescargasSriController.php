@@ -12,6 +12,7 @@ use App\models\Usuario;
 use App\models\EmpresaAsignada;
 use App\models\SriConfigDescarga;
 use App\repositories\modulos\DocumentoIgnoradoRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\SriConfigDescargaRepository;
 use Exception;
 
@@ -240,13 +241,16 @@ class DescargasSriController extends Controller
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
 
         // Mismo advisory lock (namespace 815) que usa el registro desde el agente:
-        // serializa por empresa. Sin esto, subir el mismo lote dos veces en paralelo
-        // (doble clic o dos pestañas) abre la ventana entre el chequeo de existencia
-        // y el INSERT, y se duplican documentos.
+        // serializa por RUC (no por empresa/establecimiento — el SRI no distingue
+        // establecimiento comprador, así que dos filas de `empresas` con el mismo RUC
+        // deben tratarse como un solo flujo). Sin esto, subir el mismo lote dos veces en
+        // paralelo (doble clic, dos pestañas, o dos establecimientos del mismo RUC) abre
+        // la ventana entre el chequeo de existencia y el INSERT, y se duplican documentos.
         $db     = \App\core\Database::getConnection();
         $lockNs = 815;
-        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, ?)');
-        $stLock->execute([$lockNs, $idEmpresa]);
+        $ruc    = (string) ((new EmpresaRepository())->getRucPorId($idEmpresa) ?? $idEmpresa);
+        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, hashtext(?))');
+        $stLock->execute([$lockNs, $ruc]);
         if (!$stLock->fetchColumn()) {
             echo json_encode([
                 'ok'       => false,
@@ -287,7 +291,7 @@ class DescargasSriController extends Controller
                 }
             }
         } finally {
-            $db->prepare('SELECT pg_advisory_unlock(?, ?)')->execute([$lockNs, $idEmpresa]);
+            $db->prepare('SELECT pg_advisory_unlock(?, hashtext(?))')->execute([$lockNs, $ruc]);
         }
 
         echo json_encode(['ok' => true, 'resultados' => $resultados, 'total' => $total]);
@@ -300,8 +304,9 @@ class DescargasSriController extends Controller
         
         $repo = new DocumentoIgnoradoRepository();
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
-        
-        $lista = $repo->getListado($idEmpresa);
+        $idsGrupo = (new EmpresaRepository())->getIdsEmpresaMismoRuc($idEmpresa);
+
+        $lista = $repo->getListadoGrupo($idsGrupo);
         echo json_encode(['ok' => true, 'data' => $lista]);
         exit;
     }
@@ -324,8 +329,9 @@ class DescargasSriController extends Controller
         $repo = new DocumentoIgnoradoRepository();
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $idsGrupo = (new EmpresaRepository())->getIdsEmpresaMismoRuc($idEmpresa);
 
-        if ($repo->existeClave($clave, $idEmpresa)) {
+        if ($repo->existeClaveEnGrupo($clave, $idsGrupo)) {
             echo json_encode(['ok' => false, 'error' => 'Esta clave ya se encuentra en la lista de ignorados.']);
             return;
         }
@@ -357,8 +363,9 @@ class DescargasSriController extends Controller
         $repo = new DocumentoIgnoradoRepository();
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $idsGrupo = (new EmpresaRepository())->getIdsEmpresaMismoRuc($idEmpresa);
 
-        $res = $repo->eliminar($id, $idEmpresa, $idUsuario);
+        $res = $repo->eliminarEnGrupo($id, $idsGrupo, $idUsuario);
         echo json_encode(['ok' => $res, 'mensaje' => $res ? 'Registro eliminado.' : 'Error al eliminar.']);
         exit;
     }

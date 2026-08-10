@@ -22,6 +22,10 @@ const RUTAS_IMPLEMENTADAS = new Set([
   'modulos/factura-venta',
   'modulos/compras',
   'modulos/dashboard',
+  'modulos/proveedores',
+  'modulos/reporte_ventas',
+  'modulos/reporte_compras',
+  'modulos/servicio-externo',
 ]);
 
 function soloImplementados(modulos: ModuloMenu[]): ModuloMenu[] {
@@ -72,6 +76,14 @@ export default function MenuScreen() {
       navigation.navigate('ComprasList');
     } else if (sub.ruta === 'modulos/dashboard') {
       navigation.navigate('Dashboard');
+    } else if (sub.ruta === 'modulos/proveedores') {
+      navigation.navigate('ProveedoresList');
+    } else if (sub.ruta === 'modulos/reporte_ventas') {
+      navigation.navigate('ReporteVentas');
+    } else if (sub.ruta === 'modulos/reporte_compras') {
+      navigation.navigate('ReporteCompras');
+    } else if (sub.ruta === 'modulos/servicio-externo') {
+      navigation.navigate('ServicioExternoList');
     }
   }
 

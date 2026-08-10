@@ -186,6 +186,50 @@ class ComprasRepository extends BaseRepository
     // OBTENER POR ID
     // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Candado para el flujo "leer saldo → calcular → escribir" de un pago de compra
+     * (CLAUDE.md §8). Llamar SIEMPRE antes de calcularSaldoPendiente() dentro de la
+     * misma transacción del INSERT del egreso — se libera solo al COMMIT/ROLLBACK.
+     */
+    public function lockPago(int $idCompra, int $idEmpresa): void
+    {
+        $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext(?))")
+            ->execute(['pago_compra:' . $idEmpresa . ':' . $idCompra]);
+    }
+
+    /**
+     * Saldo pendiente real de una compra, recalculado en el servidor (misma fórmula
+     * que el listado: importe_total - pagado - notas_de_crédito - retenciones).
+     * Llamar DESPUÉS de lockPago() dentro de la misma transacción — nunca confiar en
+     * un saldo que mande el cliente, es la única forma de evitar que dos pagos
+     * concurrentes contra la misma compra pasen ambos la validación de "no pagar de más".
+     */
+    public function calcularSaldoPendiente(int $idCompra, int $idEmpresa): float
+    {
+        $sql = "SELECT c.importe_total,
+                       (SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed
+                          INNER JOIN egresos_cabecera ec ON ed.id_egreso = ec.id
+                        WHERE ed.tipo_documento = 'COMPRA' AND ed.id_referencia_documento = c.id
+                          AND ed.eliminado = false AND ec.estado != 'anulado' AND ec.eliminado = false) AS total_pagado,
+                       (SELECT COALESCE(SUM(nc.importe_total), 0) FROM compras_cabecera nc
+                        WHERE nc.tipo_comprobante = '04'
+                          AND nc.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
+                          AND nc.id_proveedor = c.id_proveedor AND nc.id_empresa = c.id_empresa AND nc.eliminado = false) AS total_nc,
+                       (SELECT COALESCE(SUM(r.total_retenido), 0) FROM retencion_compra_cabecera r
+                        WHERE r.id_compra = c.id AND r.eliminado = false AND r.estado != 'anulada') AS total_retencion
+                FROM compras_cabecera c
+                WHERE c.id = ? AND c.id_empresa = ? AND c.eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([$idCompra, $idEmpresa]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$row) {
+            return 0.0;
+        }
+
+        $saldo = (float) $row['importe_total'] - (float) $row['total_pagado'] - (float) $row['total_nc'] - (float) $row['total_retencion'];
+        return max(0.0, $saldo);
+    }
+
     public function getPorId(int $id, ?int $idEmpresa = null): ?array
     {
         $where = "WHERE c.id = ? AND c.eliminado = FALSE";

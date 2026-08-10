@@ -21,7 +21,15 @@ import AsistenciaScreen from '../screens/AsistenciaScreen';
 import ComprasListScreen from '../screens/ComprasListScreen';
 import CompraDetailScreen from '../screens/CompraDetailScreen';
 import CompraCargarScreen from '../screens/CompraCargarScreen';
+import CompraPagoScreen from '../screens/CompraPagoScreen';
 import DashboardScreen from '../screens/DashboardScreen';
+import ProveedoresListScreen from '../screens/ProveedoresListScreen';
+import ProveedorFormScreen from '../screens/ProveedorFormScreen';
+import ReporteVentasScreen from '../screens/ReporteVentasScreen';
+import ReporteComprasScreen from '../screens/ReporteComprasScreen';
+import ServicioExternoListScreen from '../screens/ServicioExternoListScreen';
+import ServicioExternoFormScreen from '../screens/ServicioExternoFormScreen';
+import ServicioExternoDetailScreen from '../screens/ServicioExternoDetailScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -42,7 +50,15 @@ export type RootStackParamList = {
   ComprasList: undefined;
   CompraDetail: { id: number };
   CompraCargar: undefined;
+  CompraPago: { id: number };
   Dashboard: undefined;
+  ProveedoresList: undefined;
+  ProveedorForm: { id?: number } | undefined;
+  ReporteVentas: undefined;
+  ReporteCompras: undefined;
+  ServicioExternoList: undefined;
+  ServicioExternoForm: undefined;
+  ServicioExternoDetail: { id: number };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -82,7 +98,15 @@ export default function RootNavigator() {
             <Stack.Screen name="ComprasList" component={ComprasListScreen} options={{ title: 'Compras' }} />
             <Stack.Screen name="CompraDetail" component={CompraDetailScreen} options={{ title: 'Compra' }} />
             <Stack.Screen name="CompraCargar" component={CompraCargarScreen} options={{ title: 'Nueva compra' }} />
+            <Stack.Screen name="CompraPago" component={CompraPagoScreen} options={{ title: 'Registrar pago' }} />
             <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
+            <Stack.Screen name="ProveedoresList" component={ProveedoresListScreen} options={{ title: 'Proveedores' }} />
+            <Stack.Screen name="ProveedorForm" component={ProveedorFormScreen} options={{ title: 'Proveedor' }} />
+            <Stack.Screen name="ReporteVentas" component={ReporteVentasScreen} options={{ title: 'Reporte de ventas' }} />
+            <Stack.Screen name="ReporteCompras" component={ReporteComprasScreen} options={{ title: 'Reporte de compras' }} />
+            <Stack.Screen name="ServicioExternoList" component={ServicioExternoListScreen} options={{ title: 'Servicio externo' }} />
+            <Stack.Screen name="ServicioExternoForm" component={ServicioExternoFormScreen} options={{ title: 'Nueva orden' }} />
+            <Stack.Screen name="ServicioExternoDetail" component={ServicioExternoDetailScreen} options={{ title: 'Orden de servicio' }} />
           </>
         )}
         {/* Fuera del bloqueo de login a propósito: quien marca asistencia (ej. guardias)

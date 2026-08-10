@@ -39,6 +39,25 @@ class EmpresaRepository extends BaseModel
         return $this->query($sql);
     }
 
+    /**
+     * IDs de todas las empresas (activas) que comparten el mismo RUC que $idEmpresa,
+     * incluida ella misma. Un mismo RUC puede tener varias filas en `empresas` (una
+     * por establecimiento); esto permite deduplicar documentos del SRI a nivel de
+     * contribuyente, ya que el SRI no distingue establecimiento comprador.
+     */
+    public function getIdsEmpresaMismoRuc(int $idEmpresa): array
+    {
+        $id  = (int) $idEmpresa;
+        $sql = "SELECT id FROM empresas
+                WHERE eliminado = false
+                  AND ruc = (SELECT ruc FROM empresas WHERE id = {$id} AND eliminado = false)";
+        $ids = array_map(static fn($r) => (int) $r['id'], $this->query($sql));
+        if (!in_array($id, $ids, true)) {
+            $ids[] = $id;
+        }
+        return $ids;
+    }
+
     /** RUC de una empresa por id (para resolver la empresa facturada). */
     public function getRucPorId(int $id): ?string
     {
