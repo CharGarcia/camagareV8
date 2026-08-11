@@ -7,6 +7,7 @@
     'use strict';
 
     const urlBaseProd = (typeof BASE_URL !== 'undefined' ? BASE_URL : (typeof B_URL !== 'undefined' ? B_URL : '')) + '/modulos/productos';
+    const decP = (typeof window.PROD_DEC_PRECIO !== 'undefined') ? window.PROD_DEC_PRECIO : 2;
     let modalInst = null;
     let catalogosCargados = false;
     let datosCatalogos = null;
@@ -174,9 +175,9 @@
         const ivaDisp = document.getElementById('display_iva');
         const pvpInp = document.getElementById('prod_pvp_total');
 
-        if (ivaDisp) ivaDisp.value = ivaCalculado.toFixed(2);
+        if (ivaDisp) ivaDisp.value = ivaCalculado.toFixed(decP);
         if (pvpInp && !skipPVPUpdate) {
-            pvpInp.value = total.toFixed(2);
+            pvpInp.value = total.toFixed(decP);
         }
     };
 
@@ -205,7 +206,7 @@
 
         const baseInp = document.getElementById('prod_precio_base');
         if (baseInp) {
-            baseInp.value = (base > 0 ? base : 0).toFixed(4);
+            baseInp.value = (base > 0 ? base : 0).toFixed(Math.max(decP, 4));
         }
         
         window.calcularPreciosTotales(true);
@@ -561,7 +562,7 @@
 
         document.getElementById('prod_tipo_medida').value = data.id_tipo_medida || '';
         await window.actualizarUnidadesMedida(data.id_medida);
-        document.getElementById('prod_precio_base').value = parseFloat(data.precio_base || 0).toFixed(4);
+        document.getElementById('prod_precio_base').value = parseFloat(data.precio_base || 0).toFixed(Math.max(decP, 4));
         document.getElementById('prod_tarifa_iva').value = data.tarifa_iva || 2;
         document.getElementById('prod_id_ice').value = data.id_ice || '';
         document.getElementById('prod_valor_ice').value = parseFloat(data.valor_ice || 0).toFixed(4);

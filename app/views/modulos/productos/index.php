@@ -10,7 +10,9 @@
 /** @var string $buscar */
 /** @var string $ordenCol */
 /** @var string $ordenDir */
+/** @var int $decPrecio */
 
+$decPrecio = $decPrecio ?? 2;
 $base = BASE_URL;
 $urlBaseProd = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
@@ -203,11 +205,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="nombre_categoria"><?= htmlspecialchars((string)($r['nombre_categoria'] ?? '-')) ?></td>
                                 <td data-col="nombre_marca"><?= htmlspecialchars((string)($r['nombre_marca'] ?? '-')) ?></td>
                                 <td data-col="nombre_medida"><?= htmlspecialchars((string)($r['nombre_medida'] ?? '-')) ?></td>
-                                <td class="text-end fw-medium" data-col="precio_base">$<?= number_format((float)($r['precio_base'] ?? 0), 2) ?></td>
+                                <td class="text-end fw-medium" data-col="precio_base">$<?= number_format((float)($r['precio_base'] ?? 0), $decPrecio) ?></td>
                                 <td class="text-center" data-col="nombre_tarifa_iva"><span class="small"><?= htmlspecialchars((string)($r['nombre_tarifa_iva'] ?? '-')) ?></span></td>
-                                <td class="text-end text-muted" data-col="valor_iva">$<?= number_format((float)($r['valor_iva'] ?? 0), 2) ?></td>
-                                <td class="text-end text-muted" data-col="valor_ice">$<?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
-                                <td class="text-end fw-bold text-primary" data-col="pvp">$<?= number_format((float)($r['pvp'] ?? 0), 2) ?></td>
+                                <td class="text-end text-muted" data-col="valor_iva">$<?= number_format((float)($r['valor_iva'] ?? 0), $decPrecio) ?></td>
+                                <td class="text-end text-muted" data-col="valor_ice">$<?= number_format((float)($r['valor_ice'] ?? 0), $decPrecio) ?></td>
+                                <td class="text-end fw-bold text-primary" data-col="pvp">$<?= number_format((float)($r['pvp'] ?? 0), $decPrecio) ?></td>
                                 <td class="text-center" data-col="inventariable"><?= ($r['inventariable'] ?? false) ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle text-muted"></i>' ?></td>
                                 <td class="text-end" data-col="stock_minimo"><?= number_format((float)($r['stock_minimo'] ?? 0), 2) ?></td>
                                 <td class="text-end" data-col="stock_maximo"><?= number_format((float)($r['stock_maximo'] ?? 0), 2) ?></td>
@@ -239,6 +241,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <script>
     window.BASE_URL = '<?= $base ?>';
+    window.PROD_DEC_PRECIO = <?= $decPrecio ?>;
 </script>
 <?php include 'modal.php'; ?>
 

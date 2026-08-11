@@ -66,6 +66,10 @@ class ProductosController extends BaseModuloController
 
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
+        $empresaModel = new \App\models\Empresa();
+        $empresaData = $empresaModel->getPorId($idEmpresa);
+        $decPrecio = max(0, min(6, (int) ($empresaData['decimales_precio'] ?? 2)));
+
         $this->viewWithLayout('layouts.main', 'modulos.productos.index', [
             'titulo'     => 'Productos',
             'perm'       => $perm,
@@ -79,6 +83,7 @@ class ProductosController extends BaseModuloController
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
             'vistaConfig'=> $prefsVista,
+            'decPrecio'  => $decPrecio,
             'fullWidth'  => true
         ]);
     }
@@ -108,6 +113,10 @@ class ProductosController extends BaseModuloController
         $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
+        $empresaModel = new \App\models\Empresa();
+        $empresaData = $empresaModel->getPorId($idEmpresa);
+        $decPrecio = max(0, min(6, (int) ($empresaData['decimales_precio'] ?? 2)));
+
         ob_start();
         if (empty($rows)) {
             echo '<tr><td colspan="18" class="text-center py-5 text-muted"><i class="bi bi-box fs-3 d-block mb-2"></i>No se encontraron productos.</td></tr>';
@@ -131,11 +140,11 @@ class ProductosController extends BaseModuloController
                         <td data-col="nombre_categoria">' . htmlspecialchars((string)($r['nombre_categoria'] ?? '—')) . '</td>
                         <td data-col="nombre_marca">' . htmlspecialchars((string)($r['nombre_marca'] ?? '—')) . '</td>
                         <td data-col="nombre_medida">' . htmlspecialchars((string)($r['nombre_medida'] ?? '—')) . '</td>
-                        <td class="text-end fw-medium" data-col="precio_base">$' . number_format((float)($r['precio_base'] ?? 0), 2) . '</td>
+                        <td class="text-end fw-medium" data-col="precio_base">$' . number_format((float)($r['precio_base'] ?? 0), $decPrecio) . '</td>
                         <td class="text-center" data-col="nombre_tarifa_iva"><span class="small">' . htmlspecialchars((string)($r['nombre_tarifa_iva'] ?? '—')) . '</span></td>
-                        <td class="text-end text-muted" data-col="valor_iva">$' . number_format((float)($r['valor_iva'] ?? 0), 2) . '</td>
-                        <td class="text-end text-muted" data-col="valor_ice">$' . number_format((float)($r['valor_ice'] ?? 0), 2) . '</td>
-                        <td class="text-end fw-bold text-primary" data-col="pvp">$' . number_format((float)($r['pvp'] ?? 0), 2) . '</td>
+                        <td class="text-end text-muted" data-col="valor_iva">$' . number_format((float)($r['valor_iva'] ?? 0), $decPrecio) . '</td>
+                        <td class="text-end text-muted" data-col="valor_ice">$' . number_format((float)($r['valor_ice'] ?? 0), $decPrecio) . '</td>
+                        <td class="text-end fw-bold text-primary" data-col="pvp">$' . number_format((float)($r['pvp'] ?? 0), $decPrecio) . '</td>
                         <td class="text-center" data-col="inventariable">' . (($r['inventariable'] ?? false) ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle text-muted"></i>') . '</td>
                         <td class="text-end" data-col="stock_minimo">' . number_format((float)($r['stock_minimo'] ?? 0), 2) . '</td>
                         <td class="text-end" data-col="stock_maximo">' . number_format((float)($r['stock_maximo'] ?? 0), 2) . '</td>
@@ -477,6 +486,7 @@ class ProductosController extends BaseModuloController
             $empresaModel = new \App\models\Empresa();
             $empresa = $empresaModel->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE';
+            $decPrecio = max(0, min(6, (int) ($empresa['decimales_precio'] ?? 2)));
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) {
@@ -549,7 +559,7 @@ class ProductosController extends BaseModuloController
                                 <td><?= htmlspecialchars((string)($r['nombre'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['nombre_categoria'] ?? '-')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['nombre_marca'] ?? '-')) ?></td>
-                                <td>$<?= number_format((float)($r['precio_base'] ?? 0), 2) ?></td>
+                                <td>$<?= number_format((float)($r['precio_base'] ?? 0), $decPrecio) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -587,6 +597,7 @@ class ProductosController extends BaseModuloController
             $empresaModel = new \App\models\Empresa();
             $empresa = $empresaModel->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
+            $decPrecio = max(0, min(6, (int) ($empresa['decimales_precio'] ?? 2)));
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) {
@@ -614,12 +625,12 @@ class ProductosController extends BaseModuloController
                     (string)($r['nombre_categoria'] ?? ''),
                     (string)($r['nombre_marca'] ?? ''),
                     (string)($r['nombre_tarifa_iva'] ?? ''),
-                    number_format($precioBase, 2),
-                    number_format((float)($r['valor_iva'] ?? 0), 2),
-                    number_format((float)($r['valor_ice'] ?? 0), 2),
-                    number_format((float)($r['pvp'] ?? 0), 2),
+                    number_format($precioBase, $decPrecio),
+                    number_format((float)($r['valor_iva'] ?? 0), $decPrecio),
+                    number_format((float)($r['valor_ice'] ?? 0), $decPrecio),
+                    number_format((float)($r['pvp'] ?? 0), $decPrecio),
                     number_format($costo, 2),
-                    number_format($margen, 2),
+                    number_format($margen, $decPrecio),
                     number_format($utilidadPorc, 2) . '%',
                     $saldo,
                     $unidad,
