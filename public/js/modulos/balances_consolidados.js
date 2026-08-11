@@ -56,7 +56,11 @@
             if (e.target === bcDropdownEl._inputActivo || bcDropdownEl.contains(e.target)) return;
             cerrarDropdownFlotante();
         });
-        document.addEventListener('scroll', cerrarDropdownFlotante, true);
+        document.addEventListener('scroll', (e) => {
+            // No cerrar si el scroll es dentro de la propia lista (el usuario recorriéndola).
+            if (e.target === bcDropdownEl || bcDropdownEl.contains(e.target)) return;
+            cerrarDropdownFlotante();
+        }, true);
         window.addEventListener('resize', cerrarDropdownFlotante);
         return bcDropdownEl;
     }
