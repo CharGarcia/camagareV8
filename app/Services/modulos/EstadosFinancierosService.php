@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\EstadosFinancierosRepository;
 use App\Services\ReportService;
 use Exception;
@@ -13,11 +14,93 @@ class EstadosFinancierosService
 {
     private EstadosFinancierosRepository $repository;
     private ReportService $reportService;
+    private EmpresaRepository $empresaRepo;
+    private ConsolidacionGruposService $consolidacionSvc;
 
-    public function __construct(EstadosFinancierosRepository $repository, ReportService $reportService)
-    {
+    public function __construct(
+        EstadosFinancierosRepository $repository,
+        ReportService $reportService,
+        ?EmpresaRepository $empresaRepo = null,
+        ?ConsolidacionGruposService $consolidacionSvc = null
+    ) {
         $this->repository = $repository;
         $this->reportService = $reportService;
+        $this->empresaRepo = $empresaRepo ?? new EmpresaRepository();
+        $this->consolidacionSvc = $consolidacionSvc ?? new ConsolidacionGruposService(
+            new \App\repositories\modulos\ConsolidacionGruposRepository(),
+            new \App\Rules\modulos\ConsolidacionGruposRules(),
+            new \App\Services\LogSistemaService(),
+            $this->empresaRepo
+        );
+    }
+
+    /** Signo del saldo según el tipo contable del grupo consolidado (mismo criterio que el rollup por prefijo de código). */
+    private function signoSaldoConsolidado(string $tipo, float $debe, float $haber): float
+    {
+        return match ($tipo) {
+            'ACTIVO', 'COSTO', 'GASTO' => $debe - $haber,
+            'PASIVO', 'PATRIMONIO', 'INGRESO' => $haber - $debe,
+            default => 0.0,
+        };
+    }
+
+    /**
+     * Vista "Consolidado por RUC": arma un resumen adicional con los conceptos ya mapeados en
+     * Balances Consolidados (sumados entre establecimientos del RUC accesible al usuario) y,
+     * por separado, el reporte COMPLETO de cada establecimiento (Situación Financiera + Resultados,
+     * sin modificar ninguna de las dos funciones existentes ni su jerarquía). Nunca reconstruye un
+     * árbol único entre planes de cuentas distintos — solo suma lo que el usuario mapeó a mano.
+     * Si el RUC solo tiene un establecimiento accesible, 'aplica' viene en false.
+     */
+    public function getConsolidadoRuc(int $idEmpresa, int $idUsuario, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivelReporte = 5): array
+    {
+        $idsGrupo = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
+        if (count($idsGrupo) <= 1) {
+            return ['aplica' => false, 'consolidado' => [], 'por_establecimiento' => []];
+        }
+
+        $mapa = $this->consolidacionSvc->getMapaCuentaGrupo($idEmpresa);
+        $etiquetas = $this->empresaRepo->getEtiquetasEstablecimiento($idsGrupo);
+
+        $gruposAcum = [];
+        $porEstablecimiento = [];
+
+        foreach ($idsGrupo as $idEmp) {
+            $saldos = $this->repository->getSaldos($idEmp, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+            foreach ($saldos as $s) {
+                $idCuenta = (int) $s['id_cuenta'];
+                if (!isset($mapa[$idCuenta])) {
+                    continue;
+                }
+                $g = $mapa[$idCuenta];
+                if (!isset($gruposAcum[$g['id_grupo']])) {
+                    $gruposAcum[$g['id_grupo']] = [
+                        'nombre' => $g['nombre'], 'tipo' => $g['tipo'], 'orden' => $g['orden'],
+                        'saldo' => 0.0, 'detalle' => [],
+                    ];
+                }
+                $valor = $this->signoSaldoConsolidado($g['tipo'], (float) $s['total_debe'], (float) $s['total_haber']);
+                $gruposAcum[$g['id_grupo']]['saldo'] += $valor;
+                $gruposAcum[$g['id_grupo']]['detalle'][] = [
+                    'establecimiento' => $etiquetas[$idEmp] ?? ('Empresa ' . $idEmp),
+                    'codigo' => $s['codigo'], 'nombre' => $s['nombre'], 'valor' => $valor,
+                ];
+            }
+
+            // Reporte completo de este establecimiento, tal cual existe hoy — no se toca ni se
+            // excluyen las cuentas ya mapeadas, para no arriesgar el cuadre de cada reporte individual.
+            $porEstablecimiento[] = [
+                'id_empresa' => $idEmp,
+                'etiqueta'   => $etiquetas[$idEmp] ?? ('Empresa ' . $idEmp),
+                'situacion'  => $this->getEstadoSituacionFinanciera($idEmp, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivelReporte),
+                'resultados' => $this->getEstadoResultados($idEmp, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivelReporte),
+            ];
+        }
+
+        $consolidado = array_values($gruposAcum);
+        usort($consolidado, fn ($a, $b) => $a['orden'] <=> $b['orden']);
+
+        return ['aplica' => true, 'consolidado' => $consolidado, 'por_establecimiento' => $porEstablecimiento];
     }
 
     public function getAniosDisponibles(int $idEmpresa): array

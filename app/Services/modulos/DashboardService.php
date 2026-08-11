@@ -4,15 +4,18 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\core\Database;
+use App\repositories\modulos\EmpresaRepository;
 use PDO;
 
 class DashboardService
 {
     private PDO $db;
+    private EmpresaRepository $empresaRepo;
 
     public function __construct()
     {
         $this->db = Database::getConnection();
+        $this->empresaRepo = new EmpresaRepository();
     }
 
     /**
@@ -28,7 +31,8 @@ class DashboardService
         int     $mes          = 0,
         int     $cantMeses    = 6,
         ?string $rangoDesde   = null,
-        ?string $rangoHasta   = null
+        ?string $rangoHasta   = null,
+        int     $idUsuario    = 0
     ): array {
         $cantMeses = in_array($cantMeses, [3, 6, 12, 24]) ? $cantMeses : 6;
 
@@ -69,8 +73,10 @@ class DashboardService
             'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
             // Saldos de caja: bancos/efectivo (saldo real actual) y anticipos globales.
-            // Estado puntual, NO filtrado por período.
-            'saldos_caja'           => $this->getSaldosCaja($idEmpresa),
+            // Estado puntual, NO filtrado por período. Las cuentas BANCO/CHEQUE que comparten
+            // banco+número con otro establecimiento del mismo RUC (accesible al usuario) se
+            // consolidan en una sola fila (ver consolidarFormasPorRuc()).
+            'saldos_caja'           => $this->getSaldosCaja($idEmpresa, $idUsuario),
             // Tablas recientes
             'facturas_recientes'    => $this->getVentasRecientes($idEmpresa, 6, $tipoAmbiente),
             'compras_recientes'     => $this->getComprasRecientes($idEmpresa, 6, $tipoAmbiente),
@@ -374,10 +380,14 @@ class DashboardService
      * Si alguna tabla de saldos iniciales aún no existe en el entorno
      * (migración no aplicada), degrada con elegancia y no tumba el dashboard.
      */
-    private function getSaldosCaja(int $e): array
+    private function getSaldosCaja(int $e, int $idUsuario = 0): array
     {
         try {
-            return $this->calcularSaldosCaja($e);
+            $resultado = $this->calcularSaldosCaja($e);
+            if ($idUsuario > 0) {
+                $resultado['formas'] = $this->consolidarFormasPorRuc($e, $idUsuario, $resultado['formas']);
+            }
+            return $resultado;
         } catch (\Throwable $ex) {
             return [
                 'formas'                => [],
@@ -388,6 +398,57 @@ class DashboardService
         }
     }
 
+    /**
+     * Une, dentro de las formas BANCO/CHEQUE (las únicas con cuenta real: banco + número), las
+     * que representan la MISMA cuenta en otro establecimiento del mismo RUC accesible al usuario
+     * (nivel 3 o asignado — ver EmpresaRepository::getIdsGrupoRucAccesible()), sumando sus saldos
+     * en una sola fila. El resto (EFECTIVO, TARJETA, ANTICIPO...) queda igual, por empresa. Si un
+     * establecimiento hermano falla al calcular su saldo, se omite en vez de tumbar el dashboard.
+     */
+    private function consolidarFormasPorRuc(int $idEmpresa, int $idUsuario, array $formasPropias): array
+    {
+        $idsGrupo = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
+        $hermanas = array_values(array_diff($idsGrupo, [$idEmpresa]));
+        if (!$hermanas) {
+            return $formasPropias;
+        }
+
+        $todas = $formasPropias;
+        foreach ($hermanas as $idHermana) {
+            try {
+                $todas = array_merge($todas, $this->calcularSaldosCaja($idHermana)['formas']);
+            } catch (\Throwable $ex) {
+                // Establecimiento hermano roto (tablas de migración faltantes, etc.): se omite.
+            }
+        }
+
+        $out = [];
+        $porCuenta = [];
+        foreach ($todas as $f) {
+            $esBancaria = in_array($f['tipo'], ['BANCO', 'CHEQUE'], true)
+                && !empty($f['id_banco']) && trim((string) ($f['numero_cuenta'] ?? '')) !== '';
+            if (!$esBancaria) {
+                $out[] = $f;
+                continue;
+            }
+            $clave = $f['id_banco'] . '|' . trim((string) $f['numero_cuenta']);
+            $porCuenta[$clave][] = $f;
+        }
+        foreach ($porCuenta as $filas) {
+            if (count($filas) === 1) {
+                $out[] = $filas[0];
+                continue;
+            }
+            $out[] = [
+                'id'     => $filas[0]['id'],
+                'nombre' => $filas[0]['nombre'] . ' · consolidado (' . count($filas) . ' establecimientos)',
+                'tipo'   => $filas[0]['tipo'],
+                'saldo'  => array_sum(array_column($filas, 'saldo')),
+            ];
+        }
+        return $out;
+    }
+
     private function calcularSaldosCaja(int $e): array
     {
         // ── Bancos / Efectivo / Tarjeta / Otro: saldo real actual por forma ──
@@ -396,7 +457,7 @@ class DashboardService
         //           + Σ traspasos recibidos − Σ traspasos enviados (traspasos_cabecera)
         //   Filtrado por el ambiente real de la empresa (igual que Ingresos/Egresos).
         $sqlFormas = "
-            SELECT efp.id, efp.nombre, efp.tipo,
+            SELECT efp.id, efp.nombre, efp.tipo, efp.id_banco, efp.numero_cuenta,
                    COALESCE(sib.saldo_inicial, 0)
                    + COALESCE(ing.total, 0)
                    - COALESCE(egr.total, 0)
@@ -456,10 +517,12 @@ class DashboardService
         $formas = [];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $formas[] = [
-                'id'     => (int) $r['id'],
-                'nombre' => $r['nombre'],
-                'tipo'   => $r['tipo'],
-                'saldo'  => (float) $r['saldo'],
+                'id'            => (int) $r['id'],
+                'nombre'        => $r['nombre'],
+                'tipo'          => $r['tipo'],
+                'saldo'         => (float) $r['saldo'],
+                'id_banco'      => $r['id_banco'] !== null ? (int) $r['id_banco'] : null,
+                'numero_cuenta' => $r['numero_cuenta'],
             ];
         }
 

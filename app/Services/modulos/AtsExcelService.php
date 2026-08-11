@@ -35,9 +35,9 @@ class AtsExcelService
     /**
      * @return array{ok:bool, mensaje?:string, nombre?:string, ruta?:string}
      */
-    public function generar(int $idEmpresa, string $mes, string $anio, bool $semestral): array
+    public function generar(int $idEmpresa, string $mes, string $anio, bool $semestral, int $idUsuario = 0): array
     {
-        $datos = $this->ats->recopilar($idEmpresa, $mes, $anio, $semestral);
+        $datos = $this->ats->recopilar($idEmpresa, $mes, $anio, $semestral, $idUsuario);
         if (!$datos['ok']) {
             return ['ok' => false, 'mensaje' => $datos['mensaje'] ?? 'No se pudo recopilar la información.'];
         }
@@ -84,7 +84,7 @@ class AtsExcelService
             'Parte Rel.', 'Serie (Est-Pto-Sec)', 'Fecha Emisión', 'Fecha Registro', 'Autorización',
             'Base No Obj. IVA', 'Base 0%', 'Base Gravada', 'Base Exenta', 'Monto ICE', 'Monto IVA',
             'Ret. IVA 10%', 'Ret. IVA 20%', 'Ret. IVA 30%', 'Ret. IVA 50%', 'Ret. IVA 70%', 'Ret. IVA 100%',
-            'Importe Total',
+            'Importe Total', 'Establecimiento (propio)',
         ];
         $this->cabecera($h, $cols);
 
@@ -117,6 +117,7 @@ class AtsExcelService
             $this->dinero($h, "W{$r}", $d['valorRetServicios']);
             $this->dinero($h, "X{$r}", $d['valRetServ100']);
             $this->dinero($h, "Y{$r}", $d['_importeTotal']);
+            $this->texto($h, "Z{$r}", $d['_establecimiento_propio'] ?? '');
             $r++;
         }
 
@@ -128,8 +129,8 @@ class AtsExcelService
                 $h->setCellValue("{$c}{$r}", "=SUM({$c}2:{$c}{$fin})");
                 $h->getStyle("{$c}{$r}")->getNumberFormat()->setFormatCode(self::MONEY);
             }
-            $h->getStyle("A{$r}:Y{$r}")->getFont()->setBold(true);
-            $h->getStyle("A{$r}:Y{$r}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB(self::GRIS);
+            $h->getStyle("A{$r}:Z{$r}")->getFont()->setBold(true);
+            $h->getStyle("A{$r}:Z{$r}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB(self::GRIS);
         }
 
         $this->autosize($h, $cols);
@@ -277,7 +278,11 @@ class AtsExcelService
             ['Período', $inf['mes'] . '/' . $inf['anio']],
             ['Régimen semestral (RIMPE)', !empty($inf['regimen_microempresa']) ? 'SI' : 'NO'],
             ['Nº establecimientos', $inf['num_estab_ruc']],
+            ['Empresas consolidadas por RUC', (string) ($datos['empresas_grupo'] ?? 1)],
         ];
+        if (!empty($datos['duplicados_omitidos'])) {
+            $info[] = ['Documentos duplicados omitidos (mismo RUC, dos establecimientos)', (string) $datos['duplicados_omitidos']];
+        }
         $r = 3;
         foreach ($info as [$k, $v]) {
             $h->setCellValue("A{$r}", $k);

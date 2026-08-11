@@ -5,23 +5,119 @@ declare(strict_types=1);
 namespace App\services\modulos;
 
 use App\repositories\modulos\DeclaracionIvaRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\FacturaVentaRepository;
 use App\Rules\modulos\DeclaracionIvaRules;
 use App\Services\LogSistemaService;
 
+/**
+ * El Formulario 104 (IVA) se presenta por RUC completo, no por establecimiento: el CÁLCULO
+ * (getResumenCompleto/getResumenPago/lo que se guarda en declaracion_iva_cabecera) siempre
+ * consolida todas las filas de `empresas` del mismo RUC accesibles al usuario — ver
+ * EmpresaRepository::getIdsGrupoRucAccesible(). El asiento contable y el egreso, en cambio, solo
+ * pueden vivir en UNA empresa (plan de cuentas, puntos de emisión y período contable cerrado son
+ * por-empresa): se generan siempre contra la empresa que ejecuta la acción (normalmente la
+ * matriz), leyendo el snapshot YA consolidado que quedó guardado en declaracion_iva_cabecera —
+ * por eso generarAsientoDeclaracion()/generarEgreso() no necesitaron cambios.
+ */
 class DeclaracionIvaService
 {
     private $repository;
     private $fvRepository;
     private $rules;
     private $logService;
+    private EmpresaRepository $empresaRepo;
 
-    public function __construct(DeclaracionIvaRepository $repository)
+    public function __construct(DeclaracionIvaRepository $repository, ?EmpresaRepository $empresaRepo = null)
     {
         $this->repository = $repository;
         $this->fvRepository = new FacturaVentaRepository();
         $this->rules = new DeclaracionIvaRules();
         $this->logService = new LogSistemaService();
+        $this->empresaRepo = $empresaRepo ?? new EmpresaRepository();
+    }
+
+    /** IDs de empresas del mismo RUC accesibles al usuario (incluida siempre la activa). */
+    private function idsGrupo(int $idEmpresa, int $idUsuario): array
+    {
+        $ids = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
+        if (!in_array($idEmpresa, $ids, true)) {
+            $ids[] = $idEmpresa;
+        }
+        return $ids;
+    }
+
+    /** getResumenPorCasilleros() de todo el grupo, sumado por casillero. */
+    private function resumenPorCasillerosGrupo(array $idsGrupo, string $fechaDesde, string $fechaHasta): array
+    {
+        $acc = [];
+        foreach ($idsGrupo as $idEmp) {
+            foreach ($this->repository->getResumenPorCasilleros($idEmp, $fechaDesde, $fechaHasta) as $row) {
+                $acc[$row['casillero']] = ($acc[$row['casillero']] ?? 0.0) + (float) $row['total'];
+            }
+        }
+        $out = [];
+        foreach ($acc as $casillero => $total) {
+            $out[] = ['casillero' => $casillero, 'total' => $total];
+        }
+        return $out;
+    }
+
+    /** getConteoDocumentos() sumado en todo el grupo. */
+    private function conteoDocumentosGrupo(array $idsGrupo, string $fuente, string $fechaDesde, string $fechaHasta): int
+    {
+        $total = 0;
+        foreach ($idsGrupo as $idEmp) {
+            $total += (int) $this->repository->getConteoDocumentos($idEmp, $fuente, $fechaDesde, $fechaHasta);
+        }
+        return $total;
+    }
+
+    /** getTotalTransferenciasGravadas() sumado en todo el grupo. */
+    private function totalTransferenciasGrupo(array $idsGrupo, string $fechaDesde, string $fechaHasta, string $ambiente): float
+    {
+        $total = 0.0;
+        foreach ($idsGrupo as $idEmp) {
+            $total += (float) $this->repository->getTotalTransferenciasGravadas($idEmp, $fechaDesde, $fechaHasta, $ambiente);
+        }
+        return $total;
+    }
+
+    /**
+     * getDetalleDocumentos() de todo el grupo, unido y etiquetado con el establecimiento propio
+     * de origen (para que el Excel de revisión muestre de cuál establecimiento viene cada fila,
+     * ya que el resumen consolidado por sí solo no lo distingue).
+     */
+    public function detalleDocumentosGrupo(int $idEmpresa, string $fechaDesde, string $fechaHasta, int $idUsuario): array
+    {
+        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
+        $etiquetas = $this->empresaRepo->getEtiquetasEstablecimiento($idsGrupo);
+        $out = [];
+        foreach ($idsGrupo as $idEmp) {
+            foreach ($this->repository->getDetalleDocumentos($idEmp, $fechaDesde, $fechaHasta) as $d) {
+                $d['_id_empresa'] = $idEmp;
+                $d['_establecimiento_propio'] = $etiquetas[$idEmp] ?? '';
+                $out[] = $d;
+            }
+        }
+        return $out;
+    }
+
+    /** getResumenPagoDirecto() sumado componente a componente en todo el grupo. */
+    private function resumenPagoDirectoGrupo(array $idsGrupo, string $fechaDesde, string $fechaHasta, string $ambiente): array
+    {
+        $acc = [
+            'iva_ventas' => 0.0, 'iva_notas_credito' => 0.0, 'iva_compras' => 0.0,
+            'iva_notas_credito_compra' => 0.0, 'retenciones' => 0.0, 'num_ventas' => 0,
+        ];
+        foreach ($idsGrupo as $idEmp) {
+            $c = $this->repository->getResumenPagoDirecto($idEmp, $fechaDesde, $fechaHasta, $ambiente);
+            foreach ($acc as $k => $v) {
+                $acc[$k] += (float) ($c[$k] ?? 0);
+            }
+        }
+        $acc['num_ventas'] = (int) $acc['num_ventas'];
+        return $acc;
     }
 
     /**
@@ -104,15 +200,30 @@ class DeclaracionIvaService
         return ['ok' => true, 'mensaje' => 'Sincronización completa finalizada.'];
     }
 
+    /** Igual que sincronizarPeriodo() pero para todas las empresas del grupo RUC accesible al usuario. */
+    public function sincronizarPeriodoGrupo(int $idEmpresa, string $anio, string $mes, int $idUsuario): array
+    {
+        foreach ($this->idsGrupo($idEmpresa, $idUsuario) as $idEmp) {
+            $this->sincronizarPeriodo($idEmp, $anio, $mes, $idUsuario);
+        }
+        return ['ok' => true, 'mensaje' => 'Sincronización completa finalizada.'];
+    }
+
     /**
      * Genera el resumen final del periodo, agrupando por casilleros,
      * limitando a 0 (para que no existan valores negativos), y 
      * resolviendo las fórmulas matemáticas.
      */
-    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $tipoPeriodo = '', int $anio = 0, int $periodoValor = 0): array
+    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $tipoPeriodo = '', int $anio = 0, int $periodoValor = 0, int $idUsuario = 0): array
     {
+        // El F104 se presenta por RUC completo: se consolidan todas las empresas del grupo
+        // accesibles al usuario (ver EmpresaRepository::getIdsGrupoRucAccesible()). El arrastre
+        // (605/606/615/617, más abajo) es la única excepción: sigue anclado a $idEmpresa, la
+        // empresa que ejecuta/guarda la declaración — ver comentario de clase.
+        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
+
         // 1. Obtener sumatorias desde base de datos (se mantienen los agrupados por código '401', etc)
-        $rawSums = $this->repository->getResumenPorCasilleros($idEmpresa, $fechaDesde, $fechaHasta);
+        $rawSums = $this->resumenPorCasillerosGrupo($idsGrupo, $fechaDesde, $fechaHasta);
         $sums = [];
         foreach ($rawSums as $row) {
             // Aplicar MAX(0, valor) para casilleros directos (facturas - notas de crédito)
@@ -129,7 +240,7 @@ class DeclaracionIvaService
             if ($fuente !== '' && $fuente !== null && $fuente !== 'documentos' && !str_starts_with($fuente, 'arrastre_')) {
                 $casillero = $e['casillero_bruto'] ?: ($e['casillero_neto'] ?: $e['casillero_impuesto']);
                 if ($casillero) {
-                    $sums[$casillero] = (float) $this->repository->getConteoDocumentos($idEmpresa, $fuente, $fechaDesde, $fechaHasta);
+                    $sums[$casillero] = (float) $this->conteoDocumentosGrupo($idsGrupo, $fuente, $fechaDesde, $fechaHasta);
                 }
             }
         }
@@ -153,7 +264,7 @@ class DeclaracionIvaService
                 $sums['615'] = round((float) $declActual['saldo_favor_compras'], 2);
                 $sums['617'] = round((float) $declActual['saldo_favor_retenciones'], 2);
             } else {
-                $comp = $this->repository->getResumenPagoDirecto($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+                $comp = $this->resumenPagoDirectoGrupo($idsGrupo, $fechaDesde, $fechaHasta, $ambiente);
                 $ivaVentasNeto      = round((float) $comp['iva_ventas'] - (float) $comp['iva_notas_credito'], 2);
                 $creditoComprasNeto = round((float) $comp['iva_compras'] - (float) $comp['iva_notas_credito_compra'], 2);
                 $split = $this->calcularSplitArrastre($ivaVentasNeto, $creditoComprasNeto, (float) $comp['retenciones'], $creditoAnteriorCompras, $creditoAnteriorRetenciones);
@@ -163,7 +274,7 @@ class DeclaracionIvaService
 
             // 2d. Liquidación diferida de IVA por ventas a plazo (480/481/483/484/486 —
             // 482, 485 y 499 se resuelven solos con el motor de fórmulas de más abajo).
-            $totalTransferencias = $this->repository->getTotalTransferenciasGravadas($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+            $totalTransferencias = $this->totalTransferenciasGrupo($idsGrupo, $fechaDesde, $fechaHasta, $ambiente);
             $sums['483'] = $declAnterior ? round((float) $declAnterior['liquidacion_diferida_485'], 2) : 0.0;
             if ($declActual) {
                 $sums['481'] = round((float) $declActual['transferencias_credito'], 2);
@@ -260,7 +371,9 @@ class DeclaracionIvaService
         $nombreEmpresa = trim((string) ($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? ''));
         $ambiente      = (string) ($empresa['tipo_ambiente'] ?? '1');
 
-        $comp = $this->repository->getResumenPagoDirecto($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+        // Consolidado por RUC (avisos/automatizaciones también deben reflejar el RUC completo).
+        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
+        $comp = $this->resumenPagoDirectoGrupo($idsGrupo, $fechaDesde, $fechaHasta, $ambiente);
 
         $ivaVentas          = $comp['iva_ventas'];               // IVA facturas de venta autorizadas (bruto)
         $notasCredito       = $comp['iva_notas_credito'];        // NC de venta (resta del IVA en ventas)
@@ -440,7 +553,10 @@ class DeclaracionIvaService
         $existente = $this->repository->findDeclaracion($idEmpresa, $ambiente, $tipoPeriodo, $anio, $periodoValor);
         $this->rules->validarGuardado($data, $existente);
 
-        $comp = $this->repository->getResumenPagoDirecto($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+        // Consolidado por RUC: lo que se guarda es el F104 real que se presenta ante el SRI (por
+        // RUC completo), no solo lo de esta fila `empresas`. Ver comentario de clase.
+        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
+        $comp = $this->resumenPagoDirectoGrupo($idsGrupo, $fechaDesde, $fechaHasta, $ambiente);
         $ivaVentas          = round((float) $comp['iva_ventas'], 2);
         $notasCreditoVenta  = round((float) $comp['iva_notas_credito'], 2);
         $creditoCompras     = round((float) $comp['iva_compras'], 2);
@@ -460,7 +576,7 @@ class DeclaracionIvaService
         $empresaRow = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
         $usaLiquidacionDiferida = !empty($empresaRow['usa_liquidacion_diferida_iva']);
 
-        $totalTransferencias = $this->repository->getTotalTransferenciasGravadas($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+        $totalTransferencias = $this->totalTransferenciasGrupo($idsGrupo, $fechaDesde, $fechaHasta, $ambiente);
         $transferenciasCredito = (isset($data['ajuste_481']) && $data['ajuste_481'] !== '' && $data['ajuste_481'] !== null)
             ? round((float) $data['ajuste_481'], 2) : round((float) ($existente['transferencias_credito'] ?? 0), 2);
         $transferenciasContado = round($totalTransferencias - $transferenciasCredito, 2);
@@ -496,7 +612,7 @@ class DeclaracionIvaService
         $saldoFavor = round($saldoFavorCompras + $saldoFavorRetenciones, 2);
         $aPagar     = round($split['a_pagar'], 2);
 
-        $valoresCasilleros = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $tipoPeriodo, $anio, $periodoValor)['valores'] ?? [];
+        $valoresCasilleros = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $tipoPeriodo, $anio, $periodoValor, $idUsuario)['valores'] ?? [];
         // Los valores efectivamente guardados (con el ajuste manual aplicado) mandan sobre
         // el default que haya calculado getResumenCompleto para el snapshot del formulario.
         $valoresCasilleros['605'] = $creditoAnteriorCompras;

@@ -7,6 +7,7 @@
 /** @var array $centrosCosto */
 /** @var array $proyectos */
 /** @var array $perm */
+/** @var bool $hayGrupoRuc */
 
 $base = BASE_URL;
 $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
@@ -126,6 +127,11 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                 <i class="bi bi-bank text-info"></i> Supercias EFE
             </button>
         </div>
+        <?php if (!empty($hayGrupoRuc)): ?>
+        <button type="button" class="btn btn-outline-primary btn-sm shadow-sm ms-2" onclick="verConsolidadoRuc()">
+            <i class="bi bi-diagram-3 me-1"></i> Consolidado por RUC
+        </button>
+        <?php endif; ?>
     </div>
 
     <!-- Contenido del reporte -->
@@ -138,6 +144,44 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         </div>
         <div id="content-reporte" class="table-responsive">
             <p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Generar.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Consolidado por RUC -->
+<div class="modal fade" id="modalConsolidadoRuc" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold"><i class="bi bi-diagram-3 text-primary me-2"></i>Consolidado por RUC</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loader-consolidado" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+                </div>
+                <div id="content-consolidado" class="d-none">
+                    <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Solo se suman los conceptos ya mapeados en <a href="<?= $base ?>/modulos/balances-consolidados" target="_blank">Balances Consolidados</a>. El resto de cuentas se muestra por establecimiento, sin sumar (no todos los establecimientos comparten la misma estructura de plan de cuentas).</p>
+                    <h6 class="fw-bold small text-uppercase text-muted">Cuentas consolidadas</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm table-bordered mb-0" id="tabla-consolidado-grupos">
+                            <thead class="table-light"><tr><th>Concepto</th><th>Tipo</th><th class="text-end">Saldo</th><th>Detalle por establecimiento</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <h6 class="fw-bold small text-uppercase text-muted">Totales por establecimiento (sin consolidar)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0" id="tabla-consolidado-estab">
+                            <thead class="table-light"><tr>
+                                <th>Establecimiento</th><th class="text-end">Activos</th><th class="text-end">Pasivos</th>
+                                <th class="text-end">Patrimonio</th><th class="text-end">Ingresos</th><th class="text-end">Costos</th>
+                                <th class="text-end">Gastos</th><th class="text-end">Utilidad Neta</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -275,6 +319,65 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         const formatted = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return num < 0 ? `<span class="monto-negativo">${formatted}</span>` : formatted;
     };
+
+    async function verConsolidadoRuc() {
+        const modalEl = document.getElementById('modalConsolidadoRuc');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        document.getElementById('loader-consolidado').classList.remove('d-none');
+        document.getElementById('content-consolidado').classList.add('d-none');
+
+        const params = new URLSearchParams({
+            fecha_inicio: document.getElementById('fecha_inicio').value,
+            fecha_fin: document.getElementById('fecha_fin').value,
+            nivel: document.getElementById('filtro_nivel').value,
+            centro_costo: document.getElementById('filtro_centro_costo').value,
+            proyecto: document.getElementById('filtro_proyecto').value,
+        });
+
+        try {
+            const res = await fetch(`${urlBase}/generarConsolidadoRucAjax?${params.toString()}`).then(r => r.json());
+            if (!res.success) { Swal.fire('Error', res.error || 'No se pudo cargar el consolidado.', 'error'); modal.hide(); return; }
+            const d = res.data;
+
+            const tbGrupos = document.querySelector('#tabla-consolidado-grupos tbody');
+            if (!d.consolidado || !d.consolidado.length) {
+                tbGrupos.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No hay conceptos consolidados configurados. Ir a <a href="<?= $base ?>/modulos/balances-consolidados" target="_blank">Balances Consolidados</a>.</td></tr>';
+            } else {
+                tbGrupos.innerHTML = d.consolidado.map(g => {
+                    const detalle = (g.detalle || []).map(x => `${x.establecimiento}: ${x.codigo} - ${x.nombre} (${formatMoney(x.valor)})`).join('<br>');
+                    return `<tr>
+                        <td class="fw-bold">${g.nombre}</td>
+                        <td>${g.tipo}</td>
+                        <td class="text-end fw-bold">${formatMoney(g.saldo)}</td>
+                        <td class="small text-muted">${detalle}</td>
+                    </tr>`;
+                }).join('');
+            }
+
+            const tbEstab = document.querySelector('#tabla-consolidado-estab tbody');
+            tbEstab.innerHTML = (d.por_establecimiento || []).map(e => {
+                const s = e.situacion.totales, r = e.resultados.totales;
+                return `<tr>
+                    <td class="fw-bold">${e.etiqueta}</td>
+                    <td class="text-end">${formatMoney(s.activos)}</td>
+                    <td class="text-end">${formatMoney(s.pasivos)}</td>
+                    <td class="text-end">${formatMoney(s.patrimonio)}</td>
+                    <td class="text-end">${formatMoney(r.ingresos)}</td>
+                    <td class="text-end">${formatMoney(r.costos)}</td>
+                    <td class="text-end">${formatMoney(r.gastos)}</td>
+                    <td class="text-end fw-bold">${formatMoney(r.utilidad_neta)}</td>
+                </tr>`;
+            }).join('');
+
+            document.getElementById('loader-consolidado').classList.add('d-none');
+            document.getElementById('content-consolidado').classList.remove('d-none');
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Error de red o servidor.', 'error');
+            modal.hide();
+        }
+    }
 
     async function generarReporte() {
         const form = document.getElementById('formFiltros');

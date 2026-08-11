@@ -11,7 +11,9 @@ use Throwable;
 /**
  * Módulo "Reasignar establecimiento": reasigna la sucursal propia (id_establecimiento) de
  * documentos ya registrados (típicamente migrados/importados en el establecimiento equivocado),
- * por filtros y en lote. No cambia el número del documento ni cascada a relacionados.
+ * por filtros y en lote. No cambia el número del documento. Si el documento tiene contabilidad,
+ * pagos o inventario generados, requiere confirmación explícita para anularlos y reasignar (ver
+ * ReasignarEstablecimientoService::reasignar()); si tiene retención de compra, queda bloqueado.
  */
 class ReasignarEstablecimientoController extends BaseModuloController
 {
@@ -99,7 +101,34 @@ class ReasignarEstablecimientoController extends BaseModuloController
         }
     }
 
-    /** POST: reasigna los documentos seleccionados (ids[]) al establecimiento destino. */
+    /**
+     * GET/POST: resumen de vínculos (contabilidad/pagos/inventario/retención de compra) de los
+     * documentos seleccionados. Sirve para avisar antes de reasignar — no modifica nada.
+     */
+    public function verificarVinculosAjax(): void
+    {
+        $this->requireLeer();
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $tipo = (string) ($_POST['tipo'] ?? $_GET['tipo'] ?? '');
+            if (!in_array($tipo, ReasignarEstablecimientoRepository::tiposValidos(), true)) {
+                throw new \RuntimeException('Tipo de documento no válido.');
+            }
+            $ids = $_POST['ids'] ?? $_GET['ids'] ?? [];
+            if (!is_array($ids)) { $ids = array_filter(array_map('trim', explode(',', (string) $ids))); }
+
+            $this->json(['ok' => true, 'data' => $this->service->verificarVinculos($idEmpresa, $tipo, $ids)]);
+        } catch (Throwable $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * POST: reasigna los documentos seleccionados (ids[]) al establecimiento destino. Si alguno
+     * tiene contabilidad/pagos/inventario, se omite salvo que venga anular_vinculos=1 (en ese
+     * caso se anulan/revierten esos vínculos y se reasigna, todo por documento). Los que tienen
+     * retención de compra asociada siempre quedan bloqueados, sin importar este flag.
+     */
     public function reasignarAjax(): void
     {
         $this->requireActualizar();
@@ -110,11 +139,12 @@ class ReasignarEstablecimientoController extends BaseModuloController
             $idEstDestino = (int) ($_POST['id_establecimiento_destino'] ?? 0);
             $ids = $_POST['ids'] ?? [];
             if (!is_array($ids)) { $ids = array_filter(array_map('trim', explode(',', (string) $ids))); }
+            $anularVinculos = !empty($_POST['anular_vinculos']);
 
             $perm = $this->getPermisos();
             $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-            $res = $this->service->reasignar($idEmpresa, $tipo, $ids, $idEstDestino, $idUsuario, $idUsuarioFiltro);
+            $res = $this->service->reasignar($idEmpresa, $tipo, $ids, $idEstDestino, $idUsuario, $idUsuarioFiltro, $anularVinculos);
             $this->json($res);
         } catch (Throwable $e) {
             $this->json(['ok' => false, 'reasignados' => 0, 'mensaje' => 'Error: ' . $e->getMessage()]);

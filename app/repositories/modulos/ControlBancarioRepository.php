@@ -63,7 +63,7 @@ class ControlBancarioRepository extends BaseRepository
     /** Igual que getFormasBancarias(): la cuenta contable puede venir NULL. */
     public function getFormaBancaria(int $idFormaPago, int $idEmpresa): ?array
     {
-        $sql = "SELECT fp.id, fp.nombre, fp.id_cuenta_contable, fp.id_banco
+        $sql = "SELECT fp.id, fp.nombre, fp.id_cuenta_contable, fp.id_banco, fp.numero_cuenta
                 FROM empresa_formas_pago fp
                 WHERE fp.id = :id AND fp.id_empresa = :id_empresa AND fp.eliminado = FALSE
                   AND fp.id_banco IS NOT NULL";
@@ -71,6 +71,32 @@ class ControlBancarioRepository extends BaseRepository
         $st->execute([':id' => $idFormaPago, ':id_empresa' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * Formas bancarias de varias empresas (típicamente el grupo RUC: varias filas de `empresas`
+     * que comparten RUC), con el nombre/establecimiento de cada una — para detectar cuáles
+     * comparten cuenta real (mismo banco + número de cuenta) y armar el selector "Consolidar".
+     */
+    public function getFormasBancariasDeEmpresas(array $idsEmpresa): array
+    {
+        if (!$idsEmpresa) { return []; }
+        $ph = implode(',', array_fill(0, count($idsEmpresa), '?'));
+        $sql = "SELECT fp.id, fp.id_empresa, fp.nombre, fp.tipo_cuenta, fp.numero_cuenta, fp.id_banco,
+                       fp.id_cuenta_contable, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
+                       b.nombre_banco,
+                       COALESCE(NULLIF(e.nombre_comercial, ''), e.nombre) AS empresa_nombre,
+                       e.establecimiento
+                FROM empresa_formas_pago fp
+                LEFT JOIN plan_cuentas pc ON pc.id = fp.id_cuenta_contable
+                LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
+                JOIN empresas e ON e.id = fp.id_empresa AND e.eliminado = FALSE
+                WHERE fp.id_empresa IN ($ph)
+                  AND fp.eliminado = FALSE AND fp.activo = TRUE AND fp.id_banco IS NOT NULL
+                ORDER BY e.establecimiento ASC, fp.nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute($idsEmpresa);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function getSaldoInicial(int $idEmpresa, int $idFormaPago): float

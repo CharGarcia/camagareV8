@@ -63,13 +63,13 @@ class DeclaracionRetencionesController extends BaseModuloController
 
         try {
             if ((int) ($_GET['sincronizar'] ?? 0) === 1) {
-                $this->service->sincronizarPeriodo($idEmpresa, $anio, $mes, $idUsuario);
+                $this->service->sincronizarPeriodoGrupo($idEmpresa, $anio, $mes, $idUsuario);
             }
 
             echo json_encode([
                 'ok'                 => true,
-                'resumen_completo'   => $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta),
-                'detalle_documentos' => $this->repository->getDetalleDocumentos($idEmpresa, $fechaDesde, $fechaHasta),
+                'resumen_completo'   => $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario),
+                'detalle_documentos' => $this->service->detalleDocumentosGrupo($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -314,10 +314,11 @@ class DeclaracionRetencionesController extends BaseModuloController
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         [$anio, $mes, $fechaDesde, $fechaHasta] = $this->periodo();
 
         $empresa = $this->datosEmpresa($idEmpresa);
-        $resumen = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
+        $resumen = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
 
         $autoload = \MVC_ROOT . '/vendor/autoload.php';
         if (file_exists($autoload)) require_once $autoload;
@@ -403,11 +404,12 @@ class DeclaracionRetencionesController extends BaseModuloController
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         [$anio, $mes, $fechaDesde, $fechaHasta] = $this->periodo();
 
         $empresa = $this->datosEmpresa($idEmpresa);
-        $resumen = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
-        $lineas  = $this->repository->getDetalleLineasRenta($idEmpresa, $fechaDesde, $fechaHasta);
+        $resumen = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
+        $lineas  = $this->service->detalleLineasRentaGrupo($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
 
         try {
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
@@ -460,11 +462,11 @@ class DeclaracionRetencionesController extends BaseModuloController
             $sheet2 = $spreadsheet->createSheet();
             $sheet2->setTitle('Detalle Retenciones Compra');
             $headers2 = ['Fecha emisión', 'Comprobante', 'Doc. sustento', 'Proveedor', 'RUC/CI', 'Código retención',
-                         'Concepto', 'Base imponible', '% Retenido', 'Valor retenido', 'Casillero base', 'Casillero valor'];
+                         'Concepto', 'Base imponible', '% Retenido', 'Valor retenido', 'Casillero base', 'Casillero valor', 'Establecimiento (propio)'];
             foreach ($headers2 as $i => $h) {
                 $sheet2->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1) . '1', $h);
             }
-            $sheet2->getStyle('A1:L1')->applyFromArray($headerStyle);
+            $sheet2->getStyle('A1:M1')->applyFromArray($headerStyle);
 
             $rowIdx = 2;
             foreach ($lineas as $l) {
@@ -481,10 +483,11 @@ class DeclaracionRetencionesController extends BaseModuloController
                 $sheet2->setCellValue('J' . $rowIdx, (float) ($l['valor_retenido'] ?? 0));
                 $sheet2->setCellValueExplicit('K' . $rowIdx, $l['casillero_base'] ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet2->setCellValueExplicit('L' . $rowIdx, $l['casillero_valor'] ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet2->setCellValue('M' . $rowIdx, $l['_establecimiento_propio'] ?? '');
                 $sheet2->getStyle('H' . $rowIdx . ':J' . $rowIdx)->getNumberFormat()->setFormatCode('#,##0.00');
                 $rowIdx++;
             }
-            foreach (['A'=>14,'B'=>16,'C'=>16,'D'=>32,'E'=>14,'F'=>12,'G'=>34,'H'=>14,'I'=>10,'J'=>14,'K'=>10,'L'=>10] as $col => $w) {
+            foreach (['A'=>14,'B'=>16,'C'=>16,'D'=>32,'E'=>14,'F'=>12,'G'=>34,'H'=>14,'I'=>10,'J'=>14,'K'=>10,'L'=>10,'M'=>30] as $col => $w) {
                 $sheet2->getColumnDimension($col)->setWidth($w);
             }
 

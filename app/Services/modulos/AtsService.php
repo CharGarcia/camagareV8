@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\AtsRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\Services\Xml\XmlAtsService;
 use App\Services\Xml\AtsValidatorService;
 use App\Services\LogSistemaService;
@@ -17,6 +18,11 @@ use App\Services\LogSistemaService;
  * retenciones (retencion_compra_cabecera/detalle, atadas al documento),
  * normaliza cada documento al formato exacto del SRI y produce ATmmaaaa.xml
  * (y su .zip para carga en el portal). Registra la acción en log_sistema.
+ *
+ * El ATS se presenta por RUC completo del contribuyente, no por establecimiento — así que
+ * recopilar() SIEMPRE consolida todas las filas de `empresas` que comparten RUC y a las que el
+ * usuario tiene acceso (nivel 3 ve todo el RUC; el resto, solo sus establecimientos asignados),
+ * no solo la empresa activa de sesión. Ver EmpresaRepository::getIdsGrupoRucAccesible().
  */
 class AtsService
 {
@@ -26,12 +32,17 @@ class AtsService
         '01' => '01', '02' => '02', '03' => '03',
     ];
 
+    private EmpresaRepository $empresaRepo;
+
     public function __construct(
         private AtsRepository $repo,
         private XmlAtsService $xml,
         private LogSistemaService $log,
-        private AtsValidatorService $validator
-    ) {}
+        private AtsValidatorService $validator,
+        ?EmpresaRepository $empresaRepo = null
+    ) {
+        $this->empresaRepo = $empresaRepo ?? new EmpresaRepository();
+    }
 
     /**
      * Genera el anexo del período indicado.
@@ -44,7 +55,7 @@ class AtsService
      */
     public function generar(int $idEmpresa, int $idUsuario, string $mes, string $anio, bool $semestral): array
     {
-        $datos = $this->recopilar($idEmpresa, $mes, $anio, $semestral);
+        $datos = $this->recopilar($idEmpresa, $mes, $anio, $semestral, $idUsuario);
         if (!$datos['ok']) {
             return ['ok' => false, 'mensaje' => $datos['mensaje']];
         }
@@ -107,7 +118,7 @@ class AtsService
      * @return array{ok:bool, mensaje?:string, mes?:string, anio?:string,
      *               periodo?:string, informante?:array, documentos?:array, retenciones?:array}
      */
-    public function recopilar(int $idEmpresa, string $mes, string $anio, bool $semestral): array
+    public function recopilar(int $idEmpresa, string $mes, string $anio, bool $semestral, int $idUsuario = 0): array
     {
         $mes  = str_pad((string) ((int) $mes), 2, '0', STR_PAD_LEFT);
         $anio = (string) ((int) $anio);
@@ -117,90 +128,131 @@ class AtsService
             return ['ok' => false, 'mensaje' => 'No se encontró la empresa activa.'];
         }
 
+        // El ATS se presenta por RUC completo, no por establecimiento: se consolidan todas las
+        // filas de `empresas` con el mismo RUC a las que el usuario tenga acceso. Los queries de
+        // AtsRepository siguen siendo por-empresa (id_compra/id_venta son globalmente únicos pero
+        // las tablas de retenciones/pagos/reembolso SIEMPRE filtran también por id_empresa), así
+        // que se recorre el grupo completo llamando el mismo pipeline una vez por empresa y
+        // fusionando resultados — no se tocó ni una sola query de AtsRepository.
+        $idsGrupo = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
+        if (!in_array($idEmpresa, $idsGrupo, true)) {
+            $idsGrupo[] = $idEmpresa; // ya validada por sesión, siempre incluida
+        }
+        // Etiqueta "establecimiento - nombre" por empresa del grupo, para que el Excel de
+        // revisión muestre de cuál establecimiento propio viene cada documento (el XML del ATS
+        // no distingue esto — es solo para que el usuario audite antes de presentar).
+        $etiquetasEstab = $this->empresaRepo->getEtiquetasEstablecimiento($idsGrupo);
+
         [$desde, $hasta] = $this->rangoFechas($mes, $anio, $semestral);
 
-        $compras       = $this->repo->getCompras($idEmpresa, $desde, $hasta);
-        $liquidaciones = $this->repo->getLiquidaciones($idEmpresa, $desde, $hasta);
-
-        // Retenciones y formas de pago en bloque (evita N+1)
-        $idsCompra = array_column($compras, 'id');
-        $idsLiq    = array_column($liquidaciones, 'id');
-
-        $retCompras = $this->repo->getRetenciones($idEmpresa, 'id_compra', $idsCompra);
-        $retLiq     = $this->repo->getRetenciones($idEmpresa, 'id_liquidacion', $idsLiq);
-        $retComprasIdx = $this->indexarRetenciones($retCompras);
-        $retLiqIdx     = $this->indexarRetenciones($retLiq);
-        $pagoComprasIdx = $this->indexarPagos($this->repo->getFormasPago('compras_pagos', 'id_compra', $idsCompra));
-        $pagoLiqIdx     = $this->indexarPagos($this->repo->getFormasPago('liquidaciones_pagos', 'id_cabecera', $idsLiq));
-
-        // Facturas de Reembolso RECIBIDAS (codDoc=01, codDocReembolso=41): el bloque
-        // *Reemb del ATS-Compras (tipoComprobanteReemb, establecimientoReemb, etc.)
-        // no tiene XSD disponible en este proyecto para confirmar su cardinalidad;
-        // se emite UNA fila "compra" por cada tercero reembolsado (misma compra base,
-        // sub-bloque *Reemb distinto en cada una). Sin validar contra el XSD real del
-        // ATS — revisar con el contador antes de presentar el anexo.
-        $reembolsoIdx = $this->indexarReembolsoTerceros($this->repo->getReembolsoTercerosCompras($idEmpresa, $idsCompra));
+        // Claves (numero_autorizacion/clave_acceso) ya incluidas — evita duplicar un documento
+        // que, por carga manual, haya quedado registrado en dos establecimientos del mismo RUC
+        // (la descarga automática del SRI ya deduplica sola entre hermanos, ver
+        // DocumentoAutomatedRegisterService::existeClaveEnGrupo(); esto es la red de seguridad
+        // para lo cargado a mano). Solo aplica a claves electrónicas (49 dígitos): las físicas
+        // comparten legítimamente la misma autorización dentro de un mismo talonario.
+        $clavesVistas = [];
+        $omitidosPorDuplicado = 0;
 
         $documentos = [];
-        foreach ($compras as $c) {
-            $terceros = ((string) ($c['cod_doc_reembolso'] ?? '')) === '41'
-                ? ($reembolsoIdx[(int) $c['id']] ?? [])
-                : [];
-            if ($terceros !== []) {
-                foreach ($terceros as $i => $t) {
-                    $documentos[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? [], $t, $i === 0);
-                }
-            } else {
-                $documentos[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? []);
-            }
-        }
-        foreach ($liquidaciones as $l) {
-            $documentos[] = $this->mapearDocumento($l, $retLiqIdx[$l['id']] ?? null, $pagoLiqIdx[$l['id']] ?? []);
-        }
-
-        // Serie de cada documento, para referenciarla en la hoja de retenciones
-        $serie = [];
-        $proveedor = [];
-        foreach ($documentos as $d) {
-            $key = $d['_origen'] . ':' . $d['_id'];
-            $serie[$key]     = $d['establecimiento'] . '-' . $d['puntoEmision'] . '-' . $d['secuencial'];
-            $proveedor[$key] = $d['_proveedor'];
-        }
-
         $retenciones = [];
-        foreach ([['compra', $retCompras], ['liquidacion', $retLiq]] as [$origen, $filas]) {
-            foreach ($filas as $f) {
-                $key = $origen . ':' . (int) $f['id_documento'];
-                $cod = strtoupper((string) $f['codigo_impuesto']);
-                $retenciones[] = [
-                    'origen'        => $origen,
-                    'doc_serie'     => $serie[$key] ?? '',
-                    'doc_proveedor' => $proveedor[$key] ?? '',
-                    'ret_serie'     => str_pad(substr((string) $f['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT)
-                                       . '-' . str_pad(substr((string) $f['punto_emision'], 0, 3), 3, '0', STR_PAD_LEFT)
-                                       . '-' . str_pad((string) (int) $f['secuencial'], 9, '0', STR_PAD_LEFT),
-                    'ret_aut'       => (string) $f['numero_autorizacion'],
-                    'ret_fecha'     => $this->fecha($f['fecha_emision']),
-                    'tipo_impuesto' => ($cod === '1' || $cod === 'RENTA') ? 'RENTA' : (($cod === '2' || $cod === 'IVA') ? 'IVA' : $cod),
-                    'codigo'        => (string) $f['codigo_retencion'],
-                    'concepto'      => (string) ($f['concepto'] ?? ''),
-                    'base'          => (float) $f['base_imponible'],
-                    'porcentaje'    => (float) $f['porcentaje_retener'],
-                    'valor'         => (float) $f['valor_retenido'],
-                ];
-            }
-        }
-
-        // ── VENTAS (agrupadas por cliente + tipoComprobante + tipoEmisión) ──────
-        $ventasRaw = $this->repo->getVentas($idEmpresa, $desde, $hasta);
-        $idsVenta  = array_column($ventasRaw, 'id');
-        $retVenta  = $this->indexarRetVenta($this->repo->getRetencionesVenta($idEmpresa, $idsVenta));
-        $pagoVenta = $this->indexarPagos($this->repo->getFormasPago('ventas_pagos', 'id_venta', $idsVenta));
-
         $grupos = [];
         $ventasPorEstab = [];
         $totalVentas = 0.0;
-        foreach ($ventasRaw as $v) {
+        $anulados = [];
+        $codigosEstabGrupo = [];
+
+        foreach ($idsGrupo as $idEmp) {
+            foreach ($this->repo->getEstablecimientos($idEmp) as $cod) {
+                if (!in_array($cod, $codigosEstabGrupo, true)) {
+                    $codigosEstabGrupo[] = $cod;
+                }
+            }
+
+            $compras       = $this->filtrarDuplicados($this->repo->getCompras($idEmp, $desde, $hasta), 'numero_autorizacion', $clavesVistas, $omitidosPorDuplicado);
+            $liquidaciones = $this->filtrarDuplicados($this->repo->getLiquidaciones($idEmp, $desde, $hasta), 'numero_autorizacion', $clavesVistas, $omitidosPorDuplicado);
+
+            // Retenciones y formas de pago en bloque (evita N+1)
+            $idsCompra = array_column($compras, 'id');
+            $idsLiq    = array_column($liquidaciones, 'id');
+
+            $retCompras = $this->repo->getRetenciones($idEmp, 'id_compra', $idsCompra);
+            $retLiq     = $this->repo->getRetenciones($idEmp, 'id_liquidacion', $idsLiq);
+            $retComprasIdx = $this->indexarRetenciones($retCompras);
+            $retLiqIdx     = $this->indexarRetenciones($retLiq);
+            $pagoComprasIdx = $this->indexarPagos($this->repo->getFormasPago('compras_pagos', 'id_compra', $idsCompra));
+            $pagoLiqIdx     = $this->indexarPagos($this->repo->getFormasPago('liquidaciones_pagos', 'id_cabecera', $idsLiq));
+
+            // Facturas de Reembolso RECIBIDAS (codDoc=01, codDocReembolso=41): el bloque
+            // *Reemb del ATS-Compras (tipoComprobanteReemb, establecimientoReemb, etc.)
+            // no tiene XSD disponible en este proyecto para confirmar su cardinalidad;
+            // se emite UNA fila "compra" por cada tercero reembolsado (misma compra base,
+            // sub-bloque *Reemb distinto en cada una). Sin validar contra el XSD real del
+            // ATS — revisar con el contador antes de presentar el anexo.
+            $reembolsoIdx = $this->indexarReembolsoTerceros($this->repo->getReembolsoTercerosCompras($idEmp, $idsCompra));
+
+            $documentosEmp = [];
+            foreach ($compras as $c) {
+                $terceros = ((string) ($c['cod_doc_reembolso'] ?? '')) === '41'
+                    ? ($reembolsoIdx[(int) $c['id']] ?? [])
+                    : [];
+                if ($terceros !== []) {
+                    foreach ($terceros as $i => $t) {
+                        $documentosEmp[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? [], $t, $i === 0);
+                    }
+                } else {
+                    $documentosEmp[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? []);
+                }
+            }
+            foreach ($liquidaciones as $l) {
+                $documentosEmp[] = $this->mapearDocumento($l, $retLiqIdx[$l['id']] ?? null, $pagoLiqIdx[$l['id']] ?? []);
+            }
+            foreach ($documentosEmp as &$dEmp) {
+                $dEmp['_id_empresa'] = $idEmp;
+                $dEmp['_establecimiento_propio'] = $etiquetasEstab[$idEmp] ?? '';
+            }
+            unset($dEmp);
+            $documentos = array_merge($documentos, $documentosEmp);
+
+            // Serie de cada documento de ESTA empresa, para referenciarla en la hoja de retenciones
+            $serie = [];
+            $proveedor = [];
+            foreach ($documentosEmp as $d) {
+                $key = $d['_origen'] . ':' . $d['_id'];
+                $serie[$key]     = $d['establecimiento'] . '-' . $d['puntoEmision'] . '-' . $d['secuencial'];
+                $proveedor[$key] = $d['_proveedor'];
+            }
+
+            foreach ([['compra', $retCompras], ['liquidacion', $retLiq]] as [$origen, $filas]) {
+                foreach ($filas as $f) {
+                    $key = $origen . ':' . (int) $f['id_documento'];
+                    $cod = strtoupper((string) $f['codigo_impuesto']);
+                    $retenciones[] = [
+                        'origen'        => $origen,
+                        'doc_serie'     => $serie[$key] ?? '',
+                        'doc_proveedor' => $proveedor[$key] ?? '',
+                        'ret_serie'     => str_pad(substr((string) $f['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT)
+                                           . '-' . str_pad(substr((string) $f['punto_emision'], 0, 3), 3, '0', STR_PAD_LEFT)
+                                           . '-' . str_pad((string) (int) $f['secuencial'], 9, '0', STR_PAD_LEFT),
+                        'ret_aut'       => (string) $f['numero_autorizacion'],
+                        'ret_fecha'     => $this->fecha($f['fecha_emision']),
+                        'tipo_impuesto' => ($cod === '1' || $cod === 'RENTA') ? 'RENTA' : (($cod === '2' || $cod === 'IVA') ? 'IVA' : $cod),
+                        'codigo'        => (string) $f['codigo_retencion'],
+                        'concepto'      => (string) ($f['concepto'] ?? ''),
+                        'base'          => (float) $f['base_imponible'],
+                        'porcentaje'    => (float) $f['porcentaje_retener'],
+                        'valor'         => (float) $f['valor_retenido'],
+                    ];
+                }
+            }
+
+            // ── VENTAS (agrupadas por cliente + tipoComprobante + tipoEmisión) ──
+            $ventasRaw = $this->filtrarDuplicados($this->repo->getVentas($idEmp, $desde, $hasta), 'clave_acceso', $clavesVistas, $omitidosPorDuplicado);
+            $idsVenta  = array_column($ventasRaw, 'id');
+            $retVenta  = $this->indexarRetVenta($this->repo->getRetencionesVenta($idEmp, $idsVenta));
+            $pagoVenta = $this->indexarPagos($this->repo->getFormasPago('ventas_pagos', 'id_venta', $idsVenta));
+
+            foreach ($ventasRaw as $v) {
             $tpId = str_pad((string) $v['cli_tipo_id'], 2, '0', STR_PAD_LEFT);
             $idCli = $tpId === '07' ? '9999999999999' : (string) $v['cli_identificacion'];
             $tipoEm = !empty($v['clave_acceso']) ? 'E' : 'F';
@@ -252,10 +304,10 @@ class AtsService
             }
         }
 
-        // ── VENTAS: Facturas de Reembolso emitidas (tipoComprobante ATS = 41) ────
-        // Se reportan aparte (fila propia por cliente), nunca mezcladas con el 18.
-        $reembolsoRaw = $this->repo->getVentasReembolso($idEmpresa, $desde, $hasta);
-        foreach ($reembolsoRaw as $v) {
+            // ── VENTAS: Facturas de Reembolso emitidas (tipoComprobante ATS = 41) ──
+            // Se reportan aparte (fila propia por cliente), nunca mezcladas con el 18.
+            $reembolsoRaw = $this->filtrarDuplicados($this->repo->getVentasReembolso($idEmp, $desde, $hasta), 'clave_acceso', $clavesVistas, $omitidosPorDuplicado);
+            foreach ($reembolsoRaw as $v) {
             $tpId = str_pad((string) $v['cli_tipo_id'], 2, '0', STR_PAD_LEFT);
             $idCli = $tpId === '07' ? '9999999999999' : (string) $v['cli_identificacion'];
             $tipoEm = !empty($v['clave_acceso']) ? 'E' : 'F';
@@ -291,7 +343,21 @@ class AtsService
                 $estab = str_pad(substr((string) $v['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT);
                 $ventasPorEstab[$estab] = ($ventasPorEstab[$estab] ?? 0.0) + $baseVenta;
             }
+            }
+
+            // ── ANULADOS de esta empresa ──
+            foreach ($this->repo->getAnulados($idEmp, $desde, $hasta) as $a) {
+                $anulados[] = [
+                    'tipoComprobante' => (string) $a['tipo_comprobante'],
+                    'establecimiento' => str_pad(substr((string) $a['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT),
+                    'puntoEmision'    => str_pad(substr((string) $a['punto_emision'], 0, 3), 3, '0', STR_PAD_LEFT),
+                    'secuencialInicio'=> str_pad((string) (int) $a['secuencial'], 9, '0', STR_PAD_LEFT),
+                    'secuencialFin'   => str_pad((string) (int) $a['secuencial'], 9, '0', STR_PAD_LEFT),
+                    'autorizacion'    => (string) ($a['clave_acceso'] ?: '9999999999'),
+                ];
+            }
         }
+        // ── fin del recorrido por empresa del grupo RUC ──
 
         $ventas = [];
         foreach ($grupos as $g) {
@@ -317,12 +383,13 @@ class AtsService
             ];
         }
 
-        // ventasEstablecimiento: un registro por establecimiento inscrito en el RUC.
+        // ventasEstablecimiento: un registro por establecimiento inscrito en el RUC (de TODAS
+        // las empresas del grupo, ya unidos en $codigosEstabGrupo dentro del recorrido).
         // Solo se emite cuando hay ventas reportadas; los importes son de emisión
         // física (0.00 si el período solo tuvo ventas electrónicas).
         $ventasEstab = [];
         if ($ventas !== []) {
-            $codigosEstab = $this->repo->getEstablecimientos($idEmpresa);
+            $codigosEstab = $codigosEstabGrupo;
             foreach (array_keys($ventasPorEstab) as $e) {
                 if (!in_array($e, $codigosEstab, true)) {
                     $codigosEstab[] = $e; // establecimiento con ventas pero no listado
@@ -338,42 +405,59 @@ class AtsService
             }
         }
 
-        // ── ANULADOS ────────────────────────────────────────────────────────────
-        $anulados = [];
-        foreach ($this->repo->getAnulados($idEmpresa, $desde, $hasta) as $a) {
-            $anulados[] = [
-                'tipoComprobante' => (string) $a['tipo_comprobante'],
-                'establecimiento' => str_pad(substr((string) $a['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT),
-                'puntoEmision'    => str_pad(substr((string) $a['punto_emision'], 0, 3), 3, '0', STR_PAD_LEFT),
-                'secuencialInicio'=> str_pad((string) (int) $a['secuencial'], 9, '0', STR_PAD_LEFT),
-                'secuencialFin'   => str_pad((string) (int) $a['secuencial'], 9, '0', STR_PAD_LEFT),
-                'autorizacion'    => (string) ($a['clave_acceso'] ?: '9999999999'),
-            ];
-        }
-
         $infXml = [
             'id_informante'        => substr((string) $informante['ruc'], 0, 10) . '001',
             'razon_social'         => $this->limpiar(mb_strtoupper((string) $informante['razon_social'], 'UTF-8')),
             'anio'                 => $anio,
             'mes'                  => $mes,
-            'num_estab_ruc'        => str_pad((string) max(1, (int) $informante['num_establecimientos']), 3, '0', STR_PAD_LEFT),
+            'num_estab_ruc'        => str_pad((string) max(1, count($codigosEstabGrupo)), 3, '0', STR_PAD_LEFT),
             'total_ventas'         => $this->money($totalVentas),
             'regimen_microempresa' => $semestral,
         ];
 
         return [
-            'ok'           => true,
-            'mes'          => $mes,
-            'anio'         => $anio,
-            'periodo'      => $mes . '/' . $anio,
-            'tipo_ambiente'=> (string) ($informante['tipo_ambiente'] ?? '1'),
-            'informante'   => $infXml,
-            'documentos'   => $documentos,
-            'retenciones'  => $retenciones,
-            'ventas'       => $ventas,
-            'ventas_estab' => $ventasEstab,
-            'anulados'     => $anulados,
+            'ok'                 => true,
+            'mes'                => $mes,
+            'anio'               => $anio,
+            'periodo'            => $mes . '/' . $anio,
+            'tipo_ambiente'      => (string) ($informante['tipo_ambiente'] ?? '1'),
+            'informante'         => $infXml,
+            'documentos'         => $documentos,
+            'retenciones'        => $retenciones,
+            'ventas'             => $ventas,
+            'ventas_estab'       => $ventasEstab,
+            'anulados'           => $anulados,
+            // Info de la consolidación por RUC (para avisar en el Excel/UI, no forma parte del XML).
+            'empresas_grupo'     => count($idsGrupo),
+            'duplicados_omitidos'=> $omitidosPorDuplicado,
         ];
+    }
+
+    /**
+     * Descarta filas cuya clave (numero_autorizacion/clave_acceso) ya se vio en una empresa
+     * anterior del mismo grupo RUC — evita duplicar un documento cargado a mano en dos
+     * establecimientos. Solo aplica a claves ELECTRÓNICAS (49 dígitos): las físicas comparten
+     * legítimamente la misma autorización dentro de un mismo talonario, no se deben deduplicar.
+     * Filas sin esa columna, o con clave no electrónica, se dejan pasar tal cual.
+     */
+    private function filtrarDuplicados(array $filas, string $campoClave, array &$clavesVistas, int &$omitidos): array
+    {
+        $out = [];
+        foreach ($filas as $f) {
+            $clave = trim((string) ($f[$campoClave] ?? ''));
+            $esElectronica = $clave !== '' && strlen(preg_replace('/\D/', '', $clave)) === 49;
+            if (!$esElectronica) {
+                $out[] = $f;
+                continue;
+            }
+            if (isset($clavesVistas[$clave])) {
+                $omitidos++;
+                continue;
+            }
+            $clavesVistas[$clave] = true;
+            $out[] = $f;
+        }
+        return $out;
     }
 
     /** Suma retenciones IVA/Renta que el cliente nos practicó, por id_venta. */

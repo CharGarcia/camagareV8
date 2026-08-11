@@ -3827,10 +3827,19 @@ class AsientoBuilderService
      *
      *   DEBE : cada cuenta de retención por código SRI usada en el período (la cierra).
      *   HABER: RETENCIONRENTAPORPAGARDECLARACION, por el total.
+     *
+     * @param int[] $idsGrupoRuc Empresas cuyas retenciones se suman al DEBE (el F103 se declara
+     *              por RUC completo, ver DeclaracionRetencionesService). Vacío = solo $idEmpresa
+     *              (comportamiento de siempre). El HABER y la resolución de cuentas por código
+     *              SRI (asientos_programados) siguen SIEMPRE contra el plan de cuentas de
+     *              $idEmpresa — es la única empresa donde el asiento puede contabilizarse.
      */
-    public function generarAsientoDeclaracionRetenciones(int $idEmpresa, string $fechaDesde, string $fechaHasta): array
+    public function generarAsientoDeclaracionRetenciones(int $idEmpresa, string $fechaDesde, string $fechaHasta, array $idsGrupoRuc = []): array
     {
         $db = \App\core\Database::getConnection();
+
+        $idsGrupoRuc = $idsGrupoRuc ?: [$idEmpresa];
+        $ph = implode(',', array_fill(0, count($idsGrupoRuc), '?'));
 
         $sqlDebe = "SELECT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                            SUM(d.valor_retenido) AS total
@@ -3844,15 +3853,15 @@ class AsientoBuilderService
                     LEFT JOIN asientos_programados ap
                            ON ap.id_referencia = rsx.id
                           AND ap.tipo_referencia = 'retenciones_compra_haber'
-                          AND ap.id_empresa = :emp
+                          AND ap.id_empresa = ?
                           AND ap.eliminado = false
                     LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
-                    WHERE c.id_empresa = :emp2 AND c.estado = 'autorizada' AND c.eliminado = false
-                      AND c.fecha_emision BETWEEN :d AND :h
+                    WHERE c.id_empresa IN ($ph) AND c.estado = 'autorizada' AND c.eliminado = false
+                      AND c.fecha_emision BETWEEN ? AND ?
                       AND (d.codigo_impuesto IN ('1','RENTA'))
                     GROUP BY ap.id_cuenta, pc.codigo, pc.nombre";
         $st = $db->prepare($sqlDebe);
-        $st->execute([':emp' => $idEmpresa, ':emp2' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta]);
+        $st->execute(array_merge([$idEmpresa], $idsGrupoRuc, [$fechaDesde, $fechaHasta]));
 
         $detalles = [];
         $reglasSinCuenta = [];

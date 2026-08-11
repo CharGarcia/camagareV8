@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\DeclaracionRetencionesRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\RetencionCompraRepository;
 use App\Rules\modulos\DeclaracionRetencionesRules;
 use App\Services\LogSistemaService;
@@ -19,6 +20,13 @@ use App\Services\LogSistemaService;
  *  - Casillero 302/352 (relación de dependencia): pendiente del motor de Impuesto a
  *    la Renta de empleados (Fase 2). Hasta entonces queda en 0 y es editable
  *    manualmente en la pestaña de detalle, igual que cualquier otro casillero.
+ *
+ * El F103 se presenta por RUC completo, no por establecimiento: el CÁLCULO (getResumenCompleto,
+ * lo que se guarda en declaracion_retenciones_cabecera, y el asiento contable) siempre consolida
+ * todas las empresas del grupo RUC accesibles al usuario — ver
+ * EmpresaRepository::getIdsGrupoRucAccesible(). El asiento y el egreso solo pueden vivir en UNA
+ * empresa (plan de cuentas/puntos de emisión/período contable son por-empresa): se generan
+ * siempre contra la empresa que ejecuta la acción (normalmente la matriz).
  */
 class DeclaracionRetencionesService
 {
@@ -26,13 +34,25 @@ class DeclaracionRetencionesService
     private RetencionCompraRepository $retCompraRepo;
     private DeclaracionRetencionesRules $rules;
     private LogSistemaService $logService;
+    private EmpresaRepository $empresaRepo;
 
-    public function __construct(DeclaracionRetencionesRepository $repository)
+    public function __construct(DeclaracionRetencionesRepository $repository, ?EmpresaRepository $empresaRepo = null)
     {
         $this->repository = $repository;
         $this->retCompraRepo = new RetencionCompraRepository();
         $this->rules = new DeclaracionRetencionesRules();
         $this->logService = new LogSistemaService();
+        $this->empresaRepo = $empresaRepo ?? new EmpresaRepository();
+    }
+
+    /** IDs de empresas del mismo RUC accesibles al usuario (incluida siempre la activa). */
+    private function idsGrupo(int $idEmpresa, int $idUsuario): array
+    {
+        $ids = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
+        if (!in_array($idEmpresa, $ids, true)) {
+            $ids[] = $idEmpresa;
+        }
+        return $ids;
     }
 
     /** Sincroniza (recalcula) los casilleros del Formulario 103 para un período mensual. */
@@ -51,6 +71,15 @@ class DeclaracionRetencionesService
 
         $this->sincronizarEmpleadosIr($idEmpresa, $fechaDesde, $fechaHasta);
 
+        return ['ok' => true, 'mensaje' => 'Sincronización completa finalizada.'];
+    }
+
+    /** Igual que sincronizarPeriodo() pero para todas las empresas del grupo RUC accesible al usuario. */
+    public function sincronizarPeriodoGrupo(int $idEmpresa, string $anio, string $mes, int $idUsuario): array
+    {
+        foreach ($this->idsGrupo($idEmpresa, $idUsuario) as $idEmp) {
+            $this->sincronizarPeriodo($idEmp, $anio, $mes, $idUsuario);
+        }
         return ['ok' => true, 'mensaje' => 'Sincronización completa finalizada.'];
     }
 
@@ -118,12 +147,15 @@ class DeclaracionRetencionesService
      * Arma la estructura completa (layout oficial + valores) para la vista, el PDF y el Excel,
      * incluyendo los subtotales (349/399, 497/498) y el total (499).
      */
-    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta): array
+    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, int $idUsuario = 0): array
     {
-        $raw = $this->repository->getResumenPorCasilleros($idEmpresa, $fechaDesde, $fechaHasta);
+        // El F103 se presenta por RUC completo: se consolidan todas las empresas del grupo
+        // accesibles al usuario. Ver comentario de clase.
         $valores = [];
-        foreach ($raw as $r) {
-            $valores[$r['casillero']] = (float) $r['total'];
+        foreach ($this->idsGrupo($idEmpresa, $idUsuario) as $idEmp) {
+            foreach ($this->repository->getResumenPorCasilleros($idEmp, $fechaDesde, $fechaHasta) as $r) {
+                $valores[$r['casillero']] = ($valores[$r['casillero']] ?? 0.0) + (float) $r['total'];
+            }
         }
 
         $estructura = $this->repository->getEstructuraFormulario();
@@ -158,6 +190,40 @@ class DeclaracionRetencionesService
         $valores['499'] = $subtotalValNac + $subtotalValExt;
 
         return ['layout' => $estructura, 'valores' => $valores];
+    }
+
+    /**
+     * getDetalleDocumentos() de todo el grupo, unido y etiquetado con el establecimiento propio
+     * de origen — igual patrón que DeclaracionIvaService::detalleDocumentosGrupo().
+     */
+    public function detalleDocumentosGrupo(int $idEmpresa, string $fechaDesde, string $fechaHasta, int $idUsuario): array
+    {
+        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
+        $etiquetas = $this->empresaRepo->getEtiquetasEstablecimiento($idsGrupo);
+        $out = [];
+        foreach ($idsGrupo as $idEmp) {
+            foreach ($this->repository->getDetalleDocumentos($idEmp, $fechaDesde, $fechaHasta) as $d) {
+                $d['_id_empresa'] = $idEmp;
+                $d['_establecimiento_propio'] = $etiquetas[$idEmp] ?? '';
+                $out[] = $d;
+            }
+        }
+        return $out;
+    }
+
+    /** Igual que detalleDocumentosGrupo() pero para getDetalleLineasRenta() (hoja de detalle del Excel). */
+    public function detalleLineasRentaGrupo(int $idEmpresa, string $fechaDesde, string $fechaHasta, int $idUsuario): array
+    {
+        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
+        $etiquetas = $this->empresaRepo->getEtiquetasEstablecimiento($idsGrupo);
+        $out = [];
+        foreach ($idsGrupo as $idEmp) {
+            foreach ($this->repository->getDetalleLineasRenta($idEmp, $fechaDesde, $fechaHasta) as $l) {
+                $l['_establecimiento_propio'] = $etiquetas[$idEmp] ?? '';
+                $out[] = $l;
+            }
+        }
+        return $out;
     }
 
     // ==========================================================================
@@ -206,7 +272,7 @@ class DeclaracionRetencionesService
         $existente = $this->repository->findDeclaracion($idEmpresa, $ambiente, $anio, $mes);
         $this->rules->validarGuardado($data, $existente);
 
-        $resumen = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
+        $resumen = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
         $valores = $resumen['valores'];
 
         $toSave = [
@@ -247,8 +313,9 @@ class DeclaracionRetencionesService
             throw new \Exception('Declaración no encontrada.');
         }
 
+        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
         $builder  = new AsientoBuilderService();
-        $detalles = $builder->generarAsientoDeclaracionRetenciones($idEmpresa, $decl['fecha_desde'], $decl['fecha_hasta']);
+        $detalles = $builder->generarAsientoDeclaracionRetenciones($idEmpresa, $decl['fecha_desde'], $decl['fecha_hasta'], $idsGrupo);
         if (empty($detalles)) {
             throw new \Exception('No hay valores para generar el asiento de esta declaración.');
         }

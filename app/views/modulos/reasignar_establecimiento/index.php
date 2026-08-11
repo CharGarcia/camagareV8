@@ -9,7 +9,7 @@ $multiEst = count($establecimientos) > 1;
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
         <h4 class="mb-0 fw-bold"><i class="bi bi-shuffle text-primary me-2"></i>Reasignar establecimiento</h4>
-        <p class="text-muted mb-0 small">Cambia la sucursal (establecimiento) a la que pertenece un documento ya registrado, en lote y por filtros. No cambia el número del documento ni toca pagos, contabilidad, retenciones de compra ni inventario.</p>
+        <p class="text-muted mb-0 small">Cambia la sucursal (establecimiento) a la que pertenece un documento ya registrado, en lote y por filtros. No cambia el número del documento. Si el documento tiene contabilidad, pagos o inventario generados, pide confirmación para anularlos antes de reasignar; si tiene una retención de compra asociada, queda bloqueado hasta que se anule desde su propio módulo.</p>
     </div>
 </div>
 

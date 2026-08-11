@@ -72,22 +72,89 @@
         const destino = $('reEstDestino').value;
         const destinoTxt = $('reEstDestino').options[$('reEstDestino').selectedIndex].text;
         if (!seleccion.length || !destino) return;
-        if (!confirm('¿Reasignar ' + seleccion.length + ' documento(s) al establecimiento «' + destinoTxt + '»?\n\nNo cambia el número del documento. Se puede revertir volviendo a reasignar.')) return;
 
+        const tipo = $('reTipo').value;
         const btn = $('reBtnReasignar');
         const prev = btn.innerHTML;
+
+        // 1) Verificar vínculos (contabilidad/pagos/inventario/retención de compra) ANTES de pedir confirmación.
+        let vinc = { con_asiento: 0, con_egresos: 0, con_inventario: 0, bloqueados_retencion: [] };
+        try {
+            const bv = new FormData();
+            bv.append('tipo', tipo);
+            seleccion.forEach(r => bv.append('ids[]', r.id));
+            const rv = await fetch(RUTA + '/verificarVinculosAjax', { method: 'POST', body: bv }).then(r => r.json());
+            if (rv.ok) vinc = rv.data;
+        } catch (e) { /* sin verificación: se continúa igual, el backend igual protege */ }
+
+        const hayBloqueados = vinc.bloqueados_retencion.length > 0;
+        const hayVinculos = vinc.con_asiento > 0 || vinc.con_egresos > 0 || vinc.con_inventario > 0;
+
+        let avisoHtml = '';
+        if (hayBloqueados) {
+            avisoHtml += '<div class="alert alert-secondary text-start small mt-2 mb-0">' +
+                '<b><i class="bi bi-lock me-1"></i>' + vinc.bloqueados_retencion.length + ' documento(s)</b> tienen una retención de compra asociada y no se pueden reasignar. ' +
+                'Anule la retención primero desde su propio módulo.</div>';
+        }
+
+        let anularVinculos = false;
+        if (hayVinculos) {
+            const filasVinc = [
+                vinc.con_asiento   ? '<tr><td class="text-start">Con asiento contable</td><td class="text-end fw-bold">' + vinc.con_asiento + '</td></tr>' : '',
+                vinc.con_egresos   ? '<tr><td class="text-start">Con pagos (egresos)</td><td class="text-end fw-bold">' + vinc.con_egresos + '</td></tr>' : '',
+                vinc.con_inventario? '<tr><td class="text-start">Con inventario procesado</td><td class="text-end fw-bold">' + vinc.con_inventario + '</td></tr>' : '',
+            ].join('');
+            const htmlVinc = '<div class="alert alert-warning text-start small mt-2 mb-0">' +
+                '<b><i class="bi bi-exclamation-triangle me-1"></i>Atención:</b> algunos documentos ya tienen registros asociados:' +
+                '<table class="table table-sm mb-1 mt-1"><tbody>' + filasVinc + '</tbody></table>' +
+                'Para reasignarlos hay que <b>anular</b> primero esos registros (asiento, pagos, inventario). ' +
+                'Puede anularlos y reasignar todo, o reasignar solo los documentos que NO tienen vínculos.' +
+                '</div>';
+
+            const conf = await Swal.fire({
+                title: '¿Reasignar ' + seleccion.length + ' documento(s)?',
+                html: 'Al establecimiento «' + destinoTxt + '». No cambia el número del documento.' + avisoHtml + htmlVinc,
+                icon: 'warning',
+                showDenyButton: true,
+                showCancelButton: true,
+                confirmButtonText: 'Anular vínculos y reasignar todos',
+                denyButtonText: 'Reasignar solo sin vínculos',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545',
+                denyButtonColor: '#198754',
+            });
+            if (conf.isDismissed) return;
+            anularVinculos = !!conf.isConfirmed;
+        } else {
+            const html = 'Al establecimiento «' + destinoTxt + '». No cambia el número del documento.' + avisoHtml;
+            const conf = await Swal.fire({
+                title: '¿Reasignar ' + seleccion.length + ' documento(s)?',
+                html,
+                icon: hayBloqueados ? 'warning' : 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, reasignar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#198754',
+            });
+            if (!conf.isConfirmed) return;
+        }
+
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Reasignando…';
         try {
             const body = new FormData();
-            body.append('tipo', $('reTipo').value);
+            body.append('tipo', tipo);
             body.append('id_establecimiento_destino', destino);
             seleccion.forEach(r => body.append('ids[]', r.id));
+            if (anularVinculos) body.append('anular_vinculos', '1');
             const res = await fetch(RUTA + '/reasignarAjax', { method: 'POST', body }).then(r => r.json());
-            if (!res.ok) { alert(res.mensaje || 'No se pudo reasignar.'); return; }
-            alert(res.mensaje);
+            if (!res.ok) { Swal.fire('Error', res.mensaje || 'No se pudo reasignar.', 'error'); return; }
+            const tuvoProblemas = (res.omitidos_con_vinculos && res.omitidos_con_vinculos.length) ||
+                                   (res.bloqueados_retencion && res.bloqueados_retencion.length) ||
+                                   (res.errores && res.errores.length);
+            Swal.fire({ icon: tuvoProblemas ? 'info' : 'success', title: tuvoProblemas ? 'Reasignación parcial' : 'Listo', text: res.mensaje });
             await buscar(); // refrescar
         } catch (e) {
-            alert('Error durante la reasignación.');
+            Swal.fire('Error', 'Error durante la reasignación.', 'error');
         } finally {
             btn.disabled = false; btn.innerHTML = prev;
         }

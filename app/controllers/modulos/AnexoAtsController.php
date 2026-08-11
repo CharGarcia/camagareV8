@@ -111,6 +111,7 @@ class AnexoAtsController extends BaseModuloController
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $mes       = trim($_GET['mes'] ?? '');
         $anio      = trim($_GET['anio'] ?? '');
         $semestral = !empty($_GET['semestral']) && in_array((string) $_GET['semestral'], ['1', 'true', 'on'], true);
@@ -122,7 +123,7 @@ class AnexoAtsController extends BaseModuloController
         }
 
         try {
-            $res = $this->excel->generar($idEmpresa, $mes, $anio, $semestral);
+            $res = $this->excel->generar($idEmpresa, $mes, $anio, $semestral, $idUsuario);
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar el Excel: ' . $e->getMessage();

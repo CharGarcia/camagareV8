@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\ControlBancarioRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\Rules\modulos\ControlBancarioRules;
 use App\Services\LogSistemaService;
 use App\Services\ReportService;
@@ -17,17 +18,109 @@ use TCPDF;
 
 class ControlBancarioService
 {
+    private EmpresaRepository $empresaRepo;
+
     public function __construct(
         private ControlBancarioRepository $repository,
         private ControlBancarioRules $rules,
         private LogSistemaService $logService,
-        private ReportService $reportService
+        private ReportService $reportService,
+        ?EmpresaRepository $empresaRepo = null
     ) {
+        $this->empresaRepo = $empresaRepo ?? new EmpresaRepository();
     }
 
     public function getFormasBancarias(int $idEmpresa): array
     {
         return $this->repository->getFormasBancarias($idEmpresa);
+    }
+
+    // ── Grupo RUC (conciliación consolidada entre establecimientos) ─────────
+
+    /** IDs de empresas del mismo RUC accesibles al usuario. Ver EmpresaRepository::getIdsGrupoRucAccesible(). */
+    private function idsGrupoAccesible(int $idEmpresa, int $idUsuario): array
+    {
+        return $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
+    }
+
+    /** ¿$idUsuario puede operar (clasificar/quitar) sobre $idEmpresaObjetivo desde su sesión en $idEmpresaActiva? */
+    public function empresaAccesibleDelGrupo(int $idEmpresaActiva, int $idEmpresaObjetivo, int $idUsuario): bool
+    {
+        if ($idEmpresaObjetivo === $idEmpresaActiva) {
+            return true;
+        }
+        return in_array($idEmpresaObjetivo, $this->idsGrupoAccesible($idEmpresaActiva, $idUsuario), true);
+    }
+
+    /**
+     * Todas las formas bancarias del grupo RUC accesible, agrupadas por cuenta real
+     * (banco + número de cuenta). Sirve para que el selector muestre, junto a cada cuenta de
+     * la empresa activa, cuántos establecimientos más comparten esa misma cuenta.
+     *
+     * @return array<int, array{id_banco:int, numero_cuenta:string, formas:array}> indexado por
+     *         id_forma_pago de la empresa activa (para casar 1 a 1 con getFormasBancarias()).
+     */
+    public function getGruposDeCuentas(int $idEmpresa, int $idUsuario): array
+    {
+        $idsGrupo = $this->idsGrupoAccesible($idEmpresa, $idUsuario);
+        if (count($idsGrupo) <= 1) {
+            return [];
+        }
+        $todas = $this->repository->getFormasBancariasDeEmpresas($idsGrupo);
+
+        // Agrupar por (id_banco, numero_cuenta normalizado).
+        $porCuenta = [];
+        foreach ($todas as $f) {
+            if (empty($f['id_banco']) || trim((string) $f['numero_cuenta']) === '') {
+                continue;
+            }
+            $clave = $f['id_banco'] . '|' . trim((string) $f['numero_cuenta']);
+            $porCuenta[$clave][] = $f;
+        }
+
+        // Solo interesan los grupos con formas de MÁS DE UNA empresa (si no, no hay nada que consolidar).
+        $out = [];
+        foreach ($porCuenta as $formas) {
+            $idsEmpresasDelGrupo = array_unique(array_map(static fn ($f) => (int) $f['id_empresa'], $formas));
+            if (count($idsEmpresasDelGrupo) < 2) {
+                continue;
+            }
+            foreach ($formas as $f) {
+                if ((int) $f['id_empresa'] === $idEmpresa) {
+                    $out[(int) $f['id']] = $formas;
+                }
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Resuelve el grupo de formas bancarias (empresa+forma+cuenta contable) que representan la
+     * MISMA cuenta real que $idFormaPago, dentro del RUC accesible por el usuario. Si no hay
+     * ninguna otra empresa con esa cuenta, devuelve solo la propia (comportamiento idéntico al
+     * caso no consolidado).
+     */
+    public function resolverGrupoCuenta(int $idEmpresa, int $idFormaPago, int $idUsuario): array
+    {
+        $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
+        $propia = $forma + ['id_empresa' => $idEmpresa, 'empresa_nombre' => null, 'establecimiento' => null];
+
+        if (empty($forma['id_banco']) || trim((string) ($forma['numero_cuenta'] ?? '')) === '') {
+            return [$propia];
+        }
+
+        $idsGrupo = $this->idsGrupoAccesible($idEmpresa, $idUsuario);
+        if (count($idsGrupo) <= 1) {
+            return [$propia];
+        }
+
+        $todas = $this->repository->getFormasBancariasDeEmpresas($idsGrupo);
+        $numBase = trim((string) $forma['numero_cuenta']);
+        $pares = array_values(array_filter($todas, static function ($f) use ($forma, $numBase) {
+            return (int) $f['id_banco'] === (int) $forma['id_banco'] && trim((string) $f['numero_cuenta']) === $numBase;
+        }));
+
+        return $pares ?: [$propia];
     }
 
     public function getAniosDisponibles(int $idEmpresa): array
@@ -263,6 +356,259 @@ class ControlBancarioService
             'debitos' => $debitos,
             'cheques_no_cobrados' => $this->repository->getChequesEmitidosNoCobrados($idEmpresa, $idFormaPago, $idCuenta, $fechaInicio, $fechaFin),
             'cheques_cobrados' => $this->repository->getChequesEmitidosCobradosEnPeriodo($idEmpresa, $idFormaPago, $idCuenta, $fechaInicio, $fechaFin),
+        ];
+    }
+
+    // ── Variantes consolidadas (mismo dato, sumado/unido sobre $pares de resolverGrupoCuenta()) ──
+    //
+    // Cada $pares es la salida de resolverGrupoCuenta(): una fila por cada empresa_formas_pago
+    // que representa la MISMA cuenta real (banco + número de cuenta) en el RUC accesible. Se
+    // reutilizan los métodos de una sola cuenta (sin tocarlos) y se suman/unen los resultados en
+    // PHP — el plan de cuentas es propio de cada empresa, así que nunca hay un solo
+    // id_cuenta_contable que abarque el grupo.
+
+    /** Resumen del período, sumado sobre todas las cuentas del grupo. */
+    public function getResumenPeriodoGrupo(array $pares, string $fechaInicio, string $fechaFin): array
+    {
+        $saldoInicial = 0.0;
+        $creditos = 0.0;
+        $debitos = 0.0;
+        foreach ($pares as $p) {
+            $idEmpresa = (int) $p['id_empresa'];
+            $idCuenta = (int) $p['id_cuenta_contable'];
+            $saldoCuenta = $this->repository->getSaldoInicial($idEmpresa, (int) $p['id']);
+            $r = $this->repository->getResumenPeriodo($idEmpresa, $idCuenta, $fechaInicio, $fechaFin);
+            $saldoInicial += $saldoCuenta + $r['delta_antes'];
+            $creditos += $r['creditos'];
+            $debitos += $r['debitos'];
+        }
+        return [
+            'saldo_inicial' => $saldoInicial,
+            'creditos' => $creditos,
+            'debitos' => $debitos,
+            'saldo_final' => $saldoInicial + $creditos - $debitos,
+        ];
+    }
+
+    /**
+     * Movimientos consolidados: une el mayor de cada cuenta del grupo, recalcula el saldo
+     * acumulado en orden cronológico real (no el de cada cuenta por separado, que perdería
+     * sentido al mezclarlos) y pagina en PHP sobre el conjunto ya unido.
+     */
+    public function getMovimientosGrupo(array $pares, array $filtros, int $page, int $perPage, string $ordenCol, string $ordenDir): array
+    {
+        $fechaInicio = $filtros['fecha_inicio'] ?? null;
+        $fechaFin = $filtros['fecha_fin'] ?? ($fechaInicio ?: null);
+
+        $todas = [];
+        $saldoInicioRango = 0.0;
+        foreach ($pares as $p) {
+            $idEmpresa = (int) $p['id_empresa'];
+            $idForma = (int) $p['id'];
+            $idCuenta = (int) $p['id_cuenta_contable'];
+            $saldoCuenta = $this->repository->getSaldoInicial($idEmpresa, $idForma);
+
+            if ($fechaInicio) {
+                $r = $this->repository->getResumenPeriodo($idEmpresa, $idCuenta, $fechaInicio, $fechaFin);
+                $saldoInicioRango += $saldoCuenta + $r['delta_antes'];
+            } else {
+                $saldoInicioRango += $saldoCuenta;
+            }
+
+            // Sin paginar (perPage alto, mismo patrón que getReporteConciliacion): se necesita
+            // TODO el rango filtrado para poder unir y recalcular el saldo acumulado consolidado.
+            $res = $this->repository->getMovimientos($idEmpresa, $idForma, $idCuenta, $saldoCuenta, $filtros, 1, 1000000, 'fecha_asiento', 'ASC');
+            foreach ($res['rows'] as $row) {
+                $row['id_empresa'] = $idEmpresa;
+                $row['id_forma_pago'] = $idForma;
+                $row['empresa_nombre'] = $p['empresa_nombre'] ?? null;
+                $row['establecimiento'] = $p['establecimiento'] ?? null;
+                $todas[] = $row;
+            }
+        }
+
+        usort($todas, static function ($a, $b) {
+            return [$a['fecha_asiento'], (int) $a['id_asiento'], (int) $a['id_asiento_detalle']]
+                <=> [$b['fecha_asiento'], (int) $b['id_asiento'], (int) $b['id_asiento_detalle']];
+        });
+        $acum = $saldoInicioRango;
+        foreach ($todas as &$row) {
+            $acum += (float) $row['debe'] - (float) $row['haber'];
+            $row['saldo_acumulado'] = $acum;
+        }
+        unset($row);
+
+        if (!in_array($ordenCol, self::COLUMNAS_ORDEN_GRUPO, true)) {
+            $ordenCol = 'fecha_asiento';
+        }
+        $dir = strtoupper($ordenDir) === 'DESC' ? -1 : 1;
+        usort($todas, static function ($a, $b) use ($ordenCol, $dir) {
+            $va = $a[$ordenCol] ?? null;
+            $vb = $b[$ordenCol] ?? null;
+            if ($va == $vb) { return 0; }
+            return ($va <=> $vb) * $dir;
+        });
+
+        $total = count($todas);
+        $rows = array_slice($todas, max(0, ($page - 1) * $perPage), $perPage);
+
+        $hoy = date('Y-m-d');
+        foreach ($rows as &$row) {
+            $row['es_posfechado'] = ($row['tipo_transaccion'] === 'CHEQUE' && !empty($row['fecha_cheque']) && $row['fecha_cheque'] > $hoy);
+        }
+        unset($row);
+
+        return ['total' => $total, 'rows' => $rows];
+    }
+
+    private const COLUMNAS_ORDEN_GRUPO = [
+        'fecha_asiento', 'fecha_banco', 'fecha_cheque', 'tipo_transaccion',
+        'nombre_entidad', 'numero_comprobante', 'debe', 'haber',
+        'numero_cheque', 'beneficiario_cheque', 'documento_referencia',
+        'referencia_detalle', 'saldo_acumulado', 'empresa_nombre',
+    ];
+
+    /** Cheques posfechados de todas las cuentas del grupo, unidos y ordenados por fecha. */
+    public function getChequesPosfechadosGrupo(array $pares, string $direccion): array
+    {
+        $todas = [];
+        foreach ($pares as $p) {
+            $rows = $this->repository->getChequesPosfechados((int) $p['id_empresa'], (int) $p['id'], $direccion);
+            foreach ($rows as $r) {
+                $r['empresa_nombre'] = $p['empresa_nombre'] ?? null;
+                $todas[] = $r;
+            }
+        }
+        usort($todas, static fn ($a, $b) => ($a['fecha_cheque'] ?? '') <=> ($b['fecha_cheque'] ?? ''));
+        return $todas;
+    }
+
+    /**
+     * Marca conciliado el período en TODAS las cuentas del grupo (una fila de conciliación por
+     * cada empresa_formas_pago), en una sola transacción: o se concilian todas, o ninguna.
+     */
+    public function conciliarPeriodoGrupo(array $pares, int $idUsuario, array $data): array
+    {
+        $this->rules->validarConciliacion($data);
+        $fechaInicio = (string) $data['fecha_inicio'];
+        $fechaFin = (string) $data['fecha_fin'];
+
+        foreach ($pares as $p) {
+            if ($this->repository->existeSolapamientoConciliacion((int) $p['id'], $fechaInicio, $fechaFin)) {
+                $nombre = $p['empresa_nombre'] ?? ('establecimiento ' . ($p['establecimiento'] ?? $p['id_empresa']));
+                throw new \Exception("Ya existe una conciliación vigente para {$nombre} que se superpone con ese rango de fechas.");
+            }
+        }
+
+        $creadas = [];
+        $this->repository->beginTransaction();
+        try {
+            foreach ($pares as $p) {
+                $idEmpresa = (int) $p['id_empresa'];
+                $idForma = (int) $p['id'];
+                $resumen = $this->getResumenPeriodo($idEmpresa, $idForma, $fechaInicio, $fechaFin);
+                $id = $this->repository->crearConciliacion([
+                    'id_empresa' => $idEmpresa,
+                    'id_forma_pago' => $idForma,
+                    'fecha_inicio' => $fechaInicio,
+                    'fecha_fin' => $fechaFin,
+                    'saldo_inicial' => $resumen['saldo_inicial'],
+                    'saldo_final' => $resumen['saldo_final'],
+                    'saldo_banco' => ($data['saldo_banco'] ?? '') !== '' ? (float) $data['saldo_banco'] : null,
+                    'observaciones' => $data['observaciones'] ?? null,
+                    'usuario_id' => $idUsuario,
+                ]);
+                $creadas[] = ['id_empresa' => $idEmpresa, 'id' => $id];
+            }
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+
+        foreach ($creadas as $c) {
+            $conc = $this->repository->getConciliacionPorId($c['id'], $c['id_empresa']);
+            $this->logService->registrar($idUsuario, $c['id_empresa'], 'crear', 'control_bancario_conciliaciones', $c['id'], null, $conc);
+        }
+
+        return ['ok' => true, 'creadas' => count($creadas)];
+    }
+
+    /** Historial de conciliaciones de todas las cuentas del grupo, unido y marcado por establecimiento. */
+    public function getConciliacionesGrupo(array $pares): array
+    {
+        $todas = [];
+        foreach ($pares as $p) {
+            $idEmpresa = (int) $p['id_empresa'];
+            $idForma = (int) $p['id'];
+            foreach ($this->getConciliaciones($idEmpresa, $idForma) as $c) {
+                $c['empresa_nombre'] = $p['empresa_nombre'] ?? null;
+                $c['establecimiento'] = $p['establecimiento'] ?? null;
+                $todas[] = $c;
+            }
+        }
+        usort($todas, static fn ($a, $b) => $b['fecha_inicio'] <=> $a['fecha_inicio']);
+        return $todas;
+    }
+
+    /** Vigente solo si TODAS las cuentas del grupo tienen una conciliación que cubre exactamente el mismo rango. */
+    public function getConciliacionDelRangoGrupo(array $pares, string $fechaInicio, string $fechaFin): ?array
+    {
+        foreach ($pares as $p) {
+            $c = $this->getConciliacionDelRango((int) $p['id'], $fechaInicio, $fechaFin);
+            if (!$c) {
+                return null;
+            }
+        }
+        return ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin, 'grupo' => true];
+    }
+
+    /** Igual que getReporteConciliacion() pero uniendo todas las cuentas del grupo. */
+    public function getReporteConciliacionGrupo(array $pares, string $fechaInicio, string $fechaFin): array
+    {
+        $resumen = $this->getResumenPeriodoGrupo($pares, $fechaInicio, $fechaFin);
+        $mov = $this->getMovimientosGrupo($pares, ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin, 'buscar' => ''], 1, 1000000, 'fecha_asiento', 'ASC');
+        $movimientos = $mov['rows'];
+
+        $chequesNoCobrados = [];
+        $chequesCobrados = [];
+        foreach ($pares as $p) {
+            $idEmpresa = (int) $p['id_empresa'];
+            $idForma = (int) $p['id'];
+            $idCuenta = (int) $p['id_cuenta_contable'];
+            foreach ($this->repository->getChequesEmitidosNoCobrados($idEmpresa, $idForma, $idCuenta, $fechaInicio, $fechaFin) as $r) {
+                $r['empresa_nombre'] = $p['empresa_nombre'] ?? null;
+                $chequesNoCobrados[] = $r;
+            }
+            foreach ($this->repository->getChequesEmitidosCobradosEnPeriodo($idEmpresa, $idForma, $idCuenta, $fechaInicio, $fechaFin) as $r) {
+                $r['empresa_nombre'] = $p['empresa_nombre'] ?? null;
+                $chequesCobrados[] = $r;
+            }
+        }
+
+        $nombres = array_unique(array_filter(array_map(static fn ($p) => $p['empresa_nombre'] ?? null, $pares)));
+        $formaConsolidada = [
+            'id' => null,
+            'nombre' => 'Consolidado (' . count($pares) . ' establecimiento' . (count($pares) === 1 ? '' : 's') . ')',
+            'tipo' => null,
+            'tipo_cuenta' => $pares[0]['tipo_cuenta'] ?? null,
+            'numero_cuenta' => $pares[0]['numero_cuenta'] ?? '',
+            'id_cuenta_contable' => null,
+            'cuenta_codigo' => null,
+            'cuenta_nombre' => implode(' / ', $nombres),
+            'nombre_banco' => $pares[0]['nombre_banco'] ?? null,
+        ];
+
+        return [
+            'forma' => $formaConsolidada,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin' => $fechaFin,
+            'resumen' => $resumen,
+            'movimientos' => $movimientos,
+            'creditos' => array_values(array_filter($movimientos, fn ($r) => (float) $r['debe'] > 0)),
+            'debitos' => array_values(array_filter($movimientos, fn ($r) => (float) $r['haber'] > 0)),
+            'cheques_no_cobrados' => $chequesNoCobrados,
+            'cheques_cobrados' => $chequesCobrados,
         ];
     }
 

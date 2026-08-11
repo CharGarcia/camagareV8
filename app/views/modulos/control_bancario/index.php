@@ -9,6 +9,8 @@
 /** @var string $fechaFin */
 /** @var array $resumen */
 /** @var array $vistaConfig */
+/** @var array $gruposDeCuentas */
+/** @var bool $consolidado */
 
 $base = BASE_URL;
 $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
@@ -73,6 +75,10 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <div class="form-check form-switch mt-1" id="cb-consolidado-wrap" style="display:none;">
+                        <input class="form-check-input" type="checkbox" id="cb-consolidado" <?= $consolidado ? 'checked' : '' ?> onchange="window.CB_toggleConsolidado(this.checked)">
+                        <label class="form-check-label small" for="cb-consolidado" title="Une los movimientos de todos los establecimientos del mismo RUC que comparten esta cuenta bancaria">Consolidar por RUC</label>
+                    </div>
                 </div>
                 <div style="flex:1.1 1 0;min-width:0">
                     <label class="form-label small fw-bold text-muted mb-1">Flujo</label>
@@ -250,10 +256,13 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
             <div class="modal-body p-3">
                 <input type="hidden" id="cbm-id-asiento-detalle">
                 <input type="hidden" id="cbm-id-asiento">
+                <input type="hidden" id="cbm-id-empresa">
+                <input type="hidden" id="cbm-id-forma-pago">
                 <div class="p-2 border rounded-3 bg-light mb-3">
                     <div class="row g-1 small">
                         <div class="col-6"><span class="text-muted">Fecha asiento:</span> <span id="cbm-info-fecha" class="fw-bold"></span></div>
                         <div class="col-6"><span class="text-muted">Comprobante:</span> <span id="cbm-info-comprobante" class="fw-bold"></span></div>
+                        <div class="col-12" id="cbm-info-establecimiento-wrap" style="display:none;"><span class="text-muted">Establecimiento:</span> <span id="cbm-info-establecimiento" class="fw-bold text-info"></span></div>
                         <div class="col-12"><span class="text-muted">Glosa:</span> <span id="cbm-info-glosa"></span></div>
                         <div class="col-12"><span class="text-muted">Monto:</span> <span id="cbm-info-monto" class="fw-bold"></span></div>
                     </div>
@@ -431,6 +440,11 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     const RUTA_MODULO_CB = "<?= $rutaModulo ?>";
     const CB_URL_BASE = "<?= $urlBase ?>";
     window.BASE_URL = '<?= $base ?>';
+    // Mapa id_forma_pago -> cantidad de establecimientos que comparten esa cuenta real (mismo
+    // banco + número de cuenta) dentro del RUC accesible. Solo tiene entradas para cuentas que
+    // SÍ tienen con qué consolidar; controla cuándo se muestra el switch "Consolidar por RUC".
+    window.CB_GRUPOS_CUENTAS = <?= json_encode(array_map('count', $gruposDeCuentas ?? []), JSON_UNESCAPED_UNICODE) ?>;
+    window.CB_CONSOLIDADO_INICIAL = <?= $consolidado ? 'true' : 'false' ?>;
 </script>
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>

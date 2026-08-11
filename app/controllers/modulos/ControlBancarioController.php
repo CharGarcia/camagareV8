@@ -43,13 +43,32 @@ class ControlBancarioController extends BaseModuloController
         ];
     }
 
+    /**
+     * Resuelve el grupo de cuentas (mismo banco + número de cuenta) del RUC accesible al usuario,
+     * cuando se pidió consolidar. Devuelve [] si no se pidió, si la cuenta no tiene grupo, o si el
+     * usuario no tiene acceso a ningún establecimiento hermano — en ese caso el llamador debe
+     * seguir el camino de una sola cuenta (comportamiento idéntico al de siempre).
+     */
+    private function resolverPares(int $idEmpresa, int $idFormaPago, int $idUsuario, bool $consolidado): array
+    {
+        if (!$consolidado || $idFormaPago <= 0) {
+            return [];
+        }
+        $pares = $this->service->resolverGrupoCuenta($idEmpresa, $idFormaPago, $idUsuario);
+        return count($pares) > 1 ? $pares : [];
+    }
+
     public function index(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
 
         $formas = $this->service->getFormasBancarias($idEmpresa);
         $idFormaPago = (int) ($_GET['forma'] ?? ($formas[0]['id'] ?? 0));
+        $consolidado = !empty($_GET['consolidado']);
+
+        $gruposDeCuentas = $this->service->getGruposDeCuentas($idEmpresa, $idUsuario);
 
         $aniosDisponibles = $this->service->getAniosDisponibles($idEmpresa);
         if (empty($aniosDisponibles)) {
@@ -63,7 +82,10 @@ class ControlBancarioController extends BaseModuloController
         $resumen = ['saldo_inicial' => 0.0, 'creditos' => 0.0, 'debitos' => 0.0, 'saldo_final' => 0.0];
         if ($idFormaPago > 0) {
             try {
-                $resumen = $this->service->getResumenPeriodo($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
+                $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+                $resumen = $pares
+                    ? $this->service->getResumenPeriodoGrupo($pares, $fechaInicio, $fechaFin)
+                    : $this->service->getResumenPeriodo($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
             } catch (\Throwable $e) {
                 $idFormaPago = 0;
             }
@@ -75,6 +97,8 @@ class ControlBancarioController extends BaseModuloController
             'rutaModulo' => $this->getRutaModulo(),
             'formas' => $formas,
             'idFormaPago' => $idFormaPago,
+            'gruposDeCuentas' => $gruposDeCuentas,
+            'consolidado' => $consolidado,
             'aniosDisponibles' => $aniosDisponibles,
             'fechaInicio' => $fechaInicio,
             'fechaFin' => $fechaFin,
@@ -90,11 +114,13 @@ class ControlBancarioController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? $_POST['forma'] ?? 0);
         if ($idFormaPago <= 0) {
             echo json_encode(['ok' => false, 'error' => 'Debe seleccionar una cuenta bancaria.']);
             exit;
         }
+        $consolidado = !empty($_GET['consolidado'] ?? $_POST['consolidado'] ?? '');
 
         $prefsVista = PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $filtros = $this->getFiltrosDesdeRequest();
@@ -104,7 +130,10 @@ class ControlBancarioController extends BaseModuloController
         $perPage = 30;
 
         try {
-            $result = $this->service->getMovimientos($idEmpresa, $idFormaPago, $filtros, $page, $perPage, $ordenCol, $ordenDir);
+            $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+            $result = $pares
+                ? $this->service->getMovimientosGrupo($pares, $filtros, $page, $perPage, $ordenCol, $ordenDir)
+                : $this->service->getMovimientos($idEmpresa, $idFormaPago, $filtros, $page, $perPage, $ordenCol, $ordenDir);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -146,6 +175,14 @@ class ControlBancarioController extends BaseModuloController
                     $badgeDireccion .= ' <span class="badge bg-warning bg-opacity-25 text-warning-emphasis border border-warning border-opacity-50">Posfechado</span>';
                 }
 
+                // Solo presente en la vista consolidada (getMovimientosGrupo): de qué establecimiento
+                // del grupo RUC viene este movimiento.
+                $badgeEst = '';
+                if (!empty($r['establecimiento'])) {
+                    $tituloEst = htmlspecialchars((string) ($r['empresa_nombre'] ?? ''), ENT_QUOTES, 'UTF-8');
+                    $badgeEst = '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-1" title="' . $tituloEst . '">' . htmlspecialchars((string) $r['establecimiento']) . '</span>';
+                }
+
                 echo '<tr class="cb-row" role="button" tabindex="0" data-row="' . $rowData . '" onclick="CB_abrirModalClasificacion(this)">
                         <td class="ps-3" data-col="fecha_asiento">' . $fecha . '</td>
                         <td data-col="fecha_banco">' . $fechaBanco . '</td>
@@ -155,7 +192,7 @@ class ControlBancarioController extends BaseModuloController
                         <td data-col="fecha_cheque">' . $fechaCheque . '</td>
                         <td data-col="beneficiario_cheque" class="text-truncate" style="max-width:160px">' . htmlspecialchars($beneficiarioCheque) . '</td>
                         <td data-col="documento" class="text-truncate" style="max-width:140px">' . htmlspecialchars((string) ($r['documento_referencia'] ?? '')) . '</td>
-                        <td data-col="tercero" class="text-truncate" style="max-width:160px">' . htmlspecialchars((string) ($r['nombre_entidad'] ?? '')) . '</td>
+                        <td data-col="tercero" class="text-truncate" style="max-width:160px">' . $badgeEst . htmlspecialchars((string) ($r['nombre_entidad'] ?? '')) . '</td>
                         <td data-col="glosa" class="text-truncate text-muted" style="max-width:220px">' . htmlspecialchars((string) $glosa) . '</td>
                         <td class="text-end" data-col="debe">' . ((float) $r['debe'] > 0 ? number_format((float) $r['debe'], 2) : '') . '</td>
                         <td class="text-end" data-col="haber">' . ((float) $r['haber'] > 0 ? number_format((float) $r['haber'], 2) : '') . '</td>
@@ -179,8 +216,8 @@ class ControlBancarioController extends BaseModuloController
             'pagination' => $paginationHtml,
             'info' => "$from-$to/$total",
             'total' => $total,
-            'pdf_url' => $urlBase . '/exportarPdfAjax?forma=' . $idFormaPago . '&fecha_inicio=' . urlencode($filtros['fecha_inicio']) . '&fecha_fin=' . urlencode($filtros['fecha_fin']) . '&b=' . urlencode($filtros['buscar']),
-            'excel_url' => $urlBase . '/exportarExcelAjax?forma=' . $idFormaPago . '&fecha_inicio=' . urlencode($filtros['fecha_inicio']) . '&fecha_fin=' . urlencode($filtros['fecha_fin']) . '&b=' . urlencode($filtros['buscar']),
+            'pdf_url' => $urlBase . '/exportarPdfAjax?forma=' . $idFormaPago . '&consolidado=' . ($consolidado ? 1 : 0) . '&fecha_inicio=' . urlencode($filtros['fecha_inicio']) . '&fecha_fin=' . urlencode($filtros['fecha_fin']) . '&b=' . urlencode($filtros['buscar']),
+            'excel_url' => $urlBase . '/exportarExcelAjax?forma=' . $idFormaPago . '&consolidado=' . ($consolidado ? 1 : 0) . '&fecha_inicio=' . urlencode($filtros['fecha_inicio']) . '&fecha_fin=' . urlencode($filtros['fecha_fin']) . '&b=' . urlencode($filtros['buscar']),
         ]);
         exit;
     }
@@ -191,11 +228,16 @@ class ControlBancarioController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? 0);
+        $consolidado = !empty($_GET['consolidado'] ?? '');
         $fechaInicio = trim($_GET['fecha_inicio'] ?? date('Y-01-01'));
         $fechaFin = trim($_GET['fecha_fin'] ?? date('Y-12-31'));
         try {
-            $resumen = $this->service->getResumenPeriodo($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
+            $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+            $resumen = $pares
+                ? $this->service->getResumenPeriodoGrupo($pares, $fechaInicio, $fechaFin)
+                : $this->service->getResumenPeriodo($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
             echo json_encode(['ok' => true, 'data' => $resumen]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -210,12 +252,32 @@ class ControlBancarioController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = !empty($_GET['forma']) ? (int) $_GET['forma'] : null;
+        $consolidado = !empty($_GET['consolidado'] ?? '');
         $direccion = strtoupper(trim($_GET['direccion'] ?? ''));
 
-        $rows = $this->service->getChequesPosfechados($idEmpresa, $idFormaPago, $direccion);
+        $pares = $idFormaPago ? $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado) : [];
+        $rows = $pares
+            ? $this->service->getChequesPosfechadosGrupo($pares, $direccion)
+            : $this->service->getChequesPosfechados($idEmpresa, $idFormaPago, $direccion);
         echo json_encode(['ok' => true, 'data' => $rows]);
         exit;
+    }
+
+    /**
+     * Resuelve sobre qué empresa opera la clasificación: la del payload (fila de un
+     * establecimiento hermano, en vista consolidada) si viene y el usuario tiene acceso a ella
+     * dentro del grupo RUC; si no, la empresa activa de sesión (comportamiento de siempre).
+     */
+    private function resolverEmpresaObjetivo(int $idEmpresaActiva, int $idUsuario, array $data): int
+    {
+        $idEmpresaObjetivo = !empty($data['id_empresa']) ? (int) $data['id_empresa'] : $idEmpresaActiva;
+        if ($idEmpresaObjetivo !== $idEmpresaActiva
+            && !$this->service->empresaAccesibleDelGrupo($idEmpresaActiva, $idEmpresaObjetivo, $idUsuario)) {
+            throw new \Exception('No tiene acceso a esa empresa del grupo.');
+        }
+        return $idEmpresaObjetivo;
     }
 
     public function guardarClasificacionAjax(): void
@@ -223,11 +285,12 @@ class ControlBancarioController extends BaseModuloController
         $this->requireActualizar();
         header('Content-Type: application/json');
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresaActiva = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
 
         try {
+            $idEmpresa = $this->resolverEmpresaObjetivo($idEmpresaActiva, $idUsuario, $data);
             $resultado = $this->service->guardarClasificacion($idEmpresa, $idUsuario, $data);
             echo json_encode(['ok' => true, 'data' => $resultado]);
         } catch (\Throwable $e) {
@@ -242,12 +305,13 @@ class ControlBancarioController extends BaseModuloController
         $this->requireEliminar();
         header('Content-Type: application/json');
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresaActiva = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
         $idAsientoDetalle = (int) ($data['id_asiento_detalle'] ?? 0);
 
         try {
+            $idEmpresa = $this->resolverEmpresaObjetivo($idEmpresaActiva, $idUsuario, $data);
             $this->service->quitarClasificacion($idEmpresa, $idUsuario, $idAsientoDetalle);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
@@ -263,11 +327,17 @@ class ControlBancarioController extends BaseModuloController
         $this->requireLeer();
         header('Content-Type: application/json');
 
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? 0);
+        $consolidado = !empty($_GET['consolidado'] ?? '');
         $fechaInicio = trim($_GET['fecha_inicio'] ?? '');
         $fechaFin = trim($_GET['fecha_fin'] ?? '');
 
-        $conciliacion = $this->service->getConciliacionDelRango($idFormaPago, $fechaInicio, $fechaFin);
+        $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+        $conciliacion = $pares
+            ? $this->service->getConciliacionDelRangoGrupo($pares, $fechaInicio, $fechaFin)
+            : $this->service->getConciliacionDelRango($idFormaPago, $fechaInicio, $fechaFin);
         echo json_encode(['ok' => true, 'data' => $conciliacion]);
         exit;
     }
@@ -278,9 +348,14 @@ class ControlBancarioController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? 0);
+        $consolidado = !empty($_GET['consolidado'] ?? '');
 
-        $rows = $this->service->getConciliaciones($idEmpresa, $idFormaPago);
+        $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+        $rows = $pares
+            ? $this->service->getConciliacionesGrupo($pares)
+            : $this->service->getConciliaciones($idEmpresa, $idFormaPago);
         echo json_encode(['ok' => true, 'data' => $rows]);
         exit;
     }
@@ -293,10 +368,15 @@ class ControlBancarioController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
+        $consolidado = !empty($data['consolidado'] ?? false);
 
         try {
-            $conciliacion = $this->service->conciliarPeriodo($idEmpresa, $idUsuario, $data);
-            echo json_encode(['ok' => true, 'data' => $conciliacion]);
+            $idFormaPago = (int) ($data['id_forma_pago'] ?? 0);
+            $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+            $resultado = $pares
+                ? $this->service->conciliarPeriodoGrupo($pares, $idUsuario, $data)
+                : $this->service->conciliarPeriodo($idEmpresa, $idUsuario, $data);
+            echo json_encode(['ok' => true, 'data' => $resultado]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -357,11 +437,20 @@ class ControlBancarioController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? 0);
+        $consolidado = !empty($_GET['consolidado'] ?? '');
         $filtros = $this->getFiltrosDesdeRequest();
 
-        $result = $this->service->getMovimientos($idEmpresa, $idFormaPago, $filtros, 1, 100000, 'fecha_asiento', 'ASC');
-        [$empresaNombre, $cuentaNombre] = $this->nombreEmpresaYCuenta($idEmpresa, $idFormaPago);
+        $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+        if ($pares) {
+            $result = $this->service->getMovimientosGrupo($pares, $filtros, 1, 100000, 'fecha_asiento', 'ASC');
+            $empresaNombre = 'Consolidado (' . count($pares) . ' establecimientos)';
+            $cuentaNombre = $pares[0]['nombre'] ?? '';
+        } else {
+            $result = $this->service->getMovimientos($idEmpresa, $idFormaPago, $filtros, 1, 100000, 'fecha_asiento', 'ASC');
+            [$empresaNombre, $cuentaNombre] = $this->nombreEmpresaYCuenta($idEmpresa, $idFormaPago);
+        }
         $this->service->exportarPdf($result['rows'], $empresaNombre, $cuentaNombre);
     }
 
@@ -369,11 +458,20 @@ class ControlBancarioController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? 0);
+        $consolidado = !empty($_GET['consolidado'] ?? '');
         $filtros = $this->getFiltrosDesdeRequest();
 
-        $result = $this->service->getMovimientos($idEmpresa, $idFormaPago, $filtros, 1, 100000, 'fecha_asiento', 'ASC');
-        [$empresaNombre, $cuentaNombre] = $this->nombreEmpresaYCuenta($idEmpresa, $idFormaPago);
+        $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+        if ($pares) {
+            $result = $this->service->getMovimientosGrupo($pares, $filtros, 1, 100000, 'fecha_asiento', 'ASC');
+            $empresaNombre = 'Consolidado (' . count($pares) . ' establecimientos)';
+            $cuentaNombre = $pares[0]['nombre'] ?? '';
+        } else {
+            $result = $this->service->getMovimientos($idEmpresa, $idFormaPago, $filtros, 1, 100000, 'fecha_asiento', 'ASC');
+            [$empresaNombre, $cuentaNombre] = $this->nombreEmpresaYCuenta($idEmpresa, $idFormaPago);
+        }
         $this->service->exportarExcel($result['rows'], $empresaNombre, $cuentaNombre);
     }
 
@@ -381,12 +479,20 @@ class ControlBancarioController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? 0);
+        $consolidado = !empty($_GET['consolidado'] ?? '');
         $fechaInicio = trim($_GET['fecha_inicio'] ?? date('Y-01-01'));
         $fechaFin = trim($_GET['fecha_fin'] ?? date('Y-12-31'));
 
-        $reporte = $this->service->getReporteConciliacion($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
+        $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+        $reporte = $pares
+            ? $this->service->getReporteConciliacionGrupo($pares, $fechaInicio, $fechaFin)
+            : $this->service->getReporteConciliacion($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
         $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+        if ($pares) {
+            $empresa['nombre_comercial'] = 'Consolidado (' . count($pares) . ' establecimientos)';
+        }
 
         (new \App\Services\modulos\ControlBancarioConciliacionPdfService())->generar($reporte, $empresa);
     }
@@ -395,13 +501,21 @@ class ControlBancarioController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $idFormaPago = (int) ($_GET['forma'] ?? 0);
+        $consolidado = !empty($_GET['consolidado'] ?? '');
         $fechaInicio = trim($_GET['fecha_inicio'] ?? date('Y-01-01'));
         $fechaFin = trim($_GET['fecha_fin'] ?? date('Y-12-31'));
 
-        $reporte = $this->service->getReporteConciliacion($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
-        $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
-        $empresaNombre = $empresa['nombre_comercial'] ?: ($empresa['nombre'] ?? '');
+        $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
+        if ($pares) {
+            $reporte = $this->service->getReporteConciliacionGrupo($pares, $fechaInicio, $fechaFin);
+            $empresaNombre = 'Consolidado (' . count($pares) . ' establecimientos)';
+        } else {
+            $reporte = $this->service->getReporteConciliacion($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
+            $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $empresaNombre = $empresa['nombre_comercial'] ?: ($empresa['nombre'] ?? '');
+        }
 
         $this->service->exportarConciliacionExcel($reporte, $empresaNombre);
     }

@@ -58,6 +58,46 @@ class EmpresaRepository extends BaseModel
         return $ids;
     }
 
+    /**
+     * Mapa id_empresa => "establecimiento - nombre" para etiquetar, en reportes consolidados
+     * por RUC (ATS, etc.), de cuál establecimiento propio viene cada fila.
+     */
+    public function getEtiquetasEstablecimiento(array $idsEmpresa): array
+    {
+        if (!$idsEmpresa) {
+            return [];
+        }
+        $ids = implode(',', array_map('intval', $idsEmpresa));
+        $sql = "SELECT id, establecimiento, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre
+                FROM empresas WHERE id IN ({$ids}) AND eliminado = false";
+        $out = [];
+        foreach ($this->query($sql) as $r) {
+            $out[(int) $r['id']] = trim((string) $r['establecimiento']) . ' - ' . $r['nombre'];
+        }
+        return $out;
+    }
+
+    /**
+     * IDs de empresas del mismo RUC que $idEmpresa a las que $idUsuario tiene acceso: todas si
+     * es nivel 3 (sesión), si no, solo las asignadas (empresa_asignada) + la propia activa. Punto
+     * único de esta regla — la usan Control Bancario y Dashboard para consolidar información
+     * entre establecimientos del mismo RUC sin exponer datos de uno al que el usuario no fue
+     * asignado.
+     */
+    public function getIdsGrupoRucAccesible(int $idEmpresa, int $idUsuario): array
+    {
+        $grupo = $this->getIdsEmpresaMismoRuc($idEmpresa);
+        if ((int) ($_SESSION['nivel'] ?? 0) >= 3) {
+            return $grupo;
+        }
+        $asignadas = array_map(
+            static fn ($e) => (int) $e['id_empresa'],
+            (new \App\models\EmpresaAsignada())->getEmpresasDeUsuario($idUsuario)
+        );
+        $asignadas[] = $idEmpresa;
+        return array_values(array_intersect($grupo, $asignadas));
+    }
+
     /** RUC de una empresa por id (para resolver la empresa facturada). */
     public function getRucPorId(int $id): ?string
     {

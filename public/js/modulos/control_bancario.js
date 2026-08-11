@@ -6,6 +6,7 @@
         page: 1,
         sort: 'fecha_asiento',
         dir: 'ASC',
+        consolidado: false,
     };
 
     // Contador de peticiones a getSaldosAjax: si el usuario cambia de filtro rápido
@@ -54,8 +55,28 @@
         window.CB_fetchSearch(1);
     };
 
+    // Muestra/oculta el switch "Consolidar por RUC" según si la cuenta elegida tiene
+    // establecimientos hermanos con la misma cuenta real (window.CB_GRUPOS_CUENTAS, armado por
+    // el servidor en index()). Si la cuenta nueva no tiene grupo, se apaga el switch también.
+    function actualizarSwitchConsolidado() {
+        const wrap = document.getElementById('cb-consolidado-wrap');
+        const chk = document.getElementById('cb-consolidado');
+        const tieneGrupo = !!(window.CB_GRUPOS_CUENTAS && window.CB_GRUPOS_CUENTAS[state.forma]);
+        wrap.style.display = tieneGrupo ? '' : 'none';
+        if (!tieneGrupo) {
+            chk.checked = false;
+            state.consolidado = false;
+        }
+    }
+
+    window.CB_toggleConsolidado = function (checked) {
+        state.consolidado = !!checked;
+        window.CB_fetchSearch(1);
+    };
+
     window.CB_cambiarCuenta = function (idForma) {
         state.forma = parseInt(idForma, 10) || 0;
+        actualizarSwitchConsolidado();
         if (!state.forma) {
             document.getElementById('cb-tbody').innerHTML = '<tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>';
             return;
@@ -73,7 +94,7 @@
         if (!state.forma) return;
         const fechaInicio = document.getElementById('cb-fecha-inicio').value;
         const fechaFin = document.getElementById('cb-fecha-fin').value;
-        const params = new URLSearchParams({ forma: state.forma, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+        const params = new URLSearchParams({ forma: state.forma, consolidado: state.consolidado ? 1 : 0, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
         document.getElementById('cb-btn-conciliacion-pdf').href = `${CB_URL_BASE}/exportarConciliacionPdfAjax?${params.toString()}`;
         document.getElementById('cb-btn-conciliacion-excel').href = `${CB_URL_BASE}/exportarConciliacionExcelAjax?${params.toString()}`;
     }
@@ -86,7 +107,7 @@
         const badge = document.getElementById('cb-badge-conciliacion');
         const btnConciliar = document.getElementById('cb-btn-conciliar');
         try {
-            const params = new URLSearchParams({ forma: state.forma, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+            const params = new URLSearchParams({ forma: state.forma, consolidado: state.consolidado ? 1 : 0, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
             const json = await fetchJson(`${CB_URL_BASE}/conciliacionActualAjax?${params.toString()}`);
             if (json.ok && json.data) {
                 const d = json.data;
@@ -138,6 +159,7 @@
 
         const payload = {
             id_forma_pago: state.forma,
+            consolidado: state.consolidado,
             fecha_inicio: fechaInicio,
             fecha_fin: fechaFin,
             saldo_banco: saldoBancoStr,
@@ -156,7 +178,10 @@
                 return;
             }
             bootstrap.Modal.getInstance(document.getElementById('modalConciliarCB')).hide();
-            Swal.fire({ icon: 'success', title: 'Período conciliado', timer: 1800, showConfirmButton: false });
+            const mensaje = (json.data && json.data.creadas)
+                ? `Se conciliaron ${json.data.creadas} establecimiento(s).`
+                : 'Período conciliado';
+            Swal.fire({ icon: 'success', title: mensaje, timer: 1800, showConfirmButton: false });
             actualizarBadgeConciliacion();
         } catch (e) {
             console.error(e);
@@ -180,8 +205,12 @@
             const accion = (vigente && CB_PERM_ELIMINAR)
                 ? `<button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" onclick="window.CB_reabrirConciliacion(${r.id})"><i class="bi bi-unlock-fill"></i> Reabrir</button>`
                 : '';
+            // establecimiento solo viene en la vista consolidada (getConciliacionesGrupo).
+            const badgeEst = r.establecimiento
+                ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-1" title="${r.empresa_nombre || ''}">${r.establecimiento}</span>`
+                : '';
             return `<tr>
-                <td>${fmtDateDisplay(r.fecha_inicio)} al ${fmtDateDisplay(r.fecha_fin)}</td>
+                <td>${badgeEst}${fmtDateDisplay(r.fecha_inicio)} al ${fmtDateDisplay(r.fecha_fin)}</td>
                 <td class="text-end">$${Number(r.saldo_final).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                 <td class="text-end">${r.saldo_banco !== null ? '$' + Number(r.saldo_banco).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—'}</td>
                 <td>${r.usuario_nombre || ''}</td>
@@ -195,7 +224,7 @@
         if (!state.forma) return;
         new bootstrap.Modal(document.getElementById('modalHistorialConciliacionesCB')).show();
         try {
-            const json = await fetchJson(`${CB_URL_BASE}/listarConciliacionesAjax?forma=${state.forma}`);
+            const json = await fetchJson(`${CB_URL_BASE}/listarConciliacionesAjax?forma=${state.forma}&consolidado=${state.consolidado ? 1 : 0}`);
             renderConciliaciones(json.ok ? json.data : []);
         } catch (e) {
             console.error(e);
@@ -235,7 +264,7 @@
         const fechaFin = document.getElementById('cb-fecha-fin').value;
         const miSeq = ++saldosRequestSeq;
         try {
-            const params = new URLSearchParams({ forma: state.forma, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+            const params = new URLSearchParams({ forma: state.forma, consolidado: state.consolidado ? 1 : 0, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
             const json = await fetchJson(`${CB_URL_BASE}/getSaldosAjax?${params.toString()}`);
             if (miSeq !== saldosRequestSeq) return; // llegó una respuesta más nueva antes: descartar esta
             if (json.ok) {
@@ -270,6 +299,7 @@
 
         const params = new URLSearchParams({
             forma: state.forma,
+            consolidado: state.consolidado ? 1 : 0,
             page: state.page,
             sort: state.sort,
             dir: state.dir,
@@ -318,6 +348,17 @@
 
         document.getElementById('cbm-id-asiento-detalle').value = row.id_asiento_detalle;
         document.getElementById('cbm-id-asiento').value = row.id_asiento;
+        // row.id_empresa/id_forma_pago solo vienen en la vista consolidada (getMovimientosGrupo);
+        // si no vienen, se usa la empresa activa / cuenta seleccionada de siempre.
+        document.getElementById('cbm-id-empresa').value = row.id_empresa || 0;
+        document.getElementById('cbm-id-forma-pago').value = row.id_forma_pago || state.forma;
+        const wrapEst = document.getElementById('cbm-info-establecimiento-wrap');
+        if (row.establecimiento) {
+            document.getElementById('cbm-info-establecimiento').textContent = row.establecimiento + (row.empresa_nombre ? ' — ' + row.empresa_nombre : '');
+            wrapEst.style.display = '';
+        } else {
+            wrapEst.style.display = 'none';
+        }
         document.getElementById('cbm-info-fecha').textContent = fmtDateDisplay(row.fecha_asiento);
         document.getElementById('cbm-info-comprobante').textContent = row.numero_comprobante || 'S/N';
         document.getElementById('cbm-info-glosa').textContent = row.referencia_detalle || row.concepto || '';
@@ -344,7 +385,8 @@
     window.CB_guardarClasificacion = async function () {
         const payload = {
             id_asiento_detalle: parseInt(document.getElementById('cbm-id-asiento-detalle').value, 10),
-            id_forma_pago: state.forma,
+            id_empresa: parseInt(document.getElementById('cbm-id-empresa').value, 10) || 0,
+            id_forma_pago: parseInt(document.getElementById('cbm-id-forma-pago').value, 10) || state.forma,
             tipo_transaccion: document.getElementById('cbm-tipo').value,
             cheque_direccion: document.getElementById('cbm-tipo').value === 'CHEQUE' ? document.getElementById('cbm-direccion').value : null,
             numero_cheque: document.getElementById('cbm-numero-cheque').value || null,
@@ -375,6 +417,7 @@
 
     window.CB_quitarClasificacion = async function () {
         const idAsientoDetalle = parseInt(document.getElementById('cbm-id-asiento-detalle').value, 10);
+        const idEmpresaRow = parseInt(document.getElementById('cbm-id-empresa').value, 10) || 0;
         const result = await Swal.fire({
             icon: 'warning', title: '¿Quitar clasificación?',
             text: 'El movimiento volverá a su clasificación automática por defecto.',
@@ -386,7 +429,7 @@
             const resp = await fetch(`${CB_URL_BASE}/quitarClasificacionAjax`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ id_asiento_detalle: idAsientoDetalle }),
+                body: JSON.stringify({ id_asiento_detalle: idAsientoDetalle, id_empresa: idEmpresaRow }),
             });
             const json = await resp.json();
             if (!json.ok) {
@@ -440,6 +483,9 @@
     document.addEventListener('DOMContentLoaded', () => {
         const formaSelect = document.getElementById('cb-forma');
         state.forma = parseInt(formaSelect.value, 10) || 0;
+        state.consolidado = !!window.CB_CONSOLIDADO_INICIAL;
+        actualizarSwitchConsolidado();
+        document.getElementById('cb-consolidado').checked = state.consolidado;
 
         if (window.CMG_initSort) {
             window.CMG_initSort('control_bancario', (col, dir) => {

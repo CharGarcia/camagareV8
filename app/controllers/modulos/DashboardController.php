@@ -43,6 +43,7 @@ class DashboardController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         if ($idEmpresa <= 0) {
             echo json_encode(['ok' => false, 'error' => 'No hay empresa seleccionada.']);
             exit;
@@ -61,7 +62,7 @@ class DashboardController extends BaseModuloController
             $hasta     = trim((string) ($_POST['hasta'] ?? '')) ?: null;
 
             $service = new DashboardService();
-            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes, $cantMeses, $desde, $hasta);
+            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes, $cantMeses, $desde, $hasta, $idUsuario);
             $data['tipo_ambiente']       = $tipoAmbiente;
             $data['tipo_ambiente_label'] = $tipoAmbiente === '2' ? 'Producción' : 'Pruebas';
             echo json_encode(['ok' => true, 'data' => $data]);

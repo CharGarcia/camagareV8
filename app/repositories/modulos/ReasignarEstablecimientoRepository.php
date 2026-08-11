@@ -181,6 +181,23 @@ class ReasignarEstablecimientoRepository extends BaseRepository
         return $st->rowCount();
     }
 
+    /**
+     * IDs de compras_detalle de esta compra que ya tienen movimiento de inventario asociado
+     * (kardex vivo con referencia_tipo='compra'). Sirve para saber qué revertir antes de
+     * reasignar (mismo criterio que ComprasController::eliminarAjax()).
+     */
+    public function detalleIdsConInventario(int $idCompra, int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT d.id
+               FROM compras_detalle d
+               JOIN inventario_kardex k ON k.referencia_tipo = 'compra' AND k.referencia_id = d.id
+              WHERE d.id_compra = :ic AND k.id_empresa = :ie AND k.eliminado = false"
+        );
+        $st->execute([':ic' => $idCompra, ':ie' => $idEmpresa]);
+        return array_map('intval', array_column($st->fetchAll(PDO::FETCH_ASSOC), 'id'));
+    }
+
     // ── helpers ──
 
     private function armarWhere(int $idEmpresa, string $tipo, array $filtros, ?int $idUsuarioFiltro): array

@@ -155,15 +155,15 @@ class DeclaracionIvaController extends BaseModuloController
                 if ($tipo === 'semestral') {
                     for ($m = ($periodo == '1' ? 1 : 7); $m <= ($periodo == '1' ? 6 : 12); $m++) {
                         $mesStr = str_pad((string)$m, 2, '0', STR_PAD_LEFT);
-                        $this->service->sincronizarPeriodo($idEmpresa, (string)$anio, $mesStr, $idUsuario);
+                        $this->service->sincronizarPeriodoGrupo($idEmpresa, (string)$anio, $mesStr, $idUsuario);
                     }
                 } else {
-                    $this->service->sincronizarPeriodo($idEmpresa, (string)$anio, (string)$periodo, $idUsuario);
+                    $this->service->sincronizarPeriodoGrupo($idEmpresa, (string)$anio, (string)$periodo, $idUsuario);
                 }
             }
-            
-            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo);
-            $detalleDocumentos = $this->repository->getDetalleDocumentos($idEmpresa, $fechaDesde, $fechaHasta);
+
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo, $idUsuario);
+            $detalleDocumentos = $this->service->detalleDocumentosGrupo($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
             
             echo json_encode([
                 'ok' => true, 
@@ -205,6 +205,7 @@ class DeclaracionIvaController extends BaseModuloController
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $anio = $_GET['anio'] ?? date('Y');
         $periodo = $_GET['periodo'] ?? date('m');
         $tipo = $_GET['tipo_periodo'] ?? 'mensual';
@@ -226,8 +227,8 @@ class DeclaracionIvaController extends BaseModuloController
         }
 
         try {
-            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo);
-            $detalleDocumentos = $this->repository->getDetalleDocumentos($idEmpresa, $fechaDesde, $fechaHasta);
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo, $idUsuario);
+            $detalleDocumentos = $this->service->detalleDocumentosGrupo($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
 
@@ -357,24 +358,27 @@ class DeclaracionIvaController extends BaseModuloController
             $sheet2->setCellValue('C1', 'Fecha');
             $sheet2->setCellValue('D1', 'Entidad');
             $sheet2->setCellValue('E1', 'Concepto');
+            $sheet2->setCellValue('F1', 'Establecimiento (propio)');
 
             $sheet2->getColumnDimension('A')->setWidth(20);
             $sheet2->getColumnDimension('B')->setWidth(20);
             $sheet2->getColumnDimension('C')->setWidth(15);
             $sheet2->getColumnDimension('D')->setWidth(40);
             $sheet2->getColumnDimension('E')->setWidth(30);
+            $sheet2->getColumnDimension('F')->setWidth(30);
 
-            // Agrupar los detalles por documento y concepto
+            // Agrupar los detalles por documento y concepto (y por empresa: dos establecimientos
+            // del mismo RUC podrían coincidir en origen+documento+concepto por casualidad).
             $grupos = [];
             foreach ($detalleDocumentos as $d) {
                 $docNum = !empty($d['establecimiento']) ? "{$d['establecimiento']}-{$d['punto_emision']}-{$d['secuencial']}" : "ID: {$d['id_origen']}";
                 $keyDoc = "{$d['origen']}_{$docNum}";
-                
+
                 $concepto = $d['concepto'] ?? 'Sin concepto';
                 $concepto = preg_replace('/\s*\((Base|IVA)\)$/i', '', $concepto);
-                
-                $keyGrupo = "{$keyDoc}_{$concepto}";
-                
+
+                $keyGrupo = "{$keyDoc}_{$concepto}_{$d['_id_empresa']}";
+
                 if (!isset($grupos[$keyGrupo])) {
                     $grupos[$keyGrupo] = [
                         'origen' => $d['origen'],
@@ -382,10 +386,11 @@ class DeclaracionIvaController extends BaseModuloController
                         'fecha' => $d['fecha'],
                         'entidad' => $d['entidad'],
                         'concepto' => $concepto,
+                        'establecimiento_propio' => $d['_establecimiento_propio'] ?? '',
                         'casilleros' => []
                     ];
                 }
-                
+
                 $grupos[$keyGrupo]['casilleros'][] = [
                     'casillero' => $d['casillero'],
                     'valor' => $d['valor'],
@@ -402,13 +407,14 @@ class DeclaracionIvaController extends BaseModuloController
                 $sheet2->setCellValue('C' . $rowIdx, $g['fecha'] ?? '');
                 $sheet2->setCellValue('D' . $rowIdx, $g['entidad'] ?? '');
                 $sheet2->setCellValue('E' . $rowIdx, $g['concepto']);
-                
+                $sheet2->setCellValue('F' . $rowIdx, $g['establecimiento_propio'] ?? '');
+
                 // Ordenar casilleros
                 usort($g['casilleros'], function($a, $b) {
                     return (int)$a['casillero'] <=> (int)$b['casillero'];
                 });
 
-                $colIndex = 6; // F
+                $colIndex = 7; // G (F ya la ocupa "Establecimiento")
 
                 foreach ($g['casilleros'] as $cas) {
                     $colLetterCasillero = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
@@ -431,7 +437,7 @@ class DeclaracionIvaController extends BaseModuloController
             }
 
             // Encabezados dinámicos para casilleros
-            $colIndex = 6;
+            $colIndex = 7;
             for ($i = 1; $i <= $maxCasilleros; $i++) {
                 $colLetterCasillero = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
                 $sheet2->setCellValue($colLetterCasillero . '1', 'Casillero ' . $i);

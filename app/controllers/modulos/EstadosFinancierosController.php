@@ -33,7 +33,8 @@ class EstadosFinancierosController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
         $aniosDisponibles = $this->service->getAniosDisponibles($idEmpresa);
         if (empty($aniosDisponibles)) {
             $aniosDisponibles = [(int)date('Y')];
@@ -45,8 +46,10 @@ class EstadosFinancierosController extends BaseModuloController
         // Variables para la vista
         $fechaInicio = date('Y-01-01');
         $fechaFin = date('Y-12-31');
-        
+
         $perm = $this->getPermisos();
+
+        $idsGrupoRuc = (new \App\repositories\modulos\EmpresaRepository())->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
 
         // La generación de asientos pendientes NO se hace aquí (bloquearía la carga cuando hay
         // muchos por generar). La dispara la vista en segundo plano vía sincronizarAjax().
@@ -59,6 +62,7 @@ class EstadosFinancierosController extends BaseModuloController
             'proyectos' => $proyectos,
             'rutaModulo' => $this->getRutaModulo(),
             'perm' => $perm,
+            'hayGrupoRuc' => count($idsGrupoRuc) > 1,
             'fullWidth' => true
         ]);
     }
@@ -165,6 +169,32 @@ class EstadosFinancierosController extends BaseModuloController
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage() . ' en ' . $th->getFile() . ':' . $th->getLine()]);
+        }
+    }
+
+    /**
+     * "Consolidado por RUC": resumen de los conceptos mapeados en Balances Consolidados
+     * (sumados entre establecimientos) + el reporte completo de cada establecimiento del RUC
+     * por separado. Ver EstadosFinancierosService::getConsolidadoRuc().
+     */
+    public function generarConsolidadoRucAjax(): void
+    {
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
+            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
+            $idCentroCosto = !empty($_GET['centro_costo']) ? (int) $_GET['centro_costo'] : null;
+            $idProyecto = !empty($_GET['proyecto']) ? (int) $_GET['proyecto'] : null;
+            $nivel = !empty($_GET['nivel']) ? (int) $_GET['nivel'] : 5;
+
+            $datos = $this->service->getConsolidadoRuc($idEmpresa, $idUsuario, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
         }
     }
 
