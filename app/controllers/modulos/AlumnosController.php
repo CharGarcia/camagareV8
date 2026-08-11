@@ -50,9 +50,19 @@ class AlumnosController extends BaseModuloController
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
+        // Permisos de los catálogos/módulos que se pueden crear al vuelo desde
+        // la Barra de Acciones Superior del modal (mismo patrón que Factura de
+        // Venta con Clientes/Productos).
+        $permCampus   = $this->permisosModuloPorRuta('modulos/alumnos-campus');
+        $permNiveles  = $this->permisosModuloPorRuta('modulos/alumnos-niveles');
+        $permClientes = $this->permisosModuloPorRuta('modulos/clientes');
+
         $this->viewWithLayout('layouts.main', 'modulos.alumnos.index', [
-            'titulo'     => 'Alumnos',
-            'perm'       => $perm,
+            'titulo'      => 'Alumnos',
+            'perm'        => $perm,
+            'permCampus'  => $permCampus,
+            'permNiveles' => $permNiveles,
+            'permClientes'=> $permClientes,
             'rutaModulo' => self::RUTA_MODULO,
             'rows'       => $rows,
             'total'      => $total,

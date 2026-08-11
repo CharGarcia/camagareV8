@@ -88,6 +88,21 @@
         selNivelObjetivo = null;
     });
 
+    // El modal de Cliente (incluido desde clientes/modal_cliente.php) dispara
+    // 'clienteGuardado' en `document` con { ok, data: {id, nombre, identificacion, ...} }.
+    // Solo se autoselecciona si el modal de Alumno está abierto, para no
+    // interferir si el usuario crea un cliente desde otra pantalla.
+    document.addEventListener('clienteGuardado', (e) => {
+        if (!modalEl || !modalEl.classList.contains('show')) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.data) return;
+        const input = document.getElementById('alu_cliente_texto');
+        const hidden = document.getElementById('alu_id_cliente');
+        if (!input || !hidden) return;
+        hidden.value = res.data.id;
+        input.value = res.data.identificacion ? `${res.data.nombre} (${res.data.identificacion})` : res.data.nombre;
+    });
+
     // ── Typeahead genérico (mismo patrón que app/views/modulos/mayores/index.php) ──
     function setupTypeahead(inputEl, dropdownEl, hiddenEl, fetchFn, renderLabel) {
         let debounceTimer;

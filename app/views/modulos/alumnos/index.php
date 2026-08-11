@@ -29,8 +29,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-mortarboard-fill me-2 text-primary"></i>Alumnos</h5>
     <div class="d-flex gap-2">
-        <a href="<?= $base ?>/modulos/alumnos-campus" class="btn btn-outline-secondary btn-sm"><i class="bi bi-geo-alt me-1"></i>Campus</a>
-        <a href="<?= $base ?>/modulos/alumnos-niveles" class="btn btn-outline-secondary btn-sm"><i class="bi bi-mortarboard me-1"></i>Niveles</a>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalAlumnoCrear()">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo

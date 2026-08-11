@@ -78,6 +78,8 @@ class ConsolidacionGruposService
             if (!isset($grupos[$id])) {
                 $grupos[$id] = [
                     'id' => $id, 'nombre' => $f['nombre'], 'tipo' => $f['tipo'], 'orden' => (int) $f['orden'],
+                    'modo_consolidacion' => $f['modo_consolidacion'] ?? 'SUMA',
+                    'id_empresa_fuente' => $f['id_empresa_fuente'] !== null ? (int) $f['id_empresa_fuente'] : null,
                     'cuentas' => [],
                 ];
             }
@@ -130,10 +132,13 @@ class ConsolidacionGruposService
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
         try {
+            $modo = (string) ($data['modo_consolidacion'] ?? 'SUMA');
             $payload = [
                 'ruc' => $ruc, 'id_empresa_matriz' => $idEmpresa,
                 'nombre' => trim((string) $data['nombre']), 'tipo' => $data['tipo'],
                 'orden' => (int) ($data['orden'] ?? 0), 'usuario_id' => $idUsuario,
+                'modo_consolidacion' => $modo,
+                'id_empresa_fuente' => $modo === 'UNICA' ? (int) $data['id_empresa_fuente'] : null,
             ];
             if ($idExistente) {
                 $antes = $this->repo->getGrupo($idExistente, $ruc);

@@ -7,6 +7,7 @@ namespace App\Rules\modulos;
 class ConsolidacionGruposRules
 {
     private const TIPOS_VALIDOS = ['ACTIVO', 'PASIVO', 'PATRIMONIO', 'INGRESO', 'COSTO', 'GASTO'];
+    private const MODOS_VALIDOS = ['SUMA', 'UNICA'];
 
     public function validarGuardado(array $data): void
     {
@@ -31,6 +32,17 @@ class ConsolidacionGruposRules
                 throw new \Exception('No puede seleccionar dos cuentas de la misma empresa en un mismo grupo.');
             }
             $empresasVistas[$idEmpresa] = true;
+        }
+
+        $modo = (string) ($data['modo_consolidacion'] ?? 'SUMA');
+        if (!in_array($modo, self::MODOS_VALIDOS, true)) {
+            throw new \Exception('Modo de consolidación no válido.');
+        }
+        if ($modo === 'UNICA') {
+            $idFuente = (int) ($data['id_empresa_fuente'] ?? 0);
+            if ($idFuente <= 0 || !isset($empresasVistas[$idFuente])) {
+                throw new \Exception('Seleccione de qué establecimiento se toma el valor cuando el concepto no se debe sumar entre establecimientos.');
+            }
         }
     }
 }

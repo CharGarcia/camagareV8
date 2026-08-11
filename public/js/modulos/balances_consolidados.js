@@ -27,9 +27,12 @@
                 const acciones = [];
                 if (BC_PERM_ACTUALIZAR) acciones.push(`<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="window.BC_editar(${g.id})" title="Editar"><i class="bi bi-pencil"></i></button>`);
                 if (BC_PERM_ELIMINAR) acciones.push(`<button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" onclick="window.BC_eliminar(${g.id})" title="Eliminar"><i class="bi bi-trash"></i></button>`);
+                const badgeUnica = g.modo_consolidacion === 'UNICA'
+                    ? ' <span class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25" title="No se suma entre establecimientos: se toma un solo valor.">Única</span>'
+                    : '';
                 return `<tr>
                     <td class="ps-3 fw-bold">${esc(g.nombre)}</td>
-                    <td><span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">${TIPO_LABEL[g.tipo] || g.tipo}</span></td>
+                    <td><span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">${TIPO_LABEL[g.tipo] || g.tipo}</span>${badgeUnica}</td>
                     <td>${cuentas}</td>
                     <td class="text-center">${acciones.join(' ')}</td>
                 </tr>`;
@@ -75,7 +78,7 @@
     // Buscador tipo "chip" (mismo patrón que setupTypeahead() en mayores/index.php), pero
     // filtrando en memoria: las cuentas de cada establecimiento ya se cargan de una sola vez
     // al abrir el modal, así que no hace falta un endpoint de búsqueda nuevo.
-    function setupTypeaheadLocal(inputEl, hiddenEl, items, renderLabel) {
+    function setupTypeaheadLocal(inputEl, hiddenEl, items, renderLabel, onChange) {
         let debounceTimer;
 
         function buscar() {
@@ -102,6 +105,7 @@
                 hiddenEl.value = a.dataset.id;
                 inputEl.value = a.dataset.label;
                 cerrarDropdownFlotante();
+                if (onChange) onChange();
             };
         }
 
@@ -110,6 +114,7 @@
             hiddenEl.value = '';
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(buscar, 120);
+            if (onChange) onChange();
         });
         inputEl.addEventListener('keydown', (e) => {
             if ((e.key === 'Backspace' || e.key === 'Delete') && hiddenEl.value !== '') {
@@ -117,9 +122,41 @@
                 hiddenEl.value = '';
                 inputEl.value = '';
                 cerrarDropdownFlotante();
+                if (onChange) onChange();
             }
         });
     }
+
+    // Refresca las opciones de "Tomar el valor de" (modo cuenta única) con los establecimientos
+    // que ya tienen una cuenta elegida en la tabla del picker, conservando la selección previa
+    // si sigue siendo válida.
+    function refrescarSelectFuente() {
+        const selectFuente = document.getElementById('bc-fuente');
+        if (!selectFuente) return;
+        const valorPrevio = selectFuente.value;
+
+        const opciones = Array.from(document.querySelectorAll('#bc-tbody-establecimientos tr')).map(tr => {
+            const idEmpresa = tr.dataset.idEmpresa;
+            const idCuenta = tr.querySelector('.bc-select-cuenta')?.value;
+            if (!idCuenta) return null;
+            const est = establecimientosCache.find(e => String(e.id_empresa) === String(idEmpresa));
+            return { idEmpresa, etiqueta: est ? est.etiqueta : ('Empresa ' + idEmpresa) };
+        }).filter(Boolean);
+
+        selectFuente.innerHTML = opciones.length
+            ? opciones.map(o => `<option value="${o.idEmpresa}">${esc(o.etiqueta)}</option>`).join('')
+            : '<option value="">— Seleccione cuentas primero —</option>';
+
+        if (opciones.some(o => String(o.idEmpresa) === valorPrevio)) {
+            selectFuente.value = valorPrevio;
+        }
+    }
+
+    window.BC_toggleFuente = function () {
+        const activo = document.getElementById('bc-no-sumar').checked;
+        document.getElementById('bc-fuente-wrap').style.display = activo ? '' : 'none';
+        if (activo) refrescarSelectFuente();
+    };
 
     function renderPickerEstablecimientos(seleccionActual) {
         const tbody = document.getElementById('bc-tbody-establecimientos');
@@ -147,8 +184,10 @@
             // Las ya usadas en otro grupo no aparecen en la búsqueda (salvo la que este mismo
             // grupo ya tiene asignada para este establecimiento, al editar).
             const items = est.cuentas.filter(c => !c.usada || c.id === idSel);
-            setupTypeaheadLocal(inputEl, hiddenEl, items, c => `${c.codigo} - ${c.nombre}`);
+            setupTypeaheadLocal(inputEl, hiddenEl, items, c => `${c.codigo} - ${c.nombre}`, refrescarSelectFuente);
         });
+
+        refrescarSelectFuente();
     }
 
     window.BC_toggleAvisoPatrimonio = function () {
@@ -162,6 +201,10 @@
         document.getElementById('bc-nombre').value = datosExistente ? datosExistente.nombre : '';
         document.getElementById('bc-tipo').value = datosExistente ? datosExistente.tipo : 'ACTIVO';
         window.BC_toggleAvisoPatrimonio();
+
+        const noSumar = !!(datosExistente && datosExistente.modo_consolidacion === 'UNICA');
+        document.getElementById('bc-no-sumar').checked = noSumar;
+        document.getElementById('bc-fuente-wrap').style.display = noSumar ? '' : 'none';
 
         const seleccionActual = {};
         if (datosExistente) {
@@ -178,6 +221,9 @@
             if (!res.ok) { document.getElementById('bc-tbody-establecimientos').innerHTML = `<tr><td colspan="2" class="text-danger">${esc(res.mensaje)}</td></tr>`; return; }
             establecimientosCache = res.data || [];
             renderPickerEstablecimientos(seleccionActual);
+            if (noSumar && datosExistente.id_empresa_fuente) {
+                document.getElementById('bc-fuente').value = String(datosExistente.id_empresa_fuente);
+            }
         } catch (e) {
             console.error(e);
             document.getElementById('bc-tbody-establecimientos').innerHTML = '<tr><td colspan="2" class="text-danger">Error al cargar establecimientos.</td></tr>';
@@ -202,6 +248,8 @@
         const idGrupo = document.getElementById('bc-id-grupo').value;
         const nombre = document.getElementById('bc-nombre').value.trim();
         const tipo = document.getElementById('bc-tipo').value;
+        const noSumar = document.getElementById('bc-no-sumar').checked;
+        const idEmpresaFuente = noSumar ? (parseInt(document.getElementById('bc-fuente').value, 10) || null) : null;
 
         if (!nombre) { Swal.fire('Atención', 'Ingrese el nombre del concepto.', 'warning'); return; }
 
@@ -216,12 +264,20 @@
             Swal.fire('Atención', 'Seleccione al menos 2 establecimientos con su cuenta equivalente.', 'warning');
             return;
         }
+        if (noSumar && !idEmpresaFuente) {
+            Swal.fire('Atención', 'Seleccione de qué establecimiento se toma el valor, ya que marcó "No sumar entre establecimientos".', 'warning');
+            return;
+        }
 
         try {
             const resp = await fetch(`${BC_URL_BASE}/guardarAjax`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ id: idGrupo || null, nombre, tipo, cuentas }),
+                body: JSON.stringify({
+                    id: idGrupo || null, nombre, tipo, cuentas,
+                    modo_consolidacion: noSumar ? 'UNICA' : 'SUMA',
+                    id_empresa_fuente: idEmpresaFuente,
+                }),
             });
             const json = await resp.json();
             if (!json.ok) { Swal.fire('Error', json.mensaje || 'No se pudo guardar.', 'error'); return; }

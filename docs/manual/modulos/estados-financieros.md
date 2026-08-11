@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes
-version: 1.1
+version: 1.2
 orden: 50
 estado: activo
 ---
@@ -65,6 +65,37 @@ propio de ese mes, incluso en el Estado de Situación Financiera por Periodos
 (donde el saldo mostrado es acumulado): un mes sin movimiento repetiría el
 mismo saldo del mes anterior, así que no aporta una columna nueva.
 
+## Consolidado por RUC
+
+Si el RUC activo tiene más de un establecimiento (empresa) al que el usuario
+tenga acceso, aparece el botón **Consolidado por RUC**. Abre un modal con:
+
+- **Total General Consolidado**: un solo Estado de Situación Financiera y un
+  solo Estado de Resultados para **todo el RUC**, sin duplicar nada. Cada
+  concepto mapeado en [Balances Consolidados](modulos/balances-consolidados) aparece
+  **una sola vez** (sumado entre establecimientos, o con el valor de un solo
+  establecimiento si así se configuró — ver "Cuenta única" abajo); cada cuenta
+  que no está mapeada se lista aparte, identificada con su propio
+  establecimiento. Incluye subtotales (Total Activos, Total Pasivos, Total
+  Patrimonio, Total Pasivo + Patrimonio, Utilidad Bruta, Utilidad Neta).
+- **Detalle de conceptos consolidados**: cómo se armó cada valor del Total
+  General — de qué establecimiento(s) viene y con qué cuenta.
+- **Totales por establecimiento**: el resumen de cada establecimiento por
+  separado, tal cual su propio reporte individual, como referencia.
+
+**Cuenta única (no se suma entre establecimientos)**: algunos conceptos —
+típicamente **Capital** y otras cuentas de Patrimonio — no son un valor
+independiente por establecimiento: son el mismo capital de la misma empresa,
+aunque cada establecimiento lleve su propia contabilidad. Sumarlos infla el
+total. Por eso, en Balances Consolidados un grupo se puede marcar como
+"cuenta única": el Total General toma el valor de **un solo** establecimiento
+(el que se configuró como fuente) y no suma los demás — que igual se muestran
+en el detalle, tachados, solo como referencia.
+
+La **Utilidad/Pérdida del Ejercicio** del Total General sí se suma entre
+todos los establecimientos (a diferencia del capital, el resultado del
+período es propio de cada uno y legítimamente aditivo).
+
 ## Si el balance no cuadra
 
 Revise en este orden:
@@ -83,6 +114,10 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.2** — El modal "Consolidado por RUC" agrega el Total General Consolidado:
+  un solo Estado de Situación Financiera / Resultados por RUC, sin duplicar
+  conceptos ya mapeados en Balances Consolidados (incluye el modo "cuenta
+  única" para Capital y demás cuentas de Patrimonio que no deben sumarse).
 - **1.1** — Se agregan las variantes "por periodos" (Estado de Resultados y
   Estado de Situación Financiera horizontales, una columna por mes), con
   exportación a PDF/Excel.

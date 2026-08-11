@@ -76,6 +76,17 @@ $rutaUrl = $base . '/' . $rutaModulo;
                         <tbody id="bc-tbody-establecimientos"></tbody>
                     </table>
                 </div>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="bc-no-sumar" onchange="window.BC_toggleFuente()">
+                    <label class="form-check-label small" for="bc-no-sumar">
+                        No sumar entre establecimientos (cuenta única, ej. Capital, Reservas) — es el mismo concepto registrado una sola vez, no un valor independiente por establecimiento.
+                    </label>
+                </div>
+                <div class="mt-2" id="bc-fuente-wrap" style="display:none;">
+                    <label class="form-label small fw-bold mb-1">Tomar el valor de</label>
+                    <select id="bc-fuente" class="form-select form-select-sm shadow-none"></select>
+                    <div class="form-text small">Los demás establecimientos mapeados a este concepto se muestran como referencia, pero no se suman al total.</div>
+                </div>
             </div>
             <div class="modal-footer py-2 px-3">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>

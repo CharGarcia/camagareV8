@@ -1,6 +1,12 @@
 <?php
 /** @var array $perm */
 /** @var string $rutaModulo */
+/** @var array $permCampus */
+/** @var array $permNiveles */
+/** @var array $permClientes */
+$permCampus   = $permCampus   ?? [];
+$permNiveles  = $permNiveles  ?? [];
+$permClientes = $permClientes ?? [];
 ?>
 <style>
     .alu-grid th, .alu-grid td { vertical-align: middle; padding: 4px 6px; font-size: 0.8rem; }
@@ -10,6 +16,20 @@
     .row-alu:hover .remove-row { opacity: 1; }
     .alu-typeahead-dropdown { position: absolute; z-index: 4000; max-height: 220px; overflow-y: auto; display: none; width: 260px; }
     #modalAlumno .nav-link.disabled { pointer-events: none; opacity: .5; }
+
+    /* ── Apilado de modales sobre el modal de Alumno ──
+       app.css fuerza `.modal { z-index: 5060 !important }` a TODOS los modales,
+       lo que deja los submodales (nuevo cliente / campus / nivel) por detrás
+       del modal de Alumno. Mismo patrón que app/views/modulos/compras/index.php:
+       `.modal:not(#modalAlumno)` incluye un ID y gana en especificidad al
+       `.modal` global, elevando cualquier modal que se abra encima. */
+    .modal:not(#modalAlumno) {
+        z-index: 6060 !important;
+    }
+
+    .modal-backdrop ~ .modal-backdrop {
+        z-index: 6055 !important;
+    }
 </style>
 
 <div class="modal fade" id="modalAlumno" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -23,6 +43,24 @@
                     </h5>
                     <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
+
+                <?php if (!empty($permCampus['crear']) || !empty($permNiveles['crear']) || !empty($permClientes['crear'])): ?>
+                <!-- Barra de Acciones Superior -->
+                <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
+                    <?php if (!empty($permClientes['crear'])): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i> Nuevo cliente</button>
+                    <?php endif; ?>
+                    <?php if (!empty($permCampus['crear']) || !empty($permNiveles['crear'])): ?>
+                        <div class="vr mx-1"></div>
+                    <?php endif; ?>
+                    <?php if (!empty($permCampus['crear'])): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalCampusCrear()" title="Registrar nuevo campus"><i class="bi bi-geo-alt fs-6"></i> Nuevo campus</button>
+                    <?php endif; ?>
+                    <?php if (!empty($permNiveles['crear'])): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalNivelCrear()" title="Registrar nuevo nivel/curso"><i class="bi bi-mortarboard fs-6"></i> Nuevo nivel/curso</button>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
 
                 <div class="px-3 pt-2 bg-light border-bottom">
                     <div id="modalAlertAlumno" class="alert d-none mb-2 py-2 small shadow-sm border-0"></div>
@@ -315,5 +353,6 @@
 
 <?php include MVC_APP . '/views/modulos/alumnos_campus/modal_campus.php'; ?>
 <?php include MVC_APP . '/views/modulos/alumnos_niveles/modal_nivel.php'; ?>
+<?php include MVC_APP . '/views/modulos/clientes/modal_cliente.php'; ?>
 
 <script src="<?= BASE_URL ?>/js/modulos/alumnos_modal.js?v=<?= time() ?>"></script>

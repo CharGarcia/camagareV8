@@ -45,18 +45,51 @@ class EstadosFinancierosService
     }
 
     /**
-     * Vista "Consolidado por RUC": arma un resumen adicional con los conceptos ya mapeados en
-     * Balances Consolidados (sumados entre establecimientos del RUC accesible al usuario) y,
-     * por separado, el reporte COMPLETO de cada establecimiento (Situación Financiera + Resultados,
-     * sin modificar ninguna de las dos funciones existentes ni su jerarquía). Nunca reconstruye un
-     * árbol único entre planes de cuentas distintos — solo suma lo que el usuario mapeó a mano.
+     * Utilidad/Pérdida del Ejercicio de una empresa (cuentas 4/5/6 + pivote de migrados clase 7).
+     * Extraído de getEstadoSituacionFinanciera() para reutilizarlo también en el Total General
+     * Consolidado (getConsolidadoRuc()), sin duplicar la lógica del cierre virtual.
+     */
+    private function calcularResultadoEjercicio(int $idEmpresa, array $saldos, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto): float
+    {
+        $resultados = $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+        $utilidadNeta = $resultados['totales']['utilidad_neta'];
+
+        // CIERRE VIRTUAL: los datos migrados dejaron el resultado en la cuenta PIVOT (clase 7 =
+        // "Resumen de Resultados", que ningún reporte muestra). Se suma su saldo (haber - debe) al
+        // resultado para que el Balance cuadre. No hay doble conteo: el resultado está en 4/5/6
+        // (utilidadNeta) o en la clase 7, nunca en ambos.
+        $saldoPivot = 0.0;
+        foreach ($saldos as $s) {
+            if ((int) $s['nivel'] === 5 && str_starts_with((string) $s['codigo'], '7')) {
+                $saldoPivot += (float) $s['total_haber'] - (float) $s['total_debe'];
+            }
+        }
+        return $utilidadNeta + $saldoPivot;
+    }
+
+    /**
+     * Vista "Consolidado por RUC": arma un resumen con los conceptos ya mapeados en Balances
+     * Consolidados (sumados entre establecimientos del RUC accesible al usuario, salvo los grupos
+     * en modo "cuenta única" — ver abajo), el Total General Consolidado (un solo Estado de
+     * Situación Financiera / Resultados para todo el RUC, sin duplicar nada) y, por separado, el
+     * reporte COMPLETO de cada establecimiento (sin modificar ninguna de las dos funciones
+     * existentes ni su jerarquía, para no arriesgar el cuadre de cada reporte individual).
      * Si el RUC solo tiene un establecimiento accesible, 'aplica' viene en false.
+     *
+     * Modo de un grupo consolidado (consolidacion_grupos.modo_consolidacion):
+     * - SUMA (default): el concepto existe de forma independiente en cada establecimiento
+     *   (caja, cuentas por cobrar, etc.) — se suman los valores de todos los establecimientos
+     *   mapeados.
+     * - UNICA: el concepto es el mismo registro para todo el RUC (capital, reservas de
+     *   patrimonio) — solo cuenta el valor del establecimiento marcado como id_empresa_fuente;
+     *   los demás establecimientos mapeados se muestran en 'detalle' solo como referencia
+     *   (incluido=false), sin sumarse, para no inflar el total con el mismo capital repetido.
      */
     public function getConsolidadoRuc(int $idEmpresa, int $idUsuario, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivelReporte = 5): array
     {
         $idsGrupo = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
         if (count($idsGrupo) <= 1) {
-            return ['aplica' => false, 'consolidado' => [], 'por_establecimiento' => []];
+            return ['aplica' => false, 'consolidado' => [], 'por_establecimiento' => [], 'total_general' => null];
         }
 
         $mapa = $this->consolidacionSvc->getMapaCuentaGrupo($idEmpresa);
@@ -64,28 +97,71 @@ class EstadosFinancierosService
 
         $gruposAcum = [];
         $porEstablecimiento = [];
+        $resultadoAcumuladoRuc = 0.0;
+
+        // Total General Consolidado: solo trabaja con cuentas de MOVIMIENTO (nivel 5) — son
+        // atómicas, no hay ambigüedad de rollup entre planes de cuentas distintos.
+        $tiposTG = ['ACTIVO', 'PASIVO', 'PATRIMONIO', 'INGRESO', 'COSTO', 'GASTO'];
+        $lineasTG = array_fill_keys($tiposTG, []);
+        $totalesTG = array_fill_keys($tiposTG, 0.0);
 
         foreach ($idsGrupo as $idEmp) {
             $saldos = $this->repository->getSaldos($idEmp, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
             foreach ($saldos as $s) {
                 $idCuenta = (int) $s['id_cuenta'];
-                if (!isset($mapa[$idCuenta])) {
+
+                if (isset($mapa[$idCuenta])) {
+                    $g = $mapa[$idCuenta];
+                    if (!isset($gruposAcum[$g['id_grupo']])) {
+                        $gruposAcum[$g['id_grupo']] = [
+                            'nombre' => $g['nombre'], 'tipo' => $g['tipo'], 'orden' => $g['orden'],
+                            'modo' => $g['modo'], 'saldo' => 0.0, 'detalle' => [],
+                        ];
+                    }
+                    $valor = $this->signoSaldoConsolidado($g['tipo'], (float) $s['total_debe'], (float) $s['total_haber']);
+                    $incluido = $g['modo'] !== 'UNICA' || (int) $idEmp === (int) $g['id_empresa_fuente'];
+                    if ($incluido) {
+                        $gruposAcum[$g['id_grupo']]['saldo'] += $valor;
+                    }
+                    $gruposAcum[$g['id_grupo']]['detalle'][] = [
+                        'establecimiento' => $etiquetas[$idEmp] ?? ('Empresa ' . $idEmp),
+                        'codigo' => $s['codigo'], 'nombre' => $s['nombre'], 'valor' => $valor, 'incluido' => $incluido,
+                    ];
+                    continue; // ya representada en el grupo — no se duplica como línea suelta del Total General.
+                }
+
+                // Cuenta no mapeada a ningún grupo: entra al Total General como línea propia de
+                // este establecimiento (nivel 5 únicamente; clase 7 = pivote de migrados, se
+                // refleja aparte en la Utilidad/Pérdida del Ejercicio consolidada, más abajo).
+                if ((int) $s['nivel'] !== 5) {
                     continue;
                 }
-                $g = $mapa[$idCuenta];
-                if (!isset($gruposAcum[$g['id_grupo']])) {
-                    $gruposAcum[$g['id_grupo']] = [
-                        'nombre' => $g['nombre'], 'tipo' => $g['tipo'], 'orden' => $g['orden'],
-                        'saldo' => 0.0, 'detalle' => [],
-                    ];
+                $codigoStr = (string) $s['codigo'];
+                $tipoInferido = match (true) {
+                    str_starts_with($codigoStr, '1') => 'ACTIVO',
+                    str_starts_with($codigoStr, '2') => 'PASIVO',
+                    str_starts_with($codigoStr, '3') => 'PATRIMONIO',
+                    str_starts_with($codigoStr, '4') => 'INGRESO',
+                    str_starts_with($codigoStr, '5') => 'COSTO',
+                    str_starts_with($codigoStr, '6') => 'GASTO',
+                    default => null,
+                };
+                if ($tipoInferido === null) {
+                    continue;
                 }
-                $valor = $this->signoSaldoConsolidado($g['tipo'], (float) $s['total_debe'], (float) $s['total_haber']);
-                $gruposAcum[$g['id_grupo']]['saldo'] += $valor;
-                $gruposAcum[$g['id_grupo']]['detalle'][] = [
+                $valor = $this->signoSaldoConsolidado($tipoInferido, (float) $s['total_debe'], (float) $s['total_haber']);
+                if (round($valor, 2) === 0.0) {
+                    continue;
+                }
+                $lineasTG[$tipoInferido][] = [
+                    'origen' => 'establecimiento',
                     'establecimiento' => $etiquetas[$idEmp] ?? ('Empresa ' . $idEmp),
                     'codigo' => $s['codigo'], 'nombre' => $s['nombre'], 'valor' => $valor,
                 ];
+                $totalesTG[$tipoInferido] += $valor;
             }
+
+            $resultadoAcumuladoRuc += $this->calcularResultadoEjercicio($idEmp, $saldos, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
 
             // Reporte completo de este establecimiento, tal cual existe hoy — no se toca ni se
             // excluyen las cuentas ya mapeadas, para no arriesgar el cuadre de cada reporte individual.
@@ -100,7 +176,36 @@ class EstadosFinancierosService
         $consolidado = array_values($gruposAcum);
         usort($consolidado, fn ($a, $b) => $a['orden'] <=> $b['orden']);
 
-        return ['aplica' => true, 'consolidado' => $consolidado, 'por_establecimiento' => $porEstablecimiento];
+        // Los grupos consolidados también entran al Total General, con su valor ya resuelto
+        // (SUMA o ÚNICA) — antepuestos a las líneas sueltas por establecimiento de ese mismo tipo.
+        foreach ($consolidado as $g) {
+            $lineasTG[$g['tipo']] = array_merge(
+                [['origen' => 'grupo', 'establecimiento' => null, 'codigo' => null, 'nombre' => $g['nombre'], 'valor' => $g['saldo']]],
+                $lineasTG[$g['tipo']]
+            );
+            $totalesTG[$g['tipo']] += $g['saldo'];
+        }
+
+        // Utilidad/Pérdida del Ejercicio consolidada: suma de cada establecimiento (a diferencia
+        // del capital, el resultado del período SÍ es propio y aditivo por establecimiento — cada
+        // uno refleja su propia operación real, sumarlos da el resultado real de todo el RUC).
+        $lblResultado = $resultadoAcumuladoRuc >= 0 ? 'Utilidad del Ejercicio (consolidado)' : 'Pérdida del Ejercicio (consolidado)';
+        $lineasTG['PATRIMONIO'][] = ['origen' => 'resultado', 'establecimiento' => null, 'codigo' => null, 'nombre' => $lblResultado, 'valor' => $resultadoAcumuladoRuc];
+        $totalesTG['PATRIMONIO'] += $resultadoAcumuladoRuc;
+
+        $totalGeneral = [
+            'activo' => $lineasTG['ACTIVO'], 'pasivo' => $lineasTG['PASIVO'], 'patrimonio' => $lineasTG['PATRIMONIO'],
+            'ingreso' => $lineasTG['INGRESO'], 'costo' => $lineasTG['COSTO'], 'gasto' => $lineasTG['GASTO'],
+            'totales' => [
+                'activo' => $totalesTG['ACTIVO'], 'pasivo' => $totalesTG['PASIVO'], 'patrimonio' => $totalesTG['PATRIMONIO'],
+                'pasivo_patrimonio' => $totalesTG['PASIVO'] + $totalesTG['PATRIMONIO'],
+                'ingreso' => $totalesTG['INGRESO'], 'costo' => $totalesTG['COSTO'], 'gasto' => $totalesTG['GASTO'],
+                'utilidad_bruta' => $totalesTG['INGRESO'] - $totalesTG['COSTO'],
+                'utilidad_neta' => $totalesTG['INGRESO'] - $totalesTG['COSTO'] - $totalesTG['GASTO'],
+            ],
+        ];
+
+        return ['aplica' => true, 'consolidado' => $consolidado, 'por_establecimiento' => $porEstablecimiento, 'total_general' => $totalGeneral];
     }
 
     public function getAniosDisponibles(int $idEmpresa): array
@@ -274,21 +379,8 @@ class EstadosFinancierosService
             }
         }
 
-        // Obtener la Utilidad del Ejercicio (de las cuentas 4/5/6)
-        $resultados = $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
-        $utilidadNeta = $resultados['totales']['utilidad_neta'];
-
-        // CIERRE VIRTUAL: los datos migrados dejaron el resultado en la cuenta PIVOT (clase 7 =
-        // "Resumen de Resultados", que ningún reporte muestra). Se suma su saldo (haber - debe) al
-        // resultado para que el Balance cuadre. No hay doble conteo: el resultado está en 4/5/6
-        // (utilidadNeta) o en la clase 7, nunca en ambos.
-        $saldoPivot = 0.0;
-        foreach ($saldos as $s) {
-            if ((int) $s['nivel'] === 5 && str_starts_with((string) $s['codigo'], '7')) {
-                $saldoPivot += (float) $s['total_haber'] - (float) $s['total_debe'];
-            }
-        }
-        $resultado = $utilidadNeta + $saldoPivot;
+        // Obtener la Utilidad/Pérdida del Ejercicio (cuentas 4/5/6 + pivote de migrados clase 7)
+        $resultado = $this->calcularResultadoEjercicio($idEmpresa, $saldos, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
 
         // Cuenta de patrimonio configurada según el signo (Cierre del Ejercicio en Config. Contable)
         $ctasCierre = $this->repository->getCuentasCierreEjercicio($idEmpresa);

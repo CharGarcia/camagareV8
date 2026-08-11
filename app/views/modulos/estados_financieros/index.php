@@ -161,15 +161,32 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                     <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
                 </div>
                 <div id="content-consolidado" class="d-none">
-                    <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Solo se suman los conceptos ya mapeados en <a href="<?= $base ?>/modulos/balances-consolidados" target="_blank">Balances Consolidados</a>. El resto de cuentas se muestra por establecimiento, sin sumar (no todos los establecimientos comparten la misma estructura de plan de cuentas).</p>
-                    <h6 class="fw-bold small text-uppercase text-muted">Cuentas consolidadas</h6>
+                    <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>El <strong>Total General Consolidado</strong> es un solo Estado de Situación Financiera / Resultados para todo el RUC: cada concepto mapeado en <a href="<?= $base ?>/modulos/balances-consolidados" target="_blank">Balances Consolidados</a> aparece una sola vez (sumado, o con un valor único si así se configuró — ej. Capital), y cada cuenta que no está mapeada se lista por su propio establecimiento. Nada se cuenta dos veces.</p>
+
+                    <h6 class="fw-bold small text-uppercase text-muted">Total General Consolidado — Situación Financiera</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm table-bordered mb-0" id="tabla-tg-situacion">
+                            <thead class="table-light"><tr><th>Concepto</th><th>Origen</th><th class="text-end" style="width:140px">Valor</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <h6 class="fw-bold small text-uppercase text-muted">Total General Consolidado — Resultados</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm table-bordered mb-0" id="tabla-tg-resultados">
+                            <thead class="table-light"><tr><th>Concepto</th><th>Origen</th><th class="text-end" style="width:140px">Valor</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <h6 class="fw-bold small text-uppercase text-muted">Detalle de conceptos consolidados (cómo se armó cada valor del Total General)</h6>
                     <div class="table-responsive mb-4">
                         <table class="table table-sm table-bordered mb-0" id="tabla-consolidado-grupos">
                             <thead class="table-light"><tr><th>Concepto</th><th>Tipo</th><th class="text-end">Saldo</th><th>Detalle por establecimiento</th></tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
-                    <h6 class="fw-bold small text-uppercase text-muted">Totales por establecimiento (sin consolidar)</h6>
+                    <h6 class="fw-bold small text-uppercase text-muted">Totales por establecimiento (referencia — sin consolidar)</h6>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0" id="tabla-consolidado-estab">
                             <thead class="table-light"><tr>
@@ -340,14 +357,52 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             if (!res.success) { Swal.fire('Error', res.error || 'No se pudo cargar el consolidado.', 'error'); modal.hide(); return; }
             const d = res.data;
 
+            const escTG = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const origenTG = (l) => {
+                if (l.origen === 'grupo') return '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Grupo consolidado</span>';
+                if (l.origen === 'resultado') return '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Resultado del período</span>';
+                return `<span class="text-muted small">${escTG(l.establecimiento || '')}</span>`;
+            };
+            const filaTG = (l) => `<tr>
+                <td>${escTG(l.nombre)}${l.codigo ? ` <span class="text-muted small">(${escTG(l.codigo)})</span>` : ''}</td>
+                <td>${origenTG(l)}</td>
+                <td class="text-end">${formatMoney(l.valor)}</td>
+            </tr>`;
+            const filaTotalTG = (nombre, valor, clase) => `<tr class="${clase || 'tr-total'}"><td colspan="2">${nombre}</td><td class="text-end">${formatMoney(valor)}</td></tr>`;
+
+            const tg = d.total_general;
+            const tbTgSituacion = document.querySelector('#tabla-tg-situacion tbody');
+            const tbTgResultados = document.querySelector('#tabla-tg-resultados tbody');
+            if (!tg) {
+                tbTgSituacion.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No aplica.</td></tr>';
+                tbTgResultados.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No aplica.</td></tr>';
+            } else {
+                tbTgSituacion.innerHTML =
+                    tg.activo.map(filaTG).join('') + filaTotalTG('TOTAL ACTIVOS', tg.totales.activo) +
+                    tg.pasivo.map(filaTG).join('') + filaTotalTG('TOTAL PASIVOS', tg.totales.pasivo) +
+                    tg.patrimonio.map(filaTG).join('') + filaTotalTG('TOTAL PATRIMONIO', tg.totales.patrimonio) +
+                    filaTotalTG('TOTAL PASIVO + PATRIMONIO', tg.totales.pasivo_patrimonio, 'tr-total-general');
+
+                tbTgResultados.innerHTML =
+                    tg.ingreso.map(filaTG).join('') + filaTotalTG('TOTAL INGRESOS', tg.totales.ingreso) +
+                    tg.costo.map(filaTG).join('') + filaTotalTG('TOTAL COSTOS', tg.totales.costo) +
+                    filaTotalTG('UTILIDAD BRUTA', tg.totales.utilidad_bruta) +
+                    tg.gasto.map(filaTG).join('') + filaTotalTG('TOTAL GASTOS', tg.totales.gasto) +
+                    filaTotalTG('UTILIDAD NETA', tg.totales.utilidad_neta, 'tr-total-general');
+            }
+
             const tbGrupos = document.querySelector('#tabla-consolidado-grupos tbody');
             if (!d.consolidado || !d.consolidado.length) {
                 tbGrupos.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No hay conceptos consolidados configurados. Ir a <a href="<?= $base ?>/modulos/balances-consolidados" target="_blank">Balances Consolidados</a>.</td></tr>';
             } else {
                 tbGrupos.innerHTML = d.consolidado.map(g => {
-                    const detalle = (g.detalle || []).map(x => `${x.establecimiento}: ${x.codigo} - ${x.nombre} (${formatMoney(x.valor)})`).join('<br>');
+                    const detalle = (g.detalle || []).map(x => {
+                        const linea = `${x.establecimiento}: ${x.codigo} - ${x.nombre} (${formatMoney(x.valor)})`;
+                        return x.incluido === false ? `<span class="text-decoration-line-through" title="No se suma: este grupo es de cuenta única (modo UNICA)">${linea}</span>` : linea;
+                    }).join('<br>');
+                    const badgeUnica = g.modo === 'UNICA' ? ' <span class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25">Única</span>' : '';
                     return `<tr>
-                        <td class="fw-bold">${g.nombre}</td>
+                        <td class="fw-bold">${g.nombre}${badgeUnica}</td>
                         <td>${g.tipo}</td>
                         <td class="text-end fw-bold">${formatMoney(g.saldo)}</td>
                         <td class="small text-muted">${detalle}</td>

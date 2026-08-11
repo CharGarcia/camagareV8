@@ -167,7 +167,7 @@ class EmpresaAsignada extends BaseModel
 
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (e.nombre_comercial LIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
         }
 
         $sql = "SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc FROM {$from} WHERE {$where} ORDER BY e.nombre_comercial LIMIT 50";
@@ -193,7 +193,7 @@ class EmpresaAsignada extends BaseModel
         }
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (u.nombre LIKE '%{$b}%' OR u.cedula LIKE '%{$b}%')";
+            $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula LIKE '%{$b}%')";
         }
         $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel FROM {$from} {$where} ORDER BY u.nombre LIMIT " . (int) $limit;
         return $this->query($sql);
@@ -264,7 +264,7 @@ class EmpresaAsignada extends BaseModel
         $where = "WHERE e.eliminado = false AND e.estado = '1'";
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (e.nombre_comercial LIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
         }
         return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc FROM empresas e {$where} ORDER BY e.nombre_comercial LIMIT " . (int) $limit);
     }

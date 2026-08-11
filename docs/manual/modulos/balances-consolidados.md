@@ -6,7 +6,7 @@ ruta_modulo: modulos/balances-consolidados
 tipo: modulo
 visibilidad: todos
 etiquetas: consolidado, RUC, establecimientos, sucursales, balance general, estado de resultados, grupo de cuentas, matriz, plan de cuentas, multiempresa
-version: 1.1
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -52,9 +52,14 @@ que el usuario tenga acceso.
    buscador tipo "chip": se escribe, se elige de la lista filtrada, y queda fija
    la selección (Backspace/Delete la limpia de una sola vez). Se puede dejar en
    blanco el establecimiento que no tenga esa cuenta o no aplique.
-5. Guardar. El grupo queda disponible de inmediato en Estados Financieros y
+5. Si el concepto **no debe sumarse entre establecimientos** (típicamente
+   Capital u otra cuenta de Patrimonio que es la misma para toda la empresa,
+   no un valor independiente por establecimiento), marcar **"No sumar entre
+   establecimientos"** y elegir de cuál establecimiento se toma el valor. Los
+   demás establecimientos mapeados quedan solo como referencia — no se suman.
+6. Guardar. El grupo queda disponible de inmediato en Estados Financieros y
    Balance de Comprobación (pestaña/vista "Consolidado por RUC").
-6. Repetir por cada concepto que se quiera consolidar. Las cuentas que no se
+7. Repetir por cada concepto que se quiera consolidar. Las cuentas que no se
    mapeen a ningún grupo se siguen viendo en el reporte, pero por establecimiento
    por separado (no se inventan sumas).
 
@@ -65,6 +70,27 @@ que el usuario tenga acceso.
 | Nombre | Sí | Nombre del concepto consolidado, como aparecerá en el reporte. |
 | Tipo | Sí | Clasificación contable (Activo/Pasivo/Patrimonio/Ingreso/Costo/Gasto), solo para agrupar visualmente. |
 | Cuenta por establecimiento | Al menos 2 | La cuenta de plan de cuentas de ESE establecimiento que representa el concepto. Una cuenta no puede estar en dos grupos a la vez. |
+| No sumar entre establecimientos | No (por defecto: sumar) | Cambia el modo de cálculo de SUMA (default) a ÚNICA — ver "Modo de cálculo" abajo. |
+| Tomar el valor de | Sí, si "No sumar" está marcado | De cuál de los establecimientos mapeados se toma el valor cuando el modo es ÚNICA. |
+
+## Modo de cálculo: sumar vs. cuenta única
+
+Cada grupo tiene un modo, elegido con el checkbox "No sumar entre
+establecimientos":
+
+- **Sumar (SUMA, por defecto)**: el concepto existe de forma independiente en
+  cada establecimiento — caja, bancos, cuentas por cobrar/pagar, inventario,
+  etc. Cada establecimiento tiene SU PROPIO saldo real de ese concepto, así
+  que el total del RUC es la suma de todos.
+- **Cuenta única (UNICA)**: el concepto es el mismo registro para toda la
+  empresa, aunque cada establecimiento lleve su propia contabilidad —
+  típicamente **Capital social** y otras cuentas de **Patrimonio** (reservas,
+  aportes). No es que cada establecimiento tenga "su" capital: es el mismo
+  capital, y sumarlo entre establecimientos lo duplicaría. En este modo, el
+  Total General Consolidado de Estados Financieros toma el valor de **un
+  solo** establecimiento (el configurado como fuente); los demás
+  establecimientos mapeados a ese grupo se siguen mostrando en el detalle,
+  tachados, solo como referencia — nunca se suman al total.
 
 ## Permisos
 
@@ -92,8 +118,14 @@ del grupo.
 - **Cuentas de patrimonio**: el formulario avisa, pero no impide, mapear cuentas
   de tipo Patrimonio — capital social, utilidades retenidas o resultado del
   ejercicio no siempre deben sumarse entre establecimientos (podría representar
-  capital duplicado en vez de capital real). Verificarlo con el contador antes
-  de mapear estas cuentas específicamente.
+  capital duplicado en vez de capital real). Para evitarlo, usar el modo
+  "cuenta única" (ver arriba) en vez del modo sumar. Verificarlo con el
+  contador antes de mapear estas cuentas específicamente.
+- **La Utilidad/Pérdida del Ejercicio del Total General Consolidado siempre se
+  suma** entre todos los establecimientos, sin importar el modo de los grupos
+  de patrimonio — es un cálculo aparte (no depende de ningún grupo mapeado),
+  porque a diferencia del capital, el resultado del período sí es propio de
+  cada establecimiento y legítimamente aditivo.
 - Eliminar un grupo no borra ninguna cuenta del plan de cuentas — solo quita la
   equivalencia; los establecimientos vuelven a mostrarse por separado.
 
@@ -101,9 +133,11 @@ del grupo.
 
 - **Estados Financieros** (`modulos/estados-financieros`) y **Balance de
   Comprobación** (`modulos/balance-comprobacion`): leen estos grupos para armar
-  la vista "Consolidado por RUC" — las cuentas mapeadas se muestran sumadas en
-  una sola línea; las que no están en ningún grupo se muestran por establecimiento,
-  con el reporte jerárquico normal de cada uno.
+  la vista "Consolidado por RUC", incluyendo el **Total General Consolidado**
+  (un solo Estado de Situación Financiera/Resultados por RUC): las cuentas
+  mapeadas se muestran en una sola línea (sumadas, o con el valor único según
+  el modo del grupo); las que no están en ningún grupo se muestran por
+  establecimiento, con el reporte jerárquico normal de cada uno.
 - No afecta Libro Diario, Auditoría Contable ni la generación de asientos
   automáticos — cada establecimiento sigue contabilizando en su propio libro.
 
@@ -122,6 +156,11 @@ del grupo.
 
 ## Historial de cambios
 
+- **1.2** — Se agrega el modo "cuenta única" (no sumar entre establecimientos),
+  para conceptos que son el mismo registro en toda la empresa (Capital y demás
+  cuentas de Patrimonio) en vez de un valor independiente por establecimiento.
+  Estados Financieros ahora arma un Total General Consolidado (un solo Estado
+  de Situación Financiera/Resultados por RUC) que usa este modo.
 - **1.1** — El selector de cuenta por establecimiento pasó de lista desplegable
   a buscador tipo "chip" (por código o nombre), para no tener que recorrer el
   plan de cuentas completo uno por uno.

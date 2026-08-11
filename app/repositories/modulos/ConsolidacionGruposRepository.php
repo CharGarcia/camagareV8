@@ -25,6 +25,7 @@ class ConsolidacionGruposRepository extends BaseRepository
     public function listarGruposConCuentas(string $ruc): array
     {
         $sql = "SELECT g.id AS id_grupo, g.nombre, g.tipo, g.orden,
+                       g.modo_consolidacion, g.id_empresa_fuente,
                        gc.id AS id_detalle, gc.id_empresa, gc.id_cuenta,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                        COALESCE(NULLIF(e.nombre_comercial, ''), e.nombre) AS empresa_nombre,
@@ -51,12 +52,15 @@ class ConsolidacionGruposRepository extends BaseRepository
 
     public function crearGrupo(array $d): int
     {
-        $sql = "INSERT INTO consolidacion_grupos (ruc, id_empresa_matriz, nombre, tipo, orden, created_by, updated_by)
-                VALUES (:ruc, :idem, :nombre, :tipo, :orden, :usr, :usr) RETURNING id";
+        $sql = "INSERT INTO consolidacion_grupos
+                    (ruc, id_empresa_matriz, nombre, tipo, orden, modo_consolidacion, id_empresa_fuente, created_by, updated_by)
+                VALUES (:ruc, :idem, :nombre, :tipo, :orden, :modo, :fuente, :usr, :usr) RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':ruc' => $d['ruc'], ':idem' => $d['id_empresa_matriz'], ':nombre' => $d['nombre'],
-            ':tipo' => $d['tipo'], ':orden' => $d['orden'] ?? 0, ':usr' => $d['usuario_id'],
+            ':tipo' => $d['tipo'], ':orden' => $d['orden'] ?? 0,
+            ':modo' => $d['modo_consolidacion'] ?? 'SUMA', ':fuente' => $d['id_empresa_fuente'] ?? null,
+            ':usr' => $d['usuario_id'],
         ]);
         return (int) $st->fetchColumn();
     }
@@ -64,11 +68,13 @@ class ConsolidacionGruposRepository extends BaseRepository
     public function actualizarGrupo(int $id, string $ruc, array $d): void
     {
         $sql = "UPDATE consolidacion_grupos SET nombre = :nombre, tipo = :tipo, orden = :orden,
+                    modo_consolidacion = :modo, id_empresa_fuente = :fuente,
                     updated_by = :usr, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND ruc = :ruc AND eliminado = FALSE";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':nombre' => $d['nombre'], ':tipo' => $d['tipo'], ':orden' => $d['orden'] ?? 0,
+            ':modo' => $d['modo_consolidacion'] ?? 'SUMA', ':fuente' => $d['id_empresa_fuente'] ?? null,
             ':usr' => $d['usuario_id'], ':id' => $id, ':ruc' => $ruc,
         ]);
     }
@@ -165,7 +171,8 @@ class ConsolidacionGruposRepository extends BaseRepository
      */
     public function getMapaCuentaGrupo(string $ruc): array
     {
-        $sql = "SELECT gc.id_cuenta, gc.id_empresa, g.id AS id_grupo, g.nombre, g.tipo, g.orden
+        $sql = "SELECT gc.id_cuenta, gc.id_empresa, g.id AS id_grupo, g.nombre, g.tipo, g.orden,
+                       g.modo_consolidacion, g.id_empresa_fuente
                 FROM consolidacion_grupos_cuentas gc
                 JOIN consolidacion_grupos g ON g.id = gc.id_grupo AND g.eliminado = FALSE
                 WHERE g.ruc = :ruc AND gc.eliminado = FALSE";
@@ -178,6 +185,8 @@ class ConsolidacionGruposRepository extends BaseRepository
                 'nombre'   => $r['nombre'],
                 'tipo'     => $r['tipo'],
                 'orden'    => (int) $r['orden'],
+                'modo'     => $r['modo_consolidacion'] ?? 'SUMA',
+                'id_empresa_fuente' => $r['id_empresa_fuente'] !== null ? (int) $r['id_empresa_fuente'] : null,
             ];
         }
         return $out;
