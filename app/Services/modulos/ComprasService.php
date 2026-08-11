@@ -773,12 +773,21 @@ class ComprasService
         $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
         $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
 
-        // Para compras usamos 'factura_compra'
-        $keyDocumento = 'factura_compra';
-        // Podríamos en el futuro añadir factura_compra_no_deducible si existiera en configDec.
-        if (isset($data['tipo_comprobante']) && $data['tipo_comprobante'] === '02') {
-             $keyDocumento = 'nota_venta_compra';
-        }
+        // 'compras_cabecera' recibe los 4 tipos de documento que llegan por descarga SRI
+        // (DocumentoAutomatedRegisterService::insertarCompra): 01 factura, 02 nota de venta,
+        // 03 liquidación de compra, 04 nota de crédito, 05 nota de débito. Cada uno tiene su
+        // propia clave de casillero configurable en /config/empresa (pestaña Form 104 IVA).
+        $tipoComprobante = (string) ($data['tipo_comprobante'] ?? '01');
+        $keyDocumento = match ($tipoComprobante) {
+            '02'    => 'nota_venta_compra',
+            '03'    => 'liquidacion_compra',
+            '04'    => 'nota_credito_compra',
+            '05'    => 'nota_debito_compra',
+            default => 'factura_compra',
+        };
+        // La nota de crédito de compra reduce el crédito tributario: sus valores van en
+        // negativo al mismo casillero (igual que NotaCreditoService hace en el lado de ventas).
+        $signo = $tipoComprobante === '04' ? -1 : 1;
 
         if (!$configDec || !isset($configDec[$keyDocumento])) return;
         $confCompras = $configDec[$keyDocumento];
@@ -809,19 +818,19 @@ class ComprasService
                 if ($bruto !== '' && $base > 0) {
                     $decIvaRepo->insertarCasilleroDeclaracion([
                         'id_empresa' => $idEmpresa, 'origen' => 'compras', 'id_origen' => $idCompra,
-                        'fecha' => $fechaEmision, 'casillero' => $bruto, 'valor' => $base, 'concepto' => $concepto . ' (Base)'
+                        'fecha' => $fechaEmision, 'casillero' => $bruto, 'valor' => $signo * $base, 'concepto' => $concepto . ' (Base)'
                     ]);
                 }
                 if ($neto !== '' && $base > 0) {
                     $decIvaRepo->insertarCasilleroDeclaracion([
                         'id_empresa' => $idEmpresa, 'origen' => 'compras', 'id_origen' => $idCompra,
-                        'fecha' => $fechaEmision, 'casillero' => $neto, 'valor' => $base, 'concepto' => $concepto . ' (Base)'
+                        'fecha' => $fechaEmision, 'casillero' => $neto, 'valor' => $signo * $base, 'concepto' => $concepto . ' (Base)'
                     ]);
                 }
                 if ($impC !== '' && $valorImp > 0) {
                     $decIvaRepo->insertarCasilleroDeclaracion([
                         'id_empresa' => $idEmpresa, 'origen' => 'compras', 'id_origen' => $idCompra,
-                        'fecha' => $fechaEmision, 'casillero' => $impC, 'valor' => $valorImp, 'concepto' => $concepto . ' (IVA)'
+                        'fecha' => $fechaEmision, 'casillero' => $impC, 'valor' => $signo * $valorImp, 'concepto' => $concepto . ' (IVA)'
                     ]);
                 }
             }

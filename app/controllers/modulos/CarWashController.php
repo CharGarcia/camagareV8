@@ -66,7 +66,15 @@ class CarWashController extends BaseModuloController
 
         // Series (puntos de emisión) para la numeración, formas de pago y bodegas (emisión de documento).
         $empresaRepo = new \App\repositories\modulos\EmpresaRepository();
-        $puntos = $empresaRepo->getPuntosEmision($idEmpresa);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ($empresaRepo->getPuntosEmision($idEmpresa) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Ordenes car-wash');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
         $formasPago = $this->repository->getFormasPago();
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int) $_SESSION['id_usuario'], $idEmpresa, (int) ($_SESSION['nivel'] ?? 1));

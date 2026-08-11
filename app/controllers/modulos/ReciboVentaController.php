@@ -57,7 +57,14 @@ class ReciboVentaController extends BaseModuloController
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = [];
         if (!empty($establecimientos)) {
-            $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
+            $secRepo = new \App\repositories\SecuencialRepository();
+            foreach ($empresaModel->getPuntosEmision((int) $establecimientos[0]['id']) as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Recibos de venta');
+                if (empty($config['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
             try {
                 $estRepo   = new \App\repositories\modulos\EmpresaRepository();
                 $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
@@ -211,7 +218,15 @@ class ReciboVentaController extends BaseModuloController
         header('Content-Type: application/json');
         $idEst = (int) ($_GET['id_establecimiento'] ?? 0);
         $empresaModel = new Empresa();
-        $puntos = $empresaModel->getPuntosEmision($idEst);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ($empresaModel->getPuntosEmision($idEst) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Recibos de venta');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
         echo json_encode(['ok' => true, 'data' => $puntos]);
         exit;
     }

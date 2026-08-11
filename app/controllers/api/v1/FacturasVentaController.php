@@ -237,10 +237,18 @@ class FacturasVentaController extends ApiBaseController
         $estRepo = new EmpresaRepository();
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
 
+        $secRepo = new \App\repositories\SecuencialRepository();
         $resultado = [];
         foreach ($establecimientos as $est) {
             $idEst = (int) $est['id'];
-            $puntos = $empresaModel->getPuntosEmision($idEst);
+            $puntos = [];
+            foreach ($empresaModel->getPuntosEmision($idEst) as $p) {
+                $secConfig = $secRepo->getConfigSecuencial((int) $p['id'], 'Facturas de venta');
+                if (empty($secConfig['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
             $config = $estRepo->getEstablecimientoConfig($idEst) ?? [];
 
             $resultado[] = [
@@ -707,10 +715,18 @@ class FacturasVentaController extends ApiBaseController
         $empresaModel = new Empresa();
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
 
+        $secRepo = new \App\repositories\SecuencialRepository();
         $resultado = [];
         foreach ($establecimientos as $est) {
             $idEst = (int) $est['id'];
-            $puntos = $empresaModel->getPuntosEmision($idEst);
+            $puntos = [];
+            foreach ($empresaModel->getPuntosEmision($idEst) as $p) {
+                $secConfig = $secRepo->getConfigSecuencial((int) $p['id'], 'Ingresos');
+                if (empty($secConfig['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
             $resultado[] = [
                 'id_establecimiento' => $idEst,
                 'establecimiento' => $est['codigo'],

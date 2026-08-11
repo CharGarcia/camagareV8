@@ -335,9 +335,17 @@ class ProformaService
             }
         } catch (\Throwable $e) { /* config opcional del establecimiento */ }
 
-        $puntos = $empresaModel->getPuntosEmision($idEstab);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos  = [];
+        foreach ($empresaModel->getPuntosEmision($idEstab) as $p) {
+            $secConfig = $secRepo->getConfigSecuencial((int) $p['id'], 'Facturas de venta');
+            if (empty($secConfig['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
         if (empty($puntos)) {
-            throw new \RuntimeException('El establecimiento no tiene puntos de emisión configurados.');
+            throw new \RuntimeException('El establecimiento no tiene un punto de emisión con secuencial configurado para Facturas de venta.');
         }
         $punto   = $puntos[0];
         $idPunto = (int) $punto['id'];
@@ -541,9 +549,17 @@ class ProformaService
             }
         } catch (\Throwable $e) { /* config opcional del establecimiento */ }
 
-        $puntos = $empresaModel->getPuntosEmision($idEstab);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos  = [];
+        foreach ($empresaModel->getPuntosEmision($idEstab) as $p) {
+            $secConfig = $secRepo->getConfigSecuencial((int) $p['id'], 'Recibos de venta');
+            if (empty($secConfig['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
         if (empty($puntos)) {
-            throw new \RuntimeException('El establecimiento no tiene puntos de emisión configurados.');
+            throw new \RuntimeException('El establecimiento no tiene un punto de emisión con secuencial configurado para Recibos de venta.');
         }
         $punto   = $puntos[0];
         $idPunto = (int) $punto['id'];

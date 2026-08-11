@@ -107,7 +107,15 @@ class ServicioExternoController extends ApiBaseController
         $idUsuario = (int) $_SESSION['id_usuario'];
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
 
-        $puntos = (new EmpresaRepository())->getPuntosEmision($idEmpresa);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ((new EmpresaRepository())->getPuntosEmision($idEmpresa) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Ordenes servicio externo');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
         $bodegas = (new BodegaRepository())->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
 
         $this->jsonOk([

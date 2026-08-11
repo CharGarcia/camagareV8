@@ -79,7 +79,15 @@ class OrdenesCompraController extends BaseModuloController
         // Cargar establecimientos y puntos de emisión para el modal
         $empresaRepo      = new EmpresaRepository();
         $establecimientos = $empresaRepo->getEstablecimientos($idEmpresa);
-        $puntosEmision    = $empresaRepo->getPuntosEmision($idEmpresa);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntosEmision = [];
+        foreach ($empresaRepo->getPuntosEmision($idEmpresa) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Órdenes de compra');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntosEmision[] = $p;
+        }
 
         $this->viewWithLayout('layouts.main', 'modulos.ordenes-compra.index', [
             'titulo'          => 'Órdenes de Compra',

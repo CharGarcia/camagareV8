@@ -64,7 +64,17 @@ class ImportacionesController extends BaseModuloController
             fn($e) => strtolower((string) ($e['estado'] ?? 'activo')) === 'activo'
         ));
         $establecimientoDefault = $establecimientosActivos[0] ?? ($establecimientos[0] ?? null);
-        $puntos = $establecimientoDefault ? $empresaModel->getPuntosEmision((int) $establecimientoDefault['id']) : [];
+        $puntos = [];
+        if ($establecimientoDefault) {
+            $secRepo = new \App\repositories\SecuencialRepository();
+            foreach ($empresaModel->getPuntosEmision((int) $establecimientoDefault['id']) as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Importaciones');
+                if (empty($config['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
+        }
 
         $this->viewWithLayout('layouts.main', 'modulos/importaciones/index', [
             'titulo'             => 'Importaciones',
@@ -108,7 +118,15 @@ class ImportacionesController extends BaseModuloController
 
         $idEst        = (int) ($_GET['id_establecimiento'] ?? 0);
         $empresaModel = new Empresa();
-        $puntos       = $empresaModel->getPuntosEmision($idEst);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ($empresaModel->getPuntosEmision($idEst) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Importaciones');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
         echo json_encode(['ok' => true, 'data' => $puntos]);
         exit;
     }

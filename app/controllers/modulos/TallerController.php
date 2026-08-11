@@ -1328,10 +1328,19 @@ class TallerController extends BaseModuloController
     private function datosComunes(int $idEmpresa): array
     {
         $empresaRepo = new \App\repositories\modulos\EmpresaRepository();
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ($empresaRepo->getPuntosEmision($idEmpresa) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Ordenes de taller');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
 
         return [
             'empresa'       => $this->getEmpresaConfig($idEmpresa),
-            'puntos'        => $empresaRepo->getPuntosEmision($idEmpresa),
+            'puntos'        => $puntos,
             'formasPago'    => $this->repository->getFormasPago(),
             'bodegas'       => $this->getBodegas($idEmpresa),
             'tarifasIva'    => $this->repository->getTarifasIva(),

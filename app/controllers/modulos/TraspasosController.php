@@ -55,7 +55,14 @@ class TraspasosController extends BaseModuloController
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = [];
         if (!empty($establecimientos)) {
-            $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
+            $secRepo = new \App\repositories\SecuencialRepository();
+            foreach ($empresaModel->getPuntosEmision((int) $establecimientos[0]['id']) as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Traspasos');
+                if (empty($config['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
         }
 
         // Formas de pago disponibles para origen (pueden perder dinero) y destino (pueden recibir dinero),

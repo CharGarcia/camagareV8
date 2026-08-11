@@ -153,9 +153,17 @@ class PedidosController extends ApiBaseController
         $empresaModel = new Empresa();
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
 
+        $secRepo = new \App\repositories\SecuencialRepository();
         $resultado = [];
         foreach ($establecimientos as $est) {
-            $puntos = $empresaModel->getPuntosEmision((int) $est['id']);
+            $puntos = [];
+            foreach ($empresaModel->getPuntosEmision((int) $est['id']) as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Pedidos');
+                if (empty($config['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
             $resultado[] = [
                 'id_establecimiento' => (int) $est['id'],
                 'establecimiento' => $est['codigo'],

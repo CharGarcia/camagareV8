@@ -53,7 +53,14 @@ class EgresosController extends BaseModuloController
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = [];
         if (!empty($establecimientos)) {
-            $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
+            $secRepo = new \App\repositories\SecuencialRepository();
+            foreach ($empresaModel->getPuntosEmision((int) $establecimientos[0]['id']) as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Egresos');
+                if (empty($config['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
         }
 
         // Usamos repositorio auxiliar para formas de pago si no es un método directo en EgresoRepository

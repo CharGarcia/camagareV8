@@ -176,6 +176,13 @@ class DeclaracionIvaService
             $ncService->sincronizarCasilleros((int)$n['id'], null);
         }
 
+        // 4.1 Notas de Débito (emitidas a clientes; aumentan el IVA en ventas)
+        $notasDebito = $this->repository->getDocumentosPeriodo($idEmpresa, 'nota_debito_cabecera', $fechaDesde, $fechaHasta);
+        $ndService = new NotaDebitoService(new \App\repositories\modulos\NotaDebitoRepository(), new \App\Rules\modulos\NotaDebitoRules(), new \App\services\LogSistemaService());
+        foreach ($notasDebito as $nd) {
+            $ndService->sincronizarCasilleros((int)$nd['id'], null);
+        }
+
         // 5. Retenciones en Compras
         $retCompras = $this->repository->getDocumentosPeriodo($idEmpresa, 'retencion_compra_cabecera', $fechaDesde, $fechaHasta);
         $retCService = new RetencionCompraService(new \App\repositories\modulos\RetencionCompraRepository(), new \App\Rules\modulos\RetencionCompraRules(), new \App\services\LogSistemaService());

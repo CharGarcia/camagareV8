@@ -58,10 +58,15 @@ class RetencionesComprasController extends BaseModuloController
         $empresaData  = $empresaModel->getPorId($idEmpresa);
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
 
+        $secRepo = new \App\repositories\SecuencialRepository();
         $puntos = [];
         foreach ($establecimientos as $est) {
             $pts = $empresaModel->getPuntosEmision((int)$est['id']);
             foreach ($pts as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Retenciones de compras');
+                if (empty($config['id'])) {
+                    continue;
+                }
                 $p['cod_establecimiento'] = $est['codigo'];
                 $puntos[] = $p;
             }

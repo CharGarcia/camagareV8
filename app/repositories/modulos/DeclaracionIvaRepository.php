@@ -206,6 +206,8 @@ class DeclaracionIvaRepository extends BaseRepository
                     OR
                     (c.origen = 'notas_credito' AND NOT EXISTS (SELECT 1 FROM notas_credito_cabecera nc WHERE nc.id = CAST(c.id_origen AS INTEGER) AND COALESCE(nc.eliminado, false) = false AND nc.estado = 'autorizado'))
                     OR
+                    (c.origen = 'notas de debito' AND NOT EXISTS (SELECT 1 FROM nota_debito_cabecera nd WHERE nd.id = CAST(c.id_origen AS INTEGER) AND COALESCE(nd.eliminado, false) = false AND nd.estado = 'autorizado'))
+                    OR
                     (c.origen = 'retenciones_compras' AND NOT EXISTS (SELECT 1 FROM retencion_compra_cabecera rc WHERE rc.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rc.eliminado, false) = false AND rc.estado = 'autorizado'))
                     OR
                     (c.origen = 'retenciones_ventas' AND NOT EXISTS (SELECT 1 FROM retencion_venta_cabecera rv WHERE rv.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rv.eliminado, false) = false))
@@ -326,7 +328,8 @@ class DeclaracionIvaRepository extends BaseRepository
      * Calcula los componentes del IVA a pagar leyendo directamente de cada módulo
      * (no depende de la sincronización de casilleros). Filtra por el ambiente de la empresa.
      *
-     *  - iva_ventas:                IVA de facturas de venta AUTORIZADAS (codigo_impuesto = 2)
+     *  - iva_ventas:                IVA de facturas de venta AUTORIZADAS (codigo_impuesto = 2) +
+     *                                IVA de notas de débito emitidas a clientes AUTORIZADAS (suma, igual que una factura)
      *  - iva_notas_credito:         IVA de notas de crédito de venta AUTORIZADAS (resta del IVA en ventas)
      *  - iva_compras:               IVA de compras deducible='declaracion_iva', excluyendo notas de crédito ('04')
      *  - iva_notas_credito_compra:  IVA de notas de crédito de compra ('04') (resta del crédito tributario)
@@ -379,6 +382,15 @@ class DeclaracionIvaRepository extends BaseRepository
                AND i.codigo_impuesto = '2' AND c.tipo_ambiente = :amb
                AND c.tipo_comprobante = '04'", $p)->fetchColumn();
 
+        // Notas de débito emitidas a clientes: aumentan el IVA en ventas (mismo sentido que una factura).
+        $ivaNotasDebito = (float) $this->query(
+            "SELECT COALESCE(SUM(i.valor), 0)
+             FROM nota_debito_cabecera nd
+             JOIN nota_debito_impuestos i ON i.id_nota_debito = nd.id
+             WHERE nd.id_empresa = :emp AND nd.estado = 'autorizado' AND nd.eliminado = false
+               AND nd.fecha_emision BETWEEN :d AND :h
+               AND i.codigo_impuesto = '2' AND nd.tipo_ambiente = :amb", $p)->fetchColumn();
+
         $retenciones = (float) $this->query(
             "SELECT COALESCE(SUM(total_iva), 0)
              FROM retencion_venta_cabecera
@@ -402,7 +414,7 @@ class DeclaracionIvaRepository extends BaseRepository
                AND v.fecha_emision BETWEEN :d AND :h AND v.tipo_ambiente = :amb", $p)->fetchColumn();
 
         return [
-            'iva_ventas'               => $ivaVentas,
+            'iva_ventas'               => $ivaVentas + $ivaNotasDebito,
             'iva_notas_credito'        => $ivaNotasCredito,
             'iva_compras'              => $ivaCompras + $ivaImportaciones,
             'iva_notas_credito_compra' => $ivaNotasCreditoCompra,

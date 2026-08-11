@@ -399,7 +399,15 @@ class ProformasController extends BaseModuloController
         $this->requireLeer();
         header('Content-Type: application/json');
         $idEst = (int) ($_GET['id_establecimiento'] ?? 0);
-        $puntos = (new Empresa())->getPuntosEmision($idEst);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ((new Empresa())->getPuntosEmision($idEst) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Proformas');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
         echo json_encode(['ok' => true, 'data' => $puntos]);
         exit;
     }
@@ -1173,6 +1181,21 @@ class ProformasController extends BaseModuloController
     }
 
     private function cargarTodosPuntos(int $idEmpresa): array
+    {
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos  = $this->cargarTodosPuntosSinFiltrar($idEmpresa);
+        $filtrados = [];
+        foreach ($puntos as $p) {
+            $config = $secRepo->getConfigSecuencial((int) ($p['id'] ?? 0), 'Proformas');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $filtrados[] = $p;
+        }
+        return $filtrados;
+    }
+
+    private function cargarTodosPuntosSinFiltrar(int $idEmpresa): array
     {
         $db = \App\core\Database::getConnection();
         try {
