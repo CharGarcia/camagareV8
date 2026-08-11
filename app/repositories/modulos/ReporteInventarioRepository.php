@@ -669,11 +669,8 @@ class ReporteInventarioRepository extends BaseRepository
     public function getConsignacionesDetalle(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
-        $sql = "SELECT * FROM (" . $this->wrapSaldoConsignacion($this->baseConsignaciones($where)) . ") s WHERE 1=1";
-        if (empty($filtros['incluir_liquidadas'])) {
-            $sql .= " AND s.saldo > 0";
-        }
-        $sql .= " ORDER BY s.fecha_emision DESC, s.id_consignacion DESC";
+        $sql = "SELECT * FROM (" . $this->wrapSaldoConsignacion($this->baseConsignaciones($where)) . ") s
+                ORDER BY s.fecha_emision DESC, s.id_consignacion DESC";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -686,7 +683,6 @@ class ReporteInventarioRepository extends BaseRepository
     {
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
         $base = $this->wrapSaldoConsignacion($this->baseConsignaciones($where));
-        $having = empty($filtros['incluir_liquidadas']) ? "HAVING SUM(s.saldo) > 0" : "";
 
         $sql = "SELECT s.id_consignacion, MAX(s.secuencial) AS secuencial, MAX(s.fecha_emision) AS fecha_emision,
                        MAX(s.estado) AS estado, MAX(s.id_cliente) AS id_cliente,
@@ -696,7 +692,6 @@ class ReporteInventarioRepository extends BaseRepository
                        SUM(s.saldo) AS saldo, SUM(s.valor_saldo) AS valor_saldo
                 FROM ({$base}) s
                 GROUP BY s.id_consignacion
-                {$having}
                 ORDER BY MAX(s.fecha_emision) DESC, s.id_consignacion DESC";
 
         $st = $this->db->prepare($sql);
@@ -721,14 +716,12 @@ class ReporteInventarioRepository extends BaseRepository
     {
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
         $base = $this->wrapSaldoConsignacion($this->baseConsignaciones($where));
-        $havingSaldo = empty($filtros['incluir_liquidadas']) ? "WHERE s.saldo > 0" : "";
 
         $sql = "SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo,
                        SUM(s.saldo) AS saldo,
                        SUM(s.valor_saldo) AS valor_saldo,
                        COUNT(DISTINCT s.id_consignacion) AS cantidad_consignaciones
                 FROM ({$base}) s
-                {$havingSaldo}
                 GROUP BY {$campoId}
                 ORDER BY valor_saldo DESC";
 

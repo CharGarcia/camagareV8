@@ -97,6 +97,26 @@ class IngresoRepository extends BaseRepository
         return ['rows' => $rows, 'total' => $total];
     }
 
+    /**
+     * Ingresos del rango de fechas o de números para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta, ?int $numeroDesde, ?int $numeroHasta, ?int $idUsuarioFiltro): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $where = "WHERE i.id_empresa = :id_empresa AND i.eliminado = false
+                   " . $this->condicionRangoDescargaMasiva('i.', $fechaDesde, $fechaHasta, $numeroDesde, $numeroHasta, $params);
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND i.id_usuario = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT i.id, i.establecimiento, i.punto_emision, i.secuencial, i.fecha_emision, i.estado
+                FROM ingresos_cabecera i
+                $where
+                ORDER BY i.fecha_emision ASC, i.id ASC";
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT i.*,

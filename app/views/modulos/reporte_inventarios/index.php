@@ -516,12 +516,6 @@
                                     </select>
                                 </div>
                                 <div class="col-md-2 d-flex align-items-end">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="ri-cv-incluir-liquidadas">
-                                        <label class="form-check-label small" for="ri-cv-incluir-liquidadas">Incluir liquidadas</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-2 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
                                 </div>
                             </form>

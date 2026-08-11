@@ -258,6 +258,7 @@ class ControlBancarioRepository extends BaseRepository
                 WHERE UPPER(ac.tipo_comprobante) = 'EGRESOS'
                   AND ac.id_referencia_origen = ep2.id_egreso
                   AND ep2.eliminado = FALSE
+                  AND COALESCE(ep2.estado_cheque, 'vigente') <> 'anulado'
                 ORDER BY ep2.id
                 LIMIT 1
             ) ep ON TRUE";

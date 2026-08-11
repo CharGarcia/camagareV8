@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\core\Database;
+use App\models\CatalogoRol;
 use App\repositories\modulos\RolPagoRepository;
 use App\repositories\modulos\EgresoRepository;
 use App\Rules\modulos\EgresoRules;
@@ -89,6 +90,9 @@ class RolEgresoLoteService
         $egSvc   = new EgresoService(new EgresoRepository(), new EgresoRules(), $this->log);
         $secSvc  = new SecuencialService();
         $periodo = str_pad((string) $cab['periodo_mes'], 2, '0', STR_PAD_LEFT) . '/' . $cab['periodo_anio'];
+        // Nombre del tipo de corrida (Rol Mensual / Quincena / Semanal), para que el egreso
+        // deje claro de qué corrida viene el pago, no solo el período.
+        $tipoRolLabel = CatalogoRol::nombreTipo((string) $cab['tipo_rol']);
 
         // Empleados marcados por el usuario. Si no viene ninguno se procesan todos
         // los pendientes (comportamiento anterior). Se filtra contra el detalle real
@@ -148,11 +152,11 @@ class RolEgresoLoteService
                     'id_empleado'       => (int) $d['id_empleado'],
                     'id_egreso_concepto' => $idConcepto,
                     'monto_total'       => $saldo,
-                    'observaciones'     => 'Pago de rol ' . $periodo . ' - ' . $nombre,
+                    'observaciones'     => 'Pago de ' . $tipoRolLabel . ' ' . $periodo . ' - ' . $nombre,
                     'detalles' => [[
                         'tipo_documento'          => 'ROL',
                         'id_referencia_documento' => (int) $d['id'],
-                        'numero_documento'        => 'Rol ' . $periodo,
+                        'numero_documento'        => $tipoRolLabel . ' ' . $periodo,
                         'monto_documento'         => (float) $d['neto'],
                         'saldo_anterior'          => $saldo,
                         'monto_pagado'            => $saldo,

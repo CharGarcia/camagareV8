@@ -122,8 +122,11 @@ $defaults = [
     // día con muchos). 'xml' tiene un tope más alto porque solo lee detalle_xml
     // ya persistido (barato); 'pdf' y 'ambos' generan el PDF con TCPDF (más lento).
     'descargas_masivas' => [
-        'max_documentos_pdf' => 500,
-        'max_documentos_xml' => 2000,
+        'max_documentos_pdf'  => 500,
+        'max_documentos_xml'  => 2000,
+        // Si el formato es PDF y la cantidad de documentos es <= a este umbral,
+        // se entrega un solo PDF fusionado en vez de un ZIP.
+        'umbral_pdf_unico'    => 20,
     ],
 ];
 

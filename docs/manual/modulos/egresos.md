@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar
-version: 1.2
+etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -78,6 +78,34 @@ a PDF (descarga) como directo a la impresora (abre el diálogo de impresión del
 navegador). Cada impresión queda registrada (control anti-reimpresión): si un
 cheque ya se imprimió, el sistema avisa y pide confirmar antes de reimprimirlo.
 
+### Anular un cheque
+
+Si un cheque se dañó al imprimir, se emitió con datos equivocados o por
+cualquier motivo no se va a usar, se puede **anular** desde el icono
+<i class="bi bi-ban"></i> junto a su fila, en la pestaña **Formas de Pago** del
+egreso. El sistema pide el **motivo** de la anulación.
+
+Anular un cheque **no anula el egreso**: el documento sigue vigente, solo se
+anula ese cheque puntual. El cheque anulado:
+
+- Queda visible como historial (tachado, con motivo y fecha) en una tabla
+  aparte, **"Cheques anulados"**, debajo de las formas de pago activas — nunca
+  se borra.
+- Deja de contarse en el total pagado: si el egreso queda sin cobertura por esa
+  diferencia, el total de formas de pago se marca en rojo hasta que se agregue
+  otra forma de pago (u otro cheque) por el mismo valor, en la misma pantalla.
+- Su número **no se reutiliza**: el siguiente cheque autogenerado sigue la
+  secuencia normal, saltándose el anulado.
+- Deja de aparecer en Control Bancario y en el listado de "Cheques por
+  imprimir"; si ya se había impreso, tampoco se puede volver a imprimir.
+
+No se puede anular un cheque si:
+
+- El egreso ya está anulado.
+- El cheque ya fue reportado como **cobrado** (conciliado en Control
+  Bancario) — a esa altura ya no es una anulación, es un ajuste bancario.
+- El periodo contable del egreso está cerrado.
+
 ### Configurar impresión por banco
 
 Cada banco tiene su propio formato de cheque preimpreso (posición del
@@ -127,6 +155,9 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.3** — Anular un cheque puntual sin anular el egreso: queda como
+  historial visible, deja de contarse en el total y se puede cubrir con otra
+  forma de pago desde el mismo modal.
 - **1.2** — Botón para exportar el comprobante a Excel, junto al de PDF, en la
   barra de acciones superior del modal.
 - **1.1** — Configurar impresión de cheque por banco desde la fila de pago y el

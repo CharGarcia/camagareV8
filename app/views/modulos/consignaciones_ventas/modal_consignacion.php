@@ -67,10 +67,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <a class="nav-link" id="cons-tab-asiento-btn" data-bs-toggle="tab" href="#cons-tab-asiento" role="tab" title="Asiento Contable"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-retornos-btn" data-bs-toggle="tab" href="#cons-tab-retornos" role="tab" title="Retornos"><i class="bi bi-arrow-return-left me-1"></i> Retornos</a>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-facturacion-btn" data-bs-toggle="tab" href="#cons-tab-facturacion" role="tab" title="Facturación"><i class="bi bi-receipt me-1"></i> Facturación</a>
+                                <a class="nav-link" id="cons-tab-resumen-btn" data-bs-toggle="tab" href="#cons-tab-resumen" role="tab" title="Resumen"><i class="bi bi-list-columns-reverse me-1"></i> Resumen</a>
                             </li>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="cons-tab-guias-btn" data-bs-toggle="tab" href="#cons-tab-guias" role="tab" title="Guías Remisión"><i class="bi bi-truck me-1"></i> Guías Remisión</a>
@@ -85,12 +82,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         <div class="pb-1 flex-shrink-0">
                             <?php
                             $pestanasConfigCons = [
-                                'cons-tab-asiento'     => 'Asiento contable',
-                                'cons-tab-retornos'    => 'Retornos',
-                                'cons-tab-facturacion' => 'Facturación',
-                                'cons-tab-guias'       => 'Guías Remisión',
-                                'cons-tab-pedidos'     => 'Pedidos',
-                                'cons-tab-entrega'     => 'Entrega'
+                                'cons-tab-asiento'  => 'Asiento contable',
+                                'cons-tab-resumen'  => 'Resumen',
+                                'cons-tab-guias'    => 'Guías Remisión',
+                                'cons-tab-pedidos'  => 'Pedidos',
+                                'cons-tab-entrega'  => 'Entrega'
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigCons, $vistaConfigConsignaciones ?? [], $moduloBase);
                             ?>
@@ -334,55 +330,32 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             </div>
                         </div>
 
-                        <!-- Pestaña Retornos -->
-                        <div class="tab-pane fade p-3" id="cons-tab-retornos" role="tabpanel">
+                        <!-- Pestaña Resumen: kardex de la consignación (inicial + retornos + facturaciones, saldo corriente por producto). -->
+                        <div class="tab-pane fade p-3" id="cons-tab-resumen" role="tabpanel">
                             <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                <div class="table-responsive" style="max-height: 340px;">
+                                <div class="table-responsive" style="max-height: 400px;">
                                     <table class="table table-sm table-hover mb-0 text-nowrap">
                                         <thead>
                                             <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted">Retorno</th>
-                                                <th class="py-2 small fw-bold text-muted">Fecha</th>
+                                                <th class="ps-3 py-2 small fw-bold text-muted">Fecha</th>
+                                                <th class="py-2 small fw-bold text-muted">Tipo</th>
+                                                <th class="py-2 small fw-bold text-muted">Documento</th>
                                                 <th class="py-2 small fw-bold text-muted">Producto</th>
-                                                <th class="py-2 small fw-bold text-muted text-end">Cantidad</th>
                                                 <th class="py-2 small fw-bold text-muted">Lote</th>
                                                 <th class="py-2 small fw-bold text-muted">NUP</th>
-                                                <th class="py-2 small fw-bold text-muted">Bodega</th>
-                                                <th class="py-2 small fw-bold text-muted text-center pe-3">Estado</th>
+                                                <th class="py-2 small fw-bold text-muted text-end">Entrada</th>
+                                                <th class="py-2 small fw-bold text-muted text-end">Salida</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pe-3">Saldo</th>
                                             </tr>
                                         </thead>
-                                        <tbody id="cons_retornos_body">
-                                            <tr><td colspan="8" class="text-center py-4 text-muted">Cargando retornos...</td></tr>
+                                        <tbody id="cons_resumen_body">
+                                            <tr><td colspan="9" class="text-center py-4 text-muted">Cargando resumen...</td></tr>
                                         </tbody>
                                     </table>
                                 </div>
                                 <div class="p-2 border-top bg-light small text-muted d-flex justify-content-between align-items-center">
-                                    <span><i class="bi bi-info-circle me-1"></i> Devoluciones del cliente asociadas a esta consignación.</span>
-                                    <span>Total devuelto: <span class="fw-bold" id="cons_retornos_total_cant">0.00</span></span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Pestaña Facturación (solo lectura: historial). La generación vive en el módulo "Facturación de consignaciones". -->
-                        <div class="tab-pane fade p-3" id="cons-tab-facturacion" role="tabpanel">
-                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                <div class="table-responsive" style="max-height: 340px;">
-                                    <table class="table table-sm table-hover mb-0 text-nowrap">
-                                        <thead>
-                                            <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted">Factura</th>
-                                                <th class="py-2 small fw-bold text-muted">Fecha</th>
-                                                <th class="py-2 small fw-bold text-muted text-end">Total</th>
-                                                <th class="py-2 small fw-bold text-muted text-center pe-3">Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="cons_fact_hist_body">
-                                            <tr><td colspan="4" class="text-center py-4 text-muted">Cargando facturas...</td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div class="p-2 border-top bg-light small text-muted">
-                                    <i class="bi bi-info-circle me-1"></i> Facturas generadas desde esta consignación. Para facturar, use el módulo <b>Facturación de consignaciones</b>.
+                                    <span><i class="bi bi-info-circle me-1"></i> Movimientos de esta consignación: entrega inicial, retornos y facturaciones. El saldo es por producto.</span>
+                                    <span>Saldo total: <span class="fw-bold" id="cons_resumen_saldo_total">0.00</span></span>
                                 </div>
                             </div>
                         </div>
@@ -820,15 +793,25 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                         fLote.innerHTML = '<option value="">Lote...</option>';
                                         opts.forEach(l => {
                                             const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
-                                            fLote.innerHTML += `<option value="${lv}" ${lv == d.lote ? 'selected' : ''}>${lv || 'Sin Lote'}</option>`;
+                                            fLote.innerHTML += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
                                         });
+                                        // Garantiza que el lote guardado de la línea se muestre aunque no esté en el inventario disponible.
+                                        if (d.lote && !Array.from(fLote.options).some(o => o.value === d.lote)) {
+                                            fLote.insertAdjacentHTML('beforeend', `<option value="${d.lote}">${d.lote}</option>`);
+                                        }
+                                        fLote.value = d.lote || '';
                                     }
                                     if (fCad) {
                                         fCad.innerHTML = '<option value="">Vencimiento...</option>';
                                         opts.forEach(l => {
                                             const c = l.fecha_caducidad || '';
-                                            fCad.innerHTML += `<option value="${c}" ${c == d.fecha_caducidad ? 'selected' : ''}>${c || 'Sin Fecha'}</option>`;
+                                            fCad.innerHTML += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
                                         });
+                                        // Garantiza que la caducidad guardada de la línea se muestre aunque no coincida con un lote del inventario.
+                                        if (d.fecha_caducidad && !Array.from(fCad.options).some(o => o.value === d.fecha_caducidad)) {
+                                            fCad.insertAdjacentHTML('beforeend', `<option value="${d.fecha_caducidad}">${d.fecha_caducidad}</option>`);
+                                        }
+                                        fCad.value = d.fecha_caducidad || '';
                                     }
                                 } else {
                                     if (fLote) fLote.innerHTML = `<option value="${d.lote || ''}">${d.lote || 'Sin Lote'}</option>`;
@@ -2170,6 +2153,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
                                 fLote.innerHTML += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
                             });
+                            if (item.lote && !Array.from(fLote.options).some(o => o.value === item.lote)) {
+                                fLote.insertAdjacentHTML('beforeend', `<option value="${item.lote}">${item.lote}</option>`);
+                            }
                             fLote.value = item.lote;
                         }
                         if (fCad) {
@@ -2178,7 +2164,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 const c = l.fecha_caducidad || '';
                                 fCad.innerHTML += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
                             });
-                            fCad.value = item.caducidad;
+                            // Garantiza que la caducidad guardada se muestre aunque no coincida con un lote del inventario.
+                            if (item.caducidad && !Array.from(fCad.options).some(o => o.value === item.caducidad)) {
+                                fCad.insertAdjacentHTML('beforeend', `<option value="${item.caducidad}">${item.caducidad}</option>`);
+                            }
+                            fCad.value = item.caducidad || '';
                         }
                     } else {
                         if (fLote) fLote.innerHTML = `<option value="${item.lote}">${item.lote || 'Sin Lote'}</option>`;
@@ -2744,115 +2734,78 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         return detalles;
     };
 
-    // ── Pestaña Retornos: devoluciones del cliente asociadas a esta consignación ──
+    // ── Pestaña Resumen: kardex de la consignación (inicial + retornos + facturaciones) ──
     window.consEscHtml = function(s) {
         return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     };
-    window.consFmtFechaRetorno = function(f) {
+    window.consFmtFecha = function(f) {
         if (!f) return '';
         const s = String(f).substring(0, 10);
         const p = s.split('-');
         return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : s;
     };
-    window.consBadgeRetorno = function(estado) {
-        if (estado === 'Anulada') return '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>';
-        return '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">' + consEscHtml(estado || 'Emitida') + '</span>';
+    window.consBadgeTipoMovimiento = function(tipo) {
+        const clases = {
+            'Consignación Inicial': 'bg-info bg-opacity-10 text-info border-info',
+            'Retorno':              'bg-warning bg-opacity-10 text-warning border-warning',
+            'Facturación':          'bg-success bg-opacity-10 text-success border-success',
+        };
+        const cls = clases[tipo] || 'bg-secondary bg-opacity-10 text-secondary border-secondary';
+        return `<span class="badge ${cls} border border-opacity-25">${consEscHtml(tipo)}</span>`;
     };
 
-    window.consCargarRetornos = async function(id) {
-        const tb = document.getElementById('cons_retornos_body');
-        const totEl = document.getElementById('cons_retornos_total_cant');
+    window.consCargarResumen = async function(id) {
+        const tb = document.getElementById('cons_resumen_body');
+        const totEl = document.getElementById('cons_resumen_saldo_total');
         if (!tb) return;
         if (!id) {
-            tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Guarde la consignación para ver sus retornos.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">Guarde la consignación para ver su resumen.</td></tr>';
             if (totEl) totEl.textContent = '0.00';
             return;
         }
-        tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Cargando retornos...</td></tr>';
+        tb.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">Cargando resumen...</td></tr>';
         try {
-            const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getRetornosAjax?id=${id}`);
+            const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getKardexAjax?id=${id}`);
             const data = await res.json();
             if (data.ok && data.data && data.data.length) {
-                let totalCant = 0;
+                // Saldo total = último saldo de cada producto (el saldo ya viene acumulado por fila).
+                const ultimoSaldoPorProducto = {};
+                data.data.forEach(r => { ultimoSaldoPorProducto[r.id_producto] = parseFloat(r.saldo || 0); });
+
                 tb.innerHTML = data.data.map(r => {
-                    const cant = parseFloat(r.cantidad || 0);
-                    totalCant += cant;
+                    const entrada = parseFloat(r.entrada || 0);
+                    const salida = parseFloat(r.salida || 0);
+                    const saldo = parseFloat(r.saldo || 0);
                     return `<tr>
-                        <td class="ps-3 fw-bold text-primary">${consEscHtml((r.serie || '') + '-' + (r.secuencial || ''))}</td>
-                        <td>${consFmtFechaRetorno(r.fecha_retorno)}</td>
-                        <td class="text-truncate" style="max-width:220px" title="${consEscHtml(r.producto_nombre || '')}">${consEscHtml(r.producto_nombre || '')}</td>
-                        <td class="text-end">${cant.toFixed(2)}</td>
+                        <td class="ps-3">${consFmtFecha(r.fecha)}</td>
+                        <td>${consBadgeTipoMovimiento(r.tipo)}</td>
+                        <td class="fw-bold text-primary">${consEscHtml(r.documento || '')}</td>
+                        <td class="text-truncate" style="max-width:200px" title="${consEscHtml(r.producto_nombre || '')}">${consEscHtml(r.producto_nombre || '')}</td>
                         <td>${consEscHtml(r.lote || '—')}</td>
                         <td>${consEscHtml(r.nup || '—')}</td>
-                        <td class="text-truncate" style="max-width:140px" title="${consEscHtml(r.bodega_nombre || '')}">${consEscHtml(r.bodega_nombre || '—')}</td>
-                        <td class="text-center pe-3">${consBadgeRetorno(r.estado)}</td>
+                        <td class="text-end">${entrada > 0 ? entrada.toFixed(2) : '—'}</td>
+                        <td class="text-end">${salida > 0 ? salida.toFixed(2) : '—'}</td>
+                        <td class="text-end pe-3 fw-bold">${saldo.toFixed(2)}</td>
                     </tr>`;
                 }).join('');
-                if (totEl) totEl.textContent = totalCant.toFixed(2);
+
+                const saldoTotal = Object.values(ultimoSaldoPorProducto).reduce((a, b) => a + b, 0);
+                if (totEl) totEl.textContent = saldoTotal.toFixed(2);
             } else {
-                tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted"><i class="bi bi-arrow-return-left me-1"></i> Esta consignación no tiene retornos registrados.</td></tr>';
+                tb.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted"><i class="bi bi-list-columns-reverse me-1"></i> Esta consignación aún no tiene movimientos.</td></tr>';
                 if (totEl) totEl.textContent = '0.00';
             }
         } catch (e) {
-            tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Error al cargar los retornos.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar el resumen.</td></tr>';
         }
     };
 
-    // Carga perezosa: al mostrar la pestaña Retornos, trae los retornos de la consignación actual.
+    // Carga perezosa: al mostrar la pestaña Resumen, trae el kardex de la consignación actual.
     document.addEventListener('DOMContentLoaded', () => {
-        const btnTab = document.getElementById('cons-tab-retornos-btn');
-        if (btnTab) {
-            btnTab.addEventListener('shown.bs.tab', () => {
-                consCargarRetornos(document.getElementById('cons_id').value);
-            });
-        }
-    });
-
-    // ── Pestaña Facturación (solo lectura): historial de facturas de la consignación ──
-    window.consBadgeFactura = function(f) {
-        const ok = 'bg-success bg-opacity-10 text-success border border-success border-opacity-25';
-        const dn = 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25';
-        if (f.factura_eliminada === true || f.factura_eliminada === 't' || f.estado_factura === 'anulado') {
-            return `<span class="badge ${dn}">${consEscHtml(f.estado_factura === 'anulado' ? 'Anulada' : 'Eliminada')}</span>`;
-        }
-        return `<span class="badge ${ok}">${consEscHtml(f.estado_factura || 'Generada')}</span>`;
-    };
-
-    window.consCargarFacturacion = async function(id) {
-        const histEl = document.getElementById('cons_fact_hist_body');
-        if (!histEl) return;
-        if (!id) {
-            histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde la consignación para ver sus facturas.</td></tr>';
-            return;
-        }
-        histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando facturas...</td></tr>';
-        try {
-            const res  = await fetch(`${RUTA_MODULO_CONSIGNACION}/getFacturasAjax?id=${id}`);
-            const data = await res.json();
-            if (data.ok && data.data && data.data.length) {
-                histEl.innerHTML = data.data.map(f => {
-                    const total = parseFloat(f.importe_total || f.total || 0);
-                    return `<tr>
-                        <td class="ps-3 fw-bold text-primary">${consEscHtml(f.numero_factura || ('#' + f.id_factura))}</td>
-                        <td>${consEscHtml(f.fecha_emision || f.created_at || '')}</td>
-                        <td class="text-end">${total.toFixed(2)}</td>
-                        <td class="text-center pe-3">${consBadgeFactura(f)}</td>
-                    </tr>`;
-                }).join('');
-            } else {
-                histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-receipt me-1"></i> Esta consignación aún no tiene facturas.</td></tr>';
-            }
-        } catch (e) {
-            histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar las facturas.</td></tr>';
-        }
-    };
-
-    // Carga perezosa: al mostrar la pestaña Facturación.
-    document.addEventListener('DOMContentLoaded', () => {
-        const btnTabF = document.getElementById('cons-tab-facturacion-btn');
-        if (btnTabF) {
-            btnTabF.addEventListener('shown.bs.tab', () => {
-                consCargarFacturacion(document.getElementById('cons_id').value);
+        const btnTabResumen = document.getElementById('cons-tab-resumen-btn');
+        if (btnTabResumen) {
+            btnTabResumen.addEventListener('shown.bs.tab', () => {
+                consCargarResumen(document.getElementById('cons_id').value);
             });
         }
     });

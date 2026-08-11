@@ -29,6 +29,8 @@ class DescargasMasivasController extends BaseModuloController
             'base'       => BASE_URL,
             'rutaModulo' => $this->getRutaModulo(),
             'tipos'      => DescargaMasivaService::ETIQUETAS,
+            'tiposSinXml' => DescargaMasivaService::TIPOS_SIN_XML,
+            'umbralPdfUnico' => (int) ($this->configModulo()['umbral_pdf_unico'] ?? 20),
         ]);
     }
 
@@ -38,14 +40,18 @@ class DescargasMasivasController extends BaseModuloController
         header('Content-Type: application/json');
 
         try {
-            [$tipo, $formato, $desde, $hasta] = $this->leerFiltros();
-            DescargaMasivaRules::validarFiltros($tipo, $formato, $desde, $hasta);
+            [$tipo, $formato, $filtro] = $this->leerFiltros();
+            DescargaMasivaRules::validarFiltros(
+                $tipo, $formato, $filtro['modo'],
+                $filtro['desde'] ?? null, $filtro['hasta'] ?? null,
+                $filtro['numero_desde'] ?? null, $filtro['numero_hasta'] ?? null
+            );
 
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuarioFiltro = $this->idUsuarioFiltro();
 
             $service = new DescargaMasivaService($this->configModulo());
-            $resultado = $service->contar($idEmpresa, $tipo, $desde, $hasta, $idUsuarioFiltro, $formato);
+            $resultado = $service->contar($idEmpresa, $tipo, $filtro, $idUsuarioFiltro, $formato);
 
             echo json_encode(['ok' => true] + $resultado, JSON_UNESCAPED_UNICODE);
         } catch (\InvalidArgumentException $e) {
@@ -61,10 +67,14 @@ class DescargasMasivasController extends BaseModuloController
     {
         $this->requireLeer();
 
-        $rutaZip = '';
+        $rutaArchivo = '';
         try {
-            [$tipo, $formato, $desde, $hasta] = $this->leerFiltros();
-            DescargaMasivaRules::validarFiltros($tipo, $formato, $desde, $hasta);
+            [$tipo, $formato, $filtro] = $this->leerFiltros();
+            DescargaMasivaRules::validarFiltros(
+                $tipo, $formato, $filtro['modo'],
+                $filtro['desde'] ?? null, $filtro['hasta'] ?? null,
+                $filtro['numero_desde'] ?? null, $filtro['numero_hasta'] ?? null
+            );
 
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
@@ -73,18 +83,19 @@ class DescargasMasivasController extends BaseModuloController
             set_time_limit(0);
 
             $service = new DescargaMasivaService($this->configModulo());
-            $resultado = $service->generarZip($idEmpresa, $idUsuario, $tipo, $desde, $hasta, $formato, $idUsuarioFiltro);
-            $rutaZip = $resultado['ruta'];
+            $resultado = $service->generarDescarga($idEmpresa, $idUsuario, $tipo, $filtro, $formato, $idUsuarioFiltro);
+            $rutaArchivo = $resultado['ruta'];
 
-            if (!is_file($rutaZip)) {
+            if (!is_file($rutaArchivo)) {
                 throw new \RuntimeException('No se pudo generar el archivo.');
             }
 
-            header('Content-Type: application/zip');
+            $contentType = $resultado['tipo_salida'] === 'pdf' ? 'application/pdf' : 'application/zip';
+            header('Content-Type: ' . $contentType);
             header('Content-Disposition: attachment; filename="' . $resultado['nombre'] . '"');
-            header('Content-Length: ' . filesize($rutaZip));
+            header('Content-Length: ' . filesize($rutaArchivo));
             header('Cache-Control: no-store');
-            readfile($rutaZip);
+            readfile($rutaArchivo);
         } catch (\InvalidArgumentException|\RuntimeException $e) {
             http_response_code(400);
             header('Content-Type: text/plain; charset=utf-8');
@@ -95,21 +106,35 @@ class DescargasMasivasController extends BaseModuloController
             header('Content-Type: text/plain; charset=utf-8');
             echo 'No se pudo generar la descarga.';
         } finally {
-            DescargaMasivaService::eliminarTemporal($rutaZip);
+            DescargaMasivaService::eliminarTemporal($rutaArchivo);
         }
         exit;
     }
 
     // ── Helpers internos ──────────────────────────────────────────────────────
 
-    /** @return array{0:string,1:string,2:string,3:string} [tipo, formato, desde, hasta] */
+    /**
+     * @return array{0:string,1:string,2:array} [tipo, formato, filtro]
+     *         filtro: modo ('fecha'|'numero') + desde/hasta o numero_desde/numero_hasta.
+     */
     private function leerFiltros(): array
     {
         $tipo    = trim((string) ($_GET['tipo'] ?? ''));
         $formato = trim((string) ($_GET['formato'] ?? 'pdf'));
-        $desde   = trim((string) ($_GET['desde'] ?? ''));
-        $hasta   = trim((string) ($_GET['hasta'] ?? ''));
-        return [$tipo, $formato, $desde, $hasta];
+        $modo    = trim((string) ($_GET['modo'] ?? 'fecha')) ?: 'fecha';
+
+        $filtro = ['modo' => $modo];
+        if ($modo === 'numero') {
+            $numeroDesde = $_GET['numero_desde'] ?? '';
+            $numeroHasta = $_GET['numero_hasta'] ?? '';
+            $filtro['numero_desde'] = is_numeric($numeroDesde) ? (int) $numeroDesde : null;
+            $filtro['numero_hasta'] = is_numeric($numeroHasta) ? (int) $numeroHasta : null;
+        } else {
+            $filtro['desde'] = trim((string) ($_GET['desde'] ?? ''));
+            $filtro['hasta'] = trim((string) ($_GET['hasta'] ?? ''));
+        }
+
+        return [$tipo, $formato, $filtro];
     }
 
     private function idUsuarioFiltro(): ?int

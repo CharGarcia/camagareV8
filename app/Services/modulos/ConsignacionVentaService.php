@@ -714,6 +714,18 @@ class ConsignacionVentaService
         }
     }
 
+    /** Cantidad facturada (docs 'facturada') por línea de consignación: [id_consignacion_detalle => cantidad]. */
+    public function getFacturadoPorLinea(int $idConsignacion, int $idEmpresa): array
+    {
+        try {
+            $facturaRepo = new \App\repositories\modulos\ConsignacionFacturaRepository();
+            return $facturaRepo->getFacturadoPorConsignacion($idConsignacion, $idEmpresa);
+        } catch (\Throwable $e) {
+            // Tabla puente de facturación inexistente (migración pendiente): sin datos.
+            return [];
+        }
+    }
+
     /** Evidencias de entrega (GPS + firma) registradas desde la app móvil, para la pestaña Entrega. */
     public function getEntregasDeConsignacion(int $idConsignacion, int $idEmpresa): array
     {
@@ -753,6 +765,18 @@ class ConsignacionVentaService
         }
         $retornoRepo = new \App\repositories\modulos\RetornoCvRepository();
         return $retornoRepo->getPorConsignacion($idConsignacion, $idEmpresa);
+    }
+
+    /**
+     * Kardex de la consignación (pestaña Resumen): consignación inicial + retornos +
+     * facturaciones, cronológico, con saldo corriente por producto.
+     */
+    public function getKardexDeConsignacion(int $idConsignacion, int $idEmpresa): array
+    {
+        if (!$this->repository->find($idConsignacion, $idEmpresa)) {
+            return [];
+        }
+        return $this->repository->getKardex($idConsignacion, $idEmpresa);
     }
 
     /** Asiento sugerido (reclasificación de inventario a costo) para la pestaña. */

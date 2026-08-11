@@ -19,7 +19,6 @@ class ConsignacionesVentasController extends BaseModuloController
     private const TABLA_BLOQUEO_PEDIDO = 'pedidos_cabecera';
 
     private ConsignacionVentaService $service;
-    private \App\Services\modulos\ConsignacionFacturaService $facturaService;
     private const RUTA_MODULO = 'modulos/consignaciones-ventas';
 
     public function __construct()
@@ -53,11 +52,6 @@ class ConsignacionesVentasController extends BaseModuloController
         $rules = new ConsignacionVentaRules();
         $logService = new LogSistemaService();
         $this->service = new ConsignacionVentaService($repository, $rules, $logService);
-        $this->facturaService = new \App\Services\modulos\ConsignacionFacturaService(
-            new \App\repositories\modulos\ConsignacionFacturaRepository(),
-            new \App\Rules\modulos\ConsignacionFacturaRules(),
-            $logService
-        );
     }
 
     protected function getRutaModulo(): string
@@ -410,10 +404,12 @@ class ConsignacionesVentasController extends BaseModuloController
             $detalles = $cons['detalles'] ?? [];
             $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
 
-            // Cantidad retornada por línea (columna "Retorno" del PDF).
+            // Cantidad retornada y facturada por línea (columnas "Retorno" y "Facturados" del PDF).
             $retornado = $this->service->getRetornadoPorLinea($id, $idEmpresa);
+            $facturado = $this->service->getFacturadoPorLinea($id, $idEmpresa);
             foreach ($detalles as &$d) {
                 $d['retornado'] = $retornado[(int)($d['id'] ?? 0)] ?? 0;
+                $d['facturado'] = $facturado[(int)($d['id'] ?? 0)] ?? 0;
             }
             unset($d);
 
@@ -449,10 +445,12 @@ class ConsignacionesVentasController extends BaseModuloController
             $detalles = $cons['detalles'] ?? [];
             $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
 
-            // Cantidad retornada por línea (misma columna "Retorno" del PDF).
+            // Cantidad retornada y facturada por línea (mismas columnas "Retorno" y "Facturados" del PDF).
             $retornado = $this->service->getRetornadoPorLinea($id, $idEmpresa);
+            $facturado = $this->service->getFacturadoPorLinea($id, $idEmpresa);
             foreach ($detalles as &$d) {
                 $d['retornado'] = $retornado[(int)($d['id'] ?? 0)] ?? 0;
+                $d['facturado'] = $facturado[(int)($d['id'] ?? 0)] ?? 0;
             }
             unset($d);
 
@@ -671,8 +669,8 @@ class ConsignacionesVentasController extends BaseModuloController
         exit;
     }
 
-    /** Retornos asociados a una consignación (pestaña Retornos del modal). */
-    public function getRetornosAjax(): void
+    /** Kardex de la consignación (pestaña Resumen del modal): inicial + retornos + facturaciones, con saldo corriente. */
+    public function getKardexAjax(): void
     {
         $this->requireLeer();
         header('Content-Type: application/json');
@@ -684,34 +682,7 @@ class ConsignacionesVentasController extends BaseModuloController
                 echo json_encode(['ok' => true, 'data' => []]);
                 exit;
             }
-            $data = $this->service->getRetornosDeConsignacion($idCons, $idEmpresa);
-            echo json_encode(['ok' => true, 'data' => $data]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    /** Facturas generadas desde una consignación (historial de solo lectura de la pestaña Facturación). */
-    public function getFacturasAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-
-        try {
-            $idCons    = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            if ($idCons <= 0) {
-                echo json_encode(['ok' => true, 'data' => []]);
-                exit;
-            }
-            $data = $this->facturaService->getFacturasDeConsignacion($idEmpresa, $idCons);
-            foreach ($data as &$d) {
-                if (!empty($d['fecha_emision'])) $d['fecha_emision'] = date('d-m-Y', strtotime($d['fecha_emision']));
-                if (!empty($d['created_at']))   $d['created_at']   = date('d-m-Y H:i', strtotime($d['created_at']));
-            }
-            unset($d);
+            $data = $this->service->getKardexDeConsignacion($idCons, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

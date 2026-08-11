@@ -130,12 +130,12 @@ class NotaDebitoRepository extends BaseRepository
      * Notas de débito del rango de fechas para exportación masiva (Descargas Masivas).
      * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
      */
-    public function getParaDescargaMasiva(int $idEmpresa, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    public function getParaDescargaMasiva(int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta, ?int $numeroDesde, ?int $numeroHasta, ?int $idUsuarioFiltro): array
     {
+        $params = [':id_empresa' => $idEmpresa];
         $where = "WHERE nd.id_empresa = :id_empresa AND nd.eliminado = false
                    AND nd.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                   AND nd.fecha_emision BETWEEN :desde AND :hasta";
-        $params = [':id_empresa' => $idEmpresa, ':desde' => $fechaDesde, ':hasta' => $fechaHasta];
+                   " . $this->condicionRangoDescargaMasiva('nd.', $fechaDesde, $fechaHasta, $numeroDesde, $numeroHasta, $params);
         if ($idUsuarioFiltro !== null) {
             $where .= ' AND nd.id_usuario = :id_usuario_filtro';
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;

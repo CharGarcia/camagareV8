@@ -553,7 +553,7 @@ window.RI_Consignaciones = {
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
             numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',
             estado: 'ri-cv-estado',
-            incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
+            agrupar_por: 'ri-cv-agrupar',
         });
 
         const tbody = document.getElementById('ri-cv-tbody');
@@ -583,7 +583,7 @@ window.RI_Consignaciones = {
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
             numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',
             estado: 'ri-cv-estado',
-            incluir_liquidadas: 'ri-cv-incluir-liquidadas', agrupar_por: 'ri-cv-agrupar',
+            agrupar_por: 'ri-cv-agrupar',
         });
         params.set('tab', 'consignaciones');
         return params;

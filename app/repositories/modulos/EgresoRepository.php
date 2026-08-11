@@ -25,6 +25,12 @@ class EgresoRepository extends BaseRepository
             // Beneficiario de texto libre (egresos de otros conceptos sin proveedor/empleado;
             // p. ej. documentos migrados). Espejo del recibo_de de ingresos.
             $this->db->exec("ALTER TABLE egresos_cabecera ADD COLUMN IF NOT EXISTS beneficiario_nombre VARCHAR(255) NULL");
+            // Anular cheque puntual dejando rastro (sin borrar la fila ni afectar el resto
+            // del egreso). Ver database/migrations/20260811_add_estado_cheque_egresos_pagos.sql.
+            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS estado_cheque VARCHAR(20) NOT NULL DEFAULT 'vigente'");
+            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS motivo_anulacion_cheque VARCHAR(255) NULL");
+            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS anulado_cheque_at TIMESTAMP NULL");
+            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS anulado_cheque_by INTEGER NULL");
         } catch (\Exception $e) {
             // Silenciar en caso de no poseer permisos DDL
         }
@@ -106,6 +112,26 @@ class EgresoRepository extends BaseRepository
         return ['rows' => $rows, 'total' => $total];
     }
 
+    /**
+     * Egresos del rango de fechas o de números para exportación masiva (Descargas Masivas).
+     * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta, ?int $numeroDesde, ?int $numeroHasta, ?int $idUsuarioFiltro): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $where = "WHERE e.id_empresa = :id_empresa AND e.eliminado = false
+                   " . $this->condicionRangoDescargaMasiva('e.', $fechaDesde, $fechaHasta, $numeroDesde, $numeroHasta, $params);
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND e.created_by = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT e.id, e.establecimiento, e.punto_emision, e.secuencial, e.fecha_emision, e.estado
+                FROM egresos_cabecera e
+                $where
+                ORDER BY e.fecha_emision ASC, e.id ASC";
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT e.*,
@@ -142,6 +168,7 @@ class EgresoRepository extends BaseRepository
     {
         $sql = "SELECT ep.id, ep.id_egreso, ep.id_forma_pago, ep.monto, ep.referencia,
                        ep.tipo_operacion_bancaria, ep.numero_cheque, ep.fecha_cobro, ep.beneficiario_cheque,
+                       ep.estado_cheque, ep.motivo_anulacion_cheque, ep.anulado_cheque_at,
                        efc.nombre AS forma_pago_nombre, efc.tipo AS forma_pago_tipo,
                        " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado
                 FROM egresos_pagos ep
@@ -175,7 +202,8 @@ class EgresoRepository extends BaseRepository
     public function getPagoChequeParaEdicion(int $idEmpresa, int $idPago): ?array
     {
         $sql = "SELECT ep.id, ep.id_egreso, ep.tipo_operacion_bancaria, ep.fecha_cobro,
-                       e.estado AS egreso_estado,
+                       ep.numero_cheque, ep.estado_cheque,
+                       e.estado AS egreso_estado, e.fecha_emision,
                        " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado
                 FROM egresos_pagos ep
                 INNER JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
@@ -191,6 +219,21 @@ class EgresoRepository extends BaseRepository
     {
         $this->query("UPDATE egresos_pagos SET fecha_cobro = :f WHERE id = :id",
             [':f' => $fecha, ':id' => $idPago]);
+    }
+
+    /**
+     * Anula un cheque puntual dejando la fila intacta (no se borra ni se marca
+     * `eliminado`): queda visible en el historial de pagos del egreso, y su
+     * monto deja de contarse en el asiento contable (AsientoBuilderService)
+     * y en Control Bancario / Impresión de Cheques.
+     */
+    public function anularCheque(int $idPago, string $motivo, int $idUsuario): void
+    {
+        $sql = "UPDATE egresos_pagos
+                SET estado_cheque = 'anulado', motivo_anulacion_cheque = :motivo,
+                    anulado_cheque_at = CURRENT_TIMESTAMP, anulado_cheque_by = :usr
+                WHERE id = :id AND COALESCE(estado_cheque, 'vigente') = 'vigente'";
+        $this->query($sql, [':motivo' => $motivo, ':usr' => $idUsuario, ':id' => $idPago]);
     }
 
     /** Actualiza el nombre a imprimir en el cheque (override; null = usa el beneficiario del egreso). */
@@ -249,7 +292,8 @@ class EgresoRepository extends BaseRepository
                     GROUP BY d.id_referencia_documento
                 )
                 SELECT 'ROL' AS tipo_doc_bd, rd.id,
-                       COALESCE(NULLIF(rc.descripcion, ''), 'Rol ' || rc.periodo_mes || '/' || rc.periodo_anio) AS numero_documento,
+                       (CASE rc.tipo_rol WHEN 'MENSUAL' THEN 'Rol Mensual' WHEN 'QUINCENA' THEN 'Quincena' WHEN 'SEMANAL' THEN 'Semanal' ELSE 'Rol' END)
+                           || ' ' || rc.periodo_mes || '/' || rc.periodo_anio AS numero_documento,
                        rc.fecha_pago AS fecha_emision,
                        rd.neto AS monto_total,
                        COALESCE(p.total_pagado, 0) AS monto_pagado_previo,
@@ -622,7 +666,8 @@ class EgresoRepository extends BaseRepository
                     SELECT * FROM (
                         SELECT 'ROL' AS tipo_doc_bd,
                                rd.id,
-                               COALESCE(NULLIF(rc.descripcion, ''), 'Rol ' || rc.periodo_mes || '/' || rc.periodo_anio) AS numero_documento,
+                               (CASE rc.tipo_rol WHEN 'MENSUAL' THEN 'Rol Mensual' WHEN 'QUINCENA' THEN 'Quincena' WHEN 'SEMANAL' THEN 'Semanal' ELSE 'Rol' END)
+                                   || ' ' || rc.periodo_mes || '/' || rc.periodo_anio AS numero_documento,
                                rc.fecha_pago AS fecha_emision,
                                0 AS dias_credito,
                                rd.neto AS monto_total,

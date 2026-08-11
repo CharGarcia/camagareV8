@@ -72,6 +72,34 @@ abstract class BaseRepository
     }
 
     /**
+     * Condición de rango para Descargas Masivas: por fecha (BETWEEN sobre
+     * $colFecha) o por número (BETWEEN sobre $colSecuencial, casteado a
+     * entero) — modos EXCLUYENTES, nunca ambos a la vez. El llamador decide
+     * el modo pasando uno u otro par de valores; agrega los parámetros
+     * necesarios a $params por referencia.
+     */
+    protected function condicionRangoDescargaMasiva(
+        string $prefijo,
+        ?string $fechaDesde,
+        ?string $fechaHasta,
+        ?int $numeroDesde,
+        ?int $numeroHasta,
+        array &$params,
+        string $colFecha = 'fecha_emision',
+        string $colSecuencial = 'secuencial'
+    ): string {
+        if ($numeroDesde !== null && $numeroHasta !== null) {
+            $params[':numero_desde'] = $numeroDesde;
+            $params[':numero_hasta'] = $numeroHasta;
+            return "AND {$prefijo}{$colSecuencial} ~ '^[0-9]+$'
+                     AND CAST({$prefijo}{$colSecuencial} AS INTEGER) BETWEEN :numero_desde AND :numero_hasta";
+        }
+        $params[':desde'] = $fechaDesde;
+        $params[':hasta'] = $fechaHasta;
+        return "AND {$prefijo}{$colFecha} BETWEEN :desde AND :hasta";
+    }
+
+    /**
      * Expone la conexión PDO para uso directo en Services cuando sea necesario.
      */
     public function getDb(): \PDO

@@ -101,6 +101,80 @@ class EgresoService
         );
     }
 
+    /**
+     * Anula un cheque puntual de un egreso vigente (error de impresión, cheque dañado,
+     * etc.), dejando la fila como historial (no se borra ni se marca `eliminado`). El
+     * egreso y el resto de sus pagos NO se tocan; el monto anulado deja de contarse en
+     * el asiento contable (que se regenera más chico automáticamente) y en Control
+     * Bancario/Impresión de Cheques. Si el pago quedaba sin cobertura, el usuario agrega
+     * otra forma de pago desde el mismo modal (flujo ya existente de "editar pagos").
+     */
+    public function anularCheque(int $idEmpresa, int $idPago, string $motivo, int $idUsuario): void
+    {
+        $pago = $this->repository->getPagoChequeParaEdicion($idEmpresa, $idPago);
+        if (!$pago) {
+            throw new \RuntimeException('Pago no encontrado.');
+        }
+        if (strtoupper((string) $pago['tipo_operacion_bancaria']) !== 'CHEQUE') {
+            throw new \RuntimeException('El pago no es un cheque.');
+        }
+        if (strtoupper((string) $pago['egreso_estado']) === 'ANULADO') {
+            throw new \RuntimeException('El egreso está anulado.');
+        }
+        if (($pago['estado_cheque'] ?? 'vigente') === 'anulado') {
+            throw new \RuntimeException('El cheque ya está anulado.');
+        }
+        // PDO/pgsql devuelve el boolean como 't'/'f'.
+        $conciliado = in_array($pago['cheque_conciliado'], [true, 't', '1', 1], true);
+        if ($conciliado) {
+            throw new \RuntimeException('El cheque ya fue reportado como cobrado (conciliado en Control Bancario); no se puede anular.');
+        }
+
+        $motivo = trim($motivo);
+        if ($motivo === '') {
+            throw new \InvalidArgumentException('Debe indicar el motivo de anulación del cheque.');
+        }
+
+        $this->periodosService->validarFechaPermitida(
+            $pago['fecha_emision'],
+            $idEmpresa,
+            'No se puede anular el cheque porque el periodo contable del egreso está cerrado.'
+        );
+
+        $db = Database::getConnection();
+        $inTrans = $db->inTransaction();
+        if (!$inTrans) $db->beginTransaction();
+
+        try {
+            $this->repository->anularCheque($idPago, $motivo, $idUsuario);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'ANULAR_CHEQUE',
+                'egresos_pagos',
+                $idPago,
+                ['estado_cheque' => 'vigente'],
+                ['estado_cheque' => 'anulado', 'motivo' => $motivo, 'numero_cheque' => $pago['numero_cheque'] ?? null]
+            );
+
+            if (!$inTrans) $db->commit();
+        } catch (\Throwable $e) {
+            if (!$inTrans && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        // Asiento fuera de la transacción (mismo patrón que registrar()/actualizarPagos()):
+        // lineasFormas() ya excluye el pago anulado, así que el asiento se recalcula más
+        // chico automáticamente, sin necesidad de un asiento de reversión.
+        $this->generarAsientoContableSeguro((int) $pago['id_egreso'], [
+            'id_empresa' => $idEmpresa,
+            'usuario_id' => $idUsuario,
+        ]);
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $egreso = $this->repository->getPorId($id, $idEmpresa);
@@ -338,8 +412,13 @@ class EgresoService
             // Registrar pagos viejos para la auditoría
             $pagosViejos = $this->repository->getPagos($id);
 
-            // 1. Eliminar lógicamente los pagos históricos
-            $this->repository->query("UPDATE egresos_pagos SET eliminado = TRUE WHERE id_egreso = ? AND eliminado = FALSE", [$id]);
+            // 1. Eliminar lógicamente los pagos vigentes (los cheques ya anulados se
+            //    preservan tal cual: son historial, no se vuelven a tocar aquí).
+            $this->repository->query(
+                "UPDATE egresos_pagos SET eliminado = TRUE
+                 WHERE id_egreso = ? AND eliminado = FALSE AND COALESCE(estado_cheque, 'vigente') <> 'anulado'",
+                [$id]
+            );
 
             // 2. Insertar nuevos pagos
             foreach ($pagos as $pago) {

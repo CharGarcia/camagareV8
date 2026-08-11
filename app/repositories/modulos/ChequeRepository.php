@@ -119,6 +119,7 @@ class ChequeRepository extends BaseRepository
               AND e.eliminado  = FALSE
               AND UPPER(COALESCE(ep.tipo_operacion_bancaria, '')) = 'CHEQUE'
               AND UPPER(COALESCE(e.estado, '')) <> 'ANULADO'
+              AND COALESCE(ep.estado_cheque, 'vigente') <> 'anulado'
         ";
     }
 
@@ -197,6 +198,30 @@ class ChequeRepository extends BaseRepository
         }
 
         $sql = $this->selectBaseCheques() . $where . " ORDER BY ep.fecha_cobro ASC NULLS LAST, ep.id ASC";
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cheques del rango de fechas (fecha_cobro) o de números (numero_cheque) para
+     * exportación masiva (Descargas Masivas). Sin paginar; el llamador
+     * (DescargaMasivaService) valida el límite de cantidad. Reusa whereBaseCheques()
+     * (excluye egresos anulados) pero sin los JOIN de detalle: getChequePorPago()
+     * trae los datos completos para el PDF de cada cheque individual.
+     */
+    public function getParaDescargaMasiva(int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta, ?int $numeroDesde, ?int $numeroHasta, ?int $idUsuarioFiltro): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $where = $this->whereBaseCheques()
+            . ' ' . $this->condicionRangoDescargaMasiva('ep.', $fechaDesde, $fechaHasta, $numeroDesde, $numeroHasta, $params, 'fecha_cobro', 'numero_cheque');
+        if ($idUsuarioFiltro !== null) {
+            $where .= ' AND e.created_by = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT ep.id, ep.numero_cheque, ep.fecha_cobro AS fecha_emision
+                FROM egresos_pagos ep
+                INNER JOIN egresos_cabecera e ON ep.id_egreso = e.id
+                $where
+                ORDER BY ep.fecha_cobro ASC NULLS LAST, ep.id ASC";
         return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 

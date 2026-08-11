@@ -194,6 +194,72 @@ class ConsignacionVentaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Kardex de la consignación: un movimiento por fila (consignación inicial, retorno,
+     * facturación), ordenados cronológicamente, con saldo corriente por PRODUCTO
+     * (columna "saldo" = SUM ventana particionada por id_producto).
+     */
+    public function getKardex(int $idConsignacion, int $idEmpresa): array
+    {
+        $sql = "
+            SELECT t.*,
+                   SUM(t.mov) OVER (
+                       PARTITION BY t.id_producto
+                       ORDER BY t.fecha, t.orden, t.orden_id
+                       ROWS UNBOUNDED PRECEDING
+                   ) AS saldo
+            FROM (
+                -- 1. Consignación inicial (una fila por línea)
+                SELECT cvd.id AS id_consignacion_detalle, cv.fecha_emision AS fecha, 1 AS orden, cvd.id AS orden_id,
+                       'Consignación Inicial' AS tipo,
+                       (cv.serie || '-' || cv.secuencial) AS documento, NULL AS estado_doc,
+                       cvd.id_producto, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
+                       cvd.lote, cvd.nup,
+                       cvd.cantidad AS entrada, 0 AS salida, cvd.cantidad AS mov
+                FROM consignaciones_ventas_detalles cvd
+                INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                INNER JOIN productos p ON p.id = cvd.id_producto
+                WHERE cvd.id_consignacion = :id1 AND cvd.id_empresa = :e1 AND (cvd.eliminado = false OR cvd.eliminado IS NULL)
+
+                UNION ALL
+
+                -- 2. Retornos activos (Emitida)
+                SELECT rcd.id_consignacion_detalle, rc.fecha_retorno, 2, rcd.id,
+                       'Retorno',
+                       (rc.serie || '-' || rc.secuencial), rc.estado,
+                       rcd.id_producto, p.nombre, p.codigo,
+                       rcd.lote, rcd.nup,
+                       0, rcd.cantidad, -rcd.cantidad
+                FROM retornos_cv_detalles rcd
+                INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno AND rc.eliminado = false AND rc.estado = 'Emitida'
+                INNER JOIN productos p ON p.id = rcd.id_producto
+                WHERE rcd.id_consignacion = :id2 AND rcd.id_empresa = :e2 AND rcd.eliminado = false
+
+                UNION ALL
+
+                -- 3. Facturaciones (facturada)
+                SELECT cfd.id_consignacion_detalle, cf.fecha_emision, 3, cfd.id,
+                       'Facturación',
+                       COALESCE(cf.numero_factura, (cf.serie || '-' || cf.secuencial)), cf.estado,
+                       cfd.id_producto, p.nombre, p.codigo,
+                       cfd.lote, cfd.nup,
+                       0, cfd.cantidad, -cfd.cantidad
+                FROM consignaciones_facturas_detalles cfd
+                INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura AND cf.eliminado = false AND cf.estado = 'facturada'
+                INNER JOIN productos p ON p.id = cfd.id_producto
+                WHERE cfd.id_consignacion = :id3 AND cfd.id_empresa = :e3 AND (cfd.eliminado = false OR cfd.eliminado IS NULL)
+            ) t
+            ORDER BY t.producto_nombre ASC, t.fecha ASC, t.orden ASC, t.orden_id ASC
+        ";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id1' => $idConsignacion, ':e1' => $idEmpresa,
+            ':id2' => $idConsignacion, ':e2' => $idEmpresa,
+            ':id3' => $idConsignacion, ':e3' => $idEmpresa,
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** ¿La consignación proviene de una migración? (tiene fila en migracion_mysql_map). */
     public function esMigrado(int $id, int $idEmpresa): bool
     {

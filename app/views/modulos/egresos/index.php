@@ -576,6 +576,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    <div id="eg-wrapper-pagos-anulados" class="table-responsive border rounded mt-2 d-none">
+                                        <table class="table table-sm mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th class="text-danger small"><i class="bi bi-ban me-1"></i>Cheques anulados</th>
+                                                    <th class="text-end small" style="width: 120px;">Monto</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="eg-tbody-pagos-anulados"></tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
 
@@ -637,6 +649,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     let docsEgreso = [];
     let manualEgreso = [];
     let pagosEgreso = [];
+    let pagosAnuladosEgreso = []; // cheques anulados: solo historial, no se editan ni cuentan en el total
     let esEgresoAnulado = false;
     const EGR_URL = '<?= BASE_URL ?>/<?= $rutaModulo ?>';
 
@@ -824,6 +837,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         docsEgreso = [];
         manualEgreso = [];
         pagosEgreso = [];
+        pagosAnuladosEgreso = [];
         if (prevVal !== selSuj.value) {
             toggleBuscadorSujeto(selSuj.value); // limpia sujeto + arrays + re-render de docs
         } else {
@@ -1282,7 +1296,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     : '';
 
                 // Cheque: permitir editar la fecha de cobro solo si NO está reportado como cobrado (conciliado).
-                let btnEditFecha = '', badgeCobrado = '', btnEditNombre = '', infoNombre = '';
+                let btnEditFecha = '', badgeCobrado = '', btnEditNombre = '', infoNombre = '', btnAnular = '';
                 if (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago) {
                     if (p.beneficiario_cheque) {
                         infoNombre = ` <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" title="Nombre a imprimir en el cheque"><i class="bi bi-person"></i> ${p.beneficiario_cheque}</span>`;
@@ -1292,25 +1306,94 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     } else if (!esEgresoAnulado) {
                         btnEditFecha  = `<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-calendar-event"></i></button>`;
                         btnEditNombre = `<button type="button" class="btn btn-link btn-sm text-secondary p-0 ms-1 align-baseline" title="Nombre a imprimir en el cheque" onclick="editarNombreCheque(${p.id_pago}, ${i})"><i class="bi bi-person-gear"></i></button>`;
+                        btnAnular     = `<button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 align-baseline" title="Anular este cheque" onclick="anularChequeEgreso(${p.id_pago}, ${i})"><i class="bi bi-ban"></i></button>`;
                     }
                 }
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-opacity-25">${p.nombre}</span></td>
-                    <td class="small">${txtRef} ${btnChq}${btnChqDl}${btnChqCfg}${btnEditFecha}${btnEditNombre}${infoNombre}${badgeCobrado}</td>
+                    <td class="small">${txtRef} ${btnChq}${btnChqDl}${btnChqCfg}${btnEditFecha}${btnEditNombre}${btnAnular}${infoNombre}${badgeCobrado}</td>
                     <td class="text-end fw-bold text-primary">$${p.monto.toFixed(2)}</td>
                     <td class="text-center">${btnTrash}</td>
                 `;
                 tb.appendChild(tr);
             });
         }
-        // Recalc pago footer
+        // Recalc pago footer (los cheques anulados ya no están en pagosEgreso, así que
+        // su valor no se suma: si quedó descubierto, el footer se pone en rojo hasta que
+        // se agregue otra forma de pago que cubra la diferencia).
         let sum = 0; pagosEgreso.forEach(p=>sum+=p.monto);
         const f = document.getElementById('eg-footer-pago-tot');
         f.innerText = '$ ' + sum.toFixed(2);
         const final = parseFloat(document.getElementById('eg-final-total').innerText.replace('$ ','')) || 0;
         f.className = 'fw-bold ' + (Math.abs(sum - final) < 0.01 ? 'text-success' : 'text-danger');
+
+        renderPagosAnuladosEgreso();
+    }
+
+    function renderPagosAnuladosEgreso() {
+        const wrap = document.getElementById('eg-wrapper-pagos-anulados');
+        const tb = document.getElementById('eg-tbody-pagos-anulados');
+        if (!pagosAnuladosEgreso.length) {
+            wrap.classList.add('d-none');
+            tb.innerHTML = '';
+            return;
+        }
+        wrap.classList.remove('d-none');
+        tb.innerHTML = pagosAnuladosEgreso.map(p => {
+            const motivo = p.motivo_anulacion_cheque ? ` — ${p.motivo_anulacion_cheque}` : '';
+            const fecha  = p.anulado_cheque_at ? ` (${p.anulado_cheque_at})` : '';
+            return `<tr class="text-decoration-line-through text-muted">
+                <td class="small">CHQ#${p.numero_cheque || '?'}${motivo}${fecha}</td>
+                <td class="text-end small">$${(p.monto || 0).toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function anularChequeEgreso(idPago, index) {
+        const p = pagosEgreso[index];
+        const { value: motivo, isConfirmed } = await Swal.fire({
+            icon: 'warning',
+            title: 'Anular cheque',
+            html: `Vas a anular el cheque <b>#${p ? (p.numero_cheque || '?') : '?'}</b>.<br>
+                   El egreso NO se anula; su valor deja de contarse y podrás agregar otra forma de pago para cubrirlo.`,
+            input: 'text',
+            inputPlaceholder: 'Motivo de la anulación (obligatorio)',
+            showCancelButton: true,
+            confirmButtonText: 'Anular cheque',
+            confirmButtonColor: '#dc3545',
+            cancelButtonText: 'Cancelar',
+            target: document.getElementById('modalNuevoEgreso') || 'body',
+            heightAuto: false,
+            preConfirm: (v) => {
+                if (!v || !v.trim()) { Swal.showValidationMessage('Ingrese el motivo de la anulación'); return false; }
+                return v.trim();
+            }
+        });
+        if (!isConfirmed) return;
+
+        const fd = new FormData();
+        fd.append('id_pago', idPago);
+        fd.append('motivo', motivo);
+        try {
+            const res = await (await fetch(`${EGR_URL}/anularChequeAjax`, { method: 'POST', body: fd })).json();
+            if (!res.ok) { Swal.fire('No se pudo anular', res.mensaje, 'warning'); return; }
+            if (p) {
+                pagosAnuladosEgreso.push({
+                    numero_cheque: p.numero_cheque,
+                    monto: p.monto,
+                    motivo_anulacion_cheque: motivo,
+                    anulado_cheque_at: CMG_fechaLocal ? CMG_fechaLocal() : ''
+                });
+            }
+            pagosEgreso.splice(index, 1);
+            renderPagosEgreso();
+            recalcEgresoTot();
+            Swal.fire({ icon: 'success', title: 'Cheque anulado', text: res.mensaje, timer: 1600, showConfirmButton: false });
+        } catch (e) {
+            Swal.fire('Error', 'No se pudo anular el cheque.', 'error');
+        }
     }
 
     // ── Impresión de cheques ──────────────────────────────────────────────────
@@ -1593,7 +1676,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('eg-add-pago-forma').value = '';
         document.getElementById('eg-wrapper-banco-extra').classList.add('d-none');
         
-        docsEgreso = []; manualEgreso = []; pagosEgreso = [];
+        docsEgreso = []; manualEgreso = []; pagosEgreso = []; pagosAnuladosEgreso = [];
         const p = document.getElementById('eg-select-punto');
         if(p && esNuevo) syncEgresoSecuencial(p.value);
         
@@ -1897,7 +1980,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 renderDocsEgreso();
             }
 
-            pagosEgreso = (e.pagos||[]).map(p=>({
+            // Los cheques con estado_cheque='anulado' son historial: van aparte, no se
+            // editan ni se cuentan en el total de formas de pago.
+            const _pagosActivos = (e.pagos || []).filter(p => p.estado_cheque !== 'anulado');
+            const _pagosAnulados = (e.pagos || []).filter(p => p.estado_cheque === 'anulado');
+
+            pagosEgreso = _pagosActivos.map(p=>({
                 id_pago: p.id,
                 id_forma: p.id_forma_pago,
                 nombre: p.forma_pago_nombre,
@@ -1908,6 +1996,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 fecha_cobro: p.fecha_cobro,
                 beneficiario_cheque: p.beneficiario_cheque,
                 conciliado: (p.cheque_conciliado === true || p.cheque_conciliado === 't' || p.cheque_conciliado === 1 || p.cheque_conciliado === '1')
+            }));
+
+            pagosAnuladosEgreso = _pagosAnulados.map(p=>({
+                numero_cheque: p.numero_cheque,
+                monto: parseFloat(p.monto),
+                motivo_anulacion_cheque: p.motivo_anulacion_cheque,
+                anulado_cheque_at: p.anulado_cheque_at
             }));
 
             esEgresoAnulado = (e.estado === 'anulado');

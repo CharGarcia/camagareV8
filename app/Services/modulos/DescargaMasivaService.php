@@ -5,15 +5,21 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\models\Empresa;
+use App\repositories\modulos\ChequeRepository;
 use App\repositories\modulos\ComprasRepository;
+use App\repositories\modulos\EgresoRepository;
 use App\repositories\modulos\FacturaVentaRepository;
 use App\repositories\modulos\GuiaRemisionRepository;
+use App\repositories\modulos\IngresoRepository;
 use App\repositories\modulos\LiquidacionCompraRepository;
 use App\repositories\modulos\NotaCreditoRepository;
 use App\repositories\modulos\NotaDebitoRepository;
 use App\repositories\modulos\RetencionCompraRepository;
 use App\repositories\modulos\RetencionVentaRepository;
 use App\Services\LogSistemaService;
+use App\Services\PdfMergerService;
+use App\Services\PlantillasPdfRendererService;
+use App\Services\PlantillasPdfSeedService;
 use App\Services\Xml\XmlFacturaVentaService;
 use App\Services\Xml\XmlGuiaRemisionService;
 use App\Services\Xml\XmlLiquidacionCompraService;
@@ -24,13 +30,18 @@ use App\Services\ZipBuilderService;
 
 /**
  * Descargas Masivas: genera en memoria el PDF y/o XML de varios documentos de un
- * mismo tipo (rango de fechas) y los entrega comprimidos en un ZIP.
+ * mismo tipo (rango de fechas o de números) y los entrega al usuario.
  *
  * Ephemeral por diseño (ver CLAUDE.md / decisión del usuario): no crea ninguna
- * tabla ni guarda nada — cuenta primero (contar()), genera el ZIP en un archivo
- * temporal (generarZip()) y el Controller lo transmite y lo borra de inmediato.
+ * tabla ni guarda nada — cuenta primero (contar()), genera el archivo temporal
+ * (generarDescarga()) y el Controller lo transmite y lo borra de inmediato.
  * El volumen se acota por CANTIDAD de documentos (config), no por un rango de
  * fechas fijo: un rango largo con pocos documentos es tan válido como uno corto.
+ *
+ * Salida: si el formato es PDF y la cantidad es pequeña (umbral_pdf_unico,
+ * default 20), se fusionan los PDF individuales en UN solo archivo PDF (sin
+ * ZIP) vía PdfMergerService. En cualquier otro caso (más documentos, o XML/
+ * ambos) se entrega un ZIP, como siempre.
  */
 class DescargaMasivaService
 {
@@ -44,6 +55,9 @@ class DescargaMasivaService
         'retencion_compra'    => ['autorizada'],
         'liquidacion_compra'  => ['autorizado', 'aprobado'],
         'compras'             => null,
+        'egreso'              => ['registrado'],
+        'ingreso'             => ['registrado'],
+        'cheque'              => null, // ya excluye ANULADO en la consulta (whereBaseCheques).
     ];
 
     public const ETIQUETAS = [
@@ -55,7 +69,13 @@ class DescargaMasivaService
         'retencion_compra'   => 'Retenciones de Compra',
         'liquidacion_compra' => 'Liquidaciones de Compra',
         'compras'            => 'Compras (facturas recibidas)',
+        'egreso'             => 'Egresos',
+        'ingreso'            => 'Ingresos',
+        'cheque'             => 'Cheques',
     ];
+
+    /** Tipos que no son documentos SRI: no tienen XML, solo admiten formato "pdf". */
+    public const TIPOS_SIN_XML = ['egreso', 'ingreso', 'cheque'];
 
     private array $config;
 
@@ -66,14 +86,20 @@ class DescargaMasivaService
 
     // ── Paso 1: contar (sin generar nada) ───────────────────────────────────
 
-    public function contar(int $idEmpresa, string $tipo, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro, string $formato): array
+    /**
+     * @param array{modo?:string,desde?:string,hasta?:string,numero_desde?:int,numero_hasta?:int} $filtro
+     */
+    public function contar(int $idEmpresa, string $tipo, array $filtro, ?int $idUsuarioFiltro, string $formato): array
     {
-        $cantidad = count($this->listarDocumentos($idEmpresa, $tipo, $fechaDesde, $fechaHasta, $idUsuarioFiltro));
+        $cantidad = count($this->listarDocumentos($idEmpresa, $tipo, $filtro, $idUsuarioFiltro));
         $limite = $this->limiteParaFormato($formato);
+        $umbral = $this->umbralPdfUnico();
         return [
-            'cantidad'      => $cantidad,
-            'limite'        => $limite,
-            'dentro_limite' => $cantidad > 0 && $cantidad <= $limite,
+            'cantidad'         => $cantidad,
+            'limite'           => $limite,
+            'dentro_limite'    => $cantidad > 0 && $cantidad <= $limite,
+            'salida'           => ($formato === 'pdf' && $cantidad > 0 && $cantidad <= $umbral) ? 'pdf' : 'zip',
+            'umbral_pdf_unico' => $umbral,
         ];
     }
 
@@ -84,9 +110,22 @@ class DescargaMasivaService
             : max(1, (int) ($this->config['max_documentos_pdf'] ?? 500));
     }
 
-    private function listarDocumentos(int $idEmpresa, string $tipo, string $fechaDesde, string $fechaHasta, ?int $idUsuarioFiltro): array
+    /** Cantidad máxima de documentos para entregar un PDF único fusionado en vez de un ZIP. */
+    private function umbralPdfUnico(): int
     {
-        $rows = $this->repositorio($tipo)->getParaDescargaMasiva($idEmpresa, $fechaDesde, $fechaHasta, $idUsuarioFiltro);
+        return max(1, (int) ($this->config['umbral_pdf_unico'] ?? 20));
+    }
+
+    private function listarDocumentos(int $idEmpresa, string $tipo, array $filtro, ?int $idUsuarioFiltro): array
+    {
+        $rows = $this->repositorio($tipo)->getParaDescargaMasiva(
+            $idEmpresa,
+            $filtro['desde'] ?? null,
+            $filtro['hasta'] ?? null,
+            $filtro['numero_desde'] ?? null,
+            $filtro['numero_hasta'] ?? null,
+            $idUsuarioFiltro
+        );
 
         $estadosValidos = self::ESTADOS_VALIDOS[$tipo] ?? null;
         if ($estadosValidos !== null) {
@@ -106,28 +145,42 @@ class DescargaMasivaService
             'retencion_compra'   => new RetencionCompraRepository(),
             'liquidacion_compra' => new LiquidacionCompraRepository(),
             'compras'            => new ComprasRepository(),
+            'egreso'             => new EgresoRepository(),
+            'ingreso'            => new IngresoRepository(),
+            'cheque'             => new ChequeRepository(),
             default => throw new \InvalidArgumentException('Tipo de documento no válido.'),
         };
     }
 
-    // ── Paso 2: generar el ZIP (efímero) ────────────────────────────────────
+    // ── Paso 2: generar la descarga (efímera) ───────────────────────────────
+    // PDF único fusionado si es formato=pdf y la cantidad cabe en el umbral;
+    // ZIP en cualquier otro caso (más documentos, o XML/ambos).
 
     /**
-     * @return array{ruta:string, nombre:string, cantidad:int, errores:int}
+     * @param array{modo?:string,desde?:string,hasta?:string,numero_desde?:int,numero_hasta?:int} $filtro
+     * @return array{ruta:string, nombre:string, cantidad:int, errores:int, tipo_salida:string}
      */
-    public function generarZip(int $idEmpresa, int $idUsuario, string $tipo, string $fechaDesde, string $fechaHasta, string $formato, ?int $idUsuarioFiltro): array
+    public function generarDescarga(int $idEmpresa, int $idUsuario, string $tipo, array $filtro, string $formato, ?int $idUsuarioFiltro): array
     {
-        $rows = $this->listarDocumentos($idEmpresa, $tipo, $fechaDesde, $fechaHasta, $idUsuarioFiltro);
+        $rows = $this->listarDocumentos($idEmpresa, $tipo, $filtro, $idUsuarioFiltro);
         $cantidad = count($rows);
         if ($cantidad === 0) {
             throw new \RuntimeException('No se encontraron documentos con esos filtros.');
         }
         $limite = $this->limiteParaFormato($formato);
         if ($cantidad > $limite) {
-            throw new \RuntimeException("Se encontraron {$cantidad} documentos y el máximo por descarga es {$limite}. Reduce el rango de fechas.");
+            throw new \RuntimeException("Se encontraron {$cantidad} documentos y el máximo por descarga es {$limite}. Reduce el rango.");
         }
 
-        $rutaZip = $this->rutaTemporal($idEmpresa, $tipo);
+        if ($formato === 'pdf' && $cantidad <= $this->umbralPdfUnico()) {
+            return $this->generarPdfUnico($idEmpresa, $idUsuario, $tipo, $rows, $filtro);
+        }
+        return $this->generarZip($idEmpresa, $idUsuario, $tipo, $rows, $filtro, $formato);
+    }
+
+    private function generarZip(int $idEmpresa, int $idUsuario, string $tipo, array $rows, array $filtro, string $formato): array
+    {
+        $rutaZip = $this->rutaTemporal($idEmpresa, $tipo, 'zip');
         $zip = new ZipBuilderService();
         $zip->abrir($rutaZip);
 
@@ -158,6 +211,65 @@ class DescargaMasivaService
 
         $zip->cerrar();
 
+        $cantidad = count($rows);
+        $this->registrarLog($idUsuario, $idEmpresa, $tipo, $filtro, $formato, $cantidad, $errores);
+
+        return [
+            'ruta'        => $rutaZip,
+            'nombre'      => 'descarga_' . $tipo . '_' . $this->sufijoNombre($filtro) . '.zip',
+            'cantidad'    => $cantidad,
+            'errores'     => $errores,
+            'tipo_salida' => 'zip',
+        ];
+    }
+
+    /** PDF único: genera cada documento y fusiona sus páginas con PdfMergerService (sin ZIP). */
+    private function generarPdfUnico(int $idEmpresa, int $idUsuario, string $tipo, array $rows, array $filtro): array
+    {
+        $bytesPorDocumento = [];
+        $errores = 0;
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+            try {
+                $bytes = $this->generarPdfBytes($tipo, $idEmpresa, $id);
+                if ($bytes !== null && $bytes !== '') {
+                    $bytesPorDocumento[] = $bytes;
+                } else {
+                    $errores++;
+                }
+            } catch (\Throwable $e) {
+                $errores++;
+                \App\Services\ErrorLogService::registrar($e, ['servicio' => 'DescargaMasivaService', 'tipo' => $tipo, 'id' => $id]);
+            }
+        }
+        if (empty($bytesPorDocumento)) {
+            throw new \RuntimeException('No se pudo generar el PDF de ningún documento.');
+        }
+
+        $pdfFusionado = (new PdfMergerService())->fusionar($bytesPorDocumento);
+
+        $ruta = $this->rutaTemporal($idEmpresa, $tipo, 'pdf');
+        $this->asegurarDirectorio(dirname($ruta));
+        file_put_contents($ruta, $pdfFusionado);
+
+        $cantidad = count($rows);
+        $this->registrarLog($idUsuario, $idEmpresa, $tipo, $filtro, 'pdf', $cantidad, $errores);
+
+        return [
+            'ruta'        => $ruta,
+            'nombre'      => 'descarga_' . $tipo . '_' . $this->sufijoNombre($filtro) . '.pdf',
+            'cantidad'    => $cantidad,
+            'errores'     => $errores,
+            'tipo_salida' => 'pdf',
+        ];
+    }
+
+    private function registrarLog(int $idUsuario, int $idEmpresa, string $tipo, array $filtro, string $formato, int $cantidad, int $errores): void
+    {
+        $detalle = ($filtro['modo'] ?? 'fecha') === 'numero'
+            ? ['numero_desde' => $filtro['numero_desde'] ?? null, 'numero_hasta' => $filtro['numero_hasta'] ?? null]
+            : ['fecha_desde' => $filtro['desde'] ?? null, 'fecha_hasta' => $filtro['hasta'] ?? null];
+
         (new LogSistemaService())->registrar(
             $idUsuario,
             $idEmpresa,
@@ -165,21 +277,16 @@ class DescargaMasivaService
             $tipo,
             null,
             null,
-            [
-                'fecha_desde' => $fechaDesde,
-                'fecha_hasta' => $fechaHasta,
-                'formato'     => $formato,
-                'cantidad'    => $cantidad,
-                'errores'     => $errores,
-            ]
+            $detalle + ['formato' => $formato, 'cantidad' => $cantidad, 'errores' => $errores]
         );
+    }
 
-        return [
-            'ruta'     => $rutaZip,
-            'nombre'   => 'descarga_' . $tipo . '_' . $fechaDesde . '_a_' . $fechaHasta . '.zip',
-            'cantidad' => $cantidad,
-            'errores'  => $errores,
-        ];
+    private function sufijoNombre(array $filtro): string
+    {
+        $sufijo = ($filtro['modo'] ?? 'fecha') === 'numero'
+            ? 'num_' . ($filtro['numero_desde'] ?? '') . '_a_' . ($filtro['numero_hasta'] ?? '')
+            : ($filtro['desde'] ?? '') . '_a_' . ($filtro['hasta'] ?? '');
+        return preg_replace('/[^A-Za-z0-9\-_]/', '', $sufijo) ?: 'documentos';
     }
 
     public static function eliminarTemporal(string $ruta): void
@@ -189,20 +296,33 @@ class DescargaMasivaService
         }
     }
 
-    private function rutaTemporal(int $idEmpresa, string $tipo): string
+    private function asegurarDirectorio(string $dir): void
+    {
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new \RuntimeException('No se pudo crear el directorio temporal para la descarga.');
+        }
+    }
+
+    private function rutaTemporal(int $idEmpresa, string $tipo, string $extension = 'zip'): string
     {
         $dir = rtrim(MVC_ROOT, '\\/') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'tmp'
             . DIRECTORY_SEPARATOR . 'descargas_masivas' . DIRECTORY_SEPARATOR . $idEmpresa;
-        $nombre = 'dm_' . $tipo . '_' . bin2hex(random_bytes(6)) . '.zip';
+        $nombre = 'dm_' . $tipo . '_' . bin2hex(random_bytes(6)) . '.' . $extension;
         return $dir . DIRECTORY_SEPARATOR . $nombre;
     }
 
     private function nombreArchivo(array $row, array &$usados): string
     {
-        $estab = (string) ($row['establecimiento'] ?? '');
-        $punto = (string) ($row['punto_emision'] ?? '');
-        $sec   = (string) ($row['secuencial'] ?? '');
-        $base  = trim($estab . '-' . $punto . '-' . $sec, '-');
+        // Cheques no tienen establecimiento/punto/secuencial propios (son un pago
+        // de egreso): se nombran por su número de cheque físico.
+        if (array_key_exists('numero_cheque', $row)) {
+            $base = 'cheque-' . (string) ($row['numero_cheque'] ?? '');
+        } else {
+            $estab = (string) ($row['establecimiento'] ?? '');
+            $punto = (string) ($row['punto_emision'] ?? '');
+            $sec   = (string) ($row['secuencial'] ?? '');
+            $base  = trim($estab . '-' . $punto . '-' . $sec, '-');
+        }
         $base  = preg_replace('/[^A-Za-z0-9\-]/', '', $base) ?: ('doc-' . (int) ($row['id'] ?? 0));
 
         $nombre = $base;
@@ -252,6 +372,25 @@ class DescargaMasivaService
             // El PDF/XML se genera igual sin la config extendida del establecimiento.
         }
 
+        return $empresa;
+    }
+
+    /** Empresa + ciudad resuelta (necesaria para el layout del cheque). Réplica de ChequeImpresionService::cargarEmpresa(). */
+    private function construirEmpresaCheque(int $idEmpresa): array
+    {
+        $empresa = $this->construirEmpresa($idEmpresa);
+        $cod = trim((string) ($empresa['cod_ciudad'] ?? ''));
+        $empresa['ciudad'] = '';
+        if ($cod !== '') {
+            try {
+                $db = \App\core\Database::getConnection();
+                $st = $db->prepare("SELECT nombre FROM ciudad WHERE codigo = :c LIMIT 1");
+                $st->execute([':c' => $cod]);
+                $empresa['ciudad'] = (string) ($st->fetchColumn() ?: '');
+            } catch (\Throwable $e) {
+                // El cheque se genera igual sin el nombre de ciudad.
+            }
+        }
         return $empresa;
     }
 
@@ -348,6 +487,38 @@ class DescargaMasivaService
                     $parsed['infoAdicional'] ?? [],
                     $this->construirEmpresa($idEmpresa)
                 );
+
+            case 'egreso':
+                $service = new EgresoService();
+                $egreso = $service->getPorId($id, $idEmpresa);
+                if (!$egreso) { return null; }
+                $detalles = $egreso['detalles'] ?? [];
+                $pagos = $egreso['pagos'] ?? [];
+                $asiento = $service->getAsientoContable($id, $idEmpresa);
+                return (new ComprobanteCajaPdfService())->generarEgreso($egreso, $detalles, $pagos, $this->construirEmpresa($idEmpresa), 'S', $asiento);
+
+            case 'ingreso':
+                $service = new IngresoService();
+                $ingreso = $service->getPorId($id, $idEmpresa);
+                if (!$ingreso) { return null; }
+                $detalles = $ingreso['detalles'] ?? [];
+                $pagos = $ingreso['pagos'] ?? [];
+                $asiento = $service->getAsientoContable($id, $idEmpresa);
+                return (new ComprobanteCajaPdfService())->generarIngreso($ingreso, $detalles, $pagos, $this->construirEmpresa($idEmpresa), 'S', $asiento);
+
+            case 'cheque':
+                $repo = new ChequeRepository();
+                $chq = $repo->getChequePorPago($idEmpresa, $id);
+                if (!$chq) { return null; }
+                $idBanco = (int) ($chq['id_banco'] ?? 0) ?: null;
+                $renderer = new PlantillasPdfRendererService();
+                $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'cheque', $idBanco) ?: [
+                    'tipo_documento' => 'cheque',
+                    'configuracion'  => PlantillasPdfSeedService::getSeed('cheque'),
+                ];
+                $chq['_banco_key'] = '0';
+                $pdf = $renderer->generarCheques(['0' => $plantilla], [$chq], $this->construirEmpresaCheque($idEmpresa), 'S');
+                return is_string($pdf) && $pdf !== '' ? $pdf : null;
 
             default:
                 return null;

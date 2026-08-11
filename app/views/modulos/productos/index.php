@@ -289,6 +289,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         window.cambiarPaginaAjax = (n) => window.fetchSearch(n);
 
+        const updateSortIcons = () => {
+            document.querySelectorAll('.sortable-header').forEach(th => {
+                const icon = th.querySelector('i');
+                if (!icon) return;
+                const field = th.dataset.sort;
+                if (field === window.currentSort) {
+                    icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
+                } else {
+                    icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
+                }
+            });
+        };
+
         window.fetchSearch = async (page = 1) => {
             const term = inputBuscar ? inputBuscar.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
@@ -303,21 +316,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('btnExportPdf').href = data.pdf_url;
                     document.getElementById('btnExportExcel').href = data.excel_url;
 
-                    document.querySelectorAll('.sortable-header').forEach(th => {
-                        const icon = th.querySelector('i');
-                        if (!icon) return;
-                        const field = th.dataset.sort;
-                        if (field === window.currentSort) {
-                            icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                        } else {
-                            icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                        }
-                    });
+                    updateSortIcons();
                 }
             } catch (e) {
                 console.error(e);
             }
         };
+
+        updateSortIcons();
 
         document.querySelectorAll('.sortable-header').forEach(h => {
             h.addEventListener('click', () => {

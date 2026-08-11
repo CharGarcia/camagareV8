@@ -4330,7 +4330,10 @@ class AsientoBuilderService
         }
 
         // Las tablas de pagos de egresos tienen columna 'eliminado'; las de ingresos no.
-        $filtroElim = $flujo === 'egreso' ? ' AND p.eliminado = FALSE' : '';
+        // Un cheque anulado (estado_cheque) se preserva como historial pero deja de
+        // contarse aquí: el asiento se recalcula más chico automáticamente, sin asiento
+        // de reversión (ver EgresoService::anularCheque).
+        $filtroElim = $flujo === 'egreso' ? " AND p.eliminado = FALSE AND COALESCE(p.estado_cheque, 'vigente') <> 'anulado'" : '';
 
         $sql = "SELECT p.{$colForma} AS id_forma, p.monto,
                        f.nombre AS forma_nombre,

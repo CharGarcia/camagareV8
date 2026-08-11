@@ -649,6 +649,30 @@ class EgresosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Anula un cheque puntual (error de impresión, cheque dañado, etc.) dejando
+     * el pago como historial. El egreso sigue vigente; si queda sin cobertura,
+     * el usuario agrega otra forma de pago desde el mismo modal.
+     */
+    public function anularChequeAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $idPago    = (int) ($_POST['id_pago'] ?? 0);
+            $motivo    = trim($_POST['motivo'] ?? '');
+            if (!$idPago) { echo json_encode(['ok' => false, 'mensaje' => 'Pago no indicado.']); exit; }
+            $this->service->anularCheque($idEmpresa, $idPago, $motivo, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Cheque anulado correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Normaliza el parámetro ids ("1,2,3") a un array de enteros. */
     private function parseIdsCheque($raw): array
     {

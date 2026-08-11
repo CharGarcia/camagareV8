@@ -137,7 +137,6 @@ class ReporteInventariosController extends BaseModuloController
             'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
             'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
             'secuencial'         => trim($_REQUEST['secuencial'] ?? ''),
-            'incluir_liquidadas' => !empty($_REQUEST['incluir_liquidadas']),
         ];
     }
 
