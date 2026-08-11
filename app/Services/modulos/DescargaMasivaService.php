@@ -16,6 +16,8 @@ use App\repositories\modulos\NotaCreditoRepository;
 use App\repositories\modulos\NotaDebitoRepository;
 use App\repositories\modulos\RetencionCompraRepository;
 use App\repositories\modulos\RetencionVentaRepository;
+use App\Rules\modulos\EgresoRules;
+use App\Rules\modulos\IngresoRules;
 use App\Services\LogSistemaService;
 use App\Services\PdfMergerService;
 use App\Services\PlantillasPdfRendererService;
@@ -489,7 +491,7 @@ class DescargaMasivaService
                 );
 
             case 'egreso':
-                $service = new EgresoService();
+                $service = new EgresoService(new EgresoRepository(), new EgresoRules(), new LogSistemaService());
                 $egreso = $service->getPorId($id, $idEmpresa);
                 if (!$egreso) { return null; }
                 $detalles = $egreso['detalles'] ?? [];
@@ -498,7 +500,7 @@ class DescargaMasivaService
                 return (new ComprobanteCajaPdfService())->generarEgreso($egreso, $detalles, $pagos, $this->construirEmpresa($idEmpresa), 'S', $asiento);
 
             case 'ingreso':
-                $service = new IngresoService();
+                $service = new IngresoService(new IngresoRepository(), new IngresoRules(), new LogSistemaService());
                 $ingreso = $service->getPorId($id, $idEmpresa);
                 if (!$ingreso) { return null; }
                 $detalles = $ingreso['detalles'] ?? [];
