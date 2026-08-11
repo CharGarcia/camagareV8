@@ -2768,9 +2768,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getKardexAjax?id=${id}`);
             const data = await res.json();
             if (data.ok && data.data && data.data.length) {
-                // Saldo total = último saldo de cada producto (el saldo ya viene acumulado por fila).
+                // Saldo total = suma del saldo más reciente de cada producto. Las filas se
+                // muestran agrupadas por tipo (no cronológicas), así que "más reciente" se
+                // decide por (fecha, orden, orden_id) real de cada fila, no por su posición
+                // en la lista.
+                const ultimaClavePorProducto = {};
                 const ultimoSaldoPorProducto = {};
-                data.data.forEach(r => { ultimoSaldoPorProducto[r.id_producto] = parseFloat(r.saldo || 0); });
+                data.data.forEach(r => {
+                    const clave = `${r.fecha}_${String(r.orden).padStart(2, '0')}_${String(r.orden_id).padStart(10, '0')}`;
+                    if (!ultimaClavePorProducto[r.id_producto] || clave > ultimaClavePorProducto[r.id_producto]) {
+                        ultimaClavePorProducto[r.id_producto] = clave;
+                        ultimoSaldoPorProducto[r.id_producto] = parseFloat(r.saldo || 0);
+                    }
+                });
 
                 tb.innerHTML = data.data.map(r => {
                     const entrada = parseFloat(r.entrada || 0);

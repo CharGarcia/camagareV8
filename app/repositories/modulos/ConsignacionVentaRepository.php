@@ -195,9 +195,12 @@ class ConsignacionVentaRepository extends BaseRepository
     }
 
     /**
-     * Kardex de la consignación: un movimiento por fila (consignación inicial, retorno,
-     * facturación), ordenados cronológicamente, con saldo corriente por PRODUCTO
-     * (columna "saldo" = SUM ventana particionada por id_producto).
+     * Kardex de la consignación: un movimiento por fila. Se muestra AGRUPADO POR TIPO
+     * (primero todas las líneas "Consignación Inicial", luego todos los "Retorno", luego
+     * todas las "Facturación"; cronológico dentro de cada grupo). El saldo corriente por
+     * PRODUCTO (columna "saldo") sí se calcula en orden cronológico real dentro de la
+     * ventana (fecha, orden, orden_id) — el agrupado es solo de presentación, no afecta
+     * el cálculo del saldo.
      */
     public function getKardex(int $idConsignacion, int $idEmpresa): array
     {
@@ -249,7 +252,7 @@ class ConsignacionVentaRepository extends BaseRepository
                 INNER JOIN productos p ON p.id = cfd.id_producto
                 WHERE cfd.id_consignacion = :id3 AND cfd.id_empresa = :e3 AND (cfd.eliminado = false OR cfd.eliminado IS NULL)
             ) t
-            ORDER BY t.producto_nombre ASC, t.fecha ASC, t.orden ASC, t.orden_id ASC
+            ORDER BY t.orden ASC, t.fecha ASC, t.orden_id ASC
         ";
         $st = $this->db->prepare($sql);
         $st->execute([

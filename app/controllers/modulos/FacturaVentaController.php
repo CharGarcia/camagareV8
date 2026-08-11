@@ -77,7 +77,18 @@ class FacturaVentaController extends BaseModuloController
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = [];
         if (!empty($establecimientos)) {
-            $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
+            // Solo se ofrecen como Serie los puntos de emisión que ya tienen configurado
+            // el secuencial para "Facturas de venta" (Empresa → Secuenciales); un punto
+            // dedicado a "Facturas de reembolso" comparte el mismo codDoc SRI y no puede
+            // usarse aquí (ver FacturaReembolsoController::index(), mismo patrón).
+            $secRepo = new \App\repositories\SecuencialRepository();
+            foreach ($empresaModel->getPuntosEmision((int) $establecimientos[0]['id']) as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Facturas de venta');
+                if (empty($config['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
             // Fusionar config del establecimiento principal en $empresaData
             try {
                 $estRepo   = new \App\repositories\modulos\EmpresaRepository();
@@ -259,7 +270,14 @@ class FacturaVentaController extends BaseModuloController
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = [];
         if (!empty($establecimientos)) {
-            $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
+            $secRepo = new \App\repositories\SecuencialRepository();
+            foreach ($empresaModel->getPuntosEmision((int) $establecimientos[0]['id']) as $p) {
+                $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Facturas de venta');
+                if (empty($config['id'])) {
+                    continue;
+                }
+                $puntos[] = $p;
+            }
         }
 
         $this->viewWithLayout('layouts.main', 'modulos/factura_venta/nuevo', [
@@ -298,7 +316,15 @@ class FacturaVentaController extends BaseModuloController
 
         $idEst = (int) ($_GET['id_establecimiento'] ?? 0);
         $empresaModel = new Empresa();
-        $puntos = $empresaModel->getPuntosEmision($idEst);
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ($empresaModel->getPuntosEmision($idEst) as $p) {
+            $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Facturas de venta');
+            if (empty($config['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
 
         echo json_encode(['ok' => true, 'data' => $puntos]);
         exit;

@@ -152,7 +152,16 @@ class RetornoCvRepository extends BaseRepository
                           AND rc.eliminado = false
                           AND rc.estado = 'Emitida'
                           $excludeSql
-                    ), 0) AS cantidad_retornada
+                    ), 0) AS cantidad_retornada,
+                    COALESCE((
+                        SELECT SUM(cfd.cantidad)
+                        FROM consignaciones_facturas_detalles cfd
+                        INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                        WHERE cfd.id_consignacion_detalle = cvd.id
+                          AND cfd.eliminado = false
+                          AND cf.eliminado = false
+                          AND cf.estado = 'facturada'
+                    ), 0) AS cantidad_facturada
                 FROM consignaciones_ventas_detalles cvd
                 INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                 INNER JOIN productos p ON p.id = cvd.id_producto
@@ -163,7 +172,7 @@ class RetornoCvRepository extends BaseRepository
                   AND cv.estado = 'Entregada'
                   AND cvd.eliminado = false
             ) t
-            WHERE (t.cantidad_consignada - t.cantidad_retornada) > 0
+            WHERE (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada) > 0
             ORDER BY t.fecha_emision DESC, t.id_consignacion DESC, t.id_consignacion_detalle ASC
         ";
         $st = $this->db->prepare($sql);
@@ -171,7 +180,7 @@ class RetornoCvRepository extends BaseRepository
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($rows as &$r) {
-            $r['saldo_pendiente'] = (float) $r['cantidad_consignada'] - (float) $r['cantidad_retornada'];
+            $r['saldo_pendiente'] = (float) $r['cantidad_consignada'] - (float) $r['cantidad_retornada'] - (float) $r['cantidad_facturada'];
         }
         unset($r);
 
@@ -207,6 +216,12 @@ class RetornoCvRepository extends BaseRepository
                             INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno
                             WHERE rcd.id_consignacion_detalle = cvd.id
                               AND rcd.eliminado = false AND rc.eliminado = false AND rc.estado = 'Emitida'
+                      ), 0) - COALESCE((
+                            SELECT SUM(cfd.cantidad)
+                            FROM consignaciones_facturas_detalles cfd
+                            INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                            WHERE cfd.id_consignacion_detalle = cvd.id
+                              AND cfd.eliminado = false AND cf.eliminado = false AND cf.estado = 'facturada'
                       ), 0)) > 0
               )
             ORDER BY cv.fecha_emision DESC, cv.id DESC
@@ -254,7 +269,18 @@ class RetornoCvRepository extends BaseRepository
         $stRet->execute($paramsRet);
         $retornado = (float) $stRet->fetchColumn();
 
-        return (float) $cantidad - $retornado;
+        $sqlFact = "SELECT COALESCE(SUM(cfd.cantidad), 0)
+                   FROM consignaciones_facturas_detalles cfd
+                   INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                   WHERE cfd.id_consignacion_detalle = :id
+                     AND cfd.eliminado = false
+                     AND cf.eliminado = false
+                     AND cf.estado = 'facturada'";
+        $stFact = $this->db->prepare($sqlFact);
+        $stFact->execute([':id' => $idConsignacionDetalle]);
+        $facturado = (float) $stFact->fetchColumn();
+
+        return (float) $cantidad - $retornado - $facturado;
     }
 
     // ─── CRUD ─────────────────────────────────────────────────────────────────
