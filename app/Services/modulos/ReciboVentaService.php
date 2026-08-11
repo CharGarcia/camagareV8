@@ -345,7 +345,11 @@ class ReciboVentaService
             );
 
             $numRecibo = $data['establecimiento'] . '-' . $data['punto_emision'] . '-' . str_pad((string)$data['secuencial'], 9, '0', STR_PAD_LEFT);
-            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario);
+            // El revert solo debe bloquearse por stock negativo si la empresa exige stock
+            // positivo; si esa opción está desmarcada, el negativo es válido para ella.
+            $toBoolRevert = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
+            $soloStockPositivo = $toBoolRevert($estConfig['factura_solo_stock_positivo'] ?? false);
+            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, !$soloStockPositivo);
             $this->getInventarioService()->procesarSalidaPorVenta(
                 $id, $data['detalles'] ?? [], (int)$data['id_establecimiento'],
                 $idEmpresa, $idUsuario, "Recibo # $numRecibo", true, self::REF_TIPO
@@ -448,7 +452,8 @@ class ReciboVentaService
             $this->anularCobrosVinculados($id, $idEmpresa, $idUsuario);
             $this->anularAsiento($cabecera, $idEmpresa, $idUsuario);
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
-            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario);
+            // El saldo realmente vuelve al inventario al anular: nunca debe bloquearse.
+            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, true);
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'ANULAR', 'recibos_venta_cabecera', $id,
@@ -477,7 +482,8 @@ class ReciboVentaService
             // Revertir todo antes de eliminar lógicamente.
             $this->anularCobrosVinculados($id, $idEmpresa, $idUsuario);
             $this->anularAsiento($cabecera, $idEmpresa, $idUsuario);
-            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario);
+            // El saldo realmente vuelve al inventario al eliminar: nunca debe bloquearse.
+            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, true);
             $this->repository->eliminarLogico($id, $idUsuario);
 
             $this->logService->registrar(
@@ -634,7 +640,7 @@ class ReciboVentaService
 
         // ── 4. Liberar el inventario del recibo para que la factura pueda consumirlo,
         //       crear la factura y, si falla, restaurar el inventario del recibo. ──
-        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idRecibo, $idEmpresa, $idUsuario);
+        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idRecibo, $idEmpresa, $idUsuario, true);
         try {
             $idFactura = $facturaService->crear($payload);
             if ($managedTransaction) {
@@ -813,7 +819,7 @@ class ReciboVentaService
         // para liberar stock (así el recibo lo consume sin chocar con "solo stock
         // positivo"). El revert es idempotente: el eliminar posterior no lo duplica.
         if ($eliminarFactura) {
-            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $idFactura, $idEmpresa, $idUsuario);
+            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $idFactura, $idEmpresa, $idUsuario, true);
         }
 
         try {

@@ -767,9 +767,14 @@ class FacturaVentaService
                 ['id_venta' => $id, 'total' => $data['importe_total'] ?? 0]
             );
 
-            // 5. Procesar Inventario: Primero revertir previos, luego registrar nuevos
+            // 5. Procesar Inventario: Primero revertir previos, luego registrar nuevos.
+            // El revert solo debe bloquearse por stock negativo si la empresa exige stock
+            // positivo (factura_solo_stock_positivo); si esa opción está desmarcada, el
+            // negativo es un estado válido para ella y no debe frenar la edición.
             $numFactura = $data['establecimiento'] . '-' . $data['punto_emision'] . '-' . str_pad((string)$data['secuencial'], 9, '0', STR_PAD_LEFT);
-            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
+            $toBoolRevert = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
+            $soloStockPositivo = $toBoolRevert($estConfig['factura_solo_stock_positivo'] ?? false);
+            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario, !$soloStockPositivo);
             $this->getInventarioService()->procesarSalidaPorVenta(
                 $id,
                 $data['detalles'] ?? [],
@@ -1153,8 +1158,10 @@ class FacturaVentaService
             // 5. Anular la factura
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
 
-            // 6. Revertir inventario
-            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
+            // 6. Revertir inventario. permitirNegativo=true: anular siempre devuelve el saldo
+            // vendido al inventario, así que este revert nunca debe bloquearse por stock
+            // negativo preexistente en otro movimiento del mismo producto/bodega.
+            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario, true);
 
             // 6.1 Si la factura provino de una consignación, deshacer el reingreso y
             //     liberar el saldo facturable (reversión automática).
@@ -1249,8 +1256,10 @@ class FacturaVentaService
 
             $this->repository->eliminarLogico($id, $idUsuario);
 
-            // Revertir inventario si existiera algo (aunque en borrador no deberÃ­a haber kardex, pero por seguridad)
-            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
+            // Revertir inventario si existiera algo (aunque en borrador no debería haber kardex, pero por
+            // seguridad). permitirNegativo=true: el saldo realmente vuelve al inventario al eliminar, así
+            // que no debe bloquearse por stock negativo preexistente en otro movimiento del mismo producto.
+            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario, true);
 
             // Si la factura provino de una consignación, deshacer el reingreso y liberar el saldo.
             $this->reversarConsignacionSiAplica($id, $idEmpresa, $idUsuario);

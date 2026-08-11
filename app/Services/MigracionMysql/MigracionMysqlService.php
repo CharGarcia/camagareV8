@@ -1292,7 +1292,11 @@ class MigracionMysqlService
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
         $updEntrega = $pg->prepare("UPDATE consignaciones_ventas SET fecha_entrega = :fe, hora_entrega_desde = :hd, hora_entrega_hasta = :hh, updated_at = now(), updated_by = :u WHERE id = :id");
         // Reconcile de la caducidad por línea (re-migrar rellena fecha_caducidad sin "Eliminar migrados").
-        $updDetCad  = $pg->prepare("UPDATE consignaciones_ventas_detalles SET fecha_caducidad = :cad, updated_at = now() WHERE id_consignacion = :cons AND id_producto = :prod AND COALESCE(lote,'') = COALESCE(:lote,'')");
+        // Match ROBUSTO: si el producto es único en la consignación, casa SOLO por (consignación, producto)
+        // —independiente del lote, que a veces no coincide entre viejo y nuevo—; si el mismo producto aparece
+        // varias veces (lotes distintos), se desempata por lote.
+        $updDetCadProd = $pg->prepare("UPDATE consignaciones_ventas_detalles SET fecha_caducidad = :cad, updated_at = now() WHERE id_consignacion = :cons AND id_producto = :prod");
+        $updDetCad     = $pg->prepare("UPDATE consignaciones_ventas_detalles SET fecha_caducidad = :cad, updated_at = now() WHERE id_consignacion = :cons AND id_producto = :prod AND COALESCE(lote,'') = COALESCE(:lote,'')");
 
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare(
@@ -1319,12 +1323,22 @@ class MigracionMysqlService
                     $hh = self::nz($ec['hora_entrega_hasta']); if ($hh === '00:00:00') { $hh = null; }
                     try {
                         $updEntrega->execute([':fe' => self::fechaCorta($ec['fecha_entrega']), ':hd' => $hd, ':hh' => $hh, ':u' => $idUsuario, ':id' => $dest]);
-                        // Caducidad por línea: se casa por (producto, lote) contra el detalle viejo (sin crear productos).
+                        // Caducidad: se agrupa el detalle viejo por producto resuelto. Producto único →
+                        // match sin lote (robusto); repetido → por lote. (Sin crear productos.)
                         $detStmt->execute([':cu' => (string) $ec['codigo_unico'], ':base' => $base]);
+                        $porProd = [];
                         foreach ($detStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
                             $idProdR = $mapProd[(string) (int) $d['id_producto']] ?? ($prodPorCod[(string) $d['codigo_producto']] ?? null);
-                            if (!$idProdR) { continue; }
-                            $updDetCad->execute([':cad' => self::caducidadODef($d['vencimiento'], $ec['fecha_consignacion']), ':cons' => $dest, ':prod' => $idProdR, ':lote' => self::nz($d['lote'])]);
+                            if ($idProdR) { $porProd[$idProdR][] = $d; }
+                        }
+                        foreach ($porProd as $idProdR => $ls) {
+                            if (count($ls) === 1) {
+                                $updDetCadProd->execute([':cad' => self::caducidadODef($ls[0]['vencimiento'], $ec['fecha_consignacion']), ':cons' => $dest, ':prod' => $idProdR]);
+                            } else {
+                                foreach ($ls as $d) {
+                                    $updDetCad->execute([':cad' => self::caducidadODef($d['vencimiento'], $ec['fecha_consignacion']), ':cons' => $dest, ':prod' => $idProdR, ':lote' => self::nz($d['lote'])]);
+                                }
+                            }
                         }
                     }
                     catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }

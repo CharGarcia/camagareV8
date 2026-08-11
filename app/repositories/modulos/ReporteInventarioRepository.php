@@ -615,7 +615,10 @@ class ReporteInventarioRepository extends BaseRepository
             $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
         }
         if (!empty($filtros['secuencial'])) {
-            $where .= " AND cv.secuencial ILIKE :secuencial";
+            // Acepta buscar solo por el secuencial ("000000113") o por el número completo
+            // con serie ("001-001-000000113"): antes solo comparaba contra cv.secuencial,
+            // así que el formato completo (con guiones) nunca calzaba.
+            $where .= " AND (cv.secuencial ILIKE :secuencial OR (cv.serie || '-' || cv.secuencial) ILIKE :secuencial)";
             $params[':secuencial'] = '%' . $filtros['secuencial'] . '%';
         }
 

@@ -266,8 +266,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                                 <th class="py-2 small fw-bold text-muted text-end" style="width:120px;">Precio</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:100px;">Cantidad</th>
                                                 <th class="py-2 small fw-bold text-muted d-none th-lote" style="width:120px;">Lote</th>
-                                                <th class="py-2 small fw-bold text-muted d-none th-caducidad" style="width:120px;">Caducidad</th>
                                                 <th class="py-2 small fw-bold text-muted d-none th-nup" style="width:120px;">NUP</th>
+                                                <th class="py-2 small fw-bold text-muted d-none th-caducidad" style="width:120px;">Caducidad</th>
                                                 <th class="py-2 small fw-bold text-muted text-end d-none" style="width:120px;">Subtotal</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:40px;"></th>
                                             </tr>
@@ -346,12 +346,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                                 <th class="py-2 small fw-bold text-muted">Producto</th>
                                                 <th class="py-2 small fw-bold text-muted text-end">Cantidad</th>
                                                 <th class="py-2 small fw-bold text-muted">Lote</th>
+                                                <th class="py-2 small fw-bold text-muted">NUP</th>
                                                 <th class="py-2 small fw-bold text-muted">Bodega</th>
                                                 <th class="py-2 small fw-bold text-muted text-center pe-3">Estado</th>
                                             </tr>
                                         </thead>
                                         <tbody id="cons_retornos_body">
-                                            <tr><td colspan="7" class="text-center py-4 text-muted">Cargando retornos...</td></tr>
+                                            <tr><td colspan="8" class="text-center py-4 text-muted">Cargando retornos...</td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -885,11 +886,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 <td class="${typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.obligatorio_lotes ? '' : 'd-none'} th-lote">
                     <select class="form-select form-select-sm input-detalle input-lote d-none"></select>
                 </td>
-                <td class="${typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.obligatorio_caducidad ? '' : 'd-none'} th-caducidad">
-                    <select class="form-select form-select-sm input-detalle input-caducidad d-none"></select>
-                </td>
                 <td class="${typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.obligatorio_nup ? '' : 'd-none'} th-nup">
                     <input type="text" class="form-control form-control-sm input-detalle input-nup d-none" placeholder="NUP">
+                </td>
+                <td class="${typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.obligatorio_caducidad ? '' : 'd-none'} th-caducidad">
+                    <select class="form-select form-select-sm input-detalle input-caducidad d-none"></select>
                 </td>
                 <td class="text-end pe-4 align-middle d-none"><span class="subtotal-line">0.00</span></td>
                 <td class="text-center p-0 align-middle">
@@ -2763,11 +2764,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         const totEl = document.getElementById('cons_retornos_total_cant');
         if (!tb) return;
         if (!id) {
-            tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Guarde la consignación para ver sus retornos.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Guarde la consignación para ver sus retornos.</td></tr>';
             if (totEl) totEl.textContent = '0.00';
             return;
         }
-        tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Cargando retornos...</td></tr>';
+        tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Cargando retornos...</td></tr>';
         try {
             const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getRetornosAjax?id=${id}`);
             const data = await res.json();
@@ -2782,17 +2783,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         <td class="text-truncate" style="max-width:220px" title="${consEscHtml(r.producto_nombre || '')}">${consEscHtml(r.producto_nombre || '')}</td>
                         <td class="text-end">${cant.toFixed(2)}</td>
                         <td>${consEscHtml(r.lote || '—')}</td>
+                        <td>${consEscHtml(r.nup || '—')}</td>
                         <td class="text-truncate" style="max-width:140px" title="${consEscHtml(r.bodega_nombre || '')}">${consEscHtml(r.bodega_nombre || '—')}</td>
                         <td class="text-center pe-3">${consBadgeRetorno(r.estado)}</td>
                     </tr>`;
                 }).join('');
                 if (totEl) totEl.textContent = totalCant.toFixed(2);
             } else {
-                tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-arrow-return-left me-1"></i> Esta consignación no tiene retornos registrados.</td></tr>';
+                tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted"><i class="bi bi-arrow-return-left me-1"></i> Esta consignación no tiene retornos registrados.</td></tr>';
                 if (totEl) totEl.textContent = '0.00';
             }
         } catch (e) {
-            tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error al cargar los retornos.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Error al cargar los retornos.</td></tr>';
         }
     };
 
