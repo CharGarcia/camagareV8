@@ -40,24 +40,82 @@
         }
     }
 
+    // Buscador tipo "chip" (mismo patrón que setupTypeahead() en mayores/index.php), pero
+    // filtrando en memoria: las cuentas de cada establecimiento ya se cargan de una sola vez
+    // al abrir el modal, así que no hace falta un endpoint de búsqueda nuevo.
+    function setupTypeaheadLocal(inputEl, dropdownEl, hiddenEl, items, renderLabel) {
+        let debounceTimer;
+        const cerrar = () => { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; };
+
+        function buscar() {
+            const q = inputEl.value.trim().toLowerCase();
+            const filtrados = q.length ? items.filter(it => renderLabel(it).toLowerCase().includes(q)) : items;
+            if (!filtrados.length) { cerrar(); return; }
+            dropdownEl.innerHTML = filtrados.slice(0, 60).map(it => {
+                const label = esc(renderLabel(it));
+                return `<a href="#" class="list-group-item list-group-item-action py-1 px-2 small" data-id="${it.id}" data-label="${label}">${label}</a>`;
+            }).join('');
+            dropdownEl.style.display = 'block';
+        }
+
+        inputEl.addEventListener('focus', buscar);
+        inputEl.addEventListener('input', () => {
+            hiddenEl.value = '';
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(buscar, 120);
+        });
+        inputEl.addEventListener('keydown', (e) => {
+            if ((e.key === 'Backspace' || e.key === 'Delete') && hiddenEl.value !== '') {
+                e.preventDefault();
+                hiddenEl.value = '';
+                inputEl.value = '';
+                cerrar();
+            }
+        });
+        dropdownEl.addEventListener('click', (e) => {
+            const a = e.target.closest('a[data-id]');
+            if (!a) return;
+            e.preventDefault();
+            hiddenEl.value = a.dataset.id;
+            inputEl.value = a.dataset.label;
+            cerrar();
+        });
+        document.addEventListener('click', (e) => {
+            if (e.target !== inputEl && !dropdownEl.contains(e.target)) cerrar();
+        });
+    }
+
     function renderPickerEstablecimientos(seleccionActual) {
         const tbody = document.getElementById('bc-tbody-establecimientos');
         seleccionActual = seleccionActual || {}; // id_empresa -> id_cuenta ya elegido (al editar)
 
-        tbody.innerHTML = establecimientosCache.map(est => {
-            const opciones = ['<option value="">— Ninguna —</option>'].concat(
-                est.cuentas.map(c => {
-                    const yaSeleccionada = seleccionActual[est.id_empresa] === c.id;
-                    const bloqueada = c.usada && !yaSeleccionada;
-                    const label = `${c.codigo} - ${c.nombre}` + (bloqueada ? ' (ya usada en otro grupo)' : '');
-                    return `<option value="${c.id}" ${yaSeleccionada ? 'selected' : ''} ${bloqueada ? 'disabled' : ''}>${esc(label)}</option>`;
-                })
-            ).join('');
+        tbody.innerHTML = establecimientosCache.map((est, idx) => {
+            const idSel = seleccionActual[est.id_empresa] || null;
+            const cSel = idSel ? est.cuentas.find(c => c.id === idSel) : null;
+            const valorInicial = cSel ? esc(`${cSel.codigo} - ${cSel.nombre}`) : '';
             return `<tr data-id-empresa="${est.id_empresa}">
                 <td class="fw-medium">${esc(est.etiqueta)}</td>
-                <td><select class="form-select form-select-sm shadow-none bc-select-cuenta">${opciones}</select></td>
+                <td>
+                    <div class="position-relative">
+                        <input type="text" class="form-control form-control-sm shadow-none bc-cuenta-texto" data-idx="${idx}"
+                               placeholder="Buscar cuenta por código o nombre…" autocomplete="off" value="${valorInicial}">
+                        <input type="hidden" class="bc-select-cuenta" data-idx="${idx}" value="${cSel ? cSel.id : ''}">
+                        <div class="list-group position-absolute w-100 shadow-sm bc-cuenta-dropdown" data-idx="${idx}" style="display:none; z-index:1070; max-height:200px; overflow-y:auto;"></div>
+                    </div>
+                </td>
             </tr>`;
         }).join('');
+
+        establecimientosCache.forEach((est, idx) => {
+            const inputEl = tbody.querySelector(`.bc-cuenta-texto[data-idx="${idx}"]`);
+            const hiddenEl = tbody.querySelector(`.bc-select-cuenta[data-idx="${idx}"]`);
+            const dropdownEl = tbody.querySelector(`.bc-cuenta-dropdown[data-idx="${idx}"]`);
+            const idSel = seleccionActual[est.id_empresa] || null;
+            // Las ya usadas en otro grupo no aparecen en la búsqueda (salvo la que este mismo
+            // grupo ya tiene asignada para este establecimiento, al editar).
+            const items = est.cuentas.filter(c => !c.usada || c.id === idSel);
+            setupTypeaheadLocal(inputEl, dropdownEl, hiddenEl, items, c => `${c.codigo} - ${c.nombre}`);
+        });
     }
 
     window.BC_toggleAvisoPatrimonio = function () {

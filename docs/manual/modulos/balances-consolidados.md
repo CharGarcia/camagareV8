@@ -6,7 +6,7 @@ ruta_modulo: modulos/balances-consolidados
 tipo: modulo
 visibilidad: todos
 etiquetas: consolidado, RUC, establecimientos, sucursales, balance general, estado de resultados, grupo de cuentas, matriz, plan de cuentas, multiempresa
-version: 1.0
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -47,9 +47,11 @@ que el usuario tenga acceso.
 3. Poner un nombre al concepto (ej. "Caja General") y elegir su tipo (Activo,
    Pasivo, Patrimonio, Ingreso, Costo, Gasto) — es solo para agrupar visualmente
    el reporte, no afecta el cálculo.
-4. Para cada establecimiento listado, elegir la cuenta de su propio plan de
-   cuentas que corresponde a ese concepto. Se puede dejar en blanco el
-   establecimiento que no tenga esa cuenta o no aplique.
+4. Para cada establecimiento listado, buscar (por código o nombre) y elegir la
+   cuenta de su propio plan de cuentas que corresponde a ese concepto — es un
+   buscador tipo "chip": se escribe, se elige de la lista filtrada, y queda fija
+   la selección (Backspace/Delete la limpia de una sola vez). Se puede dejar en
+   blanco el establecimiento que no tenga esa cuenta o no aplique.
 5. Guardar. El grupo queda disponible de inmediato en Estados Financieros y
    Balance de Comprobación (pestaña/vista "Consolidado por RUC").
 6. Repetir por cada concepto que se quiera consolidar. Las cuentas que no se
@@ -113,11 +115,15 @@ del grupo.
 - **El botón "Nuevo grupo consolidado" aparece deshabilitado**: la empresa activa
   es la única de su RUC a la que el usuario tiene acceso — no hay con qué
   consolidar.
-- **Una cuenta no aparece en el selector**: puede que ya esté usada en otro grupo
-  (se muestra atenuada con la leyenda "ya usada en otro grupo"), o que el
+- **Una cuenta no aparece al buscarla**: puede que ya esté usada en otro grupo
+  del mismo RUC (esas no aparecen en los resultados de búsqueda, salvo que sea
+  la que este mismo grupo ya tiene asignada a ese establecimiento), o que el
   establecimiento no tenga plan de cuentas cargado.
 
 ## Historial de cambios
 
+- **1.1** — El selector de cuenta por establecimiento pasó de lista desplegable
+  a buscador tipo "chip" (por código o nombre), para no tener que recorrer el
+  plan de cuentas completo uno por uno.
 - **1.0** — Versión inicial: configuración de grupos de cuentas equivalentes por
   RUC, consumida por Estados Financieros y Balance de Comprobación.
