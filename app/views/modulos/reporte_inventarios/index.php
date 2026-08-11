@@ -585,14 +585,6 @@
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Buscar</label>
                                     <input type="text" id="ri-au-buscar" class="form-control form-control-sm shadow-none border" placeholder="Nombre o código...">
                                 </div>
-                                <?php if ((int) ($_SESSION['nivel'] ?? 1) === 3): ?>
-                                <div class="col-md-3 d-flex align-items-end">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="ri-au-todas-empresas">
-                                        <label class="form-check-label small" for="ri-au-todas-empresas">Todas las empresas</label>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
                                 <div class="col-md-2 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Mostrar</button>
                                 </div>

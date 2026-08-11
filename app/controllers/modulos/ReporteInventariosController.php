@@ -146,20 +146,7 @@ class ReporteInventariosController extends BaseModuloController
             'id_bodega'      => $_REQUEST['id_bodega']   ?? '',
             'id_producto'    => $_REQUEST['id_producto'] ?? '',
             'buscar'         => trim($_REQUEST['buscar'] ?? ''),
-            // Solo nivel 3 puede pedir todas las empresas a la vez; generarAuditoria()
-            // vuelve a validar el nivel antes de honrar este flag.
-            'todas_empresas' => !empty($_REQUEST['todas_empresas']),
         ];
-    }
-
-    /** null = auditoría global (todas las empresas); solo se concede a nivel 3. */
-    private function idEmpresaAuditoria(array $filtros): ?int
-    {
-        $nivel = (int) ($_SESSION['nivel'] ?? 1);
-        if ($nivel === 3 && !empty($filtros['todas_empresas'])) {
-            return null;
-        }
-        return (int) $_SESSION['id_empresa'];
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -280,15 +267,13 @@ class ReporteInventariosController extends BaseModuloController
     private function generarAuditoria(int $idEmpresaSesion): array
     {
         $filtros = $this->getFiltrosAuditoria();
-        $global = $this->idEmpresaAuditoria($filtros) === null;
-        $rows = $this->repository->getAuditoriaStock($global ? null : $idEmpresaSesion, $filtros);
+        $rows = $this->repository->getAuditoriaStock($idEmpresaSesion, $filtros);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r, $global), $global ? 7 : 6),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r), 6),
             'rawData'    => $rows,
             'kpis'       => ['total_discrepancias' => count($rows)],
             'agrupacion' => 'NINGUNO',
-            'global'     => $global,
         ];
     }
 
@@ -433,14 +418,13 @@ class ReporteInventariosController extends BaseModuloController
             . '</tr>';
     }
 
-    private function filaAuditoria(array $r, bool $incluirEmpresa = false): string
+    private function filaAuditoria(array $r): string
     {
         $cacheado = (float) ($r['cacheado'] ?? 0);
         $real = (float) ($r['real_kardex'] ?? 0);
         $diferencia = $cacheado - $real;
         $colorDif = $diferencia > 0 ? 'text-danger' : 'text-warning';
         return '<tr>'
-            . ($incluirEmpresa ? '<td class="small">' . htmlspecialchars($r['empresa_nombre'] ?? '') . '</td>' : '')
             . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['producto_codigo'] ?? '') . '</small></td>'
             . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
             . '<td class="text-end">' . number_format($cacheado, 2) . '</td>'
@@ -449,12 +433,10 @@ class ReporteInventariosController extends BaseModuloController
             . '<td class="text-center">'
             . '<button type="button" class="btn btn-sm btn-outline-primary" title="Corregir: dejar el stock guardado igual al del kardex"'
             . ' onclick="window.RI_Auditoria.corregir(this)"'
-            . ' data-id-empresa="' . (int) ($r['id_empresa'] ?? 0) . '"'
             . ' data-id-producto="' . (int) ($r['id_producto'] ?? 0) . '"'
             . ' data-id-bodega="' . (int) ($r['id_bodega'] ?? 0) . '"'
             . ' data-producto-nombre="' . htmlspecialchars($r['producto_nombre'] ?? '', ENT_QUOTES) . '"'
             . ' data-bodega-nombre="' . htmlspecialchars($r['bodega_nombre'] ?? '', ENT_QUOTES) . '"'
-            . ' data-empresa-nombre="' . htmlspecialchars($r['empresa_nombre'] ?? '', ENT_QUOTES) . '"'
             . ' data-cacheado="' . $cacheado . '" data-real="' . $real . '"'
             . '><i class="bi bi-check2-circle me-1"></i>Corregir</button>'
             . '</td>'
@@ -615,14 +597,9 @@ class ReporteInventariosController extends BaseModuloController
 
         try {
             $idUsuario = (int) $_SESSION['id_usuario'];
-            $nivel = (int) ($_SESSION['nivel'] ?? 1);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
             $idProducto = (int) ($_REQUEST['id_producto'] ?? 0);
             $idBodega = (int) ($_REQUEST['id_bodega'] ?? 0);
-            // Solo nivel 3 puede corregir una fila de una empresa distinta a la de su sesión
-            // (auditoría global); cualquier otro nivel queda forzado a su propia empresa aunque
-            // el request traiga otro id_empresa.
-            $idEmpresaReq = (int) ($_REQUEST['id_empresa'] ?? 0);
-            $idEmpresa = ($nivel === 3 && $idEmpresaReq > 0) ? $idEmpresaReq : (int) $_SESSION['id_empresa'];
 
             if ($idProducto <= 0 || $idBodega <= 0) {
                 throw new \InvalidArgumentException('Producto o bodega no válidos.');
@@ -643,7 +620,7 @@ class ReporteInventariosController extends BaseModuloController
         exit;
     }
 
-    /** Corrige TODAS las discrepancias visibles con los filtros actuales (respeta el alcance global de nivel 3). */
+    /** Corrige TODAS las discrepancias visibles con los filtros actuales, para la empresa activa en sesión. */
     public function corregirTodoAuditoriaAjax(): void
     {
         $this->requireActualizar();
@@ -651,24 +628,22 @@ class ReporteInventariosController extends BaseModuloController
 
         try {
             $idUsuario = (int) $_SESSION['id_usuario'];
-            $idEmpresaSesion = (int) $_SESSION['id_empresa'];
+            $idEmpresa = (int) $_SESSION['id_empresa'];
             $filtros = $this->getFiltrosAuditoria();
-            $idEmpresaEfectiva = $this->idEmpresaAuditoria($filtros);
 
-            $filas = $this->repository->getAuditoriaStock($idEmpresaEfectiva, $filtros);
+            $filas = $this->repository->getAuditoriaStock($idEmpresa, $filtros);
 
             $corregidas = 0;
             foreach ($filas as $f) {
-                $idEmpresaFila = (int) ($f['id_empresa'] ?? $idEmpresaSesion);
                 $resultado = $this->repository->corregirStockAuditoria(
                     (int) $f['id_producto'],
                     (int) $f['id_bodega'],
-                    $idEmpresaFila,
+                    $idEmpresa,
                     $idUsuario
                 );
 
                 (new LogSistemaService())->registrar(
-                    $idUsuario, $idEmpresaFila, 'corregir_stock_auditoria', 'productos_bodegas', (int) $f['id_producto'],
+                    $idUsuario, $idEmpresa, 'corregir_stock_auditoria', 'productos_bodegas', (int) $f['id_producto'],
                     ['stock_actual' => $resultado['antes']],
                     ['stock_actual' => $resultado['despues']]
                 );

@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones
-version: 1.4
+version: 1.5
 orden: 40
 estado: activo
 ---
@@ -73,12 +73,8 @@ confirmación mostrando cuántas va a corregir antes de ejecutar. Cada correcci�
 individual queda igual de auditada en `log_sistema` que si se hiciera fila por
 fila.
 
-**Todas las empresas** (solo Nivel 3): un superadministrador ve un check
-"Todas las empresas" en los filtros; al marcarlo, la Auditoría (y el botón
-Corregir todo) deja de limitarse a la empresa activa en sesión y muestra/corrige
-las discrepancias de **todo el sistema**, con una columna Empresa adicional.
-Los demás niveles no ven este check y siempre quedan limitados a su propia
-empresa, sin importar qué se envíe en la petición.
+La Auditoría siempre queda limitada a la empresa activa en sesión, sin importar
+el nivel del usuario: cada empresa revisa su propio inventario.
 
 ### Por qué aparecen discrepancias
 
@@ -109,6 +105,9 @@ siguen apareciendo aquí hasta que se corrigen manualmente.
 
 ## Historial de cambios
 
+- **1.5** — Quitado el check **Todas las empresas** de Auditoría (era solo
+  para Nivel 3): cada empresa audita y corrige únicamente su propio
+  inventario, sin excepción de nivel.
 - **1.4** — Botón **Corregir todo** en Auditoría (corrige de una vez todas las
   discrepancias filtradas) y check **Todas las empresas** para Nivel 3 (audita
   y corrige el sistema completo, no solo la empresa activa).

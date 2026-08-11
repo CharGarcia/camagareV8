@@ -601,10 +601,8 @@ window.RI_Auditoria = {
         this.generar();
     },
 
-    dibujarCabecera(global) {
-        let th = '<tr>';
-        if (global) th += '<th>Empresa</th>';
-        th += `<th>Producto</th><th>Bodega</th><th class="text-end">Guardado</th>
+    dibujarCabecera() {
+        const th = `<tr><th>Producto</th><th>Bodega</th><th class="text-end">Guardado</th>
                <th class="text-end">Real (Kardex)</th><th class="text-end">Diferencia</th>
                <th class="text-center">Acción</th></tr>`;
         document.getElementById('ri-au-thead').innerHTML = th;
@@ -613,25 +611,24 @@ window.RI_Auditoria = {
     _filtros() {
         return RI_paramsFromIds({
             id_bodega: 'ri-au-bodega', id_producto: 'ri-au-id-producto', buscar: 'ri-au-buscar',
-            todas_empresas: 'ri-au-todas-empresas',
         });
     },
 
     generar() {
         const params = this._filtros();
-        const colSpan = document.getElementById('ri-au-todas-empresas')?.checked ? 7 : 6;
+        const colSpan = 6;
 
         const tbody = document.getElementById('ri-au-tbody');
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('auditoria', params, (res) => {
-            this.dibujarCabecera(!!res.global);
+            this.dibujarCabecera();
             tbody.innerHTML = res.rows;
             const info = document.getElementById('ri-au-info-total');
             const total = (res.kpis && res.kpis.total_discrepancias) || 0;
             this.ultimoTotal = total;
             info.textContent = total > 0
-                ? `${total} discrepancia${total === 1 ? '' : 's'} encontrada${total === 1 ? '' : 's'}${res.global ? ' (todas las empresas)' : ''}`
+                ? `${total} discrepancia${total === 1 ? '' : 's'} encontrada${total === 1 ? '' : 's'}`
                 : 'Sin discrepancias — el stock guardado coincide con el Kardex.';
 
             const btnTodo = document.getElementById('ri-au-btn-corregir-todo');
@@ -648,7 +645,7 @@ window.RI_Auditoria = {
 
         const ejecutar = () => {
             btn.disabled = true;
-            const params = new URLSearchParams({ id_producto: d.idProducto, id_bodega: d.idBodega, id_empresa: d.idEmpresa || '' });
+            const params = new URLSearchParams({ id_producto: d.idProducto, id_bodega: d.idBodega });
             fetch(BASE_URL + '/' + RUTA_MODULO + '/corregirStockAuditoriaAjax', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
@@ -675,8 +672,7 @@ window.RI_Auditoria = {
             });
         };
 
-        const empresaLinea = d.empresaNombre ? `<p class="mb-1 text-muted small">${d.empresaNombre}</p>` : '';
-        const mensaje = `${empresaLinea}<p class="mb-2">${d.productoNombre} — ${d.bodegaNombre}</p>
+        const mensaje = `<p class="mb-2">${d.productoNombre} — ${d.bodegaNombre}</p>
             <p class="mb-0">Guardado: <b>${cacheado}</b> &rarr; Real (Kardex): <b>${real}</b></p>`;
 
         if (typeof Swal !== 'undefined') {
@@ -696,8 +692,6 @@ window.RI_Auditoria = {
     corregirTodo() {
         const total = this.ultimoTotal || 0;
         if (total <= 0) return;
-        const todas = document.getElementById('ri-au-todas-empresas')?.checked;
-        const alcance = todas ? 'de <b>todas las empresas</b>' : 'de esta empresa';
 
         const ejecutar = () => {
             const btn = document.getElementById('ri-au-btn-corregir-todo');
@@ -730,7 +724,7 @@ window.RI_Auditoria = {
             });
         };
 
-        const mensaje = `<p class="mb-0">Vas a corregir <b>${total}</b> discrepancia${total === 1 ? '' : 's'} ${alcance},
+        const mensaje = `<p class="mb-0">Vas a corregir <b>${total}</b> discrepancia${total === 1 ? '' : 's'} de esta empresa,
             dejando el stock guardado igual al del Kardex en cada una. Confirma que el Kardex está completo
             antes de continuar — si le faltan movimientos, esto solo iguala el guardado a un Kardex incompleto.</p>`;
 

@@ -767,20 +767,12 @@ class ReporteInventarioRepository extends BaseRepository
     // PESTAÑA 5 — AUDITORÍA (stock cacheado vs. real del kardex)
     // ════════════════════════════════════════════════════════════════════
 
-    /**
-     * Producto×bodega donde productos_bodegas.stock_actual no coincide con la suma real del kardex.
-     * $idEmpresa = null → TODAS las empresas (solo para nivel 3; el controller es quien filtra el
-     * acceso, este método no vuelve a validarlo). En modo global se incluye el nombre de la empresa.
-     */
-    public function getAuditoriaStock(?int $idEmpresa, array $filtros): array
+    /** Producto×bodega donde productos_bodegas.stock_actual no coincide con la suma real del kardex. */
+    public function getAuditoriaStock(int $idEmpresa, array $filtros): array
     {
-        $where = "pb.eliminado = false AND p.eliminado = false AND p.inventariable = true AND b.eliminado = false";
-        $params = [];
+        $where = "pb.id_empresa = :id_empresa AND pb.eliminado = false AND p.eliminado = false AND p.inventariable = true AND b.eliminado = false";
+        $params = [':id_empresa' => $idEmpresa];
 
-        if ($idEmpresa !== null) {
-            $where .= " AND pb.id_empresa = :id_empresa";
-            $params[':id_empresa'] = $idEmpresa;
-        }
         if (!empty($filtros['id_bodega'])) {
             $where .= " AND pb.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
@@ -796,7 +788,6 @@ class ReporteInventarioRepository extends BaseRepository
 
         $sql = "SELECT * FROM (
                     SELECT pb.id_empresa, pb.id_producto, pb.id_bodega,
-                           e.nombre AS empresa_nombre,
                            p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                            b.nombre AS bodega_nombre,
                            pb.stock_actual AS cacheado,
@@ -808,7 +799,6 @@ class ReporteInventarioRepository extends BaseRepository
                     FROM productos_bodegas pb
                     INNER JOIN productos p ON p.id = pb.id_producto AND p.id_empresa = pb.id_empresa
                     INNER JOIN bodegas b ON b.id = pb.id_bodega
-                    INNER JOIN empresas e ON e.id = pb.id_empresa
                     WHERE {$where}
                 ) t
                 WHERE cacheado <> real_kardex
