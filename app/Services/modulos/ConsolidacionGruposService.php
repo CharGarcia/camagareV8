@@ -104,8 +104,14 @@ class ConsolidacionGruposService
         // refuerzo de servidor, no solo confiar en lo que mandó el formulario.
         $idsAccesibles = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
         foreach ($data['cuentas'] as $c) {
-            if (!in_array((int) $c['id_empresa'], $idsAccesibles, true)) {
+            $idEmp = (int) $c['id_empresa'];
+            if (!in_array($idEmp, $idsAccesibles, true)) {
                 throw new \Exception('Una de las empresas seleccionadas no pertenece a este RUC o no tiene acceso a ella.');
+            }
+            // Solo cuentas de MOVIMIENTO (nivel 5): una cuenta padre no tiene saldo directo propio,
+            // así que mapearla daría siempre $0.00 en el consolidado sin ningún aviso.
+            if (!$this->repo->esCuentaNivel5DeEmpresa((int) $c['id_cuenta'], $idEmp)) {
+                throw new \Exception('Solo se pueden mapear cuentas de movimiento (nivel 5) que pertenezcan a la empresa seleccionada.');
             }
         }
 

@@ -133,14 +133,29 @@ class ConsolidacionGruposRepository extends BaseRepository
         return $out;
     }
 
-    /** Cuentas (todas, cualquier nivel) de una empresa, para el selector del picker. */
+    /**
+     * Cuentas de MOVIMIENTO (nivel 5) de una empresa, para el selector del picker. Solo nivel 5
+     * recibe asientos directos (mismo criterio que Mayores/Índices Financieros) — una cuenta
+     * padre casi nunca tiene movimiento propio, así que mapearla daría siempre $0.00 en el
+     * consolidado sin ningún aviso.
+     */
     public function getCuentasDeEmpresa(int $idEmpresa): array
     {
         $sql = "SELECT id, codigo, nombre, nivel FROM plan_cuentas
-                WHERE id_empresa = :e AND eliminado = FALSE ORDER BY codigo";
+                WHERE id_empresa = :e AND eliminado = FALSE AND nivel = '5' ORDER BY codigo";
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /** ¿La cuenta pertenece a esa empresa y es de nivel 5 (movimiento)? Refuerzo de servidor al guardar. */
+    public function esCuentaNivel5DeEmpresa(int $idCuenta, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM plan_cuentas WHERE id = :c AND id_empresa = :e AND nivel = '5' AND eliminado = FALSE"
+        );
+        $st->execute([':c' => $idCuenta, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
     }
 
     /**

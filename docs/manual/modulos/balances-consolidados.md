@@ -78,6 +78,11 @@ del grupo.
   equivalencias por coincidencia de código de cuenta: el código no es una clave
   confiable entre establecimientos (es editable, y pueden convivir distintas
   convenciones incluso dentro de una sola empresa).
+- **Solo se pueden mapear cuentas de movimiento (nivel 5)** — mismo criterio que
+  Mayores e Índices Financieros. Una cuenta padre/agrupadora (nivel 1 a 4) no
+  recibe asientos directos, así que mapearla mostraría siempre $0.00 en el
+  consolidado sin ningún aviso; por eso el selector solo ofrece cuentas de
+  nivel 5, y el servidor lo vuelve a validar al guardar.
 - Una cuenta no puede pertenecer a más de un grupo consolidado del mismo RUC.
 - Un grupo no puede tener dos cuentas del mismo establecimiento.
 - Un grupo necesita al menos 2 cuentas (de 2 establecimientos distintos) — un
