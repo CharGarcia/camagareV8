@@ -4,11 +4,6 @@ document.addEventListener('DOMContentLoaded', function () {
         aplicarFavoritosModal();
     }
 
-    if (!document.getElementById('rp-mes').value || document.getElementById('rp-mes').value === 'TODOS') {
-        const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
-        document.getElementById('rp-mes').value = currentMonth;
-    }
-
     // Buscador predictivo de Clientes (chips, multi-selección)
     let debounceTimerCliente;
     const searchCliente = document.getElementById('rp-search-cliente');
@@ -336,3 +331,17 @@ window.RP_exportarPDF = function () {
     const params = new URLSearchParams(new FormData(form)).toString();
     window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params, '_blank');
 };
+
+/* ════════════════════════════════════════════════════
+   PANEL LATERAL: detalle del pedido al hacer clic en una
+   fila (solo vista Detallado; las filas agrupadas no
+   representan un pedido individual).
+════════════════════════════════════════════════════ */
+document.addEventListener('click', function (e) {
+    const tr = e.target.closest('#rp_tbody tr[data-tipo]');
+    if (!tr) return;
+    if (e.target.closest('button, a, input, select, label')) return;
+    if (typeof window.CMG_abrirPreviewDoc !== 'function') return;
+
+    window.CMG_abrirPreviewDoc(tr.dataset.id, tr.dataset.tipo);
+});

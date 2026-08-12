@@ -120,7 +120,10 @@ class ReportePedidosController extends BaseModuloController
 
     private function renderFilaAgrupadaHtml(array $r, string $agruparPor): string
     {
-        $html = '<tr class="align-middle">';
+        $esDetallado = !in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'ESTADO', 'RESPONSABLE', 'FECHA', 'MES'], true);
+        $html = $esDetallado
+            ? "<tr class='align-middle' style='cursor:pointer;' title='Clic para ver el detalle' data-id='" . (int) ($r['id'] ?? 0) . "' data-tipo='PEDIDO'>"
+            : '<tr class="align-middle">';
         $cant = number_format((float) ($r['cantidad_total'] ?? 0), 2);
 
         if ($agruparPor === 'CLIENTE') {

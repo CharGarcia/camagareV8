@@ -521,8 +521,12 @@ function CMG_resetModal() {
     // Reset pestaña Orden de Compra (compra nueva = sin vincular todavía)
     document.getElementById('oc-tab-vinculada')?.classList.add('d-none');
     document.getElementById('oc-tab-sin-vincular')?.classList.remove('d-none');
-    const ocSel = document.getElementById('oc-tab-select');
-    if (ocSel) ocSel.innerHTML = '<option value="">-- Seleccione una orden --</option>';
+    window._ocTabOrdenesAbiertas = [];
+    const ocBuscar = document.getElementById('oc-tab-buscar');
+    if (ocBuscar) { ocBuscar.value = ''; ocBuscar.disabled = true; ocBuscar.placeholder = 'Seleccione un proveedor primero...'; }
+    const ocIdOrden = document.getElementById('oc-tab-id-orden');
+    if (ocIdOrden) ocIdOrden.value = '';
+    document.getElementById('oc-tab-lista')?.classList.add('d-none');
     document.getElementById('oc-tab-btn-vincular')?.setAttribute('disabled', 'disabled');
     document.getElementById('oc-tab-sin-abiertas')?.classList.add('d-none');
 
@@ -2441,17 +2445,30 @@ if (mcTabsEl) {
 // ORDEN DE COMPRA (vincular la compra con el pedido interno que le dio origen)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Carga la pestaña "Orden de Compra": si ya está vinculada, la comparación; si no, el buscador. */
+/**
+ * Carga la pestaña "Orden de Compra": si ya está vinculada, la comparación; si no, el buscador.
+ * IMPORTANTE: nunca usar contSin.innerHTML aquí — destruiría el input/dropdown del buscador
+ * (#oc-tab-buscar / #oc-tab-lista) y sus listeners quedarían apuntando a nodos ya eliminados
+ * del DOM, dejando el buscador roto para el resto de la sesión del modal. Los tres estados
+ * (form / aviso-guardar / error) son contenedores fijos que solo se ocultan/muestran.
+ */
 window.mcCargarOrdenCompraTab = async function () {
-    const idCompra = document.getElementById('mcId')?.value || '';
-    const contSin  = document.getElementById('oc-tab-sin-vincular');
-    const contVinc = document.getElementById('oc-tab-vinculada');
+    const idCompra    = document.getElementById('mcId')?.value || '';
+    const contSin     = document.getElementById('oc-tab-sin-vincular');
+    const contVinc    = document.getElementById('oc-tab-vinculada');
+    const avisoGuardar = document.getElementById('oc-tab-aviso-guardar');
+    const avisoError   = document.getElementById('oc-tab-error');
+    const form          = document.getElementById('oc-tab-form');
     if (!contSin || !contVinc) return;
+
+    avisoGuardar?.classList.add('d-none');
+    avisoError?.classList.add('d-none');
+    form?.classList.add('d-none');
 
     if (!idCompra) {
         contVinc.classList.add('d-none');
         contSin.classList.remove('d-none');
-        contSin.innerHTML = '<div class="text-center py-4 text-muted"><i class="bi bi-save2 d-block fs-3 mb-2"></i>Guarde la compra primero para poder vincularla con una orden de compra.</div>';
+        avisoGuardar?.classList.remove('d-none');
         return;
     }
 
@@ -2467,60 +2484,127 @@ window.mcCargarOrdenCompraTab = async function () {
         } else {
             contVinc.classList.add('d-none');
             contSin.classList.remove('d-none');
+            form?.classList.remove('d-none');
             await mcCargarOrdenesAbiertas(idCompra);
         }
     } catch (e) {
-        contSin.innerHTML = `<div class="text-center py-4 text-danger">Error al cargar: ${_esc(e.message)}</div>`;
+        contVinc.classList.add('d-none');
+        contSin.classList.remove('d-none');
+        if (avisoError) {
+            avisoError.textContent = 'Error al cargar: ' + e.message;
+            avisoError.classList.remove('d-none');
+        }
     }
 };
 
-/** Llena el select de órdenes abiertas del proveedor de la compra actual. */
+/** Trae del servidor las órdenes abiertas del proveedor de la compra actual (una vez por carga de pestaña). */
+window._ocTabOrdenesAbiertas = [];
 window.mcCargarOrdenesAbiertas = async function (idCompra) {
-    const idProveedor = document.getElementById('mcIdProveedor')?.value || '';
-    const sel      = document.getElementById('oc-tab-select');
-    const btn      = document.getElementById('oc-tab-btn-vincular');
-    const avisoVacio = document.getElementById('oc-tab-sin-abiertas');
-    if (!sel) return;
+    const idProveedor  = document.getElementById('mcIdProveedor')?.value || '';
+    const input        = document.getElementById('oc-tab-buscar');
+    const hiddenId      = document.getElementById('oc-tab-id-orden');
+    const btn           = document.getElementById('oc-tab-btn-vincular');
+    const avisoVacio    = document.getElementById('oc-tab-sin-abiertas');
+    const lista          = document.getElementById('oc-tab-lista');
+    if (!input) return;
 
-    sel.innerHTML = '<option value="">-- Seleccione una orden --</option>';
+    window._ocTabOrdenesAbiertas = [];
+    if (hiddenId) hiddenId.value = '';
     if (btn) btn.disabled = true;
     if (avisoVacio) avisoVacio.classList.add('d-none');
+    lista?.classList.add('d-none');
 
     if (!idProveedor) {
-        sel.innerHTML = '<option value="">-- Seleccione un proveedor primero --</option>';
+        input.value = '';
+        input.disabled = true;
+        input.placeholder = 'Seleccione un proveedor primero...';
         return;
     }
+    input.disabled = false;
+    input.placeholder = 'Buscar por número de orden...';
+    input.value = '';
 
     try {
         const res  = await fetch(`${window.CMG_urlBase}/buscarOrdenesCompraAjax?id_proveedor=${idProveedor}&id_compra=${idCompra}`);
         const data = await res.json();
         if (!data.ok) throw new Error(data.mensaje || 'Error');
 
-        const ordenes = data.data || [];
-        if (!ordenes.length) {
-            if (avisoVacio) avisoVacio.classList.remove('d-none');
-            return;
+        window._ocTabOrdenesAbiertas = data.data || [];
+        if (!window._ocTabOrdenesAbiertas.length && avisoVacio) {
+            avisoVacio.classList.remove('d-none');
         }
-        ordenes.forEach(o => {
-            const opt = document.createElement('option');
-            opt.value = o.id;
-            const fecha = o.fecha_orden ? String(o.fecha_orden).slice(0, 10).split('-').reverse().join('/') : '';
-            opt.textContent = `${o.numero_orden} — ${fecha} — $${parseFloat(o.total || 0).toFixed(2)} (${o.estado})`;
-            sel.appendChild(opt);
-        });
     } catch (e) {
-        sel.innerHTML = `<option value="">Error al cargar órdenes</option>`;
+        if (avisoVacio) {
+            avisoVacio.textContent = 'Error al cargar las órdenes de este proveedor.';
+            avisoVacio.classList.remove('d-none');
+        }
     }
 };
 
-document.getElementById('oc-tab-select')?.addEventListener('change', function () {
-    const btn = document.getElementById('oc-tab-btn-vincular');
-    if (btn) btn.disabled = !this.value;
+/** Etiqueta legible de una orden para el buscador: número — fecha — total (estado). */
+function _ocTabEtiqueta(o) {
+    const fecha = o.fecha_orden ? String(o.fecha_orden).slice(0, 10).split('-').reverse().join('/') : '';
+    return `${o.numero_orden} — ${fecha} — $${parseFloat(o.total || 0).toFixed(2)} (${o.estado})`;
+}
+
+/** Pinta el dropdown del buscador con las órdenes que coinciden con lo tecleado (filtro en cliente). */
+function _ocTabRenderLista(filtro) {
+    const lista = document.getElementById('oc-tab-lista');
+    if (!lista) return;
+    const q = (filtro || '').trim().toLowerCase();
+    const coincidencias = window._ocTabOrdenesAbiertas.filter(o => !q || String(o.numero_orden).toLowerCase().includes(q));
+
+    if (!coincidencias.length) {
+        lista.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias.</div>';
+        lista.classList.remove('d-none');
+        return;
+    }
+    lista.innerHTML = '';
+    coincidencias.forEach(o => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action py-1 px-2 small';
+        item.textContent = _ocTabEtiqueta(o);
+        item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            document.getElementById('oc-tab-buscar').value = _ocTabEtiqueta(o);
+            document.getElementById('oc-tab-id-orden').value = o.id;
+            document.getElementById('oc-tab-btn-vincular').disabled = false;
+            lista.classList.add('d-none');
+        });
+        lista.appendChild(item);
+    });
+    lista.classList.remove('d-none');
+}
+
+document.getElementById('oc-tab-buscar')?.addEventListener('input', function () {
+    // Si el usuario edita el texto de una selección ya hecha, se invalida hasta elegir de nuevo.
+    document.getElementById('oc-tab-id-orden').value = '';
+    document.getElementById('oc-tab-btn-vincular').disabled = true;
+    _ocTabRenderLista(this.value);
+});
+document.getElementById('oc-tab-buscar')?.addEventListener('focus', function () {
+    _ocTabRenderLista(this.value);
+});
+document.getElementById('oc-tab-buscar')?.addEventListener('keydown', function (e) {
+    if ((e.key === 'Backspace' || e.key === 'Delete') && document.getElementById('oc-tab-id-orden')?.value) {
+        e.preventDefault();
+        this.value = '';
+        document.getElementById('oc-tab-id-orden').value = '';
+        document.getElementById('oc-tab-btn-vincular').disabled = true;
+        _ocTabRenderLista('');
+    }
+});
+document.addEventListener('click', function (e) {
+    const lista = document.getElementById('oc-tab-lista');
+    if (lista && !lista.contains(e.target) && e.target.id !== 'oc-tab-buscar') {
+        lista.classList.add('d-none');
+    }
 });
 
 window.mcVincularOrdenCompra = async function () {
     const idCompra      = document.getElementById('mcId')?.value || '';
-    const idOrdenCompra = document.getElementById('oc-tab-select')?.value || '';
+    const idOrdenCompra = document.getElementById('oc-tab-id-orden')?.value || '';
     if (!idCompra || !idOrdenCompra) return;
 
     const btn = document.getElementById('oc-tab-btn-vincular');

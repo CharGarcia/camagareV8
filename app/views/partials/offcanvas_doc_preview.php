@@ -111,7 +111,8 @@
         NOTA_CREDITO:  { url: BASE + '/modulos/notas_credito/getNcAjax',             badge: 'NOTA DE CRÉDITO',  sujeto: 'Cliente',   forma: 'cabecera' },
         COMPRA:        { url: BASE + '/modulos/compras/getCompraAjax',               badge: 'FACTURA DE COMPRA', sujeto: 'Proveedor', forma: 'data' },
         LIQUIDACION:   { url: BASE + '/modulos/liquidacion-compra/getLiquidacionAjax', badge: 'LIQUIDACIÓN',    sujeto: 'Proveedor', forma: 'cabecera' },
-        IMPORTACION:   { url: BASE + '/modulos/importaciones/getImportacionAjax',     badge: 'IMPORTACIÓN',     sujeto: 'Proveedor exterior', forma: 'data' }
+        IMPORTACION:   { url: BASE + '/modulos/importaciones/getImportacionAjax',     badge: 'IMPORTACIÓN',     sujeto: 'Proveedor exterior', forma: 'data' },
+        PEDIDO:        { url: BASE + '/modulos/pedidos/getPedidoAjax',                badge: 'PEDIDO',           sujeto: 'Cliente',   forma: 'cabecera' }
     };
 
     const $ = (id) => document.getElementById(id);

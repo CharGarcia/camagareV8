@@ -3842,6 +3842,14 @@ $totalPages = $totalPagesOriginal;
         tbody.appendChild(tr);
 
         const inputDesc = tr.querySelector('.input-descripcion');
+        // Concepto libre: no permitir Enter (evita saltos de línea) y, al salir del campo,
+        // colapsar espacios dobles y recortar los extremos.
+        inputDesc.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') e.preventDefault();
+        });
+        inputDesc.addEventListener('blur', () => {
+            inputDesc.value = inputDesc.value.replace(/\s+/g, ' ').trim();
+        });
         setTimeout(() => {
             inputDesc.focus();
         }, 50);

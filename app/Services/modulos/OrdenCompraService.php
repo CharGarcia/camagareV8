@@ -66,7 +66,33 @@ class OrdenCompraService
             $data['punto_emision']   = $estabData['punto_emision'];
             $data['secuencial']      = $secResult['formateado'];
 
-            $idOrden = $this->repository->insertar($data);
+            // El listado filtra por el tipo_ambiente vigente de la empresa (separa
+            // pruebas/producción); sin esto la orden se guarda pero no aparece en la lista.
+            $stmtAmb = $db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa");
+            $stmtAmb->execute([':id_empresa' => $data['id_empresa']]);
+            $data['tipo_ambiente'] = $stmtAmb->fetchColumn() ?: '1';
+
+            // Mismo control anti-duplicado que Factura de Venta: el candado de
+            // obtenerSiguienteSecuencial() ya evita la mayoría de las carreras, pero si
+            // hay puntos de emisión "gemelos" (mismo código, distinto id) el candado no
+            // los detecta — este chequeo + el índice único de la tabla son la red final.
+            if ($this->repository->existeSecuencial(
+                (int) $data['id_empresa'],
+                (int) $data['id_establecimiento'],
+                (int) $data['id_punto_emision'],
+                (string) $data['secuencial']
+            )) {
+                throw new \Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
+            }
+
+            try {
+                $idOrden = $this->repository->insertar($data);
+            } catch (\PDOException $e) {
+                if (($e->errorInfo[0] ?? '') === '23505') {
+                    throw new \Exception('El secuencial ' . $data['secuencial'] . ' ya está en uso para esta serie. Recargue e intente nuevamente.');
+                }
+                throw $e;
+            }
 
             foreach ($items as $item) {
                 $this->repository->insertarDetalle([
@@ -107,6 +133,9 @@ class OrdenCompraService
         try {
             $anterior = $this->repository->getById($id, $idEmpresa);
             if (!$anterior) throw new \Exception('Orden de compra no encontrada.');
+            if (($anterior['estado'] ?? '') === 'recibido') {
+                throw new \Exception('Esta orden ya fue recibida (vinculada a una compra) y no se puede editar. Desvincúlela primero desde la compra correspondiente si necesita modificarla.');
+            }
 
             $estabData = $this->_getDatosSerie((int)$data['id_establecimiento'], (int)$data['id_punto_emision']);
             $data['establecimiento'] = $estabData['establecimiento'];
@@ -150,6 +179,9 @@ class OrdenCompraService
         try {
             $anterior = $this->repository->getById($id, $idEmpresa);
             if (!$anterior) throw new \Exception('Orden de compra no encontrada.');
+            if (($anterior['estado'] ?? '') === 'recibido') {
+                throw new \Exception('Esta orden ya fue recibida (vinculada a una compra) y no se puede eliminar. Desvincúlela primero desde la compra correspondiente.');
+            }
 
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
 

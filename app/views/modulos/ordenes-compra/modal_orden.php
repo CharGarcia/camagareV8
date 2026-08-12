@@ -39,6 +39,12 @@
                 </div>
                 <hr class="text-muted my-0 mb-3 opacity-25">
 
+                <!-- Aviso de solo lectura (orden ya recibida / vinculada a una compra) -->
+                <div id="oc-bloqueo-aviso" class="alert alert-secondary d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none">
+                    <i class="bi bi-lock-fill"></i>
+                    <span class="small">Esta orden ya fue <strong>recibida</strong> (vinculada a una compra) y es de solo lectura. Para modificarla, desvincúlela primero desde la compra correspondiente.</span>
+                </div>
+
                 <form id="formOrdenCompra" autocomplete="off">
                     <input type="hidden" id="oc_id" name="id">
 

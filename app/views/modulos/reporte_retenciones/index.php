@@ -1,132 +1,170 @@
 <?php /** @var string $rutaModulo @var array $conceptos @var array $anios @var int $anioActual */ ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
-<div class="container-fluid py-2">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-        <h5 class="fw-bold mb-0"><i class="bi bi-file-earmark-minus text-primary me-2"></i>Reporte de Retenciones</h5>
-        <div class="d-flex gap-1">
-            <button type="button" class="btn btn-outline-danger btn-sm" id="rrBtnPdf" disabled><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>
-            <button type="button" class="btn btn-outline-success btn-sm" id="rrBtnExcel" disabled><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
-        </div>
-    </div>
+<style>
+    .retenciones-scroll { overflow-x: auto; }
+    .retenciones-scroll thead th { background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; }
+    /* Altura idéntica y explícita para todos los controles de filtros */
+    #form-filtros-rr .form-select,
+    #form-filtros-rr .form-control,
+    #form-filtros-rr .btn { height:28px; font-size:.75rem; }
+    /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
+    @media (max-width: 767.98px) {
+        #modulo-reporte_retenciones .retenciones-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
+    }
+</style>
 
-    <!-- Filtros -->
-    <div class="card shadow-sm mb-2">
-        <div class="card-body p-2">
-            <div class="row g-2">
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Mostrar</label>
-                    <select id="rr-tipo" class="form-select form-select-sm">
-                        <option value="COMPRA">Retenciones de compras</option>
-                        <option value="VENTA">Retenciones de ventas</option>
-                    </select>
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-reporte_retenciones">
+
+    <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-minus me-2 text-primary"></i>Reporte de Retenciones</h5>
+        </div>
+        <div class="card-body p-3">
+            <form id="form-filtros-rr" onsubmit="return false;">
+
+                <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mostrar</label>
+                        <select id="rr-tipo" class="form-select form-select-sm shadow-none border" style="width:180px;">
+                            <option value="COMPRA">Retenciones de compras</option>
+                            <option value="VENTA">Retenciones de ventas</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Ver por</label>
+                        <select id="rr-ver-por" class="form-select form-select-sm shadow-none border" style="width:190px;">
+                            <option value="DETALLE">Línea de impuesto (detalle)</option>
+                            <option value="CABECERA">Comprobante (resumen)</option>
+                            <option value="TERCERO">Sujeto retenido</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
+                        <select id="rr-anio" class="form-select form-select-sm shadow-none border" style="width:90px;">
+                            <?php foreach ($anios as $a): ?>
+                                <option value="<?= (int)$a ?>" <?= (int)$a === $anioActual ? 'selected' : '' ?>><?= (int)$a ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mes</label>
+                        <select id="rr-mes" class="form-select form-select-sm shadow-none border" style="width:110px;">
+                            <option value="">Todos</option>
+                            <option value="1">Enero</option>
+                            <option value="2">Febrero</option>
+                            <option value="3">Marzo</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Mayo</option>
+                            <option value="6">Junio</option>
+                            <option value="7">Julio</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Septiembre</option>
+                            <option value="10">Octubre</option>
+                            <option value="11">Noviembre</option>
+                            <option value="12">Diciembre</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Desde</label>
+                        <input type="date" id="rr-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Hasta</label>
+                        <input type="date" id="rr-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Impuesto</label>
+                        <select id="rr-impuesto" class="form-select form-select-sm shadow-none border" style="width:110px;">
+                            <option value="">Todos</option>
+                            <option value="RENTA">Renta</option>
+                            <option value="IVA">IVA</option>
+                            <option value="ISD">ISD</option>
+                        </select>
+                    </div>
+                    <div id="rr-estado-wrap">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado (compras)</label>
+                        <select id="rr-estado" class="form-select form-select-sm shadow-none border" style="width:150px;">
+                            <option value="TODOS">Todos</option>
+                            <option value="borrador">Borrador</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="autorizada">Autorizada</option>
+                            <option value="no_autorizada">No autorizada</option>
+                            <option value="anulada">Anulada</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Ver por</label>
-                    <select id="rr-ver-por" class="form-select form-select-sm">
-                        <option value="DETALLE">Línea de impuesto (detalle)</option>
-                        <option value="CABECERA">Comprobante (resumen)</option>
-                        <option value="TERCERO">Sujeto retenido</option>
-                    </select>
+
+                <div class="d-flex flex-wrap align-items-start gap-2">
+                    <div class="position-relative" style="flex:1 1 200px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;" id="rr-tercero-label">Proveedor</label>
+                        <input type="text" id="rr-tercero-txt" class="form-control form-control-sm shadow-none border" placeholder="Nombre / RUC…" autocomplete="off">
+                        <input type="hidden" id="rr-tercero-id">
+                        <div id="rr-tercero-drop" class="list-group shadow position-absolute w-100 d-none" style="z-index:1050;max-height:220px;overflow:auto;margin-top:2px;"></div>
+                    </div>
+                    <div style="flex:1 1 260px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Búsqueda libre</label>
+                        <input type="text" id="rr-buscar" class="form-control form-control-sm shadow-none border" placeholder="Número, concepto, clave de acceso, sujeto…">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="rrBtnLimpiar" title="Limpiar filtros"><i class="bi bi-eraser me-1"></i>Limpiar</button>
+                            <button type="button" class="btn btn-primary btn-sm shadow-sm" id="rrBtnGenerar"><i class="bi bi-search me-1"></i>Buscar</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Año</label>
-                    <select id="rr-anio" class="form-select form-select-sm">
-                        <?php foreach ($anios as $a): ?>
-                            <option value="<?= (int)$a ?>" <?= (int)$a === $anioActual ? 'selected' : '' ?>><?= (int)$a ?></option>
-                        <?php endforeach; ?>
-                    </select>
+            </form>
+        </div>
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-receipt bg-secondary bg-opacity-10 text-secondary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="rr-kpi-renta">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Renta</div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Mes</label>
-                    <select id="rr-mes" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        <option value="1">Enero</option>
-                        <option value="2">Febrero</option>
-                        <option value="3">Marzo</option>
-                        <option value="4">Abril</option>
-                        <option value="5">Mayo</option>
-                        <option value="6">Junio</option>
-                        <option value="7">Julio</option>
-                        <option value="8">Agosto</option>
-                        <option value="9">Septiembre</option>
-                        <option value="10">Octubre</option>
-                        <option value="11">Noviembre</option>
-                        <option value="12">Diciembre</option>
-                    </select>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-percent bg-secondary bg-opacity-10 text-secondary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="rr-kpi-iva">$0.00</div>
+                        <div class="cmg-control-card__stat-label">IVA</div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Desde</label>
-                    <input type="date" id="rr-fecha-desde" class="form-control form-control-sm">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-airplane bg-secondary bg-opacity-10 text-secondary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="rr-kpi-isd">$0.00</div>
+                        <div class="cmg-control-card__stat-label">ISD</div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Hasta</label>
-                    <input type="date" id="rr-fecha-hasta" class="form-control form-control-sm">
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Impuesto</label>
-                    <select id="rr-impuesto" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        <option value="RENTA">Renta</option>
-                        <option value="IVA">IVA</option>
-                        <option value="ISD">ISD</option>
-                    </select>
-                </div>
-                <div class="col-6 col-md-3 position-relative">
-                    <label class="form-label small fw-bold mb-1" id="rr-tercero-label">Proveedor</label>
-                    <input type="text" id="rr-tercero-txt" class="form-control form-control-sm" placeholder="Nombre / RUC…" autocomplete="off">
-                    <input type="hidden" id="rr-tercero-id">
-                    <div id="rr-tercero-drop" class="list-group shadow position-absolute w-100 d-none" style="z-index:2000;max-height:220px;overflow:auto;"></div>
-                </div>
-                <div class="col-6 col-md-2" id="rr-estado-wrap">
-                    <label class="form-label small fw-bold mb-1">Estado (compras)</label>
-                    <select id="rr-estado" class="form-select form-select-sm">
-                        <option value="TODOS">Todos</option>
-                        <option value="borrador">Borrador</option>
-                        <option value="pendiente">Pendiente</option>
-                        <option value="autorizada">Autorizada</option>
-                        <option value="no_autorizada">No autorizada</option>
-                        <option value="anulada">Anulada</option>
-                    </select>
-                </div>
-                <div class="col-12 col-md-5">
-                    <label class="form-label small fw-bold mb-1">Búsqueda libre</label>
-                    <input type="text" id="rr-buscar" class="form-control form-control-sm" placeholder="Número, concepto, clave de acceso, sujeto…">
-                </div>
-                <div class="col-12 col-md-4 d-flex align-items-end gap-1">
-                    <button type="button" class="btn btn-primary btn-sm flex-grow-1" id="rrBtnGenerar"><i class="bi bi-funnel me-1"></i>Generar</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="rrBtnLimpiar" title="Limpiar filtros"><i class="bi bi-eraser"></i></button>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-cash-stack bg-primary bg-opacity-10 text-primary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-primary" id="rr-kpi-total">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Total <span id="rr-n-total"></span></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- KPIs -->
-    <div class="row g-2 mb-2">
-        <div class="col-3"><div class="card shadow-sm border-secondary border-opacity-25"><div class="card-body p-2 text-center">
-            <div class="small text-muted">Renta</div>
-            <div class="fs-6 fw-bold" id="rr-kpi-renta">$0.00</div>
-        </div></div></div>
-        <div class="col-3"><div class="card shadow-sm border-secondary border-opacity-25"><div class="card-body p-2 text-center">
-            <div class="small text-muted">IVA</div>
-            <div class="fs-6 fw-bold" id="rr-kpi-iva">$0.00</div>
-        </div></div></div>
-        <div class="col-3"><div class="card shadow-sm border-secondary border-opacity-25"><div class="card-body p-2 text-center">
-            <div class="small text-muted">ISD</div>
-            <div class="fs-6 fw-bold" id="rr-kpi-isd">$0.00</div>
-        </div></div></div>
-        <div class="col-3"><div class="card shadow-sm border-primary border-opacity-25"><div class="card-body p-2 text-center">
-            <div class="small text-muted">Total <span id="rr-n-total" class="text-secondary"></span></div>
-            <div class="fs-6 fw-bold text-primary" id="rr-kpi-total">$0.00</div>
-        </div></div></div>
-    </div>
-
-    <!-- Tabla -->
-    <div class="card shadow-sm">
+    <!-- ── Tabla ── -->
+    <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-2 px-3 border-bottom">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-danger" id="rrBtnPdf" disabled><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                    <button type="button" class="btn btn-outline-success" id="rrBtnExcel" disabled><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                </div>
+            </div>
+        </div>
         <div class="card-body p-0">
-            <div class="retenciones-scroll" style="max-height:calc(100vh - 360px);overflow:auto;">
+            <div class="retenciones-scroll">
                 <table class="table table-sm table-hover table-striped mb-0" style="font-size:0.82rem;">
-                    <thead class="table-light sticky-top" style="top:0;z-index:1;">
+                    <thead class="table-light">
                         <tr id="rr-head-detalle">
                             <th class="ps-3">Tipo</th><th>Número</th><th>Fecha</th><th>Sujeto</th><th>Período</th>
                             <th>Impuesto</th><th>Cód.</th><th>Concepto</th>
@@ -144,7 +182,7 @@
                         </tr>
                     </thead>
                     <tbody id="rr-tbody">
-                        <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Generar</strong>.</td></tr>
+                        <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Buscar</strong>.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -195,7 +233,14 @@
         let hasta = mes ? new Date(anio, mes, 0)     : new Date(anio, 11, 31);
         if (hasta > hoy) hasta = hoy;
         if (desde > hasta) desde = hasta;
-        const fmt = d => CMG_fechaLocal(d);
+        // Formateo local (sin depender de CMG_fechaLocal, que puede no estar cargado
+        // en el momento en que corre este script): YYYY-MM-DD en hora local, no UTC.
+        const fmt = d => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
         $('rr-fecha-desde').value = fmt(desde);
         $('rr-fecha-hasta').value = fmt(hasta);
     }

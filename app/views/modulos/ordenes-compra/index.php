@@ -297,8 +297,41 @@ function ocParseDate(str) {
     return '';
 }
 
+// ── Solo lectura: orden ya recibida (vinculada a una compra) ──────────────────
+window.ocLimpiarSoloLectura = function() {
+    const modal = document.getElementById('modalOrdenCompra');
+    if (!modal) return;
+    modal.querySelectorAll('.oc-lock-off').forEach(el => {
+        el.disabled = false;
+        el.classList.remove('oc-lock-off');
+    });
+    document.getElementById('oc-bloqueo-aviso')?.classList.add('d-none');
+    document.getElementById('oc_btn_guardar')?.classList.remove('d-none');
+};
+
+window.ocAplicarSoloLectura = function() {
+    const modal = document.getElementById('modalOrdenCompra');
+    if (!modal) return;
+
+    document.getElementById('oc-bloqueo-aviso')?.classList.remove('d-none');
+    document.getElementById('oc_btn_guardar')?.classList.add('d-none');
+    document.getElementById('oc_btn_eliminar')?.classList.add('d-none');
+
+    const bloquear = el => {
+        if (el.disabled) return;
+        el.disabled = true;
+        el.classList.add('oc-lock-off');
+    };
+    modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(bloquear);
+    modal.querySelectorAll('.modal-body button').forEach(btn => {
+        if (['ocPdf', 'ocExcel', 'ocEnviarCorreo'].some(fn => (btn.getAttribute('onclick') || '').includes(fn))) return;
+        bloquear(btn);
+    });
+};
+
 // ── Abrir modal crear ─────────────────────────────────────────────────────────
 window.ocAbrirCrear = function() {
+    ocLimpiarSoloLectura();
     document.getElementById('oc_id').value = '';
     document.getElementById('oc_titulo_modal').textContent = 'Nueva Orden de Compra';
     document.getElementById('oc_fecha_orden').value = CMG_fechaLocal();
@@ -330,6 +363,7 @@ window.ocAbrirCrear = function() {
 // ── Abrir modal editar ────────────────────────────────────────────────────────
 window.ocAbrirEditar = function(tr) {
     const d = JSON.parse(tr.dataset.row);
+    ocLimpiarSoloLectura();
 
     document.getElementById('oc_id').value = d.id ?? '';
     document.getElementById('oc_titulo_modal').textContent = `Editar Orden de Compra #${d.numero_orden || ''}`;
@@ -350,16 +384,24 @@ window.ocAbrirEditar = function(tr) {
     }
     document.getElementById('oc_secuencial').value = d.secuencial ?? '';
 
+    const soloLectura = (d.estado ?? '') === 'recibido';
+    if (soloLectura) ocAplicarSoloLectura();
+
     ocLimpiarDetalle();
     fetch(`${OC_URL_BASE}/getDetalle?id=${d.id}`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
     .then(r => r.json())
-    .then(res => { if (res.ok && res.detalle) res.detalle.forEach(item => ocAgregarFilaDetalle(item)); })
+    .then(res => {
+        if (res.ok && res.detalle) res.detalle.forEach(item => ocAgregarFilaDetalle(item));
+        // Las filas del detalle se crean después de la respuesta AJAX: hay que
+        // volver a aplicar el bloqueo para alcanzar también esos inputs nuevos.
+        if (soloLectura) ocAplicarSoloLectura();
+    })
     .catch(() => {});
 
     const btnElim = document.getElementById('oc_btn_eliminar');
-    if (btnElim) btnElim.classList.remove('d-none');
+    if (btnElim && !soloLectura) btnElim.classList.remove('d-none');
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalOrdenCompra')).show();
 };

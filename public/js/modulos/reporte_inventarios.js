@@ -755,11 +755,6 @@ document.addEventListener('DOMContentLoaded', function () {
         aplicarFavoritosModal();
     }
 
-    const mesEl = document.getElementById('ri-mv-mes');
-    if (mesEl && (!mesEl.value || mesEl.value === 'TODOS')) {
-        mesEl.value = (new Date().getMonth() + 1).toString().padStart(2, '0');
-    }
-
     RI_setupAutocomplete('ri-ex-search-producto', 'ri-ex-dropdown-producto', 'ri-ex-id-producto', 'ri-ex-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Existencias.generar());
     RI_setupAutocomplete('ri-mv-search-producto', 'ri-mv-dropdown-producto', 'ri-mv-id-producto', 'ri-mv-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Movimientos.generar());
     RI_setupAutocomplete('ri-va-search-producto', 'ri-va-dropdown-producto', 'ri-va-id-producto', 'ri-va-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Valorizacion.generar());

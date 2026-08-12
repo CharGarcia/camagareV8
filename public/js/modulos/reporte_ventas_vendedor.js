@@ -1,11 +1,5 @@
 // Control de vista para Reporte de Ventas por Vendedor
 document.addEventListener('DOMContentLoaded', function () {
-    // Mes actual por defecto
-    const mesEl = document.getElementById('rvv-mes');
-    if (!mesEl.value || mesEl.value === 'TODOS') {
-        mesEl.value = (new Date().getMonth() + 1).toString().padStart(2, '0');
-    }
-
     // Buscador predictivo de Producto
     let debounceTimerProducto;
     const searchProducto = document.getElementById('rvv-search-producto');

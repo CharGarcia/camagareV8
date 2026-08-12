@@ -2,178 +2,149 @@
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
-    .pmv-header { flex-shrink: 0; }
-    .pmv-scroll { max-height: 500px; overflow-y: auto; }
-    .pmv-scroll thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
+    .pmv-scroll { overflow-x: auto; }
+    .pmv-scroll thead th { background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; }
+    /* Altura idéntica y explícita para todos los controles de filtros */
+    #form-filtros-reporte .form-select,
+    #form-filtros-reporte .form-control,
+    #form-filtros-reporte .input-group-text,
+    #form-filtros-reporte .btn { height:28px; font-size:.75rem; }
+    /* Evita que el contenedor de chips (vacío hasta elegir) desalinee la fila de filtros */
+    #pmv-chips-cliente:empty, #pmv-chips-producto:empty { margin-top:0; }
+    /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
+    @media (max-width: 767.98px) {
+        #modulo-producto_mas_vendido .pmv-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
+    }
 </style>
 
-<div class="container-fluid py-4 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
-    <!-- ── Cabecera ── -->
-    <div class="pmv-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div>
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
+
+    <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3">
             <h5 class="mb-0 fw-bold"><i class="bi bi-trophy me-2 text-primary"></i>Productos Más Vendidos</h5>
-            <small class="text-muted">Ranking de productos por cantidad vendida, con filtros de cliente, producto y período</small>
         </div>
-    </div>
+        <div class="card-body p-3">
+            <form id="form-filtros-reporte" onsubmit="event.preventDefault(); window.PMV_generarReporte();">
+                <div class="d-flex flex-wrap align-items-start gap-2">
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de Documento</label>
+                        <select name="tipo_documento" id="pmv_tipo_documento" class="form-select form-select-sm shadow-none border" style="width:170px;" onchange="window.PMV_generarReporte()">
+                            <option value="FACTURA" selected>Facturas de Venta</option>
+                            <option value="RECIBO">Recibos de Venta</option>
+                            <option value="AMBOS">Facturas + Recibos</option>
+                        </select>
+                    </div>
 
-    <!-- ── Filtros ── -->
-    <div class="accordion mb-3 shadow-sm border-0" id="accordionFiltros">
-        <div class="accordion-item border-0 rounded-3">
-            <h2 class="accordion-header" id="headingFiltros">
-                <button class="accordion-button bg-white text-dark py-2 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFiltros" aria-expanded="true" aria-controls="collapseFiltros">
-                    <i class="bi bi-funnel me-2 text-primary"></i> <span class="fw-bold small">Filtros</span>
-                </button>
-            </h2>
-            <div id="collapseFiltros" class="accordion-collapse collapse show" aria-labelledby="headingFiltros" data-bs-parent="#accordionFiltros">
-                <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
-                    <form id="form-filtros-reporte" onsubmit="event.preventDefault(); window.PMV_generarReporte();" class="row g-3">
-
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Tipo de Documento</label>
-                            <select name="tipo_documento" id="pmv_tipo_documento" class="form-select form-select-sm shadow-none border" onchange="window.PMV_generarReporte()">
-                                <option value="FACTURA" selected>Facturas de Venta</option>
-                                <option value="RECIBO">Recibos de Venta</option>
-                                <option value="AMBOS">Facturas + Recibos</option>
-                            </select>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Top</label>
+                        <input type="hidden" name="top_n" id="pmv_top_n_hidden" value="20">
+                        <input type="number" id="pmv_top_n" class="form-control form-control-sm shadow-none border" style="width:90px;" min="1" step="1"
+                               value="20" placeholder="Cantidad" list="pmv-top-n-sugeridos"
+                               onchange="window.PMV_syncTopN(); window.PMV_generarReporte();">
+                        <datalist id="pmv-top-n-sugeridos">
+                            <option value="10"><option value="20"><option value="50"><option value="100">
+                        </datalist>
+                        <div class="form-check mt-1">
+                            <input class="form-check-input" type="checkbox" id="pmv_top_todos" onchange="window.PMV_toggleTopTodos()">
+                            <label class="form-check-label text-muted" for="pmv_top_todos" style="font-size:.65rem;">Todos</label>
                         </div>
+                    </div>
 
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Top</label>
-                            <input type="hidden" name="top_n" id="pmv_top_n_hidden" value="20">
-                            <input type="number" id="pmv_top_n" class="form-control form-control-sm shadow-none border" min="1" step="1"
-                                   value="20" placeholder="Cantidad" list="pmv-top-n-sugeridos"
-                                   onchange="window.PMV_syncTopN(); window.PMV_generarReporte();">
-                            <datalist id="pmv-top-n-sugeridos">
-                                <option value="10"><option value="20"><option value="50"><option value="100">
-                            </datalist>
-                            <div class="form-check mt-1">
-                                <input class="form-check-input" type="checkbox" id="pmv_top_todos" onchange="window.PMV_toggleTopTodos()">
-                                <label class="form-check-label text-muted" for="pmv_top_todos" style="font-size: 0.68rem;">Mostrar todos</label>
-                            </div>
-                        </div>
-
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Mes</label>
-                            <select id="pmv-mes" class="form-select form-select-sm shadow-none border">
-                                <option value="TODOS">Todos</option>
-                                <option value="01">Enero</option>
-                                <option value="02">Febrero</option>
-                                <option value="03">Marzo</option>
-                                <option value="04">Abril</option>
-                                <option value="05">Mayo</option>
-                                <option value="06">Junio</option>
-                                <option value="07">Julio</option>
-                                <option value="08">Agosto</option>
-                                <option value="09">Septiembre</option>
-                                <option value="10">Octubre</option>
-                                <option value="11">Noviembre</option>
-                                <option value="12">Diciembre</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Año</label>
-                            <select id="pmv-anio" class="form-select form-select-sm shadow-none border" onchange="window.PMV_cambiarMesAnio()">
-                                <option value="TODOS">Todos</option>
-                                <?php foreach (($anios ?? [date('Y')]) as $a): ?>
-                                    <option value="<?= htmlspecialchars($a) ?>" <?= $a == date('Y') ? 'selected' : '' ?>><?= htmlspecialchars($a) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Fecha Desde</label>
-                            <input type="date" name="fecha_desde" id="pmv-fecha-desde" class="form-control form-control-sm shadow-none border" value="<?php echo date('Y-m-01'); ?>">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Fecha Hasta</label>
-                            <input type="date" name="fecha_hasta" id="pmv-fecha-hasta" class="form-control form-control-sm shadow-none border" value="<?php echo date('Y-m-t'); ?>">
-                        </div>
-
-                        <div class="w-100 d-none d-md-block m-0"></div>
-
-                        <div class="col-md-4 position-relative">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Cliente</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                <input type="text" class="form-control border-start-0 px-1 shadow-none" id="pmv-search-cliente" placeholder="Buscar clientes..." autocomplete="off">
-                            </div>
-                            <div id="pmv-chips-cliente" class="d-flex flex-column gap-1 mt-2"></div>
-                            <div id="pmv-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: calc(100% - 1.5rem); max-height: 250px; overflow-y: auto; margin-top: 2px;"></div>
-                        </div>
-
-                        <div class="col-md-4 position-relative">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Producto</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                <input type="text" class="form-control border-start-0 px-1 shadow-none" id="pmv-search-producto" placeholder="Buscar productos..." autocomplete="off">
-                            </div>
-                            <div id="pmv-chips-producto" class="d-flex flex-column gap-1 mt-2"></div>
-                            <div id="pmv-dropdown-productos" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: calc(100% - 1.5rem); max-height: 250px; overflow-y: auto; margin-top: 2px;"></div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label small fw-bold mb-1 d-block" style="font-size: 0.65rem;">&nbsp;</label>
-                            <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100" id="btn-generar-reporte">
-                                <i class="bi bi-search me-1"></i> Aplicar y Generar
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Tarjetas de Estadísticas ── -->
-    <div class="row g-3 mb-3">
-        <div class="col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-primary bg-opacity-10 text-primary rounded-3 p-3 me-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                        <i class="bi bi-box-seam fs-4"></i>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
+                        <select id="pmv-anio" class="form-select form-select-sm shadow-none border" style="width:90px;" onchange="window.PMV_cambiarMesAnio()">
+                            <option value="TODOS">Todos</option>
+                            <?php foreach (($anios ?? [date('Y')]) as $a): ?>
+                                <option value="<?= htmlspecialchars($a) ?>" <?= $a == date('Y') ? 'selected' : '' ?>><?= htmlspecialchars($a) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div>
-                        <h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size: 0.65rem;">Productos Distintos</h6>
-                        <h4 class="mb-0 fw-bold" style="font-family: 'Outfit', sans-serif;" id="stat-productos">0</h4>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mes</label>
+                        <select id="pmv-mes" class="form-select form-select-sm shadow-none border" style="width:110px;">
+                            <option value="TODOS">Todos</option>
+                            <option value="01">Enero</option>
+                            <option value="02">Febrero</option>
+                            <option value="03">Marzo</option>
+                            <option value="04">Abril</option>
+                            <option value="05">Mayo</option>
+                            <option value="06">Junio</option>
+                            <option value="07">Julio</option>
+                            <option value="08">Agosto</option>
+                            <option value="09">Septiembre</option>
+                            <option value="10">Octubre</option>
+                            <option value="11">Noviembre</option>
+                            <option value="12">Diciembre</option>
+                        </select>
                     </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-info bg-opacity-10 text-info rounded-3 p-3 me-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                        <i class="bi bi-boxes fs-4"></i>
+
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
+                        <input type="date" name="fecha_desde" id="pmv-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?php echo date('Y-m-01'); ?>">
                     </div>
                     <div>
-                        <h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size: 0.65rem;">Unidades Vendidas</h6>
-                        <h4 class="mb-0 fw-bold" style="font-family: 'Outfit', sans-serif;" id="stat-unidades">0</h4>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
+                        <input type="date" name="fecha_hasta" id="pmv-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?php echo date('Y-m-t'); ?>">
                     </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-success bg-opacity-10 text-success rounded-3 p-3 me-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                        <i class="bi bi-cash-stack fs-4"></i>
+
+                    <div class="position-relative" style="flex:1 1 200px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cliente</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0 px-1 shadow-none" id="pmv-search-cliente" placeholder="Buscar clientes..." autocomplete="off">
+                        </div>
+                        <div id="pmv-chips-cliente" class="d-flex flex-column gap-1 mt-2"></div>
+                        <div id="pmv-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
+
+                    <div class="position-relative" style="flex:1 1 200px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0 px-1 shadow-none" id="pmv-search-producto" placeholder="Buscar productos..." autocomplete="off">
+                        </div>
+                        <div id="pmv-chips-producto" class="d-flex flex-column gap-1 mt-2"></div>
+                        <div id="pmv-dropdown-productos" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
+                    </div>
+
                     <div>
-                        <h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size: 0.65rem;">Total Vendido</h6>
-                        <h4 class="mb-0 fw-bold text-success" style="font-family: 'Outfit', sans-serif;">$<span id="stat-total">0.00</span></h4>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:90px;" id="btn-generar-reporte">
+                            <i class="bi bi-search me-1"></i> Buscar
+                        </button>
                     </div>
                 </div>
-            </div>
+            </form>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100 bg-white">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-warning bg-opacity-10 text-warning rounded-3 p-3 me-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                        <i class="bi bi-trophy fs-4"></i>
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-box-seam bg-primary bg-opacity-10 text-primary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="stat-productos">0</div>
+                        <div class="cmg-control-card__stat-label">Productos Distintos</div>
                     </div>
-                    <div class="flex-grow-1" style="min-width:0;">
-                        <h6 class="mb-0 text-muted small fw-bold text-uppercase" style="font-size: 0.65rem;">Producto #1</h6>
-                        <h6 class="mb-0 fw-bold text-truncate" id="stat-top1-nombre">—</h6>
-                        <small class="text-muted" id="stat-top1-cantidad">0 unidades</small>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-boxes bg-info bg-opacity-10 text-info"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="stat-unidades">0</div>
+                        <div class="cmg-control-card__stat-label">Unidades Vendidas</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-cash-stack bg-success bg-opacity-10 text-success"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-success">$<span id="stat-total">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Total Vendido</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-trophy bg-warning bg-opacity-10 text-warning"></i>
+                    <div style="min-width:0;">
+                        <div class="cmg-control-card__stat-value text-truncate" id="stat-top1-nombre" style="max-width:180px;">—</div>
+                        <div class="cmg-control-card__stat-label">Producto #1 (<span id="stat-top1-cantidad">0 unidades</span>)</div>
                     </div>
                 </div>
             </div>

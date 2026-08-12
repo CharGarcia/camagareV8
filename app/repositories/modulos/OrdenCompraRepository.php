@@ -34,8 +34,10 @@ class OrdenCompraRepository extends BaseRepository
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
 
         $whereSql = $this->getBaseWhere($idEmpresa, 'oc', $idUsuarioFiltro);
-        $whereSql .= " AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
-        $params   = [':id_empresa' => $idEmpresa];
+        // :id_empresa ya lo usa getBaseWhere(); PDO (sin EMULATE_PREPARES) no admite
+        // repetir el mismo placeholder con nombre, por eso esta subconsulta usa uno propio.
+        $whereSql .= " AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_amb)";
+        $params   = [':id_empresa' => $idEmpresa, ':id_empresa_amb' => $idEmpresa];
         if ($idUsuarioFiltro !== null) {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
@@ -110,6 +112,24 @@ class OrdenCompraRepository extends BaseRepository
         return ['rows' => $rows, 'total' => $total];
     }
 
+    /** Mismo chequeo anti-duplicado que FacturaVentaRepository::existeSecuencial(). */
+    public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, ?int $excluirId = null): bool
+    {
+        $sql = "SELECT COUNT(*) FROM ordenes_compra
+                WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ?
+                  AND secuencial = ? AND eliminado = FALSE";
+        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial];
+
+        if ($excluirId !== null) {
+            $sql .= " AND id <> ?";
+            $params[] = $excluirId;
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (int) $st->fetchColumn() > 0;
+    }
+
     public function getById(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT oc.*,
@@ -141,12 +161,12 @@ class OrdenCompraRepository extends BaseRepository
     {
         $sql = "INSERT INTO ordenes_compra
                     (id_empresa, id_proveedor, id_establecimiento, id_punto_emision,
-                     establecimiento, punto_emision, secuencial,
+                     establecimiento, punto_emision, secuencial, tipo_ambiente,
                      fecha_orden, fecha_recepcion, observaciones, estado,
                      created_at, updated_at, created_by, updated_by, eliminado)
                 VALUES
                     (:id_empresa, :id_proveedor, :id_establecimiento, :id_punto_emision,
-                     :establecimiento, :punto_emision, :secuencial,
+                     :establecimiento, :punto_emision, :secuencial, :tipo_ambiente,
                      :fecha_orden, :fecha_recepcion, :observaciones, :estado,
                      NOW(), NOW(), :created_by, :updated_by, false)
                 RETURNING id";
@@ -159,6 +179,7 @@ class OrdenCompraRepository extends BaseRepository
             ':establecimiento'    => $data['establecimiento'],
             ':punto_emision'      => $data['punto_emision'],
             ':secuencial'         => $data['secuencial'],
+            ':tipo_ambiente'      => $data['tipo_ambiente'] ?? '1',
             ':fecha_orden'        => $data['fecha_orden'],
             ':fecha_recepcion'    => $data['fecha_recepcion'] ?: null,
             ':observaciones'      => $data['observaciones'] ?: null,
@@ -236,6 +257,7 @@ class OrdenCompraRepository extends BaseRepository
                   AND oc.id_proveedor = :id_proveedor
                   AND oc.eliminado = false
                   AND oc.estado IN ('borrador', 'aprobado')
+                  AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa2)
                   AND NOT EXISTS (
                         SELECT 1 FROM compras_cabecera cc
                         WHERE cc.id_orden_compra = oc.id
@@ -246,6 +268,7 @@ class OrdenCompraRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_empresa'       => $idEmpresa,
+            ':id_empresa2'      => $idEmpresa,
             ':id_proveedor'     => $idProveedor,
             ':id_compra_actual' => $idCompraActual,
         ]);

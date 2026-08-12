@@ -117,6 +117,10 @@
                         if (inpCli) inpCli.focus();
                     }
                 });
+                // Colapsar espacios dobles y recortar extremos al salir del campo.
+                inpMotivo.addEventListener('blur', () => {
+                    inpMotivo.value = inpMotivo.value.replace(/\s+/g, ' ').trim();
+                });
             }
             return true;
         }

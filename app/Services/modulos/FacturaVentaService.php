@@ -607,11 +607,23 @@ class FacturaVentaService
         // 1. Enriquecer detalles con info de inventario antes de validar reglas
         if (!empty($data['detalles']) && is_array($data['detalles'])) {
             foreach ($data['detalles'] as &$det) {
+                // Normalizar espacios en texto libre (concepto/descripción escrita a mano):
+                // colapsa espacios dobles y saltos de línea a un solo espacio, y recorta
+                // los extremos. Sin esto, un concepto libre queda con el texto tal cual lo
+                // tipeó el usuario en el <textarea> (incluye Enter real).
+                $normalizarTexto = fn($s) => trim(preg_replace('/\s+/u', ' ', (string) $s));
+                if (!empty($det['descripcion'])) {
+                    $det['descripcion'] = $normalizarTexto($det['descripcion']);
+                }
+                if (!empty($det['nombre'])) {
+                    $det['nombre'] = $normalizarTexto($det['nombre']);
+                }
+
                 // Normalizar nombre
                 if (empty($det['nombre']) && !empty($det['descripcion'])) {
                     $det['nombre'] = $det['descripcion'];
                 }
-                
+
                 // Obtener info de control si es producto de catÃ¡logo
                 if (!empty($det['id_producto'])) {
                     $infoInv = $this->getInventarioService()->getProductoRepository()->getInfoControlInventario((int)$det['id_producto'], (int)$data['id_empresa']);
@@ -844,11 +856,23 @@ class FacturaVentaService
         // 1. Enriquecer detalles con info de inventario antes de validar reglas
         if (!empty($data['detalles']) && is_array($data['detalles'])) {
             foreach ($data['detalles'] as &$det) {
+                // Normalizar espacios en texto libre (concepto/descripción escrita a mano):
+                // colapsa espacios dobles y saltos de línea a un solo espacio, y recorta
+                // los extremos. Sin esto, un concepto libre queda con el texto tal cual lo
+                // tipeó el usuario en el <textarea> (incluye Enter real).
+                $normalizarTexto = fn($s) => trim(preg_replace('/\s+/u', ' ', (string) $s));
+                if (!empty($det['descripcion'])) {
+                    $det['descripcion'] = $normalizarTexto($det['descripcion']);
+                }
+                if (!empty($det['nombre'])) {
+                    $det['nombre'] = $normalizarTexto($det['nombre']);
+                }
+
                 // Normalizar nombre
                 if (empty($det['nombre']) && !empty($det['descripcion'])) {
                     $det['nombre'] = $det['descripcion'];
                 }
-                
+
                 // Obtener info de control si es producto de catÃ¡logo
                 if (!empty($det['id_producto'])) {
                     $infoInv = $this->getInventarioService()->getProductoRepository()->getInfoControlInventario((int)$det['id_producto'], (int)$data['id_empresa']);

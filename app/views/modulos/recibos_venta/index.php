@@ -3210,8 +3210,8 @@ $totalPages = $totalPagesOriginal;
         tr.className = 'row-detalle';
         tr.innerHTML = `
             <td class="ps-3 position-relative">
-                <input type="text" class="form-control form-control-sm input-detalle input-descripcion" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'Escribe o busca un producto/servicio...' : 'Buscar producto o escanee c\u00f3digo...'}"
-                    title="${EMPRESA_CONFIG.facturacion_libre ? 'Modo libre: puedes escribir directamente o seleccionar del cat\u00e1logo' : ''}">
+                <textarea rows="2" class="form-control form-control-sm input-detalle input-descripcion" style="resize:none; overflow:auto; line-height:1.15;" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'Escribe o busca un producto/servicio...' : 'Buscar producto o escanee c\u00f3digo...'}"
+                    title="${EMPRESA_CONFIG.facturacion_libre ? 'Modo libre: puedes escribir directamente o seleccionar del cat\u00e1logo' : ''}"></textarea>
                 <input type="hidden" class="input-id-producto">
                 <input type="hidden" class="input-codigo">
                 <input type="hidden" class="input-casillero">
@@ -3288,6 +3288,14 @@ $totalPages = $totalPagesOriginal;
         tbody.appendChild(tr);
 
         const inputDesc = tr.querySelector('.input-descripcion');
+        // Concepto libre: no permitir Enter (evita saltos de línea) y, al salir del campo,
+        // colapsar espacios dobles y recortar los extremos.
+        inputDesc.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') e.preventDefault();
+        });
+        inputDesc.addEventListener('blur', () => {
+            inputDesc.value = inputDesc.value.replace(/\s+/g, ' ').trim();
+        });
         setTimeout(() => {
             inputDesc.focus();
         }, 50);

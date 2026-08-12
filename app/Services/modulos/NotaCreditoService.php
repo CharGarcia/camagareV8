@@ -29,6 +29,12 @@ class NotaCreditoService
     {
         $this->rules->validar($data);
 
+        // Normalizar espacios en el motivo (texto libre): colapsa espacios dobles y
+        // saltos de línea a uno solo, y recorta los extremos.
+        if (!empty($data['motivo'])) {
+            $data['motivo'] = trim(preg_replace('/\s+/u', ' ', (string) $data['motivo']));
+        }
+
         // Validar que la suma de NC no exceda el total de la factura
         $numDocModificado = $data['num_doc_modificado'] ?? '';
         if (!empty($numDocModificado)) {
@@ -216,6 +222,12 @@ class NotaCreditoService
     public function actualizar(int $id, array $data): int
     {
         $this->rules->validar($data);
+
+        // Normalizar espacios en el motivo (texto libre): colapsa espacios dobles y
+        // saltos de línea a uno solo, y recorta los extremos.
+        if (!empty($data['motivo'])) {
+            $data['motivo'] = trim(preg_replace('/\s+/u', ' ', (string) $data['motivo']));
+        }
 
         // Validar que la suma de NC no exceda el total de la factura (excluyendo la actual)
         $numDocModificado = $data['num_doc_modificado'] ?? '';

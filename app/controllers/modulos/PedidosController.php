@@ -473,6 +473,57 @@ class PedidosController extends BaseModuloController {
         }
     }
 
+    /**
+     * Detalle de un pedido para el panel lateral compartido (offcanvas_doc_preview.php).
+     * Los pedidos no tienen precio/IVA a nivel de cabecera (§Reglas de negocio del
+     * módulo: reporte sin dinero), así que se suman aquí desde las líneas de detalle.
+     */
+    public function getPedidoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido']);
+            exit;
+        }
+
+        $cabecera = $this->repository->obtenerPorId($id, $idEmpresa);
+        if (!$cabecera) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Pedido no encontrado']);
+            exit;
+        }
+
+        $detalles = $this->repository->obtenerDetalles($id, $idEmpresa);
+
+        $subtotal = 0.0;
+        $iva      = 0.0;
+        $total    = 0.0;
+        foreach ($detalles as &$d) {
+            $d['codigo']      = $d['producto_codigo'] ?? '';
+            $d['descripcion'] = $d['producto_nombre'] ?? '';
+            $subtotal += (float) ($d['subtotal'] ?? 0);
+            $iva      += (float) ($d['iva'] ?? 0);
+            $total    += (float) ($d['total'] ?? 0);
+        }
+        unset($d);
+
+        $cabecera['fecha_emision']       = $cabecera['fecha_pedido'] ?? null;
+        $cabecera['total_sin_impuestos'] = $subtotal;
+        $cabecera['monto_iva']           = $iva;
+        $cabecera['importe_total']       = $total;
+
+        echo json_encode([
+            'ok'       => true,
+            'cabecera' => $cabecera,
+            'detalles' => $detalles,
+        ]);
+        exit;
+    }
+
     public function guardarAjax() {
         $this->requireCrear(); // O requireActualizar dependiendo de si es nuevo
         try {

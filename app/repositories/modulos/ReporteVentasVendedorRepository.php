@@ -365,8 +365,13 @@ class ReporteVentasVendedorRepository extends BaseRepository
     public function getReporteAgrupadoVendedor(int $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
+            // cantidad_documentos NO se suma con las notas de crédito: el drill-down
+            // (getDocumentosPorVendedor) solo lista facturas, netea la NC dentro de la
+            // misma fila (columna "nc") en vez de agregarla como fila aparte. Si aquí se
+            // sumara el conteo de NC, la columna "Nro Documentos" mostraría más de lo que
+            // realmente aparece al hacer clic (p. ej. 4 en la tabla vs 2 en el detalle).
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoVendedor', ['id_vendedor'],
-                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_documentos']);
+                ['base_0', 'base_iva', 'valor_iva', 'total'], []);
         }
 
         $f = $this->fuente($filtros);

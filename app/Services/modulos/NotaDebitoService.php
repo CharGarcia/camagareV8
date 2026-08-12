@@ -29,6 +29,15 @@ class NotaDebitoService
     {
         $this->rules->validar($data);
 
+        // Normalizar espacios en la razón de cada motivo (texto libre): colapsa espacios
+        // dobles y saltos de línea a uno solo, y recorta los extremos.
+        foreach ($data['motivos'] ?? [] as &$mot) {
+            if (!empty($mot['razon'])) {
+                $mot['razon'] = trim(preg_replace('/\s+/u', ' ', (string) $mot['razon']));
+            }
+        }
+        unset($mot);
+
         // Validar que la suma de ND no exceda un margen razonable del total de la factura
         // (a diferencia de la NC, la ND no "consume" el saldo de la factura, solo lo aumenta;
         // se valida únicamente que la factura exista y esté autorizada).
@@ -193,6 +202,15 @@ class NotaDebitoService
     public function actualizar(int $id, array $data): int
     {
         $this->rules->validar($data);
+
+        // Normalizar espacios en la razón de cada motivo (texto libre): colapsa espacios
+        // dobles y saltos de línea a uno solo, y recorta los extremos.
+        foreach ($data['motivos'] ?? [] as &$mot) {
+            if (!empty($mot['razon'])) {
+                $mot['razon'] = trim(preg_replace('/\s+/u', ' ', (string) $mot['razon']));
+            }
+        }
+        unset($mot);
 
         $db = Database::getConnection();
         $db->beginTransaction();

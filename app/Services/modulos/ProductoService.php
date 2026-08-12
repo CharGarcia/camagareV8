@@ -69,7 +69,7 @@ class ProductoService
                 'id_empresa'            => $idEmpresa,
                 'id_usuario'            => (int)$data['id_usuario'],
                 'codigo'                => trim($data['codigo']),
-                'nombre'                => trim($data['nombre']),
+                'nombre'                => trim(preg_replace('/\s+/u', ' ', (string) $data['nombre'])),
                 'codigo_auxiliar'       => !empty($data['codigo_auxiliar']) ? trim($data['codigo_auxiliar']) : '',
                 'codigo_barras'         => !empty($data['codigo_barras']) ? trim($data['codigo_barras']) : '',
                 'precio_base'           => !empty($data['precio_base']) ? (float)$data['precio_base'] : 0,
@@ -80,7 +80,7 @@ class ProductoService
                 'id_ice'                => !empty($data['id_ice']) ? (int)$data['id_ice'] : null,
                 'valor_ice'             => !empty($data['valor_ice']) ? (float)$data['valor_ice'] : null,
                 'codigo_ice'            => !empty($data['codigo_ice']) ? trim($data['codigo_ice']) : null,
-                'nombre_ice'            => !empty($data['nombre_ice']) ? trim($data['nombre_ice']) : null,
+                'nombre_ice'            => !empty($data['nombre_ice']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['nombre_ice'])) : null,
                 'inventariable'         => isset($data['inventariable']) ? (bool)$data['inventariable'] : false,
 
                 'id_categoria'          => !empty($data['id_categoria']) ? (int)$data['id_categoria'] : null,
@@ -351,7 +351,7 @@ class ProductoService
             $updateData = [
                 'id_usuario'            => (int)$data['id_usuario'],
                 'codigo'                => trim($data['codigo']),
-                'nombre'                => trim($data['nombre']),
+                'nombre'                => trim(preg_replace('/\s+/u', ' ', (string) $data['nombre'])),
                 'codigo_auxiliar'       => !empty($data['codigo_auxiliar']) ? trim($data['codigo_auxiliar']) : '',
                 'codigo_barras'         => !empty($data['codigo_barras']) ? trim($data['codigo_barras']) : '',
                 'precio_base'           => !empty($data['precio_base']) ? (float)$data['precio_base'] : 0,
@@ -362,7 +362,7 @@ class ProductoService
                 'id_ice'                => !empty($data['id_ice']) ? (int)$data['id_ice'] : null,
                 'valor_ice'             => !empty($data['valor_ice']) ? (float)$data['valor_ice'] : null,
                 'codigo_ice'            => !empty($data['codigo_ice']) ? trim($data['codigo_ice']) : null,
-                'nombre_ice'            => !empty($data['nombre_ice']) ? trim($data['nombre_ice']) : null,
+                'nombre_ice'            => !empty($data['nombre_ice']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['nombre_ice'])) : null,
                 'inventariable'         => isset($data['inventariable']) ? (bool)$data['inventariable'] : false,
 
                 'id_categoria'          => !empty($data['id_categoria']) ? (int)$data['id_categoria'] : null,

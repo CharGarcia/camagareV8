@@ -102,6 +102,17 @@ class ReciboVentaService
     {
         if (!empty($data['detalles']) && is_array($data['detalles'])) {
             foreach ($data['detalles'] as &$det) {
+                // Normalizar espacios en texto libre (concepto/descripción escrita a mano):
+                // colapsa espacios dobles y saltos de línea a un solo espacio, y recorta
+                // los extremos.
+                $normalizarTexto = fn($s) => trim(preg_replace('/\s+/u', ' ', (string) $s));
+                if (!empty($det['descripcion'])) {
+                    $det['descripcion'] = $normalizarTexto($det['descripcion']);
+                }
+                if (!empty($det['nombre'])) {
+                    $det['nombre'] = $normalizarTexto($det['nombre']);
+                }
+
                 if (empty($det['nombre']) && !empty($det['descripcion'])) {
                     $det['nombre'] = $det['descripcion'];
                 }

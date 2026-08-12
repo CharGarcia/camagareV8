@@ -707,23 +707,35 @@
 
               <!-- Sin vincular: buscador de órdenes abiertas del proveedor -->
               <div id="oc-tab-sin-vincular">
-                <div class="alert alert-light border d-flex align-items-start gap-2 py-2 px-3 mb-3">
-                  <i class="bi bi-info-circle mt-1"></i>
-                  <div class="small">Vincule esta compra con la orden de compra (pedido interno) que le dio origen para comparar cantidades y precios pedidos vs. facturados.</div>
+
+                <!-- Aviso: compra nueva sin guardar todavía -->
+                <div id="oc-tab-aviso-guardar" class="text-center py-4 text-muted d-none">
+                  <i class="bi bi-save2 d-block fs-3 mb-2"></i>Guarde la compra primero para poder vincularla con una orden de compra.
                 </div>
-                <div class="d-flex gap-2 align-items-end flex-wrap">
-                  <div style="min-width:320px">
-                    <label class="form-label form-label-sm mb-1 fw-semibold">Orden de compra del proveedor</label>
-                    <select id="oc-tab-select" class="form-select form-select-sm">
-                      <option value="">-- Seleccione una orden --</option>
-                    </select>
+
+                <!-- Aviso: error al cargar la comparación/órdenes -->
+                <div id="oc-tab-error" class="text-center py-4 text-danger d-none"></div>
+
+                <!-- Formulario de vinculación (se conserva siempre en el DOM; solo se oculta/muestra) -->
+                <div id="oc-tab-form">
+                  <div class="alert alert-light border d-flex align-items-start gap-2 py-2 px-3 mb-3">
+                    <i class="bi bi-info-circle mt-1"></i>
+                    <div class="small">Vincule esta compra con la orden de compra (pedido interno) que le dio origen para comparar cantidades y precios pedidos vs. facturados.</div>
                   </div>
-                  <button type="button" class="btn btn-primary btn-sm" id="oc-tab-btn-vincular" onclick="mcVincularOrdenCompra()" disabled>
-                    <i class="bi bi-link-45deg me-1"></i> Vincular
-                  </button>
-                </div>
-                <div id="oc-tab-sin-abiertas" class="text-muted small mt-3 d-none">
-                  <i class="bi bi-inbox me-1"></i>Este proveedor no tiene órdenes de compra pendientes de recibir.
+                  <div class="d-flex gap-2 align-items-end flex-wrap">
+                    <div style="min-width:360px" class="position-relative">
+                      <label class="form-label form-label-sm mb-1 fw-semibold">Orden de compra del proveedor</label>
+                      <input type="text" id="oc-tab-buscar" class="form-control form-control-sm" placeholder="Buscar por número de orden..." autocomplete="off">
+                      <input type="hidden" id="oc-tab-id-orden">
+                      <div id="oc-tab-lista" class="list-group position-absolute z-3 shadow-sm w-100 d-none" style="max-height:220px;overflow-y:auto;"></div>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" id="oc-tab-btn-vincular" onclick="mcVincularOrdenCompra()" disabled>
+                      <i class="bi bi-link-45deg me-1"></i> Vincular
+                    </button>
+                  </div>
+                  <div id="oc-tab-sin-abiertas" class="text-muted small mt-3 d-none">
+                    <i class="bi bi-inbox me-1"></i>Este proveedor no tiene órdenes de compra pendientes de recibir.
+                  </div>
                 </div>
               </div>
 

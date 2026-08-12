@@ -710,7 +710,12 @@
                 </button>
             </td>`;
         motivosBody.appendChild(tr);
-        if (!razon) tr.querySelector('input[name="mot_razon[]"]').focus();
+        const inputRazon = tr.querySelector('input[name="mot_razon[]"]');
+        // Razón del motivo: colapsar espacios dobles y recortar extremos al salir del campo.
+        inputRazon.addEventListener('blur', () => {
+            inputRazon.value = inputRazon.value.replace(/\s+/g, ' ').trim();
+        });
+        if (!razon) inputRazon.focus();
     };
 
     function ND_renderMotivos(motivos) {

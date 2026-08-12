@@ -6,7 +6,7 @@ ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado
-version: 1.2
+version: 1.4
 orden: 15
 estado: activo
 ---
@@ -62,6 +62,13 @@ Compra**:
 4. Si se vinculó por error, el botón **Desvincular** deshace el enlace y
    regresa la orden a **Aprobado**.
 
+**Mientras esté en estado Recibido, la orden es de solo lectura**: el modal
+muestra un aviso y bloquea todos los campos y el detalle (no se puede editar
+ni eliminar; los botones de PDF/Excel/Correo siguen disponibles). Esto
+también se valida en el servidor, no solo en la pantalla. Para volver a
+editarla, primero hay que **desvincularla** desde la pestaña "Orden de
+Compra" de la compra — eso la regresa a Aprobado.
+
 Esto es solo informativo: no bloquea guardar la compra, no mueve inventario
 ni genera cuentas por pagar por sí mismo — eso sigue el flujo normal de
 Compras (procesar entradas, retención, etc.).
@@ -77,9 +84,19 @@ Compras (procesar entradas, retención, etc.).
   que la orden esté en estado Borrador o Aprobado (no Recibido/Anulado), que
   sea del mismo proveedor de la compra, y que no esté ya vinculada a otra
   compra.
+- **"El número de secuencial ya existe para este punto de emisión"**: dos
+  guardados casi simultáneos compitieron por el mismo número. Recargue la
+  página e intente de nuevo; el sistema le asignará el siguiente número
+  disponible.
 
 ## Historial de cambios
 
+- **1.4** — Una orden en estado Recibido es de solo lectura (no se puede
+  editar ni eliminar hasta desvincularla), validado en el modal y en el
+  servidor.
+- **1.3** — Mismo control anti-duplicado de secuencial que Factura de Venta:
+  chequeo antes de guardar + índice único en la base de datos, para que dos
+  guardados a la vez no puedan generar el mismo número de orden.
 - **1.2** — Vinculación con Compras: pestaña "Orden de Compra" en el modal de
   Compras para enlazar la factura electrónica del proveedor con la orden que
   la originó y comparar cantidades/precios pedidos vs. facturados.

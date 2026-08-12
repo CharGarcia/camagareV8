@@ -280,6 +280,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         'use strict';
         const urlBase = '<?= $urlBaseProd ?>';
         const inputBuscar = document.getElementById('buscarProducto');
+
+        // Nombre del producto: no permitir Enter (evita saltos de línea) y, al salir
+        // del campo, colapsar espacios dobles y recortar los extremos.
+        const inputProdNombre = document.getElementById('prod_nombre');
+        if (inputProdNombre) {
+            inputProdNombre.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') e.preventDefault();
+            });
+            inputProdNombre.addEventListener('blur', () => {
+                inputProdNombre.value = inputProdNombre.value.replace(/\s+/g, ' ').trim();
+            });
+        }
         window.currentSort = '<?= $ordenCol ?>';
         window.currentDir = '<?= $ordenDir ?>';
         window.currentPage = <?= $page ?>;
