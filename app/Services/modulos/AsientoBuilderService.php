@@ -652,7 +652,7 @@ class AsientoBuilderService
         // Los demás conceptos (Cuenta por Cobrar, Subtotal, ICE) NO usan esto: su valor sí es por
         // línea real (columnas propias de `d` o joins 1:1 por d.id) y deben sumarse por línea.
         $fromClause = $colapsarPorProducto
-            ? "(SELECT DISTINCT id_producto FROM ventas_detalle WHERE id_venta = :id_doc) d"
+            ? "(SELECT DISTINCT id_producto, id_venta FROM ventas_detalle WHERE id_venta = :id_doc) d"
             : "ventas_detalle d";
 
         // COALESCE(producto, categoría, marca) → la cuenta más específica configurada para cada línea.
@@ -795,7 +795,7 @@ class AsientoBuilderService
 
         // $colapsarPorProducto (costo/inventario): ver la misma nota en repartirVentasCascada().
         $fromClause = $colapsarPorProducto
-            ? "(SELECT DISTINCT id_producto FROM recibos_venta_detalle WHERE id_recibo = :id_doc) d"
+            ? "(SELECT DISTINCT id_producto, id_recibo FROM recibos_venta_detalle WHERE id_recibo = :id_doc) d"
             : "recibos_venta_detalle d";
 
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
@@ -932,7 +932,7 @@ class AsientoBuilderService
 
         // $colapsarPorProducto (costo/inventario): ver la misma nota en repartirVentasCascada().
         $fromClause = $colapsarPorProducto
-            ? "(SELECT DISTINCT id_producto FROM notas_credito_detalle WHERE id_nota_credito = :id_doc) d"
+            ? "(SELECT DISTINCT id_producto, id_nota_credito FROM notas_credito_detalle WHERE id_nota_credito = :id_doc) d"
             : "notas_credito_detalle d";
 
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
