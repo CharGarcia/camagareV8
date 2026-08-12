@@ -164,6 +164,11 @@ class AuditoriaContableService
     /** Anula lógicamente un asiento duplicado (el usuario elige cuál) y re-audita. */
     public function anularDuplicado(int $idAsiento, int $idEmpresa, int $idUsuario): void
     {
+        // Se lee ANTES de anular (anularAsiento lo marca eliminado=true) para poder limpiar
+        // después su fila de ventas_costeo_seguimiento si es un origen con costeo de ventas.
+        $info = (new \App\repositories\modulos\AsientoContableRepository())
+            ->getDetalleAsiento($idAsiento, $idEmpresa);
+
         $this->repo->beginTransaction();
         try {
             $this->repo->anularAsiento($idAsiento, $idEmpresa, $idUsuario);
@@ -171,6 +176,15 @@ class AuditoriaContableService
         } catch (\Throwable $e) {
             $this->repo->rollBack();
             throw $e;
+        }
+
+        if ($info) {
+            $this->limpiarSeguimientoCosteo(
+                (string) ($info['modulo_origen'] ?? ''),
+                (int) ($info['id_referencia_origen'] ?? 0),
+                $idEmpresa,
+                $idUsuario
+            );
         }
 
         $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_anular_duplicado',
@@ -208,6 +222,13 @@ class AuditoriaContableService
             throw $e;
         }
 
+        $this->limpiarSeguimientoCosteo(
+            (string) ($inc['modulo_origen'] ?? ''),
+            (int) ($inc['id_documento'] ?? 0),
+            $idEmpresa,
+            $idUsuario
+        );
+
         $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_eliminar_huerfano',
             'asientos_contables_cabecera', $idAsiento, null, null);
 
@@ -241,6 +262,12 @@ class AuditoriaContableService
                 $this->repo->beginTransaction();
                 $this->repo->anularAsiento($idAsiento, $idEmpresa, $idUsuario);
                 $this->repo->commit();
+                $this->limpiarSeguimientoCosteo(
+                    $infoPorAsiento[$idAsiento]['modulo_origen'],
+                    $infoPorAsiento[$idAsiento]['id_documento'],
+                    $idEmpresa,
+                    $idUsuario
+                );
                 $ok++;
             } catch (\Throwable $e) {
                 $this->repo->rollBack();
@@ -808,6 +835,37 @@ class AuditoriaContableService
     public function getAsientosDeDocumento(int $idEmpresa, string $origen, int $idDocumento): array
     {
         return $this->repo->getAsientosDeDocumento($idEmpresa, $origen, $idDocumento);
+    }
+
+    // ==================================================================
+    //  SEGUIMIENTO DE COSTEO DE VENTAS (ventas_costeo_seguimiento)
+    // ==================================================================
+
+    /**
+     * modulo_origen (asientos_contables_cabecera) => tipo_documento (ventas_costeo_seguimiento).
+     * Solo cubre los 3 orígenes que participan del costeo de ventas; el resto de módulos
+     * (Compras, Ingresos, Nómina, etc.) no tienen fila en esa tabla y se ignoran aquí.
+     */
+    private const TIPO_DOCUMENTO_COSTEO = [
+        'factura_venta' => 'factura_venta',
+        'recibo_venta'  => 'recibo_venta',
+        'nota_credito'  => 'nota_credito_venta',
+    ];
+
+    /**
+     * anularDuplicado()/eliminarHuerfano(Masivo)() anulan el asiento vía
+     * AuditoriaContableRepository::anularAsiento() (no vía AsientoContableService::anular()),
+     * así que no pasan por la desvinculación ni por AsientoBuilderService — sin este método,
+     * ventas_costeo_seguimiento quedaría con datos obsoletos del asiento ya anulado.
+     */
+    private function limpiarSeguimientoCosteo(string $moduloOrigen, int $idDocumento, int $idEmpresa, int $idUsuario): void
+    {
+        $tipoDocumento = self::TIPO_DOCUMENTO_COSTEO[$moduloOrigen] ?? null;
+        if ($tipoDocumento === null || $idDocumento <= 0) {
+            return;
+        }
+        (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
+            ->eliminar($idEmpresa, $tipoDocumento, $idDocumento, $idUsuario);
     }
 
     // ==================================================================

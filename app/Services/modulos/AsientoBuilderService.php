@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\AsientoProgramadoRepository;
+use App\repositories\modulos\CosteoVentaSeguimientoRepository;
 use Exception;
 
 /**
@@ -71,10 +72,12 @@ class AsientoBuilderService
     ];
 
     private AsientoProgramadoRepository $programadoRepo;
+    private CosteoVentaSeguimientoRepository $costeoRepo;
 
     public function __construct()
     {
         $this->programadoRepo = new AsientoProgramadoRepository();
+        $this->costeoRepo = new CosteoVentaSeguimientoRepository();
     }
 
     /**
@@ -1648,18 +1651,36 @@ class AsientoBuilderService
         // Si están las dos cuentas (Costo de Ventas e Inventario) y suman igual en Debe/Haber,
         // se incorpora el bloque de costo. Si falta una (configuración incompleta), se descarta
         // y el asiento comercial se genera igual; se deja traza para diagnóstico.
+        $costoGenerado = false;
+        $motivoCostoPendiente = null;
         if (!empty($costoLineas)) {
             $debeCosto  = round(array_sum(array_column($costoLineas, 'debe')),  2);
             $haberCosto = round(array_sum(array_column($costoLineas, 'haber')), 2);
             if ($debeCosto > 0 && $debeCosto === $haberCosto) {
                 $detalles = array_merge($detalles, $costoLineas);
+                $costoGenerado = true;
             } else {
+                $motivoCostoPendiente = 'bloque_incompleto_descuadrado';
                 error_log(
                     "[AsientoBuilder] Bloque de costo de ventas omitido por configuración incompleta " .
                     "(Debe: $debeCosto, Haber: $haberCosto). Configure ambas cuentas (Costo de Ventas e Inventario) " .
                     "para contabilizar el costo. El asiento comercial se generó igualmente."
                 );
             }
+        } elseif ($costoRealInventario > 0) {
+            $motivoCostoPendiente = 'cuenta_no_configurada';
+        }
+
+        // Seguimiento de costeo (solo documentos reales, nunca en preview sin id_venta): deja
+        // constancia del resultado REAL de la cascada, para que SincronizadorAsientosService sepa
+        // con certeza si sigue pendiente sin tener que reconstruir la resolución de cuentas
+        // (ver database/ventas_costeo_seguimiento.sql).
+        if ($idVenta > 0) {
+            $this->costeoRepo->registrar(
+                $idEmpresa, 'factura_venta', $idVenta,
+                $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
+                $motivoCostoPendiente, (int)($data['id_usuario'] ?? 0) ?: null
+            );
         }
 
         // ── 6. Validación de balance ──
@@ -2044,18 +2065,33 @@ class AsientoBuilderService
         }
 
         // ── 5.1 Bloque de costo: solo se agrega si está COMPLETO y CUADRADO ──
+        $costoGenerado = false;
+        $motivoCostoPendiente = null;
         if (!empty($costoLineas)) {
             $debeCosto  = round(array_sum(array_column($costoLineas, 'debe')),  2);
             $haberCosto = round(array_sum(array_column($costoLineas, 'haber')), 2);
             if ($debeCosto > 0 && $debeCosto === $haberCosto) {
                 $detalles = array_merge($detalles, $costoLineas);
+                $costoGenerado = true;
             } else {
+                $motivoCostoPendiente = 'bloque_incompleto_descuadrado';
                 error_log(
                     "[AsientoBuilder] Bloque de costo de recibo de venta omitido por configuración incompleta " .
                     "(Debe: $debeCosto, Haber: $haberCosto). Configure ambas cuentas (Costo de Ventas e Inventario) " .
                     "para contabilizar el costo. El asiento comercial se generó igualmente."
                 );
             }
+        } elseif ($costoRealInventario > 0) {
+            $motivoCostoPendiente = 'cuenta_no_configurada';
+        }
+
+        // Seguimiento de costeo — ver la misma nota en armarDistribucionVentasFactura().
+        if ($idRecibo > 0) {
+            $this->costeoRepo->registrar(
+                $idEmpresa, 'recibo_venta', $idRecibo,
+                $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
+                $motivoCostoPendiente, (int)($data['id_usuario'] ?? 0) ?: null
+            );
         }
 
         // ── 6. Validación de balance ──
@@ -3057,12 +3093,27 @@ class AsientoBuilderService
 
         // El bloque de costo solo entra si está COMPLETO y CUADRADO (ambas cuentas configuradas).
         $detallesNatural = $comercial;
+        $costoGenerado = false;
+        $motivoCostoPendiente = null;
         if (!empty($costoLineas)) {
             $dc = round(array_sum(array_column($costoLineas, 'debe')),  2);
             $hc = round(array_sum(array_column($costoLineas, 'haber')), 2);
             if ($dc > 0 && $dc === $hc) {
                 $detallesNatural = array_merge($detallesNatural, $costoLineas);
+                $costoGenerado = true;
+            } else {
+                $motivoCostoPendiente = 'bloque_incompleto_descuadrado';
             }
+        } elseif ($costo > 0) {
+            $motivoCostoPendiente = 'cuenta_no_configurada';
+        }
+
+        // Seguimiento de costeo — ver la misma nota en armarDistribucionVentasFactura().
+        if ($idNotaCredito > 0) {
+            $this->costeoRepo->registrar(
+                $idEmpresa, 'nota_credito_venta', $idNotaCredito,
+                $costo > 0, $costoGenerado, $costo, $motivoCostoPendiente
+            );
         }
 
         // ── 5. INVERTIR Debe/Haber → asiento de la nota de crédito ──

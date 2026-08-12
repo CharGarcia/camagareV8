@@ -1433,6 +1433,13 @@ $totalPages = $totalPagesOriginal;
     let FV_BLOQUEAR_SECUENCIAL = false;
     const TARIFAS_IVA = <?= json_encode($tarifasIva) ?>;
     const UNIDADES = <?= json_encode($unidades) ?>;
+    // Si solo hay una bodega, se usa esa fija como respaldo cuando el <select> no tiene valor
+    // (mismo mecanismo que ya usa el POS — ver caja_sesion/venta.php, ID_BODEGA_FIJA).
+    const BODEGA_UNICA_ID = <?= count($bodegas) === 1 ? (int) $bodegas[0]['id'] : 'null' ?>;
+    function getIdBodegaCabecera() {
+        const val = document.getElementById('m-select-bodega')?.value;
+        return val ? val : (BODEGA_UNICA_ID !== null ? String(BODEGA_UNICA_ID) : '');
+    }
     const EMPRESA_CONFIG = {
         facturacion_libre: <?= (($empresa['facturacion_libre'] ?? false) === 'true' || ($empresa['facturacion_libre'] ?? false) === true) ? 'true' : 'false' ?>,
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true'  || ($empresa['facturacion_inventario'] ?? true)  === true)  ? 'true' : 'false' ?>,
@@ -1712,7 +1719,7 @@ $totalPages = $totalPagesOriginal;
         let totalDescuento = 0;
         let hayError = false;
         const detalles = [];
-        const idBodega = document.getElementById('m-select-bodega')?.value || '';
+        const idBodega = getIdBodegaCabecera();
 
         document.querySelectorAll('.row-detalle').forEach(tr => {
             if (hayError) return;
@@ -2060,7 +2067,7 @@ $totalPages = $totalPagesOriginal;
         // Cabecera
         estado.id_establecimiento = document.getElementById('m-id-establecimiento')?.value || '';
         estado.id_punto_emision = document.getElementById('m-select-puntos')?.value || '';
-        estado.id_bodega = document.getElementById('m-select-bodega')?.value || '';
+        estado.id_bodega = getIdBodegaCabecera();
         estado.fecha = document.querySelector('#formFacturaModal [name="fecha_emision"]')?.value || '';
         estado.id_vendedor = document.getElementById('m-select-vendedor')?.value || '';
         estado.dias_credito = document.getElementById('m-input-dias-credito')?.value || '';
@@ -4201,7 +4208,7 @@ $totalPages = $totalPagesOriginal;
 
     async function cargarLotesFila(row) {
         const idProd = row.dataset.idProducto;
-        const idBod = row.querySelector('.select-bodega')?.value || document.getElementById('m-select-bodega')?.value;
+        const idBod = row.querySelector('.select-bodega')?.value || getIdBodegaCabecera();
         const selLote = row.querySelector('.input-lote');
         const selCad = row.querySelector('.input-caducidad');
         const lblSaldo = row.querySelector('.lbl-saldo-valor');

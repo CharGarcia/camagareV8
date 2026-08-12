@@ -1179,6 +1179,11 @@ class FacturaVentaService
                 }
             }
 
+            // 4.1 El seguimiento de costeo de esta factura ya no aplica (el asiento se anuló):
+            // se marca eliminado para que no siga reportándose como pendiente en ningún reporte.
+            (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
+                ->eliminar($idEmpresa, 'factura_venta', $id, $idUsuario);
+
             // 5. Anular la factura
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
 
@@ -1277,6 +1282,9 @@ class FacturaVentaService
                     }
                 }
             }
+
+            (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
+                ->eliminar($idEmpresa, 'factura_venta', $id, $idUsuario);
 
             $this->repository->eliminarLogico($id, $idUsuario);
 

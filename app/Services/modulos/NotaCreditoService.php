@@ -410,6 +410,9 @@ class NotaCreditoService
                 }
             }
 
+            (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
+                ->eliminar($idEmpresa, 'nota_credito_venta', $id, $idUsuario);
+
             $this->repository->eliminarLogico($id, $idUsuario);
 
             $this->logService->registrar(
@@ -473,6 +476,9 @@ class NotaCreditoService
                     }
                 }
             }
+
+            (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
+                ->eliminar($idEmpresa, 'nota_credito_venta', $id, $idUsuario);
 
             $this->repository->updateEstado($id, 'anulado');
 

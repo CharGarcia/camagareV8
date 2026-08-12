@@ -428,6 +428,16 @@ class ReciboVentaService
     /** Anula el asiento contable del recibo (si existe). */
     private function anularAsiento(array $cabecera, int $idEmpresa, int $idUsuario): void
     {
+        // El seguimiento de costeo de este recibo ya no aplica (se anula/elimina el documento):
+        // se marca eliminado para que no siga reportándose como pendiente. Se hace antes del
+        // return por falta de asiento porque el seguimiento pudo quedar escrito aunque el
+        // asiento en sí no llegara a guardarse.
+        $idRecibo = (int)($cabecera['id'] ?? 0);
+        if ($idRecibo > 0) {
+            (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
+                ->eliminar($idEmpresa, 'recibo_venta', $idRecibo, $idUsuario);
+        }
+
         $idAsiento = (int)($cabecera['id_asiento_contable'] ?? 0);
         if ($idAsiento <= 0) return;
 
