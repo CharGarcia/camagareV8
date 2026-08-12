@@ -621,7 +621,7 @@ class AsientoBuilderService
      *
      * @return array{partes: array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>, sin_cuenta: float}
      */
-    private function repartirVentasCascada(\PDO $db, int $idEmpresa, int $idVenta, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = ''): array
+    private function repartirVentasCascada(\PDO $db, int $idEmpresa, int $idVenta, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = '', bool $colapsarPorProducto = false): array
     {
         $idCuentaBase = (int)($cuentaBase['id_cuenta'] ?? 0);
         $baseLinea = [
@@ -640,11 +640,23 @@ class AsientoBuilderService
                 : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
+        // $colapsarPorProducto (costo/inventario): inventario_kardex no guarda id_venta_detalle,
+        // solo id_producto — el join contra `d` por id_producto es necesariamente 1:N. Si el mismo
+        // producto aparece en 2+ líneas de la misma venta (multi-lote/NUP), unir el kardex
+        // directamente contra `ventas_detalle d` multiplica cada movimiento por cada línea
+        // (producto cartesiano línea×movimiento) y duplica el costo. Se colapsa `d` a productos
+        // distintos ANTES de unir el kardex, para que cada movimiento se cuente una sola vez.
+        // Los demás conceptos (Cuenta por Cobrar, Subtotal, ICE) NO usan esto: su valor sí es por
+        // línea real (columnas propias de `d` o joins 1:1 por d.id) y deben sumarse por línea.
+        $fromClause = $colapsarPorProducto
+            ? "(SELECT DISTINCT id_producto FROM ventas_detalle WHERE id_venta = :id_doc) d"
+            : "ventas_detalle d";
+
         // COALESCE(producto, categoría, marca) → la cuenta más específica configurada para cada línea.
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM({$valorExpr})::numeric, 2) AS monto
-                FROM ventas_detalle d
+                FROM {$fromClause}
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
                 LEFT JOIN asientos_programados ap_p
@@ -657,7 +669,7 @@ class AsientoBuilderService
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
-                WHERE d.id_venta = :id_doc
+                " . ($colapsarPorProducto ? "" : "WHERE d.id_venta = :id_doc") . "
                 GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
         $st->execute([
@@ -735,7 +747,7 @@ class AsientoBuilderService
             'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
             'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
         ];
-        $res = $this->repartirVentasCascada($db, $idEmpresa, $idVenta, (int)$r['id_asiento_tipo'], $cuentaBase, $monto, $valorExpr, $joinsExtra);
+        $res = $this->repartirVentasCascada($db, $idEmpresa, $idVenta, (int)$r['id_asiento_tipo'], $cuentaBase, $monto, $valorExpr, $joinsExtra, $esLineaCosto);
         foreach ($res['partes'] as $pte) {
             $linea = [
                 'id_cuenta_contable' => $pte['id_cuenta'],
@@ -760,7 +772,7 @@ class AsientoBuilderService
      *
      * @return array{partes: array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>, sin_cuenta: float}
      */
-    private function repartirRecibosCascada(\PDO $db, int $idEmpresa, int $idRecibo, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = ''): array
+    private function repartirRecibosCascada(\PDO $db, int $idEmpresa, int $idRecibo, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = '', bool $colapsarPorProducto = false): array
     {
         $idCuentaBase = (int)($cuentaBase['id_cuenta'] ?? 0);
         $baseLinea = [
@@ -778,10 +790,15 @@ class AsientoBuilderService
                 : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
+        // $colapsarPorProducto (costo/inventario): ver la misma nota en repartirVentasCascada().
+        $fromClause = $colapsarPorProducto
+            ? "(SELECT DISTINCT id_producto FROM recibos_venta_detalle WHERE id_recibo = :id_doc) d"
+            : "recibos_venta_detalle d";
+
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM({$valorExpr})::numeric, 2) AS monto
-                FROM recibos_venta_detalle d
+                FROM {$fromClause}
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
                 LEFT JOIN asientos_programados ap_p
@@ -794,7 +811,7 @@ class AsientoBuilderService
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
-                WHERE d.id_recibo = :id_doc
+                " . ($colapsarPorProducto ? "" : "WHERE d.id_recibo = :id_doc") . "
                 GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
         $st->execute([
@@ -867,7 +884,7 @@ class AsientoBuilderService
             'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
             'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
         ];
-        $res = $this->repartirRecibosCascada($db, $idEmpresa, $idRecibo, (int)$r['id_asiento_tipo'], $cuentaBase, $monto, $valorExpr, $joinsExtra);
+        $res = $this->repartirRecibosCascada($db, $idEmpresa, $idRecibo, (int)$r['id_asiento_tipo'], $cuentaBase, $monto, $valorExpr, $joinsExtra, $esLineaCosto);
         foreach ($res['partes'] as $pte) {
             $linea = [
                 'id_cuenta_contable' => $pte['id_cuenta'],
@@ -892,7 +909,7 @@ class AsientoBuilderService
      *
      * @return array{partes: array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>, sin_cuenta: float}
      */
-    private function repartirNotaCreditoCascada(\PDO $db, int $idEmpresa, int $idNotaCredito, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = ''): array
+    private function repartirNotaCreditoCascada(\PDO $db, int $idEmpresa, int $idNotaCredito, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = '', bool $colapsarPorProducto = false): array
     {
         $idCuentaBase = (int)($cuentaBase['id_cuenta'] ?? 0);
         $baseLinea = [
@@ -910,10 +927,15 @@ class AsientoBuilderService
                 : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
+        // $colapsarPorProducto (costo/inventario): ver la misma nota en repartirVentasCascada().
+        $fromClause = $colapsarPorProducto
+            ? "(SELECT DISTINCT id_producto FROM notas_credito_detalle WHERE id_nota_credito = :id_doc) d"
+            : "notas_credito_detalle d";
+
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM({$valorExpr})::numeric, 2) AS monto
-                FROM notas_credito_detalle d
+                FROM {$fromClause}
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
                 LEFT JOIN asientos_programados ap_p
@@ -926,7 +948,7 @@ class AsientoBuilderService
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
-                WHERE d.id_nota_credito = :id_doc
+                " . ($colapsarPorProducto ? "" : "WHERE d.id_nota_credito = :id_doc") . "
                 GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
         $st->execute([
@@ -999,7 +1021,7 @@ class AsientoBuilderService
             'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
             'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
         ];
-        $res = $this->repartirNotaCreditoCascada($db, $idEmpresa, $idNotaCredito, (int)$r['id_asiento_tipo'], $cuentaBase, $monto, $valorExpr, $joinsExtra);
+        $res = $this->repartirNotaCreditoCascada($db, $idEmpresa, $idNotaCredito, (int)$r['id_asiento_tipo'], $cuentaBase, $monto, $valorExpr, $joinsExtra, $esLineaCosto);
         foreach ($res['partes'] as $pte) {
             $linea = [
                 'id_cuenta_contable' => $pte['id_cuenta'],

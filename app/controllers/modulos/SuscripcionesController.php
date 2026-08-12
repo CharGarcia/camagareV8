@@ -667,14 +667,10 @@ class SuscripcionesController extends BaseModuloController
                     // está DESACOPLADA del cobro: si la suscripción usa tarjeta vía Nuvei, el
                     // cargo real lo hace la automatización "Cobrar suscripciones (Nuvei)" —
                     // aquí solo se deja el pago en 'pendiente'. Crédito y Kushki no se tocan.
-                    $nuevoProximo = $this->service->calcularProximoCobro($periodo, $meses, $codigo);
-                    // TEMPORAL: diagnóstico del bug reportado "no aplicó la próxima fecha"
-                    // (periodicidad Semestral). Quitar una vez confirmada la causa.
-                    \App\Services\ErrorLogService::registrarManual(
-                        "DIAG proximo_cobro susc#{$idSusc}: periodo_in={$periodo} meses={$meses} codigo={$codigo} nuevo={$nuevoProximo}",
-                        ['ruta' => static::class, 'accion' => __FUNCTION__ . '#diag_' . $idSusc, 'tipo' => 'manual']
+                    $suscRepo->updateProximoCobro(
+                        $idSusc,
+                        $this->service->calcularProximoCobro($periodo, $meses, $codigo)
                     );
-                    $suscRepo->updateProximoCobro($idSusc, $nuevoProximo);
 
                     $esNuveiTarjeta = ($susc['forma_cobro'] ?? '') === 'tarjeta'
                         && ($susc['pasarela_tarjeta'] ?? '') === 'nuvei'
