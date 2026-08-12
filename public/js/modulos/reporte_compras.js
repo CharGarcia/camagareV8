@@ -135,10 +135,30 @@ function RC_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
     });
 }
 
+// Mantiene los botones "Detallado" / "Por proveedor" del header de la tabla
+// reflejando el valor actual del select "Agrupar Por" (los dos son la misma fuente de verdad).
+function RC_sincronizarBotonesVista() {
+    const valor = document.getElementById('rc_agrupar_por').value;
+    const bDetalle  = document.getElementById('rc-btn-detalle');
+    const bAgrupado = document.getElementById('rc-btn-agrupado');
+    if (!bDetalle || !bAgrupado) return;
+    bDetalle.classList.toggle('btn-primary',           valor === 'NINGUNO');
+    bDetalle.classList.toggle('btn-outline-primary',   valor !== 'NINGUNO');
+    bAgrupado.classList.toggle('btn-primary',          valor === 'PROVEEDOR');
+    bAgrupado.classList.toggle('btn-outline-primary',  valor !== 'PROVEEDOR');
+}
+
+// Atajo de los botones del header: fija "Agrupar Por" y dispara el mismo flujo que el select.
+window.RC_setVistaAgrupacion = function (valor) {
+    document.getElementById('rc_agrupar_por').value = valor;
+    window.RC_onAgruparChange();
+};
+
 // Maneja el cambio de "Agrupar Por": al elegir "Por Mes" se fuerza el filtro Mes a "Todos".
 window.RC_onAgruparChange = function () {
     const agruparPor = document.getElementById('rc_agrupar_por').value;
     const mesEl = document.getElementById('rc-mes');
+    RC_sincronizarBotonesVista();
 
     if (agruparPor === 'MES') {
         mesEl.disabled = true;

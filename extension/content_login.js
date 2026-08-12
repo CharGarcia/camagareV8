@@ -48,6 +48,33 @@
         input.blur();
     }
 
+    // Ventana para considerar "reciente" un intento de login previo (igual a la del servidor).
+    const TTL_INTENTO_LOGIN = 5 * 60 * 1000;
+
+    // Busca un mensaje de error visible en la pantalla de login (Keycloak/SRI).
+    function textoErrorLogin() {
+        const selectores = ['#kc-feedback-text', '#input-error', '#input-error-username',
+            '#input-error-password', '.alert-error', '.pf-c-alert__title', '[role="alert"]'];
+        for (const sel of selectores) {
+            const el = document.querySelector(sel);
+            const t = el && el.textContent && el.textContent.trim();
+            if (t) return t;
+        }
+        return '';
+    }
+
+    // Si ya se intentó un login automático hace poco y volvimos a caer en esta misma
+    // pantalla con los campos otra vez, es porque el SRI rechazó el RUC/clave.
+    async function yaFalloLoginReciente() {
+        const { cmg_login_intento } = await chrome.storage.local.get('cmg_login_intento');
+        if (!cmg_login_intento) return false;
+        if (Date.now() - cmg_login_intento > TTL_INTENTO_LOGIN) {
+            chrome.storage.local.remove('cmg_login_intento');
+            return false;
+        }
+        return true;
+    }
+
     let yaLleno = false;
     function hacerLlenado(u, p) {
         if (yaLleno) return;
@@ -60,8 +87,9 @@
             banner('CaMaGaRe: ingresando al SRI…', '#198754');
             escribir(u, resp.ruc);
             escribir(p, resp.clave);
-            // Marca de UN SOLO USO para saltar a comprobantes desde la primera página logueada.
-            chrome.storage.local.set({ cmg_ir: Date.now() }, () => {
+            // Marca de UN SOLO USO para saltar a comprobantes desde la primera página logueada,
+            // y marca de "ya se intentó" para detectar en la próxima carga si el login falló.
+            chrome.storage.local.set({ cmg_ir: Date.now(), cmg_login_intento: Date.now() }, () => {
                 const btn = document.querySelector('#kc-login');
                 if (btn) btn.click();
                 else { const f = u.closest('form'); if (f) f.submit(); }
@@ -93,16 +121,31 @@
     }
 
     if (urlEsLogin) {
-        // Pantalla de login: esperar el formulario (~6s) y llenarlo una vez (solo si hay descarga marcada).
+        // Pantalla de login: esperar el formulario (~6s).
         let intentos = 0;
-        const iv = setInterval(() => {
+        const iv = setInterval(async () => {
             const u = document.querySelector('#usuario');
             const p = document.querySelector('#password');
-            if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
+            if (u && p) {
+                clearInterval(iv);
+                // Si ya hubo un intento automático reciente y volvimos a la pantalla de login,
+                // el RUC/clave fue rechazado: avisar y NO reintentar (ni volver a llenar el formulario).
+                if (await yaFalloLoginReciente()) {
+                    chrome.storage.local.remove(['cmg_login_intento', 'cmg_ir']);
+                    const detalle = textoErrorLogin();
+                    banner('CaMaGaRe: el RUC o la clave del SRI son incorrectos. Corrígela en el sistema (Descargas SRI) y vuelve a pulsar "Generar descarga".'
+                        + (detalle ? ' — ' + detalle : ''), '#dc3545');
+                    return;
+                }
+                hacerLlenado(u, p);
+                return;
+            }
             if (++intentos > 20) clearInterval(iv);
         }, 300);
     } else {
-        // Página logueada que no es login ni comprobantes (p.ej. el perfil): saltar a comprobantes UNA vez.
+        // Llegamos a una página logueada (no login): el intento previo, si lo hubo, funcionó.
+        chrome.storage.local.remove('cmg_login_intento');
+        // Página logueada que no es comprobantes (p.ej. el perfil): saltar a comprobantes UNA vez.
         irAComprobantes();
     }
 })();

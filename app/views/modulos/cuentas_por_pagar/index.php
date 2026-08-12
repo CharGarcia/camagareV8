@@ -2,11 +2,9 @@
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
-    .cxp-header { flex-shrink: 0; }
     /* Tabla principal */
-    .cxp-scroll { max-height: calc(100vh - 230px); min-height: 320px; overflow-y: auto; overflow-x: auto; }
+    .cxp-scroll { overflow-x: auto; }
     .cxp-scroll thead th {
-        position: sticky; top: 0; z-index: 10;
         background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6;
         white-space: nowrap;
     }
@@ -26,154 +24,128 @@
     .cxp-saldo-vencido { color: #dc3545 !important; }
     .cxp-saldo-vigente { color: #198754 !important; }
     .cxp-saldo-pagado  { color: #6c757d !important; }
+    /* Evita que el contenedor de chips (vacío hasta que se elige un proveedor) desalinee la fila de filtros */
+    #cxp-chips-proveedor:empty { margin-top:0; }
+    /* Altura idéntica y explícita para todos los controles de filtros (selects, inputs, buscador y botones),
+       para que queden alineados sin depender de que cada variante -sm de Bootstrap renderice igual. */
+    #form-filtros-cxp .form-select,
+    #form-filtros-cxp .form-control,
+    #form-filtros-cxp .input-group-text,
+    #form-filtros-cxp .btn { height:28px; font-size:.75rem; }
+    /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
+    @media (max-width: 767.98px) {
+        #modulo-cuentas_por_pagar .cxp-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
+    }
 </style>
 
-<div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
 
-    <!-- ── Cabecera ── -->
-    <div class="cxp-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div>
+    <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3">
             <h5 class="mb-0 fw-bold"><i class="bi bi-credit-card me-2 text-primary"></i>Cuentas por Pagar</h5>
-            <small class="text-muted">Control de obligaciones con proveedores — facturas, notas de venta y liquidaciones de compras y servicios pendientes</small>
         </div>
-    </div>
+        <div class="card-body p-3">
+            <form id="form-filtros-cxp" onsubmit="event.preventDefault(); CXP_cargar();" class="d-flex flex-wrap align-items-start gap-2">
 
-    <!-- ── Filtros ── -->
-    <div class="accordion mb-3 shadow-sm border-0" id="accordionFiltrosCxP">
-        <div class="accordion-item border-0 rounded-3">
-            <h2 class="accordion-header">
-                <button class="accordion-button bg-white text-dark py-2 shadow-none" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#collapseFiltrosCxP">
-                    <i class="bi bi-funnel me-2 text-primary"></i>
-                    <span class="fw-bold small">Filtros</span>
-                </button>
-            </h2>
-            <div id="collapseFiltrosCxP" class="accordion-collapse collapse show">
-                <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
-                    <form id="form-filtros-cxp" onsubmit="event.preventDefault(); CXP_cargar();" class="row g-3">
-
-                        <!-- Estado -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
-                            <select id="cxp-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:150px;"
-                                    onchange="CXP_cargar()">
-                                <option value="PENDIENTES" selected>Saldo Pendiente</option>
-                                <option value="VENCIDAS">Vencidas</option>
-                                <option value="AL_DIA">Al Día</option>
-                                <option value="PAGADAS">Pagadas</option>
-                                <option value="TODOS">Todos</option>
-                            </select>
-                        </div>
-
-                        <!-- Tipo de documento -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Tipo</label>
-                            <select id="cxp-tipo" name="tipo_fuente" class="form-select form-select-sm shadow-none border" style="width:150px;"
-                                    onchange="CXP_cargar()">
-                                <option value="">Todos</option>
-                                <option value="COMPRA">Solo Facturas</option>
-                                <option value="LIQUIDACION">Solo Liquidaciones</option>
-                                <option value="IMPORTACION">Solo Importaciones</option>
-                            </select>
-                        </div>
-
-                        <!-- Fecha Desde -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
-                            <input type="date" id="cxp-fecha-desde" name="fecha_desde"
-                                   class="form-control form-control-sm shadow-none border" style="width:140px;">
-                        </div>
-
-                        <!-- Fecha Hasta -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
-                            <input type="date" id="cxp-fecha-hasta" name="fecha_hasta"
-                                   class="form-control form-control-sm shadow-none border" style="width:140px;"
-                                   value="<?php echo date('Y-m-d'); ?>">
-                        </div>
-
-                        <!-- Buscador proveedor -->
-                        <div class="col-md-3 position-relative">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Proveedor</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                <input type="text" id="cxp-search-proveedor" class="form-control border-start-0 px-1 shadow-none"
-                                       placeholder="Buscar proveedor..." autocomplete="off">
-                            </div>
-                            <div id="cxp-chips-proveedor" class="d-flex flex-wrap gap-1 mt-1"></div>
-                            <div id="cxp-dropdown-proveedores" class="list-group shadow position-absolute d-none"
-                                 style="z-index:1050;width:calc(100% - 1.5rem);max-height:220px;overflow-y:auto;margin-top:2px;"></div>
-                        </div>
-
-                        <!-- Botones -->
-                        <div class="col-md-auto">
-                            <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="CXP_limpiarFiltros()">
-                                    <i class="bi bi-eraser me-1"></i>Limpiar filtros
-                                </button>
-                                <button type="submit" class="btn btn-primary btn-sm px-4 shadow-sm">
-                                    <i class="bi bi-search me-1"></i>Aplicar Filtros
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+                <!-- Estado -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
+                    <select id="cxp-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:130px;"
+                            onchange="CXP_cargar()">
+                        <option value="PENDIENTES" selected>Saldo Pendiente</option>
+                        <option value="VENCIDAS">Vencidas</option>
+                        <option value="AL_DIA">Al Día</option>
+                        <option value="PAGADAS">Pagadas</option>
+                        <option value="TODOS">Todos</option>
+                    </select>
                 </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- ── Tarjetas de Estadísticas ── -->
-    <div class="row g-3 mb-3" id="cxp-stats-row">
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-primary bg-opacity-10 text-primary rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-receipt fs-4"></i>
+                <!-- Tipo de documento -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo</label>
+                    <select id="cxp-tipo" name="tipo_fuente" class="form-select form-select-sm shadow-none border" style="width:130px;"
+                            onchange="CXP_cargar()">
+                        <option value="">Todos</option>
+                        <option value="COMPRA">Solo Facturas</option>
+                        <option value="LIQUIDACION">Solo Liquidaciones</option>
+                        <option value="IMPORTACION">Solo Importaciones</option>
+                    </select>
+                </div>
+
+                <!-- Fecha Desde -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
+                    <input type="date" id="cxp-fecha-desde" name="fecha_desde"
+                           class="form-control form-control-sm shadow-none border" style="width:115px;">
+                </div>
+
+                <!-- Fecha Hasta -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
+                    <input type="date" id="cxp-fecha-hasta" name="fecha_hasta"
+                           class="form-control form-control-sm shadow-none border" style="width:115px;"
+                           value="<?php echo date('Y-m-d'); ?>">
+                </div>
+
+                <!-- Proveedor + Botones: agrupados para que nunca se separen al hacer wrap -->
+                <div class="d-flex flex-wrap align-items-start gap-2">
+                    <!-- Buscador proveedor -->
+                    <div class="position-relative" style="width:440px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Proveedor</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" id="cxp-search-proveedor" class="form-control border-start-0 px-1 shadow-none"
+                                   placeholder="Buscar proveedor..." autocomplete="off">
+                        </div>
+                        <div id="cxp-chips-proveedor" class="d-flex flex-wrap gap-1 mt-1"></div>
+                        <div id="cxp-dropdown-proveedores" class="list-group shadow position-absolute d-none"
+                             style="z-index:1050;width:100%;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
+
+                    <!-- Botones -->
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Documentos</div>
-                        <div class="fw-bold fs-4" id="cxp-stat-docs">0</div>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="CXP_limpiarFiltros()">
+                                <i class="bi bi-eraser me-1"></i>Limpiar filtros
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm">
+                                <i class="bi bi-search me-1"></i>Aplicar Filtros
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </form>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-danger bg-opacity-10 text-danger rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-credit-card fs-4"></i>
-                    </div>
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats" id="cxp-stats-row">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-receipt bg-primary bg-opacity-10 text-primary"></i>
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Por Pagar</div>
-                        <div class="fw-bold fs-5 text-danger">$<span id="cxp-stat-saldo">0.00</span></div>
+                        <div class="cmg-control-card__stat-value" id="cxp-stat-docs">0</div>
+                        <div class="cmg-control-card__stat-label">Documentos</div>
                     </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-warning bg-opacity-10 text-warning rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-exclamation-triangle fs-4"></i>
-                    </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-credit-card bg-danger bg-opacity-10 text-danger"></i>
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Vencido</div>
-                        <div class="fw-bold fs-5 text-danger">$<span id="cxp-stat-vencido">0.00</span></div>
-                        <div class="text-muted" style="font-size:.7rem;"><span id="cxp-stat-dvencidos">0</span> doc. vencidos</div>
+                        <div class="cmg-control-card__stat-value text-danger">$<span id="cxp-stat-saldo">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Por Pagar</div>
                     </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-success bg-opacity-10 text-success rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-check-circle fs-4"></i>
-                    </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-exclamation-triangle bg-warning bg-opacity-10 text-warning"></i>
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Al Día</div>
-                        <div class="fw-bold fs-5 text-success">$<span id="cxp-stat-aldia">0.00</span></div>
+                        <div class="cmg-control-card__stat-value text-danger">$<span id="cxp-stat-vencido">0.00</span></div>
+                        <div class="cmg-control-card__stat-label"><span id="cxp-stat-dvencidos">0</span> vencidos</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-check-circle bg-success bg-opacity-10 text-success"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-success">$<span id="cxp-stat-aldia">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Al Día</div>
                     </div>
                 </div>
             </div>
@@ -253,17 +225,6 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-    </div>
-
-    <!-- ── Gráfico de Antigüedad (al final de todas las tablas) ── -->
-    <div class="card border-0 shadow-sm mt-4" id="cxp-chart-card" style="display:none;">
-        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-            <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart me-2 text-primary"></i>Análisis de Antigüedad de Saldo</h6>
-            <small class="text-muted">Distribución de cuentas por pagar por tramos de vencimiento</small>
-        </div>
-        <div class="card-body">
-            <canvas id="cxpAgingChart" style="max-height:260px;"></canvas>
         </div>
     </div>
 
@@ -498,5 +459,4 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 <script>
     const RUTA_MODULO_CXP = "<?php echo $rutaModulo; ?>";
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/cuentas_por_pagar.js?v=<?php echo time(); ?>"></script>

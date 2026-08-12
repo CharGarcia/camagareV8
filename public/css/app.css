@@ -1241,3 +1241,55 @@ th[data-col] {
     overflow-y: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
+
+/* ============================================================
+   Tarjeta de control fija (reportes/listados con filtros + KPIs)
+   Ver regla en CLAUDE.md §9 "Tarjeta de control fija (reportes)".
+   Uso: <div class="card cmg-control-card"> con card-header (título+icono),
+   card-body (el <form> de filtros) y card-footer (un
+   <div class="cmg-control-card__stats"> con el resumen). Referencia
+   canónica: cuentas_por_cobrar/index.php.
+   ============================================================ */
+.cmg-control-card {
+    position: sticky;
+    top: var(--cmg-sticky-h, 80px);
+    z-index: 900; /* debajo del navbar (5000) y modales, encima del resto */
+    background: #fff;
+}
+
+.cmg-control-card__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+}
+
+.cmg-control-card__stat {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.cmg-control-card__stat > i {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: .35rem;
+    font-size: .8rem;
+}
+
+.cmg-control-card__stat-value {
+    font-size: .8rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.cmg-control-card__stat-label {
+    font-size: .58rem;
+    color: #6c757d;
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+}

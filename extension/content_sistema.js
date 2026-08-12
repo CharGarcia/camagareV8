@@ -2,10 +2,13 @@
 
 /**
  * CaMaGaRe — auto-configuración del token.
- * Corre dentro del sistema CaMaGaRe. Toma el token del agente del usuario logueado y lo guarda,
- * para que el usuario NO tenga que pegarlo a mano. Lo obtiene de dos formas (la 1ª es robusta):
+ * Corre dentro del sistema CaMaGaRe, en CUALQUIER página autenticada (el elemento #cmg-config
+ * lo entrega app/views/partials/agente_extension.php, incluido desde el layout principal —
+ * no depende de que el usuario visite Descargas SRI). Toma el token del agente del usuario
+ * logueado y lo guarda, para que el usuario NO tenga que pegarlo a mano. Lo obtiene de dos
+ * formas (la 1ª es robusta):
  *   1) leyendo el elemento #cmg-config que la página deja en el HTML (no depende del timing);
- *   2) escuchando un postMessage (compatibilidad).
+ *   2) escuchando un postMessage (compatibilidad, ya no se emite pero se deja por si acaso).
  * Si varios usuarios usan el mismo navegador, el token queda el del usuario activo.
  */
 

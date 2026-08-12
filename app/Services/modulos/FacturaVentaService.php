@@ -674,7 +674,7 @@ class FacturaVentaService
                             
                             $cantidadAcumulada = $cantidadesAgregadas[$key];
                             if ($stockTotal < $cantidadAcumulada) {
-                                throw new \Exception("Stock insuficiente para el producto: " . ($det['nombre'] ?? 'Producto') . " (Lote: ".($det['lote'] ?? 'sin_lote')."). Saldo actual: {$stockTotal}, Requerido en factura: {$cantidadAcumulada}");
+                                throw new \Exception("Stock insuficiente para el producto: " . ($det['nombre'] ?? 'Producto') . " (Lote: ".($det['lote'] ?? 'sin_lote')."). Saldo actual: {$stockTotal}, Requerido en factura: {$cantidadAcumulada}. Es posible que otro usuario haya facturado este producto justo ahora. Actualiza la pantalla y vuelve a intentar.");
                             }
                             $validados[] = $key;
                         }
@@ -911,7 +911,7 @@ class FacturaVentaService
                             
                             $cantidadAcumulada = $cantidadesAgregadas[$key];
                             if ($stockTotal < $cantidadAcumulada) {
-                                throw new \Exception("Stock insuficiente para el producto: " . ($det['nombre'] ?? 'Producto') . " (Lote: ".($det['lote'] ?? 'sin_lote')."). Saldo actual: {$stockTotal}, Requerido en factura: {$cantidadAcumulada}");
+                                throw new \Exception("Stock insuficiente para el producto: " . ($det['nombre'] ?? 'Producto') . " (Lote: ".($det['lote'] ?? 'sin_lote')."). Saldo actual: {$stockTotal}, Requerido en factura: {$cantidadAcumulada}. Es posible que otro usuario haya facturado este producto justo ahora. Actualiza la pantalla y vuelve a intentar.");
                             }
                             $validados[] = $key;
                         }

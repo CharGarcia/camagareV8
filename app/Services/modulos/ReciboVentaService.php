@@ -161,11 +161,11 @@ class ReciboVentaService
                         (int)$data['id_empresa'],
                         $idActual,
                         ($idActual ? self::REF_TIPO : null),
-                        !empty($det['lote']) ? (string)$det['lote'] : null
+                        (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? (string)$det['lote'] : null
                     );
                     $cantidadAcumulada = $cantidadesAgregadas[$key];
                     if ($stockTotal < $cantidadAcumulada) {
-                        throw new \Exception("Stock insuficiente para el producto: " . ($det['nombre'] ?? 'Producto') . " (Lote: ".($det['lote'] ?? 'sin_lote')."). Saldo actual: {$stockTotal}, Requerido en recibo: {$cantidadAcumulada}");
+                        throw new \Exception("Stock insuficiente para el producto: " . ($det['nombre'] ?? 'Producto') . " (Lote: ".($det['lote'] ?? 'sin_lote')."). Saldo actual: {$stockTotal}, Requerido en recibo: {$cantidadAcumulada}. Es posible que otro usuario haya facturado este producto justo ahora. Actualiza la pantalla y vuelve a intentar.");
                     }
                     $validados[] = $key;
                 }

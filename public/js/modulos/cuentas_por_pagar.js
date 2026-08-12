@@ -10,7 +10,6 @@
 ════════════════════════════════════════════════════ */
 let CXP_datos         = [];   // filas completas recibidas del servidor
 let CXP_filtradoLocal = [];   // filas tras filtro local de texto
-let CXP_agingChart    = null;
 let CXP_catalogos     = { puntos: [], conceptos: [], formas: [] };
 let CXP_catalogosCargados = false;
 let CXP_agrupado      = false;          // vista agrupada por proveedor
@@ -56,7 +55,6 @@ async function CXP_cargar() {
         CXP_filtradoLocal = [...CXP_datos];
 
         CXP_actualizarStats(data.stats || {});
-        CXP_dibujarAging(data.antiguedad || {});
         CXP_renderTabla(CXP_filtradoLocal);
 
     } catch (e) {
@@ -74,52 +72,6 @@ function CXP_actualizarStats(s) {
     document.getElementById('cxp-stat-vencido').textContent  = CXP_fmt(s.total_vencido || 0);
     document.getElementById('cxp-stat-aldia').textContent    = CXP_fmt(s.total_al_dia  || 0);
     document.getElementById('cxp-stat-dvencidos').textContent= s.docs_vencidos  || 0;
-}
-
-/* ════════════════════════════════════════════════════
-   GRÁFICO AGING
-════════════════════════════════════════════════════ */
-function CXP_dibujarAging(ag) {
-    const card = document.getElementById('cxp-chart-card');
-    const tiene = Object.values(ag).some(v => v > 0);
-    card.style.display = tiene ? '' : 'none';
-    if (!tiene) return;
-
-    const ctx = document.getElementById('cxpAgingChart').getContext('2d');
-    if (CXP_agingChart) CXP_agingChart.destroy();
-
-    CXP_agingChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['Vigente', '1–30 días', '31–60 días', '61–90 días', '+90 días'],
-            datasets: [{
-                label: 'Saldo',
-                data: [
-                    parseFloat(ag.vigente     || 0),
-                    parseFloat(ag.tramo_1_30  || 0),
-                    parseFloat(ag.tramo_31_60 || 0),
-                    parseFloat(ag.tramo_61_90 || 0),
-                    parseFloat(ag.mas_90      || 0),
-                ],
-                backgroundColor: [
-                    'rgba(13,110,253,.55)',
-                    'rgba(255,193,7,.65)',
-                    'rgba(253,126,20,.65)',
-                    'rgba(220,53,69,.65)',
-                    'rgba(132,32,41,.75)',
-                ],
-                borderRadius: 4,
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => ' $' + CXP_fmt(ctx.raw) } }
-            },
-            scales: { y: { ticks: { callback: v => '$' + CXP_fmt(v) } } }
-        }
-    });
 }
 
 /* ════════════════════════════════════════════════════

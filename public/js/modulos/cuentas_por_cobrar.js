@@ -10,7 +10,6 @@
 ════════════════════════════════════════════════════ */
 let CXC_datos         = [];   // filas completas recibidas del servidor
 let CXC_filtradoLocal = [];   // filas mostradas tras filtro de texto
-let CXC_agingChart    = null;
 let CXC_formasCobro   = [];
 let CXC_plantillasWA  = [];
 let CXC_seleccionados = new Set(); // ids de facturas seleccionadas
@@ -63,7 +62,6 @@ async function CXC_cargar() {
         CXC_filtradoLocal = [...CXC_datos];
 
         CXC_actualizarStats(data.stats || {});
-        CXC_dibujarAging(data.antiguedad || {});
         CXC_renderTabla(CXC_filtradoLocal);
 
     } catch (e) {
@@ -81,58 +79,6 @@ function CXC_actualizarStats(s) {
     document.getElementById('cxc-stat-vencido').textContent  = CXC_fmt(s.total_vencido || 0);
     document.getElementById('cxc-stat-aldia').textContent    = CXC_fmt(s.total_al_dia || 0);
     document.getElementById('cxc-stat-fvencidas').textContent= s.facturas_vencidas || 0;
-}
-
-/* ════════════════════════════════════════════════════
-   GRÁFICO AGING
-════════════════════════════════════════════════════ */
-function CXC_dibujarAging(ag) {
-    const card = document.getElementById('cxc-chart-card');
-    const tiene = Object.values(ag).some(v => v > 0);
-    card.style.display = tiene ? '' : 'none';
-    if (!tiene) return;
-
-    const ctx = document.getElementById('cxcAgingChart').getContext('2d');
-    if (CXC_agingChart) CXC_agingChart.destroy();
-
-    CXC_agingChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['Vigente', '1–30 días', '31–60 días', '61–90 días', '+90 días'],
-            datasets: [{
-                label: 'Saldo',
-                data: [
-                    parseFloat(ag.vigente    || 0),
-                    parseFloat(ag.tramo_1_30 || 0),
-                    parseFloat(ag.tramo_31_60|| 0),
-                    parseFloat(ag.tramo_61_90|| 0),
-                    parseFloat(ag.mas_90     || 0),
-                ],
-                backgroundColor: [
-                    'rgba(25,135,84,.55)',
-                    'rgba(255,193,7,.65)',
-                    'rgba(253,126,20,.65)',
-                    'rgba(220,53,69,.65)',
-                    'rgba(132,32,41,.75)',
-                ],
-                borderRadius: 4,
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => ' $' + CXC_fmt(ctx.raw)
-                    }
-                }
-            },
-            scales: {
-                y: { ticks: { callback: v => '$' + CXC_fmt(v) } }
-            }
-        }
-    });
 }
 
 /* ════════════════════════════════════════════════════

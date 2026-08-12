@@ -220,7 +220,7 @@ class OrdenesCompraController extends BaseModuloController
         $buscar    = trim($_GET['q'] ?? '');
         try {
             $db  = Database::getConnection();
-            $sql = "SELECT id, identificacion, razon_social
+            $sql = "SELECT id, identificacion, razon_social, email
                     FROM proveedores
                     WHERE id_empresa = :id_empresa AND eliminado = false
                       AND (razon_social ILIKE :b OR identificacion ILIKE :b)
@@ -466,6 +466,221 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             echo "Error al generar Excel: " . $e->getMessage();
             exit;
         }
+    }
+
+    /** Carga cabecera + detalle de una orden puntual para PDF/Excel/Correo. */
+    private function cargarOrdenParaDocumento(int $id, int $idEmpresa): ?array
+    {
+        $orden = $this->service->getById($id, $idEmpresa);
+        if (!$orden) {
+            return null;
+        }
+        $detalles = $orden['detalle'];
+        unset($orden['detalle']);
+        return ['cabecera' => $orden, 'detalles' => $detalles];
+    }
+
+    /** Datos de la empresa (con el logo del establecimiento de la orden) para el PDF. */
+    private function cargarEmpresaParaPdf(int $idEmpresa, ?int $idEstablecimiento = null): array
+    {
+        $empresaModel = new \App\models\Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+        $estRepo   = new EmpresaRepository();
+        $estConfig = $idEstablecimiento ? $estRepo->getEstablecimientoConfig($idEstablecimiento) : null;
+        if (!empty($estConfig['logo_ruta'])) {
+            $empresa['logo_ruta'] = $estConfig['logo_ruta'];
+        } else {
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($establecimientos[0]['logo_ruta'])) {
+                $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+            }
+        }
+        return $empresa;
+    }
+
+    /** Genera el PDF de una orden de compra puntual. */
+    public function pdf(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $doc = $this->cargarOrdenParaDocumento($id, $idEmpresa);
+            if (!$doc) { http_response_code(404); echo 'Orden de compra no encontrada'; exit; }
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($doc['cabecera']['id_establecimiento']) ? (int) $doc['cabecera']['id_establecimiento'] : null);
+
+            (new \App\Services\modulos\OrdenCompraPdfService())->generar($doc['cabecera'], $doc['detalles'], $empresa, 'D');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Genera el Excel de una orden de compra puntual (mismas columnas que el PDF). */
+    public function excel(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $doc = $this->cargarOrdenParaDocumento($id, $idEmpresa);
+            if (!$doc) { http_response_code(404); echo 'Orden de compra no encontrada'; exit; }
+            $cabecera = $doc['cabecera'];
+            $detalles = $doc['detalles'];
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $numero  = (string) ($cabecera['numero_orden'] ?? '');
+
+            require_once MVC_ROOT . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Orden de Compra');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:E1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'ORDEN DE COMPRA N.° ' . ($numero !== '' ? $numero : '—'));
+            $sheet->mergeCells('A2:E2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cabecera['fecha_orden']) ? date('d-m-Y', strtotime((string) $cabecera['fecha_orden'])) : '';
+            $sheet->setCellValue('A3', 'Fecha orden: ' . $fecha);
+            $sheet->setCellValue('A4', 'Proveedor: ' . (string) ($cabecera['proveedor_nombre'] ?? ''));
+            $sheet->setCellValue('A5', 'Identificación: ' . (string) ($cabecera['proveedor_identificacion'] ?? ''));
+            $sheet->setCellValue('A6', 'Estado: ' . ucfirst((string) ($cabecera['estado'] ?? '')));
+
+            $headerRow = 8;
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unitario', 'Subtotal'];
+            $col = 'A';
+            foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
+            $headerStyle = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
+            ];
+            $sheet->getStyle('A' . $headerRow . ':E' . $headerRow)->applyFromArray($headerStyle);
+
+            $row   = $headerRow + 1;
+            $total = 0.0;
+            foreach ($detalles as $d) {
+                $cantidad = (float) ($d['cantidad'] ?? 0);
+                $precio   = (float) ($d['precio_unitario'] ?? 0);
+                $subtotal = $cantidad * $precio;
+                $total   += $subtotal;
+
+                $sheet->setCellValueExplicit('A' . $row, (string) ($d['codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B' . $row, (string) ($d['descripcion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('C' . $row, $cantidad);
+                $sheet->setCellValue('D' . $row, $precio);
+                $sheet->setCellValue('E' . $row, $subtotal);
+                $row++;
+            }
+            if ($row > $headerRow + 1) {
+                $sheet->getStyle('C' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+
+            $sheet->setCellValue('D' . $row, 'TOTAL');
+            $sheet->getStyle('D' . $row)->getFont()->setBold(true);
+            $sheet->setCellValue('E' . $row, $total);
+            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('E' . $row)->getFont()->setBold(true);
+            $row++;
+
+            $obs = trim((string) ($cabecera['observaciones'] ?? ''));
+            if ($obs !== '') {
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Observaciones: ' . $obs);
+                $sheet->mergeCells('A' . $row . ':E' . $row);
+            }
+
+            foreach (['A', 'B', 'C', 'D', 'E'] as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $nombre = 'OrdenCompra_' . ($numero !== '' ? $numero : 'comprobante') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombre . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500); echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Envía por correo el PDF de una orden de compra puntual. */
+    public function enviarCorreoAjax(): void
+    {
+        ob_start();
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+
+        try {
+            $doc = $this->cargarOrdenParaDocumento($id, $idEmpresa);
+            if (!$doc) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Orden de compra no encontrada.']); exit; }
+            $cabecera = $doc['cabecera'];
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $numero  = (string) ($cabecera['numero_orden'] ?? '');
+
+            $pdfString = (new \App\Services\modulos\OrdenCompraPdfService())->generar($cabecera, $doc['detalles'], $empresa, 'S');
+
+            // Destinatarios: el que venga del formulario o, en su defecto, el del proveedor.
+            $correosDestino = trim($_POST['correos'] ?? '');
+            if ($correosDestino === '') {
+                $correosDestino = (string) ($cabecera['proveedor_email'] ?? '');
+            }
+            if ($correosDestino === '') {
+                if (ob_get_level() > 0) ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'El proveedor no tiene correo registrado. Ingrese uno para enviar.']);
+                exit;
+            }
+
+            $proveedorNombre = (string) ($cabecera['proveedor_nombre'] ?? 'Proveedor');
+            $empresaNombre   = (string) ($empresa['nombre'] ?? '');
+            $asunto = 'Orden de Compra ' . ($numero !== '' ? $numero : '') . ($empresaNombre !== '' ? ' — ' . $empresaNombre : '');
+            $cuerpo = "<div style='font-family:Arial,sans-serif;line-height:1.5;'>"
+                . "<p>Estimad@ " . htmlspecialchars($proveedorNombre) . ",</p>"
+                . "<p>Adjunto encontrará la orden de compra <strong>" . htmlspecialchars($numero) . "</strong>.</p>"
+                . "<p>Saludos cordiales,<br>" . htmlspecialchars($empresaNombre) . "</p>"
+                . "</div>";
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarPdfSimple(
+                $idEmpresa, $correosDestino, $proveedorNombre, $asunto, $cuerpo, $pdfString,
+                'OrdenCompra_' . ($numero !== '' ? $numero : 'comprobante'), $empresaNombre
+            );
+
+            if (ob_get_level() > 0) ob_end_clean();
+            if ($enviado) {
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo o el destinatario.']);
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (ob_get_level() > 0) ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
+        exit;
     }
 
     private function _recogerCabecera(int $idEmpresa, int $idUsuario): array

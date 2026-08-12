@@ -207,12 +207,16 @@ class InventarioService
         // Validación de stock negativo si la facturación no es libre
         if (!$facturacionLibre && $stockPosterior < 0) {
             $nombreProd = $this->getProductoRepository()->getNombre($idProducto);
-            $msg = "Stock insuficiente para el producto '{$nombreProd}'. Disponible: {$stockActual}, Requerido: {$cantidad}.";
-            
+            // Este chequeo corre YA con el candado de stock tomado (lockStock arriba), así
+            // que si falla es con el saldo real y actualizado al segundo — la causa más común
+            // es que otro usuario acaba de facturar/consumir ese mismo saldo justo antes.
+            $sugerencia = ' Es posible que otro usuario haya facturado este producto justo ahora. Actualiza la pantalla y vuelve a intentar.';
+            $msg = "Stock insuficiente para el producto '{$nombreProd}'. Disponible ahora: {$stockActual}, Requerido: {$cantidad}.{$sugerencia}";
+
             if (!empty($extra['componente_de'])) {
-                $msg = "Stock insuficiente para el componente '{$nombreProd}' (Combo: '{$extra['componente_de']}'). Disponible: {$stockActual}, Requerido: {$cantidad}.";
+                $msg = "Stock insuficiente para el componente '{$nombreProd}' (Combo: '{$extra['componente_de']}'). Disponible ahora: {$stockActual}, Requerido: {$cantidad}.{$sugerencia}";
             }
-            
+
             throw new \Exception($msg);
         }
 

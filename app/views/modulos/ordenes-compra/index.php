@@ -307,6 +307,7 @@ window.ocAbrirCrear = function() {
     document.getElementById('oc_estado').value           = 'borrador';
     document.getElementById('oc_proveedor_id').value    = '';
     document.getElementById('oc_proveedor_texto').value = '';
+    window._OC_PROVEEDOR_EMAIL = '';
 
     ocPopularPuntosSelect();
     const sel = document.getElementById('oc_id_punto_emision');
@@ -338,6 +339,7 @@ window.ocAbrirEditar = function(tr) {
     document.getElementById('oc_estado').value          = d.estado ?? 'borrador';
     document.getElementById('oc_proveedor_id').value    = d.id_proveedor ?? '';
     document.getElementById('oc_proveedor_texto').value = d.proveedor_nombre ?? '';
+    window._OC_PROVEEDOR_EMAIL = d.proveedor_email ?? '';
 
     ocPopularPuntosSelect();
     const sel = document.getElementById('oc_id_punto_emision');
@@ -491,6 +493,7 @@ async function ocBuscarProveedores(q) {
                     e.preventDefault();
                     document.getElementById('oc_proveedor_id').value    = p.id;
                     document.getElementById('oc_proveedor_texto').value = p.razon_social;
+                    window._OC_PROVEEDOR_EMAIL = p.email ?? '';
                     lista.classList.add('d-none');
                 });
                 lista.appendChild(a);

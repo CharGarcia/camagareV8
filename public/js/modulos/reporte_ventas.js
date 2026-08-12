@@ -152,10 +152,30 @@ function RV_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
     });
 }
 
+// Mantiene los botones "Detallado" / "Por cliente" del header de la tabla
+// reflejando el valor actual del select "Agrupar Por" (los dos son la misma fuente de verdad).
+function RV_sincronizarBotonesVista() {
+    const valor = document.getElementById('rv_agrupar_por').value;
+    const bDetalle  = document.getElementById('rv-btn-detalle');
+    const bAgrupado = document.getElementById('rv-btn-agrupado');
+    if (!bDetalle || !bAgrupado) return;
+    bDetalle.classList.toggle('btn-primary',          valor === 'NINGUNO');
+    bDetalle.classList.toggle('btn-outline-primary',  valor !== 'NINGUNO');
+    bAgrupado.classList.toggle('btn-primary',         valor === 'CLIENTE');
+    bAgrupado.classList.toggle('btn-outline-primary', valor !== 'CLIENTE');
+}
+
+// Atajo de los botones del header: fija "Agrupar Por" y dispara el mismo flujo que el select.
+window.RV_setVistaAgrupacion = function(valor) {
+    document.getElementById('rv_agrupar_por').value = valor;
+    window.RV_onAgruparChange();
+};
+
 // Maneja el cambio de "Agrupar Por": al elegir "Por Mes" se fuerza el filtro Mes a "Todos".
 window.RV_onAgruparChange = function() {
     const agruparPor = document.getElementById('rv_agrupar_por').value;
     const mesEl = document.getElementById('rv-mes');
+    RV_sincronizarBotonesVista();
 
     if (agruparPor === 'MES') {
         mesEl.disabled = true;

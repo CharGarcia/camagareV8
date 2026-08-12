@@ -56,13 +56,13 @@ class ReporteInventarioRepository extends BaseRepository
 
     private function buildWhereExistencias(int $idEmpresa, array $filtros): array
     {
-        $where = "pb.id_empresa = :id_empresa AND pb.eliminado = false
+        $where = "u.id_empresa = :id_empresa
                    AND p.eliminado = false AND p.inventariable = true
                    AND b.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
 
         if (!empty($filtros['id_bodega'])) {
-            $where .= " AND pb.id_bodega = :id_bodega";
+            $where .= " AND u.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
         }
         if (!empty($filtros['id_categoria'])) {
@@ -74,7 +74,7 @@ class ReporteInventarioRepository extends BaseRepository
             $params[':id_marca'] = (int) $filtros['id_marca'];
         }
         if (!empty($filtros['id_producto'])) {
-            $where .= " AND pb.id_producto = :id_producto";
+            $where .= " AND u.id_producto = :id_producto";
             $params[':id_producto'] = (int) $filtros['id_producto'];
         }
         if (!empty($filtros['buscar'])) {
@@ -87,8 +87,8 @@ class ReporteInventarioRepository extends BaseRepository
         if (!empty($filtros['numero_lote'])) {
             $where .= " AND EXISTS (
                 SELECT 1 FROM inventario_kardex k2
-                WHERE k2.id_producto = pb.id_producto AND k2.id_bodega = pb.id_bodega
-                  AND k2.id_empresa = pb.id_empresa AND k2.eliminado = false
+                WHERE k2.id_producto = u.id_producto AND k2.id_bodega = u.id_bodega
+                  AND k2.id_empresa = u.id_empresa AND k2.eliminado = false
                   AND k2.numero_lote ILIKE :numero_lote
             )";
             $params[':numero_lote'] = '%' . $filtros['numero_lote'] . '%';
@@ -96,8 +96,8 @@ class ReporteInventarioRepository extends BaseRepository
         if (!empty($filtros['nup'])) {
             $where .= " AND EXISTS (
                 SELECT 1 FROM inventario_kardex k3
-                WHERE k3.id_producto = pb.id_producto AND k3.id_bodega = pb.id_bodega
-                  AND k3.id_empresa = pb.id_empresa AND k3.eliminado = false
+                WHERE k3.id_producto = u.id_producto AND k3.id_bodega = u.id_bodega
+                  AND k3.id_empresa = u.id_empresa AND k3.eliminado = false
                   AND k3.nup ILIKE :nup
             )";
             $params[':nup'] = '%' . $filtros['nup'] . '%';
@@ -105,8 +105,8 @@ class ReporteInventarioRepository extends BaseRepository
         if (!empty($filtros['fecha_caducidad_desde'])) {
             $where .= " AND EXISTS (
                 SELECT 1 FROM inventario_kardex k4
-                WHERE k4.id_producto = pb.id_producto AND k4.id_bodega = pb.id_bodega
-                  AND k4.id_empresa = pb.id_empresa AND k4.eliminado = false
+                WHERE k4.id_producto = u.id_producto AND k4.id_bodega = u.id_bodega
+                  AND k4.id_empresa = u.id_empresa AND k4.eliminado = false
                   AND k4.fecha_caducidad >= :fecha_caducidad_desde
             )";
             $params[':fecha_caducidad_desde'] = $filtros['fecha_caducidad_desde'];
@@ -114,8 +114,8 @@ class ReporteInventarioRepository extends BaseRepository
         if (!empty($filtros['fecha_caducidad_hasta'])) {
             $where .= " AND EXISTS (
                 SELECT 1 FROM inventario_kardex k5
-                WHERE k5.id_producto = pb.id_producto AND k5.id_bodega = pb.id_bodega
-                  AND k5.id_empresa = pb.id_empresa AND k5.eliminado = false
+                WHERE k5.id_producto = u.id_producto AND k5.id_bodega = u.id_bodega
+                  AND k5.id_empresa = u.id_empresa AND k5.eliminado = false
                   AND k5.fecha_caducidad <= :fecha_caducidad_hasta
             )";
             $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
@@ -124,12 +124,21 @@ class ReporteInventarioRepository extends BaseRepository
         return [$where, $params];
     }
 
-    /** Base: una fila por producto×bodega, con costo unitario (último movimiento) y estado calculado. */
+    /**
+     * Base: una fila por producto×bodega, con costo unitario (último movimiento) y estado
+     * calculado. El universo de pares producto×bodega sale de UNION(productos_bodegas activos,
+     * pares distintos con movimiento real en inventario_kardex) — no solo de productos_bodegas —
+     * para que un producto con historial de kardex nunca desaparezca de Existencias (con saldo
+     * cero o negativo incluido) aunque su fila en productos_bodegas esté ausente o eliminada
+     * (caché desincronizado; ver docs/manual/modulos/reporte-inventarios.md, pestaña Auditoría).
+     * productos_bodegas (pb) queda como LEFT JOIN solo para leer stock_minimo/stock_maximo.
+     */
     private function baseExistencias(string $where): string
     {
         return "
             SELECT * FROM (
-                SELECT pb.id_producto, pb.id_bodega, pb.stock_minimo, pb.stock_maximo,
+                SELECT u.id_producto, u.id_bodega, COALESCE(pb.stock_minimo, 0) AS stock_minimo,
+                       COALESCE(pb.stock_maximo, 0) AS stock_maximo,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        p.id_categoria, COALESCE(cat.nombre, 'Sin categoría') AS categoria_nombre,
                        p.id_marca, COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,
@@ -139,13 +148,13 @@ class ReporteInventarioRepository extends BaseRepository
                        -- por el kardex — mismo motivo que el Saldo de Movimientos).
                        COALESCE((
                            SELECT SUM(k.cantidad) FROM inventario_kardex k
-                           WHERE k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
-                             AND k.id_empresa = pb.id_empresa AND k.eliminado = false
+                           WHERE k.id_producto = u.id_producto AND k.id_bodega = u.id_bodega
+                             AND k.id_empresa = u.id_empresa AND k.eliminado = false
                        ), 0) AS stock_actual,
                        COALESCE((
                            SELECT k.costo_unitario FROM inventario_kardex k
-                           WHERE k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
-                             AND k.id_empresa = pb.id_empresa AND k.eliminado = false
+                           WHERE k.id_producto = u.id_producto AND k.id_bodega = u.id_bodega
+                             AND k.id_empresa = u.id_empresa AND k.eliminado = false
                            ORDER BY k.fecha_movimiento DESC, k.id DESC LIMIT 1
                        ), 0) AS costo_unitario,
                        COALESCE((
@@ -154,12 +163,20 @@ class ReporteInventarioRepository extends BaseRepository
                                       - COALESCE((" . $this->sqlFacturadoCv() . "), 0))
                            FROM consignaciones_ventas_detalles cvd
                            INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
-                           WHERE cvd.id_producto = pb.id_producto AND cvd.id_bodega = pb.id_bodega
-                             AND cvd.id_empresa = pb.id_empresa AND cvd.eliminado = false AND cv.eliminado = false
+                           WHERE cvd.id_producto = u.id_producto AND cvd.id_bodega = u.id_bodega
+                             AND cvd.id_empresa = u.id_empresa AND cvd.eliminado = false AND cv.eliminado = false
                        ), 0) AS consignado
-                FROM productos_bodegas pb
-                INNER JOIN productos p ON p.id = pb.id_producto AND p.id_empresa = pb.id_empresa
-                INNER JOIN bodegas b ON b.id = pb.id_bodega
+                FROM (
+                    SELECT id_empresa, id_producto, id_bodega FROM productos_bodegas
+                    WHERE id_empresa = :id_empresa AND eliminado = false
+                    UNION
+                    SELECT id_empresa, id_producto, id_bodega FROM inventario_kardex
+                    WHERE id_empresa = :id_empresa AND eliminado = false
+                ) u
+                INNER JOIN productos p ON p.id = u.id_producto AND p.id_empresa = u.id_empresa
+                INNER JOIN bodegas b ON b.id = u.id_bodega
+                LEFT JOIN productos_bodegas pb ON pb.id_producto = u.id_producto
+                    AND pb.id_bodega = u.id_bodega AND pb.id_empresa = u.id_empresa AND pb.eliminado = false
                 LEFT JOIN categorias cat ON cat.id = p.id_categoria
                 LEFT JOIN marcas mar ON mar.id = p.id_marca
                 WHERE {$where}

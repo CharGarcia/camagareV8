@@ -824,7 +824,14 @@ class ProductosController extends BaseModuloController
             'id_marca'              => empty($_POST['id_marca']) ? null : (int)$_POST['id_marca'],
             'imagen'                => trim($_POST['imagen'] ?? ''),
             'costo_producto'        => empty($_POST['costo_producto']) ? 0 : (float)$_POST['costo_producto'],
-            'inventarios'           => !empty($_POST['inventarios']) ? json_decode($_POST['inventarios'], true) : [],
+            // OJO: el modal estándar de edición de producto no gestiona bodegas (no manda
+            // este campo) — si no viene, la clave debe quedar ausente/null, NUNCA en [],
+            // porque ProductoService::crear()/actualizar() usa isset($data['inventarios'])
+            // para decidir si llama a syncInventarios() (que borra todas las bodegas del
+            // producto y solo reactiva las que vengan en el array). Un [] por defecto
+            // disparaba ese borrado en cada guardado normal, dejando el stock invisible en
+            // Existencias aunque el kardex siguiera correcto (ver reporte de inventarios).
+            'inventarios'           => !empty($_POST['inventarios']) ? json_decode($_POST['inventarios'], true) : null,
             'precios'               => !empty($_POST['precios']) ? json_decode($_POST['precios'], true) : [],
             'componentes'           => !empty($_POST['componentes']) ? json_decode($_POST['componentes'], true) : [],
             'variantes'             => !empty($_POST['variantes']) ? json_decode($_POST['variantes'], true) : [],

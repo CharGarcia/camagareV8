@@ -24,6 +24,18 @@
                             title="Nuevo proveedor">
                         <i class="bi bi-person-plus"></i>
                     </button>
+
+                    <div class="vr mx-1"></div>
+
+                    <button type="button" class="btn btn-outline-danger btn-sm px-2 py-1" onclick="ocPdf()" title="Generar PDF">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="ocExcel()" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-excel"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="ocEnviarCorreo()" title="Enviar por correo">
+                        <i class="bi bi-envelope"></i>
+                    </button>
                 </div>
                 <hr class="text-muted my-0 mb-3 opacity-25">
 
@@ -314,5 +326,52 @@ window.ocAgregarFilaDetalle = function(item = {}) {
 
     setupAutocomplete(inputCod);
     setupAutocomplete(inputDesc);
+};
+
+// ── PDF / Excel / Correo ────────────────────────────────────────────────────────
+window.ocPdf = function() {
+    const id = document.getElementById('oc_id').value;
+    if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar la orden de compra primero.' });
+    window.open(`${OC_URL_BASE}/pdf?id=${id}`, '_blank');
+};
+
+window.ocExcel = function() {
+    const id = document.getElementById('oc_id').value;
+    if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar la orden de compra primero.' });
+    window.open(`${OC_URL_BASE}/excel?id=${id}`, '_blank');
+};
+
+window.ocEnviarCorreo = async function() {
+    const id = document.getElementById('oc_id').value;
+    if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar la orden de compra primero.' });
+
+    const { value: correos, isConfirmed } = await Swal.fire({
+        title: 'Enviar por correo',
+        input: 'text',
+        inputLabel: 'Correo(s) destino, separados por coma.',
+        inputValue: window._OC_PROVEEDOR_EMAIL || '',
+        inputPlaceholder: 'proveedor@correo.com',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+        cancelButtonText: 'Cancelar',
+        target: document.getElementById('modalOrdenCompra'),
+    });
+    if (!isConfirmed) return;
+
+    Swal.fire({ title: 'Enviando correo...', allowOutsideClick: false, didOpen: () => Swal.showLoading(), target: document.getElementById('modalOrdenCompra') });
+    try {
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('correos', correos || '');
+        const res = await fetch(`${OC_URL_BASE}/enviarCorreoAjax`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            Swal.fire({ icon: 'success', title: 'Enviado', text: data.mensaje || 'Correo enviado correctamente.', target: document.getElementById('modalOrdenCompra') });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo enviar el correo.', target: document.getElementById('modalOrdenCompra') });
+        }
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo enviar el correo.', target: document.getElementById('modalOrdenCompra') });
+    }
 };
 </script>

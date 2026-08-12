@@ -1,3 +1,4 @@
+<?php require MVC_APP . '/views/partials/agente_extension.php'; ?>
 <script>
 /* ---------------------------------------------------------------
  * Control de sesión activa: polling cada 30 s.

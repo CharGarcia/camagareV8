@@ -2,166 +2,134 @@
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
-    .cxc-header { flex-shrink:0; }
-    .cxc-scroll  { max-height:calc(100vh - 230px); min-height:320px; overflow-y:auto; overflow-x:auto; }
-    .cxc-scroll thead th { position:sticky; top:0; z-index:10; background:#f8f9fa; box-shadow:0 1px 0 #dee2e6; white-space:nowrap; }
+    .cxc-scroll  { overflow-x:auto; }
+    .cxc-scroll thead th { background:#f8f9fa; box-shadow:0 1px 0 #dee2e6; white-space:nowrap; }
     .badge-vencida  { background:rgba(220,53,69,.12);  color:#dc3545; border:1px solid rgba(220,53,69,.25); }
     .badge-vigente  { background:rgba(25,135,84,.12);  color:#198754; border:1px solid rgba(25,135,84,.25); }
     .badge-proxima  { background:rgba(255,193,7,.15);  color:#856404; border:1px solid rgba(255,193,7,.35); }
     .badge-pagada   { background:rgba(108,117,125,.12);color:#6c757d; border:1px solid rgba(108,117,125,.25); }
+    /* Evita que el contenedor de chips (vacío hasta que se elige un cliente) desalinee la fila de filtros */
+    #cxc-chips-cliente:empty { margin-top:0; }
+    /* Altura idéntica y explícita para todos los controles de filtros (selects, inputs, buscador y botones),
+       para que queden alineados sin depender de que cada variante -sm de Bootstrap renderice igual. */
+    #form-filtros-cxc .form-select,
+    #form-filtros-cxc .form-control,
+    #form-filtros-cxc .input-group-text,
+    #form-filtros-cxc .btn { height:28px; font-size:.75rem; }
+    /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
+    @media (max-width: 767.98px) {
+        #modulo-cuentas_por_cobrar .cxc-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
+    }
 </style>
 
-<div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
 
-    <!-- ── Cabecera ── -->
-    <div class="cxc-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div>
+    <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3">
             <h5 class="mb-0 fw-bold"><i class="bi bi-wallet2 me-2 text-success"></i>Cuentas por Cobrar</h5>
-            <small class="text-muted">Seguimiento de saldos pendientes, cobros y recordatorios</small>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <button class="btn btn-outline-primary btn-sm" onclick="CXC_envioMasivoEmail()" title="Un correo por cliente con el resumen de sus documentos seleccionados">
-                <i class="bi bi-envelope me-1"></i>Envío Masivo Email
-            </button>
-        </div>
-    </div>
+        <div class="card-body p-3">
+            <form id="form-filtros-cxc" onsubmit="event.preventDefault(); CXC_cargar();" class="d-flex flex-wrap align-items-start gap-2">
 
-    <!-- ── Filtros ── -->
-    <div class="accordion mb-3 shadow-sm border-0" id="accordionFiltrosCxC">
-        <div class="accordion-item border-0 rounded-3">
-            <h2 class="accordion-header">
-                <button class="accordion-button bg-white text-dark py-2 shadow-none" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#collapseFiltrosCxC">
-                    <i class="bi bi-funnel me-2 text-success"></i>
-                    <span class="fw-bold small">Filtros</span>
-                </button>
-            </h2>
-            <div id="collapseFiltrosCxC" class="accordion-collapse collapse show">
-                <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
-                    <form id="form-filtros-cxc" onsubmit="event.preventDefault(); CXC_cargar();" class="row g-2 align-items-start">
-
-                        <!-- Tipo de documento -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
-                            <select id="cxc-tipo-doc" name="tipo_doc" class="form-select form-select-sm shadow-none border" style="width:170px;"
-                                    onchange="CXC_cargar()">
-                                <option value="TODOS" selected>Todos</option>
-                                <option value="FACTURA">Facturas de venta</option>
-                                <option value="RECIBO">Recibos de venta</option>
-                                <option value="SALDO_INICIAL">Saldos iniciales</option>
-                            </select>
-                        </div>
-
-                        <!-- Estado CxC -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
-                            <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:150px;"
-                                    onchange="CXC_cargar()">
-                                <option value="PENDIENTES" selected>Saldo Pendiente</option>
-                                <option value="VENCIDAS">Vencidas</option>
-                                <option value="AL_DIA">Al Día</option>
-                                <option value="PAGADAS">Pagadas</option>
-                                <option value="TODOS">Todos</option>
-                            </select>
-                        </div>
-
-                        <!-- Fecha Desde -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
-                            <input type="date" id="cxc-fecha-desde" name="fecha_desde"
-                                   class="form-control form-control-sm shadow-none border" style="width:140px;">
-                        </div>
-
-                        <!-- Fecha Hasta -->
-                        <div class="col-6 col-md-auto">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
-                            <input type="date" id="cxc-fecha-hasta" name="fecha_hasta"
-                                   class="form-control form-control-sm shadow-none border" style="width:140px;"
-                                   value="<?php echo date('Y-m-d'); ?>">
-                        </div>
-
-                        <!-- Buscador cliente -->
-                        <div class="col-md-3 position-relative">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Cliente</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                <input type="text" id="cxc-search-cliente" class="form-control border-start-0 px-1 shadow-none"
-                                       placeholder="Buscar cliente..." autocomplete="off">
-                            </div>
-                            <div id="cxc-chips-cliente" class="d-flex flex-wrap gap-1 mt-1"></div>
-                            <div id="cxc-dropdown-clientes" class="list-group shadow position-absolute d-none"
-                                 style="z-index:1050;width:calc(100% - 1.5rem);max-height:220px;overflow-y:auto;margin-top:2px;"></div>
-                        </div>
-
-                        <!-- Botones -->
-                        <div class="col-md-auto">
-                            <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="CXC_limpiarFiltros()">
-                                    <i class="bi bi-eraser me-1"></i>Limpiar filtros
-                                </button>
-                                <button type="submit" class="btn btn-success btn-sm px-4 shadow-sm">
-                                    <i class="bi bi-search me-1"></i>Aplicar Filtros
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+                <!-- Tipo de documento -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
+                    <select id="cxc-tipo-doc" name="tipo_doc" class="form-select form-select-sm shadow-none border" style="width:140px;"
+                            onchange="CXC_cargar()">
+                        <option value="TODOS" selected>Todos</option>
+                        <option value="FACTURA">Facturas de venta</option>
+                        <option value="RECIBO">Recibos de venta</option>
+                        <option value="SALDO_INICIAL">Saldos iniciales</option>
+                    </select>
                 </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- ── Tarjetas de Estadísticas ── -->
-    <div class="row g-3 mb-3" id="cxc-stats-row">
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-success bg-opacity-10 text-success rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-receipt fs-4"></i>
+                <!-- Estado CxC -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
+                    <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:130px;"
+                            onchange="CXC_cargar()">
+                        <option value="PENDIENTES" selected>Saldo Pendiente</option>
+                        <option value="VENCIDAS">Vencidas</option>
+                        <option value="AL_DIA">Al Día</option>
+                        <option value="PAGADAS">Pagadas</option>
+                        <option value="TODOS">Todos</option>
+                    </select>
+                </div>
+
+                <!-- Fecha Desde -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
+                    <input type="date" id="cxc-fecha-desde" name="fecha_desde"
+                           class="form-control form-control-sm shadow-none border" style="width:115px;">
+                </div>
+
+                <!-- Fecha Hasta -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
+                    <input type="date" id="cxc-fecha-hasta" name="fecha_hasta"
+                           class="form-control form-control-sm shadow-none border" style="width:115px;"
+                           value="<?php echo date('Y-m-d'); ?>">
+                </div>
+
+                <!-- Cliente + Botones: agrupados para que nunca se separen al hacer wrap -->
+                <div class="d-flex flex-wrap align-items-start gap-2">
+                    <!-- Buscador cliente -->
+                    <div class="position-relative" style="width:440px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cliente</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" id="cxc-search-cliente" class="form-control border-start-0 px-1 shadow-none"
+                                   placeholder="Buscar cliente..." autocomplete="off">
+                        </div>
+                        <div id="cxc-chips-cliente" class="d-flex flex-wrap gap-1 mt-1"></div>
+                        <div id="cxc-dropdown-clientes" class="list-group shadow position-absolute d-none"
+                             style="z-index:1050;width:100%;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
+
+                    <!-- Botones -->
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Documentos</div>
-                        <div class="fw-bold fs-4" id="cxc-stat-facturas">0</div>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="CXC_limpiarFiltros()">
+                                <i class="bi bi-eraser me-1"></i>Limpiar filtros
+                            </button>
+                            <button type="submit" class="btn btn-success btn-sm px-3 shadow-sm">
+                                <i class="bi bi-search me-1"></i>Aplicar Filtros
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </form>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-primary bg-opacity-10 text-primary rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-wallet2 fs-4"></i>
-                    </div>
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats" id="cxc-stats-row">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-receipt bg-success bg-opacity-10 text-success"></i>
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Saldo Total</div>
-                        <div class="fw-bold fs-5 text-primary">$<span id="cxc-stat-saldo">0.00</span></div>
+                        <div class="cmg-control-card__stat-value" id="cxc-stat-facturas">0</div>
+                        <div class="cmg-control-card__stat-label">Documentos</div>
                     </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-danger bg-opacity-10 text-danger rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-exclamation-triangle fs-4"></i>
-                    </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-wallet2 bg-primary bg-opacity-10 text-primary"></i>
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Vencido</div>
-                        <div class="fw-bold fs-5 text-danger">$<span id="cxc-stat-vencido">0.00</span></div>
-                        <div class="text-muted" style="font-size:.7rem;"><span id="cxc-stat-fvencidas">0</span> documentos vencidos</div>
+                        <div class="cmg-control-card__stat-value text-primary">$<span id="cxc-stat-saldo">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Saldo Total</div>
                     </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3 d-flex align-items-center">
-                    <div class="bg-success bg-opacity-10 text-success rounded-3 p-3 me-3" style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;">
-                        <i class="bi bi-check-circle fs-4"></i>
-                    </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-exclamation-triangle bg-danger bg-opacity-10 text-danger"></i>
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Al Día</div>
-                        <div class="fw-bold fs-5 text-success">$<span id="cxc-stat-aldia">0.00</span></div>
+                        <div class="cmg-control-card__stat-value text-danger">$<span id="cxc-stat-vencido">0.00</span></div>
+                        <div class="cmg-control-card__stat-label"><span id="cxc-stat-fvencidas">0</span> vencidos</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-check-circle bg-success bg-opacity-10 text-success"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-success">$<span id="cxc-stat-aldia">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Al Día</div>
                     </div>
                 </div>
             </div>
@@ -183,6 +151,9 @@
                         </button>
                         <button type="button" class="btn btn-outline-success" onclick="CXC_exportarExcel()">
                             <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" onclick="CXC_envioMasivoEmail()" title="Un correo por cliente con el resumen de sus documentos seleccionados">
+                            <i class="bi bi-envelope"></i> Envío Masivo Email
                         </button>
                     </div>
                     <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Vista de tabla">
@@ -240,17 +211,6 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-    </div>
-
-    <!-- ── Gráfico de Antigüedad (al final de todas las tablas) ── -->
-    <div class="card border-0 shadow-sm mt-4" id="cxc-chart-card" style="display:none;">
-        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-            <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart me-2 text-success"></i>Análisis de Antigüedad de Saldo</h6>
-            <small class="text-muted">Distribución de cuentas por cobrar por tramos de vencimiento</small>
-        </div>
-        <div class="card-body">
-            <canvas id="cxcAgingChart" style="max-height:260px;"></canvas>
         </div>
     </div>
 
@@ -562,5 +522,4 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
     const RUTA_MODULO_CXC = "<?php echo $rutaModulo; ?>";
     const CXC_TIENE_WA    = <?php echo $tieneWA ? 'true' : 'false'; ?>;
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/cuentas_por_cobrar.js?v=<?php echo time(); ?>"></script>

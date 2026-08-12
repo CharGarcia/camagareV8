@@ -244,37 +244,52 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                         <div class="fw-semibold mb-1">¿Qué hace este botón?</div>
                                         <p class="mb-2">Abre el portal del SRI con el RUC y clave del SRI actual, y automáticamente se ubica en <strong>descargas de documentos recibidos</strong> para que el usuario seleccione <strong>año, mes, día y tipo de documento</strong> y dé clic en <strong>Consultar</strong>.</p>
                                         <p class="mb-2">Luego pulsa <strong>«Enviar comprobantes al sistema»</strong> en el portal.</p>
-                                        <div class="border-top pt-2 mt-2">
-                                            <span class="fw-semibold"><i class="bi bi-puzzle me-1"></i>Requiere la extensión de Chrome instalada (una sola vez).</span>
-                                            <div class="mt-2">
-                                                <a href="https://chromewebstore.google.com/detail/efbhpocfaimlpakbhnoakafeflghejin" target="_blank" rel="noopener" class="btn btn-success btn-sm">
-                                                    <i class="bi bi-download me-1"></i> Instalar la extensión
-                                                </a>
-                                            </div>
-                                            <div class="mt-2">Pulsa el botón, luego <strong>«Añadir a Chrome»</strong> y confirma con <strong>«Agregar extensión»</strong>. Al terminar, <strong>recarga esta página</strong> y ya puedes usar "Generar descarga del SRI".</div>
+                                        <div class="accordion mt-2" id="accordionExtensionSri">
+                                          <div class="accordion-item border border-secondary border-opacity-25 rounded-3 overflow-hidden">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed bg-secondary bg-opacity-10 text-secondary fw-bold small py-2 px-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExtensionSri" aria-expanded="false" aria-controls="collapseExtensionSri">
+                                                    <i class="bi bi-puzzle me-2"></i>Extensión de Chrome (requerida, una sola vez)
+                                                    <?php if (!empty($extensionVersion)): ?>
+                                                    <span class="badge ms-2 bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:0.7rem;">v<?= htmlspecialchars($extensionVersion, ENT_QUOTES) ?></span>
+                                                    <?php endif; ?>
+                                                </button>
+                                            </h2>
+                                            <div id="collapseExtensionSri" class="accordion-collapse collapse" data-bs-parent="#accordionExtensionSri">
+                                              <div class="accordion-body px-3 py-3">
 
-                                            <!-- La extensión toma este token sola al cargar la página. Se muestra aquí
-                                                 (oculto tras el ojo) por si hace falta pegarlo a mano. -->
-                                            <div class="mt-3">
-                                                <label class="form-label small fw-semibold mb-1" for="inpToken">
-                                                    <i class="bi bi-key me-1"></i>Token de la extensión
-                                                </label>
-                                                <div class="input-group input-group-sm">
-                                                    <input type="password" class="form-control font-monospace" id="inpToken" autocomplete="off" readonly
-                                                           value="<?= htmlspecialchars($agenteToken ?? '', ENT_QUOTES) ?>">
-                                                    <button class="btn btn-outline-secondary" type="button" id="btnVerToken" title="Mostrar u ocultar el token">
-                                                        <i class="bi bi-eye" id="icoVerToken"></i>
-                                                    </button>
-                                                    <button class="btn btn-outline-secondary" type="button" id="btnCopiarToken" title="Copiar el token">
-                                                        <i class="bi bi-clipboard"></i>
-                                                    </button>
+                                                <div class="mt-2 d-flex align-items-center flex-wrap gap-2">
+                                                    <a href="https://chromewebstore.google.com/detail/efbhpocfaimlpakbhnoakafeflghejin" target="_blank" rel="noopener" class="btn btn-success btn-sm">
+                                                        <i class="bi bi-download me-1"></i> Instalar la extensión
+                                                    </a>
                                                 </div>
-                                                <div class="form-text">
-                                                    Normalmente no necesitas usarlo: la extensión lo toma sola al abrir esta página. Si no se conecta,
-                                                    cópialo desde aquí y pégalo en el ícono de la extensión → <strong>Configuración avanzada</strong> →
-                                                    <strong>Token</strong> → <strong>Guardar</strong>. No lo compartas: permite registrar comprobantes en tus empresas.
+                                                <div class="mt-2">Pulsa el botón, luego <strong>«Añadir a Chrome»</strong> y confirma con <strong>«Agregar extensión»</strong>. Al terminar, <strong>recarga esta página</strong> y ya puedes usar "Generar descarga del SRI". Si ya la tenías instalada y no coincide con la versión de arriba, ve a <code>chrome://extensions</code> y pulsa <strong>recargar (↻)</strong> o revisa actualizaciones.</div>
+
+                                                <!-- La extensión toma este token sola al cargar la página. Se muestra aquí
+                                                     (oculto tras el ojo) por si hace falta pegarlo a mano. -->
+                                                <div class="mt-3">
+                                                    <label class="form-label small fw-semibold mb-1" for="inpToken">
+                                                        <i class="bi bi-key me-1"></i>Token de la extensión
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="password" class="form-control font-monospace" id="inpToken" autocomplete="off" readonly
+                                                               value="<?= htmlspecialchars($agenteToken ?? '', ENT_QUOTES) ?>">
+                                                        <button class="btn btn-outline-secondary" type="button" id="btnVerToken" title="Mostrar u ocultar el token">
+                                                            <i class="bi bi-eye" id="icoVerToken"></i>
+                                                        </button>
+                                                        <button class="btn btn-outline-secondary" type="button" id="btnCopiarToken" title="Copiar el token">
+                                                            <i class="bi bi-clipboard"></i>
+                                                        </button>
+                                                    </div>
+                                                    <div class="form-text">
+                                                        Normalmente no necesitas usarlo: la extensión lo toma sola al abrir esta página. Si no se conecta,
+                                                        cópialo desde aquí y pégalo en el ícono de la extensión → <strong>Configuración avanzada</strong> →
+                                                        <strong>Token</strong> → <strong>Guardar</strong>. No lo compartas: permite registrar comprobantes en tus empresas.
+                                                    </div>
                                                 </div>
+
+                                              </div>
                                             </div>
+                                          </div>
                                         </div>
                                     </div>
                                 </div>
@@ -377,21 +392,9 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
     </div>
 </div>
 
-<!-- Token del agente para la extensión CaMaGaRe: la extensión lo LEE de este elemento (robusto) y
-     también lo recibe por postMessage. servidorUrl = origen + BASE_URL (cubre el subdirectorio en local). -->
-<div id="cmg-config" data-token="<?= htmlspecialchars($agenteToken ?? '', ENT_QUOTES) ?>" data-base="<?= htmlspecialchars(rtrim(BASE_URL, '/'), ENT_QUOTES) ?>" hidden></div>
 <script>
-(function () {
-    var t = <?= json_encode($agenteToken ?? '') ?>;
-    if (!t) return;
-    var servidor = window.location.origin + <?= json_encode(rtrim(BASE_URL, '/')) ?>;
-    try {
-        window.postMessage({ source: 'cmg-sistema', token: t, servidorUrl: servidor }, window.location.origin);
-    } catch (e) {}
-})();
-
 // Token de la extensión: ojo para mostrar/ocultar y botón para copiar (respaldo manual; la
-// extensión normalmente lo toma sola del elemento #cmg-config al cargar esta página).
+// extensión se conecta sola en cualquier página del sistema, ver partials/agente_extension.php).
 (function () {
     var inp = document.getElementById('inpToken');
     if (!inp) return;

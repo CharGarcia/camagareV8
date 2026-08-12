@@ -32,8 +32,24 @@ class DescargasSriController extends Controller
             'rucEmpresa'  => $_SESSION['ruc_empresa'] ?? '',
             // Token del agente (autogenerado): la vista lo entrega a la extensión sin que el usuario lo configure.
             'agenteToken' => $idUsuario > 0 ? (new Usuario())->asegurarAgenteToken($idUsuario) : '',
+            // Versión publicada de la extensión (leída de su manifest.json), para avisar al
+            // usuario cuál es la versión vigente junto al botón de instalación.
+            'extensionVersion' => $this->obtenerVersionExtension(),
             // 'perm' => $this->getPermisos('descargas_sri')
         ]);
+    }
+
+    /**
+     * Versión publicada de la extensión de Chrome, leída directamente de su manifest.json
+     * (viaja en el mismo repo, carpeta `extension/`), para no tener que duplicar el número
+     * a mano en la vista cada vez que se sube una versión nueva.
+     */
+    private function obtenerVersionExtension(): string
+    {
+        $manifest = MVC_ROOT . '/extension/manifest.json';
+        if (!is_file($manifest)) return '';
+        $data = json_decode((string) file_get_contents($manifest), true);
+        return is_array($data) ? (string) ($data['version'] ?? '') : '';
     }
 
     /**

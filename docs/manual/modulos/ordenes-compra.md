@@ -6,7 +6,7 @@ ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra
-version: 1.0
+version: 1.1
 orden: 15
 estado: activo
 ---
@@ -30,7 +30,11 @@ inventario. Es un compromiso, no una compra.
 1. Pulse **Nuevo**.
 2. Elija el **proveedor**.
 3. Añada los productos con cantidad y precio acordado.
-4. Guarde y envíela al proveedor.
+4. Guarde y envíela al proveedor: en la parte superior del modal (una vez
+   guardada) están los botones **PDF**, **Excel** y **Correo** para descargar
+   o enviar el comprobante directamente al proveedor. Al enviar por correo,
+   si el proveedor tiene correo registrado se precarga como destinatario;
+   igual se puede escribir uno distinto.
 5. Cuando llegue la mercadería con su factura, **conviértala en compra**.
 
 ## Lo que ocurre al convertirla
@@ -49,4 +53,6 @@ inventario y se genera la retención si corresponde.
 
 ## Historial de cambios
 
+- **1.1** — Botones de PDF, Excel y Correo en el modal para descargar o enviar
+  la orden guardada directamente al proveedor.
 - **1.0** — Versión inicial.

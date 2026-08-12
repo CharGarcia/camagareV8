@@ -1,153 +1,187 @@
 <?php /** @var string $rutaModulo @var array $formas @var array $conceptos @var array $anios */ ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
-<div class="container-fluid py-2">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-        <h5 class="fw-bold mb-0"><i class="bi bi-arrow-down-up text-primary me-2"></i>Reporte de Ingresos y Egresos</h5>
-        <div class="d-flex gap-1">
-            <button type="button" class="btn btn-outline-danger btn-sm" id="rieBtnPdf" disabled><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>
-            <button type="button" class="btn btn-outline-success btn-sm" id="rieBtnExcel" disabled><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+<style>
+    .rie-scroll { overflow-x: auto; }
+    .rie-scroll thead th { background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; }
+    /* Altura idéntica y explícita para todos los controles de filtros */
+    #form-filtros-rie .form-select,
+    #form-filtros-rie .form-control,
+    #form-filtros-rie .btn { height:28px; font-size:.75rem; }
+    /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
+    @media (max-width: 767.98px) {
+        #modulo-reporte_ingresos_egresos .rie-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
+    }
+</style>
+
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-reporte_ingresos_egresos">
+
+    <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-down-up me-2 text-primary"></i>Reporte de Ingresos y Egresos</h5>
         </div>
-    </div>
+        <div class="card-body p-3">
+            <form id="form-filtros-rie" onsubmit="return false;">
 
-    <!-- Filtros -->
-    <div class="card shadow-sm mb-2">
-        <div class="card-body p-2">
-            <div class="row g-2">
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Mostrar</label>
-                    <select id="rie-tipo-flujo" class="form-select form-select-sm">
-                        <option value="AMBOS">Ingresos y Egresos</option>
-                        <option value="INGRESO">Solo Ingresos</option>
-                        <option value="EGRESO">Solo Egresos</option>
-                    </select>
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Ver por</label>
-                    <select id="rie-ver-por" class="form-select form-select-sm">
-                        <option value="DETALLE">Documento (detalle)</option>
-                        <option value="TERCERO">Tercero (resumen)</option>
-                        <option value="FORMA">Forma de cobro/pago</option>
-                        <option value="FECHA">Fecha (total por día)</option>
-                        <option value="MES">Mes</option>
-                    </select>
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Desde</label>
-                    <input type="date" id="rie-fecha-desde" class="form-control form-control-sm" value="<?= date('Y-m-01') ?>">
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Hasta</label>
-                    <input type="date" id="rie-fecha-hasta" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>">
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Tipo de tercero</label>
-                    <select id="rie-tercero-tipo" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        <option value="CLIENTE">Cliente</option>
-                        <option value="PROVEEDOR">Proveedor</option>
-                        <option value="EMPLEADO">Empleado</option>
-                    </select>
-                </div>
-                <div class="col-6 col-md-2 position-relative">
-                    <label class="form-label small fw-bold mb-1">Tercero</label>
-                    <input type="text" id="rie-tercero-txt" class="form-control form-control-sm" placeholder="Nombre / RUC…" autocomplete="off">
-                    <input type="hidden" id="rie-tercero-id">
-                    <div id="rie-tercero-drop" class="list-group shadow position-absolute w-100 d-none" style="z-index:2000;max-height:220px;overflow:auto;"></div>
+                <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mostrar</label>
+                        <select id="rie-tipo-flujo" class="form-select form-select-sm shadow-none border" style="width:150px;">
+                            <option value="AMBOS">Ingresos y Egresos</option>
+                            <option value="INGRESO">Solo Ingresos</option>
+                            <option value="EGRESO">Solo Egresos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Ver por</label>
+                        <select id="rie-ver-por" class="form-select form-select-sm shadow-none border" style="width:170px;">
+                            <option value="DETALLE">Documento (detalle)</option>
+                            <option value="TERCERO">Tercero (resumen)</option>
+                            <option value="FORMA">Forma de cobro/pago</option>
+                            <option value="FECHA">Fecha (total por día)</option>
+                            <option value="MES">Mes</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
+                        <select id="rie-estado" class="form-select form-select-sm shadow-none border" style="width:110px;">
+                            <option value="TODOS">Todos</option>
+                            <option value="registrado">Registrado</option>
+                            <option value="anulado">Anulado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Desde</label>
+                        <input type="date" id="rie-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?= date('Y-m-01') ?>">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Hasta</label>
+                        <input type="date" id="rie-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de tercero</label>
+                        <select id="rie-tercero-tipo" class="form-select form-select-sm shadow-none border" style="width:130px;">
+                            <option value="">Todos</option>
+                            <option value="CLIENTE">Cliente</option>
+                            <option value="PROVEEDOR">Proveedor</option>
+                            <option value="EMPLEADO">Empleado</option>
+                        </select>
+                    </div>
+                    <div class="position-relative" style="flex:1 1 170px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cliente/Proveedor/Empleado</label>
+                        <input type="text" id="rie-tercero-txt" class="form-control form-control-sm shadow-none border" placeholder="Nombre / RUC…" autocomplete="off">
+                        <input type="hidden" id="rie-tercero-id">
+                        <div id="rie-tercero-drop" class="list-group shadow position-absolute w-100 d-none" style="z-index:1050;max-height:220px;overflow:auto;margin-top:2px;"></div>
+                    </div>
                 </div>
 
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Forma de cobro/pago</label>
-                    <select id="rie-forma" class="form-select form-select-sm">
-                        <option value="0">Todas</option>
-                        <?php foreach ($formas as $fp): ?>
-                            <option value="<?= (int)$fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Forma de cobro/pago</label>
+                        <select id="rie-forma" class="form-select form-select-sm shadow-none border" style="width:170px;">
+                            <option value="0">Todas</option>
+                            <?php foreach ($formas as $fp): ?>
+                                <option value="<?= (int)$fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Operación bancaria</label>
+                        <select id="rie-opbanc" class="form-select form-select-sm shadow-none border" style="width:150px;">
+                            <option value="">Todas</option>
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="DEPOSITO">Depósito</option>
+                            <option value="DEBITO">Débito</option>
+                            <option value="CHEQUE">Cheque</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Concepto</label>
+                        <select id="rie-concepto" class="form-select form-select-sm shadow-none border" style="width:170px;">
+                            <option value="0">Todos</option>
+                            <?php foreach ($conceptos as $c): ?>
+                                <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de documento</label>
+                        <select id="rie-tipo-doc" class="form-select form-select-sm shadow-none border" style="width:140px;">
+                            <option value="">Todos</option>
+                            <option value="FACTURA">Factura</option>
+                            <option value="RECIBO">Recibo</option>
+                            <option value="COMPRA">Compra</option>
+                            <option value="LIQUIDACION">Liquidación</option>
+                            <option value="SALDO_INICIAL">Saldo inicial</option>
+                            <option value="MANUAL">Manual</option>
+                            <option value="OTRO">Otro</option>
+                            <option value="ROL">Rol</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Monto ≥</label>
+                        <input type="number" id="rie-monto-min" class="form-control form-control-sm shadow-none border" style="width:90px;" step="0.01" placeholder="0">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Monto ≤</label>
+                        <input type="number" id="rie-monto-max" class="form-control form-control-sm shadow-none border" style="width:90px;" step="0.01" placeholder="∞">
+                    </div>
+                    <div style="flex:1 1 300px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Búsqueda libre</label>
+                        <input type="text" id="rie-buscar" class="form-control form-control-sm shadow-none border" placeholder="Número, documento, descripción, observaciones, tercero…">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="rieBtnLimpiar" title="Limpiar filtros"><i class="bi bi-eraser me-1"></i>Limpiar</button>
+                            <button type="button" class="btn btn-primary btn-sm shadow-sm" id="rieBtnGenerar"><i class="bi bi-search me-1"></i>Buscar</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Operación bancaria</label>
-                    <select id="rie-opbanc" class="form-select form-select-sm">
-                        <option value="">Todas</option>
-                        <option value="TRANSFERENCIA">Transferencia</option>
-                        <option value="DEPOSITO">Depósito</option>
-                        <option value="DEBITO">Débito</option>
-                        <option value="CHEQUE">Cheque</option>
-                    </select>
+            </form>
+        </div>
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-arrow-down-circle bg-success bg-opacity-10 text-success"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-success" id="rie-kpi-ing">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Ingresos <span id="rie-n-ing"></span></div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Concepto</label>
-                    <select id="rie-concepto" class="form-select form-select-sm">
-                        <option value="0">Todos</option>
-                        <?php foreach ($conceptos as $c): ?>
-                            <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-arrow-up-circle bg-danger bg-opacity-10 text-danger"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-danger" id="rie-kpi-egr">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Egresos <span id="rie-n-egr"></span></div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Tipo de documento</label>
-                    <select id="rie-tipo-doc" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        <option value="FACTURA">Factura</option>
-                        <option value="RECIBO">Recibo</option>
-                        <option value="COMPRA">Compra</option>
-                        <option value="LIQUIDACION">Liquidación</option>
-                        <option value="SALDO_INICIAL">Saldo inicial</option>
-                        <option value="MANUAL">Manual</option>
-                        <option value="OTRO">Otro</option>
-                        <option value="ROL">Rol</option>
-                    </select>
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small fw-bold mb-1">Estado</label>
-                    <select id="rie-estado" class="form-select form-select-sm">
-                        <option value="TODOS">Todos</option>
-                        <option value="registrado">Registrado</option>
-                        <option value="anulado">Anulado</option>
-                    </select>
-                </div>
-                <div class="col-6 col-md-1">
-                    <label class="form-label small fw-bold mb-1">Monto ≥</label>
-                    <input type="number" id="rie-monto-min" class="form-control form-control-sm" step="0.01" placeholder="0">
-                </div>
-                <div class="col-6 col-md-1">
-                    <label class="form-label small fw-bold mb-1">Monto ≤</label>
-                    <input type="number" id="rie-monto-max" class="form-control form-control-sm" step="0.01" placeholder="∞">
-                </div>
-                <div class="col-12 col-md-8">
-                    <label class="form-label small fw-bold mb-1">Búsqueda libre</label>
-                    <input type="text" id="rie-buscar" class="form-control form-control-sm" placeholder="Número, documento, descripción, observaciones, tercero…">
-                </div>
-                <div class="col-12 col-md-4 d-flex align-items-end gap-1">
-                    <button type="button" class="btn btn-primary btn-sm flex-grow-1" id="rieBtnGenerar"><i class="bi bi-funnel me-1"></i>Generar</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="rieBtnLimpiar" title="Limpiar filtros"><i class="bi bi-eraser"></i></button>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-calculator bg-primary bg-opacity-10 text-primary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-primary" id="rie-kpi-neto">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Neto (Ing − Egr)</div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- KPIs -->
-    <div class="row g-2 mb-2">
-        <div class="col-4"><div class="card shadow-sm border-success border-opacity-25"><div class="card-body p-2 text-center">
-            <div class="small text-muted">Ingresos <span id="rie-n-ing" class="text-secondary"></span></div>
-            <div class="fs-5 fw-bold text-success" id="rie-kpi-ing">$0.00</div>
-        </div></div></div>
-        <div class="col-4"><div class="card shadow-sm border-danger border-opacity-25"><div class="card-body p-2 text-center">
-            <div class="small text-muted">Egresos <span id="rie-n-egr" class="text-secondary"></span></div>
-            <div class="fs-5 fw-bold text-danger" id="rie-kpi-egr">$0.00</div>
-        </div></div></div>
-        <div class="col-4"><div class="card shadow-sm border-primary border-opacity-25"><div class="card-body p-2 text-center">
-            <div class="small text-muted">Neto (Ing − Egr)</div>
-            <div class="fs-5 fw-bold text-primary" id="rie-kpi-neto">$0.00</div>
-        </div></div></div>
-    </div>
-
-    <!-- Tabla -->
-    <div class="card shadow-sm">
+    <!-- ── Tabla ── -->
+    <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-2 px-3 border-bottom">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-danger" id="rieBtnPdf" disabled><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                    <button type="button" class="btn btn-outline-success" id="rieBtnExcel" disabled><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                </div>
+            </div>
+        </div>
         <div class="card-body p-0">
-            <div class="rie-scroll" style="max-height:calc(100vh - 340px);overflow:auto;">
+            <div class="rie-scroll">
                 <table class="table table-sm table-hover table-striped mb-0" style="font-size:0.82rem;">
-                    <thead class="table-light sticky-top" style="top:0;z-index:1;">
+                    <thead class="table-light">
                         <tr id="rie-head-detalle">
                             <th class="ps-3">Flujo</th><th>Número</th><th>Fecha</th><th>Tercero</th>
                             <th>Documento</th><th>Descripción</th><th>Concepto</th><th class="text-center">Estado</th>
@@ -171,7 +205,7 @@
                         </tr>
                     </thead>
                     <tbody id="rie-tbody">
-                        <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Generar</strong>.</td></tr>
+                        <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Buscar</strong>.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -230,7 +264,8 @@
             $('rie-kpi-neto').textContent = money(json.stats.neto);
             $('rie-n-ing').textContent = '(' + json.stats.n_ingresos + ')';
             $('rie-n-egr').textContent = '(' + json.stats.n_egresos + ')';
-            $('rie-kpi-neto').className = 'fs-5 fw-bold ' + (json.stats.neto >= 0 ? 'text-primary' : 'text-danger');
+            $('rie-kpi-neto').classList.toggle('text-primary', json.stats.neto >= 0);
+            $('rie-kpi-neto').classList.toggle('text-danger', json.stats.neto < 0);
 
             $('rieBtnPdf').disabled = json.total === 0;
             $('rieBtnExcel').disabled = json.total === 0;

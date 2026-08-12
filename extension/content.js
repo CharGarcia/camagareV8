@@ -350,14 +350,42 @@
         });
     }
 
-    // Al pulsar "Consultar" en el SRI, limpiar el aviso de la descarga anterior.
+    // Botón "✕" para ocultar todo el bloque flotante, por si estorba (queda oculto hasta la próxima consulta).
+    let ocultoManual = false;
+    function crearBotonCerrarTodo() {
+        if (document.getElementById('cmg-sri-cerrar')) return;
+        estilos();
+        const btn = document.createElement('button');
+        btn.id = 'cmg-sri-cerrar';
+        btn.textContent = '✕';
+        btn.title = 'Ocultar los botones de CaMaGaRe (vuelven a aparecer al pulsar "Consultar")';
+        Object.assign(btn.style, {
+            order: '0', alignSelf: 'flex-end',
+            background: 'rgba(0,0,0,.55)', color: '#fff', border: 'none', borderRadius: '50%',
+            width: '26px', height: '26px', minWidth: '26px', padding: '0',
+            fontSize: '14px', fontWeight: 'bold', lineHeight: '1', cursor: 'pointer',
+        });
+        btn.addEventListener('click', () => {
+            ocultoManual = true;
+            document.getElementById('cmg-sri-cont')?.remove();
+        });
+        contenedor().appendChild(btn);
+    }
+
+    // Al pulsar "Consultar" en el SRI: limpiar el aviso de la descarga anterior y volver a
+    // mostrar el bloque flotante si el usuario lo había ocultado con el botón "✕".
     document.addEventListener('click', (e) => {
         const t = e.target.closest('button, a, input[type=submit], input[type=button]');
-        if (t && /consultar/i.test((t.textContent || t.value || ''))) quitarAviso();
+        if (t && /consultar/i.test((t.textContent || t.value || ''))) {
+            quitarAviso();
+            ocultoManual = false;
+        }
     }, true);
 
     // Botón de salir siempre; el de enviar solo cuando hay resultados en la tabla.
     setInterval(() => {
+        if (ocultoManual) return;
+        crearBotonCerrarTodo();
         crearBotonSalir();
         hayResultados() ? crearBoton() : quitarBoton();
     }, 1500);

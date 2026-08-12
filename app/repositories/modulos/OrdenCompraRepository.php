@@ -84,6 +84,7 @@ class OrdenCompraRepository extends BaseRepository
         $sqlRows = "SELECT oc.*,
                            p.razon_social AS proveedor_nombre,
                            p.identificacion AS proveedor_identificacion,
+                           p.email AS proveedor_email,
                            u_created.nombre AS creado_por_nombre,
                            u_updated.nombre AS actualizado_por_nombre
                     FROM ordenes_compra oc
@@ -113,7 +114,8 @@ class OrdenCompraRepository extends BaseRepository
     {
         $sql = "SELECT oc.*,
                        p.razon_social AS proveedor_nombre,
-                       p.identificacion AS proveedor_identificacion
+                       p.identificacion AS proveedor_identificacion,
+                       p.email AS proveedor_email
                 FROM ordenes_compra oc
                 LEFT JOIN proveedores p ON p.id = oc.id_proveedor
                 WHERE oc.id = :id AND oc.id_empresa = :id_empresa AND oc.eliminado = false";
