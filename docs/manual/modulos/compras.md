@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion
-version: 1.2
+etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -15,16 +15,20 @@ El módulo de **Compras** registra las facturas que recibe la empresa. De aquí
 salen las cuentas por pagar, las retenciones de compra, la entrada de mercadería
 al inventario y el gasto contable.
 
-## Tres formas de registrar una compra
+## Dos formas de registrar una compra
 
 - **Desde el XML del SRI**: la forma recomendada. El comprobante llega ya
   descargado del SRI y el sistema lee el XML y arma la compra completa.
 - **Manual**: se captura a mano, para comprobantes que no son electrónicos.
-- **Desde una orden de compra**: se convierte la orden en compra.
 
 Al cargar desde XML, el sistema valida que el archivo sea un comprobante del SRI
 con formato válido. Si el comprobante no trae XML o el archivo está dañado, lo
 rechaza con un mensaje explícito.
+
+Ninguna compra "nace" de una orden de compra — la orden es un pedido interno
+previo (ver [Órdenes de Compra](../modulos/ordenes-compra.md)); cuando llega la
+factura electrónica, se **vincula** con la orden desde la compra ya cargada
+(ver más abajo).
 
 ## No se puede repetir un comprobante
 
@@ -44,6 +48,27 @@ Si intenta procesar la entrada sin vincular, el sistema avisa:
 
 La vinculación se guarda: la próxima compra de ese proveedor con el mismo código
 se relaciona sola. Es un trabajo que se hace una vez por producto y proveedor.
+
+## Vincular con la orden de compra
+
+Si esta factura corresponde a un pedido que se hizo antes por
+[Órdenes de Compra](../modulos/ordenes-compra.md), la pestaña **Orden de
+Compra** del modal permite enlazarla:
+
+1. Elija en el desplegable la orden abierta (borrador/aprobado, no vinculada
+   aún a otra compra) del mismo proveedor, y pulse **Vincular**. La orden pasa
+   a estado **Recibido**.
+2. La pestaña muestra una comparación por producto: cantidad y precio
+   **pedidos** vs. **facturados**, marcando cada línea como *OK*, *Diferencia*,
+   *Pendiente* (pedido y aún no facturado) o *No pedido* (facturado sin estar
+   en la orden). El emparejamiento usa el producto del catálogo de cada línea
+   — en la compra, si la línea no tiene un producto vinculado directamente, se
+   resuelve con la misma homologación código-proveedor → producto de la
+   sección anterior.
+3. **Desvincular** deshace el enlace y regresa la orden a Aprobado.
+
+Es solo informativo: no bloquea guardar la compra ni afecta inventario o
+cuentas por pagar.
 
 ## Entrada al inventario
 
@@ -104,6 +129,9 @@ ve solo las que registró.
 
 ## Historial de cambios
 
+- **1.3** — Pestaña "Orden de Compra" en el modal: vincula la compra con la
+  orden de compra del proveedor que la originó y compara cantidades/precios
+  pedidos vs. facturados.
 - **1.2** — Nuevo botón Excel en el documento de la compra (junto a PDF y XML).
 - **1.1** — Corregidos los botones Excel y PDF del listado: no descargaban nada.
 - **1.0** — Versión inicial.

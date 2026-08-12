@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\ComprasRepository;
+use App\repositories\modulos\OrdenCompraRepository;
 use App\Rules\modulos\ComprasRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\PeriodosContablesService;
@@ -14,6 +15,7 @@ use App\core\Database;
 class ComprasService
 {
     private ComprasRepository $repository;
+    private OrdenCompraRepository $ordenCompraRepo;
     private ComprasRules $rules;
     private LogSistemaService $logService;
     private PeriodosContablesService $periodosService;
@@ -22,9 +24,10 @@ class ComprasService
     public function __construct()
     {
         $this->repository = new ComprasRepository();
+        $this->ordenCompraRepo = new OrdenCompraRepository();
         $this->rules = new ComprasRules();
         $this->logService = new LogSistemaService();
-        
+
         // Inicialización manual de dependencias del servicio de periodos
         $periodosRepo = new PeriodosContablesRepository();
         $periodosRules = new PeriodosContablesRules();
@@ -113,6 +116,184 @@ class ComprasService
         $compra['terceros_reembolso'] = $terceros;
 
         return $compra;
+    }
+
+    /** Órdenes de compra del mismo proveedor disponibles para vincular con esta compra. */
+    public function buscarOrdenesAbiertas(int $idProveedor, int $idEmpresa, int $idCompraActual = 0): array
+    {
+        return $this->ordenCompraRepo->getAbiertasPorProveedor($idProveedor, $idEmpresa, $idCompraActual ?: null);
+    }
+
+    /**
+     * Vincula una compra con una orden de compra del mismo proveedor. La orden pasa a
+     * estado 'recibido' (con fecha_recepcion si no la tenía). Reversible con desvincularOrden().
+     */
+    public function vincularOrden(int $idCompra, int $idEmpresa, int $idOrdenCompra, int $idUsuario): void
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) {
+            throw new \Exception('Compra no encontrada.');
+        }
+        $orden = $this->ordenCompraRepo->getById($idOrdenCompra, $idEmpresa);
+        if (!$orden) {
+            throw new \Exception('Orden de compra no encontrada.');
+        }
+        if ((int) $orden['id_proveedor'] !== (int) $compra['id_proveedor']) {
+            throw new \Exception('La orden de compra pertenece a otro proveedor.');
+        }
+        if (!in_array($orden['estado'], ['borrador', 'aprobado'], true)) {
+            throw new \Exception('La orden de compra no está disponible (estado: ' . $orden['estado'] . ').');
+        }
+
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+        try {
+            // El índice único parcial en compras_cabecera.id_orden_compra impide vincular
+            // la misma orden dos veces aunque dos usuarios lo intenten a la vez.
+            $this->repository->vincularOrdenCompra($idCompra, $idEmpresa, $idOrdenCompra, $idUsuario);
+            $this->ordenCompraRepo->cambiarEstado($idOrdenCompra, $idEmpresa, 'recibido', $idUsuario, true);
+
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'VINCULAR_ORDEN', 'compras_cabecera', $idCompra,
+                ['id_orden_compra' => null], ['id_orden_compra' => $idOrdenCompra]
+            );
+
+            if ($managed) $db->commit();
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            if (str_contains($e->getMessage(), 'ux_compras_cabecera_orden_compra')) {
+                throw new \Exception('Esa orden de compra ya fue vinculada a otra compra.');
+            }
+            throw $e;
+        }
+    }
+
+    /** Quita el vínculo con la orden de compra y la regresa a estado 'aprobado'. */
+    public function desvincularOrden(int $idCompra, int $idEmpresa, int $idUsuario): void
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) {
+            throw new \Exception('Compra no encontrada.');
+        }
+        $idOrdenCompra = (int) ($compra['id_orden_compra'] ?? 0);
+        if (!$idOrdenCompra) {
+            return;
+        }
+
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+        try {
+            $this->repository->vincularOrdenCompra($idCompra, $idEmpresa, null, $idUsuario);
+            $this->ordenCompraRepo->cambiarEstado($idOrdenCompra, $idEmpresa, 'aprobado', $idUsuario, false);
+
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'DESVINCULAR_ORDEN', 'compras_cabecera', $idCompra,
+                ['id_orden_compra' => $idOrdenCompra], ['id_orden_compra' => null]
+            );
+
+            if ($managed) $db->commit();
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Compara línea a línea lo pedido (orden de compra vinculada) contra lo facturado
+     * (esta compra), agrupando por producto del catálogo. El emparejamiento usa
+     * id_producto de cada lado; en la compra, cuando la línea no está vinculada
+     * directamente a un producto, se resuelve por la homologación código-proveedor →
+     * producto que ya calcula ComprasRepository::getDetalles() (id_producto_vinculado).
+     * Líneas sin producto resuelto en algún lado quedan aparte, sin comparar por texto.
+     */
+    public function compararConOrden(int $idCompra, int $idEmpresa): array
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) {
+            throw new \Exception('Compra no encontrada.');
+        }
+        $idOrdenCompra = (int) ($compra['id_orden_compra'] ?? 0);
+        if (!$idOrdenCompra) {
+            return ['vinculada' => false];
+        }
+
+        $orden = $this->ordenCompraRepo->getById($idOrdenCompra, $idEmpresa);
+        if (!$orden) {
+            return ['vinculada' => false];
+        }
+
+        $lineasOrden  = $this->ordenCompraRepo->getDetalle($idOrdenCompra, $idEmpresa);
+        $lineasCompra = $this->repository->getDetalles($idCompra);
+
+        $agrupar = function (array $lineas, string $kProducto, string $kDescripcion, string $kCantidad, string $kPrecio) {
+            $agg = [];
+            $sinProducto = [];
+            foreach ($lineas as $l) {
+                $idProd   = (int) ($l[$kProducto] ?? 0);
+                $cantidad = (float) ($l[$kCantidad] ?? 0);
+                $precio   = (float) ($l[$kPrecio] ?? 0);
+                if ($idProd <= 0) {
+                    $sinProducto[] = ['descripcion' => (string) ($l[$kDescripcion] ?? ''), 'cantidad' => $cantidad, 'precio_unitario' => $precio];
+                    continue;
+                }
+                if (!isset($agg[$idProd])) {
+                    $agg[$idProd] = ['descripcion' => (string) ($l[$kDescripcion] ?? ''), 'cantidad' => 0.0, 'subtotal' => 0.0];
+                }
+                $agg[$idProd]['cantidad']  += $cantidad;
+                $agg[$idProd]['subtotal']  += $cantidad * $precio;
+            }
+            return [$agg, $sinProducto];
+        };
+
+        [$aggOrden, $sinProductoOrden]   = $agrupar($lineasOrden, 'id_producto', 'descripcion', 'cantidad', 'precio_unitario');
+        [$aggCompra, $sinProductoCompra] = $agrupar($lineasCompra, 'id_producto_vinculado', 'producto_nombre', 'cantidad', 'precio_unitario');
+
+        $idsProducto = array_unique(array_merge(array_keys($aggOrden), array_keys($aggCompra)));
+        $filas = [];
+        foreach ($idsProducto as $idProd) {
+            $o = $aggOrden[$idProd]  ?? null;
+            $c = $aggCompra[$idProd] ?? null;
+
+            $cantPedida     = $o ? $o['cantidad'] : 0.0;
+            $cantFacturada  = $c ? $c['cantidad'] : 0.0;
+            $precioPedido   = $o && $o['cantidad'] > 0 ? $o['subtotal'] / $o['cantidad'] : 0.0;
+            $precioFacturado = $c && $c['cantidad'] > 0 ? $c['subtotal'] / $c['cantidad'] : 0.0;
+
+            $estado = 'ok';
+            if (!$o) {
+                $estado = 'extra';       // facturado pero no estaba en la orden
+            } elseif (!$c) {
+                $estado = 'pendiente';   // pedido pero aún no facturado
+            } elseif (abs($cantFacturada - $cantPedida) > 0.001 || abs($precioFacturado - $precioPedido) > 0.005) {
+                $estado = 'diferencia';
+            }
+
+            $filas[] = [
+                'descripcion'       => $o['descripcion'] ?? $c['descripcion'] ?? '',
+                'cantidad_pedida'   => $cantPedida,
+                'cantidad_facturada'=> $cantFacturada,
+                'precio_pedido'     => round($precioPedido, 4),
+                'precio_facturado'  => round($precioFacturado, 4),
+                'estado'            => $estado,
+            ];
+        }
+        usort($filas, fn($a, $b) => strcmp($a['descripcion'], $b['descripcion']));
+
+        return [
+            'vinculada'            => true,
+            'orden'                => [
+                'id'              => $orden['id'],
+                'numero_orden'    => $orden['numero_orden'],
+                'fecha_orden'     => $orden['fecha_orden'],
+                'fecha_recepcion' => $orden['fecha_recepcion'],
+                'estado'          => $orden['estado'],
+            ],
+            'filas'                => $filas,
+            'sin_producto_orden'   => $sinProductoOrden,
+            'sin_producto_compra'  => $sinProductoCompra,
+        ];
     }
 
     /**

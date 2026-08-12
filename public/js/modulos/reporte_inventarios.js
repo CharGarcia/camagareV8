@@ -402,6 +402,8 @@ window.RI_Movimientos = {
             id_categoria: 'ri-mv-categoria', id_marca: 'ri-mv-marca',
             tipo_movimiento: 'ri-mv-tipo', referencia_tipo: 'ri-mv-origen',
             id_usuario: 'ri-mv-usuario', numero_lote: 'ri-mv-lote', nup: 'ri-mv-nup',
+            fecha_caducidad_desde: 'ri-mv-caducidad-desde', fecha_caducidad_hasta: 'ri-mv-caducidad-hasta',
+            observaciones: 'ri-mv-observaciones',
             agrupar_por: 'ri-mv-agrupar',
         });
 
@@ -431,6 +433,8 @@ window.RI_Movimientos = {
             id_categoria: 'ri-mv-categoria', id_marca: 'ri-mv-marca',
             tipo_movimiento: 'ri-mv-tipo', referencia_tipo: 'ri-mv-origen',
             id_usuario: 'ri-mv-usuario', numero_lote: 'ri-mv-lote', nup: 'ri-mv-nup',
+            fecha_caducidad_desde: 'ri-mv-caducidad-desde', fecha_caducidad_hasta: 'ri-mv-caducidad-hasta',
+            observaciones: 'ri-mv-observaciones',
             agrupar_por: 'ri-mv-agrupar',
         });
         params.set('tab', 'movimientos');

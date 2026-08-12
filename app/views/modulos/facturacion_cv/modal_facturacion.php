@@ -388,7 +388,8 @@
         $('faccv_tbody_info').innerHTML = '';
         faccvCargarPagos([]);
         resetAsiento();
-        $('faccv_num_factura_wrap').classList.add('d-none');
+        $('faccv_num_factura_wrap').classList.remove('text-bg-success', 'border-success', 'text-bg-danger', 'border-danger');
+        $('faccv_num_factura_wrap').classList.add('d-none', 'bg-light', 'text-dark', 'border');
         cgClienteId = null;
         added.clear();
         recalc();
@@ -454,8 +455,22 @@
 
         $('faccv_titulo').textContent = 'Facturación ' + (r.serie || '') + '-' + (r.secuencial || '');
         // Número de la factura de venta asociada (barra de acciones, derecha).
-        if (r.numero_factura) { $('faccv_num_factura').textContent = r.numero_factura; $('faccv_num_factura_wrap').classList.remove('d-none'); }
-        else $('faccv_num_factura_wrap').classList.add('d-none');
+        // Color según su estado: verde si autorizada, rojo si anulada, gris en el resto.
+        const wrapFactura = $('faccv_num_factura_wrap');
+        if (r.numero_factura) {
+            $('faccv_num_factura').textContent = r.numero_factura;
+            wrapFactura.classList.remove('d-none', 'bg-light', 'text-dark', 'border', 'text-bg-success', 'border-success', 'text-bg-danger', 'border-danger');
+            const estadoFactura = (r.estado_factura || '').toLowerCase();
+            if (estadoFactura === 'anulado') {
+                wrapFactura.classList.add('text-bg-danger', 'border-danger');
+            } else if (estadoFactura === 'autorizado') {
+                wrapFactura.classList.add('text-bg-success', 'border-success');
+            } else {
+                wrapFactura.classList.add('bg-light', 'text-dark', 'border');
+            }
+        } else {
+            wrapFactura.classList.add('d-none');
+        }
         $('faccv_serie').value = r.serie || '';
         const sel = $('faccv_select_serie');
         if (r.id_punto_emision && sel.querySelector(`option[value="${r.id_punto_emision}"]`)) sel.value = r.id_punto_emision;

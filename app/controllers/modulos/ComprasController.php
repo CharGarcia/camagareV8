@@ -393,6 +393,108 @@ class ComprasController extends BaseModuloController
         exit;
     }
 
+    /** Órdenes de compra del proveedor disponibles para vincular (pestaña "Orden de Compra" del modal). */
+    public function buscarOrdenesCompraAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        if (!\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene acceso al módulo de Órdenes de Compra.']);
+            exit;
+        }
+        try {
+            $idEmpresa      = (int) $_SESSION['id_empresa'];
+            $idProveedor    = (int) ($_GET['id_proveedor'] ?? 0);
+            $idCompraActual = (int) ($_GET['id_compra'] ?? 0);
+            if (!$idProveedor) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Proveedor requerido.']);
+                exit;
+            }
+            $ordenes = $this->service->buscarOrdenesAbiertas($idProveedor, $idEmpresa, $idCompraActual);
+            echo json_encode(['ok' => true, 'data' => $ordenes]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Compara lo pedido en la orden de compra vinculada contra lo facturado en esta compra. */
+    public function getComparacionOrdenAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        if (!\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene acceso al módulo de Órdenes de Compra.']);
+            exit;
+        }
+        try {
+            $id        = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if (!$id) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+                exit;
+            }
+            $resultado = $this->service->compararConOrden($id, $idEmpresa);
+            echo json_encode(['ok' => true] + $resultado);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function vincularOrdenCompraAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        if (!\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene acceso al módulo de Órdenes de Compra.']);
+            exit;
+        }
+        try {
+            $idEmpresa      = (int) $_SESSION['id_empresa'];
+            $idUsuario      = (int) $_SESSION['id_usuario'];
+            $idCompra       = (int) ($_POST['id'] ?? 0);
+            $idOrdenCompra  = (int) ($_POST['id_orden_compra'] ?? 0);
+            if (!$idCompra || !$idOrdenCompra) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Datos incompletos.']);
+                exit;
+            }
+            $this->service->vincularOrden($idCompra, $idEmpresa, $idOrdenCompra, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Orden de compra vinculada correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function desvincularOrdenCompraAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        if (!\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene acceso al módulo de Órdenes de Compra.']);
+            exit;
+        }
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $idCompra  = (int) ($_POST['id'] ?? 0);
+            if (!$idCompra) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+                exit;
+            }
+            $this->service->desvincularOrden($idCompra, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Orden de compra desvinculada.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /**
      * Vista previa del asiento contable de una compra (pestaña "Asiento contable" del modal).
      * Si la compra ya tiene asiento guardado, devuelve sus líneas; si no, devuelve la sugerencia

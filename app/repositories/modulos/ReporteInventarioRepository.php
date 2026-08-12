@@ -342,6 +342,18 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND k.nup ILIKE :nup";
             $params[':nup'] = '%' . $filtros['nup'] . '%';
         }
+        if (!empty($filtros['fecha_caducidad_desde'])) {
+            $where .= " AND k.fecha_caducidad >= :fecha_caducidad_desde";
+            $params[':fecha_caducidad_desde'] = $filtros['fecha_caducidad_desde'];
+        }
+        if (!empty($filtros['fecha_caducidad_hasta'])) {
+            $where .= " AND k.fecha_caducidad <= :fecha_caducidad_hasta";
+            $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
+        }
+        if (!empty($filtros['observaciones'])) {
+            $where .= " AND k.observaciones ILIKE :observaciones";
+            $params[':observaciones'] = '%' . $filtros['observaciones'] . '%';
+        }
         if (!empty($filtros['buscar'])) {
             $where .= " AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar OR b.nombre ILIKE :buscar OR k.observaciones ILIKE :buscar)";
             $params[':buscar'] = '%' . $filtros['buscar'] . '%';

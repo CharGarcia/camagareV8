@@ -15,6 +15,9 @@ class ComprasRepository extends BaseRepository
         try {
             $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
         } catch (\Throwable $e) {}
+        try {
+            $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS id_orden_compra INTEGER REFERENCES ordenes_compra(id);");
+        } catch (\Throwable $e) {}
     }
 
     public function query(string $sql, array $params = []): \PDOStatement
@@ -252,16 +255,36 @@ class ComprasRepository extends BaseRepository
                        st.nombre               AS sustento_nombre,
                        st.codigo               AS sustento_codigo,
                        uc.nombre               AS creado_por_nombre,
-                       uu.nombre               AS actualizado_por_nombre
+                       uu.nombre               AS actualizado_por_nombre,
+                       oc.numero_orden         AS orden_compra_numero,
+                       oc.estado               AS orden_compra_estado,
+                       oc.fecha_orden          AS orden_compra_fecha
                 FROM compras_cabecera c
                 INNER JOIN proveedores p ON c.id_proveedor = p.id
                 LEFT  JOIN identificador_comprador_vendedor icv ON icv.codigo = p.tipo_id_proveedor
                 LEFT  JOIN sustento_tributario st ON c.id_sustento_tributario = st.id
                 LEFT  JOIN usuarios uc ON c.created_by  = uc.id
                 LEFT  JOIN usuarios uu ON c.updated_by  = uu.id
+                LEFT  JOIN ordenes_compra oc ON oc.id = c.id_orden_compra AND oc.eliminado = false
                 $where";
         $row = $this->query($sql, $params)->fetch();
         return $row ?: null;
+    }
+
+    /** Vincula (o desvincula, pasando null) esta compra con una orden de compra. */
+    public function vincularOrdenCompra(int $idCompra, int $idEmpresa, ?int $idOrdenCompra, int $idUsuario): void
+    {
+        $sql = "UPDATE compras_cabecera SET
+                    id_orden_compra = :id_orden_compra,
+                    updated_at      = NOW(),
+                    updated_by      = :updated_by
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $this->query($sql, [
+            ':id_orden_compra' => $idOrdenCompra,
+            ':updated_by'      => $idUsuario,
+            ':id'              => $idCompra,
+            ':id_empresa'      => $idEmpresa,
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

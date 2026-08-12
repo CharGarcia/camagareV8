@@ -198,6 +198,15 @@
                         <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
                             <form id="ri-mv-form" onsubmit="event.preventDefault(); window.RI_Movimientos.generar();" class="row g-3">
                                 <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Año</label>
+                                    <select id="ri-mv-anio" class="form-select form-select-sm shadow-none border" onchange="window.RI_Movimientos.cambiarMesAnio();">
+                                        <option value="TODOS">Todos</option>
+                                        <?php foreach (($anios ?? [date('Y')]) as $a): ?>
+                                            <option value="<?= htmlspecialchars((string) $a) ?>" <?= $a == date('Y') ? 'selected' : '' ?>><?= htmlspecialchars((string) $a) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Mes</label>
                                     <select id="ri-mv-mes" class="form-select form-select-sm shadow-none border" onchange="window.RI_Movimientos.cambiarMesAnio();">
                                         <option value="TODOS">Todos</option>
@@ -205,15 +214,6 @@
                                         <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
                                         <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
                                         <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Año</label>
-                                    <select id="ri-mv-anio" class="form-select form-select-sm shadow-none border" onchange="window.RI_Movimientos.cambiarMesAnio();">
-                                        <option value="TODOS">Todos</option>
-                                        <?php foreach (($anios ?? [date('Y')]) as $a): ?>
-                                            <option value="<?= htmlspecialchars((string) $a) ?>" <?= $a == date('Y') ? 'selected' : '' ?>><?= htmlspecialchars((string) $a) ?></option>
-                                        <?php endforeach; ?>
                                     </select>
                                 </div>
                                 <div class="col-md-2">
@@ -279,6 +279,18 @@
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">NUP</label>
                                     <input type="text" id="ri-mv-nup" class="form-control form-control-sm shadow-none border" placeholder="NUP">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Caducidad desde</label>
+                                    <input type="date" id="ri-mv-caducidad-desde" class="form-control form-control-sm shadow-none border">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Caducidad hasta</label>
+                                    <input type="date" id="ri-mv-caducidad-hasta" class="form-control form-control-sm shadow-none border">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Observaciones</label>
+                                    <input type="text" id="ri-mv-observaciones" class="form-control form-control-sm shadow-none border" placeholder="Observaciones">
                                 </div>
 
                                 <div class="col-md-6 position-relative">

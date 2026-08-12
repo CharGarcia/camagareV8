@@ -518,6 +518,14 @@ function CMG_resetModal() {
     // Ocultar aviso de líneas sin vincular
     document.getElementById('mc-inventario-aviso-vinculacion')?.classList.add('d-none');
 
+    // Reset pestaña Orden de Compra (compra nueva = sin vincular todavía)
+    document.getElementById('oc-tab-vinculada')?.classList.add('d-none');
+    document.getElementById('oc-tab-sin-vincular')?.classList.remove('d-none');
+    const ocSel = document.getElementById('oc-tab-select');
+    if (ocSel) ocSel.innerHTML = '<option value="">-- Seleccione una orden --</option>';
+    document.getElementById('oc-tab-btn-vincular')?.setAttribute('disabled', 'disabled');
+    document.getElementById('oc-tab-sin-abiertas')?.classList.add('d-none');
+
     // Reset botones barra superior
     document.getElementById('btnEliminarCompraBar')?.classList.add('d-none');
 
@@ -2423,8 +2431,195 @@ if (mcTabsEl) {
             if (typeof mcSincronizarInventario === 'function') mcSincronizarInventario();
         } else if (e.target.id === 'tab-relacionados-tab') {
             mcCargarDocumentosRelacionados();
+        } else if (e.target.id === 'tab_orden_compra') {
+            mcCargarOrdenCompraTab();
         }
     });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDEN DE COMPRA (vincular la compra con el pedido interno que le dio origen)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Carga la pestaña "Orden de Compra": si ya está vinculada, la comparación; si no, el buscador. */
+window.mcCargarOrdenCompraTab = async function () {
+    const idCompra = document.getElementById('mcId')?.value || '';
+    const contSin  = document.getElementById('oc-tab-sin-vincular');
+    const contVinc = document.getElementById('oc-tab-vinculada');
+    if (!contSin || !contVinc) return;
+
+    if (!idCompra) {
+        contVinc.classList.add('d-none');
+        contSin.classList.remove('d-none');
+        contSin.innerHTML = '<div class="text-center py-4 text-muted"><i class="bi bi-save2 d-block fs-3 mb-2"></i>Guarde la compra primero para poder vincularla con una orden de compra.</div>';
+        return;
+    }
+
+    try {
+        const res  = await fetch(`${window.CMG_urlBase}/getComparacionOrdenAjax?id=${idCompra}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.mensaje || 'Error');
+
+        if (data.vinculada) {
+            contSin.classList.add('d-none');
+            contVinc.classList.remove('d-none');
+            mcRenderOrdenComparacion(data);
+        } else {
+            contVinc.classList.add('d-none');
+            contSin.classList.remove('d-none');
+            await mcCargarOrdenesAbiertas(idCompra);
+        }
+    } catch (e) {
+        contSin.innerHTML = `<div class="text-center py-4 text-danger">Error al cargar: ${_esc(e.message)}</div>`;
+    }
+};
+
+/** Llena el select de órdenes abiertas del proveedor de la compra actual. */
+window.mcCargarOrdenesAbiertas = async function (idCompra) {
+    const idProveedor = document.getElementById('mcIdProveedor')?.value || '';
+    const sel      = document.getElementById('oc-tab-select');
+    const btn      = document.getElementById('oc-tab-btn-vincular');
+    const avisoVacio = document.getElementById('oc-tab-sin-abiertas');
+    if (!sel) return;
+
+    sel.innerHTML = '<option value="">-- Seleccione una orden --</option>';
+    if (btn) btn.disabled = true;
+    if (avisoVacio) avisoVacio.classList.add('d-none');
+
+    if (!idProveedor) {
+        sel.innerHTML = '<option value="">-- Seleccione un proveedor primero --</option>';
+        return;
+    }
+
+    try {
+        const res  = await fetch(`${window.CMG_urlBase}/buscarOrdenesCompraAjax?id_proveedor=${idProveedor}&id_compra=${idCompra}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.mensaje || 'Error');
+
+        const ordenes = data.data || [];
+        if (!ordenes.length) {
+            if (avisoVacio) avisoVacio.classList.remove('d-none');
+            return;
+        }
+        ordenes.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.id;
+            const fecha = o.fecha_orden ? String(o.fecha_orden).slice(0, 10).split('-').reverse().join('/') : '';
+            opt.textContent = `${o.numero_orden} — ${fecha} — $${parseFloat(o.total || 0).toFixed(2)} (${o.estado})`;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        sel.innerHTML = `<option value="">Error al cargar órdenes</option>`;
+    }
+};
+
+document.getElementById('oc-tab-select')?.addEventListener('change', function () {
+    const btn = document.getElementById('oc-tab-btn-vincular');
+    if (btn) btn.disabled = !this.value;
+});
+
+window.mcVincularOrdenCompra = async function () {
+    const idCompra      = document.getElementById('mcId')?.value || '';
+    const idOrdenCompra = document.getElementById('oc-tab-select')?.value || '';
+    if (!idCompra || !idOrdenCompra) return;
+
+    const btn = document.getElementById('oc-tab-btn-vincular');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+    try {
+        const fd = new FormData();
+        fd.append('id', idCompra);
+        fd.append('id_orden_compra', idOrdenCompra);
+        const res  = await fetch(`${window.CMG_urlBase}/vincularOrdenCompraAjax`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            Swal.fire({ icon: 'success', title: 'Vinculada', text: data.mensaje, timer: 1600, showConfirmButton: false });
+            mcCargarOrdenCompraTab();
+        } else {
+            Swal.fire('Error', data.mensaje || 'No se pudo vincular la orden de compra.', 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error', 'Error de conexión: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i> Vincular'; }
+    }
+};
+
+window.mcDesvincularOrdenCompra = async function () {
+    const idCompra = document.getElementById('mcId')?.value || '';
+    if (!idCompra) return;
+
+    const confirm = await Swal.fire({
+        icon: 'warning',
+        title: '¿Desvincular orden de compra?',
+        text: 'La orden volverá a estado "Aprobado" y podrá vincularse a otra compra.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, desvincular',
+        cancelButtonText: 'Cancelar',
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+        const fd = new FormData();
+        fd.append('id', idCompra);
+        const res  = await fetch(`${window.CMG_urlBase}/desvincularOrdenCompraAjax`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            mcCargarOrdenCompraTab();
+        } else {
+            Swal.fire('Error', data.mensaje || 'No se pudo desvincular.', 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error', 'Error de conexión: ' + e.message, 'error');
+    }
+};
+
+/** Pinta la cabecera de la orden vinculada + la tabla comparativa pedido vs. facturado. */
+function mcRenderOrdenComparacion(data) {
+    const orden = data.orden || {};
+    const fecha = orden.fecha_orden ? String(orden.fecha_orden).slice(0, 10).split('-').reverse().join('/') : '—';
+    document.getElementById('oc-tab-numero').textContent = orden.numero_orden || '—';
+    document.getElementById('oc-tab-fecha').textContent  = fecha;
+    document.getElementById('oc-tab-estado').textContent = (orden.estado || '').charAt(0).toUpperCase() + (orden.estado || '').slice(1);
+
+    const badgeMap = {
+        ok:         { cls: 'success', label: 'OK' },
+        diferencia: { cls: 'warning', label: 'Diferencia' },
+        pendiente:  { cls: 'secondary', label: 'Pendiente' },
+        extra:      { cls: 'info',    label: 'No pedido' },
+    };
+
+    const tbody = document.getElementById('oc-tab-tbody');
+    const filas = data.filas || [];
+    if (!filas.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No hay líneas con producto del catálogo para comparar.</td></tr>';
+    } else {
+        tbody.innerHTML = filas.map(f => {
+            const b = badgeMap[f.estado] || badgeMap.ok;
+            const rowCls = f.estado === 'ok' ? '' : ` table-${b.cls}`;
+            return `<tr class="${rowCls}">
+                <td class="ps-3">${_esc(f.descripcion)}</td>
+                <td class="text-center">${parseFloat(f.cantidad_pedida).toFixed(2)}</td>
+                <td class="text-center">${parseFloat(f.cantidad_facturada).toFixed(2)}</td>
+                <td class="text-end">${parseFloat(f.precio_pedido).toFixed(2)}</td>
+                <td class="text-end">${parseFloat(f.precio_facturado).toFixed(2)}</td>
+                <td class="text-center"><span class="badge bg-${b.cls} bg-opacity-10 text-${b.cls} border border-${b.cls} border-opacity-25">${b.label}</span></td>
+            </tr>`;
+        }).join('');
+    }
+
+    const sinProdOrden  = data.sin_producto_orden  || [];
+    const sinProdCompra = data.sin_producto_compra || [];
+    const cont = document.getElementById('oc-tab-sin-producto');
+    const lista = document.getElementById('oc-tab-sin-producto-lista');
+    if ((sinProdOrden.length || sinProdCompra.length) && cont && lista) {
+        cont.classList.remove('d-none');
+        lista.innerHTML = [
+            ...sinProdOrden.map(l => `<li>Pedido: ${_esc(l.descripcion)} (cant. ${parseFloat(l.cantidad).toFixed(2)})</li>`),
+            ...sinProdCompra.map(l => `<li>Facturado: ${_esc(l.descripcion)} (cant. ${parseFloat(l.cantidad).toFixed(2)})</li>`),
+        ].join('');
+    } else if (cont) {
+        cont.classList.add('d-none');
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

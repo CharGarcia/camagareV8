@@ -44,16 +44,20 @@
             <li class="nav-item"><a class="nav-link" id="tab_pagos" data-bs-toggle="tab" href="#tabPagos" role="tab"><i class="bi bi-credit-card me-1"></i>Pagos</a></li>
             <li class="nav-item"><a class="nav-link" id="tab-inventario-tab" data-bs-toggle="tab" href="#tabInventario" role="tab"><i class="bi bi-box-seam me-1"></i>Inventario</a></li>
             <li class="nav-item"><a class="nav-link" id="tab-retenciones-tab" data-bs-toggle="tab" href="#tabRetenciones" role="tab"><i class="bi bi-file-earmark-text me-1"></i>Retenciones</a></li>
+            <?php if (\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')): ?>
+            <li class="nav-item"><a class="nav-link" id="tab_orden_compra" data-bs-toggle="tab" href="#tabOrdenCompra" role="tab"><i class="bi bi-cart3 me-1"></i>Orden de Compra<span id="oc-tab-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 d-none">1</span></a></li>
+            <?php endif; ?>
             <li class="nav-item d-none" id="tab-relacionados-li"><a class="nav-link" id="tab-relacionados-tab" data-bs-toggle="tab" href="#tabRelacionados" role="tab"><i class="bi bi-link-45deg me-1"></i><span id="tab-relacionados-label">Documento Relacionado</span></a></li>
             <li class="nav-item d-none" id="tab-reembolso-li"><a class="nav-link" id="tab-reembolso-tab" data-bs-toggle="tab" href="#tabReembolso" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Detalle de Reembolso</a></li>
           </ul>
           <div class="ms-auto pb-1">
             <?php
             $pestanasConfig = [
-              'tab_asiento'     => 'Asiento contable',
-              'tab_pagos'       => 'Pagos',
-              'tab_inventario'  => 'Inventario',
-              'tab_retenciones' => 'Retenciones'
+              'tab_asiento'      => 'Asiento contable',
+              'tab_pagos'        => 'Pagos',
+              'tab_inventario'   => 'Inventario',
+              'tab_retenciones'  => 'Retenciones',
+              'tab_orden_compra' => 'Orden de Compra',
             ];
             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/compras');
             ?>
@@ -691,6 +695,84 @@
               </div>
             </div>
           </div>
+
+          <?php if (\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')): ?>
+          <!-- ════════════════════════════════════════
+               PESTAÑA: ORDEN DE COMPRA
+               Vincula esta compra (factura electrónica) con la orden de compra
+               (pedido interno) del mismo proveedor y compara lo pedido vs lo facturado.
+               ════════════════════════════════════════ -->
+          <div class="tab-pane fade" id="tabOrdenCompra" role="tabpanel">
+            <div class="p-3">
+
+              <!-- Sin vincular: buscador de órdenes abiertas del proveedor -->
+              <div id="oc-tab-sin-vincular">
+                <div class="alert alert-light border d-flex align-items-start gap-2 py-2 px-3 mb-3">
+                  <i class="bi bi-info-circle mt-1"></i>
+                  <div class="small">Vincule esta compra con la orden de compra (pedido interno) que le dio origen para comparar cantidades y precios pedidos vs. facturados.</div>
+                </div>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="min-width:320px">
+                    <label class="form-label form-label-sm mb-1 fw-semibold">Orden de compra del proveedor</label>
+                    <select id="oc-tab-select" class="form-select form-select-sm">
+                      <option value="">-- Seleccione una orden --</option>
+                    </select>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-sm" id="oc-tab-btn-vincular" onclick="mcVincularOrdenCompra()" disabled>
+                    <i class="bi bi-link-45deg me-1"></i> Vincular
+                  </button>
+                </div>
+                <div id="oc-tab-sin-abiertas" class="text-muted small mt-3 d-none">
+                  <i class="bi bi-inbox me-1"></i>Este proveedor no tiene órdenes de compra pendientes de recibir.
+                </div>
+              </div>
+
+              <!-- Vinculada: cabecera + comparación -->
+              <div id="oc-tab-vinculada" class="d-none">
+                <div class="d-flex justify-content-between align-items-center border rounded-3 bg-light px-3 py-2 mb-3">
+                  <div class="small">
+                    <i class="bi bi-cart3 text-primary me-1"></i>
+                    Orden <strong id="oc-tab-numero">—</strong>
+                    <span class="text-muted ms-2">Fecha: <span id="oc-tab-fecha">—</span></span>
+                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-2" id="oc-tab-estado">—</span>
+                  </div>
+                  <button type="button" class="btn btn-outline-danger btn-sm" onclick="mcDesvincularOrdenCompra()">
+                    <i class="bi bi-x-circle me-1"></i> Desvincular
+                  </button>
+                </div>
+
+                <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                  <div class="table-responsive" style="max-height: 380px;">
+                    <table class="table table-sm table-hover mb-0">
+                      <thead>
+                        <tr class="table-light border-bottom">
+                          <th class="ps-3 py-2 small fw-bold text-muted">Producto</th>
+                          <th class="py-2 small fw-bold text-muted text-center" style="width:100px">Cant. Pedida</th>
+                          <th class="py-2 small fw-bold text-muted text-center" style="width:100px">Cant. Facturada</th>
+                          <th class="py-2 small fw-bold text-muted text-end" style="width:100px">Precio Pedido</th>
+                          <th class="py-2 small fw-bold text-muted text-end" style="width:100px">Precio Facturado</th>
+                          <th class="py-2 small fw-bold text-muted text-center" style="width:110px">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody id="oc-tab-tbody">
+                        <tr><td colspan="6" class="text-center py-4 text-muted">Cargando...</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div id="oc-tab-sin-producto" class="mt-3 d-none">
+                  <div class="small text-muted">
+                    <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                    Hay líneas sin un producto del catálogo vinculado (ni en la orden ni en la compra), por lo que no se pudieron comparar automáticamente. Revíselas manualmente:
+                  </div>
+                  <ul class="small mb-0 mt-1" id="oc-tab-sin-producto-lista"></ul>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <?php endif; ?>
 
           <!-- ════════════════════════════════════════
                TAB 5: INFORMACIÓN (Placeholder)

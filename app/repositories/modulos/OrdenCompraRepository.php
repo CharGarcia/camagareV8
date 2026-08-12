@@ -219,6 +219,57 @@ class OrdenCompraRepository extends BaseRepository
         ]);
     }
 
+    /**
+     * Órdenes de un proveedor disponibles para vincular con una compra: no
+     * eliminadas, en borrador/aprobado, y sin otra compra vigente ya vinculada
+     * (salvo la propia $idCompraActual, para poder reabrir la compra que ya
+     * tiene esta orden vinculada y seguir viéndola en la lista).
+     */
+    public function getAbiertasPorProveedor(int $idProveedor, int $idEmpresa, ?int $idCompraActual = null): array
+    {
+        $sql = "SELECT oc.id, oc.numero_orden, oc.fecha_orden, oc.fecha_recepcion, oc.estado,
+                       COALESCE((SELECT SUM(d.cantidad * d.precio_unitario)
+                                 FROM ordenes_compra_detalle d
+                                 WHERE d.id_orden = oc.id), 0) AS total
+                FROM ordenes_compra oc
+                WHERE oc.id_empresa = :id_empresa
+                  AND oc.id_proveedor = :id_proveedor
+                  AND oc.eliminado = false
+                  AND oc.estado IN ('borrador', 'aprobado')
+                  AND NOT EXISTS (
+                        SELECT 1 FROM compras_cabecera cc
+                        WHERE cc.id_orden_compra = oc.id
+                          AND cc.eliminado = false
+                          AND cc.id IS DISTINCT FROM :id_compra_actual
+                  )
+                ORDER BY oc.fecha_orden DESC, oc.id DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa'       => $idEmpresa,
+            ':id_proveedor'     => $idProveedor,
+            ':id_compra_actual' => $idCompraActual,
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Cambia solo el estado (y opcionalmente marca fecha_recepcion) sin tocar el resto de la cabecera. */
+    public function cambiarEstado(int $id, int $idEmpresa, string $estado, int $idUsuario, bool $marcarFechaRecepcion = false): void
+    {
+        $sql = "UPDATE ordenes_compra SET
+                    estado     = :estado,
+                    updated_at = NOW(),
+                    updated_by = :updated_by"
+                . ($marcarFechaRecepcion ? ", fecha_recepcion = COALESCE(fecha_recepcion, CURRENT_DATE)" : "")
+                . " WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id'         => $id,
+            ':id_empresa' => $idEmpresa,
+            ':estado'     => $estado,
+            ':updated_by' => $idUsuario,
+        ]);
+    }
+
     public function eliminarDetalle(int $idOrden, int $idEmpresa): void
     {
         $sql = "DELETE FROM ordenes_compra_detalle WHERE id_orden = :id_orden AND id_empresa = :id_empresa";

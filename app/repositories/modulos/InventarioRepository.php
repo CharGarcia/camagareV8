@@ -32,10 +32,11 @@ class InventarioRepository extends BaseRepository
         $sql = "SELECT id_producto, COALESCE(SUM(cantidad), 0) AS stock
                 FROM inventario_kardex
                 WHERE id_bodega = ? AND id_empresa = ? AND eliminado = false
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                   AND id_producto IN ($placeholders)
                 GROUP BY id_producto";
         $st = $this->db->prepare($sql);
-        $st->execute(array_merge([$idBodega, $idEmpresa], $idProductos));
+        $st->execute(array_merge([$idBodega, $idEmpresa, $idEmpresa], $idProductos));
 
         $resultado = [];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -189,19 +190,25 @@ class InventarioRepository extends BaseRepository
         $whereLote = $soloLote !== null ? "AND numero_lote = :lote" : "";
         $whereStock = $soloConStock ? "WHERE stock > 0" : "";
         
+        // GROUP BY solo numero_lote (no nup): el NUP es opcional (obligatorio_nup),
+        // y agrupar también por él fragmentaba el saldo del lote en una fila por
+        // cada serial — un lote con stock repartido entre varios NUP podía
+        // aparecer sin saldo suficiente en ninguna fila individual, aunque el
+        // lote completo sí tuviera stock.
         $sql = "SELECT numero_lote, fecha_caducidad, nup
                 FROM (
-                    SELECT numero_lote, MAX(fecha_caducidad) as fecha_caducidad, nup, MIN(id) as first_id, SUM(cantidad) as stock
+                    SELECT numero_lote, MAX(fecha_caducidad) as fecha_caducidad, MIN(nup) as nup, MIN(id) as first_id, SUM(cantidad) as stock
                     FROM inventario_kardex
                     WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false
+                      AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
                     $whereLote
-                    GROUP BY numero_lote, nup
+                    GROUP BY numero_lote
                 ) t
                 $whereStock
                 ORDER BY fecha_caducidad ASC NULLS LAST, first_id ASC
                 LIMIT 1";
-        
-        $params = [':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega];
+
+        $params = [':e' => $idEmpresa, ':e2' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega];
         if ($soloLote !== null) $params[':lote'] = $soloLote;
 
         $st = $this->db->prepare($sql);
@@ -581,11 +588,12 @@ class InventarioRepository extends BaseRepository
             $params[':ertipo'] = $excludeRefTipo;
         }
 
-        $sql = "SELECT COALESCE(numero_lote, 'sin_lote') as numero_lote, 
-                       MAX(fecha_caducidad) as fecha_caducidad, 
+        $sql = "SELECT COALESCE(numero_lote, 'sin_lote') as numero_lote,
+                       MAX(fecha_caducidad) as fecha_caducidad,
                        ROUND(SUM(cantidad), 2) as stock_lote
                 FROM inventario_kardex
-                WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false 
+                WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                   $whereExcluir
                 GROUP BY COALESCE(numero_lote, 'sin_lote')
                 HAVING ROUND(SUM(cantidad), 2) > 0

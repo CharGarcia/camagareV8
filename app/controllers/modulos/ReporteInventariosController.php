@@ -106,6 +106,9 @@ class ReporteInventariosController extends BaseModuloController
             'id_usuario'      => $_REQUEST['id_usuario']   ?? '',
             'numero_lote'     => trim($_REQUEST['numero_lote'] ?? ''),
             'nup'             => trim($_REQUEST['nup'] ?? ''),
+            'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
+            'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
+            'observaciones'   => trim($_REQUEST['observaciones'] ?? ''),
             'buscar'          => trim($_REQUEST['buscar'] ?? ''),
         ];
     }
