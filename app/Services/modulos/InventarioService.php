@@ -104,8 +104,12 @@ class InventarioService
                                ($prodData['tipo_produccion'] !== '02');
 
             if ($isInventariable) {
-                // Lógica de selección automática de lote si no es obligatorio y viene vacío
-                $loteParaKardex = !empty($d['lote']) ? (string)$d['lote'] : null;
+                // Lógica de selección automática de lote si no es obligatorio y viene vacío.
+                // 'sin_lote' es el centinela que arma FacturaVentaService/ReciboVentaService
+                // cuando el lote no es obligatorio y no vino uno — se trata igual que vacío,
+                // así dispara la selección automática de abajo en vez de quedar como si fuera
+                // un lote real elegido a mano.
+                $loteParaKardex = (!empty($d['lote']) && $d['lote'] !== 'sin_lote') ? (string)$d['lote'] : null;
                 $cadParaKardex  = !empty($d['caducidad']) ? (string)$d['caducidad'] : null;
 
                 if (!$obliLotes && empty($loteParaKardex)) {
@@ -145,6 +149,11 @@ class InventarioService
                     $idUsuario,
                     [
                         'lote'      => !empty($loteParaKardex) ? $loteParaKardex : null,
+                        // El stock solo se valida contra un lote específico cuando la empresa
+                        // exige elegirlo a mano. Si no es obligatorio, el lote de arriba es
+                        // auto-elegido (o un simple valor a registrar) y NO debe filtrar el
+                        // saldo — se valida contra el total del producto+bodega.
+                        'validar_por_lote' => $obliLotes,
                         'caducidad' => $cadParaKardex,
                         'nup'       => !empty($d['nup']) ? $d['nup'] : null,
                         'id_medida' => !empty($d['id_medida']) ? (int)$d['id_medida'] : (!empty($prodData['id_medida']) ? (int)$prodData['id_medida'] : null),
@@ -199,9 +208,13 @@ class InventarioService
         $excludeId   = $extra['exclude_id']   ?? null;
         $excludeTipo = $extra['exclude_tipo'] ?? null;
         $lote        = $extra['lote']         ?? null;
+        // Por defecto (llamadores que no pasan esta clave) se valida por lote, igual que
+        // antes. Solo se desactiva explícitamente cuando el lote no es obligatorio.
+        $validarPorLote = $extra['validar_por_lote'] ?? true;
+        $loteParaValidar = $validarPorLote ? $lote : null;
 
         $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
-        $stockActual = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa, $excludeId, $excludeTipo, $lote);
+        $stockActual = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa, $excludeId, $excludeTipo, $loteParaValidar);
         $stockPosterior = $stockActual - $cantidad;
 
         // Validación de stock negativo si la facturación no es libre
@@ -411,12 +424,18 @@ class InventarioService
             // Actualizar stock en bodega
             $this->repo->actualizarStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
 
-            // Eliminación lógica
-            $sql = "UPDATE inventario_kardex 
-                    SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :uid 
+            // Eliminación lógica. Se deja constancia en la observación (además de
+            // deleted_at/deleted_by) porque este movimiento no genera una entrada de
+            // reverso propia: la vista "Ver anulados" del Kardex debe poder distinguirlo
+            // de un movimiento activo con solo leer la observación.
+            $obsOriginal = trim((string) ($mov['observaciones'] ?? ''));
+            $obsAnulado  = $obsOriginal !== '' ? "{$obsOriginal} — ANULADO" : 'Movimiento anulado';
+
+            $sql = "UPDATE inventario_kardex
+                    SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :uid, observaciones = :obs
                     WHERE id = :id";
             $st = $db->prepare($sql);
-            $st->execute([':id' => $id, ':uid' => $idUsuario]);
+            $st->execute([':id' => $id, ':uid' => $idUsuario, ':obs' => $obsAnulado]);
 
             $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR_MOV', 'inventario_kardex', $id, $mov, null);
 
@@ -457,12 +476,18 @@ class InventarioService
 
             $this->repo->actualizarStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
 
+            // Quitar el sufijo " — ANULADO" que dejó eliminarMovimiento(), si está: un
+            // movimiento vuelto a habilitar ya no debe leerse como anulado.
+            $obsActual = trim((string) ($mov['observaciones'] ?? ''));
+            $obsRestaurada = preg_replace('/\s*—\s*ANULADO$/u', '', $obsActual);
+            if ($obsRestaurada === 'Movimiento anulado') $obsRestaurada = '';
+
             $sql = "UPDATE inventario_kardex
                     SET eliminado = false, deleted_at = NULL, deleted_by = NULL,
-                        updated_at = CURRENT_TIMESTAMP, updated_by = :uid
+                        observaciones = :obs, updated_at = CURRENT_TIMESTAMP, updated_by = :uid
                     WHERE id = :id";
             $st = $db->prepare($sql);
-            $st->execute([':id' => $id, ':uid' => $idUsuario]);
+            $st->execute([':id' => $id, ':uid' => $idUsuario, ':obs' => $obsRestaurada]);
 
             $this->log->registrar($idUsuario, $idEmpresa, 'HABILITAR_MOV', 'inventario_kardex', $id, $mov, null);
 
