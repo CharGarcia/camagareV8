@@ -1175,7 +1175,7 @@ class AsientoBuilderService
      * @param array  $reglas   Reglas base del concepto (incluye la regla de ajuste si existe).
      * @param string $etiqueta Texto para los mensajes de error ('ventas', 'compras', …).
      */
-    private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta, array $reglasSinCuenta = []): array
+    private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta, array $reglasSinCuenta = [], ?array $cuentaRedondeoCategoria = null): array
     {
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
@@ -1207,13 +1207,19 @@ class AsientoBuilderService
             );
         }
 
-        // Cuenta de ajuste por redondeo configurada para el concepto.
-        $ajuste = null;
-        foreach ($reglas as $r) {
-            $cod = strtoupper($r['asiento_tipo_codigo'] ?? $r['codigo'] ?? '');
-            if (str_contains($cod, 'REDONDEO') && !empty($r['id_cuenta'])) {
-                $ajuste = $r;
-                break;
+        // Cuenta de ajuste por redondeo: primero la de Categoría (si el llamador ya la resolvió
+        // — reparto por categoría activo y alguna categoría del documento la tiene configurada),
+        // y solo si no hay ninguna, la General. A diferencia de Costo/Inventario, esta función NO
+        // arma su propia cascada (el redondeo es un valor único del documento, no por línea) — el
+        // llamador es quien decide la categoría vía resolverCuentaRedondeoPorCategoria().
+        $ajuste = $cuentaRedondeoCategoria;
+        if ($ajuste === null) {
+            foreach ($reglas as $r) {
+                $cod = strtoupper($r['asiento_tipo_codigo'] ?? $r['codigo'] ?? '');
+                if (str_contains($cod, 'REDONDEO') && !empty($r['id_cuenta'])) {
+                    $ajuste = $r;
+                    break;
+                }
             }
         }
 
@@ -1236,6 +1242,49 @@ class AsientoBuilderService
         ];
 
         return $detalles;
+    }
+
+    /**
+     * Resuelve la cuenta de "Ajuste por Redondeo" con la MISMA cascada Producto → Categoría →
+     * Marca que usan Costo/Inventario/Subtotal/etc. (repartirVentasCascada() y equivalentes),
+     * para documentos con reparto por categoría activo. El redondeo es UN solo valor por
+     * documento (no por línea), así que no reparte/prorratea como Costo o Subtotal: toma la
+     * PRIMERA línea (entre los productos del documento) cuya cascada resuelva alguna cuenta —
+     * criterio de desempate razonable si el documento mezcla productos/categorías/marcas con y
+     * sin cuenta de redondeo propia. $tabla/$colDoc son literales del código (no entrada de
+     * usuario), seguros de interpolar — mismo patrón que repartirVentasCascada()/etc.
+     */
+    private function resolverCuentaRedondeoPorCategoria(\PDO $db, int $idEmpresa, int $idAsientoTipo, string $tabla, string $colDoc, int $idDocumento): ?array
+    {
+        if ($idAsientoTipo <= 0 || $idDocumento <= 0) {
+            return null;
+        }
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS id_cuenta,
+                       pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                FROM {$tabla} d
+                LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN asientos_programados ap_p
+                       ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                      AND ap_p.id_asiento_tipo = :id_tipo1 AND ap_p.id_empresa = :emp1 AND ap_p.eliminado = false
+                LEFT JOIN asientos_programados ap_c
+                       ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                      AND ap_c.id_asiento_tipo = :id_tipo2 AND ap_c.id_empresa = :emp2 AND ap_c.eliminado = false
+                LEFT JOIN asientos_programados ap_m
+                       ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                      AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                WHERE d.{$colDoc} = :id_doc
+                  AND COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) IS NOT NULL
+                LIMIT 1";
+        $st = $db->prepare($sql);
+        $st->execute([
+            ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
+            ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
+            ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_doc'   => $idDocumento,
+        ]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     /**
@@ -1671,18 +1720,6 @@ class AsientoBuilderService
             $motivoCostoPendiente = 'cuenta_no_configurada';
         }
 
-        // Seguimiento de costeo (solo documentos reales, nunca en preview sin id_venta): deja
-        // constancia del resultado REAL de la cascada, para que SincronizadorAsientosService sepa
-        // con certeza si sigue pendiente sin tener que reconstruir la resolución de cuentas
-        // (ver database/ventas_costeo_seguimiento.sql).
-        if ($idVenta > 0) {
-            $this->costeoRepo->registrar(
-                $idEmpresa, 'factura_venta', $idVenta,
-                $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
-                $motivoCostoPendiente, (int)($data['id_usuario'] ?? 0) ?: null
-            );
-        }
-
         // ── 6. Validación de balance ──
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
@@ -1704,7 +1741,32 @@ class AsientoBuilderService
         // Cuadre exacto vía la cuenta de Ajuste por redondeo (la cuenta por cobrar = total del
         // documento es la fuente de verdad; Base + IVA pueden diferir por ±centavos al redondear
         // por separado). Un descuadre > 3 centavos = error real de configuración → excepción.
-        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas', $reglasSinCuenta);
+        $idAsientoTipoRedondeo = 0;
+        foreach ($reglas as $r) {
+            if (str_contains(strtoupper($r['asiento_tipo_codigo'] ?? $r['codigo'] ?? ''), 'REDONDEO')) {
+                $idAsientoTipoRedondeo = (int) ($r['id_asiento_tipo'] ?? 0);
+                break;
+            }
+        }
+        $cuentaRedondeoCategoria = ($aplicaRepartoPorCategoria && $idAsientoTipoRedondeo > 0)
+            ? $this->resolverCuentaRedondeoPorCategoria($db, $idEmpresa, $idAsientoTipoRedondeo, 'ventas_detalle', 'id_venta', $idVenta)
+            : null;
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas', $reglasSinCuenta, $cuentaRedondeoCategoria);
+
+        // Seguimiento de costeo (solo documentos reales, nunca en preview sin id_venta): se
+        // escribe AL FINAL, después de que el asiento pasó balance y ajuste de redondeo sin
+        // excepción — si cualquiera de esos pasos falla, ni siquiera llegamos aquí, así que
+        // "costo_generado" nunca queda en true para un asiento que en realidad no se guardó
+        // (bug corregido: antes se escribía justo después del bloque de costo, ANTES de estas
+        // validaciones, y un descuadre de redondeo no relacionado con el costo dejaba la tabla
+        // diciendo "generado" para un asiento que nunca llegó a guardarse).
+        if ($idVenta > 0) {
+            $this->costeoRepo->registrar(
+                $idEmpresa, 'factura_venta', $idVenta,
+                $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
+                $motivoCostoPendiente, (int)($data['id_usuario'] ?? 0) ?: null
+            );
+        }
 
         return $detalles;
     }
@@ -2085,15 +2147,6 @@ class AsientoBuilderService
             $motivoCostoPendiente = 'cuenta_no_configurada';
         }
 
-        // Seguimiento de costeo — ver la misma nota en armarDistribucionVentasFactura().
-        if ($idRecibo > 0) {
-            $this->costeoRepo->registrar(
-                $idEmpresa, 'recibo_venta', $idRecibo,
-                $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
-                $motivoCostoPendiente, (int)($data['id_usuario'] ?? 0) ?: null
-            );
-        }
-
         // ── 6. Validación de balance ──
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
@@ -2109,7 +2162,26 @@ class AsientoBuilderService
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
 
-        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'recibos de venta', $reglasSinCuenta);
+        $idAsientoTipoRedondeo = 0;
+        foreach ($reglas as $r) {
+            if (str_contains(strtoupper($r['asiento_tipo_codigo'] ?? $r['codigo'] ?? ''), 'REDONDEO')) {
+                $idAsientoTipoRedondeo = (int) ($r['id_asiento_tipo'] ?? 0);
+                break;
+            }
+        }
+        $cuentaRedondeoCategoria = ($aplicaRepartoPorCategoria && $idAsientoTipoRedondeo > 0)
+            ? $this->resolverCuentaRedondeoPorCategoria($db, $idEmpresa, $idAsientoTipoRedondeo, 'recibos_venta_detalle', 'id_recibo', $idRecibo)
+            : null;
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'recibos de venta', $reglasSinCuenta, $cuentaRedondeoCategoria);
+
+        // Seguimiento de costeo, al final — ver la misma nota en armarDistribucionVentasFactura().
+        if ($idRecibo > 0) {
+            $this->costeoRepo->registrar(
+                $idEmpresa, 'recibo_venta', $idRecibo,
+                $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
+                $motivoCostoPendiente, (int)($data['id_usuario'] ?? 0) ?: null
+            );
+        }
 
         return $detalles;
     }
@@ -3108,14 +3180,6 @@ class AsientoBuilderService
             $motivoCostoPendiente = 'cuenta_no_configurada';
         }
 
-        // Seguimiento de costeo — ver la misma nota en armarDistribucionVentasFactura().
-        if ($idNotaCredito > 0) {
-            $this->costeoRepo->registrar(
-                $idEmpresa, 'nota_credito_venta', $idNotaCredito,
-                $costo > 0, $costoGenerado, $costo, $motivoCostoPendiente
-            );
-        }
-
         // ── 5. INVERTIR Debe/Haber → asiento de la nota de crédito ──
         $detalles = [];
         foreach ($detallesNatural as $d) {
@@ -3145,7 +3209,25 @@ class AsientoBuilderService
 
         // Cuadre exacto vía la cuenta de Ajuste por redondeo (reusa la config de ventas_factura).
         // Un descuadre > 3 centavos = error real de configuración → excepción.
-        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas (nota de crédito)', $reglasSinCuenta);
+        $idAsientoTipoRedondeo = 0;
+        foreach ($reglas as $r) {
+            if (str_contains(strtoupper($r['codigo'] ?? ''), 'REDONDEO')) {
+                $idAsientoTipoRedondeo = (int) ($r['id_asiento_tipo'] ?? 0);
+                break;
+            }
+        }
+        $cuentaRedondeoCategoria = ($aplicaRepartoPorCategoria && $idAsientoTipoRedondeo > 0)
+            ? $this->resolverCuentaRedondeoPorCategoria($db, $idEmpresa, $idAsientoTipoRedondeo, 'notas_credito_detalle', 'id_nota_credito', $idNotaCredito)
+            : null;
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas (nota de crédito)', $reglasSinCuenta, $cuentaRedondeoCategoria);
+
+        // Seguimiento de costeo, al final — ver la misma nota en armarDistribucionVentasFactura().
+        if ($idNotaCredito > 0) {
+            $this->costeoRepo->registrar(
+                $idEmpresa, 'nota_credito_venta', $idNotaCredito,
+                $costo > 0, $costoGenerado, $costo, $motivoCostoPendiente
+            );
+        }
 
         return $detalles;
     }
