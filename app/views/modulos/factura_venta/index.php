@@ -5200,21 +5200,29 @@ $totalPages = $totalPagesOriginal;
                 const inputAdi = tr.querySelector('.input-adicional');
                 if (inputAdi) inputAdi.value = d.info_adicional || '';
 
-                // Control de visibilidad de Lotes, Caducidad y NUP segÃºn configuraciÃ³n y tipo de producto
+                // Control de visibilidad de Lotes, Caducidad y NUP según configuración y tipo de producto.
+                // OJO: d.inventariable/d.tipo_produccion vienen del producto ACTUAL (JOIN en vivo,
+                // no una foto de cuando se guardó la factura). Si el producto cambió de tipo o se
+                // eliminó después, esInventariable puede dar false aunque el detalle sí tenga
+                // lote/caducidad/nup guardados. 'sin_lote' y la fecha de hoy son valores centinela
+                // que se guardan siempre en líneas inventariables cuando el lote NO es obligatorio
+                // (ver FacturaVentaService), así que no cuentan como "dato real" para este fallback.
                 const esInventariable = (d.inventariable == true || d.inventariable == 'true' || d.inventariable == 1) && (d.tipo_produccion !== '02');
+                const tieneLoteReal = !!d.numero_lote && d.numero_lote !== 'sin_lote';
+                const tieneDatoGuardado = tieneLoteReal || !!d.nup;
 
                 if (EMPRESA_CONFIG.obligatorio_lotes) {
                     const fLote = tr.querySelector('.input-lote');
-                    if (fLote) fLote.classList.toggle('d-none', !esInventariable);
+                    if (fLote) fLote.classList.toggle('d-none', !(esInventariable || tieneDatoGuardado));
                 }
                 if (EMPRESA_CONFIG.obligatorio_caducidad) {
                     const fCad = tr.querySelector('.input-caducidad');
-                    if (fCad) fCad.classList.toggle('d-none', !esInventariable);
+                    if (fCad) fCad.classList.toggle('d-none', !(esInventariable || tieneDatoGuardado));
                 }
                 if (EMPRESA_CONFIG.obligatorio_nup) {
                     const fNup = tr.querySelector('.input-nup');
                     if (fNup) {
-                        fNup.classList.toggle('d-none', !esInventariable);
+                        fNup.classList.toggle('d-none', !(esInventariable || tieneDatoGuardado));
                         // A diferencia de Lote/Caducidad, el NUP no se restaura vía
                         // cargarLotesFila() (esa consulta no lo trae) — hay que setearlo
                         // directo desde el detalle guardado.
@@ -5232,7 +5240,7 @@ $totalPages = $totalPagesOriginal;
                     selCad.dataset.originalCad = d.fecha_caducidad || '';
                 }
 
-                if (esInventariable && (selLote || selCad)) {
+                if ((esInventariable || tieneDatoGuardado) && (selLote || selCad)) {
                     cargarLotesFila(tr);
                 }
 
