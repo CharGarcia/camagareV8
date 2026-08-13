@@ -1,7 +1,7 @@
 // Cambia esto a false para volver a apuntar al backend local (útil mientras seguimos
 // construyendo módulos nuevos). true = producción real (cuidado: los datos que crees
 // quedan guardados de verdad, no hay limpieza automática como en el entorno local).
-const USAR_PRODUCCION = false;
+const USAR_PRODUCCION = true;
 
 // URL base de la API. El celular es OTRO dispositivo en la red: no sirve "localhost".
 // Windows: ipconfig -> "Dirección IPv4" de tu adaptador WiFi/Ethernet. El celular debe

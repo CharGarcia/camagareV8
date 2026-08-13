@@ -145,6 +145,70 @@ class OrdenCompraRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /** Genera (o reutiliza) el token de aprobación pública de la orden, sin tocar su estado. */
+    public function setTokenAprobacion(int $id, string $token): void
+    {
+        $st = $this->db->prepare("UPDATE ordenes_compra SET aprobacion_token = :token, updated_at = NOW() WHERE id = :id");
+        $st->execute([':token' => $token, ':id' => $id]);
+    }
+
+    /** Marca la orden como enviada al proveedor: borrador → enviado. */
+    public function marcarEnviado(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $sql = "UPDATE ordenes_compra SET
+                    estado     = 'enviado',
+                    fecha_envio = NOW(),
+                    updated_at = NOW(),
+                    updated_by = :updated_by
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa, ':updated_by' => $idUsuario]);
+    }
+
+    /** Marca la orden como aprobada: enviado → aprobado. $idUsuario puede ser null (aprobación pública, sin sesión). */
+    public function marcarAprobado(int $id, int $idEmpresa, ?int $idUsuario, string $aprobadoPor, string $ip): void
+    {
+        $sql = "UPDATE ordenes_compra SET
+                    estado            = 'aprobado',
+                    fecha_aprobacion  = NOW(),
+                    aprobado_por      = :aprobado_por,
+                    aprobacion_ip     = :ip,
+                    updated_at        = NOW(),
+                    updated_by        = COALESCE(:updated_by, updated_by)
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id'           => $id,
+            ':id_empresa'   => $idEmpresa,
+            ':aprobado_por' => $aprobadoPor,
+            ':ip'           => $ip,
+            ':updated_by'   => $idUsuario,
+        ]);
+    }
+
+    /**
+     * Orden por su token público de aprobación. Defensa en profundidad §6 CLAUDE.md:
+     * valida empresa activa en la MISMA consulta (los endpoints públicos no pasan por
+     * AuthMiddleware, así que nunca reciben la revalidación de empresa activa normal).
+     */
+    public function getPorTokenAprobacion(string $token): ?array
+    {
+        $sql = "SELECT oc.*,
+                       p.razon_social AS proveedor_nombre,
+                       p.identificacion AS proveedor_identificacion,
+                       p.email AS proveedor_email
+                FROM ordenes_compra oc
+                LEFT JOIN proveedores p ON p.id = oc.id_proveedor
+                INNER JOIN empresas emp ON emp.id = oc.id_empresa
+                WHERE oc.aprobacion_token = :token AND oc.eliminado = false
+                  AND emp.estado = '1' AND emp.eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':token' => $token]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function getDetalle(int $idOrden, int $idEmpresa): array
     {
         $sql = "SELECT d.*, COALESCE(p.codigo, '') AS codigo
@@ -242,7 +306,8 @@ class OrdenCompraRepository extends BaseRepository
 
     /**
      * Órdenes de un proveedor disponibles para vincular con una compra: no
-     * eliminadas, en borrador/aprobado, y sin otra compra vigente ya vinculada
+     * eliminadas, ya APROBADAS (el proveedor la confirmó, o se aprobó manualmente
+     * — no basta con Borrador/Enviado), y sin otra compra vigente ya vinculada
      * (salvo la propia $idCompraActual, para poder reabrir la compra que ya
      * tiene esta orden vinculada y seguir viéndola en la lista).
      */
@@ -256,7 +321,7 @@ class OrdenCompraRepository extends BaseRepository
                 WHERE oc.id_empresa = :id_empresa
                   AND oc.id_proveedor = :id_proveedor
                   AND oc.eliminado = false
-                  AND oc.estado IN ('borrador', 'aprobado')
+                  AND oc.estado = 'aprobado'
                   AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa2)
                   AND NOT EXISTS (
                         SELECT 1 FROM compras_cabecera cc

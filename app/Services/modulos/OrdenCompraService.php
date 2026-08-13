@@ -48,6 +48,9 @@ class OrdenCompraService
     {
         $this->rules->validarCabecera($data);
         $this->rules->validarDetalle($items);
+        if (!in_array($data['estado'] ?? 'borrador', ['borrador', 'anulado'], true)) {
+            throw new \Exception('Estado no válido para guardar manualmente.');
+        }
 
         $db = $this->repository->getDb();
 
@@ -133,8 +136,12 @@ class OrdenCompraService
         try {
             $anterior = $this->repository->getById($id, $idEmpresa);
             if (!$anterior) throw new \Exception('Orden de compra no encontrada.');
-            if (($anterior['estado'] ?? '') === 'recibido') {
-                throw new \Exception('Esta orden ya fue recibida (vinculada a una compra) y no se puede editar. Desvincúlela primero desde la compra correspondiente si necesita modificarla.');
+            $this->_validarEditable($anterior);
+
+            // Enviado/Aprobado/Recibido solo los pone el sistema (enviar correo, aprobar,
+            // vincular con una compra). El formulario de edición no puede saltarse ese flujo.
+            if (!in_array($data['estado'] ?? 'borrador', ['borrador', 'anulado'], true)) {
+                throw new \Exception('Estado no válido para guardar manualmente.');
             }
 
             $estabData = $this->_getDatosSerie((int)$data['id_establecimiento'], (int)$data['id_punto_emision']);
@@ -179,9 +186,7 @@ class OrdenCompraService
         try {
             $anterior = $this->repository->getById($id, $idEmpresa);
             if (!$anterior) throw new \Exception('Orden de compra no encontrada.');
-            if (($anterior['estado'] ?? '') === 'recibido') {
-                throw new \Exception('Esta orden ya fue recibida (vinculada a una compra) y no se puede eliminar. Desvincúlela primero desde la compra correspondiente.');
-            }
+            $this->_validarEditable($anterior, 'eliminar');
 
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
 
@@ -199,6 +204,94 @@ class OrdenCompraService
         } catch (\Throwable $e) {
             $this->repository->rollBack();
             throw $e;
+        }
+    }
+
+    /**
+     * Genera (o reutiliza si ya existe) el token de aprobación pública de la orden.
+     * Se llama al enviar el correo, para poder incluir el enlace de aprobación.
+     */
+    public function obtenerTokenAprobacion(int $id, int $idEmpresa): string
+    {
+        $orden = $this->repository->getById($id, $idEmpresa);
+        if (!$orden) throw new \Exception('Orden de compra no encontrada.');
+        if (!empty($orden['aprobacion_token'])) {
+            return (string) $orden['aprobacion_token'];
+        }
+        $token = bin2hex(random_bytes(24));
+        $this->repository->setTokenAprobacion($id, $token);
+        return $token;
+    }
+
+    /** Marca la orden como enviada al proveedor (borrador → enviado); no hace nada si ya no está en borrador. */
+    public function marcarEnviado(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $orden = $this->repository->getById($id, $idEmpresa);
+        if (!$orden) throw new \Exception('Orden de compra no encontrada.');
+        if (($orden['estado'] ?? '') !== 'borrador') {
+            return; // ya se envió antes (reenvío) o está en un estado posterior: no hay transición que hacer.
+        }
+        $this->repository->marcarEnviado($id, $idEmpresa, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'enviar', 'ordenes_compra', $id, ['estado' => 'borrador'], ['estado' => 'enviado']);
+    }
+
+    /**
+     * Aprueba la orden (enviado → aprobado). $idUsuario null = aprobación pública del
+     * proveedor por token (sin sesión); con id = aprobación manual desde el sistema.
+     */
+    public function marcarAprobado(int $id, int $idEmpresa, ?int $idUsuario, string $aprobadoPor, string $ip = '0.0.0.0'): void
+    {
+        $orden = $this->repository->getById($id, $idEmpresa);
+        if (!$orden) throw new \Exception('Orden de compra no encontrada.');
+
+        $estado = $orden['estado'] ?? '';
+        if ($estado !== 'enviado') {
+            $mapa = [
+                'borrador' => 'Esta orden todavía no ha sido enviada al proveedor.',
+                'aprobado' => 'Esta orden ya fue aprobada.',
+                'recibido' => 'Esta orden ya fue recibida.',
+                'anulado'  => 'Esta orden está anulada.',
+            ];
+            throw new \Exception($mapa[$estado] ?? 'Esta orden no puede aprobarse en su estado actual.');
+        }
+
+        $this->repository->marcarAprobado($id, $idEmpresa, $idUsuario, $aprobadoPor, $ip);
+        try {
+            $this->logService->registrar(
+                $idUsuario ?? 0, $idEmpresa, 'aprobar', 'ordenes_compra', $id,
+                ['estado' => 'enviado'], ['estado' => 'aprobado', 'aprobado_por' => $aprobadoPor, 'ip' => $ip]
+            );
+        } catch (\Throwable $e) { /* log no crítico: no debe impedir que la aprobación quede registrada */ }
+    }
+
+    /** Orden por su token público de aprobación (para la página /aprobar-orden-compra/{token}). */
+    public function getAprobacionPorToken(string $token): ?array
+    {
+        $orden = $this->repository->getPorTokenAprobacion($token);
+        if (!$orden) return null;
+        $orden['detalle'] = $this->repository->getDetalle((int) $orden['id'], (int) $orden['id_empresa']);
+        return $orden;
+    }
+
+    /** Aprobación pública por el proveedor desde el enlace del correo (sin sesión). */
+    public function aprobarPorTokenProveedor(string $token, string $ip): array
+    {
+        $orden = $this->getAprobacionPorToken($token);
+        if (!$orden) {
+            throw new \Exception('El enlace no es válido o la orden ya no está disponible.');
+        }
+        $this->marcarAprobado((int) $orden['id'], (int) $orden['id_empresa'], null, 'Proveedor (vía correo)', $ip);
+        return ['numero_orden' => $orden['numero_orden'] ?? ''];
+    }
+
+    /** Bloquea edición/eliminación una vez enviada la orden (solo lectura desde 'enviado' en adelante). */
+    private function _validarEditable(array $orden, string $accion = 'editar'): void
+    {
+        $estado = $orden['estado'] ?? '';
+        $participios = ['enviado' => 'enviada', 'aprobado' => 'aprobada', 'recibido' => 'recibida'];
+        if (isset($participios[$estado])) {
+            $verbo = $accion === 'eliminar' ? 'eliminar' : 'editar';
+            throw new \Exception("Esta orden ya fue {$participios[$estado]} y no se puede {$verbo}. Desvincúlela/revíertala primero si necesita modificarla.");
         }
     }
 

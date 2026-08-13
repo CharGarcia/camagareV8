@@ -136,6 +136,7 @@ class OrdenesCompraController extends BaseModuloController
 
             $estadoBadgeMap = [
                 'borrador'  => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Borrador</span>',
+                'enviado'   => '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Enviado</span>',
                 'aprobado'  => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Aprobado</span>',
                 'anulado'   => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>',
                 'recibido'  => '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Recibido</span>',
@@ -245,7 +246,9 @@ class OrdenesCompraController extends BaseModuloController
         $buscar    = trim($_GET['q'] ?? '');
         try {
             $db  = Database::getConnection();
-            $sql = "SELECT id, codigo, nombre AS descripcion, precio_base AS precio_unitario
+            // Precio unitario sugerido = precio de COSTO del producto (esto es una compra al
+            // proveedor, no una venta): usar precio_base aquí mostraría el precio de venta.
+            $sql = "SELECT id, codigo, nombre AS descripcion, costo_producto AS precio_unitario
                     FROM productos
                     WHERE id_empresa = :id_empresa AND eliminado = false AND status = 1
                       AND (nombre ILIKE :b OR codigo ILIKE :b)
@@ -626,11 +629,12 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
     public function enviarCorreoAjax(): void
     {
         ob_start();
-        $this->requireLeer();
+        $this->requireActualizar();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         if (!$id) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
 
         try {
@@ -654,20 +658,37 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
                 exit;
             }
 
+            // Botón de aprobación en el correo + transición de estado: solo la PRIMERA vez
+            // que se envía (todavía en borrador). Un reenvío o una orden ya avanzada de
+            // estado no lo necesita/incluye ni vuelve a cambiar el estado.
+            $primerEnvio = ($cabecera['estado'] ?? '') === 'borrador';
+            $urlAprobar  = '';
+            if ($primerEnvio) {
+                try {
+                    $token   = $this->service->obtenerTokenAprobacion($id, $idEmpresa);
+                    $host    = $_SERVER['HTTP_HOST'] ?? '';
+                    $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                    $basePub = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
+                    $urlAprobar = ($host !== '' ? $scheme . '://' . $host : '') . $basePub . '/aprobar-orden-compra/' . $token;
+                } catch (\Throwable $e) {
+                    $urlAprobar = '';
+                }
+            }
+
             $proveedorNombre = (string) ($cabecera['proveedor_nombre'] ?? 'Proveedor');
             $empresaNombre   = (string) ($empresa['nombre'] ?? '');
             $asunto = 'Orden de Compra ' . ($numero !== '' ? $numero : '') . ($empresaNombre !== '' ? ' — ' . $empresaNombre : '');
-            $cuerpo = "<div style='font-family:Arial,sans-serif;line-height:1.5;'>"
-                . "<p>Estimad@ " . htmlspecialchars($proveedorNombre) . ",</p>"
-                . "<p>Adjunto encontrará la orden de compra <strong>" . htmlspecialchars($numero) . "</strong>.</p>"
-                . "<p>Saludos cordiales,<br>" . htmlspecialchars($empresaNombre) . "</p>"
-                . "</div>";
+            $cuerpo = $this->_construirCorreoOrdenCompra($proveedorNombre, $numero, $empresaNombre, $urlAprobar);
 
             $emailSvc = new \App\Services\EnvioDocumentosSRIService();
             $enviado  = $emailSvc->enviarPdfSimple(
                 $idEmpresa, $correosDestino, $proveedorNombre, $asunto, $cuerpo, $pdfString,
                 'OrdenCompra_' . ($numero !== '' ? $numero : 'comprobante'), $empresaNombre
             );
+
+            if ($enviado && $primerEnvio) {
+                $this->service->marcarEnviado($id, $idEmpresa, $idUsuario);
+            }
 
             if (ob_get_level() > 0) ob_end_clean();
             if ($enviado) {
@@ -681,6 +702,61 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
         exit;
+    }
+
+    /** Aprobación manual desde el sistema (botón junto a "Enviar por correo"), sin pasar por el enlace del proveedor. */
+    public function aprobarManualAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        if (!$id) { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+
+        try {
+            $nombreUsuario = trim((string) ($_SESSION['nombre'] ?? $_SESSION['nombre_usuario'] ?? 'Usuario interno'));
+            $this->service->marcarAprobado($id, $idEmpresa, $idUsuario, 'Manual (' . $nombreUsuario . ')');
+            echo json_encode(['ok' => true, 'mensaje' => 'Orden aprobada correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Cuerpo HTML del correo de la orden de compra, con botón de aprobación si $urlAprobar viene informado. */
+    private function _construirCorreoOrdenCompra(string $proveedor, string $numero, string $empresaNombre, string $urlAprobar): string
+    {
+        $e = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+
+        $botonHtml = '';
+        if ($urlAprobar !== '') {
+            $botonHtml =
+                '<tr><td style="padding:6px 0 2px;">'
+              . '<a href="' . $e($urlAprobar) . '" target="_blank" '
+              . 'style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;'
+              . 'font-weight:700;font-size:15px;padding:13px 26px;border-radius:8px;">✓ Aprobar esta orden de compra</a>'
+              . '</td></tr>';
+        }
+
+        return
+            '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1e293b;max-width:560px;">'
+          . '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+          . 'style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">'
+          . '<tr><td style="background:#1f4e79;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">'
+          . $e($empresaNombre) . '</td></tr>'
+          . '<tr><td style="padding:22px;">'
+          . '<p style="margin:0 0 12px;font-size:15px;">Estimad@ <strong>' . $e($proveedor) . '</strong>,</p>'
+          . '<p style="margin:0 0 16px;font-size:14px;line-height:1.5;">Adjuntamos en PDF la orden de compra '
+          . '<strong>N.º ' . $e($numero) . '</strong> para su revisión'
+          . ($urlAprobar !== '' ? ', y le pedimos confirmarla con el botón:' : '.') . '</p>'
+          . '<table role="presentation" cellpadding="0" cellspacing="0">' . $botonHtml . '</table>'
+          . '<p style="margin:18px 0 0;font-size:13px;color:#475569;">Quedamos atentos a cualquier consulta.<br>'
+          . 'Saludos cordiales,<br><strong>' . $e($empresaNombre) . '</strong></p>'
+          . '</td></tr>'
+          . '</table></div>';
     }
 
     private function _recogerCabecera(int $idEmpresa, int $idUsuario): array

@@ -141,8 +141,8 @@ class ComprasService
         if ((int) $orden['id_proveedor'] !== (int) $compra['id_proveedor']) {
             throw new \Exception('La orden de compra pertenece a otro proveedor.');
         }
-        if (!in_array($orden['estado'], ['borrador', 'aprobado'], true)) {
-            throw new \Exception('La orden de compra no está disponible (estado: ' . $orden['estado'] . ').');
+        if ($orden['estado'] !== 'aprobado') {
+            throw new \Exception('La orden de compra debe estar Aprobada para vincularla (estado actual: ' . $orden['estado'] . ').');
         }
 
         $db = Database::getConnection();

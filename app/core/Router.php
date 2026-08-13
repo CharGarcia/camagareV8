@@ -168,6 +168,13 @@ class Router
                 $action        = (($parts[2] ?? '') === 'aprobar') ? 'aprobar' : 'index';
             }
 
+            // /aprobar-orden-compra/{token}[/aprobar] → aprobación pública de la orden de compra por el proveedor (sin auth)
+            if (($parts[0] ?? '') === 'aprobar-orden-compra') {
+                $controller    = 'OrdenCompraAprobacion';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $action        = (($parts[2] ?? '') === 'aprobar') ? 'aprobar' : 'index';
+            }
+
             // /factura-express/* → formulario público QR (sin auth)
             if (($parts[0] ?? '') === 'factura-express') {
                 $controller = 'FacturaExpressPublico';

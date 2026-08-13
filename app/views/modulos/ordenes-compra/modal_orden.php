@@ -36,13 +36,16 @@
                     <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="ocEnviarCorreo()" title="Enviar por correo">
                         <i class="bi bi-envelope"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2 py-1 d-none" id="oc_btn_aprobar" onclick="ocAprobarManual()" title="Aprobar manualmente">
+                        <i class="bi bi-check2-circle"></i> Aprobar
+                    </button>
                 </div>
                 <hr class="text-muted my-0 mb-3 opacity-25">
 
-                <!-- Aviso de solo lectura (orden ya recibida / vinculada a una compra) -->
+                <!-- Aviso de solo lectura (orden enviada/aprobada/recibida) -->
                 <div id="oc-bloqueo-aviso" class="alert alert-secondary d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none">
                     <i class="bi bi-lock-fill"></i>
-                    <span class="small">Esta orden ya fue <strong>recibida</strong> (vinculada a una compra) y es de solo lectura. Para modificarla, desvincúlela primero desde la compra correspondiente.</span>
+                    <span class="small" id="oc-bloqueo-aviso-texto"></span>
                 </div>
 
                 <form id="formOrdenCompra" autocomplete="off">
@@ -67,10 +70,15 @@
                             <label class="form-label small fw-bold mb-1">Estado</label>
                             <select class="form-select form-select-sm" id="oc_estado" name="estado">
                                 <option value="borrador">Borrador</option>
-                                <option value="aprobado">Aprobado</option>
-                                <option value="recibido">Recibido</option>
+                                <option value="enviado" disabled>Enviado</option>
+                                <option value="aprobado" disabled>Aprobado</option>
+                                <option value="recibido" disabled>Recibido</option>
                                 <option value="anulado">Anulado</option>
                             </select>
+                            <!-- Enviado/Aprobado/Recibido los pone el sistema (enviar correo, aprobar, vincular
+                                 con una compra); por eso están deshabilitados aquí — solo se puede elegir a
+                                 mano Borrador o Anulado. Se dejan como <option> para que el valor guardado
+                                 se siga mostrando correctamente al reabrir una orden ya avanzada de estado. -->
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small fw-bold mb-1">Proveedor <span class="text-danger">*</span></label>
@@ -373,11 +381,48 @@ window.ocEnviarCorreo = async function() {
         const data = await res.json();
         if (data.ok) {
             Swal.fire({ icon: 'success', title: 'Enviado', text: data.mensaje || 'Correo enviado correctamente.', target: document.getElementById('modalOrdenCompra') });
+            // El primer envío mueve la orden de Borrador a Enviado y la deja de solo lectura.
+            if (document.getElementById('oc_estado').value === 'borrador') {
+                document.getElementById('oc_estado').value = 'enviado';
+                if (typeof ocAplicarSoloLectura === 'function') ocAplicarSoloLectura('enviado');
+            }
         } else {
             Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo enviar el correo.', target: document.getElementById('modalOrdenCompra') });
         }
     } catch (e) {
         Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo enviar el correo.', target: document.getElementById('modalOrdenCompra') });
+    }
+};
+
+window.ocAprobarManual = async function() {
+    const id = document.getElementById('oc_id').value;
+    if (!id) return;
+
+    const confirm = await Swal.fire({
+        icon: 'question',
+        title: '¿Aprobar esta orden de compra?',
+        text: 'Quedará como aprobada y de solo lectura, igual que si el proveedor la hubiera aprobado desde el correo.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, aprobar',
+        cancelButtonText: 'Cancelar',
+        target: document.getElementById('modalOrdenCompra'),
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+        const fd = new FormData();
+        fd.append('id', id);
+        const res = await fetch(`${OC_URL_BASE}/aprobarManualAjax`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            document.getElementById('oc_estado').value = 'aprobado';
+            if (typeof ocAplicarSoloLectura === 'function') ocAplicarSoloLectura('aprobado');
+            Swal.fire({ icon: 'success', title: 'Aprobada', text: data.mensaje || 'Orden aprobada correctamente.', target: document.getElementById('modalOrdenCompra') });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo aprobar la orden.', target: document.getElementById('modalOrdenCompra') });
+        }
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo aprobar la orden.', target: document.getElementById('modalOrdenCompra') });
     }
 };
 </script>

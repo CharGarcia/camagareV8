@@ -297,7 +297,13 @@ function ocParseDate(str) {
     return '';
 }
 
-// ── Solo lectura: orden ya recibida (vinculada a una compra) ──────────────────
+// ── Solo lectura: orden ya enviada/aprobada/recibida ───────────────────────────
+const OC_AVISOS_BLOQUEO = {
+    enviado:  'Esta orden ya fue <strong>enviada</strong> al proveedor y es de solo lectura. Puede aprobarla manualmente, o esperar a que el proveedor la apruebe desde el correo.',
+    aprobado: 'Esta orden ya fue <strong>aprobada</strong> y es de solo lectura.',
+    recibido: 'Esta orden ya fue <strong>recibida</strong> (vinculada a una compra) y es de solo lectura. Para modificarla, desvincúlela primero desde la compra correspondiente.',
+};
+
 window.ocLimpiarSoloLectura = function() {
     const modal = document.getElementById('modalOrdenCompra');
     if (!modal) return;
@@ -307,15 +313,19 @@ window.ocLimpiarSoloLectura = function() {
     });
     document.getElementById('oc-bloqueo-aviso')?.classList.add('d-none');
     document.getElementById('oc_btn_guardar')?.classList.remove('d-none');
+    document.getElementById('oc_btn_aprobar')?.classList.add('d-none');
 };
 
-window.ocAplicarSoloLectura = function() {
+window.ocAplicarSoloLectura = function(estado) {
     const modal = document.getElementById('modalOrdenCompra');
     if (!modal) return;
 
+    const aviso = document.getElementById('oc-bloqueo-aviso-texto');
+    if (aviso) aviso.innerHTML = OC_AVISOS_BLOQUEO[estado] || 'Esta orden es de solo lectura.';
     document.getElementById('oc-bloqueo-aviso')?.classList.remove('d-none');
     document.getElementById('oc_btn_guardar')?.classList.add('d-none');
     document.getElementById('oc_btn_eliminar')?.classList.add('d-none');
+    document.getElementById('oc_btn_aprobar')?.classList.toggle('d-none', estado !== 'enviado');
 
     const bloquear = el => {
         if (el.disabled) return;
@@ -324,7 +334,7 @@ window.ocAplicarSoloLectura = function() {
     };
     modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(bloquear);
     modal.querySelectorAll('.modal-body button').forEach(btn => {
-        if (['ocPdf', 'ocExcel', 'ocEnviarCorreo'].some(fn => (btn.getAttribute('onclick') || '').includes(fn))) return;
+        if (['ocPdf', 'ocExcel', 'ocEnviarCorreo', 'ocAprobarManual'].some(fn => (btn.getAttribute('onclick') || '').includes(fn))) return;
         bloquear(btn);
     });
 };
@@ -384,8 +394,8 @@ window.ocAbrirEditar = function(tr) {
     }
     document.getElementById('oc_secuencial').value = d.secuencial ?? '';
 
-    const soloLectura = (d.estado ?? '') === 'recibido';
-    if (soloLectura) ocAplicarSoloLectura();
+    const soloLectura = ['enviado', 'aprobado', 'recibido'].includes(d.estado ?? '');
+    if (soloLectura) ocAplicarSoloLectura(d.estado);
 
     ocLimpiarDetalle();
     fetch(`${OC_URL_BASE}/getDetalle?id=${d.id}`, {
@@ -396,7 +406,7 @@ window.ocAbrirEditar = function(tr) {
         if (res.ok && res.detalle) res.detalle.forEach(item => ocAgregarFilaDetalle(item));
         // Las filas del detalle se crean después de la respuesta AJAX: hay que
         // volver a aplicar el bloqueo para alcanzar también esos inputs nuevos.
-        if (soloLectura) ocAplicarSoloLectura();
+        if (soloLectura) ocAplicarSoloLectura(d.estado);
     })
     .catch(() => {});
 

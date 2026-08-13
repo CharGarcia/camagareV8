@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado
-version: 1.3
+version: 1.4
 orden: 20
 estado: activo
 ---
@@ -55,9 +55,10 @@ Si esta factura corresponde a un pedido que se hizo antes por
 [Órdenes de Compra](../modulos/ordenes-compra.md), la pestaña **Orden de
 Compra** del modal permite enlazarla:
 
-1. Elija en el desplegable la orden abierta (borrador/aprobado, no vinculada
-   aún a otra compra) del mismo proveedor, y pulse **Vincular**. La orden pasa
-   a estado **Recibido**.
+1. Busque y elija la orden ya **Aprobada** (el proveedor la aprobó desde el
+   correo, o alguien la aprobó manualmente — Borrador o Enviado no bastan) y
+   sin vincular aún a otra compra, del mismo proveedor, y pulse **Vincular**.
+   La orden pasa a estado **Recibido**.
 2. La pestaña muestra una comparación por producto: cantidad y precio
    **pedidos** vs. **facturados**, marcando cada línea como *OK*, *Diferencia*,
    *Pendiente* (pedido y aún no facturado) o *No pedido* (facturado sin estar
@@ -129,6 +130,9 @@ ve solo las que registró.
 
 ## Historial de cambios
 
+- **1.4** — Vincular con una orden de compra ahora requiere que esté en
+  estado **Aprobada** (antes bastaba Borrador o Aprobado), acorde al nuevo
+  flujo de aprobación de Órdenes de Compra.
 - **1.3** — Pestaña "Orden de Compra" en el modal: vincula la compra con la
   orden de compra del proveedor que la originó y compara cantidades/precios
   pedidos vs. facturados.
