@@ -452,7 +452,20 @@
             return fetch(url, Object.assign({ headers: { 'X-Requested-With': 'XMLHttpRequest' } }, opts || {})).then(r => r.json());
         }
 
-        function verificarDeclarado() {
+        // Pinta el Formulario 103 directo desde el snapshot guardado (valores_casilleros),
+        // sin recalcular desde los documentos — lo realmente declarado en su momento.
+        function cargarDeclaracionGuardada(layout, declaracion) {
+            tabsContainer.classList.remove('d-none');
+            tabContent.classList.remove('d-none');
+            renderFormulario({ layout: layout, valores: declaracion.valores_casilleros || {} });
+            document.getElementById('accordionDetalle').innerHTML = '<div class="text-center text-muted py-3">Este es el detalle guardado al declarar. Presione SINCRONIZAR para ver el detalle de documentos actual.</div>';
+            document.getElementById('btnExportarExcel').classList.remove('d-none');
+            document.getElementById('btnPdf').classList.remove('d-none');
+            yaGenerado = true;
+            actualizarBotonesDeclaracion();
+        }
+
+        function verificarDeclarado(preguntar) {
             const p = periodoParams();
             if (!p.anio || !p.mes) return;
             const params = new URLSearchParams(p).toString();
@@ -464,6 +477,21 @@
                     const quien = declaracionActual.usuario_nombre ? ` por ${declaracionActual.usuario_nombre}` : '';
                     avisoDeclarado.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i> Este período ya fue declarado y guardado${quien}${fecha ? ' (' + fecha + ')' : ''}. Si vuelve a guardar, se actualizará la declaración existente.`;
                     avisoDeclarado.classList.remove('d-none');
+                    if (preguntar && !yaGenerado) {
+                        Swal.fire({
+                            title: 'Período ya declarado',
+                            text: 'Este período ya tiene una declaración guardada. ¿Qué desea hacer?',
+                            icon: 'question',
+                            showDenyButton: true,
+                            showCancelButton: true,
+                            confirmButtonText: 'Cargar la guardada',
+                            denyButtonText: 'Recalcular desde documentos',
+                            cancelButtonText: 'Cancelar'
+                        }).then(res => {
+                            if (res.isConfirmed) cargarDeclaracionGuardada(data.layout, declaracionActual);
+                            else if (res.isDenied) generar();
+                        });
+                    }
                 } else {
                     avisoDeclarado.classList.add('d-none');
                 }
@@ -473,11 +501,16 @@
 
         function onCambioPeriodo() {
             yaGenerado = false; // hay que volver a presionar SINCRONIZAR para este período
-            verificarDeclarado();
+            formSRI.innerHTML = '';
+            tabsContainer.classList.add('d-none');
+            tabContent.classList.add('d-none');
+            document.getElementById('btnExportarExcel').classList.add('d-none');
+            document.getElementById('btnPdf').classList.add('d-none');
+            verificarDeclarado(true);
         }
         document.getElementById('anio').addEventListener('change', onCambioPeriodo);
         selMes.addEventListener('change', onCambioPeriodo);
-        verificarDeclarado();
+        verificarDeclarado(true);
 
         if (btnGuardar) {
             btnGuardar.addEventListener('click', () => {

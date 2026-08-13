@@ -487,7 +487,20 @@ class DeclaracionIvaController extends BaseModuloController
 
         try {
             $declaracion = $this->service->verificarDeclarado($idEmpresa, $tipo, $anio, $periodo);
-            echo json_encode(['ok' => true, 'declarado' => $declaracion !== null, 'declaracion' => $declaracion]);
+            // Layout (estructura del F104) no depende del período: se envía junto con la
+            // declaración para que el navegador pueda pintar el Resumen 104 directo desde
+            // el snapshot guardado (valores_casilleros), sin recalcular desde los documentos.
+            $layout = null;
+            $total480481 = 0.0;
+            if ($declaracion) {
+                $declaracion['valores_casilleros'] = json_decode((string) ($declaracion['valores_casilleros'] ?? ''), true) ?: [];
+                $layout = $this->repository->getEstructuraFormulario();
+                $total480481 = round((float) ($declaracion['transferencias_contado'] ?? 0) + (float) ($declaracion['transferencias_credito'] ?? 0), 2);
+            }
+            echo json_encode([
+                'ok' => true, 'declarado' => $declaracion !== null, 'declaracion' => $declaracion,
+                'layout' => $layout, 'total_480_481' => $total480481,
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

@@ -378,9 +378,29 @@ $proyectos  = $proyectos ?? [];
             });
         }
 
+        function getExpandedCodes() {
+            const codes = [];
+            document.querySelectorAll('#tree-container .accordion-collapse.show').forEach(el => {
+                if (el.id.startsWith('collapse-acc-')) {
+                    codes.push(el.id.slice('collapse-acc-'.length).replace(/-/g, '.'));
+                }
+            });
+            return codes;
+        }
+
+        function restoreExpandedCodes(codes) {
+            codes.forEach(codigo => {
+                const el = document.getElementById('collapse-acc-' + codigo.replace(/\./g, '-'));
+                if (el) bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).show();
+            });
+        }
+
         window.fetchTree = async function() {
             const buscar = document.getElementById('buscarPC').value;
             const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=1&perPage=1000`; // Traer todos para armar el árbol
+            const expandedCodes = getExpandedCodes();
+            const scrollEl = document.getElementById('pc-accordion-container');
+            const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
             try {
                 const resp = await fetch(url);
                 const json = await resp.json();
@@ -388,6 +408,8 @@ $proyectos  = $proyectos ?? [];
                     pcuentasRaw = json.data_raw || []; // Necesitamos devolver data_raw en el controller
                     const tree = buildTree(pcuentasRaw);
                     renderAccordionTree(tree, 'tree-container');
+                    restoreExpandedCodes(expandedCodes);
+                    if (scrollEl) scrollEl.scrollTop = scrollTop;
                 }
             } catch (e) { console.error(e); }
         };

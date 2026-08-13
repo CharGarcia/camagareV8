@@ -93,7 +93,15 @@ class DeclaracionRetencionesController extends BaseModuloController
 
         try {
             $declaracion = $this->service->verificarDeclarado($idEmpresa, $anio, $mes);
-            echo json_encode(['ok' => true, 'declarado' => $declaracion !== null, 'declaracion' => $declaracion]);
+            // Layout (estructura del F103) no depende del período: se envía junto con la
+            // declaración para que el navegador pueda pintar el Formulario 103 directo desde
+            // el snapshot guardado (valores_casilleros), sin recalcular desde los documentos.
+            $layout = null;
+            if ($declaracion) {
+                $declaracion['valores_casilleros'] = json_decode((string) ($declaracion['valores_casilleros'] ?? ''), true) ?: [];
+                $layout = $this->repository->getEstructuraFormulario();
+            }
+            echo json_encode(['ok' => true, 'declarado' => $declaracion !== null, 'declaracion' => $declaracion, 'layout' => $layout]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
