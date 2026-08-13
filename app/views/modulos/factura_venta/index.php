@@ -5205,7 +5205,13 @@ $totalPages = $totalPagesOriginal;
                 }
                 if (EMPRESA_CONFIG.obligatorio_nup) {
                     const fNup = tr.querySelector('.input-nup');
-                    if (fNup) fNup.classList.toggle('d-none', !esInventariable);
+                    if (fNup) {
+                        fNup.classList.toggle('d-none', !esInventariable);
+                        // A diferencia de Lote/Caducidad, el NUP no se restaura vía
+                        // cargarLotesFila() (esa consulta no lo trae) — hay que setearlo
+                        // directo desde el detalle guardado.
+                        fNup.value = d.nup || '';
+                    }
                 }
 
                 // Carga de Lotes y Caducidad
