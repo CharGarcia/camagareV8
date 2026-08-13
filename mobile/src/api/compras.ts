@@ -33,7 +33,7 @@ export type CompraDetalleLinea = {
   cantidad: string;
   precio_unitario: string;
   descuento: string;
-  precio_total: string;
+  precio_total_sin_impuesto: string;
 };
 
 export type CompraDetalle = CompraListado & {
@@ -65,12 +65,11 @@ export async function cargarCompraPorAutorizacion(numeroAutorizacion: string) {
 }
 
 export type FormaPago = { id: number; nombre: string; comportamiento?: string | null };
-export type ConceptoEgreso = { id: number; nombre: string; comportamiento?: string | null };
 export type PuntoEmision = { id_punto: number; punto: string; id_estab: number; estab: string };
 
 export async function obtenerDependenciasPago() {
   const resp = await api.get('/compras/dependencias-pago');
-  return resp.data.data as { formas_pago: FormaPago[]; conceptos: ConceptoEgreso[]; puntos: PuntoEmision[] };
+  return resp.data.data as { formas_pago: FormaPago[]; puntos: PuntoEmision[] };
 }
 
 export type RegistrarPagoInput = {
@@ -78,7 +77,6 @@ export type RegistrarPagoInput = {
   monto_pagar: number;
   id_punto_emision: number;
   id_forma_pago: number;
-  id_egreso_concepto?: number;
   fecha_emision?: string;
   tipo_operacion_bancaria?: string;
   numero_operacion?: string;

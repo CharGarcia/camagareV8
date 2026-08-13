@@ -674,10 +674,15 @@ export default function FacturaVentaFormScreen() {
           <Text style={styles.dato}>Forma de pago: {pagosLectura[0].nombre_forma_pago}</Text>
         ) : null}
 
-        {cabeceraLectura.estado === 'autorizado' ? (
-          <Text style={[styles.dato, saldoPendiente > 0.01 ? styles.saldoPendienteTexto : styles.saldoPagadoTexto]}>
-            {saldoPendiente > 0.01 ? `Saldo pendiente: $${saldoPendiente.toFixed(2)}` : 'Factura pagada'}
+        {cabeceraLectura.estado === 'autorizado' && saldoPendiente > 0.01 ? (
+          <Text style={[styles.dato, styles.saldoPendienteTexto]}>
+            Saldo pendiente: ${saldoPendiente.toFixed(2)}
           </Text>
+        ) : null}
+        {cabeceraLectura.estado === 'autorizado' && saldoPendiente <= 0.01 ? (
+          <View style={styles.badgePagado}>
+            <Text style={styles.badgePagadoTexto}>Pagado</Text>
+          </View>
         ) : null}
 
         {puedeCobrar && !mostrarFormCobro ? (
@@ -1010,7 +1015,17 @@ const styles = StyleSheet.create({
   botonCancelarTexto: { color: '#666', fontWeight: '600' },
   botonCobrar: { backgroundColor: '#fd7e14', borderRadius: 8, paddingVertical: 14, marginTop: 12, alignItems: 'center' },
   saldoPendienteTexto: { color: '#fd7e14', fontWeight: '700' },
-  saldoPagadoTexto: { color: '#198754', fontWeight: '700' },
+  badgePagado: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#198754',
+    backgroundColor: '#19875422',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginTop: 4,
+  },
+  badgePagadoTexto: { color: '#198754', fontWeight: '700', fontSize: 12 },
   formCobroBox: { backgroundColor: '#fff', borderRadius: 10, padding: 16, marginTop: 12 },
   bancoBox: {
     backgroundColor: '#fff8e6',

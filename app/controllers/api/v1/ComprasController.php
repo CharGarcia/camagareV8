@@ -164,8 +164,11 @@ class ComprasController extends ApiBaseController
 
     /**
      * GET /api/v1/compras/dependencias-pago
-     * Bootstrap del formulario de pago: formas de pago (flujo EGRESO), conceptos de
-     * egreso y puntos de emisión activos (para reservar el secuencial del egreso).
+     * Bootstrap del formulario de pago: formas de pago (flujo EGRESO, ya filtradas por
+     * activas) y puntos de emisión activos (para reservar el secuencial del egreso).
+     * El concepto de egreso NO se pide al usuario: se resuelve automáticamente en
+     * registrarPago() (ver resolverConceptoComprasAutomatico()), igual que hace
+     * public/js/modulos/compras.js en la web (busca comportamiento = 'COMPRA').
      */
     public function dependenciasPago(): void
     {
@@ -175,13 +178,6 @@ class ComprasController extends ApiBaseController
         $db = \App\core\Database::getConnection();
 
         $formas = (new FormaPagoRepository())->getFormasFiltradas($idEmpresa, 'EGRESO');
-
-        $stC = $db->prepare(
-            "SELECT id, nombre, comportamiento FROM empresa_opciones_ingreso_egreso
-             WHERE id_empresa = ? AND aplica_egresos = TRUE AND eliminado = FALSE ORDER BY nombre ASC"
-        );
-        $stC->execute([$idEmpresa]);
-        $conceptos = $stC->fetchAll(PDO::FETCH_ASSOC);
 
         $stPto = $db->prepare(
             "SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
@@ -196,15 +192,40 @@ class ComprasController extends ApiBaseController
 
         $this->jsonOk([
             'formas_pago' => $formas,
-            'conceptos' => $conceptos,
             'puntos' => $puntos,
         ]);
     }
 
     /**
+     * Resuelve el concepto de egreso para pagos de compra sin pedírselo al usuario —
+     * mismo criterio que public/js/modulos/compras.js: el concepto con
+     * comportamiento = 'COMPRA' (sembrado por EmpresaInicializadorService como
+     * "Facturas compras"), con fallback por nombre para empresas migradas/antiguas
+     * que no tengan ese comportamiento seteado.
+     */
+    private function resolverConceptoComprasAutomatico(PDO $db, int $idEmpresa): int
+    {
+        $st = $db->prepare(
+            "SELECT id FROM empresa_opciones_ingreso_egreso
+             WHERE id_empresa = ? AND aplica_egresos = TRUE AND eliminado = FALSE
+               AND (comportamiento = 'COMPRA' OR nombre ILIKE '%compra%' OR nombre ILIKE '%proveedor%')
+             ORDER BY (comportamiento = 'COMPRA') DESC, nombre ASC
+             LIMIT 1"
+        );
+        $st->execute([$idEmpresa]);
+        $id = $st->fetchColumn();
+        if (!$id) {
+            throw new \RuntimeException('No se encontró el concepto de egreso para pagos de compras. Configúrelo en Configuración → Ingresos y Egresos.');
+        }
+        return (int) $id;
+    }
+
+    /**
      * POST /api/v1/compras/registrar-pago
-     * body: { id_compra, monto_pagar, id_punto_emision, id_forma_pago, id_egreso_concepto?,
+     * body: { id_compra, monto_pagar, id_punto_emision, id_forma_pago,
      *         fecha_emision?, tipo_operacion_bancaria?, numero_operacion?, observaciones? }
+     * El concepto de egreso no se recibe del cliente: se resuelve automáticamente
+     * (ver resolverConceptoComprasAutomatico()).
      *
      * A diferencia del flujo web equivalente (App\controllers\modulos\ComprasController::
      * registrarEgresoAjax, que confía en un "saldo_actual" que manda el cliente), aquí el
@@ -282,6 +303,8 @@ class ComprasController extends ApiBaseController
                 ));
             }
 
+            $idConcepto = $this->resolverConceptoComprasAutomatico($db, $idEmpresa);
+
             $secuencialService = new SecuencialService();
             $rSec = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
             $secuencial = (string) ($rSec['formateado'] ?? '');
@@ -311,7 +334,7 @@ class ComprasController extends ApiBaseController
                 'tipo_egreso' => 'COMPRA',
                 'tipo_sujeto' => 'PROVEEDOR',
                 'id_proveedor' => (int) $compra['id_proveedor'],
-                'id_egreso_concepto' => (int) ($body['id_egreso_concepto'] ?? 0),
+                'id_egreso_concepto' => $idConcepto,
                 'monto_total' => $montoPagar,
                 'observaciones' => trim((string) ($body['observaciones'] ?? '')) !== '' ? trim((string) $body['observaciones']) : "Pago de Compra #{$numDoc}",
                 'estado' => 'registrado',

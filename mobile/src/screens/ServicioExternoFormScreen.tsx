@@ -46,6 +46,7 @@ export default function ServicioExternoFormScreen() {
 
   const [idPunto, setIdPunto] = useState<number | null>(null);
   const [secuencial, setSecuencial] = useState<string | null>(null);
+  const [cargandoSecuencial, setCargandoSecuencial] = useState(false);
   const [idBodega, setIdBodega] = useState<number | null>(null);
 
   // Cliente (autocomplete)
@@ -95,9 +96,11 @@ export default function ServicioExternoFormScreen() {
       setSecuencial(null);
       return;
     }
+    setCargandoSecuencial(true);
     obtenerSiguienteSecuencial(idPunto)
       .then((r) => setSecuencial(r.formateado))
-      .catch(() => setSecuencial(null));
+      .catch(() => setSecuencial(null))
+      .finally(() => setCargandoSecuencial(false));
   }, [idPunto]);
 
   function buscarClienteDebounced(texto: string) {
@@ -258,16 +261,31 @@ export default function ServicioExternoFormScreen() {
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.card}>
-        <Text style={styles.seccionTitulo}>Numeración</Text>
+      {puntos.length === 0 ? (
+        <View style={styles.numeroOrden}>
+          <Text style={styles.error}>No hay puntos de emisión configurados.</Text>
+        </View>
+      ) : (
         <SelectorLista<number>
-          label="Punto de emisión"
+          label="Serie"
           value={idPunto}
           opciones={puntos.map((p) => ({ id: p.id, label: `${p.cod_establecimiento}-${p.codigo_punto}` }))}
           onChange={setIdPunto}
         />
-        {secuencial ? <Text style={styles.secuencial}>Secuencial: {secuencial}</Text> : null}
-      </View>
+      )}
+
+      {idPunto ? (
+        <View style={styles.numeroOrden}>
+          {cargandoSecuencial ? (
+            <ActivityIndicator color="#0d6efd" />
+          ) : (
+            <Text style={styles.numeroOrdenTexto}>
+              Orden {puntos.find((p) => p.id === idPunto)?.cod_establecimiento}-
+              {puntos.find((p) => p.id === idPunto)?.codigo_punto}-{secuencial ?? '—'}
+            </Text>
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         <Text style={styles.seccionTitulo}>Cliente</Text>
@@ -418,7 +436,7 @@ export default function ServicioExternoFormScreen() {
             <SelectorLista<number>
               label="IVA"
               value={lineaTarifaIva}
-              opciones={tarifasIva.map((t) => ({ id: t.id, label: `${t.porcentaje_iva}%` }))}
+              opciones={tarifasIva.map((t) => ({ id: t.id, label: `${t.tarifa} (${t.porcentaje_iva}%)` }))}
               onChange={setLineaTarifaIva}
             />
           </View>
@@ -455,7 +473,8 @@ const styles = StyleSheet.create({
   error: { color: '#dc3545', textAlign: 'center', marginBottom: 12 },
   card: { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 12, elevation: 1 },
   seccionTitulo: { fontSize: 13, fontWeight: '700', color: '#666', textTransform: 'uppercase', marginBottom: 10 },
-  secuencial: { fontSize: 12, color: '#888', marginTop: 6 },
+  numeroOrden: { backgroundColor: '#e7f1ff', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8, marginBottom: 12 },
+  numeroOrdenTexto: { color: '#0d6efd', fontWeight: '700', fontSize: 15 },
   label: { fontSize: 13, color: '#333', marginBottom: 4, marginTop: 10, fontWeight: '600' },
   input: {
     borderWidth: 1,

@@ -6,7 +6,6 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 import { ModuloMenu, obtenerMenu, SubmoduloMenu } from '../api/menu';
 import { mensajeError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { useSerie } from '../pedidos/SerieContext';
 import ModuloIcono from '../components/ModuloIcono';
 
 /**
@@ -37,7 +36,6 @@ function soloImplementados(modulos: ModuloMenu[]): ModuloMenu[] {
 export default function MenuScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { logout } = useAuth();
-  const { serie } = useSerie();
   const [modulos, setModulos] = useState<ModuloMenu[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +61,7 @@ export default function MenuScreen() {
 
   function abrirSubmodulo(sub: SubmoduloMenu) {
     if (sub.ruta === 'modulos/pedidos') {
-      navigation.navigate(serie ? 'PedidosList' : 'SeleccionSerie');
+      navigation.navigate('PedidosList');
     } else if (sub.ruta === 'modulos/entregas-consignaciones') {
       navigation.navigate('EntregasList');
     } else if (sub.ruta === 'modulos/clientes') {

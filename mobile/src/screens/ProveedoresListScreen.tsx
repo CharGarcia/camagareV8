@@ -86,9 +86,9 @@ export default function ProveedoresListScreen() {
                 </Text>
                 {item.telefono ? <Text style={styles.dato}>{item.telefono}</Text> : null}
               </View>
-              <View style={[styles.badge, item.status === 1 ? styles.badgeActivo : styles.badgeInactivo]}>
-                <Text style={[styles.badgeTexto, item.status === 1 ? styles.badgeTextoActivo : styles.badgeTextoInactivo]}>
-                  {item.status === 1 ? 'Activo' : 'Inactivo'}
+              <View style={[styles.badge, item.status ? styles.badgeActivo : styles.badgeInactivo]}>
+                <Text style={[styles.badgeTexto, item.status ? styles.badgeTextoActivo : styles.badgeTextoInactivo]}>
+                  {item.status ? 'Activo' : 'Inactivo'}
                 </Text>
               </View>
             </TouchableOpacity>

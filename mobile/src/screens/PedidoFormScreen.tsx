@@ -74,7 +74,7 @@ export default function PedidoFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'PedidoForm'>>();
   const idPedido = route.params?.id;
   const soloLectura = !!idPedido;
-  const { serie } = useSerie();
+  const { serie, establecimientos, cargarEstablecimientos, seleccionarSerie } = useSerie();
 
   const [cargando, setCargando] = useState(soloLectura);
   const [guardando, setGuardando] = useState(false);
@@ -146,6 +146,30 @@ export default function PedidoFormScreen() {
       .catch(() => setResponsables([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [soloLectura, serie?.id_punto_emision]);
+
+  useEffect(() => {
+    if (soloLectura) return;
+    cargarEstablecimientos().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soloLectura]);
+
+  const opcionesSerie = establecimientos.flatMap((est) =>
+    est.puntos_emision.map((punto) => ({
+      id: punto.id_punto_emision,
+      label: `${est.establecimiento}-${punto.punto_emision}`,
+      est,
+      punto,
+    }))
+  );
+
+  function cambiarSerie(idPuntoEmision: number | null) {
+    if (idPuntoEmision === null) return;
+    const opcion = opcionesSerie.find((o) => o.id === idPuntoEmision);
+    if (!opcion) return;
+    seleccionarSerie(opcion.est, opcion.punto).catch((err) =>
+      setError(mensajeError(err, 'No se pudo cambiar la serie.'))
+    );
+  }
 
   function buscarClienteDebounced(texto: string) {
     setClienteTexto(texto);
@@ -331,6 +355,15 @@ export default function PedidoFormScreen() {
       keyboardOpeningTime={0}
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <View style={{ marginBottom: 12 }}>
+        <SelectorLista<number>
+          label="Serie"
+          value={serie?.id_punto_emision ?? null}
+          onChange={cambiarSerie}
+          opciones={opcionesSerie}
+        />
+      </View>
 
       <View style={styles.numeroPedido}>
         {cargandoSecuencial ? (

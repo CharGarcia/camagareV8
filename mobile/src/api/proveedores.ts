@@ -14,7 +14,7 @@ export type ProveedorListado = {
   ciudad: string | null;
   nombre_provincia: string | null;
   nombre_ciudad: string | null;
-  status: number;
+  status: boolean;
 };
 
 export async function listarProveedores(params: { buscar?: string; page?: number } = {}) {

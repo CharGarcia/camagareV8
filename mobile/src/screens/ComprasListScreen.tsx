@@ -78,6 +78,10 @@ export default function ComprasListScreen() {
           renderItem={({ item }) => {
             const numero = `${item.establecimiento_prov}-${item.punto_emision_prov}-${item.secuencial_prov}`;
             const fecha = item.fecha_emision ? new Date(item.fecha_emision).toLocaleDateString('es-EC') : '';
+            const saldo = Math.max(
+              0,
+              Number(item.importe_total) - Number(item.total_pagado) - Number(item.total_nc) - Number(item.total_retencion)
+            );
             return (
               <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('CompraDetail', { id: item.id })}>
                 <View style={{ flex: 1 }}>
@@ -89,7 +93,18 @@ export default function ComprasListScreen() {
                   </Text>
                   <Text style={styles.subtexto}>{fecha}</Text>
                 </View>
-                <Text style={styles.total}>${Number(item.importe_total).toFixed(2)}</Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.total}>${Number(item.importe_total).toFixed(2)}</Text>
+                  {saldo > 0.01 ? (
+                    <View style={styles.badgeSaldo}>
+                      <Text style={styles.badgeSaldoTexto}>Saldo: ${saldo.toFixed(2)}</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.badgePagado}>
+                      <Text style={styles.badgePagadoTexto}>Pagado</Text>
+                    </View>
+                  )}
+                </View>
               </TouchableOpacity>
             );
           }}
@@ -137,4 +152,8 @@ const styles = StyleSheet.create({
   proveedor: { fontSize: 15, fontWeight: '600' },
   subtexto: { fontSize: 12, color: '#777', marginTop: 2 },
   total: { fontSize: 15, fontWeight: '700', color: '#0d6efd' },
+  badgeSaldo: { borderWidth: 1, borderColor: '#fd7e14', backgroundColor: '#fd7e1222', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4 },
+  badgeSaldoTexto: { fontSize: 10, fontWeight: '700', color: '#fd7e14' },
+  badgePagado: { borderWidth: 1, borderColor: '#198754', backgroundColor: '#19875422', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4 },
+  badgePagadoTexto: { fontSize: 10, fontWeight: '700', color: '#198754' },
 });

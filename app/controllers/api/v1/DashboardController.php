@@ -28,15 +28,19 @@ class DashboardController extends ApiBaseController
     }
 
     /**
-     * GET /api/v1/dashboard/resumen
-     * Ventas y compras del mes actual vs. el mes anterior, mismo período/ambiente
-     * que usa por defecto el dashboard web (mes en curso, tipo_ambiente activo de la empresa).
+     * GET /api/v1/dashboard/resumen?anio=&mes=
+     * Ventas, compras, CxC y CxP del período seleccionado vs. el período anterior,
+     * mismo tipo_ambiente activo de la empresa que usa por defecto el dashboard web.
+     * anio: 0 o ausente = año actual. mes: 1-12 = mes específico, -1 = año completo,
+     * 0 o ausente = mes actual — mismo contrato que DashboardService::getDashboardData().
      */
     public function resumen(): void
     {
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $anio = (int) ($_GET['anio'] ?? 0);
+        $mes = (int) ($_GET['mes'] ?? 0);
 
         try {
             $emisor = (new EmpresaRepository())->getEmisorConfig($idEmpresa);
@@ -45,17 +49,21 @@ class DashboardController extends ApiBaseController
                 $tipoAmbiente = '1';
             }
 
-            $data = (new DashboardService())->getDashboardData($idEmpresa, $tipoAmbiente);
+            $data = (new DashboardService())->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes);
         } catch (Throwable $e) {
             $this->jsonError('ERROR_DASHBOARD', $e->getMessage(), 500);
         }
 
         $this->jsonOk([
             'label_periodo'        => $data['label_periodo'],
+            'anio'                 => $data['anio'],
+            'mes'                  => $data['mes'],
             'ventas_mes_actual'    => $data['ventas_mes_actual'],
             'ventas_mes_anterior'  => $data['ventas_mes_anterior'],
             'compras_mes_actual'   => $data['compras_mes_actual'],
             'compras_mes_anterior' => $data['compras_mes_anterior'],
+            'cxc_total'            => $data['cxc_total'],
+            'cxp_total'            => $data['cxp_total'],
         ]);
     }
 }

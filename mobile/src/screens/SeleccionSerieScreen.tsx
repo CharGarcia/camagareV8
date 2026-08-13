@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSerie } from '../pedidos/SerieContext';
@@ -16,6 +16,8 @@ type FilaSerie = {
 
 export default function SeleccionSerieScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { params } = useRoute<RouteProp<RootStackParamList, 'SeleccionSerie'>>();
+  const irANuevoPedido = params?.irANuevoPedido ?? false;
   const { establecimientos, cargarEstablecimientos, seleccionarSerie } = useSerie();
   const { logout } = useAuth();
   const [cargando, setCargando] = useState(true);
@@ -47,7 +49,11 @@ export default function SeleccionSerieScreen() {
     setEligiendo(fila.key);
     try {
       await seleccionarSerie(fila.est, fila.punto);
-      navigation.replace('PedidosList');
+      if (irANuevoPedido) {
+        navigation.replace('PedidoForm', undefined);
+      } else {
+        navigation.replace('PedidosList');
+      }
     } catch (err) {
       setError(mensajeError(err, 'No se pudo seleccionar la serie.'));
     } finally {

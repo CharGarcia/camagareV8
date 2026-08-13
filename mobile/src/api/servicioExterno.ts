@@ -52,7 +52,7 @@ export async function obtenerOrden(id: number) {
 export type PuntoEmision = { id: number; id_establecimiento: number; codigo_punto: string; cod_establecimiento: string };
 export type FormaPago = { codigo: string; nombre: string };
 export type Bodega = { id: number; nombre: string };
-export type TarifaIva = { id: number; porcentaje_iva: string; codigo: string };
+export type TarifaIva = { id: number; tarifa: string; porcentaje_iva: string; codigo: string };
 export type UnidadMedida = { id: number; nombre: string };
 
 export async function obtenerCatalogos() {

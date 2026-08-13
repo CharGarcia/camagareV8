@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -9,15 +9,17 @@ import { mensajeError } from '../api/client';
 export default function EntregasListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<ConsignacionPendiente[]>([]);
+  const [buscar, setBuscar] = useState('');
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const cargar = useCallback(async (esRefresh = false) => {
+  const cargar = useCallback(async (texto: string, esRefresh = false) => {
     esRefresh ? setRefrescando(true) : setCargando(true);
     setError(null);
     try {
-      const resp = await listarPendientesEntrega({ page: 1 });
+      const resp = await listarPendientesEntrega({ buscar: texto, page: 1 });
       setItems(resp.data);
     } catch (err) {
       setError(mensajeError(err, 'No se pudieron cargar las entregas pendientes.'));
@@ -28,12 +30,28 @@ export default function EntregasListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      cargar();
+      cargar(buscar);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cargar])
   );
 
+  function onBuscarChange(texto: string) {
+    setBuscar(texto);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => cargar(texto), 350);
+  }
+
   return (
     <View style={styles.container}>
+      <View style={styles.toolbar}>
+        <TextInput
+          style={styles.buscador}
+          placeholder="Buscar por número o cliente..."
+          value={buscar}
+          onChangeText={onBuscarChange}
+        />
+      </View>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {cargando ? (
@@ -43,7 +61,7 @@ export default function EntregasListScreen() {
           data={items}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(true)} />}
+          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(buscar, true)} />}
           ListEmptyComponent={<Text style={styles.vacio}>No hay entregas pendientes.</Text>}
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Entrega', { id: item.id })}>
@@ -78,6 +96,25 @@ export default function EntregasListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f6f8' },
+  toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  buscador: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    fontSize: 14,
+  },
   error: { color: '#dc3545', textAlign: 'center', marginTop: 12 },
   vacio: { color: '#888', textAlign: 'center', marginTop: 40 },
   card: {

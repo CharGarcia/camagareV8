@@ -5,7 +5,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import {
   CompraDetalle,
-  ConceptoEgreso,
   FormaPago,
   PuntoEmision,
   obtenerCompra,
@@ -30,12 +29,10 @@ export default function CompraPagoScreen() {
 
   const [compra, setCompra] = useState<CompraDetalle | null>(null);
   const [formasPago, setFormasPago] = useState<FormaPago[]>([]);
-  const [conceptos, setConceptos] = useState<ConceptoEgreso[]>([]);
   const [puntos, setPuntos] = useState<PuntoEmision[]>([]);
 
   const [monto, setMonto] = useState('');
   const [idFormaPago, setIdFormaPago] = useState<number | null>(null);
-  const [idConcepto, setIdConcepto] = useState<number | null>(null);
   const [idPunto, setIdPunto] = useState<number | null>(null);
 
   useEffect(() => {
@@ -44,7 +41,6 @@ export default function CompraPagoScreen() {
         const [c, deps] = await Promise.all([obtenerCompra(params.id), obtenerDependenciasPago()]);
         setCompra(c);
         setFormasPago(deps.formas_pago);
-        setConceptos(deps.conceptos);
         setPuntos(deps.puntos);
         setMonto(saldoPendiente(c).toFixed(2));
         if (deps.puntos.length === 1) setIdPunto(deps.puntos[0].id_punto);
@@ -80,7 +76,6 @@ export default function CompraPagoScreen() {
         monto_pagar: montoNum,
         id_punto_emision: idPunto,
         id_forma_pago: idFormaPago,
-        id_egreso_concepto: idConcepto ?? undefined,
       });
       Alert.alert(
         'Pago registrado',
@@ -144,15 +139,6 @@ export default function CompraPagoScreen() {
             value={idFormaPago}
             opciones={formasPago.map((f) => ({ id: f.id, label: f.nombre }))}
             onChange={setIdFormaPago}
-          />
-        </View>
-
-        <View style={{ marginTop: 14 }}>
-          <SelectorLista<number>
-            label="Concepto (opcional)"
-            value={idConcepto}
-            opciones={conceptos.map((c) => ({ id: c.id, label: c.nombre }))}
-            onChange={setIdConcepto}
           />
         </View>
 

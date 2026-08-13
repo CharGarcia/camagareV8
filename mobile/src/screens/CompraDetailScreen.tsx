@@ -73,7 +73,9 @@ export default function CompraDetailScreen() {
             <Text style={styles.botonPagoTexto}>Registrar pago (saldo: ${saldo.toFixed(2)})</Text>
           </TouchableOpacity>
         ) : (
-          <Text style={styles.pagadoCompleto}>Compra pagada en su totalidad.</Text>
+          <View style={styles.badgePagado}>
+            <Text style={styles.badgePagadoTexto}>Pagado</Text>
+          </View>
         )}
       </View>
 
@@ -92,7 +94,7 @@ export default function CompraDetailScreen() {
                   {Number(d.cantidad)} x ${Number(d.precio_unitario).toFixed(2)}
                 </Text>
               </View>
-              <Text style={styles.detalleTotal}>${Number(d.precio_total).toFixed(2)}</Text>
+              <Text style={styles.detalleTotal}>${Number(d.precio_total_sin_impuesto).toFixed(2)}</Text>
             </View>
           ))
         )}
@@ -135,5 +137,15 @@ const styles = StyleSheet.create({
   detalleTotal: { fontSize: 13, fontWeight: '700', color: '#333' },
   botonPago: { backgroundColor: '#0d6efd', borderRadius: 8, paddingVertical: 12, marginTop: 12, alignItems: 'center' },
   botonPagoTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  pagadoCompleto: { color: '#198754', fontWeight: '600', fontSize: 13, marginTop: 12, textAlign: 'center' },
+  badgePagado: {
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: '#198754',
+    backgroundColor: '#19875422',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginTop: 12,
+  },
+  badgePagadoTexto: { color: '#198754', fontWeight: '700', fontSize: 13 },
 });

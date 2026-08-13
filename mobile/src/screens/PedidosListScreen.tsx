@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -24,17 +25,19 @@ const COLOR_ESTADO: Record<string, string> = {
 
 export default function PedidosListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { serie, cambiarSerie } = useSerie();
+  const { serie } = useSerie();
   const [pedidos, setPedidos] = useState<PedidoListado[]>([]);
+  const [buscar, setBuscar] = useState('');
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const cargar = useCallback(async (esRefresh = false) => {
+  const cargar = useCallback(async (texto: string, esRefresh = false) => {
     esRefresh ? setRefrescando(true) : setCargando(true);
     setError(null);
     try {
-      const resp = await listarPedidos({ page: 1 });
+      const resp = await listarPedidos({ buscar: texto, page: 1 });
       setPedidos(resp.data);
     } catch (err) {
       setError(mensajeError(err, 'No se pudieron cargar los pedidos.'));
@@ -45,32 +48,38 @@ export default function PedidosListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      cargar();
+      cargar(buscar);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cargar])
   );
+
+  function onBuscarChange(texto: string) {
+    setBuscar(texto);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => cargar(texto), 350);
+  }
+
+  function nuevoPedido() {
+    if (serie) {
+      navigation.navigate('PedidoForm', undefined);
+    } else {
+      navigation.navigate('SeleccionSerie', { irANuevoPedido: true });
+    }
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
-        <TouchableOpacity onPress={() => navigation.navigate('PedidoForm', undefined)} style={styles.botonNuevo}>
-          <Text style={styles.botonNuevoTexto}>+ Nuevo pedido</Text>
+        <TextInput
+          style={styles.buscador}
+          placeholder="Buscar por número o cliente..."
+          value={buscar}
+          onChangeText={onBuscarChange}
+        />
+        <TouchableOpacity onPress={nuevoPedido} style={styles.botonNuevo}>
+          <Text style={styles.botonNuevoTexto}>+ Nuevo</Text>
         </TouchableOpacity>
       </View>
-
-      {serie ? (
-        <TouchableOpacity
-          onPress={() => {
-            cambiarSerie();
-            navigation.replace('SeleccionSerie');
-          }}
-          style={styles.serieBar}
-        >
-          <Text style={styles.serieTexto}>
-            Serie: {serie.establecimiento}-{serie.punto_emision}
-          </Text>
-          <Text style={styles.serieCambiar}>Cambiar</Text>
-        </TouchableOpacity>
-      ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -81,7 +90,7 @@ export default function PedidosListScreen() {
           data={pedidos}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(true)} />}
+          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(buscar, true)} />}
           ListEmptyComponent={<Text style={styles.vacio}>No hay pedidos todavía.</Text>}
           renderItem={({ item }) => {
             const color = COLOR_ESTADO[(item.estado || '').toUpperCase()] ?? '#6c757d';
@@ -113,26 +122,25 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f6f8' },
   toolbar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  botonNuevo: { backgroundColor: '#0d6efd', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  botonNuevoTexto: { color: '#fff', fontWeight: '600' },
-  salir: { color: '#dc3545', fontWeight: '600' },
-  serieBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
+  buscador: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#e7f1ff',
+    backgroundColor: '#fff',
+    fontSize: 14,
   },
-  serieTexto: { color: '#0d6efd', fontWeight: '600' },
-  serieCambiar: { color: '#0d6efd', fontSize: 12, textDecorationLine: 'underline' },
+  botonNuevo: { backgroundColor: '#0d6efd', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+  botonNuevoTexto: { color: '#fff', fontWeight: '600' },
   error: { color: '#dc3545', textAlign: 'center', marginTop: 12 },
   vacio: { color: '#888', textAlign: 'center', marginTop: 40 },
   card: {

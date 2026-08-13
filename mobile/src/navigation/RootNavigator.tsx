@@ -36,7 +36,7 @@ export type RootStackParamList = {
   SeleccionEmpresa: undefined;
   Asistencia: undefined;
   Menu: undefined;
-  SeleccionSerie: undefined;
+  SeleccionSerie: { irANuevoPedido?: boolean } | undefined;
   PedidosList: undefined;
   PedidoForm: { id?: number } | undefined;
   EntregasList: undefined;

@@ -97,6 +97,11 @@ export default function ProductosListScreen() {
                   </Text>
                   <Text style={styles.precio}>${Number(item.pvp ?? item.precio_base).toFixed(2)}</Text>
                 </View>
+                <View style={[styles.badge, item.status === 1 ? styles.badgeActivo : styles.badgeInactivo]}>
+                  <Text style={[styles.badgeTexto, item.status === 1 ? styles.badgeTextoActivo : styles.badgeTextoInactivo]}>
+                    {item.status === 1 ? 'Activo' : 'Inactivo'}
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           }}
@@ -147,4 +152,10 @@ const styles = StyleSheet.create({
   nombre: { fontSize: 15, fontWeight: '600' },
   codigo: { fontSize: 12, color: '#777', marginTop: 2 },
   precio: { fontSize: 14, fontWeight: '700', color: '#0d6efd', marginTop: 2 },
+  badge: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeActivo: { backgroundColor: '#19875422', borderColor: '#198754' },
+  badgeInactivo: { backgroundColor: '#6c757d22', borderColor: '#6c757d' },
+  badgeTexto: { fontSize: 12, fontWeight: '700' },
+  badgeTextoActivo: { color: '#198754' },
+  badgeTextoInactivo: { color: '#6c757d' },
 });

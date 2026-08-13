@@ -48,6 +48,11 @@ class ProductosController extends ApiBaseController
 
     /**
      * GET /api/v1/productos/listar?buscar=&page=
+     * Incluye productos inactivos (a diferencia de los buscarProductos() que usan los
+     * flujos de creación de pedidos/facturas/compras, que sí filtran solo activos):
+     * esta es la pantalla de catálogo, donde el usuario necesita ver el estado de cada
+     * producto (badge Activo/Inactivo en el listado). El formulario móvil no permite
+     * cambiar el estado — eso sigue siendo exclusivo de la web.
      */
     public function listar(): void
     {
@@ -61,7 +66,7 @@ class ProductosController extends ApiBaseController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, 'nombre', 'ASC', $idUsuarioFiltro, null, true);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, 'nombre', 'ASC', $idUsuarioFiltro, null, false);
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 

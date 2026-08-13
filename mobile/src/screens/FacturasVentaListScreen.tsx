@@ -96,6 +96,11 @@ export default function FacturasVentaListScreen() {
                   {item.estado === 'autorizado' && item.saldo_pendiente > 0.01 ? (
                     <Text style={styles.saldoPendiente}>Saldo: ${item.saldo_pendiente.toFixed(2)}</Text>
                   ) : null}
+                  {item.estado === 'autorizado' && item.saldo_pendiente <= 0.01 ? (
+                    <View style={[styles.badge, styles.badgePagado]}>
+                      <Text style={[styles.badgeTexto, styles.badgePagadoTexto]}>Pagado</Text>
+                    </View>
+                  ) : null}
                 </View>
               </TouchableOpacity>
             );
@@ -147,4 +152,6 @@ const styles = StyleSheet.create({
   badge: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4 },
   badgeTexto: { fontSize: 10, fontWeight: '700' },
   saldoPendiente: { fontSize: 11, color: '#fd7e14', fontWeight: '600', marginTop: 3 },
+  badgePagado: { backgroundColor: '#19875422', borderColor: '#198754', marginTop: 4 },
+  badgePagadoTexto: { color: '#198754' },
 });
