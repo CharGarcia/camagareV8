@@ -10,6 +10,15 @@ namespace App\models;
 class Usuario extends BaseModel
 {
     /**
+     * Los booleanos de Postgres llegan por PDO como 't'/'f' (texto), no como bool
+     * nativo de PHP — (bool)'f' sería true por error. Normaliza cualquier variante.
+     */
+    private static function pgBool(mixed $v): bool
+    {
+        return $v === true || $v === 't' || $v === '1' || $v === 1 || $v === 'true';
+    }
+
+    /**
      * Valida login por cédula y contraseña.
      * Soporta bcrypt y MD5 (legacy). Si la contraseña está en MD5 y es correcta,
      * la migra automáticamente a bcrypt (el usuario no nota ningún cambio).
@@ -25,7 +34,7 @@ class Usuario extends BaseModel
             return false;
         }
 
-        $stmt = $this->db->prepare('SELECT id, nombre, cedula, password, nivel, id_empresa_favorita FROM usuarios WHERE cedula = ? AND estado = 1 AND eliminado = false LIMIT 1');
+        $stmt = $this->db->prepare('SELECT id, nombre, cedula, password, nivel, id_empresa_favorita, puede_app_movil FROM usuarios WHERE cedula = ? AND estado = 1 AND eliminado = false LIMIT 1');
         if (!$stmt) {
             return false;
         }
@@ -41,7 +50,7 @@ class Usuario extends BaseModel
         // Bcrypt (password_hash): $2y$ o $2a$
         if (str_starts_with($stored, '$2y$') || str_starts_with($stored, '$2a$') || str_starts_with($stored, '$2b$')) {
             if (password_verify($password, $stored)) {
-                return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel'], 'id_empresa_favorita' => $user['id_empresa_favorita'] ? (int)$user['id_empresa_favorita'] : null];
+                return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel'], 'id_empresa_favorita' => $user['id_empresa_favorita'] ? (int)$user['id_empresa_favorita'] : null, 'puede_app_movil' => self::pgBool($user['puede_app_movil'])];
             }
             return false;
         }
@@ -56,7 +65,7 @@ class Usuario extends BaseModel
                     $upd->execute([$newHash, $id]);
                 }
             }
-            return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel'], 'id_empresa_favorita' => $user['id_empresa_favorita'] ? (int)$user['id_empresa_favorita'] : null];
+            return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel'], 'id_empresa_favorita' => $user['id_empresa_favorita'] ? (int)$user['id_empresa_favorita'] : null, 'puede_app_movil' => self::pgBool($user['puede_app_movil'])];
         }
 
         return false;
@@ -379,8 +388,10 @@ class Usuario extends BaseModel
     {
         $id = (int) $id;
         if ($id <= 0) return null;
-        $r = $this->query("SELECT id, nombre, cedula, mail, nivel FROM usuarios WHERE id = {$id} AND estado = 1 AND eliminado = false LIMIT 1");
-        return $r[0] ?? null;
+        $r = $this->query("SELECT id, nombre, cedula, mail, nivel, puede_app_movil FROM usuarios WHERE id = {$id} AND estado = 1 AND eliminado = false LIMIT 1");
+        if (!isset($r[0])) return null;
+        $r[0]['puede_app_movil'] = self::pgBool($r[0]['puede_app_movil']);
+        return $r[0];
     }
 
     /**
@@ -442,7 +453,7 @@ class Usuario extends BaseModel
      * Valida que el correo no esté registrado por otro usuario.
      * Impide desactivar o degradar al último super administrador activo.
      */
-    public function actualizar(int $id, string $mail, int $nivel, int $estado): bool
+    public function actualizar(int $id, string $mail, int $nivel, int $estado, ?bool $puedeAppMovil = null): bool
     {
         $id = (int) $id;
         $mail = trim($mail);
@@ -476,7 +487,8 @@ class Usuario extends BaseModel
             }
         }
 
-        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado} WHERE id = {$id}";
+        $movilSet = $puedeAppMovil === null ? '' : (', puede_app_movil = ' . ($puedeAppMovil ? 'true' : 'false'));
+        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado}{$movilSet} WHERE id = {$id}";
         return $this->execute($sql);
     }
 
@@ -546,7 +558,7 @@ class Usuario extends BaseModel
     }
 
     /** Columnas ordenables */
-    public const COLUMNAS_ORDEN = ['nombre', 'cedula', 'mail', 'nivel', 'estado'];
+    public const COLUMNAS_ORDEN = ['nombre', 'cedula', 'mail', 'nivel', 'estado', 'puede_app_movil'];
 
     /**
      * Lista usuarios para el módulo de usuarios del sistema.
@@ -588,7 +600,7 @@ class Usuario extends BaseModel
         // una cédula placeholder = substr(md5(correo),0,15). Al completar el registro,
         // el usuario define su cédula REAL. Por eso: cédula = hash del correo => NO
         // registrado. Se combina con la columna `registrado` (OR) para blindar el dato.
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token,
+        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token, u.puede_app_movil,
                 (u.registrado OR COALESCE(u.cedula,'') <> substr(md5(COALESCE(u.mail,'')), 1, 15)) AS registrado
             FROM {$from} {$where}
             ORDER BY {$col} {$dir}

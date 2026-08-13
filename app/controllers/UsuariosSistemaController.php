@@ -165,6 +165,8 @@ class UsuariosSistemaController extends Controller
         $empresas = $r['empresas'] ?? [];
         $rv = $r['registrado'] ?? false;
         $registrado = ($rv === true || $rv === 't' || $rv === '1' || $rv === 1 || $rv === 'true');
+        $mv = $r['puede_app_movil'] ?? false;
+        $puedeAppMovil = ($mv === true || $mv === 't' || $mv === '1' || $mv === 1 || $mv === 'true');
         $nivelTexto = $nivelU >= 3 ? 'Super Admin' : ($nivelU >= 2 ? 'Administrador' : 'Usuario');
         $nivelClase = $nivelU >= 3 ? 'danger' : ($nivelU >= 2 ? 'info' : 'secondary');
 
@@ -176,6 +178,7 @@ class UsuariosSistemaController extends Controller
             . ' data-nivel="' . $nivelU . '"'
             . ' data-estado="' . $estado . '"'
             . ' data-empresas="' . count($empresas) . '"'
+            . ' data-puede-app-movil="' . ($puedeAppMovil ? '1' : '0') . '"'
             . ' data-token="' . htmlspecialchars($r['token'] ?? '') . '">';
         $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
         $html .= '<td><code>' . htmlspecialchars($r['cedula'] ?? '') . '</code></td>';
@@ -193,6 +196,13 @@ class UsuariosSistemaController extends Controller
             $html .= '<span class="badge bg-success">Activo</span>';
         } else {
             $html .= '<span class="badge bg-secondary">Inactivo</span>';
+        }
+        $html .= '</td>';
+        $html .= '<td class="text-center">';
+        if ($puedeAppMovil) {
+            $html .= '<span class="badge bg-success bg-opacity-10 text-success border border-success" title="Puede iniciar sesión en la app móvil"><i class="bi bi-phone"></i> Sí</span>';
+        } else {
+            $html .= '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary">No</span>';
         }
         $html .= '</td>';
         $html .= '<td class="text-center"><span class="badge bg-light text-dark">' . count($empresas) . '</span></td>';
@@ -224,8 +234,13 @@ class UsuariosSistemaController extends Controller
             $this->json(['ok' => false, 'msg' => 'Solo el super administrador puede asignar nivel de administrador.']);
         }
 
+        // El checkbox "Puede usar app móvil" solo se renderiza en el modal cuando
+        // quien edita es nivel 3, así que un POST de un admin nivel < 3 nunca lo trae
+        // — null le indica al modelo que no toque esa columna (preserva el valor actual).
+        $puedeAppMovil = $nivelActual >= 3 ? !empty($_POST['puede_app_movil']) : null;
+
         try {
-            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0)) {
+            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0, $puedeAppMovil)) {
                 $this->json(['ok' => true, 'msg' => 'Usuario actualizado correctamente.']);
             } else {
                 $this->json(['ok' => false, 'msg' => 'No se realizaron cambios o hubo un error al actualizar.']);

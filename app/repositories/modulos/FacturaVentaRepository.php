@@ -771,6 +771,24 @@ class FacturaVentaRepository extends BaseRepository
         ]);
     }
 
+    /**
+     * Igual que updateDetalleLoteNup() pero SIN tocar la columna nup — para
+     * reconciliaciones (p. ej. la migración MySQL, que no conoce el NUP) que no
+     * deben pisar un NUP ya cargado a mano con NULL.
+     */
+    public function updateDetalleLoteCaducidad(int $idDetalle, ?string $numeroLote, ?string $fechaCaducidad): void
+    {
+        $sql = "UPDATE ventas_detalle
+                SET numero_lote = :lote, fecha_caducidad = :cad
+                WHERE id = :id";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':lote' => $numeroLote,
+            ':cad'  => $fechaCaducidad,
+            ':id'   => $idDetalle,
+        ]);
+    }
+
     public function updateDetalleKardex(int $idDetalle, int $idKardex): void
     {
         $sql = "UPDATE ventas_detalle SET id_inventario_kardex = :k WHERE id = :id";

@@ -157,6 +157,7 @@ $rowsHtml = $rowsHtml ?? '';
                         <th class="sortable-header" data-sort="mail" role="button">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="nivel" role="button">Nivel <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center" data-sort="puede_app_movil" role="button">App Móvil <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center">Empresas</th>
                     </tr>
                 </thead>
@@ -289,6 +290,14 @@ $rowsHtml = $rowsHtml ?? '';
                                         <option value="0">Inactivo</option>
                                     </select>
                                 </div>
+                                <?php if ($nivel >= 3): ?>
+                                <div class="col-md-6">
+                                    <div class="form-check form-switch mt-4">
+                                        <input class="form-check-input" type="checkbox" id="edit-puede-app-movil" name="puede_app_movil" value="1">
+                                        <label class="form-check-label" for="edit-puede-app-movil">Puede usar la app móvil</label>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
                                 <!-- Botón anterior removido -->
                             </div>
                             <div id="section-reenviar-invitacion" class="mt-4 p-3 bg-light border rounded d-none">
@@ -429,7 +438,12 @@ $rowsHtml = $rowsHtml ?? '';
             document.getElementById('edit-mail').value = mailOriginal;
             document.getElementById('edit-nivel').value = el.dataset.nivel || '1';
             document.getElementById('edit-estado').value = el.dataset.estado === '1' ? '1' : '0';
-            
+
+            var chkAppMovil = document.getElementById('edit-puede-app-movil');
+            if (chkAppMovil) {
+                chkAppMovil.checked = el.dataset.puedeAppMovil === '1';
+            }
+
             var token = el.dataset.token || '';
             var secResend = document.getElementById('section-reenviar-invitacion');
             if (token !== '') {

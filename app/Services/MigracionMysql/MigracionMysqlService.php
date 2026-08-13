@@ -3087,7 +3087,10 @@ class MigracionMysqlService
                 if ($l === null) { break; }
                 $lote = trim((string) $l['lote']);
                 // Caducidad a TODAS las líneas: vencimiento, o la fecha de la factura si viene en cero.
-                $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => ($lote !== '' ? mb_substr($lote, 0, 100) : null), 'fecha_caducidad' => self::caducidadODef($l['vencimiento'], $ef['fecha_factura'])]);
+                // updateDetalleLoteCaducidad (no updateDetalleLoteNup): la tabla vieja cuerpo_factura
+                // no tiene columna de NUP, así que esta reconciliación no debe tocar esa columna —
+                // updateDetalleLoteNup la habría forzado a NULL y pisado un NUP cargado a mano.
+                $repo->updateDetalleLoteCaducidad((int) $idDet, ($lote !== '' ? mb_substr($lote, 0, 100) : null), self::caducidadODef($l['vencimiento'], $ef['fecha_factura']));
             }
         };
 
@@ -3274,7 +3277,7 @@ class MigracionMysqlService
                     // Lote / vencimiento por línea (viejo cuerpo_factura.lote/vencimiento → ventas_detalle).
                     // Caducidad a TODAS las líneas: vencimiento, o la fecha de la factura si viene en cero.
                     $lote = trim((string) ($l['lote'] ?? ''));
-                    $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => ($lote !== '' ? mb_substr($lote, 0, 100) : null), 'fecha_caducidad' => self::caducidadODef($l['vencimiento'] ?? null, $ef['fecha_factura'])]);
+                    $repo->updateDetalleLoteCaducidad((int) $idDet, ($lote !== '' ? mb_substr($lote, 0, 100) : null), self::caducidadODef($l['vencimiento'] ?? null, $ef['fecha_factura']));
                 }
 
                 $migrarHijos($idVenta, $ef, $diasDe($idCliente)); // formas de pago SRI + info adicional

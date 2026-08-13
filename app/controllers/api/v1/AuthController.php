@@ -74,6 +74,10 @@ class AuthController extends ApiBaseController
         // Credenciales correctas: pone el contador de fallos a cero y deja auditoría.
         $rateLimit->registrarExito($cedula);
 
+        if (empty($user['puede_app_movil'])) {
+            $this->jsonError('APP_MOVIL_NO_HABILITADA', 'Este usuario no tiene permiso para usar la app móvil. Contacte a su administrador.', 403);
+        }
+
         $sesionSvc = new SesionActivaService();
         $sesionActiva = $sesionSvc->obtenerSesionActiva((int) $user['id'], self::CANAL);
 
@@ -151,6 +155,13 @@ class AuthController extends ApiBaseController
         $perfil = $model->getPerfil($idUsuario);
         if (!$perfil) {
             $this->jsonError('USUARIO_NO_ENCONTRADO', 'El usuario ya no existe o está inactivo.', 401);
+        }
+
+        // Revalida el permiso en cada refresh: si un superadmin le quita el acceso a
+        // la app móvil mientras el usuario tenía sesión abierta, se corta en el
+        // siguiente refresh en vez de esperar a que el access token expire solo.
+        if (empty($perfil['puede_app_movil'])) {
+            $this->jsonError('APP_MOVIL_NO_HABILITADA', 'Este usuario ya no tiene permiso para usar la app móvil.', 403);
         }
 
         $idEmpresa = null;
