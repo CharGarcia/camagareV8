@@ -422,24 +422,33 @@ $proyectos  = $proyectos ?? [];
 
         window.handleImport = async function(input) {
             if (!input.files || input.files.length === 0) return;
-            if (!confirm('Este proceso cargará las cuentas desde el archivo. ¿Continuar?')) {
+            const result = await Swal.fire({
+                title: 'Importar desde Excel',
+                text: 'Este proceso cargará las cuentas desde el archivo. ¿Continuar?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, importar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!result.isConfirmed) {
                 input.value = '';
                 return;
             }
-            
+
             const fd = new FormData();
             fd.append('excel_file', input.files[0]);
-            
+
             try {
                 const resp = await fetch(`${urlBase}/importExcel`, { method: 'POST', body: fd });
                 const json = await resp.json();
                 if (json.ok) {
-                    alert(json.msg);
-                    location.reload();
+                    Swal.fire('¡Éxito!', json.msg, 'success').then(() => location.reload());
                 } else {
-                    alert('Error: ' + json.error);
+                    Swal.fire('Error', json.error, 'error');
                 }
-            } catch (e) { alert('Error de conexión'); }
+            } catch (e) {
+                Swal.fire('Error', 'Error de conexión', 'error');
+            }
             finally { input.value = ''; }
         };
 
@@ -572,7 +581,7 @@ $proyectos  = $proyectos ?? [];
             try {
                 const resp = await fetch(`${urlBase}/getNextCodigoAjax?padre=${codigoPadre}`);
                 const json = await resp.json();
-                if (!json.ok) { alert(json.error); return; }
+                if (!json.ok) { Swal.fire('Error', json.error, 'error'); return; }
 
                 form.reset();
                 document.getElementById('pc_id').value = '';
@@ -619,19 +628,35 @@ $proyectos  = $proyectos ?? [];
                     alertEl.className = 'alert alert-danger py-2 small shadow-sm border-0';
                     alertEl.classList.remove('d-none');
                 }
-            } catch (err) { alert('Error de red'); }
+            } catch (err) { Swal.fire('Error', 'Error de red', 'error'); }
             finally { btn.disabled = false; }
         });
 
         window.eliminarAccionDetalle = async function(id) {
-            if (!confirm('¿Seguro que desea eliminar esta cuenta?')) return;
+            const result = await Swal.fire({
+                title: '¿Eliminar cuenta?',
+                text: '¿Seguro que desea eliminar esta cuenta?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            });
+            if (!result.isConfirmed) return;
+
             try {
                 const fd = new FormData();
                 fd.append('id_eliminar', id);
                 const resp = await fetch(`${urlBase}/delete`, { method: 'POST', body: fd });
                 const json = await resp.json();
-                if (json.ok) fetchTree(); else alert(json.error);
-            } catch (e) { alert('Error de conexión'); }
+                if (json.ok) {
+                    fetchTree();
+                } else {
+                    Swal.fire('No se pudo eliminar', json.error, 'error');
+                }
+            } catch (e) {
+                Swal.fire('Error', 'Error de conexión', 'error');
+            }
         };
 
         // Inicializar carga

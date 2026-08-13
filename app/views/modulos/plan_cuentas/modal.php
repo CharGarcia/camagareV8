@@ -176,7 +176,7 @@
             try {
                 const resp = await fetch(`${urlBasePC}/getNextCodigoAjax?padre=${codigoPadre}`);
                 const json = await resp.json();
-                if (!json.ok) return alert(json.error);
+                if (!json.ok) return Swal.fire('Error', json.error, 'error');
 
                 abrirModalPCGeneral({
                     codigo: json.codigo,
