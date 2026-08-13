@@ -84,6 +84,15 @@ class PlanCuentaService
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
     {
         $old = $this->repository->findById($id, $idEmpresa);
+        if (!$old) throw new Exception('Cuenta no encontrada.');
+
+        if ($this->repository->tieneMovimientos($id, $idEmpresa)) {
+            throw new Exception('No se puede eliminar: la cuenta ya tiene movimientos contables registrados.');
+        }
+        if ($this->repository->estaEnProgramacionContable($id, $idEmpresa)) {
+            throw new Exception('No se puede eliminar: la cuenta está configurada en Programación Contable (asientos programados).');
+        }
+
         $this->repository->beginTransaction();
         try {
             $this->repository->delete($id, $idEmpresa, $idUsuario);

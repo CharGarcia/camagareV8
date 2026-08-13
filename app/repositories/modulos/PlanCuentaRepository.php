@@ -287,6 +287,43 @@ class PlanCuentaRepository extends BaseRepository
     }
 
     /**
+     * Indica si una cuenta puntual ya tiene movimientos contables
+     * (está referenciada por un detalle de asiento activo del diario).
+     */
+    public function tieneMovimientos(int $id, int $idEmpresa): bool
+    {
+        $sql = "SELECT EXISTS (
+                    SELECT 1
+                    FROM asientos_contables_detalle acd
+                    WHERE acd.id_cuenta_contable = :id
+                      AND acd.id_empresa = :id_e
+                      AND acd.eliminado = false
+                )";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * Indica si una cuenta puntual está configurada en Programación Contable
+     * (asientos_programados.id_cuenta), es decir, si algún tipo de asiento
+     * automático la usa como cuenta de contrapartida.
+     */
+    public function estaEnProgramacionContable(int $id, int $idEmpresa): bool
+    {
+        $sql = "SELECT EXISTS (
+                    SELECT 1
+                    FROM asientos_programados ap
+                    WHERE ap.id_cuenta = :id
+                      AND ap.id_empresa = :id_e
+                      AND ap.eliminado = false
+                )";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Elimina lógicamente solo las cuentas que NO han sido usadas.
      * Una cuenta se conserva si tiene movimientos contables (detalle de asiento activo)
      * o si es ancestro (cuenta padre) de una cuenta usada — para no romper la jerarquía.
