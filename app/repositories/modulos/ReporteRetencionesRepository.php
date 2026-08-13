@@ -91,6 +91,7 @@ class ReporteRetencionesRepository extends BaseRepository
                            c.periodo_fiscal AS periodo_fiscal,
                            c.estado AS estado,
                            'PROVEEDOR'::varchar AS tercero_tipo,
+                           c.id_proveedor AS id_tercero,
                            COALESCE(t.razon_social, '—') AS tercero_nombre,
                            COALESCE(t.identificacion, '') AS tercero_ident,
                            c.tipo_doc_sustento   AS cod_doc_sustento,
@@ -116,6 +117,7 @@ class ReporteRetencionesRepository extends BaseRepository
                        c.periodo_fiscal AS periodo_fiscal,
                        c.origen AS estado,
                        'CLIENTE'::varchar AS tercero_tipo,
+                       c.id_cliente AS id_tercero,
                        COALESCE(t.nombre, '—') AS tercero_nombre,
                        COALESCE(t.identificacion, '') AS tercero_ident,
                        d.cod_doc_sustento    AS cod_doc_sustento,
@@ -226,12 +228,12 @@ class ReporteRetencionesRepository extends BaseRepository
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
-        $sql = "SELECT tipo_retencion, tercero_tipo, tercero_nombre, MAX(tercero_ident) AS tercero_ident,
+        $sql = "SELECT tipo_retencion, tercero_tipo, id_tercero, tercero_nombre, MAX(tercero_ident) AS tercero_ident,
                        COUNT(DISTINCT id_comprobante) AS comprobantes,
                        COUNT(*)             AS lineas,
                        SUM(valor_retenido)  AS total
                 FROM ( $union ) r WHERE 1=1 $textoWhere
-                GROUP BY tipo_retencion, tercero_tipo, tercero_nombre
+                GROUP BY tipo_retencion, tercero_tipo, id_tercero, tercero_nombre
                 ORDER BY tipo_retencion, total DESC";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }

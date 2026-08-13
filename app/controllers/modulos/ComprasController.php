@@ -403,14 +403,13 @@ class ComprasController extends BaseModuloController
             exit;
         }
         try {
-            $idEmpresa      = (int) $_SESSION['id_empresa'];
-            $idProveedor    = (int) ($_GET['id_proveedor'] ?? 0);
-            $idCompraActual = (int) ($_GET['id_compra'] ?? 0);
+            $idEmpresa   = (int) $_SESSION['id_empresa'];
+            $idProveedor = (int) ($_GET['id_proveedor'] ?? 0);
             if (!$idProveedor) {
                 echo json_encode(['ok' => false, 'mensaje' => 'Proveedor requerido.']);
                 exit;
             }
-            $ordenes = $this->service->buscarOrdenesAbiertas($idProveedor, $idEmpresa, $idCompraActual);
+            $ordenes = $this->service->buscarOrdenesAbiertas($idProveedor, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $ordenes]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -488,6 +487,32 @@ class ComprasController extends BaseModuloController
             }
             $this->service->desvincularOrden($idCompra, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Orden de compra desvinculada.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Cierra manualmente una orden en Recibido Parcial (el proveedor no entregará el resto). */
+    public function cerrarOrdenCompraAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        if (!\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene acceso al módulo de Órdenes de Compra.']);
+            exit;
+        }
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $idCompra  = (int) ($_POST['id'] ?? 0);
+            if (!$idCompra) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+                exit;
+            }
+            $this->service->cerrarOrdenManual($idCompra, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Orden de compra cerrada como recibida.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

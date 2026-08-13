@@ -297,11 +297,22 @@ function ocParseDate(str) {
     return '';
 }
 
-// ── Solo lectura: orden ya enviada/aprobada/recibida ───────────────────────────
+// ── Solo lectura: orden ya enviada/aprobada/recibida (parcial o completa) ─────
 const OC_AVISOS_BLOQUEO = {
     enviado:  'Esta orden ya fue <strong>enviada</strong> al proveedor y es de solo lectura. Puede aprobarla manualmente, o esperar a que el proveedor la apruebe desde el correo.',
     aprobado: 'Esta orden ya fue <strong>aprobada</strong> y es de solo lectura.',
+    parcial:  'Esta orden está <strong>recibida parcialmente</strong> (el proveedor todavía debe entregar parte del pedido) y es de solo lectura. Puede vincular más compras desde Compras, o cerrarla como recibida si el proveedor ya no va a entregar el resto.',
     recibido: 'Esta orden ya fue <strong>recibida</strong> (vinculada a una compra) y es de solo lectura. Para modificarla, desvincúlela primero desde la compra correspondiente.',
+    anulado:  'Esta orden está <strong>anulada</strong> y es de solo lectura.',
+};
+
+// Eliminar solo aplica a Borrador; Anular solo a Enviado/Aprobado (sin entregas reales
+// todavía); Duplicar a partir de Enviado/Aprobado/Parcial (para corregir y reenviar).
+// Recibido hay que desvincularlo primero desde la compra; Anulado ya no tiene acciones.
+window.ocActualizarBotonesAccion = function(estado) {
+    document.getElementById('oc_btn_eliminar')?.classList.toggle('d-none', estado !== 'borrador');
+    document.getElementById('oc_btn_anular')?.classList.toggle('d-none', !['enviado', 'aprobado'].includes(estado));
+    document.getElementById('oc_btn_duplicar')?.classList.toggle('d-none', !['enviado', 'aprobado', 'parcial'].includes(estado));
 };
 
 window.ocLimpiarSoloLectura = function() {
@@ -314,6 +325,8 @@ window.ocLimpiarSoloLectura = function() {
     document.getElementById('oc-bloqueo-aviso')?.classList.add('d-none');
     document.getElementById('oc_btn_guardar')?.classList.remove('d-none');
     document.getElementById('oc_btn_aprobar')?.classList.add('d-none');
+    document.getElementById('oc_btn_anular')?.classList.add('d-none');
+    document.getElementById('oc_btn_duplicar')?.classList.add('d-none');
 };
 
 window.ocAplicarSoloLectura = function(estado) {
@@ -324,8 +337,8 @@ window.ocAplicarSoloLectura = function(estado) {
     if (aviso) aviso.innerHTML = OC_AVISOS_BLOQUEO[estado] || 'Esta orden es de solo lectura.';
     document.getElementById('oc-bloqueo-aviso')?.classList.remove('d-none');
     document.getElementById('oc_btn_guardar')?.classList.add('d-none');
-    document.getElementById('oc_btn_eliminar')?.classList.add('d-none');
     document.getElementById('oc_btn_aprobar')?.classList.toggle('d-none', estado !== 'enviado');
+    ocActualizarBotonesAccion(estado);
 
     const bloquear = el => {
         if (el.disabled) return;
@@ -334,7 +347,7 @@ window.ocAplicarSoloLectura = function(estado) {
     };
     modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(bloquear);
     modal.querySelectorAll('.modal-body button').forEach(btn => {
-        if (['ocPdf', 'ocExcel', 'ocEnviarCorreo', 'ocAprobarManual'].some(fn => (btn.getAttribute('onclick') || '').includes(fn))) return;
+        if (['ocPdf', 'ocExcel', 'ocEnviarCorreo', 'ocAprobarManual', 'ocAnular', 'ocDuplicar'].some(fn => (btn.getAttribute('onclick') || '').includes(fn))) return;
         bloquear(btn);
     });
 };
@@ -394,8 +407,12 @@ window.ocAbrirEditar = function(tr) {
     }
     document.getElementById('oc_secuencial').value = d.secuencial ?? '';
 
-    const soloLectura = ['enviado', 'aprobado', 'recibido'].includes(d.estado ?? '');
-    if (soloLectura) ocAplicarSoloLectura(d.estado);
+    const soloLectura = ['enviado', 'aprobado', 'parcial', 'recibido', 'anulado'].includes(d.estado ?? '');
+    if (soloLectura) {
+        ocAplicarSoloLectura(d.estado);
+    } else {
+        ocActualizarBotonesAccion(d.estado ?? 'borrador');
+    }
 
     ocLimpiarDetalle();
     fetch(`${OC_URL_BASE}/getDetalle?id=${d.id}`, {
@@ -409,9 +426,6 @@ window.ocAbrirEditar = function(tr) {
         if (soloLectura) ocAplicarSoloLectura(d.estado);
     })
     .catch(() => {});
-
-    const btnElim = document.getElementById('oc_btn_eliminar');
-    if (btnElim && !soloLectura) btnElim.classList.remove('d-none');
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalOrdenCompra')).show();
 };
@@ -508,6 +522,104 @@ window.ocEliminar = async function() {
             ocBuscar(ocCurrentPage);
         } else {
             Swal.fire({ icon: 'error', title: 'Error', text: data.error, confirmButtonColor: '#0d6efd' });
+        }
+    } catch(e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Error de comunicación.', confirmButtonColor: '#0d6efd' });
+    }
+};
+
+window.ocAnular = async function() {
+    const id = document.getElementById('oc_id').value;
+    if (!id) return;
+
+    const confirm = await Swal.fire({
+        icon: 'warning',
+        title: '¿Anular esta orden de compra?',
+        text: 'Ya no se podrá vincular con ninguna compra. Esta acción no se puede deshacer.',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, anular',
+        cancelButtonText: 'Cancelar',
+        target: document.getElementById('modalOrdenCompra'),
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+        const fd = new FormData();
+        fd.append('id', id);
+        const resp = await fetch(`${OC_URL_BASE}/anularAjax`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            document.getElementById('oc_estado').value = 'anulado';
+            bootstrap.Modal.getInstance(document.getElementById('modalOrdenCompra'))?.hide();
+            Swal.fire({ icon: 'success', title: 'Anulada', text: data.mensaje || 'Orden de compra anulada.', timer: 1800, showConfirmButton: false });
+            ocBuscar(ocCurrentPage);
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo anular la orden.', confirmButtonColor: '#0d6efd' });
+        }
+    } catch(e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Error de comunicación.', confirmButtonColor: '#0d6efd' });
+    }
+};
+
+window.ocDuplicar = async function() {
+    const id = document.getElementById('oc_id').value;
+    if (!id) return;
+    const estado = document.getElementById('oc_estado').value;
+    const modal = document.getElementById('modalOrdenCompra');
+
+    let anular = false;
+    if (estado === 'parcial') {
+        const confirm = await Swal.fire({
+            icon: 'question',
+            title: '¿Duplicar esta orden?',
+            text: 'Se creará una nueva orden en Borrador con las cantidades que aún faltan por recibir, para que la pueda editar y volver a enviar.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, duplicar',
+            cancelButtonText: 'Cancelar',
+            target: modal,
+        });
+        if (!confirm.isConfirmed) return;
+    } else {
+        const confirm = await Swal.fire({
+            icon: 'question',
+            title: '¿Duplicar esta orden?',
+            html: 'Se creará una nueva orden en Borrador con los mismos ítems, para que la pueda editar y volver a enviar.' +
+                  '<div class="form-check text-start mt-3">' +
+                  '<input type="checkbox" class="form-check-input" id="oc-dup-anular" checked>' +
+                  '<label class="form-check-label" for="oc-dup-anular">Anular esta orden al duplicarla</label>' +
+                  '</div>',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, duplicar',
+            cancelButtonText: 'Cancelar',
+            target: modal,
+            preConfirm: () => document.getElementById('oc-dup-anular')?.checked ?? false,
+        });
+        if (!confirm.isConfirmed) return;
+        anular = confirm.value;
+    }
+
+    try {
+        const fd = new FormData();
+        fd.append('id', id);
+        if (anular) fd.append('anular_original', '1');
+        const resp = await fetch(`${OC_URL_BASE}/duplicarAjax`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(modal)?.hide();
+            Swal.fire({ icon: 'success', title: 'Duplicada', text: data.mensaje || 'Se creó una nueva orden en Borrador.', timer: 2200, showConfirmButton: false });
+            ocBuscar(ocCurrentPage);
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo duplicar la orden.', confirmButtonColor: '#0d6efd' });
         }
     } catch(e) {
         Swal.fire({ icon: 'error', title: 'Error', text: 'Error de comunicación.', confirmButtonColor: '#0d6efd' });

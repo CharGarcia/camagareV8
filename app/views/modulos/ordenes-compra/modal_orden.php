@@ -39,6 +39,14 @@
                     <button type="button" class="btn btn-outline-success btn-sm px-2 py-1 d-none" id="oc_btn_aprobar" onclick="ocAprobarManual()" title="Aprobar manualmente">
                         <i class="bi bi-check2-circle"></i> Aprobar
                     </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-none" id="oc_btn_duplicar" onclick="ocDuplicar()" title="Duplicar en una orden nueva editable">
+                        <i class="bi bi-copy"></i> Duplicar
+                    </button>
+                    <?php if (!empty($perm['eliminar'])): ?>
+                    <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1 d-none" id="oc_btn_anular" onclick="ocAnular()" title="Anular orden">
+                        <i class="bi bi-slash-circle"></i> Anular
+                    </button>
+                    <?php endif; ?>
                 </div>
                 <hr class="text-muted my-0 mb-3 opacity-25">
 
@@ -72,6 +80,7 @@
                                 <option value="borrador">Borrador</option>
                                 <option value="enviado" disabled>Enviado</option>
                                 <option value="aprobado" disabled>Aprobado</option>
+                                <option value="parcial" disabled>Recibido parcial</option>
                                 <option value="recibido" disabled>Recibido</option>
                                 <option value="anulado">Anulado</option>
                             </select>

@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado
-version: 1.4
+etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden
+version: 1.5
 orden: 20
 estado: activo
 ---
@@ -55,18 +55,27 @@ Si esta factura corresponde a un pedido que se hizo antes por
 [Órdenes de Compra](../modulos/ordenes-compra.md), la pestaña **Orden de
 Compra** del modal permite enlazarla:
 
-1. Busque y elija la orden ya **Aprobada** (el proveedor la aprobó desde el
-   correo, o alguien la aprobó manualmente — Borrador o Enviado no bastan) y
-   sin vincular aún a otra compra, del mismo proveedor, y pulse **Vincular**.
-   La orden pasa a estado **Recibido**.
+1. Busque y elija la orden ya **Aprobada** o **Recibida parcial** (el
+   proveedor la aprobó desde el correo, o alguien la aprobó manualmente —
+   Borrador o Enviado no bastan), del mismo proveedor, y pulse **Vincular**.
+   Una orden puede tener **varias compras vinculadas** (entregas parciales
+   del proveedor): según cuánto cubra esta factura del total pedido, la
+   orden queda en **Recibido parcial** (falta saldo) o **Recibido**
+   (se completó).
 2. La pestaña muestra una comparación por producto: cantidad y precio
-   **pedidos** vs. **facturados**, marcando cada línea como *OK*, *Diferencia*,
-   *Pendiente* (pedido y aún no facturado) o *No pedido* (facturado sin estar
-   en la orden). El emparejamiento usa el producto del catálogo de cada línea
-   — en la compra, si la línea no tiene un producto vinculado directamente, se
-   resuelve con la misma homologación código-proveedor → producto de la
-   sección anterior.
-3. **Desvincular** deshace el enlace y regresa la orden a Aprobado.
+   **pedidos** vs. **facturados** — este último es el acumulado de *todas*
+   las compras vinculadas a la orden, no solo la que se está viendo, con la
+   lista de esas compras justo arriba de la tabla. Cada línea se marca como
+   *OK*, *Diferencia*, *Pendiente* (pedido y aún no facturado en ninguna
+   compra) o *No pedido* (facturado sin estar en la orden). El
+   emparejamiento usa el producto del catálogo de cada línea — en la compra,
+   si la línea no tiene un producto vinculado directamente, se resuelve con
+   la misma homologación código-proveedor → producto de la sección anterior.
+3. **Cerrar orden**: si la orden queda en Recibido parcial y el proveedor ya
+   no va a entregar el saldo, este botón la fuerza a Recibido sin más
+   compras.
+4. **Desvincular esta compra** deshace solo ese enlace y recalcula el
+   estado de la orden con las compras que le queden vinculadas.
 
 Es solo informativo: no bloquea guardar la compra ni afecta inventario o
 cuentas por pagar.
@@ -130,6 +139,11 @@ ve solo las que registró.
 
 ## Historial de cambios
 
+- **1.5** — Entregas parciales: una orden de compra puede vincularse con
+  varias compras (una orden en Recibido parcial también aparece para
+  vincular); nuevo botón "Cerrar orden" para cerrar manualmente una
+  Recibido parcial. La comparación pedido-vs-facturado ahora es el
+  acumulado de todas las compras vinculadas, no solo la actual.
 - **1.4** — Vincular con una orden de compra ahora requiere que esté en
   estado **Aprobada** (antes bastaba Borrador o Aprobado), acorde al nuevo
   flujo de aprobación de Órdenes de Compra.

@@ -242,8 +242,11 @@ class ConsignacionVentaPdfService
             foreach ($cols as $c) {
                 $k   = $c['k'];
                 $raw = $d[$k] ?? '';
-                if (in_array($k, ['cantidad', 'retornado', 'facturado'], true)) {
+                if ($k === 'cantidad') {
                     $vals[] = number_format((float)$raw, 2);
+                } elseif (in_array($k, ['retornado', 'facturado'], true)) {
+                    // En blanco cuando es 0: menos ruido visual que repetir "0.00" en cada fila.
+                    $vals[] = ((float)$raw != 0.0) ? number_format((float)$raw, 2) : '';
                 } elseif ($k === 'fecha_caducidad') {
                     $ts = $raw ? strtotime((string)$raw) : false;
                     $vals[] = $ts ? date('d/m/Y', $ts) : (string)$raw;

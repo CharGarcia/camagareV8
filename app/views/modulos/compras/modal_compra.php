@@ -748,10 +748,17 @@
                     <span class="text-muted ms-2">Fecha: <span id="oc-tab-fecha">—</span></span>
                     <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-2" id="oc-tab-estado">—</span>
                   </div>
-                  <button type="button" class="btn btn-outline-danger btn-sm" onclick="mcDesvincularOrdenCompra()">
-                    <i class="bi bi-x-circle me-1"></i> Desvincular
-                  </button>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-success btn-sm d-none" id="oc-tab-btn-cerrar" onclick="mcCerrarOrdenCompra()" title="El proveedor no entregará el saldo pendiente">
+                      <i class="bi bi-check2-all me-1"></i> Cerrar orden (recibida)
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="mcDesvincularOrdenCompra()">
+                      <i class="bi bi-x-circle me-1"></i> Desvincular esta compra
+                    </button>
+                  </div>
                 </div>
+
+                <div id="oc-tab-compras-vinculadas" class="small text-muted mb-3"></div>
 
                 <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
                   <div class="table-responsive" style="max-height: 380px;">
@@ -760,7 +767,7 @@
                         <tr class="table-light border-bottom">
                           <th class="ps-3 py-2 small fw-bold text-muted">Producto</th>
                           <th class="py-2 small fw-bold text-muted text-center" style="width:100px">Cant. Pedida</th>
-                          <th class="py-2 small fw-bold text-muted text-center" style="width:100px">Cant. Facturada</th>
+                          <th class="py-2 small fw-bold text-muted text-center" style="width:100px" title="Suma de todas las compras vinculadas a esta orden">Cant. Facturada</th>
                           <th class="py-2 small fw-bold text-muted text-end" style="width:100px">Precio Pedido</th>
                           <th class="py-2 small fw-bold text-muted text-end" style="width:100px">Precio Facturado</th>
                           <th class="py-2 small fw-bold text-muted text-center" style="width:110px">Estado</th>

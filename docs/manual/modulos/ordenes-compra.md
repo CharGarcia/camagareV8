@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden
-version: 1.6
+etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden
+version: 1.8
 orden: 15
 estado: activo
 ---
@@ -39,13 +39,19 @@ inventario. Es un compromiso, no una compra.
 ## Ciclo de vida y estados
 
 ```
-Borrador → [Enviar correo] → Enviado → [proveedor aprueba, o botón Aprobar] → Aprobado → [se vincula con una compra] → Recibido
+Borrador → [Enviar correo] → Enviado → [proveedor aprueba, o botón Aprobar] → Aprobado
+                                                                                   │
+                                                            [se vincula 1ª compra] │
+                                                                                   ▼
+                              Recibido parcial ◄──────────────────────────────► Recibido
+                        [falta saldo por entregar]      [se cubre / se cierra    [todo lo pedido llegó
+                                                          manualmente]             en una o varias compras]
 ```
 
 El campo **Estado** del modal solo deja elegir a mano **Borrador** o
-**Anulado**; Enviado/Aprobado/Recibido los pone el sistema según la acción
-correspondiente — no se pueden forzar desde el formulario (ni tampoco desde
-el servidor, aunque se manipule la petición).
+**Anulado**; Enviado/Aprobado/Recibido parcial/Recibido los pone el sistema
+según la acción correspondiente — no se pueden forzar desde el formulario (ni
+tampoco desde el servidor, aunque se manipule la petición).
 
 1. **Enviar correo**: con el botón de correo en la parte superior del modal
    se envía el PDF al proveedor (se precarga su correo si lo tiene
@@ -64,16 +70,83 @@ el servidor, aunque se manipule la petición).
    En ambos casos la orden pasa a **Aprobado**.
 3. **Vinculación con una compra**: cuando llega la factura electrónica real
    (ver más abajo), solo se puede vincular una orden que ya esté **Aprobada**
-   — no basta con Enviado. Al vincularla pasa a **Recibido**.
+   o **Recibida parcial** — no basta con Enviado. Según cuánto cubra esa
+   compra del total pedido, la orden pasa a **Recibido parcial** (falta algo)
+   o **Recibido** (se completó).
 
 **Desde Enviado en adelante, la orden es de solo lectura**: el modal muestra
-un aviso y bloquea todos los campos y el detalle (no se puede editar ni
-eliminar; los botones de PDF/Excel/Correo siguen disponibles). Esto también
-se valida en el servidor, no solo en la pantalla. Para volver a editar una
-orden **Recibida**, hay que **desvincularla** primero desde la compra (eso la
-regresa a Aprobado); una orden **Enviada** o **Aprobada** que aún no se
-vinculó a ninguna compra no tiene forma de "desbloquearse" — si de verdad
-hace falta corregirla, hay que anular esta y crear una nueva.
+un aviso y bloquea todos los campos y el detalle (no se puede editar; los
+botones de PDF/Excel/Correo/Duplicar siguen disponibles). Esto también se
+valida en el servidor, no solo en la pantalla. Para volver a editar una orden
+**Recibida** o **Recibida parcial**, hay que **desvincular** sus compras
+primero (ver "Entregas parciales" más abajo); una orden **Enviada** o
+**Aprobada** que aún no tiene ninguna compra vinculada no tiene forma de
+"desbloquearse" para editarla directamente — para eso está **Duplicar**.
+
+## Entregas parciales
+
+El proveedor no siempre entrega todo el pedido de una sola vez. Una misma
+orden se puede vincular con **varias compras** a lo largo del tiempo (una
+por cada entrega/factura), y el sistema lleva la cuenta:
+
+- Al vincular una compra, se compara la cantidad facturada **acumulada de
+  todas las compras vinculadas a esa orden** contra lo pedido, línea por
+  línea (por producto del catálogo). Si falta saldo en alguna línea, la
+  orden queda en **Recibido parcial**; si ya se cubrió todo, pasa a
+  **Recibido**.
+- Cada vez que se abre la pestaña "Orden de Compra" de una de esas compras,
+  se muestra la lista de **todas** las compras vinculadas a la orden (no solo
+  la que se está viendo), para tener el historial completo de entregas a la
+  vista.
+- **Cerrar orden** (botón que aparece en esa pestaña cuando la orden está en
+  Recibido parcial): úselo cuando el proveedor ya no va a entregar el saldo
+  pendiente. Fuerza la orden a **Recibido** aunque falte cantidad, y queda
+  marcada como "cierre manual" para diferenciarla de una recibida por
+  cantidades completas.
+- Al **desvincular** una compra, el estado se recalcula con las que queden:
+  puede volver a Aprobado (si no queda ninguna), seguir en Recibido parcial,
+  o incluso bajar de Recibido a Recibido parcial si esa compra era la que
+  completaba el pedido.
+- Las líneas de la orden que **no tienen un producto del catálogo
+  vinculado** no se pueden rastrear automáticamente (no hay forma de saber
+  cuánto de ellas llegó); en cuanto la orden tiene alguna compra vinculada,
+  esas líneas se dan por recibidas sin poder distinguir si fue parcial.
+
+## Duplicar una orden
+
+Una orden Enviada, Aprobada o Recibida parcialmente ya no se puede editar.
+Si hace falta corregir algo (precio, cantidad, agregar/quitar un ítem) o
+pedir el saldo que el proveedor no entregó, el botón **Duplicar** (barra
+superior del modal) crea una **orden nueva en Borrador** para seguir desde
+ahí:
+
+- Desde **Enviado** o **Aprobado** (nada recibido todavía): copia todos los
+  ítems tal cual. Se pregunta si además se quiere **anular la orden
+  original** (casilla marcada por defecto) — recomendable para no dejar dos
+  órdenes "vivas" con la misma intención.
+- Desde **Recibido parcial**: copia solo el **saldo pendiente** de cada
+  línea (lo pedido menos lo ya recibido en las compras vinculadas), no el
+  pedido completo — para no duplicar lo que ya llegó. En este caso no se
+  ofrece anular la original, porque ya tiene entregas reales asociadas.
+- La orden nueva queda totalmente editable: cambie lo que necesite y
+  vuelva a enviarla normalmente.
+
+## Eliminar vs. Anular
+
+No son lo mismo, y cuál está disponible depende del estado:
+
+- **Eliminar** (barra superior del modal): solo aparece y solo funciona con
+  la orden en **Borrador**. Es lo único que realmente saca el registro de la
+  lista (baja lógica, como el resto del sistema).
+- **Anular** (barra superior, junto a Enviar correo/Aprobar/Duplicar):
+  aparece cuando la orden ya está **Enviada** o **Aprobada** (sin ninguna
+  compra vinculada todavía) — en esos estados ya no se puede eliminar, solo
+  anular. El registro se conserva con estado **Anulado** y queda de solo
+  lectura, igual que el resto de estados avanzados.
+- Una orden **Recibida** o **Recibida parcial** no tiene ni Eliminar ni
+  Anular disponibles: hay que desvincular sus compras primero (o cerrarla
+  manualmente), y desde Aprobado sí se puede anular si hace falta.
+- Una orden ya **Anulada** no tiene más acciones sobre su estado.
 
 ## Cuando llega la factura del proveedor
 
@@ -82,21 +155,23 @@ desde el SRI (módulo **Compras**), no se "convierten" desde la orden. Para
 cerrar el ciclo, abra esa compra ya cargada y use su pestaña **Orden de
 Compra**:
 
-1. Seleccione, en el buscador, la orden **Aprobada** del mismo proveedor que
-   corresponde a esa factura (solo aparecen órdenes aprobadas que no estén ya
-   vinculadas a otra compra) y pulse **Vincular**.
-2. La orden pasa automáticamente a estado **Recibido** (con la fecha de hoy
-   como fecha de recepción si no tenía una).
+1. Seleccione, en el buscador, la orden **Aprobada** o **Recibida parcial**
+   del mismo proveedor que corresponde a esa factura y pulse **Vincular**.
+   Una misma orden admite varias compras vinculadas a lo largo del tiempo
+   (entregas parciales) — ver "Entregas parciales" arriba.
+2. Según cuánto cubra esta compra del total pedido, la orden pasa a
+   **Recibido parcial** (aún falta algo) o **Recibido** (se completó), con la
+   fecha de hoy como fecha de recepción si no tenía una.
 3. La pestaña muestra una tabla comparativa por producto: cantidad y precio
-   **pedidos** (de la orden) vs. **facturados** (de la compra), con un
-   estado por línea — *OK*, *Diferencia* (cantidad o precio no coincide),
-   *Pendiente* (se pidió pero no llegó en esta factura) o *No pedido*
-   (llegó algo que no estaba en la orden). Las líneas que no tienen un
-   producto del catálogo vinculado en algún lado (ni en la orden ni por
-   homologación del código del proveedor en la compra) se listan aparte, sin
-   comparar automáticamente.
-4. Si se vinculó por error, el botón **Desvincular** deshace el enlace y
-   regresa la orden a **Aprobado**.
+   **pedidos** (de la orden) vs. **facturados** (acumulado de todas las
+   compras vinculadas a la orden, no solo esta), con un estado por línea —
+   *OK*, *Diferencia* (cantidad o precio no coincide), *Pendiente* (se pidió
+   pero no llegó en ninguna factura) o *No pedido* (llegó algo que no estaba
+   en la orden). Las líneas que no tienen un producto del catálogo vinculado
+   en algún lado (ni en la orden ni por homologación del código del
+   proveedor en la compra) se listan aparte, sin comparar automáticamente.
+4. Si se vinculó por error, el botón **Desvincular esta compra** deshace ese
+   enlace y recalcula el estado de la orden con las compras que le queden.
 
 Esto es solo informativo: no bloquea guardar la compra, no mueve inventario
 ni genera cuentas por pagar por sí mismo — eso sigue el flujo normal de
@@ -110,9 +185,14 @@ Compras (procesar entradas, retención, etc.).
   compra.
 - **El proveedor no aparece**: regístrelo primero en Proveedores.
 - **No aparece en el buscador de la pestaña "Orden de Compra"**: revise que
-  la orden esté en estado **Aprobado** (Borrador y Enviado no bastan), que
-  sea del mismo proveedor de la compra, y que no esté ya vinculada a otra
-  compra.
+  la orden esté en estado **Aprobado** o **Recibido parcial** (Borrador y
+  Enviado no bastan), y que sea del mismo proveedor de la compra. Si ya está
+  en **Recibido** (completo), no debería vincularse una compra más.
+- **La orden pasó a Recibido con una compra pero le faltaba mercadería**:
+  revise que las líneas de la orden estén vinculadas a un producto del
+  catálogo — sin esa vinculación no se puede rastrear la cantidad recibida,
+  y la orden se da por recibida completa en cuanto tiene alguna compra
+  vinculada (ver "Entregas parciales").
 - **"El número de secuencial ya existe para este punto de emisión"**: dos
   guardados casi simultáneos compitieron por el mismo número. Recargue la
   página e intente de nuevo; el sistema le asignará el siguiente número
@@ -128,6 +208,14 @@ Compras (procesar entradas, retención, etc.).
 
 ## Historial de cambios
 
+- **1.8** — Entregas parciales: una orden ahora admite varias compras
+  vinculadas (nuevo estado **Recibido parcial**, cierre manual "Cerrar
+  orden" cuando el proveedor no entrega el saldo). Botón **Duplicar** para
+  corregir/reenviar una orden que ya no se puede editar, copiando el saldo
+  pendiente cuando aplica.
+- **1.7** — Eliminar ahora solo funciona en Borrador; una orden Enviada o
+  Aprobada se **Anula** en su lugar (nuevo botón junto a Eliminar), sin
+  borrar el registro. Una orden Anulada también queda de solo lectura.
 - **1.6** — Nuevo estado **Enviado**: se activa automáticamente al enviar el
   correo por primera vez y deja la orden de solo lectura desde ahí. El
   correo incluye un enlace para que el proveedor apruebe sin iniciar sesión;

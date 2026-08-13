@@ -118,15 +118,17 @@ class ComprasService
         return $compra;
     }
 
-    /** Órdenes de compra del mismo proveedor disponibles para vincular con esta compra. */
-    public function buscarOrdenesAbiertas(int $idProveedor, int $idEmpresa, int $idCompraActual = 0): array
+    /** Órdenes de compra del mismo proveedor disponibles para vincular con esta compra (admite varias entregas parciales). */
+    public function buscarOrdenesAbiertas(int $idProveedor, int $idEmpresa): array
     {
-        return $this->ordenCompraRepo->getAbiertasPorProveedor($idProveedor, $idEmpresa, $idCompraActual ?: null);
+        return $this->ordenCompraRepo->getAbiertasPorProveedor($idProveedor, $idEmpresa);
     }
 
     /**
-     * Vincula una compra con una orden de compra del mismo proveedor. La orden pasa a
-     * estado 'recibido' (con fecha_recepcion si no la tenía). Reversible con desvincularOrden().
+     * Vincula una compra con una orden de compra del mismo proveedor (admite varias
+     * compras contra la misma orden, para entregas parciales del proveedor). El estado
+     * de la orden se recalcula según lo acumulado: Recibido Parcial si falta saldo,
+     * Recibido si ya se cubrió todo. Reversible con desvincularOrden().
      */
     public function vincularOrden(int $idCompra, int $idEmpresa, int $idOrdenCompra, int $idUsuario): void
     {
@@ -141,18 +143,19 @@ class ComprasService
         if ((int) $orden['id_proveedor'] !== (int) $compra['id_proveedor']) {
             throw new \Exception('La orden de compra pertenece a otro proveedor.');
         }
-        if ($orden['estado'] !== 'aprobado') {
-            throw new \Exception('La orden de compra debe estar Aprobada para vincularla (estado actual: ' . $orden['estado'] . ').');
+        if (!in_array($orden['estado'], ['aprobado', 'parcial'], true)) {
+            throw new \Exception('La orden de compra debe estar Aprobada o Recibida Parcialmente para vincularla (estado actual: ' . $orden['estado'] . ').');
+        }
+        if ((int) ($compra['id_orden_compra'] ?? 0) === $idOrdenCompra) {
+            throw new \Exception('Esta compra ya está vinculada a esa orden.');
         }
 
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
         try {
-            // El índice único parcial en compras_cabecera.id_orden_compra impide vincular
-            // la misma orden dos veces aunque dos usuarios lo intenten a la vez.
             $this->repository->vincularOrdenCompra($idCompra, $idEmpresa, $idOrdenCompra, $idUsuario);
-            $this->ordenCompraRepo->cambiarEstado($idOrdenCompra, $idEmpresa, 'recibido', $idUsuario, true);
+            $this->_recomputarEstadoOrden($idOrdenCompra, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'VINCULAR_ORDEN', 'compras_cabecera', $idCompra,
@@ -162,14 +165,15 @@ class ComprasService
             if ($managed) $db->commit();
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
-            if (str_contains($e->getMessage(), 'ux_compras_cabecera_orden_compra')) {
-                throw new \Exception('Esa orden de compra ya fue vinculada a otra compra.');
-            }
             throw $e;
         }
     }
 
-    /** Quita el vínculo con la orden de compra y la regresa a estado 'aprobado'. */
+    /**
+     * Quita el vínculo de esta compra con su orden y recalcula el estado de la orden a
+     * partir de las compras que le queden vinculadas (puede quedar Aprobada si ya no
+     * tiene ninguna, o seguir Recibida Parcial/Recibida si aún tiene otras).
+     */
     public function desvincularOrden(int $idCompra, int $idEmpresa, int $idUsuario): void
     {
         $compra = $this->repository->getPorId($idCompra, $idEmpresa);
@@ -186,7 +190,7 @@ class ComprasService
         if ($managed) $db->beginTransaction();
         try {
             $this->repository->vincularOrdenCompra($idCompra, $idEmpresa, null, $idUsuario);
-            $this->ordenCompraRepo->cambiarEstado($idOrdenCompra, $idEmpresa, 'aprobado', $idUsuario, false);
+            $this->_recomputarEstadoOrden($idOrdenCompra, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'DESVINCULAR_ORDEN', 'compras_cabecera', $idCompra,
@@ -201,12 +205,97 @@ class ComprasService
     }
 
     /**
-     * Compara línea a línea lo pedido (orden de compra vinculada) contra lo facturado
-     * (esta compra), agrupando por producto del catálogo. El emparejamiento usa
-     * id_producto de cada lado; en la compra, cuando la línea no está vinculada
-     * directamente a un producto, se resuelve por la homologación código-proveedor →
-     * producto que ya calcula ComprasRepository::getDetalles() (id_producto_vinculado).
-     * Líneas sin producto resuelto en algún lado quedan aparte, sin comparar por texto.
+     * Cierra manualmente una orden en Recibido Parcial cuando el proveedor ya no va a
+     * entregar el saldo pendiente ("short close", igual que en los ERPs). La deja en
+     * Recibido con cierre_forzado=true, para distinguirla de una recibida por cantidades.
+     */
+    public function cerrarOrdenManual(int $idCompra, int $idEmpresa, int $idUsuario): void
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) {
+            throw new \Exception('Compra no encontrada.');
+        }
+        $idOrdenCompra = (int) ($compra['id_orden_compra'] ?? 0);
+        if (!$idOrdenCompra) {
+            throw new \Exception('Esta compra no está vinculada a ninguna orden de compra.');
+        }
+        $orden = $this->ordenCompraRepo->getById($idOrdenCompra, $idEmpresa);
+        if (!$orden) {
+            throw new \Exception('Orden de compra no encontrada.');
+        }
+        if ($orden['estado'] !== 'parcial') {
+            throw new \Exception('Solo se puede cerrar manualmente una orden en Recibido Parcial (estado actual: ' . $orden['estado'] . ').');
+        }
+
+        $this->ordenCompraRepo->cambiarEstado($idOrdenCompra, $idEmpresa, 'recibido', $idUsuario, true, true);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'CERRAR_ORDEN_MANUAL', 'ordenes_compra', $idOrdenCompra,
+            ['estado' => 'parcial'], ['estado' => 'recibido', 'cierre_forzado' => true]
+        );
+    }
+
+    /**
+     * Recalcula el estado de una orden a partir de lo acumulado en TODAS las compras que
+     * tenga vinculadas actualmente: Aprobado si no hay nada recibido, Recibido Parcial si
+     * falta saldo en alguna línea (con producto identificado), Recibido si todas están
+     * cubiertas. Las líneas sin producto vinculado no se pueden verificar automáticamente
+     * y se ignoran para esta cuenta (quedan visibles aparte en compararConOrden()).
+     */
+    private function _recomputarEstadoOrden(int $idOrdenCompra, int $idEmpresa, int $idUsuario): void
+    {
+        $comprasVinculadas = $this->ordenCompraRepo->getComprasVinculadas($idOrdenCompra, $idEmpresa);
+        if (empty($comprasVinculadas)) {
+            // Se desvinculó la última compra: sin nada vinculado, vuelve a Aprobado.
+            $this->ordenCompraRepo->cambiarEstado($idOrdenCompra, $idEmpresa, 'aprobado', $idUsuario, false, false);
+            return;
+        }
+
+        $lineasOrden = $this->ordenCompraRepo->getDetalle($idOrdenCompra, $idEmpresa);
+        $recibido    = $this->ordenCompraRepo->getRecibidoAcumuladoPorProducto($idOrdenCompra, $idEmpresa);
+
+        $totalRecibido = 0.0;
+        $completo = true;
+        $huboLineaVerificable = false;
+        foreach ($lineasOrden as $l) {
+            $idProd = (int) ($l['id_producto'] ?? 0);
+            if ($idProd <= 0) {
+                continue; // no se puede rastrear automáticamente
+            }
+            $huboLineaVerificable = true;
+            $cantPedida   = (float) ($l['cantidad'] ?? 0);
+            $cantRecibida = $recibido[$idProd] ?? 0.0;
+            $totalRecibido += min($cantRecibida, $cantPedida);
+            if ($cantRecibida + 0.001 < $cantPedida) {
+                $completo = false;
+            }
+        }
+
+        if (!$huboLineaVerificable) {
+            // Ningún ítem de la orden está vinculado a un producto del catálogo: no hay
+            // forma de saber cuánto llegó. En cuanto tiene alguna compra vinculada, se da
+            // por recibida completa (no se puede distinguir "parcial" en este caso).
+            $nuevoEstado = 'recibido';
+        } elseif ($totalRecibido <= 0.0) {
+            $nuevoEstado = 'aprobado';
+        } elseif ($completo) {
+            $nuevoEstado = 'recibido';
+        } else {
+            $nuevoEstado = 'parcial';
+        }
+
+        $this->ordenCompraRepo->cambiarEstado($idOrdenCompra, $idEmpresa, $nuevoEstado, $idUsuario, $nuevoEstado !== 'aprobado', false);
+    }
+
+    /**
+     * Compara línea a línea lo pedido (orden de compra) contra lo facturado, agrupando
+     * por producto del catálogo. A diferencia de una comparación 1 a 1, "lo facturado"
+     * es la SUMA de todas las compras que estén vinculadas a esa orden — una orden puede
+     * recibirse en varias entregas parciales, así que la comparación siempre es del total
+     * acumulado, no solo de esta compra. El emparejamiento usa id_producto de cada lado;
+     * en cada compra, cuando la línea no está vinculada directamente a un producto, se
+     * resuelve por la homologación código-proveedor → producto que ya calcula
+     * ComprasRepository::getDetalles() (id_producto_vinculado). Líneas sin producto
+     * resuelto en algún lado quedan aparte, sin comparar por texto.
      */
     public function compararConOrden(int $idCompra, int $idEmpresa): array
     {
@@ -224,8 +313,15 @@ class ComprasService
             return ['vinculada' => false];
         }
 
+        $comprasVinculadas = $this->ordenCompraRepo->getComprasVinculadas($idOrdenCompra, $idEmpresa);
+
         $lineasOrden  = $this->ordenCompraRepo->getDetalle($idOrdenCompra, $idEmpresa);
-        $lineasCompra = $this->repository->getDetalles($idCompra);
+        $lineasCompra = [];
+        foreach ($comprasVinculadas as $cv) {
+            foreach ($this->repository->getDetalles((int) $cv['id']) as $linea) {
+                $lineasCompra[] = $linea;
+            }
+        }
 
         $agrupar = function (array $lineas, string $kProducto, string $kDescripcion, string $kCantidad, string $kPrecio) {
             $agg = [];
@@ -281,6 +377,14 @@ class ComprasService
         }
         usort($filas, fn($a, $b) => strcmp($a['descripcion'], $b['descripcion']));
 
+        $comprasVinculadas = array_map(fn($cv) => [
+            'id'            => $cv['id'],
+            'numero'        => $cv['numero'],
+            'fecha_emision' => $cv['fecha_emision'],
+            'importe_total' => $cv['importe_total'],
+            'es_esta'       => (int) $cv['id'] === $idCompra,
+        ], $comprasVinculadas);
+
         return [
             'vinculada'            => true,
             'orden'                => [
@@ -289,10 +393,12 @@ class ComprasService
                 'fecha_orden'     => $orden['fecha_orden'],
                 'fecha_recepcion' => $orden['fecha_recepcion'],
                 'estado'          => $orden['estado'],
+                'cierre_forzado'  => (bool) ($orden['cierre_forzado'] ?? false),
             ],
             'filas'                => $filas,
             'sin_producto_orden'   => $sinProductoOrden,
             'sin_producto_compra'  => $sinProductoCompra,
+            'compras_vinculadas'   => $comprasVinculadas,
         ];
     }
 

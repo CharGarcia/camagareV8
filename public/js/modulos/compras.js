@@ -2544,7 +2544,8 @@ window.mcCargarOrdenesAbiertas = async function (idCompra) {
 /** Etiqueta legible de una orden para el buscador: número — fecha — total (estado). */
 function _ocTabEtiqueta(o) {
     const fecha = o.fecha_orden ? String(o.fecha_orden).slice(0, 10).split('-').reverse().join('/') : '';
-    return `${o.numero_orden} — ${fecha} — $${parseFloat(o.total || 0).toFixed(2)} (${o.estado})`;
+    const estado = o.estado === 'parcial' ? 'recibido parcial' : o.estado;
+    return `${o.numero_orden} — ${fecha} — $${parseFloat(o.total || 0).toFixed(2)} (${estado})`;
 }
 
 /** Pinta el dropdown del buscador con las órdenes que coinciden con lo tecleado (filtro en cliente). */
@@ -2657,13 +2658,69 @@ window.mcDesvincularOrdenCompra = async function () {
     }
 };
 
+/** Cierra manualmente una orden en Recibido Parcial cuando el proveedor no va a entregar el saldo. */
+window.mcCerrarOrdenCompra = async function () {
+    const idCompra = document.getElementById('mcId')?.value || '';
+    if (!idCompra) return;
+
+    const confirm = await Swal.fire({
+        icon: 'question',
+        title: '¿Cerrar esta orden como recibida?',
+        text: 'Úselo cuando el proveedor ya no va a entregar el saldo pendiente. La orden quedará en Recibido, con el faltante registrado como no entregado.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, cerrar',
+        cancelButtonText: 'Cancelar',
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+        const fd = new FormData();
+        fd.append('id', idCompra);
+        const res  = await fetch(`${window.CMG_urlBase}/cerrarOrdenCompraAjax`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            mcCargarOrdenCompraTab();
+        } else {
+            Swal.fire('Error', data.mensaje || 'No se pudo cerrar la orden.', 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error', 'Error de conexión: ' + e.message, 'error');
+    }
+};
+
 /** Pinta la cabecera de la orden vinculada + la tabla comparativa pedido vs. facturado. */
 function mcRenderOrdenComparacion(data) {
     const orden = data.orden || {};
     const fecha = orden.fecha_orden ? String(orden.fecha_orden).slice(0, 10).split('-').reverse().join('/') : '—';
     document.getElementById('oc-tab-numero').textContent = orden.numero_orden || '—';
     document.getElementById('oc-tab-fecha').textContent  = fecha;
-    document.getElementById('oc-tab-estado').textContent = (orden.estado || '').charAt(0).toUpperCase() + (orden.estado || '').slice(1);
+
+    const estadoBadge = { aprobado: 'info', parcial: 'warning', recibido: 'success' }[orden.estado] || 'info';
+    const estadoEl = document.getElementById('oc-tab-estado');
+    estadoEl.className = `badge bg-${estadoBadge} bg-opacity-10 text-${estadoBadge} border border-${estadoBadge} border-opacity-25 ms-2`;
+    let estadoTexto = (orden.estado || '').charAt(0).toUpperCase() + (orden.estado || '').slice(1);
+    if (orden.estado === 'parcial') estadoTexto = 'Recibido parcial';
+    if (orden.estado === 'recibido' && orden.cierre_forzado) estadoTexto += ' (cierre manual)';
+    estadoEl.textContent = estadoTexto;
+
+    // "Cerrar orden" solo tiene sentido mientras falte saldo por recibir.
+    document.getElementById('oc-tab-btn-cerrar')?.classList.toggle('d-none', orden.estado !== 'parcial');
+
+    // Historial de compras vinculadas a esta orden (entregas parciales del proveedor).
+    const contCompras = document.getElementById('oc-tab-compras-vinculadas');
+    const compras = data.compras_vinculadas || [];
+    if (contCompras) {
+        if (compras.length <= 1) {
+            contCompras.innerHTML = '';
+        } else {
+            const items = compras.map(c => {
+                const f = c.fecha_emision ? String(c.fecha_emision).slice(0, 10).split('-').reverse().join('/') : '—';
+                const marca = c.es_esta ? ' <strong>(esta compra)</strong>' : '';
+                return `<li>${_esc(c.numero)} — ${f} — $${parseFloat(c.importe_total || 0).toFixed(2)}${marca}</li>`;
+            }).join('');
+            contCompras.innerHTML = `<i class="bi bi-clock-history me-1"></i>Esta orden se está recibiendo en ${compras.length} entregas:<ul class="mb-0 mt-1">${items}</ul>`;
+        }
+    }
 
     const badgeMap = {
         ok:         { cls: 'success', label: 'OK' },

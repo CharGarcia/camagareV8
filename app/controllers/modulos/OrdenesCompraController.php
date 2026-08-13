@@ -138,6 +138,7 @@ class OrdenesCompraController extends BaseModuloController
                 'borrador'  => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Borrador</span>',
                 'enviado'   => '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Enviado</span>',
                 'aprobado'  => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Aprobado</span>',
+                'parcial'   => '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Recibido parcial</span>',
                 'anulado'   => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>',
                 'recibido'  => '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Recibido</span>',
             ];
@@ -344,6 +345,49 @@ class OrdenesCompraController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Anula una orden Enviada o Aprobada (no la elimina, solo cambia su estado). */
+    public function anularAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $id        = (int) ($_POST['id'] ?? 0);
+
+        try {
+            if ($id <= 0) throw new \Exception('ID de orden no válido.');
+            $this->service->anular($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Orden de compra anulada correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Duplica una orden Enviada/Aprobada/Recibida Parcialmente en una nueva orden Borrador. */
+    public function duplicarAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa      = (int) $_SESSION['id_empresa'];
+        $idUsuario      = (int) $_SESSION['id_usuario'];
+        $id             = (int) ($_POST['id'] ?? 0);
+        $anularOriginal = !empty($_POST['anular_original']);
+
+        try {
+            if ($id <= 0) throw new \Exception('ID de orden no válido.');
+            $idNueva = $this->service->duplicar($id, $idEmpresa, $idUsuario, $anularOriginal);
+            echo json_encode(['ok' => true, 'mensaje' => 'Se creó una nueva orden en Borrador.', 'id' => $idNueva]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
     }

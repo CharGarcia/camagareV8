@@ -306,12 +306,12 @@ class OrdenCompraRepository extends BaseRepository
 
     /**
      * Órdenes de un proveedor disponibles para vincular con una compra: no
-     * eliminadas, ya APROBADAS (el proveedor la confirmó, o se aprobó manualmente
-     * — no basta con Borrador/Enviado), y sin otra compra vigente ya vinculada
-     * (salvo la propia $idCompraActual, para poder reabrir la compra que ya
-     * tiene esta orden vinculada y seguir viéndola en la lista).
+     * eliminadas, y todavía "recibibles" — Aprobada (nada recibido aún) o
+     * Recibido Parcial (falta parte del pedido). Una orden puede vincularse
+     * con VARIAS compras a lo largo del tiempo (entregas parciales del
+     * proveedor); solo se excluye cuando ya está completamente Recibida.
      */
-    public function getAbiertasPorProveedor(int $idProveedor, int $idEmpresa, ?int $idCompraActual = null): array
+    public function getAbiertasPorProveedor(int $idProveedor, int $idEmpresa): array
     {
         $sql = "SELECT oc.id, oc.numero_orden, oc.fecha_orden, oc.fecha_recepcion, oc.estado,
                        COALESCE((SELECT SUM(d.cantidad * d.precio_unitario)
@@ -321,40 +321,89 @@ class OrdenCompraRepository extends BaseRepository
                 WHERE oc.id_empresa = :id_empresa
                   AND oc.id_proveedor = :id_proveedor
                   AND oc.eliminado = false
-                  AND oc.estado = 'aprobado'
+                  AND oc.estado IN ('aprobado', 'parcial')
                   AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa2)
-                  AND NOT EXISTS (
-                        SELECT 1 FROM compras_cabecera cc
-                        WHERE cc.id_orden_compra = oc.id
-                          AND cc.eliminado = false
-                          AND cc.id IS DISTINCT FROM :id_compra_actual
-                  )
                 ORDER BY oc.fecha_orden DESC, oc.id DESC";
         $st = $this->db->prepare($sql);
         $st->execute([
-            ':id_empresa'       => $idEmpresa,
-            ':id_empresa2'      => $idEmpresa,
-            ':id_proveedor'     => $idProveedor,
-            ':id_compra_actual' => $idCompraActual,
+            ':id_empresa'   => $idEmpresa,
+            ':id_empresa2'  => $idEmpresa,
+            ':id_proveedor' => $idProveedor,
         ]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Cambia solo el estado (y opcionalmente marca fecha_recepcion) sin tocar el resto de la cabecera. */
-    public function cambiarEstado(int $id, int $idEmpresa, string $estado, int $idUsuario, bool $marcarFechaRecepcion = false): void
+    /**
+     * Cantidad recibida acumulada por producto, sumando TODAS las compras ya
+     * vinculadas a esta orden (entregas parciales incluidas). El producto se
+     * resuelve igual que en ComprasRepository::getDetalles(): directo por
+     * id_producto, o por la homologación código-proveedor → producto cuando
+     * la línea de la compra no está vinculada directamente.
+     * Devuelve [id_producto => cantidad_recibida].
+     */
+    public function getRecibidoAcumuladoPorProducto(int $idOrden, int $idEmpresa): array
+    {
+        $sql = "SELECT COALESCE(pr.id, ph_pr.id) AS id_producto,
+                       SUM(cd.cantidad) AS cantidad_recibida
+                FROM compras_cabecera cc
+                JOIN compras_detalle cd ON cd.id_compra = cc.id
+                LEFT JOIN productos pr ON cd.id_producto = pr.id
+                LEFT JOIN productos_homologacion ph ON ph.id_proveedor = cc.id_proveedor
+                                                     AND ph.id_empresa = cc.id_empresa
+                                                     AND ph.codigo_proveedor = cd.codigo_principal
+                                                     AND ph.eliminado = false
+                LEFT JOIN productos ph_pr ON ph.id_producto = ph_pr.id
+                WHERE cc.id_orden_compra = :id_orden
+                  AND cc.id_empresa = :id_empresa
+                  AND cc.eliminado = false
+                GROUP BY COALESCE(pr.id, ph_pr.id)
+                HAVING COALESCE(pr.id, ph_pr.id) IS NOT NULL";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_orden' => $idOrden, ':id_empresa' => $idEmpresa]);
+
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['id_producto']] = (float) $row['cantidad_recibida'];
+        }
+        return $out;
+    }
+
+    /** Compras (no eliminadas) vinculadas a una orden, para mostrar el historial de entregas. */
+    public function getComprasVinculadas(int $idOrden, int $idEmpresa): array
+    {
+        $sql = "SELECT cc.id,
+                       CONCAT(cc.establecimiento_prov, '-', cc.punto_emision_prov, '-', cc.secuencial_prov) AS numero,
+                       cc.fecha_emision, cc.importe_total
+                FROM compras_cabecera cc
+                WHERE cc.id_orden_compra = :id_orden AND cc.id_empresa = :id_empresa AND cc.eliminado = false
+                ORDER BY cc.fecha_emision ASC, cc.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_orden' => $idOrden, ':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cambia solo el estado (y opcionalmente marca fecha_recepcion) sin tocar el resto de
+     * la cabecera. $cierreForzado se escribe siempre de forma explícita (no solo cuando es
+     * true) para que un recómputo automático posterior (vincular/desvincular otra compra)
+     * limpie la marca de un cierre manual anterior que ya dejó de reflejar la realidad.
+     */
+    public function cambiarEstado(int $id, int $idEmpresa, string $estado, int $idUsuario, bool $marcarFechaRecepcion = false, bool $cierreForzado = false): void
     {
         $sql = "UPDATE ordenes_compra SET
-                    estado     = :estado,
-                    updated_at = NOW(),
-                    updated_by = :updated_by"
+                    estado         = :estado,
+                    cierre_forzado = :cierre_forzado,
+                    updated_at     = NOW(),
+                    updated_by     = :updated_by"
                 . ($marcarFechaRecepcion ? ", fecha_recepcion = COALESCE(fecha_recepcion, CURRENT_DATE)" : "")
                 . " WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([
-            ':id'         => $id,
-            ':id_empresa' => $idEmpresa,
-            ':estado'     => $estado,
-            ':updated_by' => $idUsuario,
+            ':id'             => $id,
+            ':id_empresa'     => $idEmpresa,
+            ':estado'         => $estado,
+            ':updated_by'     => $idUsuario,
+            ':cierre_forzado' => $cierreForzado ? 'true' : 'false',
         ]);
     }
 

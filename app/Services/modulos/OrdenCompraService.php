@@ -180,13 +180,25 @@ class OrdenCompraService
         }
     }
 
+    /** Solo se puede eliminar una orden en Borrador. Enviada/Aprobada se anulan (anular()); Recibida se desvincula primero. */
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
     {
         $this->repository->beginTransaction();
         try {
             $anterior = $this->repository->getById($id, $idEmpresa);
             if (!$anterior) throw new \Exception('Orden de compra no encontrada.');
-            $this->_validarEditable($anterior, 'eliminar');
+
+            $estado = $anterior['estado'] ?? '';
+            if ($estado !== 'borrador') {
+                $mapa = [
+                    'enviado'  => 'Esta orden ya fue enviada al proveedor: no se puede eliminar, solo anular.',
+                    'aprobado' => 'Esta orden ya fue aprobada: no se puede eliminar, solo anular.',
+                    'parcial'  => 'Esta orden ya tiene entregas recibidas; desvincule primero todas las compras desde Compras.',
+                    'recibido' => 'Esta orden ya fue recibida (vinculada a una compra); desvincúlela primero desde la compra correspondiente.',
+                    'anulado'  => 'Esta orden ya está anulada.',
+                ];
+                throw new \Exception($mapa[$estado] ?? 'Solo se puede eliminar una orden en estado Borrador.');
+            }
 
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
 
@@ -205,6 +217,100 @@ class OrdenCompraService
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    /** Anula una orden Enviada o Aprobada (no elimina el registro, solo cambia su estado). */
+    public function anular(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $orden = $this->repository->getById($id, $idEmpresa);
+        if (!$orden) throw new \Exception('Orden de compra no encontrada.');
+
+        $estado = $orden['estado'] ?? '';
+        if (!in_array($estado, ['enviado', 'aprobado'], true)) {
+            $mapa = [
+                'borrador' => 'Una orden en Borrador se elimina, no se anula.',
+                'parcial'  => 'Esta orden ya tiene entregas recibidas; no se puede anular. Desvincule las compras o ciérrela como recibida desde Compras.',
+                'recibido' => 'Esta orden ya fue recibida (vinculada a una compra); desvincúlela primero desde la compra correspondiente.',
+                'anulado'  => 'Esta orden ya está anulada.',
+            ];
+            throw new \Exception($mapa[$estado] ?? 'Esta orden no se puede anular en su estado actual.');
+        }
+
+        $this->repository->cambiarEstado($id, $idEmpresa, 'anulado', $idUsuario, false);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'anular', 'ordenes_compra', $id, ['estado' => $estado], ['estado' => 'anulado']);
+    }
+
+    /**
+     * Duplica una orden Enviada/Aprobada/Recibida Parcialmente en una nueva orden en
+     * Borrador, para poder corregirla y volver a enviarla (la original ya no se puede
+     * editar directamente). Si viene de Recibido Parcial, solo copia el SALDO pendiente
+     * de cada línea (pedido - ya recibido en las compras vinculadas), no el pedido
+     * completo — para no duplicar lo que ya llegó. $anularOriginal solo aplica cuando la
+     * original está en Enviado/Aprobado (sin entregas reales todavía); una orden con
+     * entregas parciales no se anula automáticamente, porque ya tiene historial real.
+     */
+    public function duplicar(int $id, int $idEmpresa, int $idUsuario, bool $anularOriginal): int
+    {
+        $orden = $this->repository->getById($id, $idEmpresa);
+        if (!$orden) throw new \Exception('Orden de compra no encontrada.');
+
+        $estado = $orden['estado'] ?? '';
+        if (!in_array($estado, ['enviado', 'aprobado', 'parcial'], true)) {
+            throw new \Exception('Solo se puede duplicar una orden Enviada, Aprobada o Recibida Parcialmente.');
+        }
+
+        $lineas = $this->repository->getDetalle($id, $idEmpresa);
+        $items  = [];
+
+        if ($estado === 'parcial') {
+            $recibido = $this->repository->getRecibidoAcumuladoPorProducto($id, $idEmpresa);
+            foreach ($lineas as $l) {
+                $idProd       = (int) ($l['id_producto'] ?? 0);
+                $cantPedida   = (float) ($l['cantidad'] ?? 0);
+                $cantRestante = $idProd > 0 ? max(0.0, $cantPedida - ($recibido[$idProd] ?? 0.0)) : $cantPedida;
+                if ($cantRestante <= 0.001) continue; // esta línea ya se recibió completa
+                $items[] = [
+                    'id_producto'     => $l['id_producto'] ?? null,
+                    'descripcion'     => $l['descripcion'],
+                    'cantidad'        => $cantRestante,
+                    'precio_unitario' => $l['precio_unitario'],
+                ];
+            }
+        } else {
+            foreach ($lineas as $l) {
+                $items[] = [
+                    'id_producto'     => $l['id_producto'] ?? null,
+                    'descripcion'     => $l['descripcion'],
+                    'cantidad'        => $l['cantidad'],
+                    'precio_unitario' => $l['precio_unitario'],
+                ];
+            }
+        }
+        if (empty($items)) {
+            throw new \Exception('No quedan cantidades pendientes por duplicar: esta orden ya se recibió por completo.');
+        }
+
+        $data = [
+            'id_empresa'         => $idEmpresa,
+            'id_proveedor'       => $orden['id_proveedor'],
+            'id_establecimiento' => $orden['id_establecimiento'],
+            'id_punto_emision'   => $orden['id_punto_emision'],
+            'fecha_orden'        => date('Y-m-d'),
+            'fecha_recepcion'    => null,
+            'observaciones'      => trim('Duplicada de la orden ' . ($orden['numero_orden'] ?? '') . '.'),
+            'estado'             => 'borrador',
+            'created_by'         => $idUsuario,
+            'updated_by'         => $idUsuario,
+        ];
+
+        $idNueva = $this->crear($data, $items);
+
+        // Solo se ofrece anular la original cuando aún no tiene entregas reales.
+        if ($anularOriginal && in_array($estado, ['enviado', 'aprobado'], true)) {
+            $this->anular($id, $idEmpresa, $idUsuario);
+        }
+
+        return $idNueva;
     }
 
     /**
@@ -285,13 +391,12 @@ class OrdenCompraService
     }
 
     /** Bloquea edición/eliminación una vez enviada la orden (solo lectura desde 'enviado' en adelante). */
-    private function _validarEditable(array $orden, string $accion = 'editar'): void
+    private function _validarEditable(array $orden): void
     {
         $estado = $orden['estado'] ?? '';
-        $participios = ['enviado' => 'enviada', 'aprobado' => 'aprobada', 'recibido' => 'recibida'];
+        $participios = ['enviado' => 'enviada', 'aprobado' => 'aprobada', 'parcial' => 'recibida parcialmente', 'recibido' => 'recibida', 'anulado' => 'anulada'];
         if (isset($participios[$estado])) {
-            $verbo = $accion === 'eliminar' ? 'eliminar' : 'editar';
-            throw new \Exception("Esta orden ya fue {$participios[$estado]} y no se puede {$verbo}. Desvincúlela/revíertala primero si necesita modificarla.");
+            throw new \Exception("Esta orden ya fue {$participios[$estado]} y no se puede editar.");
         }
     }
 

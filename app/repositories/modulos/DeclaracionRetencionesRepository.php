@@ -208,13 +208,13 @@ class DeclaracionRetencionesRepository extends BaseRepository
                     id_empresa, tipo_ambiente, periodo_anio, periodo_mes,
                     fecha_desde, fecha_hasta,
                     total_base_nacional, total_retenido_nacional,
-                    total_base_exterior, total_retenido_exterior, total_retenido,
+                    total_base_exterior, total_retenido_exterior, total_retenido, total_a_pagar,
                     valores_casilleros, estado, observaciones, created_by, updated_by
                 ) VALUES (
                     :id_empresa, :amb, :anio, :mes,
                     :fdesde, :fhasta,
                     :base_nac, :ret_nac,
-                    :base_ext, :ret_ext, :total,
+                    :base_ext, :ret_ext, :total, :total_pagar,
                     :valores, :estado, :obs, :usr, :usr2
                 ) RETURNING id";
         $params = $this->mapDeclaracionParams($data);
@@ -230,7 +230,7 @@ class DeclaracionRetencionesRepository extends BaseRepository
                     fecha_desde = :fdesde, fecha_hasta = :fhasta,
                     total_base_nacional = :base_nac, total_retenido_nacional = :ret_nac,
                     total_base_exterior = :base_ext, total_retenido_exterior = :ret_ext,
-                    total_retenido = :total,
+                    total_retenido = :total, total_a_pagar = :total_pagar,
                     valores_casilleros = :valores, estado = :estado, observaciones = :obs,
                     updated_by = :usr, updated_at = now()
                 WHERE id = :id AND id_empresa = :id_empresa2";
@@ -244,21 +244,22 @@ class DeclaracionRetencionesRepository extends BaseRepository
     private function mapDeclaracionParams(array $data): array
     {
         return [
-            ':id_empresa' => (int) $data['id_empresa'],
-            ':amb'        => (string) $data['tipo_ambiente'],
-            ':anio'       => (int) $data['periodo_anio'],
-            ':mes'        => (int) $data['periodo_mes'],
-            ':fdesde'     => $data['fecha_desde'],
-            ':fhasta'     => $data['fecha_hasta'],
-            ':base_nac'   => (float) $data['total_base_nacional'],
-            ':ret_nac'    => (float) $data['total_retenido_nacional'],
-            ':base_ext'   => (float) $data['total_base_exterior'],
-            ':ret_ext'    => (float) $data['total_retenido_exterior'],
-            ':total'      => (float) $data['total_retenido'],
-            ':valores'    => json_encode($data['valores_casilleros'] ?? [], JSON_UNESCAPED_UNICODE),
-            ':estado'     => (string) ($data['estado'] ?? 'guardado'),
-            ':obs'        => $data['observaciones'] ?? null,
-            ':usr'        => (int) $data['usuario_id'],
+            ':id_empresa'  => (int) $data['id_empresa'],
+            ':amb'         => (string) $data['tipo_ambiente'],
+            ':anio'        => (int) $data['periodo_anio'],
+            ':mes'         => (int) $data['periodo_mes'],
+            ':fdesde'      => $data['fecha_desde'],
+            ':fhasta'      => $data['fecha_hasta'],
+            ':base_nac'    => (float) $data['total_base_nacional'],
+            ':ret_nac'     => (float) $data['total_retenido_nacional'],
+            ':base_ext'    => (float) $data['total_base_exterior'],
+            ':ret_ext'     => (float) $data['total_retenido_exterior'],
+            ':total'       => (float) $data['total_retenido'],
+            ':total_pagar' => (float) ($data['total_a_pagar'] ?? $data['total_retenido']),
+            ':valores'     => json_encode($data['valores_casilleros'] ?? [], JSON_UNESCAPED_UNICODE),
+            ':estado'      => (string) ($data['estado'] ?? 'guardado'),
+            ':obs'         => $data['observaciones'] ?? null,
+            ':usr'         => (int) $data['usuario_id'],
         ];
     }
 

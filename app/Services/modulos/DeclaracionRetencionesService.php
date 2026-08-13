@@ -189,6 +189,16 @@ class DeclaracionRetencionesService
         $valores['498'] = $subtotalValExt;
         $valores['499'] = $subtotalValNac + $subtotalValExt;
 
+        // 897/898/899 (interés/impuesto/multa "de imputación al pago") son informativos: hoy
+        // nada los alimenta (no hay soporte de rectificativas con pago previo), así que quedan
+        // en 0 salvo que algo escriba en casilleros_declaracion_sri con esos códigos. 902 =
+        // "Total impuesto a pagar" oficial del F103 (499 - 898) — es el valor real a pagar,
+        // distinto de 499 (total retenido) el día que exista un pago previo imputado.
+        $valores['897'] = $valores['897'] ?? 0.0;
+        $valores['898'] = $valores['898'] ?? 0.0;
+        $valores['899'] = $valores['899'] ?? 0.0;
+        $valores['902'] = round($valores['499'] - $valores['898'], 2);
+
         return ['layout' => $estructura, 'valores' => $valores];
     }
 
@@ -287,6 +297,7 @@ class DeclaracionRetencionesService
             'total_base_exterior'     => (float) ($valores['497'] ?? 0),
             'total_retenido_exterior' => (float) ($valores['498'] ?? 0),
             'total_retenido'          => (float) ($valores['499'] ?? 0),
+            'total_a_pagar'           => (float) ($valores['902'] ?? ($valores['499'] ?? 0)),
             'valores_casilleros'      => $valores,
             'estado'                  => $existente['estado'] ?? 'guardado',
             'observaciones'           => $data['observaciones'] ?? ($existente['observaciones'] ?? null),
@@ -404,7 +415,11 @@ class DeclaracionRetencionesService
         $sec    = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
         $numero = $est . '-' . $pto . '-' . str_pad((string) $sec, 9, '0', STR_PAD_LEFT);
 
-        $monto        = round((float) $decl['total_retenido'], 2);
+        // El monto del egreso es el casillero 902 ("Total impuesto a pagar" = 499 - 898), no el
+        // 499 (total retenido) directo: son iguales mientras no exista un pago previo imputado
+        // (898), pero conceptualmente son campos distintos del F103. Declaraciones guardadas
+        // antes de este cambio no tienen total_a_pagar (columna nueva): cae a total_retenido.
+        $monto        = round((float) ($decl['total_a_pagar'] ?? $decl['total_retenido']), 2);
         $periodoLabel = $this->etiquetaPeriodo($decl);
 
         $egSvc = new EgresoService(
