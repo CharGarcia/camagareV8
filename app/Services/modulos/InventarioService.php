@@ -362,6 +362,10 @@ class InventarioService
                     'id_medida'       => !empty($data['id_medida'])        ? (int)$data['id_medida']  : null,
                     'observaciones'   => $data['observaciones']   ?? 'Ajuste manual',
                     'id_usuario'      => $idUsuario,
+                    // Solo para correcciones retroactivas (backfill de kardex faltante con la
+                    // fecha real del documento original); si no se pasa, registrarMovimiento()
+                    // sigue usando CURRENT_TIMESTAMP como siempre.
+                    'fecha_movimiento' => $data['fecha_movimiento'] ?? null,
                 ];
 
                 $lastKardexId = $this->repo->registrarMovimiento($kardexData);

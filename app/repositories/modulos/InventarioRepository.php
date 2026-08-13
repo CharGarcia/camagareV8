@@ -222,12 +222,18 @@ class InventarioRepository extends BaseRepository
         $colsSql = "SELECT column_name FROM information_schema.columns WHERE table_name = 'inventario_kardex' AND column_name = 'id_medida'";
         $hasMedida = (bool)$this->db->query($colsSql)->fetchColumn();
 
+        // fecha_movimiento: por defecto CURRENT_TIMESTAMP (comportamiento de siempre, sin
+        // parámetro de por medio). Si el llamador pasa 'fecha_movimiento' explícitamente
+        // (p. ej. una corrección retroactiva de kardex con la fecha real del documento
+        // original), se usa esa fecha en su lugar — único caso donde se aparta de "ahora".
+        $fechaMovExpr = !empty($data['fecha_movimiento']) ? ':fecha_mov' : 'CURRENT_TIMESTAMP';
+
         // tipo_ambiente DEBE guardarse con el ambiente actual de la empresa: el
         // listado del kardex filtra por él. Si se deja el DEFAULT ('1'), los
         // movimientos de una empresa en producción ('2') quedan invisibles.
         $cols = "id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, referencia_id, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, fecha_caducidad, nup, observaciones, created_by, updated_by, tipo_ambiente";
-        $vals = ":emp, :prod, :bod, :tipo, :ref_tipo, :ref_id, CURRENT_TIMESTAMP, :cant, :costo_u, :costo_t, :stock_ant, :stock_post, :lote, :cad, :nup, :obs, :uid, :uid, (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp_amb)";
-        
+        $vals = ":emp, :prod, :bod, :tipo, :ref_tipo, :ref_id, {$fechaMovExpr}, :cant, :costo_u, :costo_t, :stock_ant, :stock_post, :lote, :cad, :nup, :obs, :uid, :uid, (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp_amb)";
+
         if ($hasMedida) {
             $cols .= ", id_medida";
             $vals .= ", :id_medida";
@@ -235,7 +241,7 @@ class InventarioRepository extends BaseRepository
 
         $sql = "INSERT INTO inventario_kardex ({$cols}) VALUES ({$vals}) RETURNING id";
         $st = $this->db->prepare($sql);
-        
+
         $params = [
             ':emp'       => $data['id_empresa'],
             ':emp_amb'   => $data['id_empresa'],
@@ -255,6 +261,10 @@ class InventarioRepository extends BaseRepository
             ':obs'       => $data['observaciones']   ?? null,
             ':uid'       => $data['id_usuario']
         ];
+
+        if (!empty($data['fecha_movimiento'])) {
+            $params[':fecha_mov'] = $data['fecha_movimiento'];
+        }
 
         if ($hasMedida) {
             $params[':id_medida'] = $data['id_medida'] ?? null;
