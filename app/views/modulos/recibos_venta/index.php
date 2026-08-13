@@ -1067,6 +1067,10 @@ $totalPages = $totalPagesOriginal;
     // ID del recibo actualmente abierta en el modal (0 = nueva)
     let RV_ID_ACTIVO = 0;
     let RV_ESTADO_ACTIVO = ''; // estado del recibo activo: borrador/anulado/facturado
+    // Refleja el último esBorrador aplicado en la lógica de solo-lectura: cargarLotesFila()
+    // lo necesita para no volver a habilitar Lote/Caducidad en un recibo no editable cuando
+    // su fetch asíncrono resuelve después del pase de solo-lectura.
+    let RV_ES_BORRADOR = true;
     let RV_FECHA_EMISION = null; // 'YYYY-MM-DD' del recibo activa; null si es nueva
     let RV_CLIENTE_RUC  = '';   // RUC/cédula del cliente activo (9999999999999 = Consumidor Final)
     // Cuando es true, cargarSecuencial no sobreescribe el campo (modo edición de factura existente)
@@ -2032,6 +2036,7 @@ $totalPages = $totalPagesOriginal;
 
         // ”€”€ Lógica de Solo Lectura para la pestaña Recibo de Venta ”€”€
         const esBorrador = st === 'borrador';
+        RV_ES_BORRADOR = esBorrador;
         const tabDetalle = document.getElementById('m-tab-detalle');
         if (tabDetalle) {
             // Deshabilitar inputs, selects y textareas
@@ -3654,13 +3659,16 @@ $totalPages = $totalPagesOriginal;
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getLotesAjax?id_producto=${idProd}&id_bodega=${idBod}&id_venta=${idVenta}`);
             const json = await resp.json();
 
+            // No rehabilitar Lote/Caducidad si el recibo es de solo lectura: este fetch es
+            // async y puede resolver DESPUÉS del pase de solo-lectura, reabriendo campos
+            // que debían quedar bloqueados.
             if (selLote) {
                 selLote.innerHTML = '<option value="">Lote...</option>';
-                selLote.disabled = false;
+                selLote.disabled = !RV_ES_BORRADOR;
             }
             if (selCad) {
                 selCad.innerHTML = '<option value="">Vencimiento...</option>';
-                selCad.disabled = false;
+                selCad.disabled = !RV_ES_BORRADOR;
             }
 
             if (json.ok) {
@@ -3747,7 +3755,7 @@ $totalPages = $totalPagesOriginal;
         } catch (e) {
             console.error('Error cargando lotes', e);
         } finally {
-            if (selLote) selLote.disabled = false;
+            if (selLote) selLote.disabled = !RV_ES_BORRADOR;
         }
     }
 

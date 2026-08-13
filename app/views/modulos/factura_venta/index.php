@@ -1431,6 +1431,10 @@ $totalPages = $totalPagesOriginal;
     let FV_CLIENTE_RUC  = '';   // RUC/cédula del cliente activo (9999999999999 = Consumidor Final)
     // Cuando es true, cargarSecuencial no sobreescribe el campo (modo edición de factura existente)
     let FV_BLOQUEAR_SECUENCIAL = false;
+    // Refleja el último esBorrador aplicado por fvAplicarSoloLectura(): cargarLotesFila()
+    // lo necesita para no volver a habilitar Lote/Caducidad en una factura autorizada
+    // cuando su fetch asíncrono resuelve después del pase de solo-lectura.
+    let FV_ES_BORRADOR = true;
     const TARIFAS_IVA = <?= json_encode($tarifasIva) ?>;
     const UNIDADES = <?= json_encode($unidades) ?>;
     // Si solo hay una bodega, se usa esa fija como respaldo cuando el <select> no tiene valor
@@ -2497,6 +2501,7 @@ $totalPages = $totalPagesOriginal;
      * editable, sus controles quedaron deshabilitados y form.reset() no los rehabilita.
      */
     function fvAplicarSoloLectura(esBorrador) {
+        FV_ES_BORRADOR = esBorrador;
         const tabDetalle = document.getElementById('m-tab-detalle');
         if (!tabDetalle) return;
 
@@ -4238,13 +4243,16 @@ $totalPages = $totalPagesOriginal;
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getLotesAjax?id_producto=${idProd}&id_bodega=${idBod}&id_venta=${idVenta}`);
             const json = await resp.json();
 
+            // No rehabilitar Lote/Caducidad si la factura es de solo lectura (autorizada/
+            // anulada): este fetch es async y puede resolver DESPUÉS del pase de
+            // fvAplicarSoloLectura(), reabriendo campos que debían quedar bloqueados.
             if (selLote) {
                 selLote.innerHTML = '<option value="">Lote...</option>';
-                selLote.disabled = false;
+                selLote.disabled = !FV_ES_BORRADOR;
             }
             if (selCad) {
                 selCad.innerHTML = '<option value="">Vencimiento...</option>';
-                selCad.disabled = false;
+                selCad.disabled = !FV_ES_BORRADOR;
             }
 
             if (json.ok) {
@@ -4331,7 +4339,7 @@ $totalPages = $totalPagesOriginal;
         } catch (e) {
             console.error('Error cargando lotes', e);
         } finally {
-            if (selLote) selLote.disabled = false;
+            if (selLote) selLote.disabled = !FV_ES_BORRADOR;
         }
     }
 
