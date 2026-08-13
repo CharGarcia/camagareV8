@@ -20,6 +20,7 @@ type AuthState = {
   autenticado: boolean;
   usuario: Usuario | null;
   idEmpresa: number | null;
+  nombreEmpresa: string | null;
   requiereSeleccionEmpresa: boolean;
   avisoSesionActiva: AvisoSesionActiva;
   login: (cedula: string, password: string) => Promise<void>;
@@ -27,6 +28,8 @@ type AuthState = {
   descartarAvisoSesionActiva: () => void;
   listarEmpresas: () => Promise<authApi.Empresa[]>;
   seleccionarEmpresa: (idEmpresa: number) => Promise<void>;
+  cambiarEmpresa: () => void;
+  cancelarCambioEmpresa: () => void;
   logout: () => Promise<void>;
 };
 
@@ -36,8 +39,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cargando, setCargando] = useState(true);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [idEmpresa, setIdEmpresaState] = useState<number | null>(null);
+  const [nombreEmpresa, setNombreEmpresa] = useState<string | null>(null);
   const [requiereSeleccionEmpresa, setRequiereSeleccionEmpresa] = useState(false);
   const [avisoSesionActiva, setAvisoSesionActiva] = useState<AvisoSesionActiva>(null);
+
+  // Deriva el nombre de la empresa activa cada vez que cambia idEmpresa (login,
+  // selección explícita, o reanudar sesión desde tokens guardados) — el login no
+  // trae el nombre en su respuesta, solo el id, así que se busca en /auth/empresas.
+  useEffect(() => {
+    if (!idEmpresa) {
+      setNombreEmpresa(null);
+      return;
+    }
+    let activo = true;
+    authApi
+      .empresas()
+      .then((lista) => {
+        if (!activo) return;
+        setNombreEmpresa(lista.find((e) => e.id_empresa === idEmpresa)?.nombre ?? null);
+      })
+      .catch(() => {
+        if (activo) setNombreEmpresa(null);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [idEmpresa]);
 
   // Si el refresh token también falló (sesión realmente cerrada), volver a Login.
   useEffect(() => {
@@ -76,11 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.id_empresa) {
         await guardarIdEmpresa(data.id_empresa);
         setIdEmpresaState(data.id_empresa);
-        setRequiereSeleccionEmpresa(false);
       } else {
         setIdEmpresaState(null);
-        setRequiereSeleccionEmpresa(true);
       }
+      // El backend puede devolver un id_empresa (favorita) Y requiere_seleccion_empresa=true
+      // a la vez, cuando el usuario tiene más de una empresa: entra directo con la favorita
+      // pero igual se le da la opción de confirmar/cambiar antes de seguir.
+      setRequiereSeleccionEmpresa(data.requiere_seleccion_empresa);
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
       if (code === 'SESION_ACTIVA_OTRO_DISPOSITIVO') {
@@ -97,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       autenticado: usuario !== null,
       usuario,
       idEmpresa,
+      nombreEmpresa,
       requiereSeleccionEmpresa,
       avisoSesionActiva,
 
@@ -120,6 +150,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRequiereSeleccionEmpresa(false);
       },
 
+      // Vuelve a mostrar el selector de empresas sin cerrar sesión (el usuario ya
+      // tiene una empresa activa y quiere cambiarla). No aplica si nunca hubo una
+      // empresa seleccionada — para eso ya existe el flujo normal de login.
+      cambiarEmpresa: () => setRequiereSeleccionEmpresa(true),
+
+      // Cancela el cambio de empresa y vuelve a la empresa que ya estaba activa.
+      cancelarCambioEmpresa: () => setRequiereSeleccionEmpresa(false),
+
       logout: async () => {
         const refresh = await getRefreshToken();
         try {
@@ -133,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRequiereSeleccionEmpresa(false);
       },
     }),
-    [cargando, usuario, idEmpresa, requiereSeleccionEmpresa, avisoSesionActiva]
+    [cargando, usuario, idEmpresa, nombreEmpresa, requiereSeleccionEmpresa, avisoSesionActiva]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

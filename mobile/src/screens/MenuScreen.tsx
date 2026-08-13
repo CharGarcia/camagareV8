@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -35,10 +36,23 @@ function soloImplementados(modulos: ModuloMenu[]): ModuloMenu[] {
 
 export default function MenuScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { logout } = useAuth();
+  const { logout, nombreEmpresa, cambiarEmpresa } = useAuth();
   const [modulos, setModulos] = useState<ModuloMenu[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [colapsados, setColapsados] = useState<Set<string>>(new Set());
+
+  function toggleSeccion(titulo: string) {
+    setColapsados((prev) => {
+      const copia = new Set(prev);
+      if (copia.has(titulo)) {
+        copia.delete(titulo);
+      } else {
+        copia.add(titulo);
+      }
+      return copia;
+    });
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -93,12 +107,29 @@ export default function MenuScreen() {
     );
   }
 
-  const secciones = modulos.map((m) => ({ title: m.nombre_modulo, icono: m.icono_modulo, data: m.submodulos }));
+  const secciones = modulos.map((m) => ({
+    title: m.nombre_modulo,
+    icono: m.icono_modulo,
+    data: colapsados.has(m.nombre_modulo) ? [] : m.submodulos,
+  }));
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.titulo}>Módulos</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.titulo}>Módulos</Text>
+          {nombreEmpresa ? (
+            <View style={styles.empresaFila}>
+              <Ionicons name="business-outline" size={14} color="#666" />
+              <Text style={styles.empresaNombre} numberOfLines={1}>
+                {nombreEmpresa}
+              </Text>
+              <TouchableOpacity onPress={() => cambiarEmpresa()} style={styles.botonCambiar}>
+                <Text style={styles.botonCambiarTexto}>Cambiar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
         <TouchableOpacity onPress={() => logout()}>
           <Text style={styles.salir}>Salir</Text>
         </TouchableOpacity>
@@ -116,12 +147,21 @@ export default function MenuScreen() {
             Todavía no hay módulos disponibles en la app para tu usuario. Por ahora la app cubre Pedidos y Entregas.
           </Text>
         }
-        renderSectionHeader={({ section }) => (
-          <View style={styles.seccionHeader}>
-            <ModuloIcono clase={section.icono} size={16} color="#666" />
-            <Text style={styles.seccionTitulo}>{section.title}</Text>
-          </View>
-        )}
+        renderSectionHeader={({ section }) => {
+          const colapsada = colapsados.has(section.title);
+          return (
+            <TouchableOpacity
+              style={styles.seccionHeader}
+              onPress={() => toggleSeccion(section.title)}
+              activeOpacity={0.6}
+            >
+              <ModuloIcono clase={section.icono} size={16} color="#666" />
+              <Text style={styles.seccionTitulo}>{section.title}</Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons name={colapsada ? 'chevron-down' : 'chevron-up'} size={16} color="#999" />
+            </TouchableOpacity>
+          );
+        }}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.item} onPress={() => abrirSubmodulo(item)}>
             <ModuloIcono clase={item.icono_submodulo} size={18} color="#0d6efd" />
@@ -147,10 +187,28 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   titulo: { fontSize: 20, fontWeight: '700' },
+  empresaFila: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  empresaNombre: { fontSize: 13, color: '#666', flexShrink: 1 },
+  botonCambiar: {
+    borderWidth: 1,
+    borderColor: '#0d6efd',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginLeft: 4,
+  },
+  botonCambiarTexto: { fontSize: 11, color: '#0d6efd', fontWeight: '700' },
   salir: { color: '#dc3545', fontWeight: '600' },
   error: { color: '#dc3545', textAlign: 'center', marginTop: 12 },
   vacio: { color: '#888', textAlign: 'center', marginTop: 40 },
-  seccionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 6 },
+  seccionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 18,
+    marginBottom: 6,
+    paddingVertical: 4,
+  },
   seccionTitulo: { fontSize: 12, fontWeight: '700', color: '#666', textTransform: 'uppercase' },
   item: {
     flexDirection: 'row',

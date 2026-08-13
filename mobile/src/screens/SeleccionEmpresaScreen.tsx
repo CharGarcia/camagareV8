@@ -1,15 +1,35 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { Empresa } from '../api/auth';
 import { mensajeError } from '../api/client';
 
+const MAPA_ACENTOS: Record<string, string> = {
+  á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ü: 'u', ñ: 'n',
+};
+
+function normalizar(texto: string): string {
+  return texto
+    .toLowerCase()
+    .split('')
+    .map((c) => MAPA_ACENTOS[c] ?? c)
+    .join('');
+}
+
 export default function SeleccionEmpresaScreen() {
-  const { listarEmpresas, seleccionarEmpresa, logout } = useAuth();
+  const { idEmpresa, listarEmpresas, seleccionarEmpresa, cancelarCambioEmpresa, logout } = useAuth();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [buscar, setBuscar] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [seleccionando, setSeleccionando] = useState<number | null>(null);
+
+  const empresasFiltradas = useMemo(() => {
+    const q = normalizar(buscar.trim());
+    if (q === '') return empresas;
+    return empresas.filter((e) => normalizar(e.nombre).includes(q) || normalizar(e.ruc).includes(q));
+  }, [empresas, buscar]);
 
   useEffect(() => {
     (async () => {
@@ -46,12 +66,30 @@ export default function SeleccionEmpresaScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.titulo}>Selecciona tu empresa</Text>
+
+      {empresas.length > 1 ? (
+        <View style={styles.buscadorFila}>
+          <Ionicons name="search-outline" size={18} color="#888" />
+          <TextInput
+            style={styles.buscadorInput}
+            placeholder="Buscar por nombre o RUC..."
+            value={buscar}
+            onChangeText={setBuscar}
+            autoCapitalize="none"
+          />
+        </View>
+      ) : null}
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <FlatList
-        data={empresas}
+        data={empresasFiltradas}
         keyExtractor={(item) => String(item.id_empresa)}
         contentContainerStyle={{ paddingBottom: 24 }}
-        ListEmptyComponent={<Text style={styles.vacio}>No tienes empresas asignadas.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.vacio}>
+            {empresas.length === 0 ? 'No tienes empresas asignadas.' : 'Ninguna empresa coincide con la búsqueda.'}
+          </Text>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.item}
@@ -66,6 +104,11 @@ export default function SeleccionEmpresaScreen() {
           </TouchableOpacity>
         )}
       />
+      {idEmpresa ? (
+        <TouchableOpacity onPress={() => cancelarCambioEmpresa()} style={styles.cancelar}>
+          <Text style={styles.cancelarTexto}>Cancelar</Text>
+        </TouchableOpacity>
+      ) : null}
       <TouchableOpacity onPress={() => logout()} style={styles.salir}>
         <Text style={styles.salirTexto}>Cerrar sesión</Text>
       </TouchableOpacity>
@@ -77,6 +120,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f6f8', paddingTop: 60, paddingHorizontal: 16 },
   centrado: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   titulo: { fontSize: 20, fontWeight: '700', marginBottom: 16 },
+  buscadorFila: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  buscadorInput: { flex: 1, paddingVertical: 10, fontSize: 15 },
   error: { color: '#dc3545', marginBottom: 12 },
   vacio: { color: '#888', textAlign: 'center', marginTop: 40 },
   item: {
@@ -92,4 +147,6 @@ const styles = StyleSheet.create({
   itemRuc: { fontSize: 13, color: '#777', marginTop: 2 },
   salir: { alignItems: 'center', paddingVertical: 16 },
   salirTexto: { color: '#dc3545', fontWeight: '600' },
+  cancelar: { alignItems: 'center', paddingVertical: 12 },
+  cancelarTexto: { color: '#0d6efd', fontWeight: '600' },
 });
