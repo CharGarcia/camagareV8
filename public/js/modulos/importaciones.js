@@ -626,6 +626,7 @@ function IMP_agregarFilaProducto(det) {
         <td><input type="date" class="form-control form-control-sm input-imp-caducidad" value="${det.fecha_caducidad ? det.fecha_caducidad.slice(0,10) : ''}"></td>
         <td><input type="text" class="form-control form-control-sm text-center input-imp-nup" value="${IMP_esc(det.nup || '')}"></td>
         <td><select class="form-select form-select-sm input-imp-bodega">${IMP_bodegaOptionsHtml(det.id_bodega || '')}</select></td>
+        <td class="text-center"><input type="checkbox" class="form-check-input input-imp-activo-fijo" ${(det.es_activo_fijo === true || det.es_activo_fijo === 't') ? 'checked' : ''} title="Activo fijo (afecta el casillero de la Declaración de IVA)"></td>
         <td class="text-end imp-col-nacionalizado d-none"><span class="input-imp-costo-unit">${costoUnit ? costoUnit.toFixed(4) : '-'}</span></td>
         <td class="text-end imp-col-nacionalizado d-none"><span class="input-imp-costo-total">${costoTotal ? costoTotal.toFixed(2) : '-'}</span></td>
         <td class="text-center p-0 align-middle">
@@ -1193,6 +1194,7 @@ window.guardarImportacion = async function () {
             fecha_caducidad: tr.querySelector('.input-imp-caducidad')?.value || null,
             nup: tr.querySelector('.input-imp-nup')?.value || null,
             id_bodega: tr.querySelector('.input-imp-bodega')?.value || null,
+            es_activo_fijo: !!tr.querySelector('.input-imp-activo-fijo')?.checked,
         });
     });
 

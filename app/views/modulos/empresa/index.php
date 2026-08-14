@@ -1068,6 +1068,17 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
                         <div class="row g-4">
 
+                            <!-- Régimen de liquidación diferida de IVA - PRIMERO, antes de los acordeones -->
+                            <div class="col-12">
+                                <div class="form-check form-switch p-3 border rounded-3 bg-light">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="usa_liquidacion_diferida_iva" name="usa_liquidacion_diferida_iva" value="1" <?= !empty($empresa['usa_liquidacion_diferida_iva']) ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-medium" for="usa_liquidacion_diferida_iva">
+                                        Esta empresa declara bajo el régimen de <b>liquidación diferida de IVA por ventas a plazo</b> (art. 67 LRTI, casilleros 480-499)
+                                    </label>
+                                    <p class="text-muted small mb-0 mt-1">Actívelo solo si vende a crédito con IVA diferido. Con esta opción encendida, el casillero 499 (impuesto a liquidar este mes) reemplaza al IVA en ventas normal para calcular el IVA a pagar/saldo a favor de la declaración.</p>
+                                </div>
+                            </div>
+
                             <!-- Tabla: Casilleros IVA por Tarifa -->
                             <div class="col-12">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1085,7 +1096,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     </div>
                                 </div>
 
-                                <?php 
+                                <?php
                                 $tiposDocumento = [
                                     'factura_venta' => 'Facturas de Venta',
                                     'nota_credito_venta' => 'Notas de Crédito (Venta)',
@@ -1095,21 +1106,26 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     'nota_credito_compra' => 'Notas de Crédito (Compra)',
                                     'nota_debito_compra' => 'Notas de Débito (Compra)',
                                     'importacion' => 'Importaciones (crédito tributario aduanero)',
+                                    'importacion_activo_fijo' => 'Importaciones de Activos Fijos (crédito tributario aduanero)',
                                 ];
                                 $idxAcc = 0;
                                 ?>
-                                <div class="accordion mb-5 shadow-sm" id="accordionCasillerosIva">
+                                <div class="accordion mb-4 shadow-sm" id="accordionCasillerosIva">
                                     <?php foreach ($tiposDocumento as $tdKey => $tdName): $idxAcc++; ?>
                                         <div class="accordion-item border-0 border-bottom">
                                             <h2 class="accordion-header" id="heading<?= $idxAcc ?>">
-                                                <button class="accordion-button <?= $idxAcc === 1 ? '' : 'collapsed' ?> bg-white text-dark fw-medium" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<?= $idxAcc ?>" aria-expanded="<?= $idxAcc === 1 ? 'true' : 'false' ?>" aria-controls="collapse<?= $idxAcc ?>">
+                                                <button class="accordion-button collapsed bg-white text-dark fw-medium" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<?= $idxAcc ?>" aria-expanded="false" aria-controls="collapse<?= $idxAcc ?>">
                                                     <?= $tdName ?>
                                                 </button>
                                             </h2>
-                                            <div id="collapse<?= $idxAcc ?>" class="accordion-collapse collapse <?= $idxAcc === 1 ? 'show' : '' ?>" aria-labelledby="heading<?= $idxAcc ?>" data-bs-parent="#accordionCasillerosIva">
+                                            <div id="collapse<?= $idxAcc ?>" class="accordion-collapse collapse" aria-labelledby="heading<?= $idxAcc ?>" data-bs-parent="#accordionCasillerosIva">
                                                 <div class="accordion-body p-0">
-                                                    <?php if ($tdKey === 'importacion'): ?>
-                                                        <p class="text-muted small px-3 pt-2 mb-0"><i class="bi bi-info-circle me-1"></i>El IVA pagado en aduana (nacionalización) no viene desglosado por tarifa: complete solo la columna <b>Casillero Impuesto</b> de la fila 15% (la tarifa habitual de importación); Bruto/Neto se dejan vacíos.</p>
+                                                    <?php if ($tdKey === 'importacion' || $tdKey === 'importacion_activo_fijo'): ?>
+                                                        <p class="text-muted small px-3 pt-2 mb-0"><i class="bi bi-info-circle me-1"></i>El IVA pagado en aduana (nacionalización) no viene desglosado por tarifa: complete la fila 15% (la tarifa habitual de importación) con los casilleros oficiales
+                                                            <?= $tdKey === 'importacion' ? '<b>503 / 513 / 523</b> (excepto activos fijos)' : '<b>504 / 514 / 524</b> (activos fijos)' ?>.
+                                                            Bruto y Neto se llenan con una <b>base referencial</b> (IVA ÷ 15%), ya que el módulo de Importaciones no captura una base imponible real por tarifa. El IVA de cada importación se reparte entre esta fila y la de
+                                                            <?= $tdKey === 'importacion' ? '"Importaciones de Activos Fijos"' : '"Importaciones"' ?>
+                                                            a prorrata del valor FOB de las líneas marcadas como "Activo Fijo" en cada importación.</p>
                                                     <?php endif; ?>
                                                     <div class="table-responsive">
                                                         <table class="table table-sm table-hover mb-0 small border-top-0">
@@ -1158,65 +1174,64 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             </div>
                                         </div>
                                     <?php endforeach; ?>
-                                </div>
 
-                                <div class="form-check form-switch mt-3 p-3 border rounded-3 bg-light">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="usa_liquidacion_diferida_iva" name="usa_liquidacion_diferida_iva" value="1" <?= !empty($empresa['usa_liquidacion_diferida_iva']) ? 'checked' : '' ?>>
-                                    <label class="form-check-label fw-medium" for="usa_liquidacion_diferida_iva">
-                                        Esta empresa declara bajo el régimen de <b>liquidación diferida de IVA por ventas a plazo</b> (art. 67 LRTI, casilleros 480-499)
-                                    </label>
-                                    <p class="text-muted small mb-0 mt-1">Actívelo solo si vende a crédito con IVA diferido. Con esta opción encendida, el casillero 499 (impuesto a liquidar este mes) reemplaza al IVA en ventas normal para calcular el IVA a pagar/saldo a favor de la declaración.</p>
-                                </div>
-                            </div>
-
-                            <!-- Tabla: Retenciones SRI - IVA -->
-                            <div class="col-12">
-                                <h6 class="fw-bold fs-6 text-primary mb-3"><i class="bi bi-percent me-2"></i>Retenciones SRI - IVA</h6>
-                                <p class="text-muted small mb-4">Conceptos de retención de IVA del SRI. Configure los casilleros del Formulario 104 para cada porcentaje de retención.</p>
-
-                                <div class="table-responsive rounded-3 border">
-                                    <table class="table table-sm table-hover mb-0 small">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th class="ps-3 py-2" style="width: 45%;">Concepto</th>
-                                                <th class="py-2 text-center" style="width: 10%;">%</th>
-                                                <th class="py-2 text-center" style="width: 22%;">Cas. Compras</th>
-                                                <th class="py-2 text-center pe-3" style="width: 23%;">Cas. Ventas</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php if (empty($retenciones_sri_iva)): ?>
-                                                <tr>
-                                                    <td colspan="4" class="text-center py-4 text-muted">
-                                                        <i class="bi bi-info-circle me-2"></i>No hay retenciones de IVA registradas en la tabla <code>retenciones_sri</code>.
-                                                    </td>
-                                                </tr>
-                                            <?php else: ?>
-                                                <?php foreach ($retenciones_sri_iva as $ret):
-                                                    $idRet      = (int)$ret['id'];
-                                                    $casComp    = $retenciones_casilleros[$idRet]['casillero_compras'] ?? '';
-                                                    $casVen     = $retenciones_casilleros[$idRet]['casillero_ventas']  ?? '';
-                                                ?>
-                                                    <tr>
-                                                        <td class="ps-3 align-middle"><?= htmlspecialchars($ret['concepto_ret']) ?></td>
-                                                        <td class="text-center align-middle">
-                                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill"><?= htmlspecialchars($ret['porcentaje']) ?>%</span>
-                                                        </td>
-                                                        <td class="text-center align-middle">
-                                                            <input type="text" name="ret_casilleros[<?= $idRet ?>][cas_compras]"
-                                                                class="form-control form-control-sm border-0 bg-light text-center"
-                                                                value="<?= htmlspecialchars($casComp) ?>">
-                                                        </td>
-                                                        <td class="pe-3 text-center align-middle">
-                                                            <input type="text" name="ret_casilleros[<?= $idRet ?>][cas_ventas]"
-                                                                class="form-control form-control-sm border-0 bg-light text-center"
-                                                                value="<?= htmlspecialchars($casVen) ?>">
-                                                        </td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            <?php endif; ?>
-                                        </tbody>
-                                    </table>
+                                    <!-- Retenciones SRI - IVA: mismo acordeón, también encogido -->
+                                    <div class="accordion-item border-0 border-bottom">
+                                        <h2 class="accordion-header" id="headingRetIva">
+                                            <button class="accordion-button collapsed bg-white text-dark fw-medium" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRetIva" aria-expanded="false" aria-controls="collapseRetIva">
+                                                <i class="bi bi-percent me-2"></i>Retenciones SRI - IVA
+                                            </button>
+                                        </h2>
+                                        <div id="collapseRetIva" class="accordion-collapse collapse" aria-labelledby="headingRetIva" data-bs-parent="#accordionCasillerosIva">
+                                            <div class="accordion-body p-0">
+                                                <p class="text-muted small px-3 pt-2 mb-0">Conceptos de retención de IVA del SRI. Configure los casilleros del Formulario 104 para cada porcentaje de retención.</p>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-hover mb-0 small border-top-0">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th class="ps-3 py-2 text-muted fw-semibold" style="width: 45%;">Concepto</th>
+                                                                <th class="py-2 text-center text-muted fw-semibold" style="width: 10%;">%</th>
+                                                                <th class="py-2 text-center text-muted fw-semibold" style="width: 22%;">Cas. Compras</th>
+                                                                <th class="py-2 text-center text-muted fw-semibold pe-3" style="width: 23%;">Cas. Ventas</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php if (empty($retenciones_sri_iva)): ?>
+                                                                <tr>
+                                                                    <td colspan="4" class="text-center py-4 text-muted">
+                                                                        <i class="bi bi-info-circle me-2"></i>No hay retenciones de IVA registradas en la tabla <code>retenciones_sri</code>.
+                                                                    </td>
+                                                                </tr>
+                                                            <?php else: ?>
+                                                                <?php foreach ($retenciones_sri_iva as $ret):
+                                                                    $idRet      = (int)$ret['id'];
+                                                                    $casComp    = $retenciones_casilleros[$idRet]['casillero_compras'] ?? '';
+                                                                    $casVen     = $retenciones_casilleros[$idRet]['casillero_ventas']  ?? '';
+                                                                ?>
+                                                                    <tr>
+                                                                        <td class="ps-3 align-middle"><?= htmlspecialchars($ret['concepto_ret']) ?></td>
+                                                                        <td class="text-center align-middle">
+                                                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill"><?= htmlspecialchars($ret['porcentaje']) ?>%</span>
+                                                                        </td>
+                                                                        <td class="text-center align-middle">
+                                                                            <input type="text" name="ret_casilleros[<?= $idRet ?>][cas_compras]"
+                                                                                class="form-control form-control-sm border-0 bg-light text-center"
+                                                                                value="<?= htmlspecialchars($casComp) ?>">
+                                                                        </td>
+                                                                        <td class="pe-3 text-center align-middle">
+                                                                            <input type="text" name="ret_casilleros[<?= $idRet ?>][cas_ventas]"
+                                                                                class="form-control form-control-sm border-0 bg-light text-center"
+                                                                                value="<?= htmlspecialchars($casVen) ?>">
+                                                                        </td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            <?php endif; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

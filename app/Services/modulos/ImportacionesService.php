@@ -748,8 +748,15 @@ class ImportacionesService
     /**
      * Refleja el IVA de importación (crédito tributario pagado en aduana) en el "Detalle de
      * Casilleros" de la Declaración de IVA. Mismo patrón que ComprasService::sincronizarCasilleros,
-     * pero sin desglose por tarifa: importaciones_gastos no guarda codigo_porcentaje, así que solo
-     * se completa el casillero "Impuesto" configurado en Empresa → Form 104 IVA → Importaciones.
+     * pero sin desglose por tarifa real: importaciones_gastos no guarda codigo_porcentaje, así que se
+     * usa la tarifa 15% (habitual en aduana) como referencia tanto para elegir la fila configurada en
+     * Empresa → Form 104 IVA como para calcular una "base referencial" (IVA ÷ 15%) a falta de un monto
+     * de base imponible real capturado en el módulo.
+     *
+     * El IVA total se reparte entre dos filas oficiales del F104 según el detalle de productos
+     * (importaciones_detalle.es_activo_fijo), a prorrata del valor FOB de cada grupo:
+     *   - tipo_documento 'importacion'             → casilleros 503/513/523 (excepto activos fijos)
+     *   - tipo_documento 'importacion_activo_fijo' → casilleros 504/514/524 (activos fijos)
      */
     public function sincronizarCasilleros(int $idImportacion, int $idEmpresa): void
     {
@@ -780,29 +787,80 @@ class ImportacionesService
             return;
         }
 
+        // Reparto entre "activo fijo" y "resto" a prorrata del valor FOB de cada grupo de líneas.
+        $detalles = $this->repository->getDetalles($idImportacion);
+        $fobAf = 0.0;
+        $fobResto = 0.0;
+        foreach ($detalles as $d) {
+            $fob = (float) ($d['precio_total_fob'] ?? 0);
+            if (!empty($d['es_activo_fijo']) && $d['es_activo_fijo'] !== 'f') {
+                $fobAf += $fob;
+            } else {
+                $fobResto += $fob;
+            }
+        }
+        $fobTotalDet = $fobAf + $fobResto;
+        $propAf = $fobTotalDet > 0 ? ($fobAf / $fobTotalDet) : 0.0;
+        $ivaAf = round($ivaTotal * $propAf, 2);
+        $ivaResto = round($ivaTotal - $ivaAf, 2);
+
         $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
         $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
-        if (!$configDec || !isset($configDec['importacion'])) {
+        if (!$configDec) {
             return;
         }
-        $confImp = $configDec['importacion'];
 
-        // Sin tarifa real disponible: se usa la fila configurada para el 15% (tarifa habitual de
-        // importación) como casillero destino; si no está configurada, se toma la primera que sí lo esté.
-        $tarifaMap = $decIvaRepo->getMapaTarifasIva();
-        $idTarifa15 = $tarifaMap['15'] ?? null;
-        $conf = ($idTarifa15 !== null && isset($confImp[$idTarifa15])) ? $confImp[$idTarifa15] : reset($confImp);
-        $impC = $conf['impuesto'] ?? '';
-        if ($impC === '' || $impC === false) {
-            return;
-        }
+        // Tarifa 15% real (habitual en aduana): fija el casillero destino y sirve de referencia
+        // para retro-calcular una base ("valor / 0.15") ya que no se captura base por tarifa.
+        $tarifa15 = $decIvaRepo->getTarifaPorPorcentaje(15);
+        $pctReferencial = $tarifa15 ? ((float) $tarifa15['porcentaje_iva'] / 100) : 0.15;
 
         $concepto = 'Importación #' . ($importacion['establecimiento'] ?? '') . '-' . ($importacion['punto_emision'] ?? '') . '-' . ($importacion['secuencial'] ?? $idImportacion);
-        $decIvaRepo->insertarCasilleroDeclaracion([
-            'id_empresa' => $idEmpresa, 'origen' => 'importaciones', 'id_origen' => $idImportacion,
-            'fecha' => $importacion['fecha_nacionalizacion'] ?? date('Y-m-d'),
-            'casillero' => $impC, 'valor' => round($ivaTotal, 2), 'concepto' => $concepto . ' (IVA aduana)',
-        ]);
+        $fecha = $importacion['fecha_nacionalizacion'] ?? date('Y-m-d');
+
+        $buckets = [
+            ['tipoDoc' => 'importacion',             'valor' => $ivaResto, 'sufijo' => ' (IVA aduana)'],
+            ['tipoDoc' => 'importacion_activo_fijo', 'valor' => $ivaAf,    'sufijo' => ' (IVA aduana - activo fijo)'],
+        ];
+
+        foreach ($buckets as $bucket) {
+            if ($bucket['valor'] <= 0.0 || !isset($configDec[$bucket['tipoDoc']])) {
+                continue;
+            }
+            $confDoc = $configDec[$bucket['tipoDoc']];
+            // Si la tarifa 15% no está configurada, se toma la primera fila que sí lo esté.
+            $conf = ($tarifa15 && isset($confDoc[$tarifa15['id']])) ? $confDoc[$tarifa15['id']] : reset($confDoc);
+            if (!$conf) {
+                continue;
+            }
+
+            $bruto = $conf['bruto'] ?? '';
+            $neto = $conf['neto'] ?? '';
+            $impC = $conf['impuesto'] ?? '';
+            $baseReferencial = round($bucket['valor'] / $pctReferencial, 2);
+
+            if ($bruto !== '' && $bruto !== false) {
+                $decIvaRepo->insertarCasilleroDeclaracion([
+                    'id_empresa' => $idEmpresa, 'origen' => 'importaciones', 'id_origen' => $idImportacion,
+                    'fecha' => $fecha, 'casillero' => $bruto, 'valor' => $baseReferencial,
+                    'concepto' => $concepto . $bucket['sufijo'] . ' (Base referencial)',
+                ]);
+            }
+            if ($neto !== '' && $neto !== false) {
+                $decIvaRepo->insertarCasilleroDeclaracion([
+                    'id_empresa' => $idEmpresa, 'origen' => 'importaciones', 'id_origen' => $idImportacion,
+                    'fecha' => $fecha, 'casillero' => $neto, 'valor' => $baseReferencial,
+                    'concepto' => $concepto . $bucket['sufijo'] . ' (Base referencial)',
+                ]);
+            }
+            if ($impC !== '' && $impC !== false) {
+                $decIvaRepo->insertarCasilleroDeclaracion([
+                    'id_empresa' => $idEmpresa, 'origen' => 'importaciones', 'id_origen' => $idImportacion,
+                    'fecha' => $fecha, 'casillero' => $impC, 'valor' => $bucket['valor'],
+                    'concepto' => $concepto . $bucket['sufijo'],
+                ]);
+            }
+        }
     }
 
     public function procesarAsientoContable(int $idImportacion, int $idEmpresa, int $idUsuario): void

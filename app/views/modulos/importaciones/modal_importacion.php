@@ -203,6 +203,7 @@
                       <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Caducidad</th>
                       <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP</th>
                       <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Bodega</th>
+                      <th class="py-2 small fw-bold text-muted text-center" style="width:7%;" title="Marca si el producto es un activo fijo (afecta el casillero de la Declaración de IVA donde se registra el crédito tributario de aduana).">Activo Fijo</th>
                       <th class="py-2 small fw-bold text-muted text-end imp-col-nacionalizado d-none" style="width:10%;">Costo Unit. Nac.</th>
                       <th class="py-2 small fw-bold text-muted text-end imp-col-nacionalizado d-none" style="width:10%;">Costo Total Nac.</th>
                       <th style="width:40px;"></th>
@@ -238,7 +239,7 @@
                 </div>
               </div>
             </div>
-            <div class="form-text x-small mt-2">Peso (Kg) es obligatorio en todas las líneas si el criterio de prorrateo es "por peso"; volumen (m3) es obligatorio si el criterio es "por volumen". El Excel debe tener las columnas <code>codigo_producto, descripcion, cantidad, precio_unitario_fob, peso_kg, volumen_m3, numero_lote, fecha_caducidad, nup</code> (descargue la plantilla para verlas con ejemplos y la lista de códigos válidos).</div>
+            <div class="form-text x-small mt-2">Peso (Kg) es obligatorio en todas las líneas si el criterio de prorrateo es "por peso"; volumen (m3) es obligatorio si el criterio es "por volumen". El Excel debe tener las columnas <code>codigo_producto, descripcion, cantidad, precio_unitario_fob, peso_kg, volumen_m3, numero_lote, fecha_caducidad, nup</code> (descargue la plantilla para verlas con ejemplos y la lista de códigos válidos). "Activo Fijo" determina a qué fila del Formulario 104 (503/513/523 o 504/514/524) se declara el IVA de aduana de esa línea, a prorrata del valor FOB.</div>
           </div>
 
           <!-- ════════════════════════════════════════

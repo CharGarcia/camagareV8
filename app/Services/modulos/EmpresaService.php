@@ -346,7 +346,7 @@ class EmpresaService
         $this->repository->clearIvaCasilleros($idEmpresa);
 
         // Guardamos los documentos de IVA
-        $documentosIva = ['factura_venta', 'nota_credito_venta', 'factura_compra', 'nota_venta_compra', 'nota_credito_compra', 'nota_debito_compra', 'liquidacion_compra', 'importacion'];
+        $documentosIva = ['factura_venta', 'nota_credito_venta', 'factura_compra', 'nota_venta_compra', 'nota_credito_compra', 'nota_debito_compra', 'liquidacion_compra', 'importacion', 'importacion_activo_fijo'];
         foreach ($documentosIva as $doc) {
             if (isset($data[$doc])) {
                 foreach ($data[$doc] as $porcentajeKey => $casilleros) {

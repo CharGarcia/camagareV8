@@ -454,6 +454,21 @@ class DeclaracionIvaRepository extends BaseRepository
         return $mapa;
     }
 
+    /**
+     * Busca la fila de tarifa_iva activa cuyo porcentaje coincide (p. ej. 15).
+     * A diferencia de getMapaTarifasIva() (indexado por 'codigo' SRI, no por %),
+     * esto resuelve directamente por el porcentaje real de la tarifa.
+     */
+    public function getTarifaPorPorcentaje(int $porcentaje): ?array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT id, porcentaje_iva FROM tarifa_iva WHERE porcentaje_iva = :p AND status = 1 ORDER BY id LIMIT 1"
+        );
+        $stmt->execute([':p' => $porcentaje]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     // ==========================================================================
     // Declaración guardada (declaracion_iva_cabecera)
     // ==========================================================================
