@@ -72,27 +72,13 @@
         getModalEmp()?.show();
     };
 
-    window.abrirModalEditar = async function(tr) {
-        const rowData = (tr instanceof HTMLElement) ? JSON.parse(tr.dataset.row) : tr;
-        const id = rowData.id;
-        if (!formEmp || !id) return;
-
-        formEmp.reset();
-        limpiarBadgeSriEmp();
-        document.getElementById('emp_id').value = id;
-        document.getElementById('tituloModal').textContent = 'Editar Empleado';
-        document.getElementById('btnEliminarModal')?.classList.remove('d-none');
-        if (alertElEmp) alertElEmp.classList.add('d-none');
-
-        document.querySelector('#tablaPeriodos tbody').innerHTML = '<tr><td colspan="4" class="text-center py-2 small text-muted">Cargando...</td></tr>';
-        document.querySelector('#tablaRubros tbody').innerHTML = '<tr><td colspan="5" class="text-center py-2 small text-muted">Cargando...</td></tr>';
-
-        const tabGenBtn = document.getElementById('tab-general-btn');
-        if (tabGenBtn && typeof bootstrap !== 'undefined') {
-            (bootstrap.Tab.getInstance(tabGenBtn) || new bootstrap.Tab(tabGenBtn)).show();
-        }
-        getModalEmp()?.show();
-
+    /**
+     * Carga el detalle del empleado desde el servidor y repuebla el formulario ya
+     * abierto (NO resetea ni cierra el modal): se usa tanto al abrir "Editar" como
+     * para resincronizar el formulario justo después de guardar/actualizar, sin
+     * perder la posición del usuario dentro del modal.
+     */
+    async function cargarDetalleEmp(id) {
         try {
             const resp = await fetch(`${urlModuloEmp}/getDetalleAjax?id=${id}`);
             const res = await resp.json();
@@ -166,6 +152,30 @@
                 if (window.frActualizarAviso) window.frActualizarAviso();
             }
         } catch (e) {}
+    }
+
+    window.abrirModalEditar = async function(tr) {
+        const rowData = (tr instanceof HTMLElement) ? JSON.parse(tr.dataset.row) : tr;
+        const id = rowData.id;
+        if (!formEmp || !id) return;
+
+        formEmp.reset();
+        limpiarBadgeSriEmp();
+        document.getElementById('emp_id').value = id;
+        document.getElementById('tituloModal').textContent = 'Editar Empleado';
+        document.getElementById('btnEliminarModal')?.classList.remove('d-none');
+        if (alertElEmp) alertElEmp.classList.add('d-none');
+
+        document.querySelector('#tablaPeriodos tbody').innerHTML = '<tr><td colspan="4" class="text-center py-2 small text-muted">Cargando...</td></tr>';
+        document.querySelector('#tablaRubros tbody').innerHTML = '<tr><td colspan="5" class="text-center py-2 small text-muted">Cargando...</td></tr>';
+
+        const tabGenBtn = document.getElementById('tab-general-btn');
+        if (tabGenBtn && typeof bootstrap !== 'undefined') {
+            (bootstrap.Tab.getInstance(tabGenBtn) || new bootstrap.Tab(tabGenBtn)).show();
+        }
+        getModalEmp()?.show();
+
+        await cargarDetalleEmp(id);
     };
 
     window.toggleIessFields = async function() {
@@ -649,6 +659,17 @@
         a.remove();
     };
 
+    // Limpia los 3 campos de la pestaña Banco de un tirón (no hay forma de dejar
+    // "Tipo Cuenta" vacío escribiendo, y hacerlo campo por campo es tedioso).
+    window.limpiarDatosBancariosEmp = function() {
+        const banco = document.getElementById('emp_id_banco_ecuador');
+        const tipo = document.getElementById('emp_tipo_cuenta');
+        const num = document.getElementById('emp_numero_cuenta');
+        if (banco) banco.value = '0';
+        if (tipo) tipo.value = '';
+        if (num) num.value = '';
+    };
+
     // Botón "Exportar Excel" de la barra superior del modal.
     window.exportarEmpleadoExcel = function() {
         const id = document.getElementById('emp_id').value;
@@ -707,12 +728,19 @@
                         timer: 1500,
                         showConfirmButton: false
                     });
-                    setTimeout(() => {
-                        restaurarBtn();
-                        getModalEmp()?.hide();
-                        if (typeof window.cambiarPaginaAjax === 'function') window.cambiarPaginaAjax(window.currentPage || 1);
-                        window.dispatchEvent(new CustomEvent('empleadoGuardado', { detail: json }));
-                    }, 1500);
+                    // El modal se queda abierto: se guarda y se sigue editando en el mismo
+                    // lugar, sin tener que volver a abrirlo. Si era un empleado nuevo, ahora
+                    // ya tiene id: se pasa a modo "editar" y se resincroniza el formulario
+                    // con lo que quedó guardado en el servidor (ids de periodos/rubros, etc.).
+                    if (!id && json.id) {
+                        document.getElementById('emp_id').value = json.id;
+                        document.getElementById('tituloModal').textContent = 'Editar Empleado';
+                        document.getElementById('btnEliminarModal')?.classList.remove('d-none');
+                    }
+                    await cargarDetalleEmp(id || json.id);
+                    restaurarBtn();
+                    if (typeof window.cambiarPaginaAjax === 'function') window.cambiarPaginaAjax(window.currentPage || 1);
+                    window.dispatchEvent(new CustomEvent('empleadoGuardado', { detail: json }));
                 } else {
                     Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo guardar el empleado.' });
                     restaurarBtn();

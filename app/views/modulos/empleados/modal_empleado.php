@@ -487,6 +487,11 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 
                         <!-- Panel Bancario -->
                         <div class="tab-pane fade" id="tab-financiera" role="tabpanel">
+                            <div class="d-flex justify-content-end mb-2">
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" onclick="window.limpiarDatosBancariosEmp()">
+                                    <i class="bi bi-x-circle me-1"></i>Limpiar datos bancarios
+                                </button>
+                            </div>
                             <div class="row g-3">
                                 <div class="col-12">
                                     <label class="form-label mb-1 small fw-bold text-muted">Banco <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_id_banco_ecuador', 'id_banco_ecuador') ?></label>
@@ -500,6 +505,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                 <div class="col-md-6">
                                     <label class="form-label mb-1 small fw-bold text-muted">Tipo Cuenta <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_tipo_cuenta', 'tipo_cuenta') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="tipo_cuenta" id="emp_tipo_cuenta">
+                                        <option value="">-- Seleccionar --</option>
                                         <option value="ahorros">Ahorros</option>
                                         <option value="corriente">Corriente</option>
                                         <option value="virtual">Virtual</option>

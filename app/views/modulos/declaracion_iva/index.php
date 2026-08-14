@@ -111,6 +111,9 @@
         
         <!-- Pestaña 2 -->
         <div class="tab-pane fade" id="detalle" role="tabpanel">
+            <div class="mb-2">
+                <input type="text" id="detalleBuscar" class="form-control form-control-sm" style="max-width:320px" placeholder="Buscar por número, entidad, concepto o casillero…">
+            </div>
             <div id="accordionDetalle" class="accordion accordion-flush" style="max-height: 50vh; overflow-y: auto;"></div>
         </div>
     </div>
@@ -216,6 +219,7 @@
         let ultimoLayout = [];
         let ultimosValores = {};
         let ultimoTotal480481 = 0;
+        let ultimoDetalle = []; // último detalle_documentos recibido, para filtrar sin volver a pedir el servidor
 
         // Map (no objeto literal): en los objetos JS las claves '10'-'12' se ordenan
         // numéricamente antes que '01'-'09' y los meses salían desordenados
@@ -273,7 +277,9 @@
             }).then(res => res.json()).then(data => {
                 if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
                 renderVentas(data.resumen_completo);
-                renderDetalle(data.detalle_documentos);
+                ultimoDetalle = data.detalle_documentos || [];
+                document.getElementById('detalleBuscar').value = '';
+                renderDetalle(ultimoDetalle);
                 document.getElementById('btnExportarExcel').classList.remove('d-none');
                 yaGenerado = true;
                 actualizarBotonesDeclaracion();
@@ -527,7 +533,9 @@
             let html = '';
             const accordionDetalle = document.getElementById('accordionDetalle');
             if (detalle.length === 0) {
-                accordionDetalle.innerHTML = '<div class="text-center text-muted py-3">No hay documentos sincronizados.</div>';
+                const hayBusqueda = document.getElementById('detalleBuscar').value.trim() !== '';
+                accordionDetalle.innerHTML = '<div class="text-center text-muted py-3">' +
+                    (hayBusqueda ? 'Sin resultados para la búsqueda.' : 'No hay documentos sincronizados.') + '</div>';
                 return;
             }
 
@@ -550,9 +558,19 @@
                 grupos[key].total += parseFloat(d.valor) || 0;
             });
 
+            // Orden de los grupos: primero por tipo de documento (Compras, Facturas de Venta,
+            // Retenciones, Importaciones...), y dentro de cada tipo por fecha. Los orígenes no
+            // listados aquí caen al final, en el orden en que llegaron.
+            const ordenOrigen = ['compras', 'liquidaciones_compras', 'facturas de venta', 'notas_credito', 'notas de debito', 'retenciones_ventas', 'retenciones_compras', 'importaciones'];
+            const listaGrupos = Object.values(grupos).sort((a, b) => {
+                const pa = ordenOrigen.indexOf(a.origen); const pb = ordenOrigen.indexOf(b.origen);
+                const ra = pa === -1 ? ordenOrigen.length : pa; const rb = pb === -1 ? ordenOrigen.length : pb;
+                if (ra !== rb) return ra - rb;
+                return new Date(a.fecha) - new Date(b.fecha);
+            });
+
             let i = 0;
-            for (const key in grupos) {
-                const g = grupos[key];
+            for (const g of listaGrupos) {
                 const headerId = 'heading' + i;
                 const collapseId = 'collapse' + i;
                 
@@ -638,6 +656,22 @@
             accordionDetalle.innerHTML = html;
         }
 
+        // Filtra sobre el detalle ya cargado (sin volver a pedir el servidor): por número de
+        // documento, entidad, concepto o casillero.
+        document.getElementById('detalleBuscar').addEventListener('input', function () {
+            const q = this.value.trim().toLowerCase();
+            if (!q) { renderDetalle(ultimoDetalle); return; }
+            const filtrado = ultimoDetalle.filter(d => {
+                const docNum = d.establecimiento ? `${d.establecimiento}-${d.punto_emision}-${d.secuencial}` : `ID: ${d.id_origen}`;
+                return docNum.toLowerCase().includes(q)
+                    || (d.entidad || '').toLowerCase().includes(q)
+                    || (d.concepto || '').toLowerCase().includes(q)
+                    || (d.casillero || '').toLowerCase().includes(q)
+                    || (d.origen || '').toLowerCase().includes(q);
+            });
+            renderDetalle(filtrado);
+        });
+
         window.editarCasillero = function(id, casilleroActual) {
             Swal.fire({
                 title: 'Editar Casillero',
@@ -716,6 +750,8 @@
             tabsContainer.classList.remove('d-none');
             tabContent.classList.remove('d-none');
             renderVentas({ layout: data.layout, valores: declaracion.valores_casilleros || {}, total_480_481: data.total_480_481 });
+            ultimoDetalle = []; // no hay detalle de documentos al cargar el snapshot guardado
+            document.getElementById('detalleBuscar').value = '';
             document.getElementById('accordionDetalle').innerHTML = '<div class="text-center text-muted py-3">Este es el detalle guardado al declarar. Presione GENERAR para ver el detalle de documentos actual.</div>';
             document.getElementById('btnExportarExcel').classList.remove('d-none');
             yaGenerado = true;
