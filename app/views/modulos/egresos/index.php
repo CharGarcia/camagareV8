@@ -428,9 +428,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <div class="tab-pane fade show active p-3" id="eg-subtab-det" role="tabpanel">
                                     
                                     <div id="eg-block-docs">
-                                        <div class="d-flex justify-content-between mb-2 align-items-center">
+                                        <div class="d-flex justify-content-between mb-2 align-items-center gap-2">
                                             <h6 class="small fw-bold mb-0 text-secondary">Documentos seleccionados para pago</h6>
                                             <span id="eg-status-docs" class="badge bg-light text-muted border d-none">Cargando...</span>
+                                            <button type="button" id="eg-btn-add-docs" class="btn btn-link btn-sm p-0 ms-auto text-decoration-none fw-bold" onclick="if (_egTipoDocActual) abrirModalEgDocsPendientes(_egTipoDocActual)">
+                                                <i class="bi bi-plus-circle me-1"></i> Agregar documentos
+                                            </button>
                                         </div>
                                         <div class="table-responsive border rounded mb-3" style="max-height: 240px;">
                                             <table class="table table-sm table-detalle mb-0">
@@ -922,6 +925,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             const isReadOnly = document.getElementById('eg-input-obs').disabled;
             const docsConfirmados = docsEgreso.filter(d => d.seleccionado);
+
+            const btnAddDocs = document.getElementById('eg-btn-add-docs');
+            if (btnAddDocs) btnAddDocs.style.display = isReadOnly ? 'none' : '';
 
             if (docsConfirmados.length === 0) {
                 const tipoLabel = tEgreso === 'COMPRA' ? 'facturas de compra' : tEgreso === 'LIQUIDACION' ? 'liquidaciones de compras' : (['ROL','QUINCENA','PRESTAMO'].includes(tEgreso) ? 'roles pendientes' : 'documentos');
@@ -3025,7 +3031,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
 
-            <div class="modal-body p-0 d-flex flex-column" style="min-height: 420px;">
+            <div class="modal-body p-0 d-flex flex-column" style="min-height: 280px; max-height: 60vh;">
                 <!-- Barra de búsqueda única -->
                 <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-wrap">
                     <div class="input-group input-group-sm flex-grow-1" style="min-width:240px;">

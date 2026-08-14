@@ -426,6 +426,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <div class="d-flex align-items-center gap-2 mb-2">
                                             <h6 class="small fw-bold mb-0 text-secondary">Documentos seleccionados</h6>
                                             <span id="m-lbl-status-pend" class="badge bg-light text-muted border d-none">Cargando...</span>
+                                            <button type="button" id="m-btn-add-docs" class="btn btn-link btn-sm p-0 ms-auto text-decoration-none fw-bold" onclick="abrirModalDocsPendientes()">
+                                                <i class="bi bi-plus-circle me-1"></i> Agregar documentos
+                                            </button>
                                         </div>
                                         <div class="table-responsive border rounded mb-3" style="max-height: 220px;">
                                             <table class="table table-sm table-detalle mb-0">
@@ -1335,6 +1338,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
             const tbody = document.getElementById('m-tbody-docs-pendientes');
             tbody.innerHTML = '';
+
+            const btnAddDocs = document.getElementById('m-btn-add-docs');
+            if (btnAddDocs) btnAddDocs.style.display = esHistorico ? 'none' : '';
 
             if (docPendientes.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3 small">Use el buscador para añadir documentos pendientes de uno o más clientes.</td></tr>';
@@ -2592,7 +2598,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
 
-            <div class="modal-body p-0 d-flex flex-column" style="min-height: 400px;">
+            <div class="modal-body p-0 d-flex flex-column" style="min-height: 280px; max-height: 60vh;">
                 <!-- Barra de búsqueda -->
                 <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-wrap">
                     <div class="input-group input-group-sm flex-grow-1" style="min-width:240px;">
