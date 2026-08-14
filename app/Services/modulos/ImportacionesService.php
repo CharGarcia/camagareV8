@@ -809,8 +809,9 @@ class ImportacionesService
      *
      * El IVA total se reparte entre dos filas oficiales del F104 según el detalle de productos
      * (importaciones_detalle.es_activo_fijo), a prorrata del valor FOB de cada grupo:
-     *   - tipo_documento 'importacion'             → casilleros 503/513/523 (excepto activos fijos)
-     *   - tipo_documento 'importacion_activo_fijo' → casilleros 504/514/524 (activos fijos)
+     *   - tipo_documento 'importacion'             → casilleros 504/514/524 (bienes, excepto activos fijos)
+     *   - tipo_documento 'importacion_activo_fijo' → casilleros 505/515/525 (activos fijos)
+     * (casillero 503/513/523 es "Importaciones de servicios y/o derechos" — no lo usa este módulo)
      */
     public function sincronizarCasilleros(int $idImportacion, int $idEmpresa): void
     {

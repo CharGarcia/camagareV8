@@ -1124,7 +1124,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                 <div class="accordion-body p-0">
                                                     <?php if ($tdKey === 'importacion' || $tdKey === 'importacion_activo_fijo'): ?>
                                                         <p class="text-muted small px-3 pt-2 mb-0"><i class="bi bi-info-circle me-1"></i>El IVA pagado en aduana (nacionalización) no viene desglosado por tarifa: complete la fila 15% (la tarifa habitual de importación) con los casilleros oficiales
-                                                            <?= $tdKey === 'importacion' ? '<b>503 / 513 / 523</b> (excepto activos fijos)' : '<b>504 / 514 / 524</b> (activos fijos)' ?>.
+                                                            <?= $tdKey === 'importacion' ? '<b>504 / 514 / 524</b> (bienes, excepto activos fijos)' : '<b>505 / 515 / 525</b> (activos fijos)' ?>.
                                                             Bruto y Neto se llenan con una <b>base referencial</b> (IVA ÷ 15%), ya que el módulo de Importaciones no captura una base imponible real por tarifa. El IVA de cada importación se reparte entre esta fila y la de
                                                             <?= $tdKey === 'importacion' ? '"Importaciones de Activos Fijos"' : '"Importaciones"' ?>
                                                             a prorrata del valor FOB de las líneas marcadas como "Activo Fijo" en cada importación.</p>
