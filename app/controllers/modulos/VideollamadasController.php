@@ -37,6 +37,18 @@ class VideollamadasController extends BaseModuloController
     private const SESSION_SALA = 'vc_sala_actual';
 
     /**
+     * Empresa a la que pertenece la sala fijada en SESSION_SALA.
+     *
+     * Se fija UNA vez al entrar y es la que usan los endpoints de señalización
+     * (poll, ofertas ICE, admitir, etc.) para resolver la sala — NUNCA
+     * $_SESSION['id_empresa'] en vivo. Si se usara la empresa activa en vivo,
+     * cambiar de empresa en OTRA pestaña (misma sesión PHP) haría que el
+     * siguiente poll de una llamada ya en curso buscara la sala con el
+     * id_empresa equivocado y la diera por inexistente, cortando la llamada.
+     */
+    private const SESSION_SALA_EMPRESA = 'vc_sala_id_empresa';
+
+    /**
      * Identificador de par (peer) del usuario dentro de la sala.
      * Lo genera el servidor y vive en la sesión: el navegador nunca lo envía,
      * así no puede hacerse pasar por otro participante.
@@ -356,7 +368,8 @@ class VideollamadasController extends BaseModuloController
 
             $sala = $this->service->iniciar($id, $idEmpresa, $idUsuario, !empty($perm['todo']));
 
-            $_SESSION[self::SESSION_SALA] = $id;
+            $_SESSION[self::SESSION_SALA]         = $id;
+            $_SESSION[self::SESSION_SALA_EMPRESA] = $idEmpresa;
 
             $this->json([
                 'ok'     => true,
@@ -401,8 +414,13 @@ class VideollamadasController extends BaseModuloController
 
         // La sala llega por su código en la URL (enlace compartible) o, si no
         // viene, por la que quedó fijada en la sesión al pulsar "entrar".
-        $codigo = trim((string) ($_GET['codigo'] ?? ''));
-        $idSala = (int) ($_SESSION[self::SESSION_SALA] ?? 0);
+        $codigo        = trim((string) ($_GET['codigo'] ?? ''));
+        $idSala        = (int) ($_SESSION[self::SESSION_SALA] ?? 0);
+        // La sala ya fijada en sesión se resuelve con la empresa que quedó
+        // pinneada al entrar, no con la empresa activa en vivo (ver
+        // SESSION_SALA_EMPRESA): si no, reabrir la ventana de la sala después
+        // de cambiar de empresa en otra pestaña la daría por inexistente.
+        $idEmpresaSala = (int) ($_SESSION[self::SESSION_SALA_EMPRESA] ?? $idEmpresa);
 
         if ($codigo !== '') {
             $porCodigo = $this->repository->getPorCodigo($codigo);
@@ -413,24 +431,26 @@ class VideollamadasController extends BaseModuloController
             if ($porCodigo === null || (int) $porCodigo['id_empresa'] !== $idEmpresa) {
                 $this->redirect($urlModulo);
             }
-            $idSala = (int) $porCodigo['id'];
-            $_SESSION[self::SESSION_SALA] = $idSala;
+            $idSala        = (int) $porCodigo['id'];
+            $idEmpresaSala = $idEmpresa;
+            $_SESSION[self::SESSION_SALA]         = $idSala;
+            $_SESSION[self::SESSION_SALA_EMPRESA] = $idEmpresaSala;
         }
 
         if ($idSala <= 0) {
             $this->redirect($urlModulo);
         }
 
-        $sala = $this->service->getPorId($idSala, $idEmpresa);
+        $sala = $this->service->getPorId($idSala, $idEmpresaSala);
         if ($sala === null) {
-            unset($_SESSION[self::SESSION_SALA]);
+            unset($_SESSION[self::SESSION_SALA], $_SESSION[self::SESSION_SALA_EMPRESA]);
             $this->redirect($urlModulo);
         }
 
         // Quien llega por el enlace no pasó por "entrar", así que aquí es donde
         // se comprueba que tenga derecho a estar en esta reunión.
         try {
-            $esParticipante = $this->repository->getIdParticipante($idSala, $idEmpresa, $idUsuario) !== null;
+            $esParticipante = $this->repository->getIdParticipante($idSala, $idEmpresaSala, $idUsuario) !== null;
             (new VideollamadaRules())->validarPuedeEntrar($sala, $idUsuario, $this->tieneAccesoTotal(), $esParticipante);
         } catch (\Throwable $e) {
             $_SESSION['vc_mensaje'] = $e->getMessage();
@@ -457,7 +477,7 @@ class VideollamadasController extends BaseModuloController
     {
         $this->requireLeer();
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = (int) ($_SESSION[self::SESSION_SALA_EMPRESA] ?? $_SESSION['id_empresa']);
         $idUsuario = (int) $_SESSION['id_usuario'];
         $idSala    = (int) ($_GET['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
 
@@ -492,7 +512,10 @@ class VideollamadasController extends BaseModuloController
     {
         $this->requireLeer();
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        // Pinneada al entrar (ver SESSION_SALA_EMPRESA): estos endpoints se
+        // consultan por polling durante toda la llamada, y no pueden depender
+        // de la empresa activa en vivo, que puede cambiar en otra pestaña.
+        $idEmpresa = (int) ($_SESSION[self::SESSION_SALA_EMPRESA] ?? $_SESSION['id_empresa']);
         $idUsuario = (int) $_SESSION['id_usuario'];
         $nombre    = (string) ($_SESSION['nombre'] ?? 'Usuario');
         $idSala    = (int) ($_POST['id'] ?? $_GET['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
@@ -558,7 +581,7 @@ class VideollamadasController extends BaseModuloController
     {
         $this->requireLeer();
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = (int) ($_SESSION[self::SESSION_SALA_EMPRESA] ?? $_SESSION['id_empresa']);
         $idUsuario = (int) $_SESSION['id_usuario'];
         $idSala    = (int) ($_POST['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
         $peerId    = (string) ($_POST['peer_id'] ?? '');

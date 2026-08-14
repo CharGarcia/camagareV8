@@ -69,8 +69,8 @@ class ImportacionesService
         if (!$cabecera) {
             throw new \Exception('Importación no encontrada.');
         }
-        if (in_array($cabecera['estado'], ['pendiente_aprobacion', 'nacionalizada', 'cerrada', 'anulada'], true)) {
-            throw new \Exception('No se puede modificar una importación pendiente de aprobación, nacionalizada, cerrada o anulada.');
+        if (in_array($cabecera['estado'], ['pendiente_aprobacion', 'nacionalizada', 'cerrada', 'anulada', 'registrada'], true)) {
+            throw new \Exception('No se puede modificar una importación pendiente de aprobación, registrada, nacionalizada, cerrada o anulada. Vuélvala a Borrador primero.');
         }
 
         $this->rules->validar($data);
@@ -123,6 +123,50 @@ class ImportacionesService
         return $importacion;
     }
 
+    /**
+     * Confirma los datos de la importación (borrador → registrada): queda bloqueada
+     * para edición pero SIN afectar inventario/kardex/asiento/Declaración de IVA —
+     * eso solo ocurre al nacionalizar. Es un paso intermedio opcional: el usuario
+     * puede seguir en borrador indefinidamente, o "registrar" para dejar constancia
+     * de que los datos ya están confirmados, sin comprometerse todavía a nacionalizar.
+     */
+    public function registrar(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $importacion = $this->repository->getPorId($id, $idEmpresa);
+        if (!$importacion) {
+            throw new \Exception('Importación no encontrada.');
+        }
+        if (($importacion['estado'] ?? '') !== 'borrador') {
+            throw new \Exception('Solo se puede marcar como Registrada una importación en estado Borrador.');
+        }
+
+        $this->repository->actualizarEstado($id, 'registrada', $idUsuario);
+
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'REGISTRAR', 'importaciones_cabecera', $id,
+            ['estado' => 'borrador'], ['estado' => 'registrada']
+        );
+    }
+
+    /** Reversa registrar(): registrada → borrador, para poder corregir algo. */
+    public function volverABorrador(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $importacion = $this->repository->getPorId($id, $idEmpresa);
+        if (!$importacion) {
+            throw new \Exception('Importación no encontrada.');
+        }
+        if (($importacion['estado'] ?? '') !== 'registrada') {
+            throw new \Exception('Solo se puede devolver a Borrador una importación en estado Registrada.');
+        }
+
+        $this->repository->actualizarEstado($id, 'borrador', $idUsuario);
+
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'VOLVER_A_BORRADOR', 'importaciones_cabecera', $id,
+            ['estado' => 'registrada'], ['estado' => 'borrador']
+        );
+    }
+
     public function eliminar(int $id, int $idUsuario, int $idEmpresa): bool
     {
         $importacion = $this->repository->getPorId($id, $idEmpresa);
@@ -134,6 +178,9 @@ class ImportacionesService
         }
         if ($importacion['estado'] === 'pendiente_aprobacion') {
             throw new \Exception('No se puede eliminar una importación pendiente de aprobación. Recházela primero.');
+        }
+        if ($importacion['estado'] === 'registrada') {
+            throw new \Exception('No se puede eliminar una importación Registrada. Vuélvala a Borrador primero.');
         }
 
         $db = Database::getConnection();

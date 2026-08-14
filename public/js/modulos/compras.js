@@ -387,9 +387,17 @@ function mcAplicarSoloLectura(d) {
         bloquear(btn);
     });
 
-    // Sin edición ni borrado: ocultar Guardar y Eliminar.
+    // Sin edición: ocultar Guardar siempre que esté bloqueada (migrada o período cerrado).
     document.getElementById('btnGuardarCompra')?.classList.add('d-none');
-    document.getElementById('btnEliminarCompra')?.classList.add('d-none');
+
+    // Eliminar SÍ se permite para compras migradas (a diferencia de editar) — solo se
+    // oculta cuando el bloqueo es por período contable cerrado (esa restricción aplica
+    // igual a migradas y no migradas). El backend (ComprasService::eliminar) ya no exige
+    // que la compra no sea migrada; solo valida el período, así que este ajuste de UI
+    // no abre nada que el servidor no aceptara.
+    if (periodoCerrado) {
+        document.getElementById('btnEliminarCompra')?.classList.add('d-none');
+    }
 
     return true;
 }

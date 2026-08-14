@@ -50,6 +50,10 @@ class ImportacionesRules
         $sumaFob = 0.0;
         foreach ($data['detalles'] as $idx => $det) {
             $num = $idx + 1;
+            if (empty($det['id_producto'])) {
+                $desc = trim((string) ($det['descripcion'] ?? ''));
+                throw new \Exception("La línea #{$num}" . ($desc !== '' ? " (\"{$desc}\")" : '') . ' debe estar vinculada a un producto del catálogo. Búsquelo y selecciónelo de la lista (o créelo primero con el botón "Crear producto").');
+            }
             if ((float) ($det['cantidad'] ?? 0) <= 0) {
                 throw new \Exception("La cantidad de la línea #{$num} debe ser mayor a cero.");
             }

@@ -207,6 +207,7 @@ class ImportacionesController extends BaseModuloController
                     'cerrada'       => 'bg-primary bg-opacity-10 text-primary border-primary',
                     'anulada'       => 'bg-danger bg-opacity-10 text-danger border-danger',
                     'en_transito'   => 'bg-warning bg-opacity-10 text-warning border-warning',
+                    'registrada'    => 'bg-info bg-opacity-10 text-info border-info',
                     default         => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
                 };
                 $estadoLabel = match ($estado) {
@@ -214,6 +215,7 @@ class ImportacionesController extends BaseModuloController
                     'cerrada'       => 'Cerrada',
                     'anulada'       => 'Anulada',
                     'en_transito'   => 'En tránsito',
+                    'registrada'    => 'Registrada',
                     default         => 'Borrador',
                 };
                 $estadoBadge = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . $estadoLabel . '</span>';
@@ -549,6 +551,52 @@ class ImportacionesController extends BaseModuloController
         exit;
     }
 
+    public function registrarAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID de importación requerido.']);
+            exit;
+        }
+
+        try {
+            $this->service->registrar($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'La importación quedó marcada como Registrada.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function volverABorradorAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID de importación requerido.']);
+            exit;
+        }
+
+        try {
+            $this->service->volverABorrador($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'La importación volvió a Borrador.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function aprobarNacionalizacionAjax(): void
     {
         $this->requireActualizar();
@@ -723,5 +771,185 @@ class ImportacionesController extends BaseModuloController
         $buscar    = trim($_GET['q'] ?? '');
         echo json_encode(['ok' => true, 'data' => $this->repository->buscarLiquidacionesParaVincular($idEmpresa, $buscar)]);
         exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // EXPORTAR PDF / EXCEL DEL DOCUMENTO
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Carga cabecera + detalles + gastos + facturas del exterior (vía
+     * ImportacionesService::getPorId) + empresa enriquecida con logo/dirección
+     * del establecimiento. Mismo patrón que
+     * LiquidacionCompraController::cargarDatosDocumento().
+     */
+    private function cargarDatosDocumentoImp(int $id, int $idEmpresa): ?array
+    {
+        if (!$id) return null;
+
+        $importacion = $this->service->getPorId($id, $idEmpresa);
+        if (!$importacion) return null;
+
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        $est = null;
+        if (!empty($importacion['id_establecimiento'])) {
+            foreach ($establecimientos as $e) {
+                if ((int) $e['id'] === (int) $importacion['id_establecimiento']) { $est = $e; break; }
+            }
+        }
+        if ($est === null && !empty($establecimientos)) {
+            $est = $establecimientos[0];
+        }
+        if ($est) {
+            if (!empty($est['logo_ruta'])) {
+                $empresa['logo_ruta'] = $est['logo_ruta'];
+            }
+            $empresa['direccion_matriz']          = $empresa['direccion'] ?? '';
+            $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
+        }
+
+        return ['cabecera' => $importacion, 'empresa' => $empresa];
+    }
+
+    public function exportarPdfAjax(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $datos = $this->cargarDatosDocumentoImp($id, $idEmpresa);
+            if (!$datos) { die('Importación no encontrada'); }
+
+            $pdfService = new \App\Services\modulos\ImportacionesPdfService();
+            $pdfService->generar($datos['cabecera'], $datos['empresa']);
+        } catch (\Throwable $e) {
+            die('Error al generar PDF: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    public function exportarExcelAjax(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $datos = $this->cargarDatosDocumentoImp($id, $idEmpresa);
+            if (!$datos) { http_response_code(404); echo 'Importación no encontrada'; exit; }
+
+            $cab      = $datos['cabecera'];
+            $empresa  = $datos['empresa'];
+            $detalles = $cab['detalles'] ?? [];
+            $gastos   = $cab['gastos'] ?? [];
+
+            $numero = str_pad((string) ($cab['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+                    . str_pad((string) ($cab['punto_emision']   ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+                    . str_pad((string) ($cab['secuencial']      ?? ''),   9, '0', STR_PAD_LEFT);
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Importación');
+
+            $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
+            $sheet->mergeCells('A1:H1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
+
+            $sheet->setCellValue('A2', 'IMPORTACIÓN N.° ' . $numero);
+            $sheet->mergeCells('A2:H2');
+            $sheet->getStyle('A2')->getFont()->setBold(true);
+
+            $fecha = !empty($cab['fecha_nacionalizacion']) ? date('d-m-Y', strtotime((string) $cab['fecha_nacionalizacion'])) : '';
+            $sheet->setCellValue('A3', 'Fecha nacionalización: ' . $fecha);
+            $sheet->setCellValue('D3', 'Proveedor exterior: ' . (string) ($cab['proveedor_nombre'] ?? ''));
+            $sheet->setCellValue('A4', 'Referencia DAI: ' . (string) ($cab['referencia_dai'] ?? ''));
+            $sheet->setCellValue('D4', 'Agente afianzado: ' . (string) ($cab['agente_nombre'] ?? ''));
+
+            // Tabla de productos
+            $headerRow = 6;
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unit. FOB', 'Total FOB', 'Activo Fijo', 'Costo Unit. Nac.', 'Costo Total Nac.'];
+            $col = 'A';
+            foreach ($headers as $h) {
+                $sheet->setCellValue($col . $headerRow, $h);
+                $col++;
+            }
+            $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->getFont()->setBold(true);
+            $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E9ECEF');
+
+            $row = $headerRow + 1;
+            foreach ($detalles as $d) {
+                $esAf = !empty($d['es_activo_fijo']) && $d['es_activo_fijo'] !== 'f';
+                $sheet->setCellValue('A' . $row, (string) ($d['producto_codigo'] ?? $d['codigo_producto_raw'] ?? ''));
+                $sheet->setCellValue('B' . $row, (string) ($d['producto_nombre'] ?? $d['descripcion'] ?? ''));
+                $sheet->setCellValue('C' . $row, (float) ($d['cantidad'] ?? 0));
+                $sheet->setCellValue('D' . $row, (float) ($d['precio_unitario_fob'] ?? 0));
+                $sheet->setCellValue('E' . $row, (float) ($d['precio_total_fob'] ?? 0));
+                $sheet->setCellValue('F' . $row, $esAf ? 'Sí' : 'No');
+                $sheet->setCellValue('G' . $row, (float) ($d['costo_unitario_nacionalizado'] ?? 0));
+                $sheet->setCellValue('H' . $row, (float) ($d['costo_total_nacionalizado'] ?? 0));
+                $row++;
+            }
+
+            $row++;
+            $sheet->setCellValue('A' . $row, 'GASTOS DE NACIONALIZACIÓN');
+            $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+            $row++;
+            $headersG = ['Tipo', 'Origen', 'Descripción', 'Monto', 'Prorrateable'];
+            $col = 'A';
+            foreach ($headersG as $h) {
+                $sheet->setCellValue($col . $row, $h);
+                $col++;
+            }
+            $sheet->getStyle('A' . $row . ':E' . $row)->getFont()->setBold(true);
+            $sheet->getStyle('A' . $row . ':E' . $row)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E9ECEF');
+            $row++;
+            foreach ($gastos as $g) {
+                $esProrr = !empty($g['prorrateable']) && $g['prorrateable'] !== 'f';
+                $sheet->setCellValue('A' . $row, (string) ($g['tipo_gasto'] ?? ''));
+                $sheet->setCellValue('B' . $row, (string) ($g['origen'] ?? ''));
+                $sheet->setCellValue('C' . $row, (string) ($g['descripcion'] ?? ''));
+                $sheet->setCellValue('D' . $row, (float) ($g['monto'] ?? 0));
+                $sheet->setCellValue('E' . $row, $esProrr ? 'Sí' : 'No');
+                $row++;
+            }
+
+            $row++;
+            $totales = [
+                'Subtotal FOB'               => (float) ($cab['subtotal_fob'] ?? 0),
+                'Gastos capitalizables'      => (float) ($cab['total_gastos_capitalizables'] ?? 0),
+                'IVA'                        => (float) ($cab['total_iva'] ?? 0),
+                'ISD'                        => (float) ($cab['total_isd'] ?? 0),
+                'Otros gastos'               => (float) ($cab['total_otros_gastos'] ?? 0),
+                'Costo total nacionalizado'  => (float) ($cab['costo_total_nacionalizado'] ?? 0),
+            ];
+            foreach ($totales as $label => $valor) {
+                $sheet->setCellValue('A' . $row, $label);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('B' . $row, $valor);
+                $row++;
+            }
+
+            foreach (range('A', 'H') as $c) {
+                $sheet->getColumnDimension($c)->setAutoSize(true);
+            }
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="Importacion_' . $numero . '.xlsx"');
+            header('Cache-Control: max-age=0');
+
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+            exit;
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
     }
 }

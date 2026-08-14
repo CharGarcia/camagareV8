@@ -238,6 +238,10 @@ $estadoLabelMap = [
 </script>
 
 <?php include __DIR__ . '/modal_importacion.php'; ?>
+<?php include MVC_APP . '/views/modulos/proveedores/modal_proveedor.php'; ?>
+<?php include MVC_APP . '/views/modulos/productos/modal.php'; ?>
+<script src="<?= $base ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/importaciones.js?v=<?= time() ?>"></script>
 

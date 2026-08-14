@@ -127,6 +127,10 @@
         document.getElementById('vc-max').max = MAX_MESH;
         document.getElementById('vc-duracion').value = 60;
         document.getElementById('vc-sala-espera').checked = true;
+        // Por defecto activado: si no, cualquier participante agregado por
+        // correo (sin cuenta en el sistema) no puede ni añadirse sin que el
+        // organizador recuerde marcar este switch antes.
+        document.getElementById('vc-invitados').checked = true;
         document.getElementById('vcTbodyParticipantes').innerHTML = '';
         filaParticipante = 0;
 

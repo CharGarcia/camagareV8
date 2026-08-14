@@ -278,6 +278,21 @@ window.abrirModalImportacion = function (el) {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EXPORTAR PDF / EXCEL
+// ─────────────────────────────────────────────────────────────────────────────
+window.IMP_exportarPdf = function () {
+    const id = document.getElementById('impId').value;
+    if (!id) return;
+    window.open(`${window.CMG_urlBaseImp}/exportarPdfAjax?id=${id}`, '_blank');
+};
+
+window.IMP_exportarExcel = function () {
+    const id = document.getElementById('impId').value;
+    if (!id) return;
+    window.open(`${window.CMG_urlBaseImp}/exportarExcelAjax?id=${id}`, '_blank');
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // RESET
 // ─────────────────────────────────────────────────────────────────────────────
 // esNueva=true (default, "Nueva Importación"): preselecciona la primera serie
@@ -324,6 +339,9 @@ function IMP_resetModal(esNueva = true) {
 
     document.getElementById('btnEliminarImportacion').classList.add('d-none');
     document.getElementById('impBtnProcesarInventario').classList.add('d-none');
+    document.getElementById('impBtnRegistrar').classList.add('d-none');
+    document.getElementById('impBtnVolverBorrador').classList.add('d-none');
+    ['impBtnPdf', 'impBtnExcel'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     document.getElementById('impBtnCalcularProrrateo').disabled = true;
     document.getElementById('impAlertPendienteAprobacion').classList.add('d-none');
     const grupoAprobacionReset = document.getElementById('impGrupoAprobacion');
@@ -389,6 +407,7 @@ function IMP_poblarModal(d) {
     // d.numero_importacion es el string ya concatenado "est-pto-secuencial";
     // no usarlo aquí para no duplicar la serie dentro de este campo.
     document.getElementById('impSecuencial').value = d.secuencial || '';
+    ['impBtnPdf', 'impBtnExcel'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !d.id; });
     // La serie/secuencial se asigna una sola vez al crear: no editable al abrir un registro existente.
     const puntoSel = document.getElementById('impPuntoEmision');
     puntoSel.value = d.id_punto_emision || '';
@@ -423,6 +442,7 @@ function IMP_poblarModal(d) {
     const estadoMap = {
         borrador: ['Borrador', 'secondary'],
         en_transito: ['En tránsito', 'warning'],
+        registrada: ['Registrada', 'info'],
         pendiente_aprobacion: ['Pendiente aprobación', 'info'],
         nacionalizada: ['Nacionalizada', 'success'],
         cerrada: ['Cerrada', 'primary'],
@@ -432,7 +452,10 @@ function IMP_poblarModal(d) {
     badge.className = `badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25 ms-2`;
     badge.textContent = label;
 
+    // "registrada" bloquea la edición de campos (como las demás), pero NO oculta
+    // "Procesar Inventario": desde Registrada también se puede nacionalizar directo.
     const bloqueada = ['nacionalizada', 'cerrada', 'anulada', 'pendiente_aprobacion'].includes(estado);
+    const edicionBloqueada = bloqueada || estado === 'registrada';
     document.querySelectorAll('.imp-col-nacionalizado').forEach(el => el.classList.toggle('d-none', estado !== 'nacionalizada' && !bloqueada));
 
     const pendiente = estado === 'pendiente_aprobacion';
@@ -459,11 +482,13 @@ function IMP_poblarModal(d) {
     (d.gastos || []).forEach(g => IMP_agregarFilaGasto(g));
 
     IMP_recalcularTotalesLineas();
-    IMP_bloquearEdicion(bloqueada);
+    IMP_bloquearEdicion(edicionBloqueada);
 
-    document.getElementById('btnEliminarImportacion').classList.toggle('d-none', bloqueada || !d.id);
+    document.getElementById('btnEliminarImportacion').classList.toggle('d-none', edicionBloqueada || !d.id);
     document.getElementById('impBtnProcesarInventario').classList.toggle('d-none', !d.id || bloqueada);
     document.getElementById('impBtnCalcularProrrateo').disabled = !d.id;
+    document.getElementById('impBtnRegistrar').classList.toggle('d-none', !d.id || estado !== 'borrador');
+    document.getElementById('impBtnVolverBorrador').classList.toggle('d-none', estado !== 'registrada');
 
     const modal = document.getElementById('modalImportacion');
     if (modal) modal.dataset.id = d.id;
@@ -651,6 +676,7 @@ function IMP_agregarFilaProducto(det) {
                 tr.querySelector('.input-imp-id-medida').value = p.id_medida || '';
                 descInput.value = p.nombre;
                 descInput.dataset.selectedId = p.id;
+                descInput.classList.remove('border-danger');
             },
             clear: () => { tr.querySelector('.input-imp-id-producto').value = ''; },
         });
@@ -1036,6 +1062,91 @@ async function IMP_recargarModalTrasAprobacion(id) {
     if (typeof window.CMG_fetchSearchImp === 'function') window.CMG_fetchSearchImp(window.CMG_currentPageImp);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REGISTRAR / VOLVER A BORRADOR (confirma los datos sin enviar al inventario)
+// ─────────────────────────────────────────────────────────────────────────────
+window.IMP_registrarImportacion = async function () {
+    const id = document.getElementById('impId').value;
+    if (!id) return;
+
+    const confirm = await Swal.fire({
+        title: '¿Marcar como Registrada?',
+        text: 'Se confirman los datos de la importación y queda bloqueada para edición (proveedor, productos, gastos, facturas). Todavía NO se envía al inventario; para eso usa "Procesar Inventario / Nacionalizar".',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#0d6efd',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, registrar',
+        cancelButtonText: 'Cancelar',
+    });
+    if (!confirm.isConfirmed) return;
+
+    const btn = document.getElementById('impBtnRegistrar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Registrando...';
+
+    try {
+        const fd = new FormData();
+        fd.append('id', id);
+        const res = await fetch(`${window.CMG_urlBaseImp}/registrarAjax`, {
+            method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        if (data.ok) {
+            Swal.fire({ icon: 'success', title: 'Registrada', text: data.mensaje || 'La importación quedó marcada como Registrada.', timer: 2000, showConfirmButton: false });
+            await IMP_recargarModalTrasAprobacion(id);
+        } else {
+            Swal.fire('Error', data.mensaje, 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error de conexión', e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-clipboard-check me-1"></i> Marcar como Registrada';
+    }
+};
+
+window.IMP_volverABorrador = async function () {
+    const id = document.getElementById('impId').value;
+    if (!id) return;
+
+    const confirm = await Swal.fire({
+        title: '¿Volver a Borrador?',
+        text: 'La importación vuelve a quedar editable (proveedor, productos, gastos, facturas).',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#6c757d',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, volver a Borrador',
+        cancelButtonText: 'Cancelar',
+    });
+    if (!confirm.isConfirmed) return;
+
+    const btn = document.getElementById('impBtnVolverBorrador');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ...';
+
+    try {
+        const fd = new FormData();
+        fd.append('id', id);
+        const res = await fetch(`${window.CMG_urlBaseImp}/volverABorradorAjax`, {
+            method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        if (data.ok) {
+            Swal.fire({ icon: 'success', title: 'Borrador', text: data.mensaje || 'La importación volvió a Borrador.', timer: 2000, showConfirmButton: false });
+            await IMP_recargarModalTrasAprobacion(id);
+        } else {
+            Swal.fire('Error', data.mensaje, 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error de conexión', e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i> Volver a Borrador';
+    }
+};
+
 window.IMP_aprobarNacionalizacion = async function () {
     const id = document.getElementById('impId').value;
     if (!id) return;
@@ -1202,6 +1313,23 @@ window.guardarImportacion = async function () {
         Swal.fire('Atención', 'Debe agregar al menos una línea de producto.', 'warning');
         const tabProd = document.getElementById('imp-tab-productos');
         if (tabProd) bootstrap.Tab.getOrCreateInstance(tabProd).show();
+        return;
+    }
+
+    // Toda línea debe estar vinculada a un producto del catálogo (no basta con el texto
+    // libre de la búsqueda) — mismo control que aplica el backend al guardar.
+    let filaSinProducto = null;
+    document.querySelectorAll('#tbodyProductosFob tr').forEach(tr => {
+        const descInput = tr.querySelector('.input-imp-descripcion');
+        const tieneProducto = !!tr.querySelector('.input-imp-id-producto')?.value;
+        if (descInput) descInput.classList.toggle('border-danger', !tieneProducto);
+        if (!tieneProducto && !filaSinProducto) filaSinProducto = descInput;
+    });
+    if (filaSinProducto) {
+        Swal.fire('Atención', 'Hay líneas de producto sin vincular al catálogo. Búsquelas y selecciónelas de la lista desplegable (o créelas primero con el botón "Crear producto" en la barra superior).', 'warning');
+        const tabProd = document.getElementById('imp-tab-productos');
+        if (tabProd) bootstrap.Tab.getOrCreateInstance(tabProd).show();
+        filaSinProducto.focus();
         return;
     }
 

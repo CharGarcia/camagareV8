@@ -12,6 +12,29 @@
       <div class="modal-body p-0">
         <input type="hidden" id="impId" name="id">
 
+        <!-- Barra de Acciones Superior -->
+        <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap" id="impBarraAcciones">
+          <button type="button" id="impBtnPdf" class="btn btn-outline-danger btn-sm px-2" onclick="IMP_exportarPdf()" title="Exportar PDF" disabled>
+            <i class="bi bi-file-earmark-pdf"></i>
+          </button>
+          <button type="button" id="impBtnExcel" class="btn btn-outline-success btn-sm px-2" onclick="IMP_exportarExcel()" title="Exportar Excel" disabled>
+            <i class="bi bi-file-earmark-excel"></i>
+          </button>
+          <?php if (\App\Helpers\Permisos::puedeCrear('modulos/proveedores') || \App\Helpers\Permisos::puedeCrear('modulos/productos')): ?>
+            <div class="vr mx-1"></div>
+          <?php endif; ?>
+          <?php if (\App\Helpers\Permisos::puedeCrear('modulos/proveedores')): ?>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="abrirModalProveedorCrear()" title="Registrar nuevo proveedor">
+              <i class="bi bi-person-plus fs-6"></i>
+            </button>
+          <?php endif; ?>
+          <?php if (\App\Helpers\Permisos::puedeCrear('modulos/productos')): ?>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto">
+              <i class="bi bi-box-seam fs-6"></i>
+            </button>
+          <?php endif; ?>
+        </div>
+
         <!-- Pestañas -->
         <div class="d-flex align-items-center bg-light px-3 pt-2">
           <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="impTabs" role="tablist">
@@ -313,6 +336,12 @@
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
               <button type="button" class="btn btn-outline-primary btn-sm" id="impBtnCalcularProrrateo" onclick="IMP_calcularProrrateo()">
                 <i class="bi bi-calculator me-1"></i> Calcular prorrateo
+              </button>
+              <button type="button" class="btn btn-primary btn-sm px-3 d-none" id="impBtnRegistrar" onclick="IMP_registrarImportacion()" title="Confirma los datos y bloquea la edición, sin enviarla todavía al inventario.">
+                <i class="bi bi-clipboard-check me-1"></i> Marcar como Registrada
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm px-3 d-none" id="impBtnVolverBorrador" onclick="IMP_volverABorrador()" title="Vuelve a Borrador para poder editarla de nuevo.">
+                <i class="bi bi-arrow-counterclockwise me-1"></i> Volver a Borrador
               </button>
               <button type="button" class="btn btn-success btn-sm px-3 d-none" id="impBtnProcesarInventario" onclick="IMP_procesarInventario()">
                 <i class="bi bi-box-arrow-in-right me-1"></i> Procesar Inventario / Nacionalizar
