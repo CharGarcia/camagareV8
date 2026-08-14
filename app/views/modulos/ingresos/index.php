@@ -785,8 +785,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     document.querySelectorAll('.concepto-ingreso-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             const sel = document.getElementById('m-select-concepto');
-            // Si ya está seleccionado este mismo concepto, no hacer nada
-            if (sel.value == this.dataset.id) return;
+            const comp = this.dataset.comportamiento || 'GENERAL';
+
+            if (sel.value == this.dataset.id) {
+                // Mismo concepto ya seleccionado → re-abrir el modal de documentos pendientes.
+                if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
+                    abrirModalDocsPendientes();
+                }
+                return;
+            }
 
             const hayDatos = docPendientes.length > 0
                         || detalleManual.some(d => d.descripcion.trim() !== '' || parseFloat(d.monto) > 0);
