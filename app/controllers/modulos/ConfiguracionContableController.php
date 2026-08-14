@@ -38,6 +38,11 @@ class ConfiguracionContableController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
+        // Declaración de IVA / Retenciones consolidan y contabilizan siempre contra el
+        // establecimiento matriz del grupo RUC — configurarlas desde otro establecimiento
+        // no tendría efecto, así que ni se ofrecen ahí.
+        $esMatriz = (new \App\repositories\modulos\EmpresaRepository())->getEsMatriz($idEmpresa);
+
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'id');
@@ -67,6 +72,7 @@ class ConfiguracionContableController extends BaseModuloController
             'ordenDir'     => $ordenDir,
             'vistaConfig'  => $prefsVista,
             'asientosTipo' => $asientosTipo,
+            'esMatriz'     => $esMatriz,
             'fullWidth'    => true,
         ]);
     }
@@ -1262,6 +1268,33 @@ class ConfiguracionContableController extends BaseModuloController
                 $rows = array_merge($rows, $stIva->fetchAll(PDO::FETCH_ASSOC));
 
                 echo json_encode(['ok' => true, 'data' => $rows]);
+                exit;
+            }
+
+            // Tipo de Producción (Bien/Servicio): no hay tabla de catálogo, son 2 valores fijos.
+            // id_referencia guarda 1 (Bien) o 2 (Servicio) — mismo mapeo usado en la cascada de
+            // AsientoBuilderService::repartirVentasCascada() contra productos.tipo_produccion ('01'/'02').
+            if ($tipoReferencia === 'tipo_produccion') {
+                $sql = "SELECT ap.id,
+                               ap.id_asiento_tipo,
+                               ap.id_cuenta,
+                               ap.id_referencia,
+                               ap.tipo_referencia,
+                               at.referencia AS asiento_tipo_referencia,
+                               pc.codigo AS cuenta_codigo,
+                               pc.nombre AS cuenta_nombre,
+                               (CASE ap.id_referencia WHEN 1 THEN 'Bien' WHEN 2 THEN 'Servicio' ELSE 'Desconocido' END) AS dimension_nombre
+                        FROM asientos_programados ap
+                        INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                        INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                        WHERE ap.id_empresa = ?
+                          AND at.tipo_asiento = ?
+                          AND ap.tipo_referencia = 'tipo_produccion'
+                          AND ap.eliminado = false
+                        ORDER BY ap.id_referencia ASC";
+                $st = $db->prepare($sql);
+                $st->execute([$idEmpresa, $tipoAsiento]);
+                echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
                 exit;
             }
 

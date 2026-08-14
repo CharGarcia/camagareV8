@@ -40,6 +40,14 @@ class DeclaracionRetencionesController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         [$anio, $mes] = $this->periodo();
 
+        // El F103 se presenta por RUC completo y solo se puede generar (asiento/egreso) desde el
+        // establecimiento matriz — ver DeclaracionRetencionesService::generarAsientoDeclaracion().
+        // Si no lo es, la vista solo muestra el aviso (mismo patrón que Declaración de IVA).
+        $empresaRepo = new \App\repositories\modulos\EmpresaRepository();
+        $esMatriz    = $empresaRepo->getEsMatriz($idEmpresa);
+        $matrizGrupo = $esMatriz ? null : $empresaRepo->getOtraMatrizDelGrupo($idEmpresa);
+        $empresaActual = $empresaRepo->getEmisorConfig($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/declaracion_retenciones/index', [
             'titulo'     => 'Declaración de Retenciones en la Fuente (Formulario 103 SRI)',
             'fullWidth'  => true,
@@ -49,6 +57,9 @@ class DeclaracionRetencionesController extends BaseModuloController
             'anios'      => $this->repository->getAniosConRetenciones($idEmpresa),
             'base'       => BASE_URL,
             'rutaModulo' => $this->getRutaModulo(),
+            'esMatriz'     => $esMatriz,
+            'matrizGrupo'  => $matrizGrupo,
+            'empresaActual' => $empresaActual,
         ]);
     }
 

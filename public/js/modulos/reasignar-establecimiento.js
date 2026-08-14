@@ -5,12 +5,38 @@
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmtMoney = (n) => (Number(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+    // Código SRI => nombre (mismo mapa que ComprasController::TIPOS_COMPROBANTE_EXCEL / ComprasPdfService).
+    const TIPOS_COMPROBANTE = {
+        '01': 'Factura', '02': 'Nota de Venta', '03': 'Liquidación de Compra',
+        '04': 'Nota de Crédito', '05': 'Nota de Débito', '06': 'Guía de Remisión',
+        '07': 'Comprobante de Retención',
+    };
+    const tipoDocTexto = (cod) => TIPOS_COMPROBANTE[cod] || cod;
+
     let filas = [];
+
+    // El destino no puede ser el mismo establecimiento que el origen (no tiene sentido reasignar
+    // "001 a 001"). Se deshabilita esa opción en el select de destino en vez de solo validar al
+    // final, para que quede claro de una vez por qué no se puede elegir.
+    function sincronizarDestinoConOrigen() {
+        const origen = $('reEstOrigen').value;
+        let seleccionInvalidada = false;
+        Array.from($('reEstDestino').options).forEach(opt => {
+            if (!opt.value) return; // "Elegir…"
+            const igualAlOrigen = origen !== '0' && opt.value === origen;
+            opt.disabled = igualAlOrigen;
+            if (igualAlOrigen && opt.selected) { seleccionInvalidada = true; }
+        });
+        if (seleccionInvalidada) { $('reEstDestino').value = ''; }
+    }
 
     function contarSeleccion() {
         const sel = document.querySelectorAll('.re-chk:checked').length;
         $('reContadorSel').textContent = sel + ' seleccionados';
-        $('reBtnReasignar').disabled = sel === 0 || !$('reEstDestino').value;
+        const origen = $('reEstOrigen').value;
+        const destino = $('reEstDestino').value;
+        const mismoEstablecimiento = origen !== '0' && !!destino && origen === destino;
+        $('reBtnReasignar').disabled = sel === 0 || !destino || mismoEstablecimiento;
     }
 
     function render() {
@@ -23,12 +49,13 @@
         }
         filas.forEach((r, i) => {
             const tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
             tr.innerHTML =
                 '<td><input type="checkbox" class="re-chk" data-i="' + i + '"></td>' +
                 '<td class="small">' + esc(r.fecha) + '</td>' +
-                '<td class="small">' + esc(r.tipo_doc) + '</td>' +
+                '<td class="small">' + esc(tipoDocTexto(r.tipo_doc)) + '</td>' +
                 '<td class="small">' + esc(r.numero) + '</td>' +
-                '<td class="small">' + (r.ident ? '<span class="text-muted">' + esc(r.ident) + '</span> ' : '') + esc(r.contraparte) + '</td>' +
+                '<td class="small">' + esc(r.contraparte) + (r.ident ? '<div class="small text-muted">' + esc(r.ident) + '</div>' : '') + '</td>' +
                 '<td class="small text-end">' + fmtMoney(r.total) + '</td>' +
                 '<td class="small"><span class="badge bg-secondary bg-opacity-25 text-dark">' + esc(r.est_codigo) + '</span> ' + esc(r.est_nombre) + '</td>';
             tb.appendChild(tr);
@@ -150,6 +177,7 @@
             if (!res.ok) { Swal.fire('Error', res.mensaje || 'No se pudo reasignar.', 'error'); return; }
             const tuvoProblemas = (res.omitidos_con_vinculos && res.omitidos_con_vinculos.length) ||
                                    (res.bloqueados_retencion && res.bloqueados_retencion.length) ||
+                                   (res.bloqueados_colision && res.bloqueados_colision.length) ||
                                    (res.errores && res.errores.length);
             Swal.fire({ icon: tuvoProblemas ? 'info' : 'success', title: tuvoProblemas ? 'Reasignación parcial' : 'Listo', text: res.mensaje });
             await buscar(); // refrescar
@@ -205,12 +233,23 @@
     $('reBtnBuscar').addEventListener('click', buscar);
     $('reBuscar').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
     $('reTipo').addEventListener('change', () => { filas = []; render(); $('reResumen').textContent = ''; $('reDesde').value = ''; $('reHasta').value = ''; cargarPeriodos(); });
+    $('reEstOrigen').addEventListener('change', () => { sincronizarDestinoConOrigen(); contarSeleccion(); });
     $('reEstDestino').addEventListener('change', contarSeleccion);
     $('reChkAll').addEventListener('change', function () { document.querySelectorAll('.re-chk').forEach(c => c.checked = this.checked); contarSeleccion(); });
     $('reTbody').addEventListener('change', e => { if (e.target.classList.contains('re-chk')) contarSeleccion(); });
+    // Clic en cualquier parte de la fila selecciona/deselecciona (no solo el checkbox).
+    $('reTbody').addEventListener('click', e => {
+        if (e.target.classList.contains('re-chk')) return; // el checkbox ya se maneja solo
+        const tr = e.target.closest('tr');
+        const chk = tr && tr.querySelector('.re-chk');
+        if (!chk) return;
+        chk.checked = !chk.checked;
+        contarSeleccion();
+    });
     $('reSelTodos').addEventListener('click', e => { e.preventDefault(); document.querySelectorAll('.re-chk').forEach(c => c.checked = true); $('reChkAll').checked = true; contarSeleccion(); });
     $('reSelNinguno').addEventListener('click', e => { e.preventDefault(); document.querySelectorAll('.re-chk').forEach(c => c.checked = false); $('reChkAll').checked = false; contarSeleccion(); });
     $('reBtnReasignar').addEventListener('click', reasignar);
 
+    sincronizarDestinoConOrigen(); // el origen puede venir preseleccionado con el establecimiento propio
     cargarPeriodos(); // poblar Año/Mes desde los datos del tipo inicial
 })();

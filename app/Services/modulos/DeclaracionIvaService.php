@@ -684,6 +684,10 @@ class DeclaracionIvaService
      */
     public function generarAsientoDeclaracion(int $idDeclaracion, int $idEmpresa, int $idUsuario): array
     {
+        if (!$this->empresaRepo->getEsMatriz($idEmpresa)) {
+            throw new \Exception('El asiento de la Declaración de IVA solo se puede generar desde el establecimiento matriz del RUC.');
+        }
+
         $decl = $this->repository->findDeclaracionById($idDeclaracion, $idEmpresa);
         if (!$decl) {
             throw new \Exception('Declaración no encontrada.');
@@ -704,8 +708,9 @@ class DeclaracionIvaService
             throw new \Exception('No hay valores para generar el asiento de esta declaración.');
         }
 
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
         $asientoService = new AsientoContableService(
-            new \App\repositories\modulos\AsientoContableRepository(),
+            $asientoRepo,
             new \App\Rules\modulos\AsientoContableRules(),
             $this->logService
         );
@@ -729,7 +734,11 @@ class DeclaracionIvaService
         $this->repository->marcarAsiento($idDeclaracion, $idEmpresa, $idGenerado, $idUsuario);
         $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_ASIENTO', 'declaracion_iva_cabecera', $idDeclaracion, null, ['id_asiento' => $idGenerado]);
 
-        return ['id_asiento' => $idGenerado];
+        // El id interno (17279) no sirve para buscarlo en Asientos Contables — ahí se busca
+        // por número de comprobante (p. ej. "DV-000001"), así que se devuelve también.
+        $numeroComprobante = $asientoRepo->getDetalleAsiento($idGenerado, $idEmpresa)['numero_comprobante'] ?? '';
+
+        return ['id_asiento' => $idGenerado, 'numero_comprobante' => $numeroComprobante];
     }
 
     /**

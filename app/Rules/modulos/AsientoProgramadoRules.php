@@ -38,7 +38,7 @@ class AsientoProgramadoRules
 
         if ($tipoRef !== '') {
             $allowedTypes = [
-                'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'iva', 'iva_ventas_factura', 'iva_compras_factura', 'iva_recibos_venta',
+                'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'tipo_produccion', 'iva', 'iva_ventas_factura', 'iva_compras_factura', 'iva_recibos_venta',
                 'item_compra',
                 'ventas_factura', 'ventas_recibo', 'recibos_venta', 'adquisiciones_compras', 'retenciones_venta', 'retenciones_compra',
                 'ingresos_egresos', 'cobros_pagos', 'nomina', 'retenciones_venta_debe', 'retenciones_venta_haber',

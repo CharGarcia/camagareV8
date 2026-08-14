@@ -764,6 +764,33 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     <?php
                     $est = !empty($establecimientos) ? $establecimientos[0] : null;
                     ?>
+
+                    <!-- Matriz del grupo RUC: distinto del "Tipo" (Matriz/Sucursal) del establecimiento SRI de
+                         abajo, que es solo una etiqueta. Este flag es el que usan los procesos que consolidan
+                         varios establecimientos del mismo RUC (ej. Declaración de IVA/Retenciones). -->
+                    <div class="alert <?= !empty($empresa['es_matriz']) ? 'alert-success' : 'alert-light border' ?> d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                            <i class="bi bi-building-fill-check me-2"></i>
+                            <strong>
+                                <?= !empty($empresa['es_matriz'])
+                                    ? 'Este es el establecimiento matriz del RUC ' . htmlspecialchars((string)($empresa['ruc'] ?? ''))
+                                    : 'Este NO es el establecimiento matriz del RUC ' . htmlspecialchars((string)($empresa['ruc'] ?? '')) ?>
+                            </strong>
+                            <div class="small text-muted mt-1" style="font-size:.72rem;">
+                                Los procesos que consolidan varios establecimientos del mismo RUC (ej. Declaración de IVA / Retenciones)
+                                se ejecutan siempre contra el establecimiento matriz. Solo un establecimiento por RUC puede serlo.
+                            </div>
+                        </div>
+                        <?php if (!empty($empresa['es_matriz'])): ?>
+                            <span class="badge bg-success flex-shrink-0 ms-3"><i class="bi bi-check-circle me-1"></i>Es la matriz</span>
+                        <?php else: ?>
+                            <form id="form-matriz" method="POST" class="flex-shrink-0 ms-3">
+                                <input type="hidden" name="section" value="matriz">
+                                <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-building-fill-check me-1"></i>Marcar como matriz</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+
                     <?php if ($est): ?>
                         <form id="form-establecimiento-directo" method="POST" enctype="multipart/form-data">
                             <input type="hidden" name="section" value="establecimiento">
@@ -2185,7 +2212,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        const forms = ['form-general', 'form-emisor', 'form-correo', 'form-firma', 'form-punto', 'form-secuenciales', 'form-establecimiento-directo', 'form-decimales', 'form-iva', 'form-facturacion-config', 'form-inventario-config', 'form-transferencias-config', 'form-ice'];
+        const forms = ['form-general', 'form-emisor', 'form-correo', 'form-firma', 'form-punto', 'form-secuenciales', 'form-establecimiento-directo', 'form-decimales', 'form-iva', 'form-facturacion-config', 'form-inventario-config', 'form-transferencias-config', 'form-ice', 'form-matriz'];
         forms.forEach(id => {
             const f = document.getElementById(id);
             if (!f) return;
@@ -2207,7 +2234,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     const res = await response.json();
                     if (res.ok) {
                         swalToastOk(res.msg || 'Cambios guardados correctamente');
-                        if (id === 'form-firma' || id === 'form-punto' || id === 'form-ice') setTimeout(() => location.reload(), 1000);
+                        if (id === 'form-firma' || id === 'form-punto' || id === 'form-ice' || id === 'form-matriz') setTimeout(() => location.reload(), 1000);
                     } else {
                         if (res.confirm) {
                             if (await swalConfirm(res.msg, { titulo: 'Confirmación requerida', icon: 'question', confirmText: 'Sí, continuar', confirmColor: '#0d6efd' })) {
@@ -2219,8 +2246,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     f.appendChild(input);
                                 }
                                 f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-                                return;
                             }
+                            // Canceló la confirmación: no es un error, solo se cierra el diálogo.
+                            return;
                         }
                         swalError(res.error || res.msg || 'Error al guardar');
                     }

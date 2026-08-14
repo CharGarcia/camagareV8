@@ -37,13 +37,19 @@ class ReasignarEstablecimientoController extends BaseModuloController
         $perm = $this->getPermisos();
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
+        // "Origen" (filtro de la lista): solo los establecimientos de la empresa activa, porque
+        // el listado de documentos solo muestra los de esta empresa. "Destino" (a dónde mover):
+        // también los de otras empresas del mismo grupo RUC — ver ReasignarEstablecimientoService.
         $establecimientos = $this->service->repo()->establecimientos($idEmpresa);
+        $establecimientosDestino = $this->service->establecimientosGrupoRuc($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos.reasignar_establecimiento.index', [
-            'titulo'           => 'Reasignar establecimiento',
+            'titulo'           => 'Reasignar documentos a otro establecimiento',
             'perm'             => $perm,
             'rutaModulo'       => self::RUTA_MODULO,
             'establecimientos' => $establecimientos,
+            'establecimientosDestino' => $establecimientosDestino,
+            'idEmpresaActual'  => $idEmpresa,
             'tipos'            => [
                 'compras'           => 'Compras (incluye NC/ND de compra)',
                 'retenciones_venta' => 'Retenciones de venta',
@@ -69,9 +75,10 @@ class ReasignarEstablecimientoController extends BaseModuloController
             if (!in_array($tipo, ReasignarEstablecimientoRepository::tiposValidos(), true)) {
                 throw new \RuntimeException('Tipo de documento no válido.');
             }
-            $perm = $this->getPermisos();
-            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
-            $this->json(['ok' => true, 'data' => $this->service->repo()->periodos($idEmpresa, $tipo, $idUsuarioFiltro)]);
+            // Sin filtro de "registros propios": esta herramienta corrige documentos migrados/
+            // importados en lote, casi nunca creados por quien los está corrigiendo — igual
+            // criterio que los módulos de Reporte. El acceso ya lo controla requireLeer/Actualizar.
+            $this->json(['ok' => true, 'data' => $this->service->repo()->periodos($idEmpresa, $tipo, null)]);
         } catch (Throwable $e) {
             $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -87,8 +94,8 @@ class ReasignarEstablecimientoController extends BaseModuloController
             if (!in_array($tipo, ReasignarEstablecimientoRepository::tiposValidos(), true)) {
                 throw new \RuntimeException('Tipo de documento no válido.');
             }
-            $perm = $this->getPermisos();
-            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            // Sin filtro de "registros propios" — ver comentario de periodosAjax().
+            $idUsuarioFiltro = null;
 
             $filtros = $this->filtrosGet();
             $page    = max(1, (int) ($_GET['page'] ?? 1));
@@ -141,10 +148,8 @@ class ReasignarEstablecimientoController extends BaseModuloController
             if (!is_array($ids)) { $ids = array_filter(array_map('trim', explode(',', (string) $ids))); }
             $anularVinculos = !empty($_POST['anular_vinculos']);
 
-            $perm = $this->getPermisos();
-            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
-
-            $res = $this->service->reasignar($idEmpresa, $tipo, $ids, $idEstDestino, $idUsuario, $idUsuarioFiltro, $anularVinculos);
+            // Sin filtro de "registros propios" — ver comentario de periodosAjax().
+            $res = $this->service->reasignar($idEmpresa, $tipo, $ids, $idEstDestino, $idUsuario, null, $anularVinculos);
             $this->json($res);
         } catch (Throwable $e) {
             $this->json(['ok' => false, 'reasignados' => 0, 'mensaje' => 'Error: ' . $e->getMessage()]);

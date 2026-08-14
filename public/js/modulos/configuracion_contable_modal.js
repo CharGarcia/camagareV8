@@ -8,12 +8,12 @@
     // Acordeones de dimensión visibles por tipo de asiento (se muestran todos los aplicables;
     // la resolución de cuentas elige el más específico configurado, cayendo a General).
     const ACORDEONES_DIM = {
-        ventas_factura:        ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
-        recibos_venta:         ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
+        ventas_factura:        ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca', 'accItemTipoProduccion'],
+        recibos_venta:         ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca', 'accItemTipoProduccion'],
         adquisiciones_compras: ['accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
         nomina:                ['accItemEmpleado']
     };
-    const ACORDEONES_DIM_TODOS = ['accItemCliente', 'accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca', 'accItemEmpleado'];
+    const ACORDEONES_DIM_TODOS = ['accItemCliente', 'accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca', 'accItemTipoProduccion', 'accItemEmpleado'];
 
     // ¿La dimensión actual es la regla por NOMBRE del ítem de compra? (producto + adquisiciones_compras).
     // En ese caso la regla se guarda por texto (tipo_referencia='item_compra', clave = descripción del ítem).
@@ -21,6 +21,18 @@
         const ta = (document.getElementById('tipoAsientoSelector') || {}).value || '';
         return tipo === 'producto' && ta === 'adquisiciones_compras';
     }
+
+    // Tipo de Producción (Bien/Servicio) es un selector fijo de 2 valores, no un buscador con
+    // autocompletado como el resto de dimensiones — por eso no pasa por
+    // ASIENTOPROG_vincularDimAutocomplete(); este handler solo replica lo que allí hace el click
+    // de una sugerencia: fijar el hidden id_referencia y disparar el indicador de faltantes.
+    window.ASIENTOPROG_seleccionarTipoProduccion = function (select) {
+        const hidden = document.getElementById('dim_id_tipo_produccion');
+        const label = document.getElementById('dim_search_tipo_produccion');
+        if (hidden) hidden.value = select.value;
+        if (label) label.value = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : '';
+        if (select.value) ASIENTOPROG_mostrarFaltantesEntidad('tipo_produccion');
+    };
 
     function ASIENTOPROG_mostrarAcordeonesDim(tipoAsiento) {
         const visibles = ACORDEONES_DIM[tipoAsiento] || [];
@@ -846,7 +858,7 @@
             // y Descuento siempre quedan en Cliente/Proveedor/General. En Compras, ICE TAMPOCO se
             // reparte (el subtotal ya viene neto por línea) — a diferencia de Ventas/Recibos, donde
             // ICE sí tiene su propio reparto.
-            const esDimensionPorLinea = ['producto', 'categoria', 'marca'].includes(tipo);
+            const esDimensionPorLinea = ['producto', 'categoria', 'marca', 'tipo_produccion'].includes(tipo);
             const repartoCompletoImplementado = ['ventas_factura', 'recibos_venta', 'adquisiciones_compras'].includes(tipoAsiento);
             const esCompras = (tipoAsiento === 'adquisiciones_compras');
             let notaAlcance = '';

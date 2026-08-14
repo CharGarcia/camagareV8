@@ -120,6 +120,12 @@ class EmpresaController extends BaseModuloController
                     $this->requireActualizar();
                     echo json_encode($this->service->saveEstablecimiento($idEmpresa, $_POST, $_FILES));
                     break;
+                case 'matriz':
+                    $this->requireActualizar();
+                    $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+                    $forzar = !empty($_POST['forzar']);
+                    echo json_encode($this->service->marcarEstablecimientoMatriz($idEmpresa, $idUsuario, $forzar));
+                    break;
                 case 'secuenciales':
                     $this->requireActualizar();
                     $idPunto = (int) ($_POST['id_punto_emision'] ?? 0);

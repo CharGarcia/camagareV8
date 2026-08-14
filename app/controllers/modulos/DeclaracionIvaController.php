@@ -103,11 +103,20 @@ class DeclaracionIvaController extends BaseModuloController
     public function index(): void
     {
         $this->requireLeer();
-        
+
         $idEmpresa = (int) $_SESSION['id_empresa'];
         // Por defecto se declara el mes anterior al actual
         $anio = $_GET['anio'] ?? date('Y', strtotime('first day of last month'));
         $mes  = $_GET['mes']  ?? date('m', strtotime('first day of last month'));
+
+        // El F104 se presenta por RUC completo y solo se puede generar (asiento/egreso) desde el
+        // establecimiento matriz — ver DeclaracionIvaService::generarAsientoDeclaracion(). Si no
+        // lo es, la vista solo muestra el aviso, para no dejar entrar a un módulo que igual va a
+        // fallar al presionar generar asiento/egreso.
+        $empresaRepo = new \App\repositories\modulos\EmpresaRepository();
+        $esMatriz    = $empresaRepo->getEsMatriz($idEmpresa);
+        $matrizGrupo = $esMatriz ? null : $empresaRepo->getOtraMatrizDelGrupo($idEmpresa);
+        $empresaActual = $empresaRepo->getEmisorConfig($idEmpresa);
 
         $estructura = $this->repository->getEstructuraFormulario();
         $anios      = $this->repository->getAniosConVentas($idEmpresa);
@@ -121,7 +130,10 @@ class DeclaracionIvaController extends BaseModuloController
             'anios' => $anios,
             'estructura' => $estructura,
             'base' => BASE_URL,
-            'rutaModulo' => $this->getRutaModulo()
+            'rutaModulo' => $this->getRutaModulo(),
+            'esMatriz' => $esMatriz,
+            'matrizGrupo' => $matrizGrupo,
+            'empresaActual' => $empresaActual,
         ]);
     }
 

@@ -124,6 +124,33 @@ class EmpresaService
         ];
     }
     
+    /**
+     * Marca $idEmpresa como matriz de su grupo RUC. Si otra empresa del grupo ya es matriz y
+     * $forzar es false, no cambia nada y devuelve confirm=true (mismo patrón que uploadFirma:
+     * el JS genérico de la vista reintenta automáticamente con forzar=1 tras confirmar) — una
+     * sola empresa puede ser matriz por RUC.
+     */
+    public function marcarEstablecimientoMatriz(int $idEmpresa, int $idUsuario, bool $forzar = false): array
+    {
+        $otra = $this->repository->getOtraMatrizDelGrupo($idEmpresa);
+        if ($otra && !$forzar) {
+            return [
+                'ok' => false,
+                'confirm' => true,
+                'msg' => 'Ya hay otro establecimiento marcado como matriz (' . $otra['establecimiento'] . ' - «' . $otra['nombre'] . '»). ¿Desea cambiarlo por este?',
+            ];
+        }
+
+        $this->repository->marcarMatriz($idEmpresa);
+        (new \App\Services\LogSistemaService())->registrar(
+            $idUsuario, $idEmpresa, 'MARCAR_MATRIZ', 'empresas', $idEmpresa,
+            $otra ? ['matriz_anterior' => $otra['id']] : null,
+            ['es_matriz' => true]
+        );
+
+        return ['ok' => true, 'msg' => 'Establecimiento marcado como matriz.'];
+    }
+
     public function saveEstablecimiento(int $idEmpresa, array $data, array $files = []): array
     {
         $idEst = (int) ($data['id'] ?? 0);

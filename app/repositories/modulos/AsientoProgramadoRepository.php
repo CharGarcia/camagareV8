@@ -236,7 +236,7 @@ class AsientoProgramadoRepository extends BaseRepository
         }
 
         if ($idReferencia !== null && $idReferencia > 0) {
-            if ($tipoReferencia !== 'cliente' && $tipoReferencia !== 'proveedor' && $tipoReferencia !== 'producto' && $tipoReferencia !== 'categoria' && $tipoReferencia !== 'marca' && $tipoReferencia !== 'iva' && $tipoReferencia !== 'empleado') {
+            if ($tipoReferencia !== 'cliente' && $tipoReferencia !== 'proveedor' && $tipoReferencia !== 'producto' && $tipoReferencia !== 'categoria' && $tipoReferencia !== 'marca' && $tipoReferencia !== 'iva' && $tipoReferencia !== 'empleado' && $tipoReferencia !== 'tipo_produccion') {
                 // For general rules, check both new and old reference types to prevent duplicates
                 $sql .= " AND id_referencia = :id_ref AND (tipo_referencia = :tipo_ref OR tipo_referencia = 'asientos tipo')";
             } else {
@@ -814,7 +814,7 @@ class AsientoProgramadoRepository extends BaseRepository
         // Crédito, que reusan la misma configuración), 'recibos_venta' y 'adquisiciones_compras'.
         // Actualizar este flag si se agregan más tipos.
         $repartoCompletoImplementado = in_array($tipoAsiento, ['ventas_factura', 'recibos_venta', 'adquisiciones_compras'], true);
-        $esDimensionPorLinea = in_array($tipoReferencia, ['producto', 'categoria', 'marca', 'item_compra'], true);
+        $esDimensionPorLinea = in_array($tipoReferencia, ['producto', 'categoria', 'marca', 'item_compra', 'tipo_produccion'], true);
 
         $conceptosFaltantes = [];
         foreach ($generales as $g) {

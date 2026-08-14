@@ -7,6 +7,28 @@
     .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
 </style>
 
+<?php if (empty($esMatriz)): ?>
+    <div class="container-fluid py-2">
+        <div class="alert alert-warning border-0 shadow-sm rounded-3 d-flex align-items-start gap-3 p-4">
+            <i class="bi bi-exclamation-triangle-fill fs-3 text-warning"></i>
+            <div>
+                <h5 class="fw-bold mb-1">Este no es el establecimiento matriz</h5>
+                <?php if (!empty($matrizGrupo)): ?>
+                    <p class="mb-0">La Declaración de Retenciones se presenta por RUC completo y se debe generar desde el
+                        establecimiento matriz: <strong><?= htmlspecialchars((string)($matrizGrupo['establecimiento'] ?? '')) ?> - <?= htmlspecialchars((string)($matrizGrupo['nombre'] ?? '')) ?></strong>.
+                        Cambie a esa empresa para declarar este período.</p>
+                <?php else: ?>
+                    <p class="mb-0">La Declaración de Retenciones se presenta por RUC completo y se debe generar desde el
+                        establecimiento matriz, pero este grupo (RUC <?= htmlspecialchars((string)($empresaActual['ruc'] ?? '')) ?>)
+                        todavía no tiene ninguno configurado. Configúrelo en
+                        <a href="<?= $base ?>/modulos/empresa#establecimientos">Empresa → Establecimientos</a>.</p>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <?php return; ?>
+<?php endif; ?>
+
 <div class="container-fluid py-2">
     <div class="row mb-1 print-none">
         <div class="col-12 d-flex justify-content-between align-items-center">
@@ -538,7 +560,7 @@
                 fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/generar-asiento-ajax`, { method: 'POST', body: fd }).then(data => {
                     btnAsiento.disabled = false;
                     if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
-                    Swal.fire({ title: 'Asiento generado', text: 'El asiento contable #' + data.id_asiento + ' fue generado.', icon: 'success' });
+                    Swal.fire({ title: 'Asiento generado', text: 'El asiento contable ' + (data.numero_comprobante || ('#' + data.id_asiento)) + ' fue generado.', icon: 'success' });
                     verificarDeclarado();
                 }).catch(() => { btnAsiento.disabled = false; });
             });

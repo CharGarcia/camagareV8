@@ -206,6 +206,15 @@ class Empresa extends BaseModel
         return !empty($this->query($sql));
     }
 
+    /** ¿Ya existe alguna otra empresa activa con este RUC? Usado para decidir si la nueva "nace" matriz del grupo. */
+    public function existeOtraEmpresaConRuc(string $ruc): bool
+    {
+        $rucEsc = $this->escape(trim($ruc));
+        if ($rucEsc === '') return false;
+        $sql = "SELECT 1 FROM empresas WHERE ruc = '{$rucEsc}' AND eliminado = false LIMIT 1";
+        return !empty($this->query($sql));
+    }
+
     /**
      * Crear empresa. Retorna id o lanza excepción.
      */
@@ -254,6 +263,12 @@ class Empresa extends BaseModel
         $estEsc = $this->escape($establecimiento);
         $obligadoCont = strtoupper(trim($data['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO';
 
+        // "Nace" matriz del grupo RUC solo si es la primera empresa activa con este RUC en el
+        // sistema; si ya hay otra (matriz o no), la nueva no reclama el flag automáticamente
+        // — cambiar la matriz de un grupo existente es una acción explícita del usuario
+        // (EmpresaService::marcarEstablecimientoMatriz()), no un efecto secundario de alta.
+        $esMatrizSql = $this->existeOtraEmpresaConRuc($ruc) ? 'false' : 'true';
+
         // Empresa que controla la suscripción (FK lógica a empresas.id) y flag de administradora.
         $idEmpSusc = isset($data['id_empresa_suscripciones']) && $data['id_empresa_suscripciones'] !== '' && (int) $data['id_empresa_suscripciones'] > 0
             ? (int) $data['id_empresa_suscripciones'] : null;
@@ -280,8 +295,8 @@ class Empresa extends BaseModel
         // su factura exige la placa del vehículo en XML y PDF.
         $operadoraTransporte = $this->esValorVerdadero($data['factura_operadora_transporte'] ?? null) ? 'true' : 'false';
 
-        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado, id_suscripcion, factura_operadora_transporte)
-            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql}, {$idSuscSql}, '{$operadoraTransporte}')";
+        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado, id_suscripcion, factura_operadora_transporte, es_matriz)
+            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql}, {$idSuscSql}, '{$operadoraTransporte}', {$esMatrizSql})";
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
 

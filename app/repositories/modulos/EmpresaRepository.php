@@ -16,7 +16,8 @@ class EmpresaRepository extends BaseModel
                        cancelar_renovacion, obligado_contabilidad, id_empresa_suscripciones, id_cliente_facturado, id_suscripcion,
                        COALESCE(max_usuarios, 3) AS max_usuarios,
                        COALESCE(usa_liquidacion_diferida_iva, false) AS usa_liquidacion_diferida_iva,
-                       COALESCE(es_demo, false) AS es_demo
+                       COALESCE(es_demo, false) AS es_demo,
+                       COALESCE(es_matriz, false) AS es_matriz
                 FROM empresas
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
@@ -37,6 +38,53 @@ class EmpresaRepository extends BaseModel
         $ruc = $this->escape($ruc);
         $sql = "SELECT id, ruc, nombre FROM empresas WHERE ruc = '{$ruc}' AND eliminado = false";
         return $this->query($sql);
+    }
+
+    /** ¿Es esta empresa la matriz de su grupo RUC? */
+    public function getEsMatriz(int $idEmpresa): bool
+    {
+        $id = (int) $idEmpresa;
+        $res = $this->query("SELECT COALESCE(es_matriz, false) FROM empresas WHERE id = {$id} AND eliminado = false");
+        return !empty($res[0]) && filter_var(reset($res[0]), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Empresa marcada matriz dentro del grupo RUC de $idEmpresa, excluyéndola a ella misma.
+     * Null si nadie más del grupo es matriz (o el grupo no tiene matriz asignada aún).
+     */
+    public function getOtraMatrizDelGrupo(int $idEmpresa): ?array
+    {
+        $id = (int) $idEmpresa;
+        $sql = "SELECT id, ruc, establecimiento, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre
+                FROM empresas
+                WHERE eliminado = false AND es_matriz = true AND id != {$id}
+                  AND ruc = (SELECT ruc FROM empresas WHERE id = {$id} AND eliminado = false)
+                LIMIT 1";
+        $res = $this->query($sql);
+        return $res[0] ?? null;
+    }
+
+    /**
+     * Marca $idEmpresa como matriz de su grupo RUC y desmarca a cualquier otra del mismo
+     * grupo (solo puede haber una). Transaccional: sin esto, dos requests concurrentes
+     * podrían dejar dos empresas marcadas matriz a la vez.
+     */
+    public function marcarMatriz(int $idEmpresa): void
+    {
+        $id = (int) $idEmpresa;
+        $pdo = \App\core\Database::getConnection();
+        $managedTransaction = !$pdo->inTransaction();
+        if ($managedTransaction) $pdo->beginTransaction();
+        try {
+            $pdo->exec("UPDATE empresas SET es_matriz = false
+                        WHERE eliminado = false AND es_matriz = true
+                          AND ruc = (SELECT ruc FROM empresas WHERE id = {$id} AND eliminado = false)");
+            $pdo->exec("UPDATE empresas SET es_matriz = true WHERE id = {$id} AND eliminado = false");
+            if ($managedTransaction) $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
     }
 
     /**
@@ -306,6 +354,31 @@ class EmpresaRepository extends BaseModel
         return !empty($this->query($sql));
     }
 
+    /**
+     * ¿Ya usa este código otra empresa del mismo grupo RUC (varias filas de `empresas` pueden
+     * compartir RUC)? El código SRI del establecimiento debe ser único por RUC completo, no solo
+     * dentro de una empresa — sin esto, dos empresas hermanas podían terminar ambas con "002".
+     */
+    private function existeCodigoEstablecimientoEnGrupo(int $idEmpresa, string $codigo, ?int $excluirId = null): ?string
+    {
+        $idsGrupo = $this->getIdsEmpresaMismoRuc($idEmpresa);
+        $idsOtras = array_values(array_diff($idsGrupo, [(int) $idEmpresa]));
+        if (!$idsOtras) { return null; }
+
+        $in  = implode(',', $idsOtras);
+        $cod = $this->escape($codigo);
+        $sql = "SELECT COALESCE(NULLIF(e.nombre_comercial,''), e.nombre) AS nombre
+                FROM empresa_establecimiento ee
+                JOIN empresas e ON e.id = ee.id_empresa AND e.eliminado = false
+                WHERE ee.id_empresa IN ({$in}) AND TRIM(ee.codigo) = '{$cod}' AND ee.eliminado = false";
+        if ($excluirId !== null && $excluirId > 0) {
+            $sql .= ' AND ee.id != ' . (int) $excluirId;
+        }
+        $sql .= ' LIMIT 1';
+        $res = $this->query($sql);
+        return $res[0]['nombre'] ?? null;
+    }
+
     public function saveEstablecimiento(int $idEmpresa, array $data): int
     {
         $id = (int) $idEmpresa;
@@ -313,6 +386,10 @@ class EmpresaRepository extends BaseModel
         $codNorm = $this->normalizarCodigoEstablecimiento((string) ($data['codigo'] ?? '001'));
         if ($this->existeCodigoEstablecimiento($id, $codNorm)) {
             throw new \Exception("Ya existe un establecimiento con el código {$codNorm} en esta empresa.");
+        }
+        $otraEmpresa = $this->existeCodigoEstablecimientoEnGrupo($id, $codNorm);
+        if ($otraEmpresa !== null) {
+            throw new \Exception("El código {$codNorm} ya lo usa «{$otraEmpresa}», otra empresa del mismo RUC. El código debe ser único por RUC completo.");
         }
         $data['codigo'] = $codNorm;
 
@@ -341,6 +418,10 @@ class EmpresaRepository extends BaseModel
         $codNorm = $this->normalizarCodigoEstablecimiento((string) ($data['codigo'] ?? '001'));
         if ($this->existeCodigoEstablecimiento((int) $idEmpresa, $codNorm, $id)) {
             throw new \Exception("Ya existe otro establecimiento con el código {$codNorm} en esta empresa.");
+        }
+        $otraEmpresa = $this->existeCodigoEstablecimientoEnGrupo((int) $idEmpresa, $codNorm, $id);
+        if ($otraEmpresa !== null) {
+            throw new \Exception("El código {$codNorm} ya lo usa «{$otraEmpresa}», otra empresa del mismo RUC. El código debe ser único por RUC completo.");
         }
         $data['codigo'] = $codNorm;
 

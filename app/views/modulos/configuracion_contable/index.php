@@ -94,8 +94,10 @@ $base = BASE_URL;
                     <option value="cobros_pagos">Cobros y Pagos</option>
                     <option value="nomina">Nómina</option>
                     <option value="cierre_ejercicio">Cierre del Ejercicio (Saldo de resultados a patrimonio)</option>
+                    <?php if (!empty($esMatriz)): ?>
                     <option value="declaracion_iva">Declaración de IVA (Liquidación del período)</option>
                     <option value="declaracion_retenciones">Declaración de Retenciones (Reclasificación al pago del SRI)</option>
+                    <?php endif; ?>
                     <option value="activos_fijos_alta">Activos Fijos - Alta (Contrapartida)</option>
                     <option value="activos_fijos_depreciacion">Activos Fijos - Depreciación (Ajuste por redondeo)</option>
                 </select>
@@ -134,9 +136,10 @@ $base = BASE_URL;
             <ul class="mb-1 mt-1 ps-3">
                 <li><b>1. Cliente / Proveedor</b> — si la entidad del documento tiene reglas, <b>todo el documento se contabiliza con sus cuentas</b>; los conceptos que no le configuraste pasan directo a <b>General</b> (no se reparten por producto).</li>
                 <li><b>2. Producto → Categoría → Marca</b> — solo cuando el documento <b>no</b> tiene cliente/proveedor con reglas. En <b>Ventas con Factura</b> (incluye Notas de Crédito, que reusan la misma configuración), <b>Recibos de Venta</b> y <b>Compras</b>, cada línea arma su <b>asiento completo</b> con la cuenta de su producto/ítem (si no, categoría; si no, marca): Cuenta por Cobrar/Por Pagar, Subtotal, Costo e Inventario pueden quedar repartidos en varias líneas contables, una por cada producto/categoría/marca presente en el documento. En Ventas/Recibos el ICE también se reparte así; en Compras, ICE sigue sin repartirse (el subtotal ya viene neto por línea).</li>
-                <li><b>3. General</b> — todo lo que no haya resuelto un nivel anterior (para cualquier concepto que la entidad no cubrió).</li>
+                <li><b>3. Tipo de Producción (Bien / Servicio)</b> — solo en <b>Ventas con Factura</b> (y Notas de Crédito) y <b>Recibos de Venta</b>, y solo para las líneas cuyo producto no resolvió cuenta por Producto/Categoría/Marca. Es la dimensión menos específica de las cuatro (solo 2 valores posibles), por eso se evalúa al final, justo antes de caer a General.</li>
+                <li><b>4. General</b> — todo lo que no haya resuelto un nivel anterior (para cualquier concepto que la entidad no cubrió).</li>
             </ul>
-            <b>Propina</b> nunca se reparte por Producto/Categoría/Marca: siempre sale del Cliente/Proveedor o de la General. El <b>IVA por tarifa</b> tiene su propia cascada independiente (cliente/proveedor → producto → categoría → marca → general). Las columnas <b>Debe / Haber</b> indican la naturaleza de la cuenta, y <b>“Copiar cuentas de General”</b> precarga las cuentas base.
+            <b>Propina</b> nunca se reparte por Producto/Categoría/Marca/Tipo de Producción: siempre sale del Cliente/Proveedor o de la General. El <b>IVA por tarifa</b> tiene su propia cascada independiente (cliente/proveedor → producto → categoría → marca → general; Tipo de Producción no participa en esa cascada). Las columnas <b>Debe / Haber</b> indican la naturaleza de la cuenta, y <b>“Copiar cuentas de General”</b> precarga las cuentas base.
         </div>
     </div>
 
@@ -441,6 +444,44 @@ $base = BASE_URL;
                         <table class="table table-hover table-sm align-middle table-interactiva">
                             <thead class="table-light"><tr><th class="ps-4 py-2">Marca</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
                             <tbody id="tbodyDim_marca"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones para marcas.</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- POR TIPO DE PRODUCCIÓN (Bien / Servicio) — Ventas con Factura (y Notas de Crédito) y Recibos de Venta -->
+        <div class="accordion-item border-0 border-top dim-accordion-fase-a" id="accItemTipoProduccion" style="display:none;">
+            <h2 class="accordion-header" id="headingTipoProduccion">
+                <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTipoProduccion" aria-expanded="false" aria-controls="collapseTipoProduccion" onclick="ASIENTOPROG_cargarDim('tipo_produccion')">
+                    <i class="bi bi-box-seam me-2 text-primary"></i> Reglas por Tipo de Producci&oacute;n (Bien / Servicio)
+                </button>
+            </h2>
+            <div id="collapseTipoProduccion" class="accordion-collapse collapse" aria-labelledby="headingTipoProduccion" data-bs-parent="#acordeonConfiguracion">
+                <div class="accordion-body bg-white p-4">
+                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'tipo_produccion')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
+                        <div class="col-12 mb-2 border-bottom pb-2">
+                            <h6 class="text-primary mb-0 fw-bold"><i class="bi bi-box-seam me-1"></i> Nueva Asociaci&oacute;n por Tipo de Producci&oacute;n</h6>
+                            <small class="text-muted">Se aplica seg&uacute;n la clasificaci&oacute;n Bien/Servicio del producto de cada l&iacute;nea. Solo se usa cuando esa l&iacute;nea no resolvi&oacute; cuenta por Producto, Categor&iacute;a ni Marca.</small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Tipo de Producci&oacute;n</label>
+                            <select class="form-select form-select-sm bg-white text-dark" id="dim_select_tipo_produccion" onchange="ASIENTOPROG_seleccionarTipoProduccion(this)" required>
+                                <option value="" selected>-- Seleccione --</option>
+                                <option value="1">Bien</option>
+                                <option value="2">Servicio</option>
+                            </select>
+                            <input type="hidden" id="dim_search_tipo_produccion">
+                            <input type="hidden" id="dim_id_tipo_produccion" required>
+                        </div>
+                        <div class="col-12" id="dim_faltantes_tipo_produccion"></div>
+                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_tipo_produccion"></div></div>
+                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
+                    </form>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle table-interactiva">
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Tipo</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_tipo_produccion"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones por tipo de producci&oacute;n.</td></tr></tbody>
                         </table>
                     </div>
                 </div>

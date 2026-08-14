@@ -83,6 +83,73 @@ class ReasignarEstablecimientoRepository extends BaseRepository
     }
 
     /**
+     * Establecimientos activos de TODAS las empresas del mismo grupo RUC (varias filas de
+     * `empresas` pueden compartir RUC — ver EmpresaRepository::getIdsEmpresaMismoRuc()). Para
+     * el selector "Cambiar a": permite reasignar documentos también hacia el establecimiento
+     * de OTRA empresa del grupo, no solo entre los códigos de la empresa activa.
+     */
+    public function establecimientosGrupoRuc(array $idsGrupo): array
+    {
+        $idsGrupo = array_values(array_filter(array_map('intval', $idsGrupo), fn($v) => $v > 0));
+        if (!$idsGrupo) { return []; }
+        $in = implode(',', $idsGrupo);
+        $sql = "SELECT ee.id, ee.codigo, ee.nombre, ee.id_empresa,
+                       COALESCE(NULLIF(e.nombre_comercial,''), e.nombre) AS empresa_nombre,
+                       COALESCE(e.es_matriz, false) AS empresa_es_matriz
+                FROM empresa_establecimiento ee
+                JOIN empresas e ON e.id = ee.id_empresa AND e.eliminado = false
+                WHERE ee.id_empresa IN ({$in}) AND ee.eliminado = false AND ee.estado = 'activo'
+                ORDER BY empresa_es_matriz DESC, e.id ASC, ee.codigo ASC";
+        return $this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** ¿A qué empresa del grupo pertenece este establecimiento? Null si no es de ninguna del grupo. */
+    public function establecimientoValidoGrupo(array $idsGrupo, int $idEstablecimiento): ?int
+    {
+        $idsGrupo = array_values(array_filter(array_map('intval', $idsGrupo), fn($v) => $v > 0));
+        if (!$idsGrupo) { return null; }
+        $in = implode(',', $idsGrupo);
+        $st = $this->db->prepare(
+            "SELECT id_empresa FROM empresa_establecimiento
+              WHERE id = :id AND id_empresa IN ({$in}) AND eliminado = false AND estado = 'activo' LIMIT 1"
+        );
+        $st->execute([':id' => $idEstablecimiento]);
+        $r = $st->fetchColumn();
+        return $r !== false ? (int) $r : null;
+    }
+
+    /**
+     * Establecimiento (código/punto/secuencial) propio de un documento con numeración propia
+     * (retenciones de venta). Compras usa el número del PROVEEDOR (numero_prov), que no depende
+     * de a qué empresa propia esté atribuido el documento, así que ese tipo nunca colisiona.
+     */
+    public function numeroPropioDe(string $tipo, int $idEmpresa, int $id): ?array
+    {
+        if ($tipo !== 'retenciones_venta') { return null; }
+        $st = $this->db->prepare(
+            "SELECT establecimiento, punto_emision, secuencial FROM retencion_venta_cabecera
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        );
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+        return $r ?: null;
+    }
+
+    /** ¿La empresa destino ya tiene un documento propio con este mismo establecimiento-punto-secuencial? */
+    public function existeNumeroEnEmpresa(string $tipo, int $idEmpresaDestino, string $establecimiento, string $puntoEmision, string $secuencial): bool
+    {
+        if ($tipo !== 'retenciones_venta') { return false; }
+        $st = $this->db->prepare(
+            "SELECT 1 FROM retencion_venta_cabecera
+              WHERE id_empresa = :e AND eliminado = false
+                AND establecimiento = :est AND punto_emision = :pto AND secuencial = :sec
+              LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresaDestino, ':est' => $establecimiento, ':pto' => $puntoEmision, ':sec' => $secuencial]);
+        return $st->fetchColumn() !== false;
+    }
+
+    /**
      * Lista documentos del tipo dado según filtros. Devuelve ['rows'=>[], 'total'=>int].
      * $filtros: desde, hasta (fecha_emision), id_est_origen (int|0), buscar (texto proveedor/cliente).
      */
@@ -163,18 +230,22 @@ class ReasignarEstablecimientoRepository extends BaseRepository
     }
 
     /**
-     * Reasigna id_establecimiento de los documentos indicados. Devuelve el nº de filas afectadas.
-     * Filtra por empresa + eliminado (y created_by si $idUsuarioFiltro). No renumera nada.
+     * Reasigna id_establecimiento (y, si el destino pertenece a OTRA empresa del grupo RUC,
+     * también id_empresa) de los documentos indicados. Devuelve el nº de filas afectadas.
+     * Filtra por empresa origen + eliminado (y created_by si $idUsuarioFiltro). No renumera nada.
      */
-    public function reasignar(int $idEmpresa, string $tipo, array $ids, int $idEstDestino, int $idUsuario, ?int $idUsuarioFiltro): int
+    public function reasignar(int $idEmpresa, int $idEmpresaDestino, string $tipo, array $ids, int $idEstDestino, int $idUsuario, ?int $idUsuarioFiltro): int
     {
         $ids = array_values(array_filter(array_map('intval', $ids), fn($v) => $v > 0));
         if (!$ids) { return 0; }
         $cfg = self::TIPOS[$tipo];
         $in  = implode(',', $ids);
-        $sql = "UPDATE {$cfg['tabla']} SET id_establecimiento = :dest, updated_at = now(), updated_by = :u
+        $cambiaEmpresa = $idEmpresaDestino !== $idEmpresa;
+        $setEmpresa = $cambiaEmpresa ? ", id_empresa = :destemp" : "";
+        $sql = "UPDATE {$cfg['tabla']} SET id_establecimiento = :dest{$setEmpresa}, updated_at = now(), updated_by = :u
                  WHERE id_empresa = :e AND eliminado = false AND id IN ($in)";
         $params = [':dest' => $idEstDestino, ':u' => $idUsuario, ':e' => $idEmpresa];
+        if ($cambiaEmpresa) { $params[':destemp'] = $idEmpresaDestino; }
         if ($idUsuarioFiltro !== null) { $sql .= " AND created_by = :cbf"; $params[':cbf'] = $idUsuarioFiltro; }
         $st = $this->db->prepare($sql);
         $st->execute($params);

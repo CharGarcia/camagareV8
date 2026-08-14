@@ -8,6 +8,7 @@ use App\core\Database;
 use App\repositories\modulos\AsientoContableRepository;
 use App\repositories\modulos\ComprasRepository;
 use App\repositories\modulos\EgresoRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\InventarioRepository;
 use App\repositories\modulos\ReasignarEstablecimientoRepository;
 use App\repositories\modulos\RetencionCompraRepository;
@@ -17,19 +18,25 @@ use App\Services\LogSistemaService;
 use Throwable;
 
 /**
- * Reasigna el establecimiento (sucursal propia) de documentos ya registrados —típicamente
- * migrados/importados que quedaron en el establecimiento equivocado— sin cambiar su número.
+ * Reasigna el establecimiento de documentos ya registrados —típicamente migrados/importados que
+ * quedaron en el establecimiento equivocado— sin cambiar su número. El destino puede ser un
+ * establecimiento de la MISMA empresa o de OTRA empresa del mismo grupo RUC (varias filas de
+ * `empresas` con el mismo RUC — ver EmpresaRepository::getIdsEmpresaMismoRuc()); en ese segundo
+ * caso también se mueve id_empresa del documento.
  *
  * Solo se reasigna sin más trámite si el documento NO tiene contabilidad, pagos ni inventario
  * generados. Si los tiene, requiere confirmación explícita ($anularVinculos) y en ese caso se
  * anulan/revierten (reusando los mismos anular() de cada módulo, nunca lógica propia) ANTES de
- * reasignar, todo en una sola transacción por documento. La retención de compra generada NUNCA
- * se anula automáticamente aquí (es un documento fiscal propio, reportable en el F103): esos
- * documentos quedan siempre bloqueados hasta que el usuario la anule desde su propio módulo.
+ * reasignar, todo en una sola transacción por documento — nunca se regeneran automáticamente en
+ * la empresa destino (otro plan de cuentas, otra bodega): el usuario los vuelve a generar allá.
+ * La retención de compra generada NUNCA se anula automáticamente aquí (es un documento fiscal
+ * propio, reportable en el F103): esos documentos quedan siempre bloqueados hasta que el usuario
+ * la anule desde su propio módulo.
  */
 class ReasignarEstablecimientoService
 {
     private ReasignarEstablecimientoRepository $repo;
+    private EmpresaRepository $empresaRepo;
     private LogSistemaService $log;
 
     private ?ComprasRepository $comprasRepo = null;
@@ -50,15 +57,23 @@ class ReasignarEstablecimientoService
         'retenciones_venta' => 'retencion_venta',
     ];
 
-    public function __construct(?ReasignarEstablecimientoRepository $repo = null, ?LogSistemaService $log = null)
+    public function __construct(?ReasignarEstablecimientoRepository $repo = null, ?LogSistemaService $log = null, ?EmpresaRepository $empresaRepo = null)
     {
         $this->repo = $repo ?: new ReasignarEstablecimientoRepository();
         $this->log  = $log ?: new LogSistemaService();
+        $this->empresaRepo = $empresaRepo ?: new EmpresaRepository();
         // La columna de retención de venta puede no existir aún: se asegura al instanciar el módulo.
         $this->repo->asegurarColumnaRetVenta();
     }
 
     public function repo(): ReasignarEstablecimientoRepository { return $this->repo; }
+
+    /** Establecimientos de TODAS las empresas del grupo RUC de $idEmpresa (para el selector destino). */
+    public function establecimientosGrupoRuc(int $idEmpresa): array
+    {
+        $idsGrupo = $this->empresaRepo->getIdsEmpresaMismoRuc($idEmpresa);
+        return $this->repo->establecimientosGrupoRuc($idsGrupo);
+    }
 
     private function comprasRepo(): ComprasRepository { return $this->comprasRepo ??= new ComprasRepository(); }
     private function retencionCompraRepo(): RetencionCompraRepository { return $this->retencionCompraRepo ??= new RetencionCompraRepository(); }
@@ -138,7 +153,7 @@ class ReasignarEstablecimientoService
      *             los documentos con vínculos se omiten (se listan en 'omitidos_con_vinculos').
      *             La retención de compra NUNCA se anula aquí; esos documentos van siempre a
      *             'bloqueados_retencion', ignorando este flag.
-     * @return array{ok:bool, reasignados:int, bloqueados_retencion:int[], omitidos_con_vinculos:int[], anulados:array, errores:array, mensaje:string}
+     * @return array{ok:bool, reasignados:int, bloqueados_retencion:int[], bloqueados_colision:int[], omitidos_con_vinculos:int[], anulados:array, errores:array, mensaje:string}
      */
     public function reasignar(int $idEmpresa, string $tipo, array $ids, int $idEstDestino, int $idUsuario, ?int $idUsuarioFiltro, bool $anularVinculos = false): array
     {
@@ -149,15 +164,22 @@ class ReasignarEstablecimientoService
         if (!$ids) {
             return ['ok' => false, 'reasignados' => 0, 'mensaje' => 'No se seleccionó ningún documento.'];
         }
-        if (!$this->repo->establecimientoValido($idEmpresa, $idEstDestino)) {
-            return ['ok' => false, 'reasignados' => 0, 'mensaje' => 'El establecimiento destino no es válido para esta empresa.'];
+
+        // El destino puede ser un establecimiento de OTRA empresa del mismo grupo RUC, no solo
+        // de la empresa activa — ver EmpresaRepository::getIdsEmpresaMismoRuc().
+        $idsGrupo = $this->empresaRepo->getIdsEmpresaMismoRuc($idEmpresa);
+        $idEmpresaDestino = $this->repo->establecimientoValidoGrupo($idsGrupo, $idEstDestino);
+        if ($idEmpresaDestino === null) {
+            return ['ok' => false, 'reasignados' => 0, 'mensaje' => 'El establecimiento destino no es válido para este grupo RUC.'];
         }
+        $cambiaEmpresa = $idEmpresaDestino !== $idEmpresa;
 
         $db = Database::getConnection();
         $tablaLog = self::TABLA_LOG[$tipo];
 
         $reasignados = 0;
         $bloqueadosRetencion = [];
+        $bloqueadosColision = [];
         $omitidosConVinculos = [];
         $anulados = ['asientos' => 0, 'egresos' => 0, 'inventario' => 0];
         $errores = [];
@@ -166,7 +188,19 @@ class ReasignarEstablecimientoService
 
         foreach ($ids as $id) {
             $estAnterior = $antes[$id] ?? null;
-            if ($estAnterior === $idEstDestino) { continue; } // ya está en el destino
+            if (!$cambiaEmpresa && $estAnterior === $idEstDestino) { continue; } // ya está en el destino
+
+            // Al cambiar de empresa, un documento con numeración propia (retención de venta) no
+            // se puede mover si esa empresa destino ya usó ese mismo establecimiento-punto-secuencial.
+            // Compras no aplica: su "número" es del proveedor, no depende de a qué empresa propia
+            // esté atribuido el documento.
+            if ($cambiaEmpresa) {
+                $num = $this->repo->numeroPropioDe($tipo, $idEmpresa, $id);
+                if ($num && $this->repo->existeNumeroEnEmpresa($tipo, $idEmpresaDestino, $num['establecimiento'], $num['punto_emision'], $num['secuencial'])) {
+                    $bloqueadosColision[] = $id;
+                    continue;
+                }
+            }
 
             $vinc = $this->vinculosDeUnDocumento($idEmpresa, $tipo, $id);
             if ($vinc['bloqueado_retencion']) {
@@ -200,13 +234,13 @@ class ReasignarEstablecimientoService
                     }
                 }
 
-                $n = $this->repo->reasignar($idEmpresa, $tipo, [$id], $idEstDestino, $idUsuario, $idUsuarioFiltro);
+                $n = $this->repo->reasignar($idEmpresa, $idEmpresaDestino, $tipo, [$id], $idEstDestino, $idUsuario, $idUsuarioFiltro);
 
                 if ($n > 0) {
                     $this->log->registrar(
                         $idUsuario, $idEmpresa, 'reasignar_establecimiento', $tablaLog, $id,
-                        ['id_establecimiento' => $estAnterior],
-                        ['id_establecimiento' => $idEstDestino]
+                        ['id_establecimiento' => $estAnterior, 'id_empresa' => $idEmpresa],
+                        ['id_establecimiento' => $idEstDestino, 'id_empresa' => $idEmpresaDestino]
                     );
                     $db->commit();
                     $reasignados++;
@@ -222,6 +256,7 @@ class ReasignarEstablecimientoService
 
         $mensaje = "Se reasignaron {$reasignados} documento(s) al establecimiento destino.";
         if ($bloqueadosRetencion) { $mensaje .= ' ' . count($bloqueadosRetencion) . ' bloqueado(s) por tener retención de compra asociada.'; }
+        if ($bloqueadosColision) { $mensaje .= ' ' . count($bloqueadosColision) . ' bloqueado(s) porque la empresa destino ya tiene un documento con ese mismo número.'; }
         if ($omitidosConVinculos) { $mensaje .= ' ' . count($omitidosConVinculos) . ' omitido(s) por tener contabilidad/pagos/inventario (confirme "Anular y reasignar").'; }
         if ($errores) { $mensaje .= ' ' . count($errores) . ' con error.'; }
 
@@ -229,6 +264,7 @@ class ReasignarEstablecimientoService
             'ok'                    => true,
             'reasignados'           => $reasignados,
             'bloqueados_retencion'  => $bloqueadosRetencion,
+            'bloqueados_colision'   => $bloqueadosColision,
             'omitidos_con_vinculos' => $omitidosConVinculos,
             'anulados'              => $anulados,
             'errores'               => $errores,

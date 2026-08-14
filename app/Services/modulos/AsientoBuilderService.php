@@ -655,8 +655,12 @@ class AsientoBuilderService
             ? "(SELECT DISTINCT id_producto, id_venta FROM ventas_detalle WHERE id_venta = :id_doc) d"
             : "ventas_detalle d";
 
-        // COALESCE(producto, categoría, marca) → la cuenta más específica configurada para cada línea.
-        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+        // COALESCE(producto, categoría, marca, tipo de producción) → la cuenta más específica
+        // configurada para cada línea. Tipo de Producción (Bien=1/Servicio=2, ver mapeo de
+        // productos.tipo_produccion '01'/'02' en el CASE de ap_tp) es la dimensión MENOS específica
+        // de las cuatro (solo 2 valores posibles) — por eso va al final del COALESCE, justo antes de
+        // caer a la cuenta base (Cliente/General).
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM({$valorExpr})::numeric, 2) AS monto
                 FROM {$fromClause}
@@ -671,14 +675,19 @@ class AsientoBuilderService
                 LEFT JOIN asientos_programados ap_m
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
-                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                LEFT JOIN asientos_programados ap_tp
+                       ON ap_tp.tipo_referencia = 'tipo_produccion'
+                      AND ap_tp.id_referencia = (CASE WHEN p.tipo_produccion = '02' THEN 2 WHEN p.tipo_produccion = '01' THEN 1 END)
+                      AND ap_tp.id_asiento_tipo = :id_tipo4 AND ap_tp.id_empresa = :emp4 AND ap_tp.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)
                 " . ($colapsarPorProducto ? "" : "WHERE d.id_venta = :id_doc") . "
-                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
+                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
         $st->execute([
             ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
             ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
             ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_tipo4' => $idAsientoTipo, ':emp4' => $idEmpresa,
             ':id_doc'   => $idVenta,
         ]);
 
@@ -763,7 +772,7 @@ class AsientoBuilderService
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $detalles[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
-            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca, ni en la General)';
+            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)';
         }
     }
 
@@ -798,7 +807,7 @@ class AsientoBuilderService
             ? "(SELECT DISTINCT id_producto, id_recibo FROM recibos_venta_detalle WHERE id_recibo = :id_doc) d"
             : "recibos_venta_detalle d";
 
-        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM({$valorExpr})::numeric, 2) AS monto
                 FROM {$fromClause}
@@ -813,14 +822,19 @@ class AsientoBuilderService
                 LEFT JOIN asientos_programados ap_m
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
-                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                LEFT JOIN asientos_programados ap_tp
+                       ON ap_tp.tipo_referencia = 'tipo_produccion'
+                      AND ap_tp.id_referencia = (CASE WHEN p.tipo_produccion = '02' THEN 2 WHEN p.tipo_produccion = '01' THEN 1 END)
+                      AND ap_tp.id_asiento_tipo = :id_tipo4 AND ap_tp.id_empresa = :emp4 AND ap_tp.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)
                 " . ($colapsarPorProducto ? "" : "WHERE d.id_recibo = :id_doc") . "
-                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
+                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
         $st->execute([
             ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
             ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
             ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_tipo4' => $idAsientoTipo, ':emp4' => $idEmpresa,
             ':id_doc'   => $idRecibo,
         ]);
 
@@ -900,7 +914,7 @@ class AsientoBuilderService
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $detalles[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
-            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca, ni en la General)';
+            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)';
         }
     }
 
@@ -935,7 +949,7 @@ class AsientoBuilderService
             ? "(SELECT DISTINCT id_producto, id_nota_credito FROM notas_credito_detalle WHERE id_nota_credito = :id_doc) d"
             : "notas_credito_detalle d";
 
-        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM({$valorExpr})::numeric, 2) AS monto
                 FROM {$fromClause}
@@ -950,14 +964,19 @@ class AsientoBuilderService
                 LEFT JOIN asientos_programados ap_m
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
-                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                LEFT JOIN asientos_programados ap_tp
+                       ON ap_tp.tipo_referencia = 'tipo_produccion'
+                      AND ap_tp.id_referencia = (CASE WHEN p.tipo_produccion = '02' THEN 2 WHEN p.tipo_produccion = '01' THEN 1 END)
+                      AND ap_tp.id_asiento_tipo = :id_tipo4 AND ap_tp.id_empresa = :emp4 AND ap_tp.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)
                 " . ($colapsarPorProducto ? "" : "WHERE d.id_nota_credito = :id_doc") . "
-                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
+                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
         $st->execute([
             ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
             ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
             ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_tipo4' => $idAsientoTipo, ':emp4' => $idEmpresa,
             ':id_doc'   => $idNotaCredito,
         ]);
 
@@ -1037,7 +1056,7 @@ class AsientoBuilderService
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $comercial[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
-            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca, ni en la General)';
+            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)';
         }
     }
 
@@ -1259,7 +1278,7 @@ class AsientoBuilderService
         if ($idAsientoTipo <= 0 || $idDocumento <= 0) {
             return null;
         }
-        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS id_cuenta,
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS id_cuenta,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                 FROM {$tabla} d
                 LEFT JOIN productos p ON p.id = d.id_producto
@@ -1272,15 +1291,20 @@ class AsientoBuilderService
                 LEFT JOIN asientos_programados ap_m
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
-                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                LEFT JOIN asientos_programados ap_tp
+                       ON ap_tp.tipo_referencia = 'tipo_produccion'
+                      AND ap_tp.id_referencia = (CASE WHEN p.tipo_produccion = '02' THEN 2 WHEN p.tipo_produccion = '01' THEN 1 END)
+                      AND ap_tp.id_asiento_tipo = :id_tipo4 AND ap_tp.id_empresa = :emp4 AND ap_tp.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)
                 WHERE d.{$colDoc} = :id_doc
-                  AND COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) IS NOT NULL
+                  AND COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) IS NOT NULL
                 LIMIT 1";
         $st = $db->prepare($sql);
         $st->execute([
             ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
             ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
             ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_tipo4' => $idAsientoTipo, ':emp4' => $idEmpresa,
             ':id_doc'   => $idDocumento,
         ]);
         $row = $st->fetch(\PDO::FETCH_ASSOC);

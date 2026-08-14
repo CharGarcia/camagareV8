@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre
-version: 1.0
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio
+version: 1.1
 orden: 5
 estado: activo
 ---
@@ -34,6 +34,20 @@ Dicho al revés: la configuración general es el valor por defecto, y lo que se
 configura en la ficha concreta lo sobreescribe. Es lo que permite que casi todo
 funcione con una configuración única y solo las excepciones necesiten atención.
 
+En **Ventas con Factura** (incluye Notas de Crédito, que reusan la misma
+configuración) y **Recibos de Venta**, el orden exacto de la cascada es:
+
+1. **Cliente** — si el cliente del documento tiene reglas, todo el documento se
+   contabiliza con sus cuentas; lo que no le configuró pasa directo a General.
+2. **Producto → Categoría → Marca** — solo si el documento no tiene cliente con
+   reglas. Cada línea usa la cuenta de su producto; si no tiene, la de su
+   categoría; si no, la de su marca.
+3. **Tipo de Producción (Bien / Servicio)** — solo para las líneas que no
+   resolvieron cuenta en el paso anterior. Es la dimensión menos específica
+   (solo existen dos valores posibles), por eso se evalúa al final, justo antes
+   de caer a General.
+4. **General** — lo que ningún nivel anterior resolvió.
+
 ## Cierre del ejercicio
 
 Entre los tipos configurables está el **cierre del ejercicio**, que necesita dos
@@ -57,4 +71,7 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.1** — Se agregó la regla por Tipo de Producción (Bien / Servicio) en la
+  cascada de Ventas con Factura, Notas de Crédito y Recibos de Venta, entre
+  Producto/Categoría/Marca y General.
 - **1.0** — Versión inicial.
