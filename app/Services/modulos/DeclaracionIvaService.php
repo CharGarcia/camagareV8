@@ -651,6 +651,11 @@ class DeclaracionIvaService
             'credito_anterior_compras'     => $creditoAnteriorCompras,
             'credito_anterior_retenciones' => $creditoAnteriorRetenciones,
             'iva_a_pagar'                  => $aPagar,
+            // Casillero 902 ("Total consolidado de impuesto a pagar") del F104: hoy no hay
+            // soporte de "impuesto ya imputado a un pago anterior" (rectificativas), así que
+            // coincide con iva_a_pagar — pero es el campo que debe usar el egreso, no el otro,
+            // mismo criterio que Declaración de Retenciones (ver DeclaracionRetencionesService).
+            'total_a_pagar'                => $aPagar,
             'saldo_favor'                  => $saldoFavor,
             'saldo_favor_compras'          => $saldoFavorCompras,
             'saldo_favor_retenciones'      => $saldoFavorRetenciones,
@@ -798,7 +803,11 @@ class DeclaracionIvaService
         $sec    = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
         $numero = $est . '-' . $pto . '-' . str_pad((string) $sec, 9, '0', STR_PAD_LEFT);
 
-        $monto        = round((float) $decl['iva_a_pagar'], 2);
+        // El monto del egreso es el casillero 902 ("Total consolidado de impuesto a pagar"), no
+        // iva_a_pagar directo: son iguales mientras no exista un pago previo imputado en este
+        // período, pero conceptualmente son campos distintos del F104. Declaraciones guardadas
+        // antes de este cambio no tienen total_a_pagar (columna nueva): cae a iva_a_pagar.
+        $monto        = round((float) ($decl['total_a_pagar'] ?? $decl['iva_a_pagar']), 2);
         $periodoLabel = $this->etiquetaPeriodo($decl);
 
         $egSvc = new \App\Services\modulos\EgresoService(
