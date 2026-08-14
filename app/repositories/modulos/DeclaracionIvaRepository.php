@@ -244,10 +244,10 @@ class DeclaracionIvaRepository extends BaseRepository
     public function getDetalleDocumentos(int $idEmpresa, string $fechaDesde, string $fechaHasta): array
     {
         $sql = "SELECT c.id, c.origen, c.id_origen, c.fecha, c.casillero, c.valor, c.editado_manualmente, c.concepto,
-                       COALESCE(v.establecimiento, com.establecimiento_prov, l.establecimiento, nc.establecimiento, rc.establecimiento, rv.establecimiento) AS establecimiento,
-                       COALESCE(v.punto_emision, com.punto_emision_prov, l.punto_emision, nc.punto_emision, rc.punto_emision, rv.punto_emision) AS punto_emision,
-                       COALESCE(v.secuencial, com.secuencial_prov, l.secuencial, nc.secuencial, rc.secuencial, rv.secuencial) AS secuencial,
-                       COALESCE(cl_v.nombre, pr_com.razon_social, pr_com.nombre_comercial, pr_l.razon_social, pr_l.nombre_comercial, cl_nc.nombre, pr_rc.razon_social, pr_rc.nombre_comercial, cl_rv.nombre) AS entidad
+                       COALESCE(v.establecimiento, com.establecimiento_prov, l.establecimiento, nc.establecimiento, rc.establecimiento, rv.establecimiento, nd.establecimiento, im.establecimiento) AS establecimiento,
+                       COALESCE(v.punto_emision, com.punto_emision_prov, l.punto_emision, nc.punto_emision, rc.punto_emision, rv.punto_emision, nd.punto_emision, im.punto_emision) AS punto_emision,
+                       COALESCE(v.secuencial, com.secuencial_prov, l.secuencial, nc.secuencial, rc.secuencial, rv.secuencial, nd.secuencial, im.secuencial) AS secuencial,
+                       COALESCE(cl_v.nombre, pr_com.razon_social, pr_com.nombre_comercial, pr_l.razon_social, pr_l.nombre_comercial, cl_nc.nombre, pr_rc.razon_social, pr_rc.nombre_comercial, cl_rv.nombre, cl_nd.nombre, pr_im.razon_social, pr_im.nombre_comercial) AS entidad
                 FROM casilleros_declaracion_sri c
                 LEFT JOIN ventas_cabecera v ON c.id_origen = v.id AND c.origen = 'facturas de venta'
                 LEFT JOIN clientes cl_v ON v.id_cliente = cl_v.id
@@ -261,6 +261,10 @@ class DeclaracionIvaRepository extends BaseRepository
                 LEFT JOIN proveedores pr_rc ON rc.id_proveedor = pr_rc.id
                 LEFT JOIN retencion_venta_cabecera rv ON c.id_origen = rv.id AND c.origen = 'retenciones_ventas'
                 LEFT JOIN clientes cl_rv ON rv.id_cliente = cl_rv.id
+                LEFT JOIN nota_debito_cabecera nd ON c.id_origen = nd.id AND c.origen = 'notas de debito'
+                LEFT JOIN clientes cl_nd ON nd.id_cliente = cl_nd.id
+                LEFT JOIN importaciones_cabecera im ON c.id_origen = im.id AND c.origen = 'importaciones'
+                LEFT JOIN proveedores pr_im ON im.id_proveedor = pr_im.id
                 WHERE c.id_empresa = ? AND c.fecha BETWEEN ? AND ?
                 AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                 ORDER BY c.fecha ASC, c.origen ASC, c.id_origen ASC";

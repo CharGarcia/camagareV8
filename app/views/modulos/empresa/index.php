@@ -1070,12 +1070,14 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
                             <!-- Régimen de liquidación diferida de IVA - PRIMERO, antes de los acordeones -->
                             <div class="col-12">
-                                <div class="form-check form-switch p-3 border rounded-3 bg-light">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="usa_liquidacion_diferida_iva" name="usa_liquidacion_diferida_iva" value="1" <?= !empty($empresa['usa_liquidacion_diferida_iva']) ? 'checked' : '' ?>>
-                                    <label class="form-check-label fw-medium" for="usa_liquidacion_diferida_iva">
-                                        Esta empresa declara bajo el régimen de <b>liquidación diferida de IVA por ventas a plazo</b> (art. 67 LRTI, casilleros 480-499)
-                                    </label>
-                                    <p class="text-muted small mb-0 mt-1">Actívelo solo si vende a crédito con IVA diferido. Con esta opción encendida, el casillero 499 (impuesto a liquidar este mes) reemplaza al IVA en ventas normal para calcular el IVA a pagar/saldo a favor de la declaración.</p>
+                                <div class="border rounded-3 bg-light p-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="usa_liquidacion_diferida_iva" name="usa_liquidacion_diferida_iva" value="1" <?= !empty($empresa['usa_liquidacion_diferida_iva']) ? 'checked' : '' ?>>
+                                        <label class="form-check-label fw-medium" for="usa_liquidacion_diferida_iva">
+                                            Esta empresa declara bajo el régimen de <b>liquidación diferida de IVA por ventas a plazo</b> (art. 67 LRTI, casilleros 480-499)
+                                        </label>
+                                        <p class="text-muted small mb-0 mt-1">Actívelo solo si vende a crédito con IVA diferido. Con esta opción encendida, el casillero 499 (impuesto a liquidar este mes) reemplaza al IVA en ventas normal para calcular el IVA a pagar/saldo a favor de la declaración.</p>
+                                    </div>
                                 </div>
                             </div>
 

@@ -275,8 +275,16 @@ class ReporteVentasRepository extends BaseRepository
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
         $clave = $f['clave'] ? "COALESCE(v.clave_acceso, '')" : "''";
+        // Vínculo doble, igual que en FacturaVentaRepository/RetencionVentaRepository: además de
+        // r.id_venta (registrada directo desde la factura), cubre la retención electrónica del SRI
+        // que solo referencia el número de la factura en su detalle (num_doc_sustento) sin haber
+        // quedado enlazada por id_venta.
         $reten = $f['retenciones']
-            ? "COALESCE((SELECT SUM(r.total_iva + r.total_renta + r.total_isd) FROM retencion_venta_cabecera r WHERE r.id_venta = v.id AND r.eliminado = false), 0)"
+            ? "COALESCE((SELECT SUM(r.total_iva + r.total_renta + r.total_isd) FROM retencion_venta_cabecera r
+                          WHERE r.eliminado = false AND r.id_empresa = v.id_empresa
+                            AND (r.id_venta = v.id
+                                 OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id
+                                             AND rd.num_doc_sustento = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)))), 0)"
             : "0";
         // Las notas de crédito no tienen id_vendedor: se omite el join.
         $vendedorSel  = $f['vendedor'] ? "COALESCE(vend.nombre, '')" : "''";
