@@ -71,12 +71,15 @@ class DecimoTerceroRepository extends BaseRepository
 
     public function crearCabecera(array $d): int
     {
+        // fecha_emision = hoy (día en que se generó la declaración), NO fecha_limite_pago (el
+        // plazo legal, casi siempre futuro respecto al cálculo). Ver mismo comentario en
+        // DecimoCuartoRepository::crearCabecera().
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, anio, fecha_desde, fecha_hasta, fecha_limite_pago,
-                    base_calculo, estado, created_by, updated_by, created_at, updated_at, eliminado
+                    fecha_emision, base_calculo, estado, created_by, updated_by, created_at, updated_at, eliminado
                 ) VALUES (
                     :id_empresa, :anio, :fecha_desde, :fecha_hasta, :fecha_limite,
-                    :base_calculo, 'borrador', :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false
+                    CURRENT_DATE, :base_calculo, 'borrador', :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([

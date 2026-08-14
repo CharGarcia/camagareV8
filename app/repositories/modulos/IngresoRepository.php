@@ -247,13 +247,35 @@ class IngresoRepository extends BaseRepository
                     GROUP BY id_referencia_documento
                 ),
                 retenido_fact AS (
-                    SELECT id_venta, SUM(total_renta + total_iva + total_isd) AS total_retenido
-                    FROM retencion_venta_cabecera
-                    WHERE id_empresa = :id_empresa
-                      AND eliminado = FALSE
-                      AND id_venta IS NOT NULL
-                      AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                    GROUP BY id_venta
+                    -- Cubre dos vías de enlace: id_venta directo (flujo normal) y
+                    -- num_doc_sustento en el detalle (retenciones migradas, sin id_venta).
+                    SELECT tmp.id_venta, SUM(tmp.monto) AS total_retenido
+                    FROM (
+                        SELECT r.id_venta,
+                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
+                               r.id AS id_ret
+                        FROM retencion_venta_cabecera r
+                        WHERE r.id_empresa = :id_empresa
+                          AND r.eliminado = FALSE
+                          AND r.id_venta IS NOT NULL
+                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+
+                        UNION
+
+                        SELECT vc.id AS id_venta,
+                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
+                               r.id AS id_ret
+                        FROM retencion_venta_cabecera r
+                        JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
+                        JOIN ventas_cabecera vc
+                             ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
+                            AND vc.id_empresa = r.id_empresa
+                            AND vc.eliminado  = FALSE
+                        WHERE r.id_empresa = :id_empresa
+                          AND r.eliminado = FALSE
+                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                    ) tmp
+                    GROUP BY tmp.id_venta
                 ),
                 cobrado_si AS (
                     SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
@@ -644,13 +666,35 @@ class IngresoRepository extends BaseRepository
                     GROUP BY id_referencia_documento
                 ),
                 retenido_fact AS (
-                    SELECT id_venta, SUM(total_renta + total_iva + total_isd) AS total_retenido
-                    FROM retencion_venta_cabecera
-                    WHERE id_empresa = :id_empresa
-                      AND eliminado = FALSE
-                      AND id_venta IS NOT NULL
-                      AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                    GROUP BY id_venta
+                    -- Cubre dos vías de enlace: id_venta directo (flujo normal) y
+                    -- num_doc_sustento en el detalle (retenciones migradas, sin id_venta).
+                    SELECT tmp.id_venta, SUM(tmp.monto) AS total_retenido
+                    FROM (
+                        SELECT r.id_venta,
+                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
+                               r.id AS id_ret
+                        FROM retencion_venta_cabecera r
+                        WHERE r.id_empresa = :id_empresa
+                          AND r.eliminado = FALSE
+                          AND r.id_venta IS NOT NULL
+                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+
+                        UNION
+
+                        SELECT vc.id AS id_venta,
+                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
+                               r.id AS id_ret
+                        FROM retencion_venta_cabecera r
+                        JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
+                        JOIN ventas_cabecera vc
+                             ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
+                            AND vc.id_empresa = r.id_empresa
+                            AND vc.eliminado  = FALSE
+                        WHERE r.id_empresa = :id_empresa
+                          AND r.eliminado = FALSE
+                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                    ) tmp
+                    GROUP BY tmp.id_venta
                 ),
                 cobrado_si AS (
                     SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado

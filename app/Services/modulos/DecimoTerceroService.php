@@ -111,7 +111,10 @@ class DecimoTerceroService
                 'total_ganado'      => $totalGanado,
                 'valor'             => $valor,
                 'mensualiza'        => $mensualiza,
-                'tipo_pago'         => $prev ? (string) $prev['tipo_pago'] : (!empty($emp['numero_cuenta']) ? 'A' : 'P'),
+                // Ver mismo comentario en DecimoCuartoService::calcular(): no adivinar
+                // 'A' a partir del número de cuenta de la ficha (esa cuenta es la del rol,
+                // no necesariamente cómo se paga el décimo tercero) — default neutro 'P'.
+                'tipo_pago'         => $prev ? (string) $prev['tipo_pago'] : 'P',
                 'discapacidad'      => $prev ? $this->truthy($prev['discapacidad']) : (bool) $emp['discapacidad'],
                 'valor_retencion'   => $prev ? (float) $prev['valor_retencion'] : (float) $emp['valor_retencion_judicial'],
             ];

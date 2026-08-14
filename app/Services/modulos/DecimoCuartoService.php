@@ -111,7 +111,15 @@ class DecimoCuartoService
                 'dias_laborados'    => $dias,
                 'valor'             => $valor,
                 'mensualiza'        => $mensualiza,
-                'tipo_pago'         => $prev ? (string) $prev['tipo_pago'] : (!empty($emp['numero_cuenta']) ? 'A' : 'P'),
+                // Si ya existe una fila previa (mismo empleado, misma declaración) se
+                // preserva su tipo_pago tal cual quedó en el detalle — nunca se pisa con
+                // un valor derivado de la ficha. Para una fila NUEVA, antes se adivinaba
+                // 'A' (Acreditación) solo porque el empleado tenía número de cuenta
+                // configurado en Empleados — pero eso es la cuenta para el ROL, no
+                // necesariamente cómo se paga el décimo cuarto, y terminaba exportando
+                // 'A' al Ministerio sin que nadie lo haya decidido así. Default neutro:
+                // 'P' (Pago Directo), a definir explícitamente en el detalle.
+                'tipo_pago'         => $prev ? (string) $prev['tipo_pago'] : 'P',
                 'discapacidad'      => $prev ? $this->truthy($prev['discapacidad']) : (bool) $emp['discapacidad'],
                 'fecha_jubilacion'  => $prev ? $prev['fecha_jubilacion'] : $emp['fecha_jubilacion_patronal'],
                 'valor_retencion'   => $prev ? (float) $prev['valor_retencion'] : (float) $emp['valor_retencion_judicial'],

@@ -341,7 +341,7 @@ class EgresoRepository extends BaseRepository
                        'Décimo Cuarto ' || dcc.anio || ' (' ||
                            CASE WHEN dcc.region_grupo = 'sierra_amazonia' THEN 'Sierra/Amazonía' ELSE 'Costa/Insular' END
                        || ')' AS numero_documento,
-                       dcc.fecha_limite_pago AS fecha_emision,
+                       dcc.fecha_emision,
                        dcd.valor AS monto_total,
                        COALESCE(pdc.total_pagado, 0) AS monto_pagado_previo,
                        (dcd.valor - COALESCE(pdc.total_pagado, 0)) AS saldo_pendiente,
@@ -355,7 +355,7 @@ class EgresoRepository extends BaseRepository
                 UNION ALL
                 SELECT 'DECIMO_TERCERO' AS tipo_doc_bd, dtd.id,
                        'Décimo Tercero ' || dtc.anio AS numero_documento,
-                       dtc.fecha_limite_pago AS fecha_emision,
+                       dtc.fecha_emision,
                        dtd.valor AS monto_total,
                        COALESCE(pdt.total_pagado, 0) AS monto_pagado_previo,
                        (dtd.valor - COALESCE(pdt.total_pagado, 0)) AS saldo_pendiente,
@@ -585,6 +585,35 @@ class EgresoRepository extends BaseRepository
                           AND nc.eliminado = FALSE
                           AND nc.id_empresa = :id_empresa
                         GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
+                    ),
+                    retenido_compra AS (
+                        -- Cubre dos vías de enlace: id_compra directo (flujo normal) y
+                        -- num_doc_sustento por dígitos (retenciones migradas, sin id_compra).
+                        SELECT tmp.id_compra, SUM(tmp.monto) AS total_retenido
+                        FROM (
+                            SELECT r.id_compra, r.total_retenido AS monto, r.id AS id_ret
+                            FROM retencion_compra_cabecera r
+                            WHERE r.id_empresa = :id_empresa
+                              AND r.eliminado = FALSE
+                              AND r.id_compra IS NOT NULL
+                              AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+
+                            UNION
+
+                            SELECT c2.id AS id_compra, r.total_retenido AS monto, r.id AS id_ret
+                            FROM retencion_compra_cabecera r
+                            JOIN compras_cabecera c2
+                                 ON regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
+                                    = regexp_replace(CONCAT(c2.establecimiento_prov,'-',c2.punto_emision_prov,'-',c2.secuencial_prov), '[^0-9]', '', 'g')
+                                AND c2.id_empresa = r.id_empresa
+                                AND c2.eliminado  = FALSE
+                            WHERE r.id_empresa = :id_empresa
+                              AND r.eliminado = FALSE
+                              AND r.id_compra IS NULL
+                              AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
+                              AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                        ) tmp
+                        GROUP BY tmp.id_compra
                     )
                     SELECT 'COMPRA' AS tipo_doc_bd,
                            cb.id,
@@ -593,13 +622,15 @@ class EgresoRepository extends BaseRepository
                            0 AS dias_credito,
                            cb.importe_total AS monto_total,
                            COALESCE(p.total_pagado, 0) AS monto_cobrado,
-                           (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
+                           COALESCE(rcp.total_retenido, 0) AS monto_retenido,
+                           (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
                            prov.id             AS proveedor_id,
                            prov.razon_social   AS proveedor_nombre,
                            prov.identificacion AS proveedor_ruc
                     FROM compras_cabecera cb
                     INNER JOIN proveedores prov ON cb.id_proveedor = prov.id
                     LEFT  JOIN pagado p ON cb.id = p.id_referencia_documento
+                    LEFT  JOIN retenido_compra rcp ON cb.id = rcp.id_compra
                     LEFT  JOIN nc_nd nn ON nn.id_empresa = cb.id_empresa
                                        AND nn.id_proveedor = cb.id_proveedor
                                        AND nn.documento_modificado = CONCAT(cb.establecimiento_prov,'-',cb.punto_emision_prov,'-',cb.secuencial_prov)
@@ -607,7 +638,7 @@ class EgresoRepository extends BaseRepository
                       AND cb.eliminado = FALSE
                       AND COALESCE(cb.tipo_comprobante, '01') NOT IN ('04','05')
                       AND cb.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
+                      AND (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                       $filtroBusq
                     ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
                     LIMIT 301";
@@ -739,7 +770,7 @@ class EgresoRepository extends BaseRepository
                                'Décimo Cuarto ' || dcc.anio || ' (' ||
                                    CASE WHEN dcc.region_grupo = 'sierra_amazonia' THEN 'Sierra/Amazonía' ELSE 'Costa/Insular' END
                                || ')' AS numero_documento,
-                               dcc.fecha_limite_pago AS fecha_emision,
+                               dcc.fecha_emision,
                                0 AS dias_credito,
                                dcd.valor AS monto_total,
                                COALESCE(pdc.total_pagado, 0) AS monto_cobrado,
@@ -759,7 +790,7 @@ class EgresoRepository extends BaseRepository
                         SELECT 'DECIMO_TERCERO' AS tipo_doc_bd,
                                dtd.id,
                                'Décimo Tercero ' || dtc.anio AS numero_documento,
-                               dtc.fecha_limite_pago AS fecha_emision,
+                               dtc.fecha_emision,
                                0 AS dias_credito,
                                dtd.valor AS monto_total,
                                COALESCE(pdt.total_pagado, 0) AS monto_cobrado,
@@ -800,6 +831,36 @@ class EgresoRepository extends BaseRepository
                           AND d.eliminado = FALSE
                           $excluirSql
                         GROUP BY d.id_referencia_documento
+                    ),
+                    retenido_liq AS (
+                        -- Cubre dos vías de enlace: id_liquidacion directo (flujo normal) y
+                        -- num_doc_sustento por dígitos (retenciones migradas, sin id_liquidacion).
+                        SELECT tmp.id_liquidacion, SUM(tmp.monto) AS total_retenido
+                        FROM (
+                            SELECT r.id_liquidacion, r.total_retenido AS monto, r.id AS id_ret
+                            FROM retencion_compra_cabecera r
+                            WHERE r.id_empresa = :id_empresa
+                              AND r.eliminado = FALSE
+                              AND r.id_liquidacion IS NOT NULL
+                              AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+
+                            UNION
+
+                            SELECT l2.id AS id_liquidacion, r.total_retenido AS monto, r.id AS id_ret
+                            FROM retencion_compra_cabecera r
+                            JOIN liquidaciones_cabecera l2
+                                 ON regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
+                                    = regexp_replace(CONCAT(l2.establecimiento, '-', l2.punto_emision, '-', l2.secuencial), '[^0-9]', '', 'g')
+                                AND l2.id_empresa = r.id_empresa
+                                AND l2.eliminado  = FALSE
+                            WHERE r.id_empresa = :id_empresa
+                              AND r.eliminado = FALSE
+                              AND r.id_liquidacion IS NULL
+                              AND r.id_compra IS NULL
+                              AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
+                              AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                        ) tmp
+                        GROUP BY tmp.id_liquidacion
                     )
                     SELECT 'LIQUIDACION' AS tipo_doc_bd,
                            l.id,
@@ -808,18 +869,20 @@ class EgresoRepository extends BaseRepository
                            0 AS dias_credito,
                            l.importe_total AS monto_total,
                            COALESCE(p.total_pagado, 0) AS monto_cobrado,
-                           (l.importe_total - COALESCE(p.total_pagado, 0)) AS saldo_pendiente,
+                           COALESCE(rl.total_retenido, 0) AS monto_retenido,
+                           (l.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rl.total_retenido, 0)) AS saldo_pendiente,
                            prov.id             AS proveedor_id,
                            prov.razon_social   AS proveedor_nombre,
                            prov.identificacion AS proveedor_ruc
                     FROM liquidaciones_cabecera l
                     INNER JOIN proveedores prov ON l.id_proveedor = prov.id
                     LEFT  JOIN pagado p ON l.id = p.id_referencia_documento
+                    LEFT  JOIN retenido_liq rl ON l.id = rl.id_liquidacion
                     WHERE l.id_empresa = :id_empresa
                       AND l.eliminado = FALSE
                       AND l.estado = 'autorizado'
                       AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (l.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
+                      AND (l.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rl.total_retenido, 0)) > 0.01
                       $filtroBusq
                     ORDER BY prov.razon_social ASC, l.fecha_emision ASC
                     LIMIT 301";

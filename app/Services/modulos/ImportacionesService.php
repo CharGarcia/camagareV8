@@ -125,10 +125,11 @@ class ImportacionesService
 
     /**
      * Confirma los datos de la importación (borrador → registrada): queda bloqueada
-     * para edición pero SIN afectar inventario/kardex/asiento/Declaración de IVA —
-     * eso solo ocurre al nacionalizar. Es un paso intermedio opcional: el usuario
-     * puede seguir en borrador indefinidamente, o "registrar" para dejar constancia
-     * de que los datos ya están confirmados, sin comprometerse todavía a nacionalizar.
+     * para edición. NO postea inventario/kardex/asiento (eso solo ocurre al procesar
+     * inventario/nacionalizar) — pero SÍ cuenta para la Declaración de IVA (ver
+     * sincronizarCasilleros()), porque es el único camino para importaciones que el
+     * usuario decide no enviar a inventario (p. ej. gastos que no son mercadería
+     * propia) pero cuyo IVA de nacionalización sí es crédito tributario real.
      */
     public function registrar(int $id, int $idEmpresa, int $idUsuario): void
     {
@@ -141,6 +142,9 @@ class ImportacionesService
         }
 
         $this->repository->actualizarEstado($id, 'registrada', $idUsuario);
+        // Sincroniza de una vez (no esperar a la próxima vez que se genere la Declaración de
+        // IVA): "registrada" ya cuenta para el crédito tributario — ver sincronizarCasilleros().
+        $this->sincronizarCasilleros($id, $idEmpresa);
 
         $this->logService->registrar(
             $idUsuario, $idEmpresa, 'REGISTRAR', 'importaciones_cabecera', $id,
@@ -160,6 +164,9 @@ class ImportacionesService
         }
 
         $this->repository->actualizarEstado($id, 'borrador', $idUsuario);
+        // "Borrador" ya no cuenta para el crédito tributario: limpia lo que sincronizarCasilleros()
+        // haya escrito mientras estuvo en "registrada" (si no, quedaría huérfano en la declaración).
+        $this->sincronizarCasilleros($id, $idEmpresa);
 
         $this->logService->registrar(
             $idUsuario, $idEmpresa, 'VOLVER_A_BORRADOR', 'importaciones_cabecera', $id,
@@ -814,9 +821,12 @@ class ImportacionesService
         if (!$importacion) {
             return;
         }
-        // Solo cuenta una vez nacionalizada/cerrada (antes es un borrador sin crédito real todavía)
-        // y si no se excluyó puntualmente de la declaración.
-        if (!in_array($importacion['estado'] ?? '', ['nacionalizada', 'cerrada'], true)) {
+        // Cuenta desde "registrada" en adelante (registrada/nacionalizada/cerrada) — un simple
+        // borrador todavía no tiene datos confirmados, así que no genera crédito tributario. Una
+        // importación puede quedarse en "registrada" indefinidamente si el usuario decide no
+        // enviarla a inventario (no es mercadería propia, gasto puntual, etc.); igual da derecho
+        // a crédito tributario por el IVA pagado en la nacionalización — ver registrar().
+        if (!in_array($importacion['estado'] ?? '', ['registrada', 'nacionalizada', 'cerrada'], true)) {
             return;
         }
         if (($importacion['deducible'] ?? 'declaracion_iva') !== 'declaracion_iva') {

@@ -65,15 +65,34 @@ class CuentasPorPagarRepository extends BaseRepository
     private function getCteRetenciones(?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :ret_hasta" : '';
+        // Cubre dos vías de enlace: id_compra/id_liquidacion directo (flujo normal) y
+        // num_doc_sustento por dígitos contra compras_cabecera (retenciones migradas, sin id_compra).
         return "
-            SELECT r.id_compra,
-                   r.id_liquidacion,
-                   SUM(r.total_retenido) AS total_retenido
-            FROM retencion_compra_cabecera r
-            WHERE r.eliminado = false
-              AND UPPER(r.estado) NOT IN ('ANULADO','BORRADOR','PENDIENTE')
-              {$filtroFecha}
-            GROUP BY r.id_compra, r.id_liquidacion
+            SELECT tmp.id_compra, tmp.id_liquidacion, SUM(tmp.monto) AS total_retenido
+            FROM (
+                SELECT r.id_compra, r.id_liquidacion, r.total_retenido AS monto, r.id AS id_ret
+                FROM retencion_compra_cabecera r
+                WHERE r.eliminado = false
+                  AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                  AND (r.id_compra IS NOT NULL OR r.id_liquidacion IS NOT NULL)
+                  {$filtroFecha}
+
+                UNION
+
+                SELECT c2.id AS id_compra, NULL::int AS id_liquidacion, r.total_retenido AS monto, r.id AS id_ret
+                FROM retencion_compra_cabecera r
+                JOIN compras_cabecera c2
+                     ON regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
+                        = regexp_replace(CONCAT(c2.establecimiento_prov,'-',c2.punto_emision_prov,'-',c2.secuencial_prov), '[^0-9]', '', 'g')
+                    AND c2.id_empresa = r.id_empresa
+                    AND c2.eliminado  = false
+                WHERE r.eliminado = false
+                  AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                  AND r.id_compra IS NULL AND r.id_liquidacion IS NULL
+                  AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
+                  {$filtroFecha}
+            ) tmp
+            GROUP BY tmp.id_compra, tmp.id_liquidacion
         ";
     }
 
@@ -640,10 +659,21 @@ class CuentasPorPagarRepository extends BaseRepository
                              AND ec.estado!='anulado' AND ec.eliminado=false AND ed.eliminado=false
                        ), 0) AS total_pagado,
                        COALESCE((
-                           SELECT SUM(r.total_retenido)
-                           FROM retencion_compra_cabecera r
-                           WHERE r.id_liquidacion=l.id AND r.eliminado=false
-                             AND UPPER(r.estado) NOT IN ('ANULADO','BORRADOR','PENDIENTE')
+                           SELECT SUM(tmp.monto) FROM (
+                               SELECT r.total_retenido AS monto, r.id AS id_ret
+                               FROM retencion_compra_cabecera r
+                               WHERE r.id_liquidacion=l.id AND r.eliminado=false
+                                 AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                               UNION
+                               SELECT r.total_retenido AS monto, r.id AS id_ret
+                               FROM retencion_compra_cabecera r
+                               WHERE r.id_liquidacion IS NULL AND r.id_compra IS NULL AND r.eliminado=false
+                                 AND r.id_empresa = l.id_empresa
+                                 AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
+                                 AND regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
+                                     = regexp_replace(CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial), '[^0-9]', '', 'g')
+                                 AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                           ) tmp
                        ), 0) AS total_retenido
                 FROM liquidaciones_cabecera l
                 JOIN proveedores p ON p.id=l.id_proveedor
@@ -692,10 +722,21 @@ class CuentasPorPagarRepository extends BaseRepository
                              AND ec.estado!='anulado' AND ec.eliminado=false AND ed.eliminado=false
                        ), 0) AS total_pagado,
                        COALESCE((
-                           SELECT SUM(r.total_retenido)
-                           FROM retencion_compra_cabecera r
-                           WHERE r.id_compra=c.id AND r.eliminado=false
-                             AND UPPER(r.estado) NOT IN ('ANULADO','BORRADOR','PENDIENTE')
+                           SELECT SUM(tmp.monto) FROM (
+                               SELECT r.total_retenido AS monto, r.id AS id_ret
+                               FROM retencion_compra_cabecera r
+                               WHERE r.id_compra=c.id AND r.eliminado=false
+                                 AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                               UNION
+                               SELECT r.total_retenido AS monto, r.id AS id_ret
+                               FROM retencion_compra_cabecera r
+                               WHERE r.id_compra IS NULL AND r.id_liquidacion IS NULL AND r.eliminado=false
+                                 AND r.id_empresa = c.id_empresa
+                                 AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
+                                 AND regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
+                                     = regexp_replace(CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov), '[^0-9]', '', 'g')
+                                 AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                           ) tmp
                        ), 0) AS total_retenido,
                        COALESCE((
                            SELECT SUM(nc.importe_total) FROM compras_cabecera nc

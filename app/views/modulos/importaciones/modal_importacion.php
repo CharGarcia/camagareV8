@@ -33,6 +33,13 @@
               <i class="bi bi-box-seam fs-6"></i>
             </button>
           <?php endif; ?>
+          <div class="vr mx-1"></div>
+          <button type="button" class="btn btn-primary btn-sm px-3 d-none" id="impBtnRegistrar" onclick="IMP_registrarImportacion()" title="Confirma los datos y bloquea la edición. Ya cuenta para la Declaración de IVA, aunque no se envíe a inventario.">
+            <i class="bi bi-clipboard-check me-1"></i> Marcar como Registrada
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm px-3 d-none" id="impBtnVolverBorrador" onclick="IMP_volverABorrador()" title="Vuelve a Borrador para poder editarla de nuevo.">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Volver a Borrador
+          </button>
         </div>
 
         <!-- Pestañas -->
@@ -336,12 +343,6 @@
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
               <button type="button" class="btn btn-outline-primary btn-sm" id="impBtnCalcularProrrateo" onclick="IMP_calcularProrrateo()">
                 <i class="bi bi-calculator me-1"></i> Calcular prorrateo
-              </button>
-              <button type="button" class="btn btn-primary btn-sm px-3 d-none" id="impBtnRegistrar" onclick="IMP_registrarImportacion()" title="Confirma los datos y bloquea la edición, sin enviarla todavía al inventario.">
-                <i class="bi bi-clipboard-check me-1"></i> Marcar como Registrada
-              </button>
-              <button type="button" class="btn btn-outline-secondary btn-sm px-3 d-none" id="impBtnVolverBorrador" onclick="IMP_volverABorrador()" title="Vuelve a Borrador para poder editarla de nuevo.">
-                <i class="bi bi-arrow-counterclockwise me-1"></i> Volver a Borrador
               </button>
               <button type="button" class="btn btn-success btn-sm px-3 d-none" id="impBtnProcesarInventario" onclick="IMP_procesarInventario()">
                 <i class="bi bi-box-arrow-in-right me-1"></i> Procesar Inventario / Nacionalizar
