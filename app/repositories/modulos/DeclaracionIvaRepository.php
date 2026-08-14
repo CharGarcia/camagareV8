@@ -39,7 +39,7 @@ class DeclaracionIvaRepository extends BaseRepository
             // No es comprobante SRI: no tiene fecha_emision, y el crédito solo es real una
             // vez nacionalizada (o cerrada); antes es un borrador sin IVA declarable todavía.
             $fechaCol = 'fecha_nacionalizacion';
-            $estadoFilter = "AND estado IN ('nacionalizada', 'cerrada') AND COALESCE(deducible, '') = 'declaracion_iva'";
+            $estadoFilter = "AND estado IN ('registrada', 'nacionalizada', 'cerrada') AND COALESCE(deducible, '') = 'declaracion_iva'";
         }
 
         $sql = "SELECT id FROM {$tabla} WHERE id_empresa = :emp AND {$fechaCol} BETWEEN :d AND :h {$estadoFilter} AND eliminado = false AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)";
@@ -212,7 +212,7 @@ class DeclaracionIvaRepository extends BaseRepository
                     OR
                     (c.origen = 'retenciones_ventas' AND NOT EXISTS (SELECT 1 FROM retencion_venta_cabecera rv WHERE rv.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rv.eliminado, false) = false))
                     OR
-                    (c.origen = 'importaciones' AND NOT EXISTS (SELECT 1 FROM importaciones_cabecera imp WHERE imp.id = CAST(c.id_origen AS INTEGER) AND COALESCE(imp.eliminado, false) = false AND imp.estado IN ('nacionalizada', 'cerrada') AND COALESCE(imp.deducible, '') = 'declaracion_iva'))
+                    (c.origen = 'importaciones' AND NOT EXISTS (SELECT 1 FROM importaciones_cabecera imp WHERE imp.id = CAST(c.id_origen AS INTEGER) AND COALESCE(imp.eliminado, false) = false AND imp.estado IN ('registrada', 'nacionalizada', 'cerrada') AND COALESCE(imp.deducible, '') = 'declaracion_iva'))
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([$idEmpresa, $fechaDesde, $fechaHasta, $idEmpresa]);
@@ -403,12 +403,12 @@ class DeclaracionIvaRepository extends BaseRepository
 
         // IVA pagado en aduana al nacionalizar importaciones: mismo casillero oficial que las
         // compras (605/615 "adquisiciones E IMPORTACIONES"), por eso se suma directo a iva_compras.
-        // Solo cuenta una vez nacionalizada/cerrada (antes es un borrador sin crédito real todavía).
+        // Cuenta desde "registrada" en adelante, igual que ImportacionesService::sincronizarCasilleros().
         $ivaImportaciones = (float) $this->query(
             "SELECT COALESCE(SUM(total_iva), 0)
              FROM importaciones_cabecera
              WHERE id_empresa = :emp AND deducible = 'declaracion_iva' AND eliminado = false
-               AND estado IN ('nacionalizada', 'cerrada')
+               AND estado IN ('registrada', 'nacionalizada', 'cerrada')
                AND fecha_nacionalizacion BETWEEN :d AND :h AND tipo_ambiente = :amb", $p)->fetchColumn();
 
         $numVentas = (int) $this->query(
