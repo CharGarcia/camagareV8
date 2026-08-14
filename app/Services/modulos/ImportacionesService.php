@@ -301,12 +301,14 @@ class ImportacionesService
                 $capitalizableVinculado += $monto;
                 continue;
             }
-            if ($prorrateable) {
-                $capitalizableManual += $monto;
-            } elseif ($tipo === 'iva_importacion') {
+            // IVA/ISD nunca se capitalizan, sin importar el checkbox "Prorrateable"
+            // (el checkbox solo decide el destino de los demás tipos de gasto).
+            if ($tipo === 'iva_importacion') {
                 $iva += $monto;
             } elseif ($tipo === 'isd') {
                 $isd += $monto;
+            } elseif ($prorrateable) {
+                $capitalizableManual += $monto;
             } else {
                 $otros += $monto;
             }

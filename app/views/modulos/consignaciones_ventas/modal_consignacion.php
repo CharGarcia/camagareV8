@@ -1742,6 +1742,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     };
 
     window.cargarPedidoParaPaso2 = async function(id, numero_pedido, cliente_nombre) {
+        // Evita reconstrucciones solapadas de la tabla (ej. click en "Desagregar por unidad"
+        // mientras la carga anterior todavía está pidiendo lotes por ítem, uno por uno).
+        if (window._CONS_CARGANDO_PEDIDO) return;
+        window._CONS_CARGANDO_PEDIDO = true;
         try {
             Swal.fire({
                 title: 'Cargando detalles del pedido...',
@@ -1815,13 +1819,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 tbody.innerHTML = '';
                 const bodegaId = document.getElementById('buscar_pedido_bodega').value || document.getElementById('cons_id_bodega').value || 0;
 
+                // Preparar los datos de cada producto UNA vez (lotes incluidos). La desagregación
+                // se decide por producto (checkbox "Desagr." en la tabla), no de forma global: se
+                // puede desagregar unos productos (NUP por unidad) y dejar otros en una sola fila
+                // (cantidades grandes, ej. 1000 guantes).
+                const itemsPreparados = [];
                 for (const item of pendingItems) {
                     const cantPendiente = parseFloat(item.cantidad_pendiente) || 0;
                     const pBase = parseFloat(item.precio_base) || 0;
                     // Los pedidos (módulo Pedidos) no capturan precio por línea (siempre llega en 0):
                     // si el pedido no trae precio, se usa el precio base del producto.
                     const precioPedido = (parseFloat(item.precio_unitario) || 0) > 0 ? parseFloat(item.precio_unitario) : pBase;
-                    
+
                     let listaOptions = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
                     if (item.precios_lista && item.precios_lista.length > 0) {
                         item.precios_lista.forEach(pl => {
@@ -1830,94 +1839,159 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     }
 
                     let esInv = (item.inventariable == true || item.inventariable == 'true' || item.inventariable == 1) && item.tipo_produccion !== '02';
-                    let loteHtml = '';
-                    let vencHtml = '';
-                    let nupHtml = '';
+                    let lotesOptions = '<option value="">Lote...</option>';
+                    let vencOptions = '<option value="">Vencimiento...</option>';
                     let lotesData = [];
-                    const requiereNup = esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario && !!EMPRESA_CONFIG.obligatorio_nup;
+                    let stockActual = null;
+                    // Si el producto maneja NUP (campo visible), el checkbox "Desagr." decide la
+                    // desagregación por sí solo — no depende de que la empresa tenga el NUP marcado
+                    // como "obligatorio" globalmente (puede usarse sin serlo).
+                    const manejaNup = esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario;
 
-                    if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
-                        let lotesOptions = '<option value="">Lote...</option>';
-                        let vencOptions = '<option value="">Vencimiento...</option>';
-
+                    // El stock de bodega se muestra para cualquier producto inventariable (no solo
+                    // los que manejan NUP): mismo endpoint que ya trae los lotes, que además
+                    // devuelve el stock total disponible en esa bodega.
+                    if (esInv && bodegaId) {
                         try {
                             const resL = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${item.id_producto}&id_bodega=${bodegaId}`);
                             const dataL = await resL.json();
-                            if (dataL.ok && dataL.data.length > 0) {
-                                lotesData = dataL.data;
-                                dataL.data.forEach(l => {
-                                    const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
-                                    const c = l.fecha_caducidad || '';
-                                    lotesOptions += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
-                                    vencOptions += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
-                                });
-                            } else {
+                            if (dataL.ok) {
+                                stockActual = parseFloat(dataL.stock_total) || 0;
+                                if (manejaNup && dataL.data.length > 0) {
+                                    lotesData = dataL.data;
+                                    dataL.data.forEach(l => {
+                                        const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
+                                        const c = l.fecha_caducidad || '';
+                                        lotesOptions += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
+                                        vencOptions += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
+                                    });
+                                } else if (manejaNup) {
+                                    lotesOptions = '<option value="">Sin Lote</option>';
+                                    vencOptions = '<option value="">Sin Fecha</option>';
+                                }
+                            } else if (manejaNup) {
                                 lotesOptions = '<option value="">Sin Lote</option>';
                                 vencOptions = '<option value="">Sin Fecha</option>';
                             }
                         } catch(e) {
-                            lotesOptions = '<option value="">Sin Lote</option>';
-                            vencOptions = '<option value="">Sin Fecha</option>';
-                        }
-
-                        loteHtml = `<select class="form-select form-select-sm item-lote py-0 px-1" style="font-size: 0.8rem; height: auto;">${lotesOptions}</select>`;
-                        vencHtml = `<select class="form-select form-select-sm item-caducidad py-0 px-1" style="font-size: 0.8rem; height: auto;">${vencOptions}</select>`;
-                        nupHtml = `<input type="text" class="form-control form-control-sm item-nup py-0 px-1" style="font-size: 0.8rem; height: auto;" placeholder="NUP">`;
-                    } else {
-                        loteHtml = '<span class="text-muted small">—</span>';
-                        vencHtml = '<span class="text-muted small">—</span>';
-                        nupHtml = '<span class="text-muted small">—</span>';
-                    }
-
-                    // Con NUP obligatorio cada UNIDAD lleva su propio NUP: si el pedido tiene más
-                    // de 1 pendiente, se despliega una fila por unidad (misma línea de pedido),
-                    // en vez de una sola fila con todo el saldo, para poder llenar cada NUP de una.
-                    const unidades = requiereNup ? Math.max(1, Math.floor(cantPendiente)) : 1;
-
-                    for (let u = 0; u < unidades; u++) {
-                        const cantidadMax = requiereNup ? 1 : cantPendiente;
-                        const cantidadDefault = cantidadMax;
-                        const etiquetaUnidad = unidades > 1 ? ` <span class="text-muted">— Unidad ${u + 1}/${unidades}</span>` : '';
-
-                        const tr = document.createElement('tr');
-                        tr.dataset.itemId = item.id;
-                        tr.dataset.productoId = item.id_producto;
-                        tr.innerHTML = `
-                            <td class="align-middle">
-                                <div class="fw-bold small text-dark">${item.producto_nombre}${etiquetaUnidad}</div>
-                                <div class="text-muted" style="font-size: 0.75rem;">${item.producto_codigo}</div>
-                            </td>
-                            <td class="text-end align-middle small">${parseFloat(item.cantidad)}</td>
-                            <td class="text-end align-middle small">${parseFloat(item.cantidad_consignada)}</td>
-                            <td class="text-end align-middle small fw-bold text-danger">${cantPendiente}</td>
-                            <td class="align-middle">
-                                <input type="number" class="form-control form-control-sm item-cantidad text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0" step="any" max="${cantidadMax}" value="${cantidadDefault}" ${requiereNup ? 'oninput="if(parseFloat(this.value)>1){this.value=1;}"' : ''}>
-                            </td>
-                            <td class="align-middle">
-                                <select class="form-select form-select-sm item-lista-precios py-0 px-1" style="font-size: 0.8rem; height: auto;" onchange="const tr = this.closest('tr'); tr.querySelector('.item-precio').value = parseFloat(this.value).toFixed(2);">
-                                        ${listaOptions}
-                                </select>
-                            </td>
-                            <td class="align-middle">
-                                <input type="number" class="form-control form-control-sm item-precio text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0.00" step="0.01" value="${precioPedido.toFixed(2)}">
-                            </td>
-                            <td class="align-middle">${loteHtml}</td>
-                            <td class="align-middle">${vencHtml}</td>
-                            <td class="align-middle">${nupHtml}</td>
-                        `;
-                        tbody.appendChild(tr);
-
-                        // Al elegir un lote, autocompletar la fecha de vencimiento que le corresponde.
-                        const selLoteRow = tr.querySelector('.item-lote');
-                        const selVencRow = tr.querySelector('.item-caducidad');
-                        if (selLoteRow && selVencRow) {
-                            selLoteRow.addEventListener('change', () => {
-                                const match = lotesData.find(l => (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) === selLoteRow.value);
-                                selVencRow.value = match ? (match.fecha_caducidad || '') : '';
-                            });
+                            if (manejaNup) {
+                                lotesOptions = '<option value="">Sin Lote</option>';
+                                vencOptions = '<option value="">Sin Fecha</option>';
+                            }
                         }
                     }
+
+                    itemsPreparados.push({
+                        item, cantPendiente, precioPedido, listaOptions, lotesOptions, vencOptions, lotesData, manejaNup, stockActual
+                    });
                 }
+
+                // Preferencia de desagregación por producto (por defecto activada donde aplica).
+                const desagregarPrefs = {};
+                itemsPreparados.forEach(p => { desagregarPrefs[p.item.id] = true; });
+
+                function renderTablaPedido() {
+                    tbody.innerHTML = '';
+                    itemsPreparados.forEach(datos => {
+                        const { item, cantPendiente, precioPedido, listaOptions, lotesOptions, vencOptions, lotesData, manejaNup, stockActual } = datos;
+                        const desagregarEstaFila = manejaNup && desagregarPrefs[item.id];
+                        const unidades = desagregarEstaFila ? Math.max(1, Math.floor(cantPendiente)) : 1;
+
+                        // Badge de stock en bodega: verde si alcanza para despachar todo lo
+                        // pendiente, rojo si no. Solo se muestra si se pudo consultar el stock.
+                        let badgeStock = '';
+                        if (stockActual !== null) {
+                            const alcanza = stockActual >= cantPendiente;
+                            const cls = alcanza ? 'bg-success bg-opacity-10 text-success border-success' : 'bg-danger bg-opacity-10 text-danger border-danger';
+                            badgeStock = `<span class="badge ${cls} border border-opacity-25" title="Stock disponible en la bodega seleccionada">Stock: ${stockActual.toFixed(2)}</span>`;
+                        }
+
+                        const loteHtml = manejaNup
+                            ? `<select class="form-select form-select-sm item-lote py-0 px-1" style="font-size: 0.8rem; height: auto;">${lotesOptions}</select>`
+                            : '<span class="text-muted small">—</span>';
+                        const vencHtml = manejaNup
+                            ? `<select class="form-select form-select-sm item-caducidad py-0 px-1" style="font-size: 0.8rem; height: auto;">${vencOptions}</select>`
+                            : '<span class="text-muted small">—</span>';
+                        const nupHtml = manejaNup
+                            ? `<input type="text" class="form-control form-control-sm item-nup py-0 px-1" style="font-size: 0.8rem; height: auto;" placeholder="NUP">`
+                            : '<span class="text-muted small">—</span>';
+
+                        for (let u = 0; u < unidades; u++) {
+                            const cantidadMax = desagregarEstaFila ? 1 : cantPendiente;
+                            const cantidadDefault = cantidadMax;
+                            const etiquetaUnidad = unidades > 1 ? ` <span class="text-muted">— Unidad ${u + 1}/${unidades}</span>` : '';
+
+                            const tr = document.createElement('tr');
+                            tr.dataset.itemId = item.id;
+                            tr.dataset.productoId = item.id_producto;
+                            tr.dataset.desagregado = desagregarEstaFila ? '1' : '0';
+
+                            let celdaDesagr;
+                            if (!manejaNup) {
+                                celdaDesagr = '<td class="text-center align-middle"><span class="text-muted small">—</span></td>';
+                            } else if (u === 0) {
+                                celdaDesagr = `<td class="text-center align-middle" rowspan="${unidades}">
+                                    <input type="checkbox" class="form-check-input chk-desagregar-producto" ${desagregarPrefs[item.id] ? 'checked' : ''} title="Desagregar por unidad (1 NUP c/u)">
+                                </td>`;
+                            } else {
+                                celdaDesagr = ''; // cubierta por el rowspan de la primera fila del grupo
+                            }
+
+                            tr.innerHTML = `
+                                ${celdaDesagr}
+                                <td class="align-middle">
+                                    <div class="d-flex justify-content-between align-items-center gap-2">
+                                        <div>
+                                            <div class="fw-bold small text-dark">${item.producto_nombre}${etiquetaUnidad}</div>
+                                            <div class="text-muted" style="font-size: 0.75rem;">${item.producto_codigo}</div>
+                                        </div>
+                                        ${badgeStock}
+                                    </div>
+                                </td>
+                                <td class="text-end align-middle small">${parseFloat(item.cantidad)}</td>
+                                <td class="text-end align-middle small">${parseFloat(item.cantidad_consignada)}</td>
+                                <td class="text-end align-middle small fw-bold text-danger">${cantPendiente}</td>
+                                <td class="align-middle">
+                                    <input type="number" class="form-control form-control-sm item-cantidad text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0" step="any" max="${cantidadMax}" value="${cantidadDefault}" ${desagregarEstaFila ? 'oninput="if(parseFloat(this.value)>1){this.value=1;}"' : ''}>
+                                </td>
+                                <td class="align-middle">
+                                    <select class="form-select form-select-sm item-lista-precios py-0 px-1" style="font-size: 0.8rem; height: auto;" onchange="const tr = this.closest('tr'); tr.querySelector('.item-precio').value = parseFloat(this.value).toFixed(2);">
+                                            ${listaOptions}
+                                    </select>
+                                </td>
+                                <td class="align-middle">
+                                    <input type="number" class="form-control form-control-sm item-precio text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0.00" step="0.01" value="${precioPedido.toFixed(2)}">
+                                </td>
+                                <td class="align-middle">${loteHtml}</td>
+                                <td class="align-middle">${vencHtml}</td>
+                                <td class="align-middle">${nupHtml}</td>
+                            `;
+                            tbody.appendChild(tr);
+
+                            if (u === 0 && manejaNup) {
+                                const chk = tr.querySelector('.chk-desagregar-producto');
+                                if (chk) {
+                                    chk.addEventListener('change', () => {
+                                        desagregarPrefs[item.id] = chk.checked;
+                                        renderTablaPedido();
+                                    });
+                                }
+                            }
+
+                            // Al elegir un lote, autocompletar la fecha de vencimiento que le corresponde.
+                            const selLoteRow = tr.querySelector('.item-lote');
+                            const selVencRow = tr.querySelector('.item-caducidad');
+                            if (selLoteRow && selVencRow) {
+                                selLoteRow.addEventListener('change', () => {
+                                    const match = lotesData.find(l => (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) === selLoteRow.value);
+                                    selVencRow.value = match ? (match.fecha_caducidad || '') : '';
+                                });
+                            }
+                        }
+                    });
+                }
+
+                renderTablaPedido();
 
                 document.getElementById('bp_empty_state').classList.add('d-none');
                 document.getElementById('bp_items_container').classList.remove('d-none');
@@ -1928,6 +2002,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         } catch(e) {
             console.error(e);
             Swal.fire('Error', 'Ocurrió un error al cargar el detalle.', 'error');
+        } finally {
+            window._CONS_CARGANDO_PEDIDO = false;
         }
     };
 
@@ -1996,7 +2072,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         omitidos.push(`${detailObj.producto_nombre} (falta fecha de vencimiento)`);
                         return;
                     }
-                    if (EMPRESA_CONFIG.obligatorio_nup && !nup) {
+                    // El NUP solo es obligatorio en filas desagregadas por unidad (una fila = una
+                    // unidad = un NUP). En una fila "sin desagregar" (cantidades grandes) no aplica.
+                    if (EMPRESA_CONFIG.obligatorio_nup && tr.dataset.desagregado === '1' && !nup) {
                         omitidos.push(`${detailObj.producto_nombre} (falta NUP)`);
                         return;
                     }
@@ -2786,11 +2864,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     const entrada = parseFloat(r.entrada || 0);
                     const salida = parseFloat(r.salida || 0);
                     const saldo = parseFloat(r.saldo || 0);
+                    const saldoGeneral = ultimoSaldoPorProducto[r.id_producto] ?? 0;
+                    const badgeCls = saldoGeneral > 0
+                        ? 'bg-primary bg-opacity-10 text-primary border-primary'
+                        : 'bg-secondary bg-opacity-10 text-secondary border-secondary';
                     return `<tr>
                         <td class="ps-3">${consFmtFecha(r.fecha)}</td>
                         <td>${consBadgeTipoMovimiento(r.tipo)}</td>
                         <td class="fw-bold text-primary">${consEscHtml(r.documento || '')}</td>
-                        <td class="text-truncate" style="max-width:200px" title="${consEscHtml(r.producto_nombre || '')}">${consEscHtml(r.producto_nombre || '')}</td>
+                        <td>
+                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                <span class="text-truncate" style="max-width:180px" title="${consEscHtml(r.producto_nombre || '')}">${consEscHtml(r.producto_nombre || '')}</span>
+                                <span class="badge ${badgeCls} border border-opacity-25" title="Saldo general del producto en esta consignación">${saldoGeneral.toFixed(2)}</span>
+                            </div>
+                        </td>
                         <td>${consEscHtml(r.lote || '—')}</td>
                         <td>${consEscHtml(r.nup || '—')}</td>
                         <td class="text-end">${entrada > 0 ? entrada.toFixed(2) : '—'}</td>
@@ -3039,14 +3126,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     </div>
 
                     <div class="card shadow-sm border border-secondary border-opacity-25 rounded-3 bg-white">
-                        <div class="card-header bg-light py-2 px-3">
+                        <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <span class="small fw-bold text-dark"><i class="bi bi-box-seam me-1 text-primary"></i> Ítems Pendientes para Cargar</span>
+                            <span class="text-muted" style="font-size: 0.7rem;" title="Marque 'Desagr.' en los productos que necesita despachar con un NUP por unidad. Los que deje sin marcar se cargan en una sola fila (útil para cantidades grandes, ej. 1000 guantes).">
+                                <i class="bi bi-info-circle me-1"></i> La columna "Desagr." se marca por producto
+                            </span>
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
                                 <table class="table table-sm table-hover table-bordered mb-0 align-middle" style="font-size: 0.8rem;">
                                     <thead class="table-light">
                                         <tr>
+                                            <th class="text-center" style="width: 60px;">Desagr.</th>
                                             <th>Producto</th>
                                             <th class="text-end" style="width: 60px;">Ped.</th>
                                             <th class="text-end" style="width: 60px;">Cons.</th>

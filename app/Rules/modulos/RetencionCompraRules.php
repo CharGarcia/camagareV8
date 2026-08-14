@@ -69,8 +69,11 @@ class RetencionCompraRules
                 } elseif (!$esElectronico && (float)$linea['base_imponible'] <= 0) {
                     $errores[] = "Línea {$n}: la base imponible debe ser mayor a 0.";
                 }
-                if (!isset($linea['porcentaje_retener']) || (float)$linea['porcentaje_retener'] <= 0)
+                if (!isset($linea['porcentaje_retener']) || (float)$linea['porcentaje_retener'] < 0) {
+                    $errores[] = "Línea {$n}: el porcentaje de retención es obligatorio.";
+                } elseif (!$esElectronico && (float)$linea['porcentaje_retener'] <= 0) {
                     $errores[] = "Línea {$n}: el porcentaje de retención debe ser mayor a 0.";
+                }
             }
         }
 

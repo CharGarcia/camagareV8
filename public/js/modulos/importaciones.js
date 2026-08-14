@@ -751,7 +751,9 @@ window.IMP_agregarFilaGasto = function (g) {
     const tbody = document.getElementById('tbodyGastosImp');
     const idx = _impGastoIdx++;
     const origen = g.origen || 'dai_manual';
-    const prorrateableDefault = g.id ? !!(g.prorrateable === true || g.prorrateable === 't') : (origen === 'dai_manual' ? !['iva_importacion', 'isd'].includes(g.tipo_gasto) : true);
+    const tipoInicial = g.tipo_gasto || (origen === 'dai_manual' ? 'otro' : 'agente_afianzado');
+    const esIvaIsdInicial = origen === 'dai_manual' && ['iva_importacion', 'isd'].includes(tipoInicial);
+    const prorrateableDefault = esIvaIsdInicial ? false : (g.id ? !!(g.prorrateable === true || g.prorrateable === 't') : true);
 
     const tr = document.createElement('tr');
     tr.dataset.idx = idx;
@@ -780,7 +782,7 @@ window.IMP_agregarFilaGasto = function (g) {
             </div>
         </td>
         <td><input type="text" inputmode="decimal" class="form-control form-control-sm text-end input-imp-gasto-monto" value="${parseFloat(g.monto || 0).toFixed(2)}" oninput="IMP_recalcularTotalesLineas()"></td>
-        <td class="text-center"><input type="checkbox" class="form-check-input input-imp-gasto-prorrateable" ${prorrateableDefault ? 'checked' : ''} ${origen !== 'dai_manual' ? 'disabled' : ''}></td>
+        <td class="text-center"><input type="checkbox" class="form-check-input input-imp-gasto-prorrateable" ${prorrateableDefault ? 'checked' : ''} ${(origen !== 'dai_manual' || esIvaIsdInicial) ? 'disabled' : ''}></td>
         <td class="text-center p-0 align-middle">
             <button type="button" class="btn btn-sm btn-link text-danger p-0 shadow-none border-0 btn-eliminar-fila">
                 <i class="bi bi-trash3 fs-6"></i>
@@ -793,7 +795,9 @@ window.IMP_agregarFilaGasto = function (g) {
     const chkProrr = tr.querySelector('.input-imp-gasto-prorrateable');
     selTipo.addEventListener('change', function () {
         if (tr.querySelector('.select-imp-gasto-origen').value !== 'dai_manual') return;
-        chkProrr.checked = !['iva_importacion', 'isd'].includes(this.value);
+        const esIvaIsd = ['iva_importacion', 'isd'].includes(this.value);
+        chkProrr.checked = !esIvaIsd;
+        chkProrr.disabled = esIvaIsd;
     });
 
     IMP_wireBuscadorDocGasto(tr);
@@ -821,7 +825,9 @@ window.IMP_onCambioOrigenGasto = function (sel) {
     if (origen === 'dai_manual') {
         idCompra.value = '';
         idLiq.value = '';
-        chkProrr.disabled = false;
+        const esIvaIsd = ['iva_importacion', 'isd'].includes(selTipo.value);
+        chkProrr.disabled = esIvaIsd;
+        if (esIvaIsd) chkProrr.checked = false;
     } else {
         chkProrr.checked = true;
         chkProrr.disabled = true;

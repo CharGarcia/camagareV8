@@ -616,6 +616,17 @@ return [
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
+    'modulos/reporte_consolidado' => [
+        // Consolida Compras, Retenciones de Compra, Facturas de Venta, Recibos de
+        // Venta, Retenciones de Venta, Notas de Crédito, Notas de Débito y
+        // Liquidaciones de Compra en un solo listado/PDF, con export a Excel en 8
+        // hojas (una por documento, detallado línea por línea). Registrar el
+        // submódulo en submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/reporte_consolidado', y actualizar este id_submodulo
+        // con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/producto_mas_vendido' => [
         // Ranking de productos más vendidos (cantidad) con filtros de cliente,
         // producto, tipo de documento (Facturas/Recibos), Top N y período; export
