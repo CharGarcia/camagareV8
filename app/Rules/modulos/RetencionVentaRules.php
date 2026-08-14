@@ -24,6 +24,11 @@ class RetencionVentaRules
             $errores[] = 'El período fiscal debe tener el formato MM/YYYY.';
         }
 
+        // Documentos importados desde el SRI (XML autorizado) se registran tal cual llegan:
+        // el SRI permite líneas de retención con base imponible 0, así que aquí solo se exige
+        // que el dato exista y no sea negativo. Para captura manual se mantiene la exigencia > 0.
+        $esElectronico = ($data['origen'] ?? '') === 'electronico';
+
         if (empty($data['lineas']) || !is_array($data['lineas'])) {
             $errores[] = 'Debe agregar al menos una línea de retención.';
         } else {
@@ -37,8 +42,11 @@ class RetencionVentaRules
                     $errores[] = "Línea {$n}: la fecha del documento de sustento es obligatoria.";
                 if (empty($linea['codigo_retencion']))
                     $errores[] = "Línea {$n}: el código de retención es obligatorio.";
-                if (!isset($linea['base_imponible']) || (float)$linea['base_imponible'] <= 0)
+                if (!isset($linea['base_imponible']) || (float)$linea['base_imponible'] < 0) {
+                    $errores[] = "Línea {$n}: la base imponible es obligatoria.";
+                } elseif (!$esElectronico && (float)$linea['base_imponible'] <= 0) {
                     $errores[] = "Línea {$n}: la base imponible debe ser mayor a 0.";
+                }
                 if (!isset($linea['porcentaje_retencion']) || (float)$linea['porcentaje_retencion'] <= 0)
                     $errores[] = "Línea {$n}: el porcentaje de retención debe ser mayor a 0.";
             }
