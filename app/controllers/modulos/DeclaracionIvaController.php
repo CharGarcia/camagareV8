@@ -174,11 +174,14 @@ class DeclaracionIvaController extends BaseModuloController
                 }
             }
 
-            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo, $idUsuario);
+            // "GENERAR" con sincronizar=1 es una reconstrucción explícita desde documentos: no
+            // debe pisarse con los valores que ya estén guardados (respetarGuardado=false), o el
+            // botón "Recalcular desde documentos" quedaría mostrando lo mismo de siempre.
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo, $idUsuario, !$sincronizar);
             $detalleDocumentos = $this->service->detalleDocumentosGrupo($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
-            
+
             echo json_encode([
-                'ok' => true, 
+                'ok' => true,
                 'resumen_completo' => $resumenCompleto,
                 'detalle_documentos' => $detalleDocumentos
             ]);

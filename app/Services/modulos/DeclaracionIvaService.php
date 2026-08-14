@@ -221,7 +221,15 @@ class DeclaracionIvaService
      * limitando a 0 (para que no existan valores negativos), y 
      * resolviendo las fórmulas matemáticas.
      */
-    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $tipoPeriodo = '', int $anio = 0, int $periodoValor = 0, int $idUsuario = 0): array
+    /**
+     * @param bool $respetarGuardado Si true (default), los casilleros de arrastre/ajuste
+     *             (605/606/615/617/480/481/483/484/485/486/902) se fijan al valor ya guardado
+     *             cuando el período tiene una declaración (para no pisar un ajuste manual) — lo
+     *             usan el Excel/PDF y la carga inicial. Si false, esos casilleros se recalculan
+     *             siempre desde cero: lo usa el botón "GENERAR"/"Recalcular desde documentos" de
+     *             la vista, para que sea una reconstrucción real y no un espejo de lo guardado.
+     */
+    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $tipoPeriodo = '', int $anio = 0, int $periodoValor = 0, int $idUsuario = 0, bool $respetarGuardado = true): array
     {
         // El F104 se presenta por RUC completo: se consolidan todas las empresas del grupo
         // accesibles al usuario (ver EmpresaRepository::getIdsGrupoRucAccesible()). El arrastre
@@ -265,8 +273,11 @@ class DeclaracionIvaService
             $sums['606'] = $creditoAnteriorRetenciones;
 
             // Si el período ya tiene una declaración guardada, se respeta el valor guardado
-            // (pudo haber sido ajustado manualmente) en vez de recalcular el default y pisarlo.
-            $declActual = $this->repository->findDeclaracion($idEmpresa, $ambiente, $tipoPeriodo, $anio, $periodoValor);
+            // (pudo haber sido ajustado manualmente) en vez de recalcular el default y pisarlo
+            // — salvo que el llamador pida explícitamente reconstruir desde cero (ver docblock).
+            $declActual = $respetarGuardado
+                ? $this->repository->findDeclaracion($idEmpresa, $ambiente, $tipoPeriodo, $anio, $periodoValor)
+                : null;
             if ($declActual) {
                 $sums['615'] = round((float) $declActual['saldo_favor_compras'], 2);
                 $sums['617'] = round((float) $declActual['saldo_favor_retenciones'], 2);
