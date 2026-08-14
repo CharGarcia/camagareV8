@@ -270,13 +270,19 @@ class DeclaracionIvaService
             if ($declActual) {
                 $sums['615'] = round((float) $declActual['saldo_favor_compras'], 2);
                 $sums['617'] = round((float) $declActual['saldo_favor_retenciones'], 2);
+                // 902 respeta el ajuste manual guardado, igual que 615/617 (ver comentario arriba).
+                $sums['902'] = round((float) $declActual['total_a_pagar'], 2);
             } else {
-                $comp = $this->resumenPagoDirectoGrupo($idsGrupo, $fechaDesde, $fechaHasta, $ambiente);
-                $ivaVentasNeto      = round((float) $comp['iva_ventas'] - (float) $comp['iva_notas_credito'], 2);
-                $creditoComprasNeto = round((float) $comp['iva_compras'] - (float) $comp['iva_notas_credito_compra'], 2);
-                $split = $this->calcularSplitArrastre($ivaVentasNeto, $creditoComprasNeto, (float) $comp['retenciones'], $creditoAnteriorCompras, $creditoAnteriorRetenciones);
+                // Misma fuente que guardarDeclaracion(): los casilleros "impuesto" ya sincronizados
+                // en $sums (ver paso 1), no una segunda consulta SQL aparte — para que la vista
+                // previa (antes de guardar) coincida con lo que se va a guardar.
+                $ivaVentasNeto      = $this->sumarImpuestoPorSeccion($estructura, $sums, '400');
+                $creditoComprasNeto = $this->sumarImpuestoPorSeccion($estructura, $sums, '500');
+                $retencionesPreview = round((float) ($sums['609'] ?? 0), 2);
+                $split = $this->calcularSplitArrastre($ivaVentasNeto, $creditoComprasNeto, $retencionesPreview, $creditoAnteriorCompras, $creditoAnteriorRetenciones);
                 $sums['615'] = $split['615'];
                 $sums['617'] = $split['617'];
+                $sums['902'] = round((float) $split['a_pagar'], 2);
             }
 
             // 2d. Liquidación diferida de IVA por ventas a plazo (480/481/483/484/486 —
@@ -482,6 +488,28 @@ class DeclaracionIvaService
     }
 
     /**
+     * Suma el valor de la columna "Impuesto" (casillero_impuesto) de todas las filas de una
+     * sección del layout (400=ventas, 500=compras), leyendo de $valores (el mismo array que
+     * pinta el Resumen 104). Es la fuente única para "total impuesto generado"/"total crédito
+     * tributario": como cada fila ya viene neta de su nota de crédito (mismo casillero, signo
+     * negativo — ver empresa_casilleros_iva_sri), el resultado es directamente el neto, y
+     * automáticamente incluye cualquier tipo de documento que ya esté sincronizado a casilleros
+     * (Facturas, Recibos que se configuren, Liquidaciones de Compra, Importaciones, etc.) sin
+     * necesidad de listar tablas a mano en una consulta aparte.
+     */
+    private function sumarImpuestoPorSeccion(array $estructura, array $valores, string $seccion): float
+    {
+        $total = 0.0;
+        foreach ($estructura as $fila) {
+            if (($fila['seccion'] ?? '') !== $seccion) continue;
+            $cas = $fila['casillero_impuesto'] ?? '';
+            if ($cas === '' || $cas === null) continue;
+            $total += (float) ($valores[$cas] ?? 0);
+        }
+        return round($total, 2);
+    }
+
+    /**
      * Descompone el arrastre de crédito tributario en sus dos orígenes (compras/adquisiciones
      * y retenciones), consumiendo el IVA en ventas en el MISMO orden que ya usa el cálculo
      * combinado de siempre (compras primero, retenciones después), para que el total
@@ -563,12 +591,21 @@ class DeclaracionIvaService
         // Consolidado por RUC: lo que se guarda es el F104 real que se presenta ante el SRI (por
         // RUC completo), no solo lo de esta fila `empresas`. Ver comentario de clase.
         $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
-        $comp = $this->resumenPagoDirectoGrupo($idsGrupo, $fechaDesde, $fechaHasta, $ambiente);
-        $ivaVentas          = round((float) $comp['iva_ventas'], 2);
-        $notasCreditoVenta  = round((float) $comp['iva_notas_credito'], 2);
-        $creditoCompras     = round((float) $comp['iva_compras'], 2);
-        $notasCreditoCompra = round((float) $comp['iva_notas_credito_compra'], 2);
-        $retenciones        = round((float) $comp['retenciones'], 2);
+
+        // El IVA a pagar se deriva de los MISMOS casilleros que arma el Resumen 104 (no de una
+        // segunda consulta SQL independiente): así nunca puede desincronizarse de lo que el
+        // usuario ve en pantalla, sin importar qué tipos de documento se agreguen a futuro (ver
+        // hallazgo: getResumenPagoDirecto() no contaba Liquidaciones de Compra en el crédito
+        // tributario). Los casilleros "impuesto" de ventas/compras (421, 422... / 520, 521...)
+        // ya vienen NETOS de notas de crédito: NotaCreditoService escribe el mismo casillero que
+        // la factura, con signo negativo (ver empresa_casilleros_iva_sri).
+        $resumen = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $tipoPeriodo, $anio, $periodoValor, $idUsuario);
+        $estructura = $resumen['layout'] ?? [];
+        $valoresCasilleros = $resumen['valores'] ?? [];
+
+        $ivaVentasNetoBase  = $this->sumarImpuestoPorSeccion($estructura, $valoresCasilleros, '400');
+        $creditoComprasBase = $this->sumarImpuestoPorSeccion($estructura, $valoresCasilleros, '500');
+        $retenciones        = round((float) ($valoresCasilleros['609'] ?? 0), 2);
 
         [$anioAnt, $periodoAnt] = $this->periodoAnterior($tipoPeriodo, $anio, $periodoValor);
         $declAnterior = $this->repository->getDeclaracionAnterior($idEmpresa, $ambiente, $tipoPeriodo, $anioAnt, $periodoAnt);
@@ -593,18 +630,19 @@ class DeclaracionIvaService
         $mesPagoCredito = (isset($data['ajuste_486']) && $data['ajuste_486'] !== '' && $data['ajuste_486'] !== null)
             ? (int) $data['ajuste_486'] : (int) ($existente['mes_pago_credito'] ?? 0);
 
-        // 482 = "trasládese campo 429" = IVA generado en ventas del período (bruto, antes de NC).
-        $liq482 = $ivaVentas;
+        // 482 = "trasládese campo 429" = total impuesto generado en ventas del período (ya neto
+        // de notas de crédito — ver comentario más arriba sobre cómo se arma $ivaVentasNetoBase).
+        $liq482 = $ivaVentasNetoBase;
         $liq483 = $declAnterior ? round((float) $declAnterior['liquidacion_diferida_485'], 2) : 0.0;
         $liq485 = round(max(0.0, $liq482 - $liq484), 2);
         $liq499 = round($liq483 + $liq484, 2);
 
-        $ivaVentasNeto      = round($ivaVentas - $notasCreditoVenta, 2);
+        $ivaVentasNeto = $ivaVentasNetoBase;
         if ($usaLiquidacionDiferida) {
             // El 499 (impuesto a liquidar este mes) reemplaza al IVA en ventas neto normal.
             $ivaVentasNeto = $liq499;
         }
-        $creditoComprasNeto = round($creditoCompras - $notasCreditoCompra, 2);
+        $creditoComprasNeto = $creditoComprasBase;
         $split = $this->calcularSplitArrastre($ivaVentasNeto, $creditoComprasNeto, $retenciones, $creditoAnteriorCompras, $creditoAnteriorRetenciones);
 
         // Saliente (casilleros 615/617): autocalculado, pero el usuario puede sobreescribirlo
@@ -619,7 +657,14 @@ class DeclaracionIvaService
         $saldoFavor = round($saldoFavorCompras + $saldoFavorRetenciones, 2);
         $aPagar     = round($split['a_pagar'], 2);
 
-        $valoresCasilleros = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $tipoPeriodo, $anio, $periodoValor, $idUsuario)['valores'] ?? [];
+        // Casillero 902 ("Total impuesto a pagar"): autocalculado igual que 615/617, pero
+        // editable en el formulario — el usuario puede sobreescribirlo antes de guardar. Ese
+        // valor final (autocalculado o ajustado a mano) es el que usa el egreso, no un cálculo
+        // interno aparte — pedido explícito: tomarlo del campo del formulario, no de una fórmula.
+        $ajuste902 = (isset($data['ajuste_902']) && $data['ajuste_902'] !== '' && $data['ajuste_902'] !== null)
+            ? round((float) $data['ajuste_902'], 2) : null;
+        $totalAPagar = $ajuste902 ?? $aPagar;
+
         // Los valores efectivamente guardados (con el ajuste manual aplicado) mandan sobre
         // el default que haya calculado getResumenCompleto para el snapshot del formulario.
         $valoresCasilleros['605'] = $creditoAnteriorCompras;
@@ -632,6 +677,7 @@ class DeclaracionIvaService
         $valoresCasilleros['484'] = $liq484;
         $valoresCasilleros['485'] = $liq485;
         $valoresCasilleros['486'] = $mesPagoCredito;
+        $valoresCasilleros['902'] = $totalAPagar;
         $valoresCasilleros['499'] = $liq499;
 
         $toSave = [
@@ -642,20 +688,21 @@ class DeclaracionIvaService
             'periodo_valor'                => $periodoValor,
             'fecha_desde'                  => $fechaDesde,
             'fecha_hasta'                  => $fechaHasta,
-            'iva_ventas'                   => $ivaVentas,
-            'notas_credito_venta'          => $notasCreditoVenta,
-            'credito_tributario_compras'   => $creditoCompras,
-            'notas_credito_compra'         => $notasCreditoCompra,
+            // Las notas de crédito ya vienen restadas dentro de iva_ventas/credito_tributario_compras
+            // (comparten casillero con la factura, signo negativo — ver comentario más arriba), así
+            // que estas dos columnas quedan en 0: no hay un total "bruto" por separado que romantizar.
+            'iva_ventas'                   => $ivaVentasNetoBase,
+            'notas_credito_venta'          => 0.0,
+            'credito_tributario_compras'   => $creditoComprasBase,
+            'notas_credito_compra'         => 0.0,
             'retenciones_iva'              => $retenciones,
             'credito_anterior_aplicado'    => $creditoAnteriorAplicado,
             'credito_anterior_compras'     => $creditoAnteriorCompras,
             'credito_anterior_retenciones' => $creditoAnteriorRetenciones,
             'iva_a_pagar'                  => $aPagar,
-            // Casillero 902 ("Total consolidado de impuesto a pagar") del F104: hoy no hay
-            // soporte de "impuesto ya imputado a un pago anterior" (rectificativas), así que
-            // coincide con iva_a_pagar — pero es el campo que debe usar el egreso, no el otro,
-            // mismo criterio que Declaración de Retenciones (ver DeclaracionRetencionesService).
-            'total_a_pagar'                => $aPagar,
+            // Casillero 902 ("Total impuesto a pagar"): el campo editable del formulario manda
+            // sobre el cálculo automático (ver $ajuste902 más arriba) — es el que usa el egreso.
+            'total_a_pagar'                => $totalAPagar,
             'saldo_favor'                  => $saldoFavor,
             'saldo_favor_compras'          => $saldoFavorCompras,
             'saldo_favor_retenciones'      => $saldoFavorRetenciones,
@@ -698,11 +745,17 @@ class DeclaracionIvaService
             throw new \Exception('Declaración no encontrada.');
         }
 
+        // El asiento usa total_a_pagar (casillero 902, el campo del formulario), no iva_a_pagar
+        // (el cálculo automático crudo): si el usuario ajustó el 902 a mano, lo que se contabiliza
+        // como "IVA por Pagar" debe ser lo mismo que después cancela el egreso — si no, quedan
+        // descuadrados entre sí. La diferencia entre el 902 ajustado y el cálculo automático (si
+        // la hay) la absorbe el ajuste por redondeo del asiento (tolera hasta 3 centavos; más que
+        // eso, aplicarAjusteRedondeo() avisa en vez de cuadrar a la fuerza un ajuste grande).
         $datos = [
             'iva_ventas_neto'           => round((float) $decl['iva_ventas'] - (float) $decl['notas_credito_venta'], 2),
             'credito_compras_neto'      => round((float) $decl['credito_tributario_compras'] - (float) $decl['notas_credito_compra'], 2),
             'retenciones'               => (float) $decl['retenciones_iva'],
-            'iva_a_pagar'               => (float) $decl['iva_a_pagar'],
+            'iva_a_pagar'               => (float) ($decl['total_a_pagar'] ?? $decl['iva_a_pagar']),
             'saldo_favor'               => (float) $decl['saldo_favor'],
             'credito_anterior_aplicado' => (float) $decl['credito_anterior_aplicado'],
         ];

@@ -541,6 +541,7 @@ class DeclaracionIvaController extends BaseModuloController
                 'ajuste_481'    => $_POST['ajuste_481'] ?? '',
                 'ajuste_484'    => $_POST['ajuste_484'] ?? '',
                 'ajuste_486'    => $_POST['ajuste_486'] ?? '',
+                'ajuste_902'    => $_POST['ajuste_902'] ?? '',
             ]);
             echo json_encode(['ok' => true, 'declaracion' => $declaracion]);
         } catch (\Throwable $e) {

@@ -777,10 +777,10 @@
                 fd.append('periodo', p.periodo);
                 fd.append('tipo_periodo', p.tipo_periodo);
 
-                // Casilleros editables (615/617 arrastre, 481/484/486 liquidación diferida):
-                // si la tabla ya se generó, se envía el valor actual de cada input (autocalculado
-                // o ajustado a mano por el usuario).
-                const mapaAjustes = { '615': 'ajuste_615', '617': 'ajuste_617', '481': 'ajuste_481', '484': 'ajuste_484', '486': 'ajuste_486' };
+                // Casilleros editables (615/617 arrastre, 481/484/486 liquidación diferida,
+                // 902 total a pagar): si la tabla ya se generó, se envía el valor actual de cada
+                // input (autocalculado o ajustado a mano por el usuario).
+                const mapaAjustes = { '615': 'ajuste_615', '617': 'ajuste_617', '481': 'ajuste_481', '484': 'ajuste_484', '486': 'ajuste_486', '902': 'ajuste_902' };
                 Object.keys(mapaAjustes).forEach(codigo => {
                     const inp = formSRI.querySelector('input[data-casillero-editable="' + codigo + '"]');
                     if (inp) fd.append(mapaAjustes[codigo], inp.value);
