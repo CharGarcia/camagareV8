@@ -316,6 +316,49 @@ class DeclaracionRetencionesService
         return $this->repository->findDeclaracionById($id, $idEmpresa) ?? [];
     }
 
+    /**
+     * Reabre una declaración 'pagado' (cerrada, con asiento y egreso generados) para poder
+     * recalcularla: anula el egreso (que a su vez anula su propio asiento de pago —
+     * EgresoService::anular()) y el asiento de la declaración, y la regresa a 'guardado'.
+     */
+    public function reabrirDeclaracion(int $idDeclaracion, int $idEmpresa, int $idUsuario): array
+    {
+        $decl = $this->repository->findDeclaracionById($idDeclaracion, $idEmpresa);
+        if (!$decl) {
+            throw new \Exception('Declaración no encontrada.');
+        }
+        if (($decl['estado'] ?? '') !== 'pagado') {
+            throw new \Exception('Esta declaración no está cerrada; no hace falta reabrirla.');
+        }
+
+        if (!empty($decl['id_egreso'])) {
+            $egresoService = new EgresoService(
+                new \App\repositories\modulos\EgresoRepository(),
+                new \App\Rules\modulos\EgresoRules(),
+                $this->logService
+            );
+            $egresoService->anular((int) $decl['id_egreso'], $idEmpresa, $idUsuario);
+        }
+
+        if (!empty($decl['id_asiento'])) {
+            $asientoService = new AsientoContableService(
+                new \App\repositories\modulos\AsientoContableRepository(),
+                new \App\Rules\modulos\AsientoContableRules(),
+                $this->logService
+            );
+            $asientoService->anular((int) $decl['id_asiento'], $idEmpresa, $idUsuario);
+        }
+
+        $this->repository->reabrir($idDeclaracion, $idEmpresa, $idUsuario);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'REABRIR', 'declaracion_retenciones_cabecera', $idDeclaracion,
+            ['estado' => 'pagado', 'id_asiento' => $decl['id_asiento'], 'id_egreso' => $decl['id_egreso']],
+            ['estado' => 'guardado', 'id_asiento' => null, 'id_egreso' => null]
+        );
+
+        return $this->repository->findDeclaracionById($idDeclaracion, $idEmpresa) ?? [];
+    }
+
     /** Genera (o regenera, sin duplicar) el asiento contable de la declaración de retenciones. */
     public function generarAsientoDeclaracion(int $idDeclaracion, int $idEmpresa, int $idUsuario): array
     {

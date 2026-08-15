@@ -625,4 +625,18 @@ class DeclaracionIvaRepository extends BaseRepository
                 WHERE id = ? AND id_empresa = ?";
         $this->query($sql, [$idEgreso, $idUsuario, $id, $idEmpresa]);
     }
+
+    /**
+     * Reabre una declaración 'pagado' (cerrada): limpia el asiento/egreso ya anulados por el
+     * Service y la regresa a 'guardado' para poder recalcularla. Ver
+     * DeclaracionIvaService::reabrirDeclaracion().
+     */
+    public function reabrir(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $sql = "UPDATE declaracion_iva_cabecera
+                SET estado = 'guardado', id_asiento = NULL, id_egreso = NULL,
+                    updated_by = ?, updated_at = now()
+                WHERE id = ? AND id_empresa = ?";
+        $this->query($sql, [$idUsuario, $id, $idEmpresa]);
+    }
 }

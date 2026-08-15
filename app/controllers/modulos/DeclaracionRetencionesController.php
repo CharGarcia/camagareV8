@@ -163,6 +163,25 @@ class DeclaracionRetencionesController extends BaseModuloController
         exit;
     }
 
+    public function reabrirAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $idDeclaracion = (int) ($_POST['id_declaracion'] ?? 0);
+
+        try {
+            $declaracion = $this->service->reabrirDeclaracion($idDeclaracion, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'declaracion' => $declaracion]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function generarEgresoAjax(): void
     {
         $this->requireActualizar();

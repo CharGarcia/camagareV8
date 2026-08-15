@@ -186,6 +186,11 @@
     </div>
 </div>
 
+<?php // Modal de Asiento Contable estándar (mismo del módulo Libro Diario / Asientos):
+      // permite ver, modificar y agregar cuentas al asiento generado, sin cerrarse solo. ?>
+<?php require MVC_APP . '/views/modulos/asientos_contables/modal_asiento.php'; ?>
+<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('formDeclaracion');
@@ -216,6 +221,28 @@
 
         form.addEventListener('submit', e => {
             e.preventDefault();
+            if (declaracionActual && declaracionActual.estado === 'pagado') {
+                Swal.fire({
+                    title: 'Declaración cerrada',
+                    html: 'Esta declaración ya tiene un <b>asiento</b> y un <b>egreso</b> generados.<br>Para recalcularla hay que <b>anular</b> el asiento y el egreso actuales. ¿Desea continuar?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, reabrir y regenerar',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#dc3545'
+                }).then(r => {
+                    if (!r.isConfirmed) return;
+                    const fd = new FormData();
+                    fd.append('id_declaracion', declaracionActual.id);
+                    fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/reabrir-ajax`, { method: 'POST', body: fd }).then(data => {
+                        if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
+                        declaracionActual = data.declaracion || null;
+                        actualizarBotonesDeclaracion();
+                        generar();
+                    });
+                });
+                return;
+            }
             generar();
         });
 
@@ -456,7 +483,8 @@
 
         function actualizarBotonesDeclaracion() {
             if (!btnGuardar) return; // sin permisos de crear/actualizar
-            btnGuardar.classList.toggle('d-none', !yaGenerado);
+            const cerrada = !!declaracionActual && declaracionActual.estado === 'pagado';
+            btnGuardar.classList.toggle('d-none', !yaGenerado || cerrada);
             if (declaracionActual) {
                 btnAsiento.classList.remove('d-none');
                 const aPagar = parseFloat(declaracionActual.total_retenido) || 0;
@@ -467,6 +495,19 @@
                 btnAsiento.classList.add('d-none');
                 btnEgreso.classList.add('d-none');
                 btnGuardar.innerHTML = '<i class="bi bi-save"></i> GUARDAR DECLARACIÓN';
+            }
+            let avisoCerrada = document.getElementById('avisoDeclaracionCerrada');
+            if (cerrada) {
+                if (!avisoCerrada) {
+                    avisoCerrada = document.createElement('div');
+                    avisoCerrada.id = 'avisoDeclaracionCerrada';
+                    avisoCerrada.className = 'alert alert-dark py-2 px-3 small mb-2';
+                    avisoDeclarado.insertAdjacentElement('afterend', avisoCerrada);
+                }
+                avisoCerrada.innerHTML = '<i class="bi bi-lock-fill me-1"></i> Esta declaración está <b>cerrada</b> (tiene asiento y egreso generados) y no se puede editar. Presione GENERAR si necesita corregirla: se anulará el asiento y el egreso actuales.';
+                avisoCerrada.classList.remove('d-none');
+            } else if (avisoCerrada) {
+                avisoCerrada.classList.add('d-none');
             }
         }
 
@@ -489,9 +530,9 @@
 
         function verificarDeclarado(preguntar) {
             const p = periodoParams();
-            if (!p.anio || !p.mes) return;
+            if (!p.anio || !p.mes) return Promise.resolve();
             const params = new URLSearchParams(p).toString();
-            fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/verificar-declarado-ajax?${params}`).then(data => {
+            return fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/verificar-declarado-ajax?${params}`).then(data => {
                 if (!data.ok) return;
                 declaracionActual = data.declaracion || null;
                 if (declaracionActual) {
@@ -560,8 +601,32 @@
                 fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/generar-asiento-ajax`, { method: 'POST', body: fd }).then(data => {
                     btnAsiento.disabled = false;
                     if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
-                    Swal.fire({ title: 'Asiento generado', text: 'El asiento contable ' + (data.numero_comprobante || ('#' + data.id_asiento)) + ' fue generado.', icon: 'success' });
-                    verificarDeclarado();
+                    if (typeof window.ASIENTO_abrirModal === 'function' && data.id_asiento) {
+                        window.ASIENTO_abrirModal(data.id_asiento);
+                        const modalAsientoEl = document.getElementById('modalAsientoContable');
+                        if (modalAsientoEl) {
+                            modalAsientoEl.addEventListener('hidden.bs.modal', function alCerrarAsiento() {
+                                modalAsientoEl.removeEventListener('hidden.bs.modal', alCerrarAsiento);
+                                verificarDeclarado().then(() => {
+                                    const aPagar = parseFloat(declaracionActual && declaracionActual.total_retenido) || 0;
+                                    const yaTieneEgreso = !!(declaracionActual && declaracionActual.id_egreso);
+                                    if (aPagar > 0 && !yaTieneEgreso) {
+                                        Swal.fire({
+                                            title: 'Asiento generado',
+                                            text: '¿Desea generar también el egreso del pago ahora?',
+                                            icon: 'question',
+                                            showCancelButton: true,
+                                            confirmButtonText: 'Sí, generar egreso',
+                                            cancelButtonText: 'Ahora no'
+                                        }).then(r => { if (r.isConfirmed) btnEgreso.click(); });
+                                    }
+                                });
+                            }, { once: true });
+                        }
+                    } else {
+                        verificarDeclarado();
+                        Swal.fire({ title: 'Asiento generado', text: 'El asiento contable ' + (data.numero_comprobante || ('#' + data.id_asiento)) + ' fue generado.', icon: 'success' });
+                    }
                 }).catch(() => { btnAsiento.disabled = false; });
             });
         }
