@@ -201,7 +201,7 @@
                 nombre_cuenta: l.nombre_cuenta || '',
                 id_centro_costo: '',
                 id_proyecto: '',
-                documento_referencia: l.descripcion || '',
+                documento_referencia: l.casillero ? `${l.casillero} - ${l.descripcion || ''}` : (l.descripcion || ''),
                 debe: l.lado === 'debe' ? l.valor : 0,
                 haber: l.lado === 'haber' ? l.valor : 0,
             }));
