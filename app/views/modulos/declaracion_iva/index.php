@@ -195,6 +195,16 @@
                     </div>
                 </div>
 
+                <div class="row g-2 mt-1">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold mb-1">Valor a pagar</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">$</span>
+                            <input type="number" step="0.01" min="0.01" id="egresoMonto" class="form-control fw-bold text-danger" onfocus="this.select()">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="alert alert-secondary py-2 px-3 small mb-0 mt-2" id="egresoMontoInfo"></div>
             </div>
             <div class="modal-footer py-2">
@@ -877,41 +887,79 @@
         if (btnAsiento) {
             btnAsiento.addEventListener('click', () => {
                 if (!declaracionActual) return;
+
+                // Ya existe un asiento vinculado: se abre para revisarlo/editarlo (mismo modal
+                // que usa Libro Diario / Asientos), no se vuelve a sugerir uno desde cero.
+                if (declaracionActual.id_asiento) {
+                    if (typeof window.ASIENTO_abrirModalDesdeOrigen === 'function') {
+                        window.ASIENTO_abrirModalDesdeOrigen('declaracion_iva', declaracionActual.id);
+                    }
+                    return;
+                }
+
                 btnAsiento.disabled = true;
                 const fd = new FormData();
                 fd.append('id_declaracion', declaracionActual.id);
                 fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/generar-asiento-ajax`, { method: 'POST', body: fd }).then(data => {
                     btnAsiento.disabled = false;
                     if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
-                    if (typeof window.ASIENTO_abrirModal === 'function' && data.id_asiento) {
-                        window.ASIENTO_abrirModal(data.id_asiento);
-                        const modalAsientoEl = document.getElementById('modalAsientoContable');
-                        if (modalAsientoEl) {
-                            modalAsientoEl.addEventListener('hidden.bs.modal', function alCerrarAsiento() {
-                                modalAsientoEl.removeEventListener('hidden.bs.modal', alCerrarAsiento);
-                                verificarDeclarado().then(() => {
-                                    const aPagar = parseFloat(declaracionActual && declaracionActual.iva_a_pagar) || 0;
-                                    const yaTieneEgreso = !!(declaracionActual && declaracionActual.id_egreso);
-                                    if (aPagar > 0 && !yaTieneEgreso) {
-                                        Swal.fire({
-                                            title: 'Asiento generado',
-                                            text: '¿Desea generar también el egreso del pago ahora?',
-                                            icon: 'question',
-                                            showCancelButton: true,
-                                            confirmButtonText: 'Sí, generar egreso',
-                                            cancelButtonText: 'Ahora no'
-                                        }).then(r => { if (r.isConfirmed) btnEgreso.click(); });
-                                    }
-                                });
-                            }, { once: true });
-                        }
-                    } else {
-                        verificarDeclarado();
-                        Swal.fire({ title: 'Asiento generado', text: 'El asiento contable ' + (data.numero_comprobante || ('#' + data.id_asiento)) + ' fue generado.', icon: 'success' });
+                    if (typeof window.ASIENTO_abrirModalSugerido !== 'function') {
+                        return Swal.fire('Error', 'No se pudo cargar el modal de asiento.', 'error');
                     }
+                    window.ASIENTO_abrirModalSugerido({
+                        concepto: data.concepto,
+                        fecha_asiento: data.fecha_asiento,
+                        tipo_comprobante: 'declaracion_iva',
+                        modulo_origen: 'declaracion_iva',
+                        id_referencia_origen: declaracionActual.id,
+                        titulo: 'Asiento sugerido — Declaración de IVA',
+                    }, data.lineas || []);
                 }).catch(() => { btnAsiento.disabled = false; });
             });
         }
+
+        // El asiento se guarda desde el modal compartido (asientos_contables_modal.js), que no
+        // sabe nada de "declaraciones" — este listener es el que, tras guardarlo, lo vincula a
+        // la declaración, aprende la cuenta elegida por casillero (plantilla del próximo
+        // período) y ofrece generar el egreso a continuación.
+        document.addEventListener('asiento:guardado', (e) => {
+            if (!declaracionActual || e.detail.modulo_origen !== 'declaracion_iva'
+                || String(e.detail.id_referencia_origen) !== String(declaracionActual.id)) {
+                return;
+            }
+
+            const lineasPlantilla = [];
+            document.querySelectorAll('#tbodyAsientoDetalles tr[data-casillero]').forEach(tr => {
+                const idCuenta = tr.querySelector('.cuenta-id').value;
+                if (!idCuenta) return;
+                const debe = parseFloat(tr.querySelector('.input-debe').value) || 0;
+                lineasPlantilla.push({ casillero: tr.dataset.casillero, id_cuenta_contable: idCuenta, lado: debe > 0 ? 'debe' : 'haber' });
+            });
+            if (lineasPlantilla.length > 0) {
+                const fdP = new FormData();
+                fdP.append('lineas_json', JSON.stringify(lineasPlantilla));
+                fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/guardar-plantilla-asiento-ajax`, { method: 'POST', body: fdP });
+            }
+
+            const fdV = new FormData();
+            fdV.append('id_declaracion', declaracionActual.id);
+            fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/vincular-asiento-ajax`, { method: 'POST', body: fdV }).then(() => {
+                verificarDeclarado().then(() => {
+                    const aPagar = parseFloat(declaracionActual && declaracionActual.iva_a_pagar) || 0;
+                    const yaTieneEgreso = !!(declaracionActual && declaracionActual.id_egreso);
+                    if (aPagar > 0 && !yaTieneEgreso) {
+                        Swal.fire({
+                            title: 'Asiento guardado',
+                            text: '¿Desea generar también el egreso del pago ahora?',
+                            icon: 'question',
+                            showCancelButton: true,
+                            confirmButtonText: 'Sí, generar egreso',
+                            cancelButtonText: 'Ahora no'
+                        }).then(r => { if (r.isConfirmed) btnEgreso.click(); });
+                    }
+                });
+            });
+        });
 
         // ---- Modal Generar Egreso ----
         let modalEgreso = null;
@@ -970,7 +1018,9 @@
         if (btnEgreso) {
             btnEgreso.addEventListener('click', () => {
                 if (!declaracionActual) return;
-                document.getElementById('egresoMontoInfo').innerHTML = `IVA a pagar: <b>$${(parseFloat(declaracionActual.iva_a_pagar) || 0).toLocaleString('en-US', {minimumFractionDigits:2})}</b>`;
+                const sugerido = parseFloat(declaracionActual.total_a_pagar ?? declaracionActual.iva_a_pagar) || 0;
+                document.getElementById('egresoMonto').value = sugerido.toFixed(2);
+                document.getElementById('egresoMontoInfo').innerHTML = `Sugerido según la declaración (casillero 902): <b>$${sugerido.toLocaleString('en-US', {minimumFractionDigits:2})}</b>. Puede editarlo arriba.`;
                 document.getElementById('egresoFecha').value = CMG_fechaLocal();
                 document.getElementById('egresoProveedorTexto').value = '';
                 document.getElementById('egresoProveedorId').value = '';
@@ -983,6 +1033,13 @@
                     document.getElementById('egresoConcepto').innerHTML = data.conceptos.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
                     document.getElementById('egresoFormaPago').innerHTML = data.formas_pago.map(f => `<option value="${f.id}" data-tipo="${f.tipo || ''}">${f.nombre}</option>`).join('');
                     document.getElementById('egresoPuntoEmision').innerHTML = data.puntos_emision.map(p => `<option value="${p.id}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('');
+
+                    // Proveedor sugerido (recordado del último egreso de este tipo de declaración).
+                    if (data.proveedor_sugerido) {
+                        const p = data.proveedor_sugerido;
+                        document.getElementById('egresoProveedorId').value = p.id;
+                        document.getElementById('egresoProveedorTexto').value = p.identificacion ? `${p.razon_social} (${p.identificacion})` : p.razon_social;
+                    }
 
                     // Los selects se llenaron recién ahora (AJAX): aplicar los favoritos guardados
                     // (estrella) antes de calcular secuencial/campos bancarios dependientes.
@@ -1059,10 +1116,13 @@
                 if (!declaracionActual) return;
                 const idProveedor = document.getElementById('egresoProveedorId').value;
                 if (!idProveedor) return Swal.fire('Atención', 'Seleccione un proveedor de la lista.', 'warning');
+                const monto = parseFloat(document.getElementById('egresoMonto').value) || 0;
+                if (monto <= 0) return Swal.fire('Atención', 'Ingrese el valor a pagar.', 'warning');
 
                 const fd = new FormData();
                 fd.append('id_declaracion', declaracionActual.id);
                 fd.append('id_proveedor', idProveedor);
+                fd.append('monto', monto.toFixed(2));
                 fd.append('id_egreso_concepto', document.getElementById('egresoConcepto').value);
                 fd.append('id_forma_pago', document.getElementById('egresoFormaPago').value);
                 fd.append('id_punto_emision', document.getElementById('egresoPuntoEmision').value);

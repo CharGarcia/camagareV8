@@ -554,7 +554,27 @@ class DeclaracionIvaController extends BaseModuloController
         exit;
     }
 
+    /** Devuelve las líneas sugeridas del asiento (no escribe nada); la vista las carga en el modal. */
     public function generarAsientoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idDeclaracion = (int) ($_POST['id_declaracion'] ?? 0);
+
+        try {
+            $resultado = $this->service->getLineasSugeridasAsiento($idDeclaracion, $idEmpresa);
+            echo json_encode(['ok' => true] + $resultado);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Vincula a la declaración el asiento que el usuario acaba de guardar en el modal estándar. */
+    public function vincularAsientoAjax(): void
     {
         $this->requireActualizar();
         header('Content-Type: application/json');
@@ -564,8 +584,28 @@ class DeclaracionIvaController extends BaseModuloController
         $idDeclaracion = (int) ($_POST['id_declaracion'] ?? 0);
 
         try {
-            $resultado = $this->service->generarAsientoDeclaracion($idDeclaracion, $idEmpresa, $idUsuario);
+            $resultado = $this->service->vincularAsiento($idDeclaracion, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true] + $resultado);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Guarda la cuenta elegida por casillero como sugerencia para el próximo período. */
+    public function guardarPlantillaAsientoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $lineas = json_decode((string) ($_POST['lineas_json'] ?? ''), true) ?: [];
+
+        try {
+            $this->service->guardarPlantillaAsiento($idEmpresa, $lineas, $idUsuario);
+            echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -608,6 +648,7 @@ class DeclaracionIvaController extends BaseModuloController
                 'id_forma_pago'            => (int) ($_POST['id_forma_pago'] ?? 0),
                 'id_punto_emision'         => (int) ($_POST['id_punto_emision'] ?? 0),
                 'fecha'                    => $_POST['fecha'] ?? date('Y-m-d'),
+                'monto'                    => $_POST['monto'] ?? '',
                 'tipo_operacion_bancaria'  => $_POST['tipo_operacion_bancaria'] ?? '',
                 'numero_cheque'            => $_POST['numero_cheque'] ?? '',
                 'fecha_cobro'              => $_POST['fecha_cobro'] ?? '',
@@ -627,6 +668,7 @@ class DeclaracionIvaController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
             $empresaModel = new \App\models\Empresa();
@@ -640,9 +682,26 @@ class DeclaracionIvaController extends BaseModuloController
             $formasPago = $fpRepo->getFormasFiltradas($idEmpresa, 'EGRESO');
 
             $egRepo = new \App\repositories\modulos\EgresoRepository();
-            $conceptos = $egRepo->getConceptosEgreso($idEmpresa);
+            // Solo conceptos libres (comportamiento GENERAL): los que tienen comportamiento
+            // ligado a un módulo (COMPRA, ROL, ANTICIPO_*, etc.) los asigna ese módulo, no el
+            // usuario a mano — igual criterio que $conceptosSelect en Egresos/Ingresos.
+            $conceptos = array_values(array_filter(
+                $egRepo->getConceptosEgreso($idEmpresa),
+                fn ($c) => ($c['comportamiento'] ?? 'GENERAL') === 'GENERAL'
+            ));
 
-            echo json_encode(['ok' => true, 'puntos_emision' => $puntos, 'formas_pago' => $formasPago, 'conceptos' => $conceptos]);
+            $prefSvc = new \App\Services\UsuarioPreferenciaService(new \App\repositories\UsuarioPreferenciaRepository());
+            $prefs = $prefSvc->obtenerPreferencias($idUsuario, $idEmpresa, 'declaracion_iva');
+            $idProveedorSugerido = (int) ($prefs['id_proveedor_egreso_default'] ?? 0);
+            $proveedorSugerido = null;
+            if ($idProveedorSugerido > 0) {
+                $proveedorSugerido = (new \App\repositories\modulos\ProveedorRepository())->getDetalleCompleto($idProveedorSugerido, $idEmpresa);
+            }
+
+            echo json_encode([
+                'ok' => true, 'puntos_emision' => $puntos, 'formas_pago' => $formasPago, 'conceptos' => $conceptos,
+                'proveedor_sugerido' => $proveedorSugerido,
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

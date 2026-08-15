@@ -156,6 +156,64 @@
         if(modalInstance) modalInstance.show();
     };
 
+    /**
+     * Abre el modal para un asiento NUEVO (sin guardar todavía) con líneas ya sugeridas —
+     * p. ej. una por casillero de la Declaración de IVA/Retenciones, con la cuenta precargada
+     * si hay una plantilla guardada. El llamador decide qué hacer tras el guardado exitoso
+     * escuchando el evento 'asiento:guardado' (ver ASIENTO_guardar).
+     *
+     * @param {{concepto:string, fecha_asiento:string, tipo_comprobante?:string, modulo_origen?:string, id_referencia_origen?:number|string, titulo?:string}} cabecera
+     * @param {Array<{casillero:string, descripcion:string, lado:'debe'|'haber', valor:number, id_cuenta_contable?:number|null, codigo_cuenta?:string|null, nombre_cuenta?:string|null}>} lineas
+     */
+    window.ASIENTO_abrirModalSugerido = async function (cabecera, lineas) {
+        if (!modalInstance) {
+            const el = document.getElementById('modalAsientoContable');
+            if (el) modalInstance = new bootstrap.Modal(el);
+        }
+
+        document.getElementById('formAsientoContable').reset();
+        document.getElementById('asiento_id').value = '';
+        document.getElementById('asiento_modulo_origen').value = cabecera.modulo_origen || 'manual';
+        document.getElementById('asiento_id_referencia_origen').value = cabecera.id_referencia_origen || '';
+        document.getElementById('tbodyAsientoDetalles').innerHTML = '';
+        document.getElementById('btnAnularAsiento').classList.add('d-none');
+        document.getElementById('btnRestablecerAsiento').classList.add('d-none');
+        document.getElementById('btnGuardarAsiento').classList.remove('d-none');
+        document.getElementById('asientoBarraAcciones').classList.add('d-none');
+        document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
+        aplicarModoLecturaAsiento(false);
+        document.getElementById('asientoModalTitle').textContent = cabecera.titulo || 'Asiento sugerido';
+        document.getElementById('asiento_fecha').value = cabecera.fecha_asiento || getCurrentLocalDate();
+        document.getElementById('asiento_tipo').value = cabecera.tipo_comprobante || 'diario';
+        document.getElementById('asiento_tipo_label').value = (cabecera.tipo_comprobante || 'diario').replace(/_/g, ' ');
+        document.getElementById('asiento_estado').value = 'contabilizado';
+        document.getElementById('asiento_estado_label').value = 'Contabilizado';
+        document.getElementById('asiento_numero').value = '';
+        document.getElementById('asiento_concepto').value = cabecera.concepto || '';
+
+        await cargarDatosAuxiliares();
+
+        if (lineas && lineas.length > 0) {
+            lineas.forEach(l => window.ASIENTO_agregarFila({
+                casillero: l.casillero,
+                id_cuenta_contable: l.id_cuenta_contable || '',
+                codigo_cuenta: l.codigo_cuenta || '',
+                nombre_cuenta: l.nombre_cuenta || '',
+                id_centro_costo: '',
+                id_proyecto: '',
+                documento_referencia: l.descripcion || '',
+                debe: l.lado === 'debe' ? l.valor : 0,
+                haber: l.lado === 'haber' ? l.valor : 0,
+            }));
+        } else {
+            window.ASIENTO_agregarFila();
+            window.ASIENTO_agregarFila();
+        }
+
+        calcularTotales();
+        if (modalInstance) modalInstance.show();
+    };
+
     function cargarDatosAsiento(data) {
         const tipoVal   = (data.tipo_comprobante || '').toLowerCase().trim();
         const estadoVal = (data.estado || '').toLowerCase().trim();
@@ -212,9 +270,10 @@
     window.ASIENTO_agregarFila = function (datos = null) {
         const tbody = document.getElementById('tbodyAsientoDetalles');
         const tr = document.createElement('tr');
+        if (datos && datos.casillero) tr.dataset.casillero = datos.casillero;
 
         const idCuenta = datos ? datos.id_cuenta_contable : '';
-        const codigoNombre = datos ? `${datos.codigo_cuenta} - ${datos.nombre_cuenta}` : '';
+        const codigoNombre = datos && datos.id_cuenta_contable ? `${datos.codigo_cuenta} - ${datos.nombre_cuenta}` : '';
         const idCentro = datos ? datos.id_centro_costo : '';
         const idProyecto = datos ? datos.id_proyecto : '';
         const docRef = datos ? (datos.documento_referencia || '') : '';
@@ -398,6 +457,15 @@
             const resp = await fetch(url, { method: 'POST', body: fd });
             const res = await resp.json();
             if (res.ok) {
+                // Hook genérico para que quien haya abierto el modal (p. ej. la Declaración de
+                // IVA/Retenciones) reaccione al guardado sin que este archivo sepa nada de ellos.
+                document.dispatchEvent(new CustomEvent('asiento:guardado', {
+                    detail: {
+                        id: res.id,
+                        modulo_origen: document.getElementById('asiento_modulo_origen').value,
+                        id_referencia_origen: document.getElementById('asiento_id_referencia_origen').value,
+                    }
+                }));
                 if (window.cambiarPaginaAjax) window.cambiarPaginaAjax(window.currentPage || 1);
                 if (modalInstance) modalInstance.hide();
                 await swalExito(res.msg || 'Asiento guardado correctamente.');

@@ -38,11 +38,6 @@ class ConfiguracionContableController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
-        // Declaración de IVA / Retenciones consolidan y contabilizan siempre contra el
-        // establecimiento matriz del grupo RUC — configurarlas desde otro establecimiento
-        // no tendría efecto, así que ni se ofrecen ahí.
-        $esMatriz = (new \App\repositories\modulos\EmpresaRepository())->getEsMatriz($idEmpresa);
-
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'id');
@@ -72,7 +67,6 @@ class ConfiguracionContableController extends BaseModuloController
             'ordenDir'     => $ordenDir,
             'vistaConfig'  => $prefsVista,
             'asientosTipo' => $asientosTipo,
-            'esMatriz'     => $esMatriz,
             'fullWidth'    => true,
         ]);
     }

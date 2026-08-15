@@ -360,7 +360,16 @@ class DeclaracionRetencionesService
     }
 
     /** Genera (o regenera, sin duplicar) el asiento contable de la declaración de retenciones. */
-    public function generarAsientoDeclaracion(int $idDeclaracion, int $idEmpresa, int $idUsuario): array
+    /**
+     * Arma las líneas SUGERIDAS del asiento de la declaración (una por casillero con valor —
+     * la columna "valor" del F103, equivalente a la de impuesto del F104 — más el total a pagar
+     * 902), con la cuenta contable precargada desde la plantilla del período anterior (ver
+     * DeclaracionAsientoPlantillaRepository). NO escribe nada: el usuario completa/ajusta las
+     * cuentas en el modal estándar de Asientos Contables (reemplaza el asiento que armaba
+     * AsientoBuilderService::generarAsientoDeclaracionRetenciones() con cuentas preconfiguradas
+     * por código SRI en asientos_programados).
+     */
+    public function getLineasSugeridasAsiento(int $idDeclaracion, int $idEmpresa): array
     {
         if (!$this->empresaRepo->getEsMatriz($idEmpresa)) {
             throw new \Exception('El asiento de la Declaración de Retenciones solo se puede generar desde el establecimiento matriz del RUC.');
@@ -370,45 +379,87 @@ class DeclaracionRetencionesService
         if (!$decl) {
             throw new \Exception('Declaración no encontrada.');
         }
+        $valores = json_decode((string) ($decl['valores_casilleros'] ?? ''), true) ?: [];
 
-        $idsGrupo = $this->idsGrupo($idEmpresa, $idUsuario);
-        $builder  = new AsientoBuilderService();
-        $detalles = $builder->generarAsientoDeclaracionRetenciones($idEmpresa, $decl['fecha_desde'], $decl['fecha_hasta'], $idsGrupo);
-        if (empty($detalles)) {
+        $plantillaRepo = new \App\repositories\modulos\DeclaracionAsientoPlantillaRepository();
+        $plantilla = $plantillaRepo->getPlantilla($idEmpresa, 'retenciones');
+
+        $lineas = [];
+        $agregar = function (string $casillero, string $descripcion, string $lado, float $valor) use (&$lineas, $plantilla) {
+            $valor = round($valor, 2);
+            if ($valor <= 0.0) {
+                return;
+            }
+            $sugerida = $plantilla[$casillero] ?? null;
+            $lineas[] = [
+                'casillero'          => $casillero,
+                'descripcion'        => $descripcion,
+                'lado'               => $lado,
+                'valor'              => $valor,
+                'id_cuenta_contable' => $sugerida['id_cuenta_contable'] ?? null,
+                'codigo_cuenta'      => $sugerida['codigo_cuenta'] ?? null,
+                'nombre_cuenta'      => $sugerida['nombre_cuenta'] ?? null,
+            ];
+        };
+
+        // Una línea DEBE por cada código de retención con valor (cierra el pasivo que ya se
+        // reconoció documento a documento, ver comentario de generarAsientoDeclaracionRetenciones
+        // que este método reemplaza), excepto 499/902 que son totales, no un código real.
+        foreach ($this->repository->getEstructuraFormulario() as $fila) {
+            $cas = $fila['casillero_valor'] ?? '';
+            if ($cas === '' || $cas === null || in_array($cas, ['499', '902'], true)) {
+                continue;
+            }
+            $valor = (float) ($valores[$cas] ?? 0);
+            $agregar($cas, (string) ($fila['descripcion'] ?? "Casillero $cas"), 'debe', $valor);
+        }
+
+        // Total consolidado a pagar (902, el campo del formulario) = HABER: el pasivo único
+        // frente al SRI que luego cancela el egreso.
+        $agregar('902', 'Total impuesto a pagar', 'haber', (float) ($decl['total_a_pagar'] ?? $decl['total_retenido']));
+
+        if (empty($lineas)) {
             throw new \Exception('No hay valores para generar el asiento de esta declaración.');
         }
 
-        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
-        $asientoService = new AsientoContableService(
-            $asientoRepo,
-            new \App\Rules\modulos\AsientoContableRules(),
-            $this->logService
-        );
-
-        $previo    = $asientoService->getAsientoPorOrigen('declaracion_retenciones', $idDeclaracion, $idEmpresa);
-        $idAsiento = $previo ? (int) $previo['id'] : 0;
-
-        $cabecera = [
-            'id'                   => $idAsiento > 0 ? $idAsiento : null,
-            'fecha_asiento'        => $decl['fecha_hasta'],
-            'tipo_comprobante'     => 'declaracion_retenciones',
-            'numero_comprobante'   => '',
-            'concepto'             => 'Declaración de Retenciones ' . $this->etiquetaPeriodo($decl),
-            'estado'               => 'contabilizado',
-            'modulo_origen'        => 'declaracion_retenciones',
-            'id_referencia_origen' => $idDeclaracion,
-            'observaciones'        => $decl['observaciones'] ?? null,
+        return [
+            'concepto'      => 'Declaración de Retenciones ' . $this->etiquetaPeriodo($decl),
+            'fecha_asiento' => $decl['fecha_hasta'],
+            'lineas'        => $lineas,
         ];
+    }
 
-        $idGenerado = $asientoService->guardarAsiento($cabecera, $detalles, $idEmpresa, $idUsuario);
-        $this->repository->marcarAsiento($idDeclaracion, $idEmpresa, $idGenerado, $idUsuario);
-        $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_ASIENTO', 'declaracion_retenciones_cabecera', $idDeclaracion, null, ['id_asiento' => $idGenerado]);
+    /**
+     * Guarda como plantilla la cuenta elegida por casillero (upsert), para precargarla en el
+     * próximo período. Se llama tras guardar el asiento sugerido (ver evento JS
+     * 'asiento:guardado' en la vista).
+     */
+    public function guardarPlantillaAsiento(int $idEmpresa, array $lineas, int $idUsuario): void
+    {
+        $plantillaRepo = new \App\repositories\modulos\DeclaracionAsientoPlantillaRepository();
+        $plantillaRepo->guardarPlantilla($idEmpresa, 'retenciones', $lineas, $idUsuario);
+    }
 
-        // El id interno no sirve para buscarlo en Asientos Contables — ahí se busca por
-        // número de comprobante (p. ej. "DV-000001"), así que se devuelve también.
-        $numeroComprobante = $asientoRepo->getDetalleAsiento($idGenerado, $idEmpresa)['numero_comprobante'] ?? '';
+    /**
+     * Vincula a la declaración el asiento ya guardado por el usuario en el modal estándar de
+     * Asientos Contables (modulo_origen='declaracion_retenciones',
+     * id_referencia_origen=$idDeclaracion): el modal no sabe nada de "declaraciones", así que
+     * este paso es el que actualiza declaracion_retenciones_cabecera.id_asiento tras guardar.
+     */
+    public function vincularAsiento(int $idDeclaracion, int $idEmpresa, int $idUsuario): array
+    {
+        $asientoRepo = new \App\repositories\modulos\AsientoContableRepository();
+        $asiento = $asientoRepo->getAsientoPorOrigen('declaracion_retenciones', $idDeclaracion, $idEmpresa);
+        if (!$asiento) {
+            throw new \Exception('No se encontró el asiento guardado para esta declaración.');
+        }
+        $idAsiento = (int) $asiento['id'];
 
-        return ['id_asiento' => $idGenerado, 'numero_comprobante' => $numeroComprobante];
+        $this->repository->marcarAsiento($idDeclaracion, $idEmpresa, $idAsiento, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_ASIENTO', 'declaracion_retenciones_cabecera', $idDeclaracion, null, ['id_asiento' => $idAsiento]);
+
+        $numeroComprobante = $asientoRepo->getDetalleAsiento($idAsiento, $idEmpresa)['numero_comprobante'] ?? '';
+        return ['id_asiento' => $idAsiento, 'numero_comprobante' => $numeroComprobante];
     }
 
     /**
@@ -467,11 +518,15 @@ class DeclaracionRetencionesService
         $sec    = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
         $numero = $est . '-' . $pto . '-' . str_pad((string) $sec, 9, '0', STR_PAD_LEFT);
 
-        // El monto del egreso es el casillero 902 ("Total impuesto a pagar" = 499 - 898), no el
-        // 499 (total retenido) directo: son iguales mientras no exista un pago previo imputado
-        // (898), pero conceptualmente son campos distintos del F103. Declaraciones guardadas
-        // antes de este cambio no tienen total_a_pagar (columna nueva): cae a total_retenido.
-        $monto        = round((float) ($decl['total_a_pagar'] ?? $decl['total_retenido']), 2);
+        // El monto del egreso lo ingresa el usuario en el modal (precargado con el casillero
+        // 902 "Total impuesto a pagar" como sugerencia, pero editable). Sin override, cae al
+        // 902/total_retenido calculado (declaraciones guardadas antes de este cambio no tienen
+        // total_a_pagar: cae a total_retenido).
+        $montoManual  = isset($opts['monto']) && $opts['monto'] !== '' ? round((float) $opts['monto'], 2) : null;
+        $monto        = $montoManual ?? round((float) ($decl['total_a_pagar'] ?? $decl['total_retenido']), 2);
+        if ($monto <= 0.0) {
+            throw new \Exception('El valor a pagar debe ser mayor a cero.');
+        }
         $periodoLabel = $this->etiquetaPeriodo($decl);
 
         $egSvc = new EgresoService(
@@ -512,6 +567,15 @@ class DeclaracionRetencionesService
 
         if ($managedTransaction) {
             $db->commit();
+        }
+
+        // Recordar el proveedor elegido como sugerencia para el próximo egreso de este tipo de
+        // declaración (no debe tumbar el egreso ya generado si falla por cualquier motivo).
+        try {
+            $prefSvc = new \App\Services\UsuarioPreferenciaService(new \App\repositories\UsuarioPreferenciaRepository());
+            $prefSvc->guardarPreferencia($idUsuario, $idEmpresa, 'declaracion_retenciones', 'id_proveedor_egreso_default', $idProveedor);
+        } catch (\Throwable $e) {
+            // no crítico
         }
 
         return $idEgreso;
