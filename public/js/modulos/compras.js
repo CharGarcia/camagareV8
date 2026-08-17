@@ -1205,11 +1205,20 @@ function CMG_agregarFilaDetalle(det) {
         opcIva += `<option value="${_codH}" data-codigo="${_codH}" data-tarifa="${ivaPct}" selected>${ivaPct}%</option>`;
     }
 
+    // Subtotal DECLARADO en el XML del SRI para esta línea (precioTotalSinImpuesto), ya guardado
+    // en compras_detalle.precio_total_sin_impuesto. Mientras la línea no se edite, se usa TAL CUAL
+    // (no se recalcula cantidad*precio en el navegador, que puede redondear distinto que el emisor
+    // del comprobante) tanto para el subtotal de esta fila como para los totales agrupados. En
+    // cuanto el usuario edita cantidad/precio/descuento/IVA de la línea, deja de haber un valor
+    // "declarado" que respetar y se recalcula en vivo (ver los oninput/onchange de abajo).
+    const esLineaExistente = !!det.id && det.precio_total_sin_impuesto !== undefined && det.precio_total_sin_impuesto !== null;
+
     const tr = document.createElement('tr');
     tr.className = 'row-detalle';
     tr.dataset.idx = idx;
     tr.dataset.productoNombre = det.producto_nombre || '';
     tr.dataset.descripcionOriginal = det.descripcion || '';
+    tr.dataset.subtotalOriginal = esLineaExistente ? String(det.precio_total_sin_impuesto) : '';
     tr.innerHTML = `
         <td class="ps-3">
             <input type="text" class="form-control form-control-sm input-detalle input-descripcion" value="${_esc(det.descripcion||'')}" placeholder="Descripción del producto..." oninput="CMG_recalcularTotales()">
@@ -1219,9 +1228,9 @@ function CMG_agregarFilaDetalle(det) {
             <input type="hidden" class="input-id-medida" value="${det.product_id_medida || det.id_medida || ''}">
             <input type="hidden" class="input-id-tipo-medida" value="${det.product_id_tipo_medida || det.id_tipo_medida || ''}">
         </td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="CMG_recalcularFila(this)"></td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
         <td class="text-center"><select class="form-select form-select-sm input-detalle input-iva" onchange="CMG_recalcularFila(this)">${opcIva}</select></td>
         <td class="text-end pe-4 align-middle fw-semibold"><span class="subtotal-line">0.00</span></td>
         <td class="text-center p-0 align-middle">
@@ -1238,7 +1247,11 @@ function CMG_agregarFilaDetalle(det) {
             mcConsultarHomologacion(idProv, det.codigo_principal, tr);
         }
     }
-    CMG_recalcularFila(tr.querySelector('.input-cantidad'));
+    if (esLineaExistente) {
+        tr.querySelector('.subtotal-line').textContent = parseFloat(det.precio_total_sin_impuesto).toFixed(2);
+    } else {
+        CMG_recalcularFila(tr.querySelector('.input-cantidad'));
+    }
 }
 
 function CMG_recalcularFila(input) {
@@ -1274,12 +1287,25 @@ function CMG_recalcularTotales() {
         // "0%", "No objeto de IVA", "Exento"...), igual que en facturas de venta.
         const label  = sel ? (sel.selectedOptions[0]?.text || (tarifa + '%')) : (tarifa + '%');
 
-        const brutoFila  = r2(cant * prec);
-        // Si el descuento de la línea supera su propio subtotal, se acota a este (evita bases
-        // negativas) y se usa ese mismo valor acotado para totalDesc — así Subtotal - Descuento
-        // sigue coincidiendo exactamente con la suma de las bases por tarifa de IVA.
-        const descLinea  = Math.min(desc, brutoFila);
-        const netoFila   = r2(brutoFila - descLinea);
+        // Si la línea no fue editada y viene de un documento ya guardado, se respeta el subtotal
+        // TAL CUAL lo declaró el XML del SRI (precioTotalSinImpuesto) en vez de recalcular
+        // cantidad*precio, que puede redondear distinto que el sistema del proveedor (ver
+        // CMG_agregarFilaDetalle). El bruto (pre-descuento) se deriva de ese valor confiable, no al
+        // revés, para que Subtotal - Descuento siga coincidiendo con la suma de bases por IVA.
+        const original = tr.dataset.subtotalOriginal;
+        let brutoFila, descLinea, netoFila;
+        if (original) {
+            netoFila  = r2(parseFloat(original));
+            descLinea = desc;
+            brutoFila = r2(netoFila + descLinea);
+        } else {
+            brutoFila = r2(cant * prec);
+            // Si el descuento de la línea supera su propio subtotal, se acota a este (evita bases
+            // negativas) y se usa ese mismo valor acotado para totalDesc — así Subtotal - Descuento
+            // sigue coincidiendo exactamente con la suma de las bases por tarifa de IVA.
+            descLinea = Math.min(desc, brutoFila);
+            netoFila  = r2(brutoFila - descLinea);
+        }
 
         subTotalBruto = r2(subTotalBruto + brutoFila);
         totalDesc = r2(totalDesc + descLinea);
@@ -1384,9 +1410,20 @@ window.CMG_guardar = async function() {
         const cant = parseFloat(tr.querySelector('.input-cantidad')?.value || 1);
         const precio = parseFloat(tr.querySelector('.input-precio')?.value || 0);
         const descVal = parseFloat(tr.querySelector('.input-desc')?.value || 0);
-        
-        const neto = Math.max(0, cant * precio - descVal);
-        const ivaVal = neto * tarifa / 100;
+
+        // Si la línea no fue editada, se envía el subtotal TAL CUAL lo declaró el XML del SRI
+        // (mismo criterio que CMG_recalcularTotales/CMG_agregarFilaDetalle) en vez de recalcularlo
+        // aquí — de lo contrario, con solo guardar sin tocar nada se sobrescribiría en la BD el
+        // precio_total_sin_impuesto original con el recálculo de cantidad*precio del navegador,
+        // que puede redondear distinto que el emisor del comprobante.
+        let neto;
+        if (tr.dataset.subtotalOriginal) {
+            neto = _r2(parseFloat(tr.dataset.subtotalOriginal));
+        } else {
+            const bruto = _r2(cant * precio);
+            neto = _r2(bruto - Math.min(_r2(descVal), bruto));
+        }
+        const ivaVal = _r2(neto * tarifa / 100);
         
         detalles.push({
             id: tr.querySelector('.input-id-detalle')?.value || null,
@@ -1937,6 +1974,9 @@ async function mcConsultarHomologacion(idProv, codigoProv, tr) {
                 const inputPrecio = tr.querySelector('.input-precio');
                 if (inputPrecio && parseFloat(inputPrecio.value || 0) === 0) {
                     inputPrecio.value = parseFloat(prod.costo || 0).toFixed(DEC_PRECIO);
+                    // Ya no es el precio del XML: invalida el subtotal "declarado" de la línea
+                    // para que a partir de ahora se recalcule en vivo (ver CMG_recalcularTotales).
+                    tr.dataset.subtotalOriginal = '';
                 }
                 
                 // Sincronizar con la pestaña de inventario
