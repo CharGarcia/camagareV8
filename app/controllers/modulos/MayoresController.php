@@ -77,6 +77,36 @@ class MayoresController extends BaseModuloController
     }
 
     /**
+     * Ejecuta UN paso de la sincronización (un módulo, o una de las verificaciones fijas del
+     * final) y devuelve de inmediato — permite a la UI mostrar una barra de progreso real
+     * (paso/totalPasos) e interrumpir el proceso entre pasos. Ver
+     * SincronizadorAsientosService::ejecutarPaso().
+     */
+    public function sincronizarPasoAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $paso = (int) ($_GET['paso'] ?? $_POST['paso'] ?? 0);
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            @set_time_limit(120);
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            $resultado = $sincronizador->ejecutarPaso($idEmpresa, $idUsuario, $paso);
+
+            echo json_encode(['ok' => true] + $resultado);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
+    /**
      * Cuenta cuántos documentos operativos están pendientes de generar su asiento contable,
      * sin generar nada. La vista lo consulta al cargar para preguntar al usuario si desea
      * generarlos ahora o continuar sin generar.

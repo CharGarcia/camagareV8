@@ -19,6 +19,11 @@ const CMG_TIPOS_MASCARA = ['01', '03', '04', '05', '06', '09', '11', '12', '15',
 // Verificar si la empresa es Persona Natural (Acepta '1' o '01')
 const _esPersonaNatural = (window.CMG_empresa?.tipo == '1' || window.CMG_empresa?.tipo == '01');
 
+// Decimales configurables por empresa (mismo patrón que factura_venta.js) — evita truncar a un
+// número fijo de decimales lo que ya viene con más precisión desde el XML del SRI.
+const DEC_CANT = parseInt(window.CMG_empresa?.decimales_cantidad ?? 2, 10) || 2;
+const DEC_PRECIO = parseInt(window.CMG_empresa?.decimales_precio ?? 2, 10) || 2;
+
 document.addEventListener('DOMContentLoaded', () => {
     if (window.CMG_tarifasIva && window.CMG_tarifasIva.length > 0) {
         const tDefault = window.CMG_tarifasIva.find(t => parseFloat(t.porcentaje_iva) > 0) || window.CMG_tarifasIva[0];
@@ -1195,8 +1200,8 @@ function CMG_agregarFilaDetalle(det) {
             <input type="hidden" class="input-id-medida" value="${det.product_id_medida || det.id_medida || ''}">
             <input type="hidden" class="input-id-tipo-medida" value="${det.product_id_tipo_medida || det.id_tipo_medida || ''}">
         </td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${parseFloat(det.cantidad||1)}" min="0.0001" step="any" oninput="CMG_recalcularFila(this)"></td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${parseFloat(det.precio_unitario||0).toFixed(4)}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${parseFloat(det.cantidad||1).toFixed(DEC_CANT)}" min="0.0001" step="any" oninput="CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${parseFloat(det.precio_unitario||0).toFixed(DEC_PRECIO)}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
         <td class="text-center"><select class="form-select form-select-sm input-detalle input-iva" onchange="CMG_recalcularFila(this)">${opcIva}</select></td>
         <td class="text-end pe-4 align-middle fw-semibold"><span class="subtotal-line">0.00</span></td>
@@ -1900,7 +1905,7 @@ async function mcConsultarHomologacion(idProv, codigoProv, tr) {
                 // Si el precio es 0, poner el costo sugerido
                 const inputPrecio = tr.querySelector('.input-precio');
                 if (inputPrecio && parseFloat(inputPrecio.value || 0) === 0) {
-                    inputPrecio.value = parseFloat(prod.costo || 0).toFixed(4);
+                    inputPrecio.value = parseFloat(prod.costo || 0).toFixed(DEC_PRECIO);
                 }
                 
                 // Sincronizar con la pestaña de inventario
@@ -2906,8 +2911,8 @@ function mcRenderDocRelacionado(doc) {
         return `<tr>
             <td class="ps-2">${_esc(det.codigo_principal || det.producto_codigo || '')}</td>
             <td>${_esc(det.descripcion || det.producto_nombre || '')}</td>
-            <td class="text-center">${cant.toFixed(2)}</td>
-            <td class="text-end">${pu.toFixed(2)}</td>
+            <td class="text-center">${cant.toFixed(DEC_CANT)}</td>
+            <td class="text-end">${pu.toFixed(DEC_PRECIO)}</td>
             <td class="text-end pe-2">${sub.toFixed(2)}</td>
         </tr>`;
     }).join('') || '<tr><td colspan="5" class="text-center text-muted py-2">Sin líneas de detalle.</td></tr>';
