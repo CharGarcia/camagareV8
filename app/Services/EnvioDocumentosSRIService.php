@@ -92,55 +92,61 @@ class EnvioDocumentosSRIService
             ];
         }
 
-        // 4. Preparar el contenido del correo
-        $asunto = $correoConfig['asunto_correo'] ?: 'Comprobante Electrónico Autorizado';
+        // 4. Preparar el contenido del correo (plantilla lib/mail/email_documento_sri.php)
+        $asunto              = $correoConfig['asunto_correo'] ?: 'Comprobante Electrónico Autorizado';
         $cuerpoPersonalizado = $correoConfig['cuerpo_correo'] ?? '';
 
-        $nombreDocStr = match ($tipoDocumento) {
-            'factura_venta' => 'Factura',
-            'nota_credito' => 'Nota de Crédito',
-            'nota_debito' => 'Nota de Débito',
-            'factura_reembolso' => 'Factura de Reembolso',
-            'retencion_compra' => 'Comprobante de Retención',
-            'guia_remision' => 'Guía de Remisión',
-            'liquidacion_compra' => 'Liquidación de Compra',
-            default => 'Comprobante Electrónico',
-        };
+        $nombreDocCorreo  = $this->nombreDocumentoCorreo($tipoDocumento);
+        $nombreDocArchivo = $this->nombreDocumentoArchivo($tipoDocumento);
 
-        // Construir el HTML
-        $htmlCuerpo = "<div style='font-family: Arial, sans-serif; line-height: 1.5;'>";
-        $htmlCuerpo .= "<p><strong>Estimad@:</strong> " . htmlspecialchars($nombreDestino) . "</p>";
-        $htmlCuerpo .= "<p><strong>Tipo de documento:</strong> " . $nombreDocStr . "</p>";
-
-        // Nombre base para los archivos adjuntos y número de documento visible (ej: 001-001-000000001)
-        $secuencial = $cabecera['secuencial'] ?? '';
+        // Numero de documento visible (ej: 001-001-000000001)
+        $secuencial      = $cabecera['secuencial'] ?? '';
         $establecimiento = $cabecera['establecimiento'] ?? '001';
-        $puntoEmision = $cabecera['punto_emision'] ?? '001';
-        $numComprobante = "";
+        $puntoEmision    = $cabecera['punto_emision'] ?? '001';
         if (!empty($secuencial)) {
             $numComprobante = $establecimiento . '-' . $puntoEmision . '-' . str_pad((string)$secuencial, 9, '0', STR_PAD_LEFT);
         } else {
-            $numComprobante = $cabecera['clave_acceso'] ?? time();
+            $numComprobante = (string)($cabecera['clave_acceso'] ?? time());
         }
 
         $claveAcceso = $cabecera['clave_acceso'] ?? $numAutorizacion;
-        $htmlCuerpo .= "<p><strong>Número de documento:</strong> " . htmlspecialchars((string)$numComprobante) . "</p>";
-        $htmlCuerpo .= "<p><strong>Número de autorización:</strong> " . htmlspecialchars($claveAcceso) . "</p>";
-        $htmlCuerpo .= "<hr style='border: 0; border-top: 1px solid #ccc; margin: 20px 0;'>";
-        if (!empty($cuerpoPersonalizado)) {
-            $htmlCuerpo .= "<div>" . $cuerpoPersonalizado . "</div>";
-        } else {
-            $htmlCuerpo .= "<p>Adjuntamos a este correo su comprobante electrónico en formato PDF y XML.</p>";
+
+        // Fecha de emision del documento en formato d-m-Y
+        $fechaEmisionFmt = '';
+        if (!empty($cabecera['fecha_emision'])) {
+            $ts = strtotime((string)$cabecera['fecha_emision']);
+            $fechaEmisionFmt = $ts ? date('d-m-Y', $ts) : (string)$cabecera['fecha_emision'];
         }
-        $htmlCuerpo .= "</div>";
+
+        // Valor total: las retenciones usan total_retenido y las guias de remision no tienen monto.
+        $totalRaw = $cabecera['importe_total'] ?? $cabecera['total_retenido'] ?? null;
+        $valorTotalFmt = ($totalRaw !== null && $totalRaw !== '')
+            ? number_format((float)$totalRaw, 2, '.', '') . ' $'
+            : '';
+
+        // Datos del emisor y su logo (para la cabecera y la firma del correo)
+        $datosEmpresa = $this->datosEmpresaCorreo($idEmpresa);
+        $logoPath     = $this->resolverLogoEmpresa($idEmpresa, isset($cabecera['id_establecimiento']) ? (int)$cabecera['id_establecimiento'] : null);
+        $logoCid      = $logoPath !== '' ? 'logoempresa' : '';
+
+        $htmlCuerpo = $this->renderPlantillaDocumento([
+            'nombre_destino'       => $nombreDestino,
+            'nombre_documento'     => $nombreDocCorreo,
+            'num_comprobante'      => $numComprobante,
+            'fecha_emision'        => $fechaEmisionFmt,
+            'num_autorizacion'     => (string)$claveAcceso,
+            'valor_total'          => $valorTotalFmt,
+            'cuerpo_personalizado' => $cuerpoPersonalizado,
+            'empresa_nombre'       => $datosEmpresa['nombre'],
+            'empresa_ruc'          => $datosEmpresa['ruc'],
+            'logo_cid'             => $logoCid,
+            'anulado'              => false,
+        ]);
 
         // Nombre base para los archivos adjuntos (ej: Factura_001-001-000000001)
-
-
-        $baseName = str_replace(' ', '_', $nombreDocStr) . '_' . $numComprobante;
-
+        $baseName = str_replace(' ', '_', $nombreDocArchivo) . '_' . $numComprobante;
         // 5. Enviar usando PHPMailer
-        $enviado = $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, $xmlString, $pdfString);
+        $enviado = $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, $xmlString, $pdfString, [], $logoPath, $logoCid);
         if (!$enviado) {
             \App\Services\ErrorLogService::registrarManual(
                 "Correo NO enviado ($tipoDocumento) a " . implode(', ', $listaDestinos) . ": el servidor SMTP rechazó o falló el envío. Revise host/usuario/contraseña de 'envio_documentos_sri' o del correo propio de la empresa.",
@@ -564,16 +570,8 @@ class EnvioDocumentosSRIService
             ];
         }
 
-        $nombreDocStr = match ($tipoDocumento) {
-            'factura_venta'      => 'Factura',
-            'nota_credito'       => 'Nota de Crédito',
-            'nota_debito'        => 'Nota de Débito',
-            'factura_reembolso'  => 'Factura de Reembolso',
-            'retencion_compra'   => 'Comprobante de Retención',
-            'guia_remision'      => 'Guía de Remisión',
-            'liquidacion_compra' => 'Liquidación de Compra',
-            default              => 'Comprobante Electrónico',
-        };
+        $nombreDocCorreo  = $this->nombreDocumentoCorreo($tipoDocumento);
+        $nombreDocArchivo = $this->nombreDocumentoArchivo($tipoDocumento);
 
         $secuencial      = $cabecera['secuencial'] ?? '';
         $establecimiento = $cabecera['establecimiento'] ?? '001';
@@ -582,24 +580,40 @@ class EnvioDocumentosSRIService
             ? $establecimiento . '-' . $puntoEmision . '-' . str_pad((string)$secuencial, 9, '0', STR_PAD_LEFT)
             : (string)($cabecera['clave_acceso'] ?? '');
 
-        $asunto = "Comprobante ANULADO: {$nombreDocStr} {$numComprobante}";
+        $asunto = "Comprobante ANULADO: {$nombreDocArchivo} {$numComprobante}";
 
-        $htmlCuerpo  = "<div style='font-family: Arial, sans-serif; line-height: 1.5;'>";
-        $htmlCuerpo .= "<p><strong>Estimad@:</strong> " . htmlspecialchars($nombreDestino) . "</p>";
-        $htmlCuerpo .= "<p>Le informamos que el siguiente comprobante electrónico ha sido <strong style='color:#b00020;'>ANULADO</strong>:</p>";
-        $htmlCuerpo .= "<p><strong>Tipo de documento:</strong> " . $nombreDocStr . "</p>";
-        $htmlCuerpo .= "<p><strong>Número de documento:</strong> " . htmlspecialchars((string)$numComprobante) . "</p>";
-        if (!empty($cabecera['clave_acceso'])) {
-            $htmlCuerpo .= "<p><strong>Clave de acceso:</strong> " . htmlspecialchars((string)$cabecera['clave_acceso']) . "</p>";
+        $fechaEmisionFmt = '';
+        if (!empty($cabecera['fecha_emision'])) {
+            $ts = strtotime((string)$cabecera['fecha_emision']);
+            $fechaEmisionFmt = $ts ? date('d-m-Y', $ts) : (string)$cabecera['fecha_emision'];
         }
-        $htmlCuerpo .= "<hr style='border:0;border-top:1px solid #ccc;margin:16px 0;'>";
-        $htmlCuerpo .= "<p>Este comprobante ya no tiene validez. Si tiene alguna duda, comuníquese con nosotros.</p>";
-        $htmlCuerpo .= "</div>";
 
-        $baseName = str_replace(' ', '_', $nombreDocStr) . '_ANULADO_' . $numComprobante;
+        $totalRaw = $cabecera['importe_total'] ?? $cabecera['total_retenido'] ?? null;
+        $valorTotalFmt = ($totalRaw !== null && $totalRaw !== '')
+            ? number_format((float)$totalRaw, 2, '.', '') . ' $'
+            : '';
+
+        $datosEmpresa = $this->datosEmpresaCorreo($idEmpresa);
+        $logoPath     = $this->resolverLogoEmpresa($idEmpresa, isset($cabecera['id_establecimiento']) ? (int)$cabecera['id_establecimiento'] : null);
+        $logoCid      = $logoPath !== '' ? 'logoempresa' : '';
+
+        $htmlCuerpo = $this->renderPlantillaDocumento([
+            'nombre_destino'   => $nombreDestino,
+            'nombre_documento' => $nombreDocCorreo,
+            'num_comprobante'  => $numComprobante,
+            'fecha_emision'    => $fechaEmisionFmt,
+            'num_autorizacion' => (string)($cabecera['clave_acceso'] ?? ''),
+            'valor_total'      => $valorTotalFmt,
+            'empresa_nombre'   => $datosEmpresa['nombre'],
+            'empresa_ruc'      => $datosEmpresa['ruc'],
+            'logo_cid'         => $logoCid,
+            'anulado'          => true,
+        ]);
+
+        $baseName = str_replace(' ', '_', $nombreDocArchivo) . '_ANULADO_' . $numComprobante;
 
         // Sin adjuntos (aviso informativo)
-        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, '', '');
+        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, '', '', [], $logoPath, $logoCid);
     }
 
     /**
@@ -722,7 +736,122 @@ class EnvioDocumentosSRIService
      *                             ['contenido' => string, 'nombre' => string]. Ej.: la
      *                             ficha de productos con imágenes de una Proforma.
      */
-    private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString, array $adjuntosExtra = []): bool
+    /**
+     * Nombre del documento tal como se muestra al destinatario en el correo.
+     * Incluye el genero correcto de "electronica/electronico".
+     */
+    private function nombreDocumentoCorreo(string $tipoDocumento): string
+    {
+        return match ($tipoDocumento) {
+            'factura_venta'      => 'Factura electrónica',
+            'nota_credito'       => 'Nota de Crédito electrónica',
+            'nota_debito'        => 'Nota de Débito electrónica',
+            'factura_reembolso'  => 'Factura de Reembolso electrónica',
+            'retencion_compra'   => 'Comprobante de Retención electrónico',
+            'guia_remision'      => 'Guía de Remisión electrónica',
+            'liquidacion_compra' => 'Liquidación de Compra electrónica',
+            default              => 'Comprobante electrónico',
+        };
+    }
+
+    /**
+     * Nombre corto del documento, usado para el nombre de los archivos adjuntos.
+     */
+    private function nombreDocumentoArchivo(string $tipoDocumento): string
+    {
+        return match ($tipoDocumento) {
+            'factura_venta'      => 'Factura',
+            'nota_credito'       => 'Nota de Crédito',
+            'nota_debito'        => 'Nota de Débito',
+            'factura_reembolso'  => 'Factura de Reembolso',
+            'retencion_compra'   => 'Comprobante de Retención',
+            'guia_remision'      => 'Guía de Remisión',
+            'liquidacion_compra' => 'Liquidación de Compra',
+            default              => 'Comprobante Electrónico',
+        };
+    }
+
+    /**
+     * Nombre y RUC de la empresa emisora para la firma del correo.
+     */
+    private function datosEmpresaCorreo(int $idEmpresa): array
+    {
+        try {
+            $emisor = (new EmpresaRepository())->getEmisorConfig($idEmpresa) ?? [];
+        } catch (\Throwable) {
+            $emisor = [];
+        }
+
+        $nombre = trim((string)($emisor['nombre_comercial'] ?? ''));
+        if ($nombre === '') {
+            $nombre = trim((string)($emisor['nombre'] ?? ''));
+        }
+
+        return [
+            'nombre' => $nombre,
+            'ruc'    => trim((string)($emisor['ruc'] ?? '')),
+        ];
+    }
+
+    /**
+     * Ruta absoluta en disco del logo de la empresa (vive en empresa_establecimiento.logo_ruta).
+     * Misma resolucion de rutas que usan los PDF, para no duplicar criterios.
+     */
+    private function resolverLogoEmpresa(int $idEmpresa, ?int $idEstablecimiento): string
+    {
+        $logoRuta = '';
+        try {
+            $repo             = new EmpresaRepository();
+            $establecimientos = $repo->getEstablecimientos($idEmpresa);
+            foreach ($establecimientos as $est) {
+                $esElEstablecimiento = !empty($idEstablecimiento)
+                    ? (int)$est['id'] === (int)$idEstablecimiento
+                    : true; // si el documento no trae establecimiento, usar el primero
+                if ($esElEstablecimiento) {
+                    $logoRuta = (string)($est['logo_ruta'] ?? '');
+                    break;
+                }
+            }
+        } catch (\Throwable) {
+            return '';
+        }
+
+        if ($logoRuta === '') {
+            return '';
+        }
+
+        $clean = ltrim($logoRuta, '/');
+        foreach (['sistema/public/', 'sistema/', 'public/'] as $prefijo) {
+            if (strpos($clean, $prefijo) === 0) {
+                $clean = substr($clean, strlen($prefijo));
+                break;
+            }
+        }
+
+        foreach ([\MVC_ROOT . '/public/' . $clean, \MVC_ROOT . '/' . $clean] as $candidato) {
+            if (is_file($candidato)) {
+                return $candidato;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Renderiza la plantilla HTML del correo de comprobantes (lib/mail/email_documento_sri.php).
+     */
+    private function renderPlantillaDocumento(array $data): string
+    {
+        $plantilla = MVC_APP . '/lib/mail/email_documento_sri.php';
+        if (!is_file($plantilla)) {
+            error_log('[SRI Correo] No se encuentra la plantilla email_documento_sri.php.');
+            return '';
+        }
+        ob_start();
+        require $plantilla;
+        return (string) ob_get_clean();
+    }
+    private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString, array $adjuntosExtra = [], string $logoPath = '', string $logoCid = ''): bool
     {
         $docMailDir = MVC_APP . '/lib/mail';
         if (!file_exists($docMailDir . '/phpmailer.php')) {
@@ -761,6 +890,12 @@ class EnvioDocumentosSRIService
 
             $mail->Body = $bodyHtml;
             $mail->isHTML(true);
+
+            // Logo de la empresa embebido en el HTML (cid:) porque los clientes de
+            // correo bloquean por defecto las imagenes remotas.
+            if ($logoPath !== '' && $logoCid !== '' && is_file($logoPath)) {
+                $mail->addEmbeddedImage($logoPath, $logoCid, basename($logoPath));
+            }
 
             // Adjuntos
             if (!empty($xmlString)) {
