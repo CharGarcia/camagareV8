@@ -3489,7 +3489,7 @@ class MigracionMysqlService
         $delDetImp = $pg->prepare("DELETE FROM compras_detalle_impuestos WHERE id_compra_detalle IN (SELECT id FROM compras_detalle WHERE id_compra = ?)");
         $delDet    = $pg->prepare("DELETE FROM compras_detalle WHERE id_compra = ?");
         // Al re-correr: actualiza el ambiente y los datos tributarios de una compra ya migrada, según la empresa actual
-        $updCab = $pg->prepare("UPDATE compras_cabecera SET numero_autorizacion = :aut, tipo_ambiente = :amb, tipo_comprobante = :tcomp, documento_modificado = :docmod, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, id_establecimiento = COALESCE(id_establecimiento, :idest), updated_at = now(), updated_by = :u WHERE id = :id");
+        $updCab = $pg->prepare("UPDATE compras_cabecera SET numero_autorizacion = :aut, tipo_ambiente = :amb, tipo_comprobante = :tcomp, documento_modificado = :docmod, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, total_sin_impuestos = :tsi, total_descuento = :tdes, id_establecimiento = COALESCE(id_establecimiento, :idest), updated_at = now(), updated_by = :u WHERE id = :id");
         // Formas de pago SRI de la compra: viejo formas_pago_compras → nuevo compras_pagos (enlaza por codigo_documento)
         $fpStmt  = $mysql->prepare("SELECT forma_pago, total_pago, plazo_pago, tiempo_pago FROM formas_pago_compras WHERE codigo_documento = :cd");
         $insPago = $pg->prepare("INSERT INTO compras_pagos (id_compra, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
@@ -3538,15 +3538,21 @@ class MigracionMysqlService
                 $autRec = ($autEsElectronica && isset($authUsadas[$aut]) && $authUsadas[$aut] !== $idExist) ? null : $aut;
                 try {
                     $pg->beginTransaction();
-                    $updCab->execute([':aut' => $autRec, ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':idest' => $idEstMatriz, ':u' => $idUsuario, ':id' => $idExist]);
+                    // Totales de cabecera desde el cuerpo viejo (subtotal YA es neto → no restar descuento):
+                    // re-migrar CORRIGE también el total_sin_impuestos/total_descuento de corridas viejas.
+                    $cuerpoStmt->execute([':cd' => $ec['codigo_documento']]);
+                    $lineasRec = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $tsiRec = 0.0; $tdesRec = 0.0;
+                    foreach ($lineasRec as $l) { $tsiRec += (float) $l['subtotal']; $tdesRec += (float) $l['descuento']; }
+                    $updCab->execute([':aut' => $autRec, ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':tsi' => round($tsiRec, 2), ':tdes' => round($tdesRec, 2), ':idest' => $idEstMatriz, ':u' => $idUsuario, ':id' => $idExist]);
                     if ($autEsElectronica && $autRec !== null) { $authUsadas[$aut] = $idExist; }
                     // Rehacer detalle + impuestos desde el cuerpo viejo: corrige el IVA de corridas
                     // viejas que usaban `impuesto` (siempre '2'=12%) en vez de `det_impuesto`.
                     $delDetImp->execute([$idExist]);
                     $delDet->execute([$idExist]);
-                    $cuerpoStmt->execute([':cd' => $ec['codigo_documento']]);
-                    foreach ($cuerpoStmt->fetchAll(PDO::FETCH_ASSOC) as $l) {
-                        $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
+                    foreach ($lineasRec as $l) {
+                        // cuerpo_compra.subtotal YA viene neto (cantidad·precio − descuento): NO restar el descuento otra vez.
+                        $base_i = (float) $l['subtotal'];
                         $insDet->execute([
                             ':c' => $idExist, ':cod' => (string) $l['codigo_producto'],
                             ':desc' => (string) ($l['detalle_producto'] ?: $l['codigo_producto'] ?: 'ITEM'),
@@ -3593,7 +3599,7 @@ class MigracionMysqlService
                 $cuerpoStmt->execute([':cd' => $ec['codigo_documento']]);
                 $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
                 $tsi = 0.0; $tdes = 0.0;
-                foreach ($lineas as $l) { $tsi += (float) $l['subtotal'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
+                foreach ($lineas as $l) { $tsi += (float) $l['subtotal']; $tdes += (float) $l['descuento']; } // cuerpo_compra.subtotal ya es NETO
 
                 // $aut / $autEsElectronica ya calculados arriba. Solo las electrónicas (49 díg.) se deduplican
                 // (evita 23505); las físicas (10 díg., compartidas por talonario) se conservan siempre.
@@ -3611,7 +3617,8 @@ class MigracionMysqlService
                 if ($autEsElectronica && $autIns !== null) { $authUsadas[$aut] = $idCompra; }
 
                 foreach ($lineas as $l) {
-                    $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
+                    // cuerpo_compra.subtotal YA viene neto (cantidad·precio − descuento): NO restar el descuento otra vez.
+                    $base_i = (float) $l['subtotal'];
                     $insDet->execute([
                         ':c' => $idCompra, ':cod' => (string) $l['codigo_producto'], ':desc' => (string) ($l['detalle_producto'] ?: $l['codigo_producto'] ?: 'ITEM'),
                         ':cant' => (float) $l['cantidad'], ':pu' => (float) $l['precio'], ':desc2' => (float) $l['descuento'], ':base' => round($base_i, 2),
