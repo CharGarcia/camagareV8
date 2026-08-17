@@ -4922,4 +4922,155 @@ class MigracionMysqlService
 
         return $res;
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // MIGRACIÓN DE USUARIOS (usuarios activos del sistema anterior → usuarios
+    // NIVEL 1 en el nuevo). Se dedupe por correo, se omiten los ya registrados,
+    // se crean con token de registro (contraseñas viejas son MD5, incompatibles;
+    // NO se envía correo) y se asignan a las empresas nuevas que correspondan por
+    // RUC (vía empresa_asignada del viejo), si ya están migradas.
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Usuarios activos (estado=1) del viejo, con correo, deduplicados por correo y
+     * EXCLUYENDO los que ya existen en el nuevo. Incluye las empresas donde estaba
+     * (para mostrar y para la asignación por RUC).
+     *
+     * @return array<int,array{mail:string,nombre:string,cedula:string,telefono:string,n_empresas:int,empresas:string,empresas_en_nuevo:int}>
+     */
+    public function listarUsuariosParaMigrar(): array
+    {
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        // Correos ya en el nuevo → se excluyen (no repetir correo).
+        $existentes = [];
+        foreach ($pg->query("SELECT LOWER(TRIM(mail)) AS m FROM usuarios WHERE mail IS NOT NULL AND TRIM(mail) <> '' AND eliminado = false") as $r) {
+            $existentes[(string) $r['m']] = true;
+        }
+
+        // Usuarios activos del viejo con correo.
+        $rows = $mysql->query("SELECT id, nombre, cedula, mail, telefono FROM usuarios WHERE estado = 1 AND TRIM(COALESCE(mail,'')) <> '' ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+
+        // Empresas viejas: id → base RUC + nombre.
+        $oldEmp = [];
+        foreach ($mysql->query("SELECT id, LEFT(ruc,10) AS base, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nom FROM empresas") as $r) {
+            $oldEmp[(int) $r['id']] = ['base' => (string) $r['base'], 'nom' => (string) $r['nom']];
+        }
+        // empresa_asignada viejo: id_usuario → [id_empresa].
+        $asigByUser = [];
+        foreach ($mysql->query("SELECT id_usuario, id_empresa FROM empresa_asignada") as $r) {
+            $asigByUser[(int) $r['id_usuario']][] = (int) $r['id_empresa'];
+        }
+        // Bases presentes en el nuevo (para marcar "se asignará").
+        $newBases = [];
+        foreach ($pg->query("SELECT DISTINCT LEFT(ruc,10) AS b FROM empresas WHERE eliminado = false") as $r) { $newBases[(string) $r['b']] = true; }
+
+        $porMail = [];
+        foreach ($rows as $r) {
+            $mail = strtolower(trim((string) $r['mail']));
+            if (isset($existentes[$mail])) { continue; } // ya registrado en el nuevo
+            if (!isset($porMail[$mail])) {
+                $porMail[$mail] = ['mail' => trim((string) $r['mail']), 'nombre' => trim((string) $r['nombre']), 'cedula' => trim((string) $r['cedula']), 'telefono' => trim((string) $r['telefono']), 'basesSet' => []];
+            }
+            foreach ($asigByUser[(int) $r['id']] ?? [] as $oldEmpId) {
+                if (isset($oldEmp[$oldEmpId])) { $porMail[$mail]['basesSet'][$oldEmp[$oldEmpId]['base']] = $oldEmp[$oldEmpId]['nom']; }
+            }
+        }
+
+        $out = [];
+        foreach ($porMail as $u) {
+            $enNuevo = 0; $nombres = [];
+            foreach ($u['basesSet'] as $b => $nom) { $nombres[] = $nom; if (isset($newBases[$b])) { $enNuevo++; } }
+            $out[] = [
+                'mail'              => $u['mail'],
+                'nombre'            => $u['nombre'],
+                'cedula'            => $u['cedula'],
+                'telefono'          => $u['telefono'],
+                'n_empresas'        => count($u['basesSet']),
+                'empresas'          => implode(', ', array_slice($nombres, 0, 3)) . (count($nombres) > 3 ? '…' : ''),
+                'empresas_en_nuevo' => $enNuevo,
+            ];
+        }
+        usort($out, static fn($a, $b) => strcasecmp($a['nombre'], $b['nombre']));
+        return $out;
+    }
+
+    /**
+     * Crea en el nuevo los usuarios indicados por correo, como NIVEL 1, con token de
+     * registro (sin enviar correo), y los asigna a las empresas nuevas que correspondan
+     * por RUC. Idempotente: omite los correos que ya existen en el nuevo.
+     *
+     * @param string[] $mailsSeleccionados
+     * @return array{migrados:int,omitidos:int,asignaciones:int,detalle:array<int,array<string,mixed>>}
+     */
+    public function migrarUsuarios(array $mailsSeleccionados, int $idUsuario): array
+    {
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $mails = array_values(array_unique(array_filter(array_map(static fn($m) => strtolower(trim((string) $m)), $mailsSeleccionados), static fn($m) => $m !== '')));
+        $res = ['migrados' => 0, 'omitidos' => 0, 'asignaciones' => 0, 'detalle' => []];
+        if (!$mails) { return $res; }
+
+        $asignada = new \App\models\EmpresaAsignada();
+
+        // Correos y cédulas ya usados (unicidad).
+        $mailUsados = []; $cedUsadas = [];
+        foreach ($pg->query("SELECT LOWER(TRIM(mail)) AS m, cedula FROM usuarios WHERE eliminado = false") as $r) {
+            if ($r['m'] !== null) { $mailUsados[(string) $r['m']] = true; }
+            if ($r['cedula'] !== null) { $cedUsadas[(string) $r['cedula']] = true; }
+        }
+        // Empresas nuevas por base RUC + empresas viejas id → base.
+        $newEmpByBase = [];
+        foreach ($pg->query("SELECT id, LEFT(ruc,10) AS b FROM empresas WHERE eliminado = false") as $r) { $newEmpByBase[(string) $r['b']][] = (int) $r['id']; }
+        $oldEmpBase = [];
+        foreach ($mysql->query("SELECT id, LEFT(ruc,10) AS b FROM empresas") as $r) { $oldEmpBase[(int) $r['id']] = (string) $r['b']; }
+
+        $selUser = $mysql->prepare("SELECT id, nombre, cedula, telefono FROM usuarios WHERE estado = 1 AND LOWER(TRIM(mail)) = :m ORDER BY id LIMIT 1");
+        $selAsig = $mysql->prepare("SELECT DISTINCT ea.id_empresa FROM empresa_asignada ea JOIN usuarios u ON u.id = ea.id_usuario WHERE LOWER(TRIM(u.mail)) = :m AND u.estado = 1");
+        $insUser = $pg->prepare("INSERT INTO usuarios (nombre, cedula, password, nivel, estado, mail, token, telefono) VALUES (:n, :c, :p, 1, 1, :m, :t, :tel) RETURNING id");
+        $insUA   = $pg->prepare("INSERT INTO usuario_asignado (id_usuario, id_adm) SELECT :u, :a WHERE NOT EXISTS (SELECT 1 FROM usuario_asignado WHERE id_usuario = :u AND id_adm = :a)");
+
+        foreach ($mails as $mail) {
+            $det = ['mail' => $mail, 'ok' => false, 'nombre' => '', 'asignadas' => 0, 'msg' => ''];
+            try {
+                if (isset($mailUsados[$mail])) { $res['omitidos']++; $det['msg'] = 'Ya registrado en el sistema nuevo.'; $res['detalle'][] = $det; continue; }
+                $selUser->execute([':m' => $mail]);
+                $u = $selUser->fetch(PDO::FETCH_ASSOC);
+                if (!$u) { $res['omitidos']++; $det['msg'] = 'No se encontró usuario activo con ese correo.'; $res['detalle'][] = $det; continue; }
+
+                $det['nombre'] = trim((string) $u['nombre']);
+                $ced = trim((string) $u['cedula']);
+                if ($ced === '' || isset($cedUsadas[$ced])) { $ced = substr(md5($mail), 0, 15); } // cédula única obligatoria
+                $token  = bin2hex(random_bytes(16));
+                $hash   = password_hash($token, PASSWORD_DEFAULT) ?: md5($token);
+                $nombre = trim((string) $u['nombre']) !== '' ? trim((string) $u['nombre']) : $mail;
+                $tel    = trim((string) $u['telefono']); // NOT NULL → '' si vacío
+
+                $pg->beginTransaction();
+                $insUser->execute([':n' => $nombre, ':c' => $ced, ':p' => $hash, ':m' => $mail, ':t' => $token, ':tel' => $tel]);
+                $idNuevo = (int) $insUser->fetchColumn();
+                $insUA->execute([':u' => $idNuevo, ':a' => $idUsuario]);
+
+                // Asignar a las empresas nuevas por RUC (empresas viejas donde estaba, activas o no).
+                $selAsig->execute([':m' => $mail]);
+                $bases = [];
+                foreach ($selAsig->fetchAll(PDO::FETCH_COLUMN) as $oe) { $b = $oldEmpBase[(int) $oe] ?? null; if ($b !== null) { $bases[$b] = true; } }
+                foreach (array_keys($bases) as $b) {
+                    foreach ($newEmpByBase[$b] ?? [] as $ne) { $asignada->asignar($ne, $idNuevo, $idUsuario); $det['asignadas']++; $res['asignaciones']++; }
+                }
+                $pg->commit();
+
+                $mailUsados[$mail] = true; $cedUsadas[$ced] = true;
+                $det['ok'] = true; $det['msg'] = 'Creado (nivel 1).'; $res['migrados']++;
+            } catch (Throwable $e) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $det['msg'] = 'Error: ' . substr($e->getMessage(), 0, 150);
+            }
+            $res['detalle'][] = $det;
+        }
+
+        return $res;
+    }
 }

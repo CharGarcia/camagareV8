@@ -131,6 +131,25 @@ function IMP_bodegaOptionsHtml(selectedId) {
     return html;
 }
 
+// Clasificación de la línea de producto: determina el casillero de la Declaración
+// de IVA (Activo Fijo) y la cuenta de inventario del asiento (Materia Prima vs
+// Producto Terminado), reemplaza a los antiguos checkboxes independientes "Activo
+// Fijo"/"Materia Prima" (mutuamente excluyentes ahora, un solo valor por línea).
+const IMP_TIPOS_INVENTARIO = {
+    producto_terminado: 'Producto Terminado',
+    materia_prima: 'Materia Prima',
+    activo_fijo: 'Activo Fijo',
+};
+
+function IMP_tipoInventarioOptionsHtml(seleccionado) {
+    const val = IMP_TIPOS_INVENTARIO[seleccionado] ? seleccionado : 'producto_terminado';
+    let html = '';
+    Object.entries(IMP_TIPOS_INVENTARIO).forEach(([v, label]) => {
+        html += `<option value="${v}" ${v === val ? 'selected' : ''}>${label}</option>`;
+    });
+    return html;
+}
+
 // Buscador genérico con debounce reutilizado para todos los typeaheads del módulo
 // z-index muy por encima del modal (1055 por defecto de Bootstrap, 6060 en el
 // stacking de un segundo modal sobre #modalImportacion): así el listado
@@ -651,7 +670,7 @@ function IMP_agregarFilaProducto(det) {
         <td><input type="date" class="form-control form-control-sm input-imp-caducidad" value="${det.fecha_caducidad ? det.fecha_caducidad.slice(0,10) : ''}"></td>
         <td><input type="text" class="form-control form-control-sm text-center input-imp-nup" value="${IMP_esc(det.nup || '')}"></td>
         <td><select class="form-select form-select-sm input-imp-bodega">${IMP_bodegaOptionsHtml(det.id_bodega || '')}</select></td>
-        <td class="text-center"><input type="checkbox" class="form-check-input input-imp-activo-fijo" ${(det.es_activo_fijo === true || det.es_activo_fijo === 't') ? 'checked' : ''} title="Activo fijo (afecta el casillero de la Declaración de IVA)"></td>
+        <td><select class="form-select form-select-sm input-imp-tipo-inventario" title="Clasificación de la línea">${IMP_tipoInventarioOptionsHtml(det.tipo_inventario)}</select></td>
         <td class="text-end imp-col-nacionalizado d-none"><span class="input-imp-costo-unit">${costoUnit ? costoUnit.toFixed(4) : '-'}</span></td>
         <td class="text-end imp-col-nacionalizado d-none"><span class="input-imp-costo-total">${costoTotal ? costoTotal.toFixed(2) : '-'}</span></td>
         <td class="text-center p-0 align-middle">
@@ -1305,7 +1324,7 @@ window.guardarImportacion = async function () {
             fecha_caducidad: tr.querySelector('.input-imp-caducidad')?.value || null,
             nup: tr.querySelector('.input-imp-nup')?.value || null,
             id_bodega: tr.querySelector('.input-imp-bodega')?.value || null,
-            es_activo_fijo: !!tr.querySelector('.input-imp-activo-fijo')?.checked,
+            tipo_inventario: tr.querySelector('.input-imp-tipo-inventario')?.value || 'producto_terminado',
         });
     });
 

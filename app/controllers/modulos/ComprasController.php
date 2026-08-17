@@ -1348,11 +1348,6 @@ class ComprasController extends BaseModuloController
             $invRepo = new \App\repositories\modulos\InventarioRepository();
             $invSrv  = new \App\Services\modulos\InventarioService($invRepo, new \App\Services\LogSistemaService());
 
-            // Obtener reglas de facturación/inventario de la empresa (primer establecimiento)
-            $empRepo = new \App\repositories\modulos\EmpresaRepository();
-            $idEst   = $empRepo->getPrimerEstablecimientoId($idEmpresa);
-            $config  = $empRepo->getEstablecimientoConfig($idEst) ?? [];
-
             $db->beginTransaction();
             error_log("INICIO PROCESAR INVENTARIO: Empresa $idEmpresa, Usuario $idUsuario, Compra $idCompra");
             $processedCount = 0;
@@ -1393,16 +1388,12 @@ class ComprasController extends BaseModuloController
                 if (empty($item['id_medida'])) throw new \Exception("Debe seleccionar una medida para '{$nombreAMostrar}'.");
                 if (empty($item['id_bodega'])) throw new \Exception("Debe seleccionar una bodega para '{$nombreAMostrar}'.");
 
-                // Reglas obligatorias por configuración de empresa
-                if (($config['obligatorio_lotes'] ?? 'false') === 'true' && empty($item['lote'])) {
-                    throw new \Exception("El Lote es OBLIGATORIO para '{$nombreAMostrar}' según la configuración.");
-                }
-                if (($config['obligatorio_caducidad'] ?? 'false') === 'true' && empty($item['caducidad'])) {
-                    throw new \Exception("La Fecha de Caducidad es OBLIGATORIA para '{$nombreAMostrar}' según la configuración.");
-                }
-                if (($config['obligatorio_nup'] ?? 'false') === 'true' && empty($item['nup'])) {
-                    throw new \Exception("El NUP (Serial) es OBLIGATORIO para '{$nombreAMostrar}' según la configuración.");
-                }
+                // Lote, Caducidad y NUP son OPCIONALES en este flujo (envío a inventario desde
+                // una compra). Los switches obligatorio_lotes / obligatorio_caducidad /
+                // obligatorio_nup del establecimiento aplican a la FACTURACIÓN (salida), donde el
+                // usuario elige de qué lote/serial sale la mercadería; al ingresar la compra el
+                // documento del proveedor muchas veces no trae ese dato y exigirlo bloqueaba el
+                // ingreso incluso en productos que no manejan lotes ni seriales.
 
                 // 3. Ya NO se valida "no exceder lo comprado": cd.cantidad no distingue unidad de
                 // medida (p. ej. "4" puede ser 4 cajas) y compararla en crudo contra lo que se

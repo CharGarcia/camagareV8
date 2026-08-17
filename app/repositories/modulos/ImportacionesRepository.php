@@ -400,12 +400,16 @@ class ImportacionesRepository extends BaseRepository
         $sql = "INSERT INTO importaciones_detalle (
                     id_importacion, id_factura_exterior, id_producto, codigo_producto_raw, descripcion,
                     cantidad, id_medida, precio_unitario_fob, precio_total_fob, peso_kg, volumen_m3,
-                    numero_lote, fecha_caducidad, nup, id_bodega, es_activo_fijo, created_by, updated_by
+                    numero_lote, fecha_caducidad, nup, id_bodega, tipo_inventario, created_by, updated_by
                 ) VALUES (
                     :id_importacion, :id_factura_exterior, :id_producto, :codigo_producto_raw, :descripcion,
                     :cantidad, :id_medida, :precio_unitario_fob, :precio_total_fob, :peso_kg, :volumen_m3,
-                    :numero_lote, :fecha_caducidad, :nup, :id_bodega, :es_activo_fijo, :id_usuario, :id_usuario
+                    :numero_lote, :fecha_caducidad, :nup, :id_bodega, :tipo_inventario, :id_usuario, :id_usuario
                 ) RETURNING id";
+
+        $tipoInventario = in_array($data['tipo_inventario'] ?? '', ['materia_prima', 'activo_fijo'], true)
+            ? $data['tipo_inventario']
+            : 'producto_terminado';
 
         $cantidad = (float) ($data['cantidad'] ?? 0);
         $precioUnitario = (float) ($data['precio_unitario_fob'] ?? 0);
@@ -426,7 +430,7 @@ class ImportacionesRepository extends BaseRepository
             ':fecha_caducidad'     => $data['fecha_caducidad'] ?? null,
             ':nup'                 => $data['nup'] ?? null,
             ':id_bodega'           => !empty($data['id_bodega']) ? (int) $data['id_bodega'] : null,
-            ':es_activo_fijo'      => !empty($data['es_activo_fijo']) ? 'true' : 'false',
+            ':tipo_inventario'     => $tipoInventario,
             ':id_usuario'          => (int) $data['id_usuario'],
         ])->fetchColumn();
     }

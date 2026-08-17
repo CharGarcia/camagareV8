@@ -791,91 +791,9 @@ class DeclaracionIvaService
      * Genera (o regenera, sin duplicar) el asiento contable de la liquidación del IVA.
      */
     /**
-     * Arma las líneas SUGERIDAS del asiento de la declaración (una por casillero con valor en
-     * la columna de impuesto — la "tercera columna" del F104 — más los casilleros de arrastre
-     * 605/606/615/617 y el total a pagar 902/609), con la cuenta contable precargada desde la
-     * plantilla guardada del período anterior (ver DeclaracionAsientoPlantillaRepository). NO
-     * escribe nada: el usuario completa/ajusta las cuentas en el modal estándar de Asientos
-     * Contables y decide cuándo guardar (reemplaza el asiento de 6 líneas fijas con cuentas
-     * preconfiguradas que armaba AsientoBuilderService::generarAsientoDeclaracionIva()).
-     */
-    public function getLineasSugeridasAsiento(int $idDeclaracion, int $idEmpresa): array
-    {
-        if (!$this->empresaRepo->getEsMatriz($idEmpresa)) {
-            throw new \Exception('El asiento de la Declaración de IVA solo se puede generar desde el establecimiento matriz del RUC.');
-        }
-
-        $decl = $this->repository->findDeclaracionById($idDeclaracion, $idEmpresa);
-        if (!$decl) {
-            throw new \Exception('Declaración no encontrada.');
-        }
-        $valores = json_decode((string) ($decl['valores_casilleros'] ?? ''), true) ?: [];
-
-        $plantillaRepo = new \App\repositories\modulos\DeclaracionAsientoPlantillaRepository();
-        $plantilla = $plantillaRepo->getPlantilla($idEmpresa, 'iva');
-
-        $lineas = [];
-        $agregar = function (string $casillero, string $descripcion, string $lado, float $valor) use (&$lineas, $plantilla) {
-            $valor = round($valor, 2);
-            if ($valor <= 0.0) {
-                return;
-            }
-            $sugerida = $plantilla[$casillero] ?? null;
-            $lineas[] = [
-                'casillero'          => $casillero,
-                'descripcion'        => $descripcion,
-                'lado'               => $lado,
-                'valor'              => $valor,
-                'id_cuenta_contable' => $sugerida['id_cuenta_contable'] ?? null,
-                'codigo_cuenta'      => $sugerida['codigo_cuenta'] ?? null,
-                'nombre_cuenta'      => $sugerida['nombre_cuenta'] ?? null,
-            ];
-        };
-
-        // Una línea por cada casillero con valor en la columna de Impuesto (secciones 400
-        // ventas y 500 compras/importaciones, ya netas de notas de crédito/débito — comparten
-        // el mismo casillero con signo contrario, ver comentario en guardarDeclaracion()).
-        foreach ($this->repository->getEstructuraFormulario() as $fila) {
-            $cas = $fila['casillero_impuesto'] ?? '';
-            if ($cas === '' || $cas === null) {
-                continue;
-            }
-            $valor = (float) ($valores[$cas] ?? 0);
-            $seccion = (string) ($fila['seccion'] ?? '');
-            $lado = strpos($seccion, '400') === 0 ? 'debe' : 'haber';
-            $agregar($cas, (string) ($fila['descripcion'] ?? "Casillero $cas"), $lado, $valor);
-        }
-
-        // Arrastre de crédito tributario: entrante (605/606) cancela el activo que traía del
-        // período anterior (haber); saliente (615/617) crea el nuevo activo a favor (debe).
-        $agregar('605', 'Saldo crédito tributario del mes anterior por adquisiciones e importaciones', 'haber', (float) ($valores['605'] ?? 0));
-        $agregar('606', 'Saldo crédito tributario del mes anterior por retenciones de IVA', 'haber', (float) ($valores['606'] ?? 0));
-        $agregar('615', 'Saldo crédito tributario para el próximo mes por adquisiciones e importaciones', 'debe', (float) ($valores['615'] ?? 0));
-        $agregar('617', 'Saldo crédito tributario para el próximo mes por retenciones de IVA', 'debe', (float) ($valores['617'] ?? 0));
-
-        // Retenciones de IVA recibidas (609): no tiene fila propia en el layout del F104 (es un
-        // acumulado interno, ver guardarDeclaracion()), así que se toma directo de la cabecera.
-        $agregar('609', 'Retenciones de IVA recibidas', 'haber', (float) $decl['retenciones_iva']);
-
-        // Total impuesto a pagar (902, el campo del formulario — ver comentario en
-        // guardarDeclaracion() sobre por qué manda sobre el cálculo automático).
-        $agregar('902', 'Total impuesto a pagar', 'haber', (float) ($decl['total_a_pagar'] ?? $decl['iva_a_pagar']));
-
-        if (empty($lineas)) {
-            throw new \Exception('No hay valores para generar el asiento de esta declaración.');
-        }
-
-        return [
-            'concepto'      => 'Declaración de IVA ' . $this->etiquetaPeriodo($decl),
-            'fecha_asiento' => $decl['fecha_hasta'],
-            'lineas'        => $lineas,
-        ];
-    }
-
-    /**
      * Guarda como plantilla la cuenta elegida por casillero (upsert), para precargarla en el
-     * próximo período. Se llama tras guardar el asiento sugerido (ver evento JS
-     * 'asiento:guardado' en la vista).
+     * próximo período si más adelante se vuelve a sugerir el asiento por casillero. Hoy el
+     * modal se abre en blanco (ver vista), así que normalmente no hay nada que guardar aquí.
      */
     public function guardarPlantillaAsiento(int $idEmpresa, array $lineas, int $idUsuario): void
     {
@@ -884,10 +802,13 @@ class DeclaracionIvaService
     }
 
     /**
-     * Vincula a la declaración el asiento ya guardado por el usuario en el modal estándar de
-     * Asientos Contables (modulo_origen='declaracion_iva', id_referencia_origen=$idDeclaracion):
+     * Vincula a la declaración el asiento que el usuario acaba de guardar en el modal estándar
+     * de Asientos Contables (modulo_origen='declaracion_iva', id_referencia_origen=$idDeclaracion):
      * el modal no sabe nada de "declaraciones", así que este paso es el que actualiza
-     * declaracion_iva_cabecera.id_asiento después del guardado.
+     * declaracion_iva_cabecera.id_asiento después del guardado. Si el asiento todavía es un
+     * borrador (temporal, sin cuadrar — ver AsientoContableRules), solo se vincula el id para
+     * que "Generar Asiento" lo reabra la próxima vez; la declaración recién pasa a
+     * 'contabilizado' cuando el asiento ya está registrado (cuadrado).
      */
     public function vincularAsiento(int $idDeclaracion, int $idEmpresa, int $idUsuario): array
     {
@@ -897,12 +818,21 @@ class DeclaracionIvaService
             throw new \Exception('No se encontró el asiento guardado para esta declaración.');
         }
         $idAsiento = (int) $asiento['id'];
+        $detalle = $asientoRepo->getDetalleAsiento($idAsiento, $idEmpresa);
+        $estadoAsiento = (string) ($detalle['estado'] ?? '');
 
-        $this->repository->marcarAsiento($idDeclaracion, $idEmpresa, $idAsiento, $idUsuario);
-        $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_ASIENTO', 'declaracion_iva_cabecera', $idDeclaracion, null, ['id_asiento' => $idAsiento]);
+        if ($estadoAsiento === 'contabilizado') {
+            $this->repository->marcarAsiento($idDeclaracion, $idEmpresa, $idAsiento, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_ASIENTO', 'declaracion_iva_cabecera', $idDeclaracion, null, ['id_asiento' => $idAsiento]);
+        } else {
+            $this->repository->vincularAsientoSinEstado($idDeclaracion, $idEmpresa, $idAsiento, $idUsuario);
+        }
 
-        $numeroComprobante = $asientoRepo->getDetalleAsiento($idAsiento, $idEmpresa)['numero_comprobante'] ?? '';
-        return ['id_asiento' => $idAsiento, 'numero_comprobante' => $numeroComprobante];
+        return [
+            'id_asiento'      => $idAsiento,
+            'estado_asiento'  => $estadoAsiento,
+            'numero_comprobante' => $detalle['numero_comprobante'] ?? '',
+        ];
     }
 
     /**

@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden
-version: 1.5
+version: 1.6
 orden: 20
 estado: activo
 ---
@@ -90,6 +90,14 @@ cuando se procesan las entradas, indicando la bodega de destino. Ese paso:
 
 Solo entran los productos **inventariables** y vinculados al catálogo.
 
+**Lote, NUP y caducidad son opcionales aquí.** Aunque la empresa tenga activados
+los interruptores *Obligatorio usar Lotes*, *Obligatorio usar Fecha de
+Caducidad* u *Obligatorio usar NUP* (en Empresa → configuración de facturación),
+esas reglas aplican a la **facturación** (la salida de la mercadería), no al
+ingreso desde una compra. El documento del proveedor muchas veces no trae ese
+dato, así que la entrada al inventario no lo exige: llénelos solo si los conoce
+y los necesita para la trazabilidad.
+
 ## Retenciones
 
 Desde la compra se genera la retención al proveedor, con los porcentajes que
@@ -139,6 +147,10 @@ ve solo las que registró.
 
 ## Historial de cambios
 
+- **1.6** — La entrada al inventario desde una compra ya **no exige** lote, fecha
+  de caducidad ni NUP, aunque esos campos estén marcados como obligatorios en la
+  configuración de la empresa (esa configuración sigue aplicando a la
+  facturación).
 - **1.5** — Entregas parciales: una orden de compra puede vincularse con
   varias compras (una orden en Recibido parcial también aparece para
   vincular); nuevo botón "Cerrar orden" para cerrar manualmente una

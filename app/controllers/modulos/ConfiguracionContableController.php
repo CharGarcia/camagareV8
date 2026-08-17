@@ -98,6 +98,7 @@ class ConfiguracionContableController extends BaseModuloController
             'recibos_venta' => 'Ventas con Recibo',
             'consignacion_venta' => 'Consignaciones en Ventas',
             'adquisiciones_compras' => 'Adquisiciones de Compras/Servicios',
+            'adquisiciones_importacion' => 'Importaciones',
             'retenciones_venta' => 'Retenciones en Venta',
             'retenciones_compra' => 'Retenciones en Compra',
             'ingresos_egresos' => 'Ingresos y Egresos',

@@ -605,69 +605,35 @@
         if (btnAsiento) {
             btnAsiento.addEventListener('click', () => {
                 if (!declaracionActual) return;
-
-                // Ya existe un asiento vinculado: se abre para revisarlo/editarlo (mismo modal
-                // que usa Libro Diario / Asientos), no se vuelve a sugerir uno desde cero.
-                if (declaracionActual.id_asiento) {
-                    if (typeof window.ASIENTO_abrirModalDesdeOrigen === 'function') {
-                        window.ASIENTO_abrirModalDesdeOrigen('declaracion_retenciones', declaracionActual.id);
-                    }
-                    return;
+                // Formulario en blanco (o el borrador/asiento ya guardado, si existe) — sin
+                // cuentas ni valores sugeridos: el usuario arma las líneas a mano y puede
+                // guardar aunque no cuadre todavía (queda como borrador temporal).
+                if (typeof window.ASIENTO_abrirModalDesdeOrigen === 'function') {
+                    window.ASIENTO_abrirModalDesdeOrigen('declaracion_retenciones', declaracionActual.id);
                 }
-
-                btnAsiento.disabled = true;
-                const fd = new FormData();
-                fd.append('id_declaracion', declaracionActual.id);
-                fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/generar-asiento-ajax`, { method: 'POST', body: fd }).then(data => {
-                    btnAsiento.disabled = false;
-                    if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
-                    if (typeof window.ASIENTO_abrirModalSugerido !== 'function') {
-                        return Swal.fire('Error', 'No se pudo cargar el modal de asiento.', 'error');
-                    }
-                    window.ASIENTO_abrirModalSugerido({
-                        concepto: data.concepto,
-                        fecha_asiento: data.fecha_asiento,
-                        tipo_comprobante: 'declaracion_retenciones',
-                        modulo_origen: 'declaracion_retenciones',
-                        id_referencia_origen: declaracionActual.id,
-                        titulo: 'Asiento sugerido — Declaración de Retenciones',
-                    }, data.lineas || []);
-                }).catch(() => { btnAsiento.disabled = false; });
             });
         }
 
         // El asiento se guarda desde el modal compartido (asientos_contables_modal.js), que no
         // sabe nada de "declaraciones" — este listener es el que, tras guardarlo, lo vincula a
-        // la declaración, aprende la cuenta elegida por casillero (plantilla del próximo
-        // período) y ofrece generar el egreso a continuación.
+        // la declaración. Si quedó como borrador (sin cuadrar todavía) solo se vincula el id,
+        // sin marcar la declaración como contabilizada ni ofrecer el egreso.
         document.addEventListener('asiento:guardado', (e) => {
             if (!declaracionActual || e.detail.modulo_origen !== 'declaracion_retenciones'
                 || String(e.detail.id_referencia_origen) !== String(declaracionActual.id)) {
                 return;
             }
 
-            const lineasPlantilla = [];
-            document.querySelectorAll('#tbodyAsientoDetalles tr[data-casillero]').forEach(tr => {
-                const idCuenta = tr.querySelector('.cuenta-id').value;
-                if (!idCuenta) return;
-                const debe = parseFloat(tr.querySelector('.input-debe').value) || 0;
-                lineasPlantilla.push({ casillero: tr.dataset.casillero, id_cuenta_contable: idCuenta, lado: debe > 0 ? 'debe' : 'haber' });
-            });
-            if (lineasPlantilla.length > 0) {
-                const fdP = new FormData();
-                fdP.append('lineas_json', JSON.stringify(lineasPlantilla));
-                fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/guardar-plantilla-asiento-ajax`, { method: 'POST', body: fdP });
-            }
-
             const fdV = new FormData();
             fdV.append('id_declaracion', declaracionActual.id);
-            fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/vincular-asiento-ajax`, { method: 'POST', body: fdV }).then(() => {
+            fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/vincular-asiento-ajax`, { method: 'POST', body: fdV }).then(res => {
                 verificarDeclarado().then(() => {
+                    if (res.estado_asiento !== 'contabilizado') return; // sigue en borrador
                     const aPagar = parseFloat(declaracionActual && declaracionActual.total_retenido) || 0;
                     const yaTieneEgreso = !!(declaracionActual && declaracionActual.id_egreso);
                     if (aPagar > 0 && !yaTieneEgreso) {
                         Swal.fire({
-                            title: 'Asiento guardado',
+                            title: 'Asiento registrado',
                             text: '¿Desea generar también el egreso del pago ahora?',
                             icon: 'question',
                             showCancelButton: true,

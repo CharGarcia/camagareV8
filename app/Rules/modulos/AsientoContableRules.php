@@ -6,6 +6,12 @@ namespace App\Rules\modulos;
 
 class AsientoContableRules
 {
+    /**
+     * $data['estado'] === 'borrador' permite guardar un asiento a medio construir (temporal),
+     * sin exigir que Debe cuadre con Haber todavía: se puede ir guardando mientras se arma y
+     * recién exige el cuadre cuando el usuario lo registra (estado 'contabilizado'). Ver
+     * AsientoContableService::guardarAsiento().
+     */
     public function validarCabecera(array $data): void
     {
         if (empty($data['fecha_asiento'])) {
@@ -22,8 +28,9 @@ class AsientoContableRules
 
         $debe = round((float)($data['total_debe'] ?? 0), 2);
         $haber = round((float)($data['total_haber'] ?? 0), 2);
-        
-        if ($debe !== $haber) {
+        $esBorrador = ($data['estado'] ?? '') === 'borrador';
+
+        if (!$esBorrador && $debe !== $haber) {
             throw new \Exception('El asiento no está cuadrado. Total Debe (' . $debe . ') no coincide con Total Haber (' . $haber . ').');
         }
 
@@ -32,7 +39,7 @@ class AsientoContableRules
         }
     }
 
-    public function validarDetalles(array $detalles): void
+    public function validarDetalles(array $detalles, bool $esBorrador = false): void
     {
         if (empty($detalles) || !is_array($detalles)) {
             throw new \Exception('El asiento debe contener al menos un detalle de cuenta.');
@@ -66,11 +73,11 @@ class AsientoContableRules
             $sumaHaber += $haber;
         }
 
-        // Validación final de cuadre de detalles sumados
+        // Validación final de cuadre de detalles sumados (se salta en borrador).
         $sumaDebe = round($sumaDebe, 2);
         $sumaHaber = round($sumaHaber, 2);
 
-        if ($sumaDebe !== $sumaHaber) {
+        if (!$esBorrador && $sumaDebe !== $sumaHaber) {
             throw new \Exception('La sumatoria de los detalles no cuadra. Total Debe (' . $sumaDebe . ') vs Total Haber (' . $sumaHaber . ').');
         }
     }

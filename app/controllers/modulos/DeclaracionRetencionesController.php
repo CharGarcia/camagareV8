@@ -145,24 +145,6 @@ class DeclaracionRetencionesController extends BaseModuloController
     }
 
     /** Devuelve las líneas sugeridas del asiento (no escribe nada); la vista las carga en el modal. */
-    public function generarAsientoAjax(): void
-    {
-        $this->requireActualizar();
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idDeclaracion = (int) ($_POST['id_declaracion'] ?? 0);
-
-        try {
-            $resultado = $this->service->getLineasSugeridasAsiento($idDeclaracion, $idEmpresa);
-            echo json_encode(['ok' => true] + $resultado);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
-        exit;
-    }
-
     /** Vincula a la declaración el asiento que el usuario acaba de guardar en el modal estándar. */
     public function vincularAsientoAjax(): void
     {

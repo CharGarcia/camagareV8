@@ -272,6 +272,19 @@ class DeclaracionRetencionesRepository extends BaseRepository
         $this->query($sql, [$idAsiento, $idUsuario, $id, $idEmpresa]);
     }
 
+    /**
+     * Igual que marcarAsiento() pero sin tocar el estado de la declaración: se usa cuando el
+     * asiento vinculado todavía es un borrador (temporal, sin cuadrar), para que el botón
+     * "Generar Asiento" lo encuentre y lo reabra, sin dar por contabilizada la declaración.
+     */
+    public function vincularAsientoSinEstado(int $id, int $idEmpresa, int $idAsiento, int $idUsuario): void
+    {
+        $sql = "UPDATE declaracion_retenciones_cabecera
+                SET id_asiento = ?, updated_by = ?, updated_at = now()
+                WHERE id = ? AND id_empresa = ?";
+        $this->query($sql, [$idAsiento, $idUsuario, $id, $idEmpresa]);
+    }
+
     public function marcarEgreso(int $id, int $idEmpresa, int $idEgreso, int $idUsuario): void
     {
         $sql = "UPDATE declaracion_retenciones_cabecera

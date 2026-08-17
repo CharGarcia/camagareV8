@@ -88,6 +88,7 @@ $base = BASE_URL;
                     <option value="recibos_venta">Recibos de Venta (Recibos y su IVA)</option>
                     <option value="consignacion_venta">Consignaciones en Ventas (Reclasificación de inventario a costo)</option>
                     <option value="adquisiciones_compras">Adquisiciones de Compras/Servicios (Documentos recibidos)</option>
+                    <option value="adquisiciones_importacion">Importaciones (Inventario nacionalizado, IVA/ISD aduana, CxP)</option>
                     <option value="retenciones_venta">Retenciones en Venta</option>
                     <option value="retenciones_compra">Retenciones en Compra</option>
                     <option value="ingresos_egresos">Ingresos y Egresos (Transacciones directas)</option>

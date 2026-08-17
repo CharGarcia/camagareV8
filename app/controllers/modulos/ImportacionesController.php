@@ -539,7 +539,7 @@ class ImportacionesController extends BaseModuloController
             } else {
                 $mensaje = 'Importación nacionalizada. Costo total capitalizado: $' . number_format($resultado['costo_total_nacionalizado'], 2) . '.';
                 if (!empty($resultado['asiento_warning'])) {
-                    $mensaje .= ' Atención: el asiento contable no se pudo generar (' . $resultado['asiento_warning'] . '). Configúrelo en /config/asientos-contables y vuelva a intentar.';
+                    $mensaje .= ' Atención: el asiento contable no se pudo generar (' . $resultado['asiento_warning'] . '). Una vez configurada la cuenta, se generará solo la próxima vez que abra Libro Diario / Asientos (botón Sincronizar).';
                 }
             }
 
@@ -618,7 +618,7 @@ class ImportacionesController extends BaseModuloController
 
             $mensaje = 'Importación aprobada y nacionalizada. Costo total capitalizado: $' . number_format($resultado['costo_total_nacionalizado'], 2) . '.';
             if (!empty($resultado['asiento_warning'])) {
-                $mensaje .= ' Atención: el asiento contable no se pudo generar (' . $resultado['asiento_warning'] . '). Configúrelo en /config/asientos-contables.';
+                $mensaje .= ' Atención: el asiento contable no se pudo generar (' . $resultado['asiento_warning'] . '). Una vez configurada la cuenta, se generará solo la próxima vez que abra Libro Diario / Asientos (botón Sincronizar).';
             }
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'data' => $resultado]);
@@ -873,7 +873,7 @@ class ImportacionesController extends BaseModuloController
 
             // Tabla de productos
             $headerRow = 6;
-            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unit. FOB', 'Total FOB', 'Activo Fijo', 'Costo Unit. Nac.', 'Costo Total Nac.'];
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unit. FOB', 'Total FOB', 'Tipo', 'Costo Unit. Nac.', 'Costo Total Nac.'];
             $col = 'A';
             foreach ($headers as $h) {
                 $sheet->setCellValue($col . $headerRow, $h);
@@ -882,15 +882,16 @@ class ImportacionesController extends BaseModuloController
             $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->getFont()->setBold(true);
             $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E9ECEF');
 
+            $tipoInvLabels = ['materia_prima' => 'Materia Prima', 'activo_fijo' => 'Activo Fijo'];
             $row = $headerRow + 1;
             foreach ($detalles as $d) {
-                $esAf = !empty($d['es_activo_fijo']) && $d['es_activo_fijo'] !== 'f';
+                $tipoInv = $tipoInvLabels[$d['tipo_inventario'] ?? ''] ?? 'Producto Terminado';
                 $sheet->setCellValue('A' . $row, (string) ($d['producto_codigo'] ?? $d['codigo_producto_raw'] ?? ''));
                 $sheet->setCellValue('B' . $row, (string) ($d['producto_nombre'] ?? $d['descripcion'] ?? ''));
                 $sheet->setCellValue('C' . $row, (float) ($d['cantidad'] ?? 0));
                 $sheet->setCellValue('D' . $row, (float) ($d['precio_unitario_fob'] ?? 0));
                 $sheet->setCellValue('E' . $row, (float) ($d['precio_total_fob'] ?? 0));
-                $sheet->setCellValue('F' . $row, $esAf ? 'Sí' : 'No');
+                $sheet->setCellValue('F' . $row, $tipoInv);
                 $sheet->setCellValue('G' . $row, (float) ($d['costo_unitario_nacionalizado'] ?? 0));
                 $sheet->setCellValue('H' . $row, (float) ($d['costo_total_nacionalizado'] ?? 0));
                 $row++;

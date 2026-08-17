@@ -94,7 +94,7 @@ class AsientoContableService
 
         // 2. Validaciones
         $this->rules->validarCabecera($cabeceraData);
-        $this->rules->validarDetalles($detallesData);
+        $this->rules->validarDetalles($detallesData, ($cabeceraData['estado'] ?? '') === 'borrador');
 
         // 2b. Período contable: ni se crea ni se modifica un asiento dentro de un período
         // cerrado. En una edición se validan AMBAS fechas —la nueva y la que tiene hoy el

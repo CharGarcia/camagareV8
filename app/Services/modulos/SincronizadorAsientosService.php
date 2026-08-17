@@ -57,6 +57,65 @@ class SincronizadorAsientosService
     }
 
     /**
+     * Total de "pasos" en los que se puede dividir sincronizar(): uno por cada trabajo (módulo)
+     * más las 3 verificaciones fijas del final. Lo usa la UI para calcular el % de la barra de
+     * progreso — debe coincidir exactamente con lo que recorre ejecutarPaso().
+     */
+    public function contarPasos(int $idEmpresa): int
+    {
+        $db = Database::getConnection();
+        $excMig = $this->construirExclusionMigracion($db);
+        return count($this->construirTrabajos($idEmpresa, $excMig)) + 3;
+    }
+
+    /**
+     * Ejecuta UN solo paso de sincronizar() (0-indexado) y devuelve lo generado/avisado en ESE
+     * paso — no acumula entre llamadas. Existe para que la UI pueda mostrar una barra de progreso
+     * real y permitir cancelar entre pasos: cada llamada HTTP procesa un módulo (o una
+     * verificación) y vuelve, en vez de bloquear hasta terminar todo de una vez como sincronizar().
+     * El llamador (JS) es quien acumula generados/warnings/detalle de cada paso y arma el resumen
+     * final — ver public/js/modulos/asientos_pendientes.js.
+     */
+    public function ejecutarPaso(int $idEmpresa, int $idUsuario, int $paso): array
+    {
+        $db = Database::getConnection();
+        $this->prepararEsquema($db);
+        $excMig = $this->construirExclusionMigracion($db);
+        $trabajos = $this->construirTrabajos($idEmpresa, $excMig);
+        $totalPasos = count($trabajos) + 3;
+
+        $nombrePaso = null;
+        if ($paso >= 0 && $paso < count($trabajos)) {
+            $t = $trabajos[$paso];
+            $nombrePaso = $t['nombre'];
+            $this->sincronizarModulo(
+                $db, $t['sql'], $t['params'], $t['factory'], $t['nombre'],
+                $t['dondeConfigurar'], $t['tablaVerif'], $t['colAsiento'], $t['colsDoc'] ?? []
+            );
+        } elseif ($paso === count($trabajos)) {
+            $nombrePaso = 'Configuración de cuentas (Ingresos/Egresos, Cobros/Pagos)';
+            $this->verificarConfiguracionCuentas($db, $idEmpresa);
+        } elseif ($paso === count($trabajos) + 1) {
+            $nombrePaso = 'Consignaciones en Ventas pendientes';
+            $this->verificarConsignacionesPendientes($db, $idEmpresa);
+        } elseif ($paso === count($trabajos) + 2) {
+            $nombrePaso = 'Costeo de Ventas pendiente';
+            $this->verificarCosteoVentasPendiente($db, $idEmpresa);
+        }
+
+        return [
+            'paso'             => $paso,
+            'totalPasos'       => $totalPasos,
+            'nombrePaso'       => $nombrePaso,
+            'terminado'        => $paso >= $totalPasos - 1,
+            'generados'        => $this->generados,
+            'warnings'         => $this->warnings,
+            'detalle'          => $this->detalle,
+            'resumenPorModulo' => $this->resumenPorModulo,
+        ];
+    }
+
+    /**
      * Cuenta cuántos documentos operativos están pendientes de generar su asiento contable,
      * SIN generarlos. Reutiliza exactamente las mismas consultas de detección que sincronizar()
      * (envolviéndolas en un COUNT), para que la cifra mostrada al usuario coincida con lo que
@@ -497,6 +556,22 @@ class SincronizadorAsientosService
             'tablaVerif' => 'rol_cabecera',
             'colAsiento' => 'id_asiento',
             'colsDoc' => ['periodo_mes', 'periodo_anio'],
+        ];
+
+        // 9. Importaciones (nacionalizadas/cerradas): registra crédito de IVA/ISD e inventario
+        //    nacionalizado. 'borrador'/'registrada' no generan asiento (no tocan inventario
+        //    todavía), por eso se filtran aquí igual que ImportacionesService::procesarInventario().
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM importaciones_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('nacionalizada', 'cerrada')" . $excMig('importaciones', 'importaciones_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
+                return new \App\Services\modulos\ImportacionesService();
+            },
+            'nombre' => 'Importaciones',
+            'dondeConfigurar' => 'Configuración Contable (tipo de asiento «Importaciones»)',
+            'tablaVerif' => 'importaciones_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
         return $trabajos;

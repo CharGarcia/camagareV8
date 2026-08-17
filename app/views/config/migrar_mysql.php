@@ -13,7 +13,46 @@ $base = BASE_URL;
     <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver a Configuración</a>
 </div>
 
-<!-- ① Migrar las empresas del sistema anterior (registro en el nuevo, sin correos) -->
+<!-- ① Migrar usuarios del sistema anterior (nivel 1, sin correos) -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 border-bottom-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-people text-primary me-2"></i>Migrar usuarios del sistema anterior</h6>
+        <button class="btn btn-sm btn-outline-primary" id="btnListarUsuarios"><i class="bi bi-search me-1"></i> Buscar usuarios por migrar</button>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Crea en el sistema nuevo los usuarios <b>activos</b> del anterior como <b>nivel 1</b>, solo los que
+            <b>no están registrados</b> aquí y <b>sin repetir correo</b>. Se crean con enlace de registro (fijan su
+            contraseña al ingresar) y <b>no se envía correo ahora</b>. Se asignan a las empresas que correspondan por
+            RUC (si ya están migradas).
+        </p>
+        <div id="usuariosMigrarBox" style="display:none;">
+            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <input type="text" class="form-control form-control-sm" id="usrFiltro" style="max-width:280px" placeholder="Filtrar por nombre o correo…">
+                <div><a href="#" class="small me-2" id="usrTodos">Todos</a><a href="#" class="small" id="usrNinguno">Ninguno</a></div>
+                <span class="small text-muted" id="usrContador"></span>
+                <button class="btn btn-sm btn-success ms-auto" id="btnMigrarUsuarios" disabled><i class="bi bi-download me-1"></i> Migrar seleccionados</button>
+            </div>
+            <div style="max-height:340px;overflow:auto;" class="border rounded">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                        <tr>
+                            <th style="width:38px"><input type="checkbox" id="usrChkAll" title="Seleccionar todos los visibles"></th>
+                            <th>Usuario</th>
+                            <th>Correo</th>
+                            <th style="width:90px" class="text-center">Cédula</th>
+                            <th>Empresas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usrTbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="usrResultado" class="small mt-2"></div>
+    </div>
+</div>
+
+<!-- ② Migrar las empresas del sistema anterior (registro en el nuevo, sin correos) -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white py-3 border-bottom-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h6 class="mb-0 fw-bold"><i class="bi bi-building-add text-primary me-2"></i>Registrar empresas del sistema anterior</h6>
@@ -755,7 +794,103 @@ $base = BASE_URL;
         }
     });
 
-    // ── ① Registrar empresas del sistema anterior ──
+    // ── ① Migrar usuarios del sistema anterior ──
+    let usrData = [];
+
+    function usrRender() {
+        const q = ($('usrFiltro').value || '').trim().toLowerCase();
+        const tb = $('usrTbody');
+        tb.innerHTML = '';
+        let visibles = 0;
+        usrData.forEach((u, i) => {
+            const hay = (u.nombre + ' ' + u.mail + ' ' + (u.cedula || '')).toLowerCase();
+            if (q !== '' && hay.indexOf(q) === -1) return;
+            visibles++;
+            let emp = '<span class="text-muted">—</span>';
+            if (u.n_empresas > 0) {
+                emp = esc(u.empresas) + ' <span class="badge bg-secondary">' + u.n_empresas + '</span>';
+                if (u.empresas_en_nuevo > 0) emp += ' <span class="badge bg-success" title="Se asignará a estas empresas ya migradas">' + u.empresas_en_nuevo + ' en el nuevo</span>';
+            }
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td><input type="checkbox" class="usr-chk" data-i="' + i + '"></td>' +
+                '<td class="fw-semibold">' + esc(u.nombre || '(sin nombre)') + '</td>' +
+                '<td class="small">' + esc(u.mail) + '</td>' +
+                '<td class="text-center small">' + esc(u.cedula || '—') + '</td>' +
+                '<td class="small">' + emp + '</td>';
+            tb.appendChild(tr);
+        });
+        $('usrContador').textContent = visibles + ' de ' + usrData.length + ' usuarios por migrar';
+        usrSync();
+    }
+
+    function usrSync() {
+        const marcadas = document.querySelectorAll('.usr-chk:checked').length;
+        $('btnMigrarUsuarios').disabled = marcadas === 0;
+        $('btnMigrarUsuarios').innerHTML = marcadas > 0
+            ? '<i class="bi bi-download me-1"></i> Migrar ' + marcadas + ' seleccionado(s)'
+            : '<i class="bi bi-download me-1"></i> Migrar seleccionados';
+    }
+
+    $('btnListarUsuarios').addEventListener('click', async () => {
+        const btn = $('btnListarUsuarios');
+        const prev = btn.innerHTML;
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Buscando…';
+        $('usrResultado').innerHTML = '';
+        try {
+            const res = await fetch(base + '/config/migrarMysql?action=usuarios-por-migrar').then(r => r.json());
+            if (!res.ok) { $('usrResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+            usrData = res.data || [];
+            $('usuariosMigrarBox').style.display = usrData.length ? '' : 'none';
+            if (!usrData.length) {
+                $('usrResultado').innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>No hay usuarios activos pendientes: todos ya están registrados en el sistema nuevo.</span>';
+            }
+            usrRender();
+        } catch (e) {
+            $('usrResultado').innerHTML = '<span class="text-danger">Error al consultar el sistema anterior.</span>';
+        } finally {
+            btn.disabled = false; btn.innerHTML = prev;
+        }
+    });
+
+    $('usrFiltro').addEventListener('input', usrRender);
+    $('usrTodos').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.usr-chk').forEach(c => c.checked = true); usrSync(); });
+    $('usrNinguno').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.usr-chk').forEach(c => c.checked = false); $('usrChkAll').checked = false; usrSync(); });
+    $('usrChkAll').addEventListener('change', function () { document.querySelectorAll('.usr-chk').forEach(c => c.checked = this.checked); usrSync(); });
+    $('usrTbody').addEventListener('change', (e) => { if (e.target.classList.contains('usr-chk')) usrSync(); });
+
+    $('btnMigrarUsuarios').addEventListener('click', async () => {
+        const mails = Array.from(document.querySelectorAll('.usr-chk:checked')).map(c => usrData[+c.dataset.i].mail);
+        if (!mails.length) return;
+        if (!confirm('¿Migrar ' + mails.length + ' usuario(s) como nivel 1?\n\nSe crean con enlace de registro (fijan su contraseña al ingresar); no se envía correo ahora.')) return;
+        const btn = $('btnMigrarUsuarios');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando…';
+        $('usrResultado').innerHTML = '';
+        try {
+            const body = new FormData();
+            mails.forEach(m => body.append('mails[]', m));
+            const res = await fetch(base + '/config/migrarMysql?action=migrar-usuarios', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) { $('usrResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+            const d = res.data;
+            let html = '<div class="alert alert-success py-2 mb-2"><b>' + fmt(d.migrados) + '</b> usuario(s) migrado(s)' +
+                (d.asignaciones ? ' · <b>' + fmt(d.asignaciones) + '</b> asignación(es) a empresas' : '') +
+                (d.omitidos ? ' · <b>' + fmt(d.omitidos) + '</b> omitido(s)' : '') + '.</div>';
+            const errores = (d.detalle || []).filter(x => !x.ok);
+            if (errores.length) {
+                html += '<div class="small"><b>Detalle:</b><ul class="mb-0">';
+                errores.forEach(x => { html += '<li>' + esc(x.mail) + ': ' + esc(x.msg) + '</li>'; });
+                html += '</ul></div>';
+            }
+            $('usrResultado').innerHTML = html;
+            $('btnListarUsuarios').click(); // refrescar: los migrados ya no aparecen
+        } catch (e) {
+            $('usrResultado').innerHTML = '<span class="text-danger">Error durante la migración.</span>';
+        } finally {
+            usrSync();
+        }
+    });
+
+    // ── ② Registrar empresas del sistema anterior ──
     let empData = [];
 
     function empRender() {

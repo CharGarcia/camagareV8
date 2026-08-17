@@ -2743,22 +2743,61 @@ class AsientoBuilderService
             $porCodigo[strtoupper((string) $r['codigo'])] = $r;
         }
 
-        $lineas = [
-            ['codigo' => 'INVENTARIOIMPORTACION',           'monto' => $costoTotalNacionalizado],
+        // Inventario: si la empresa configuró AMBAS cuentas (Materia Prima y Producto
+        // Terminado), se reparte el costo nacionalizado entre las dos según la línea
+        // de producto (importaciones_detalle.tipo_inventario) en vez de ir todo a la
+        // cuenta general única 'INVENTARIOIMPORTACION'. El reparto usa el costo YA
+        // prorrateado por línea (más preciso que estimar por FOB), disponible en este
+        // punto porque el asiento se genera después de calcularProrrateo()/aplicarNacionalizacion().
+        // Las líneas 'activo_fijo' caen en el balde Producto Terminado (no tienen cuenta
+        // propia en este reparto; solo afectan el casillero de la Declaración de IVA).
+        $usaSplitInventario = !empty($porCodigo['INVENTARIOIMPORTACIONMATERIAPRIMA']['id_cuenta'])
+            && !empty($porCodigo['INVENTARIOIMPORTACIONPRODUCTOTERMINADO']['id_cuenta']);
+
+        $costoMateriaPrima = 0.0;
+        $costoProductoTerminado = 0.0;
+        if ($usaSplitInventario) {
+            $stDet = $db->prepare(
+                "SELECT tipo_inventario, COALESCE(costo_total_nacionalizado, 0) AS costo
+                 FROM importaciones_detalle WHERE id_importacion = ? AND eliminado = false"
+            );
+            $stDet->execute([$idImportacion]);
+            foreach ($stDet as $d) {
+                if (($d['tipo_inventario'] ?? '') === 'materia_prima') {
+                    $costoMateriaPrima += (float) $d['costo'];
+                } else {
+                    $costoProductoTerminado += (float) $d['costo'];
+                }
+            }
+            $costoMateriaPrima = round($costoMateriaPrima, 2);
+            // Residual de redondeo (si lo hay) se absorbe en Producto Terminado, para
+            // que la suma de las dos líneas cuadre exacto con $costoTotalNacionalizado.
+            $costoProductoTerminado = round($costoTotalNacionalizado - $costoMateriaPrima, 2);
+        }
+
+        $lineas = $usaSplitInventario
+            ? [
+                ['codigo' => 'INVENTARIOIMPORTACIONMATERIAPRIMA',     'monto' => $costoMateriaPrima],
+                ['codigo' => 'INVENTARIOIMPORTACIONPRODUCTOTERMINADO', 'monto' => $costoProductoTerminado],
+            ]
+            : [
+                ['codigo' => 'INVENTARIOIMPORTACION', 'monto' => $costoTotalNacionalizado],
+            ];
+        $lineas = array_merge($lineas, [
             ['codigo' => 'IVAIMPORTACION',                  'monto' => $totalIva],
             ['codigo' => 'ISDIMPORTACION',                  'monto' => $totalIsd],
             ['codigo' => 'OTROSGASTOSIMPORTACION',           'monto' => $totalOtros],
             ['codigo' => 'PORPAGARPROVEEDOREXTERIOR',        'monto' => $totalFacturaExterior],
             ['codigo' => 'PORPAGARTRIBUTOSADUANEROS',        'monto' => $totalManual],
             ['codigo' => 'RECLASIFICACIONGASTOIMPORTACION',  'monto' => $totalVinculado],
-        ];
+        ]);
 
         $detalles = [];
         foreach ($lineas as $l) {
             if ($l['monto'] <= 0.0) continue;
             $regla = $porCodigo[$l['codigo']] ?? null;
             if (!$regla || empty($regla['id_cuenta'])) {
-                throw new \Exception("No se ha configurado la cuenta contable para '{$l['codigo']}' del concepto Importaciones. Configúrela en /config/asientos-contables.");
+                throw new \Exception("No se ha configurado la cuenta contable para '{$l['codigo']}' del concepto Importaciones. Configúrela en Contabilidad → Configuración contable, concepto «importaciones».");
             }
             $esDebe = ($regla['debe_haber'] ?? 'debe') === 'debe';
             $detalles[] = [

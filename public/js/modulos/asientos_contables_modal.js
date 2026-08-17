@@ -143,8 +143,13 @@
                 cargarDatosAsiento(res.data);
                 document.getElementById('asientoModalTitle').textContent = `Asiento de ${modulo.replace('_', ' ').toUpperCase()}`;
             } else {
-                // No existe asiento aún para este origen
+                // No existe asiento aún para este origen: formulario en blanco, sin cuentas ni
+                // valores sugeridos — el usuario arma las líneas a mano con "Agregar línea".
                 document.getElementById('asientoModalTitle').textContent = `Nuevo Asiento - ${modulo.replace('_', ' ').toUpperCase()}`;
+                document.getElementById('asiento_tipo').value = modulo;
+                document.getElementById('asiento_tipo_label').value = modulo.replace(/_/g, ' ');
+                document.getElementById('asiento_estado').value = 'borrador';
+                document.getElementById('asiento_estado_label').value = 'Borrador';
                 window.ASIENTO_agregarFila();
                 window.ASIENTO_agregarFila();
             }
@@ -154,64 +159,6 @@
 
         calcularTotales();
         if(modalInstance) modalInstance.show();
-    };
-
-    /**
-     * Abre el modal para un asiento NUEVO (sin guardar todavía) con líneas ya sugeridas —
-     * p. ej. una por casillero de la Declaración de IVA/Retenciones, con la cuenta precargada
-     * si hay una plantilla guardada. El llamador decide qué hacer tras el guardado exitoso
-     * escuchando el evento 'asiento:guardado' (ver ASIENTO_guardar).
-     *
-     * @param {{concepto:string, fecha_asiento:string, tipo_comprobante?:string, modulo_origen?:string, id_referencia_origen?:number|string, titulo?:string}} cabecera
-     * @param {Array<{casillero:string, descripcion:string, lado:'debe'|'haber', valor:number, id_cuenta_contable?:number|null, codigo_cuenta?:string|null, nombre_cuenta?:string|null}>} lineas
-     */
-    window.ASIENTO_abrirModalSugerido = async function (cabecera, lineas) {
-        if (!modalInstance) {
-            const el = document.getElementById('modalAsientoContable');
-            if (el) modalInstance = new bootstrap.Modal(el);
-        }
-
-        document.getElementById('formAsientoContable').reset();
-        document.getElementById('asiento_id').value = '';
-        document.getElementById('asiento_modulo_origen').value = cabecera.modulo_origen || 'manual';
-        document.getElementById('asiento_id_referencia_origen').value = cabecera.id_referencia_origen || '';
-        document.getElementById('tbodyAsientoDetalles').innerHTML = '';
-        document.getElementById('btnAnularAsiento').classList.add('d-none');
-        document.getElementById('btnRestablecerAsiento').classList.add('d-none');
-        document.getElementById('btnGuardarAsiento').classList.remove('d-none');
-        document.getElementById('asientoBarraAcciones').classList.add('d-none');
-        document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
-        aplicarModoLecturaAsiento(false);
-        document.getElementById('asientoModalTitle').textContent = cabecera.titulo || 'Asiento sugerido';
-        document.getElementById('asiento_fecha').value = cabecera.fecha_asiento || getCurrentLocalDate();
-        document.getElementById('asiento_tipo').value = cabecera.tipo_comprobante || 'diario';
-        document.getElementById('asiento_tipo_label').value = (cabecera.tipo_comprobante || 'diario').replace(/_/g, ' ');
-        document.getElementById('asiento_estado').value = 'contabilizado';
-        document.getElementById('asiento_estado_label').value = 'Contabilizado';
-        document.getElementById('asiento_numero').value = '';
-        document.getElementById('asiento_concepto').value = cabecera.concepto || '';
-
-        await cargarDatosAuxiliares();
-
-        if (lineas && lineas.length > 0) {
-            lineas.forEach(l => window.ASIENTO_agregarFila({
-                casillero: l.casillero,
-                id_cuenta_contable: l.id_cuenta_contable || '',
-                codigo_cuenta: l.codigo_cuenta || '',
-                nombre_cuenta: l.nombre_cuenta || '',
-                id_centro_costo: '',
-                id_proyecto: '',
-                documento_referencia: l.casillero ? `${l.casillero} - ${l.descripcion || ''}` : (l.descripcion || ''),
-                debe: l.lado === 'debe' ? l.valor : 0,
-                haber: l.lado === 'haber' ? l.valor : 0,
-            }));
-        } else {
-            window.ASIENTO_agregarFila();
-            window.ASIENTO_agregarFila();
-        }
-
-        calcularTotales();
-        if (modalInstance) modalInstance.show();
     };
 
     function cargarDatosAsiento(data) {
@@ -402,15 +349,25 @@
 
         const dif = Math.abs(totDebe - totHaber).toFixed(2);
         const elDif = document.getElementById('asientoDiferencia');
+        const cuadrado = dif === '0.00' && totDebe > 0;
 
-        if (dif === '0.00' && totDebe > 0) {
+        if (cuadrado) {
             elDif.textContent = 'CUADRADO';
             elDif.className = 'text-center fw-bold fs-6 text-success';
-            document.getElementById('btnGuardarAsiento').disabled = false;
         } else {
             elDif.textContent = `-$${dif}`;
-            elDif.className = 'text-center fw-bold fs-6 text-danger';
-            document.getElementById('btnGuardarAsiento').disabled = true;
+            elDif.className = 'text-center fw-bold fs-6 text-warning';
+        }
+
+        // El asiento se puede guardar en cualquier momento, cuadre o no (queda como
+        // 'borrador'/temporal hasta que cuadre — ver AsientoContableRules::validarCabecera()).
+        // No tocar el estado si el asiento cargado ya está 'anulado': eso se maneja aparte con
+        // Anular/Restablecer, no debe cambiar solo porque se edite un monto.
+        const estadoInput = document.getElementById('asiento_estado');
+        const estadoLabel = document.getElementById('asiento_estado_label');
+        if (estadoInput && estadoInput.value !== 'anulado') {
+            estadoInput.value = cuadrado ? 'contabilizado' : 'borrador';
+            if (estadoLabel) estadoLabel.value = cuadrado ? 'Contabilizado' : 'Borrador (temporal)';
         }
     }
 
@@ -457,18 +414,23 @@
             const resp = await fetch(url, { method: 'POST', body: fd });
             const res = await resp.json();
             if (res.ok) {
+                const estadoGuardado = document.getElementById('asiento_estado').value;
                 // Hook genérico para que quien haya abierto el modal (p. ej. la Declaración de
                 // IVA/Retenciones) reaccione al guardado sin que este archivo sepa nada de ellos.
                 document.dispatchEvent(new CustomEvent('asiento:guardado', {
                     detail: {
                         id: res.id,
+                        estado: estadoGuardado,
                         modulo_origen: document.getElementById('asiento_modulo_origen').value,
                         id_referencia_origen: document.getElementById('asiento_id_referencia_origen').value,
                     }
                 }));
                 if (window.cambiarPaginaAjax) window.cambiarPaginaAjax(window.currentPage || 1);
                 if (modalInstance) modalInstance.hide();
-                await swalExito(res.msg || 'Asiento guardado correctamente.');
+                const msg = estadoGuardado === 'borrador'
+                    ? 'Guardado como borrador (temporal). Complételo y vuelva a guardar cuando esté cuadrado para registrarlo.'
+                    : (res.msg || 'Asiento registrado correctamente.');
+                await swalExito(msg);
             } else {
                 await swalError(res.error || 'Error al guardar el asiento.');
             }

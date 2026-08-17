@@ -808,7 +808,7 @@ class ImportacionesService
      * de base imponible real capturado en el módulo.
      *
      * El IVA total se reparte entre dos filas oficiales del F104 según el detalle de productos
-     * (importaciones_detalle.es_activo_fijo), a prorrata del valor FOB de cada grupo:
+     * (importaciones_detalle.tipo_inventario = 'activo_fijo' o no), a prorrata del valor FOB de cada grupo:
      *   - tipo_documento 'importacion'             → casilleros 504/514/524 (bienes, excepto activos fijos)
      *   - tipo_documento 'importacion_activo_fijo' → casilleros 505/515/525 (activos fijos)
      * (casillero 503/513/523 es "Importaciones de servicios y/o derechos" — no lo usa este módulo)
@@ -851,7 +851,7 @@ class ImportacionesService
         $fobResto = 0.0;
         foreach ($detalles as $d) {
             $fob = (float) ($d['precio_total_fob'] ?? 0);
-            if (!empty($d['es_activo_fijo']) && $d['es_activo_fijo'] !== 'f') {
+            if (($d['tipo_inventario'] ?? '') === 'activo_fijo') {
                 $fobAf += $fob;
             } else {
                 $fobResto += $fob;
@@ -952,6 +952,27 @@ class ImportacionesService
 
         $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
         $this->repository->updateAsientoContable($idImportacion, $idAsientoGenerado);
+    }
+
+    /**
+     * Punto de entrada de SincronizadorAsientosService (Libro Diario / Asientos → "Sincronizar"):
+     * reintenta generar/actualizar el asiento de una importación nacionalizada/cerrada que
+     * todavía no lo tiene — típicamente porque cuando se procesó el inventario faltaba
+     * configurar alguna cuenta en /config/configuracion-contable (concepto "Importaciones").
+     * Si sigue faltando, la excepción de generarAsientoImportacion() se propaga tal cual para
+     * que el sincronizador la muestre como aviso con el motivo real (qué cuenta falta).
+     * Resuelve id_empresa/id_usuario del propio documento — mismo patrón que
+     * ComprasService::procesarAsientoContablePorSincronizacion().
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idImportacion): void
+    {
+        $importacion = $this->repository->getPorId($idImportacion);
+        if (!$importacion) {
+            return;
+        }
+        $idEmpresa = (int) ($importacion['id_empresa'] ?? 0);
+        $idUsuario = (int) ($importacion['created_by'] ?? $_SESSION['id_usuario'] ?? 0);
+        $this->procesarAsientoContable($idImportacion, $idEmpresa, $idUsuario);
     }
 
     /**

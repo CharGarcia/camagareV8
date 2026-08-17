@@ -212,7 +212,7 @@ class ImportacionesPdfService
             ['t' => 'Cant.',          'w' => 16, 'a' => 'C'],
             ['t' => 'P. Unit. FOB',   'w' => 22, 'a' => 'R'],
             ['t' => 'Total FOB',      'w' => 22, 'a' => 'R'],
-            ['t' => 'Act. Fijo',      'w' => 16, 'a' => 'C'],
+            ['t' => 'Tipo',           'w' => 24, 'a' => 'C'],
             ['t' => 'Costo Unit.',    'w' => 22, 'a' => 'R'],
             ['t' => 'Costo Total',    'w' => 22, 'a' => 'R'],
         ];
@@ -245,14 +245,15 @@ class ImportacionesPdfService
             $alt = !$alt;
             $pdf->SetFillColor(...$bg);
 
-            $esAf = !empty($d['es_activo_fijo']) && $d['es_activo_fijo'] !== 'f';
+            $tipoLabels = ['materia_prima' => 'Mat. Prima', 'activo_fijo' => 'Act. Fijo'];
+            $tipoInv = $tipoLabels[$d['tipo_inventario'] ?? ''] ?? 'Prod. Term.';
             $desc = (string) ($d['producto_nombre'] ?? $d['descripcion'] ?? '');
             $vals = [
                 $desc,
                 number_format((float) ($d['cantidad'] ?? 0), 2),
                 number_format((float) ($d['precio_unitario_fob'] ?? 0), 4),
                 number_format((float) ($d['precio_total_fob'] ?? 0), 2),
-                $esAf ? 'Sí' : 'No',
+                $tipoInv,
                 number_format((float) ($d['costo_unitario_nacionalizado'] ?? 0), 4),
                 number_format((float) ($d['costo_total_nacionalizado'] ?? 0), 2),
             ];
