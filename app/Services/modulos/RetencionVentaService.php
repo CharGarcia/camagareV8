@@ -173,6 +173,9 @@ class RetencionVentaService
         if ($managed) $db->beginTransaction();
 
         try {
+            // Antes del borrado lógico: `anular()` necesita leer el documento todavía vivo.
+            $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
+
             $this->repository->eliminarLogico($id, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(
@@ -289,6 +292,36 @@ class RetencionVentaService
         }
         $cabecera['id_usuario'] = (int) ($cabecera['updated_by'] ?? $cabecera['created_by'] ?? 0);
         $this->procesarAsientoContable($idRetencion, $cabecera);
+    }
+
+    /**
+     * Anula el asiento contable de la retención. Se llama al ELIMINAR el documento: un asiento
+     * que sobrevive a su retención queda huérfano y sigue sumando en el Balance. Este módulo no
+     * tiene `anular()`, así que eliminar es la única salida y aquí es donde debe limpiarse.
+     *
+     * `AsientoContableService::anular()` ya deja en NULL `retencion_venta_cabecera.id_asiento_contable`
+     * (vía `desvincularAsientoRetencionVenta`), así que no hay que desvincular aparte.
+     *
+     * Participa en la transacción del llamador: si el asiento no se puede anular, la eliminación
+     * se revierte entera en vez de dejar la retención borrada con su asiento vivo.
+     */
+    private function anularAsientoContable(int $idRetencion, int $idEmpresa, int $idUsuario): void
+    {
+        $asientoService = $this->asientoContableService();
+
+        // getAsientoPorOrigen ya excluye los anulados: si no devuelve nada, no hay asiento vivo.
+        $previo = $asientoService->getAsientoPorOrigen('retencion_venta', $idRetencion, $idEmpresa);
+        if ($previo === null) {
+            return;
+        }
+
+        try {
+            $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
+        } catch (\Throwable $e) {
+            if (stripos($e->getMessage(), 'ya se encuentra anulado') === false) {
+                throw $e;
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

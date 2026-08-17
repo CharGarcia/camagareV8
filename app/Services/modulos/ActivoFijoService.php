@@ -271,10 +271,60 @@ class ActivoFijoService
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): bool
     {
+        // Solo bloquea si ya hay depreciaciones contabilizadas; el asiento de ALTA existe
+        // desde el registro, así que un activo sin depreciar sí llega hasta acá con asiento.
         $this->rules->validarEliminacion($id);
-        $this->repository->softDelete($id, $idEmpresa, $idUsuario);
-        $this->logService->registrar($idUsuario, $idEmpresa, 'eliminar', 'activos_fijos', $id, null, null);
-        return true;
+
+        $db = \App\core\Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+
+        try {
+            // Antes del borrado lógico: `anular()` necesita leer el activo todavía vivo.
+            $this->anularAsientoAlta($id, $idEmpresa, $idUsuario);
+
+            $this->repository->softDelete($id, $idEmpresa, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'eliminar', 'activos_fijos', $id, null, null);
+
+            if ($managed) $db->commit();
+            return true;
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Anula el asiento de ALTA del activo. Se llama al ELIMINAR: un asiento que sobrevive a su
+     * activo queda huérfano y sigue sumando en el Balance. A diferencia de compras/retenciones,
+     * `AsientoContableService::anular()` NO desvincula este origen (`activos_fijos_alta` no está
+     * en su mapa `DocumentoOrigenAsiento`), así que la columna se limpia acá.
+     *
+     * Las depreciaciones ya contabilizadas no se tocan: `validarEliminacion()` impide llegar
+     * hasta aquí si existen.
+     */
+    private function anularAsientoAlta(int $idActivo, int $idEmpresa, int $idUsuario): void
+    {
+        $asientoService = new AsientoContableService(
+            new \App\repositories\modulos\AsientoContableRepository(),
+            new \App\Rules\modulos\AsientoContableRules(),
+            $this->logService
+        );
+
+        // getAsientoPorOrigen ya excluye los anulados: si no devuelve nada, no hay asiento vivo.
+        $previo = $asientoService->getAsientoPorOrigen('activos_fijos_alta', $idActivo, $idEmpresa);
+        if ($previo === null) {
+            return;
+        }
+
+        try {
+            $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
+        } catch (\Throwable $e) {
+            if (stripos($e->getMessage(), 'ya se encuentra anulado') === false) {
+                throw $e;
+            }
+        }
+        $this->repository->setAsientoAlta($idActivo, null);
     }
 
     /**

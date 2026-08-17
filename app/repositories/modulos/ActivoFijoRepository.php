@@ -256,7 +256,8 @@ class ActivoFijoRepository extends BaseRepository
         );
     }
 
-    public function setAsientoAlta(int $id, int $idAsiento): void
+    /** $idAsiento = null desvincula el asiento de alta (se usa al anularlo). */
+    public function setAsientoAlta(int $id, ?int $idAsiento): void
     {
         $this->query("UPDATE activos_fijos SET id_asiento_alta = ? WHERE id = ?", [$idAsiento, $id]);
     }

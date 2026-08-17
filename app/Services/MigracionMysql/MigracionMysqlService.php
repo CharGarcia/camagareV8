@@ -4723,9 +4723,16 @@ class MigracionMysqlService
     // (ver EmpresasSistemaController::update()).
     // ─────────────────────────────────────────────────────────────────
 
-    /** Asegura la columna `notificacion_pendiente` en `empresas` (idempotente). */
+    /**
+     * Asegura la columna `notificacion_pendiente` en `empresas` (idempotente).
+     * Chequea PRIMERO con una lectura barata a information_schema y solo hace el ALTER si falta:
+     * `empresas` es una tabla caliente (se lee en cada request); correr el ALTER en cada migración
+     * toma un lock ACCESS EXCLUSIVE que puede quedarse esperando y colgar la migración y la app.
+     */
     public static function asegurarColumnaNotificacion(PDO $pg): void
     {
+        $existe = $pg->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'empresas' AND column_name = 'notificacion_pendiente' LIMIT 1")->fetchColumn();
+        if ($existe !== false) { return; }
         $pg->exec("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS notificacion_pendiente boolean NOT NULL DEFAULT false");
     }
 

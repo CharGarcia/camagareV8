@@ -118,6 +118,40 @@ class AsientoContableRepository
         return $cabecera;
     }
 
+    /**
+     * Candado transaccional del asiento de UN documento. Regla §8: todo
+     * "leer → decidir → escribir" sobre un valor compartido va bloqueado, y aquí el valor
+     * compartido es «¿este documento ya tiene asiento?» — sin candado, dos procesos
+     * simultáneos (dos corridas del sincronizador, o el sincronizador y un guardado) leen
+     * ambos "no tiene" e insertan dos asientos para el mismo documento.
+     *
+     * Se libera solo con el COMMIT/ROLLBACK de la transacción en curso, así que **debe
+     * llamarse con una transacción abierta**: fuera de transacción, PostgreSQL la cierra
+     * en el mismo statement y el candado no protege nada.
+     *
+     * La clave incluye el módulo, así que no bloquea documentos que no se relacionan
+     * entre sí (una compra no espera por una factura de venta).
+     */
+    public function lockAsientoOrigen(int $idEmpresa, string $moduloOrigen, int $idReferenciaOrigen): void
+    {
+        $sql = "SELECT pg_advisory_xact_lock(hashtext('asiento_origen:' || :e || ':' || :m || ':' || :r))";
+        $stmt = \App\core\Database::getConnection()->prepare($sql);
+        $stmt->execute([':e' => $idEmpresa, ':m' => $moduloOrigen, ':r' => $idReferenciaOrigen]);
+    }
+
+    /**
+     * Candado del contador de `numero_comprobante`. `generarNumeroComprobante()` es un
+     * MAX+1 (leer → calcular → escribir), así que sin candado dos asientos creados a la vez
+     * en la misma empresa y tipo salen con el MISMO número. Va por (empresa, tipo) para no
+     * serializar tipos distintos entre sí.
+     */
+    public function lockNumeroComprobante(int $idEmpresa, string $tipoComprobante): void
+    {
+        $sql = "SELECT pg_advisory_xact_lock(hashtext('asiento_numero:' || :e || ':' || :t))";
+        $stmt = \App\core\Database::getConnection()->prepare($sql);
+        $stmt->execute([':e' => $idEmpresa, ':t' => strtolower(trim($tipoComprobante))]);
+    }
+
     public function getAsientoPorOrigen(string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): ?array
     {
         $sql = "SELECT id FROM asientos_contables_cabecera

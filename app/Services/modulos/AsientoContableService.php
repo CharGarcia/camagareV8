@@ -16,6 +16,22 @@ use App\Services\modulos\PeriodosContablesService;
 
 class AsientoContableService
 {
+    /**
+     * Orígenes que legítimamente tienen VARIOS asientos vivos para el MISMO documento, así
+     * que el candado de guardarAsiento() no debe reconvertir su INSERT en UPDATE: colapsaría
+     * en uno solo los asientos que deben ser varios.
+     *
+     * Hoy solo 'nomina': un rol se contabiliza con un asiento por empleado
+     * (ver RolAsientoService y AsientoContableRepository::getIdsAsientosPorOrigen()). El resto
+     * de los orígenes —compra, factura_venta, ingreso, egreso, retenciones, notas de crédito
+     * y débito, liquidaciones, traspasos, consignaciones, importaciones, activos fijos,
+     * declaraciones— tiene exactamente uno, y por eso sí se les aplica.
+     *
+     * Al agregar un módulo que contabilice varios asientos por documento hay que sumarlo acá
+     * (y excluirlo del índice único de database/asientos_unico_por_documento.sql).
+     */
+    private const ORIGENES_MULTIASIENTO = ['nomina'];
+
     private AsientoContableCabecera $modelCabecera;
     private AsientoContableDetalle $modelDetalle;
     private PeriodosContablesService $periodosService;
@@ -128,10 +144,44 @@ class AsientoContableService
 
         try {
             $idAsiento = (int)($cabeceraData['id'] ?? 0);
+
+            // ── Concurrencia (§8): el id que llega es solo una PISTA ──────────────────
+            // Los módulos resuelven "¿ya existe asiento?" con getAsientoPorOrigen() antes
+            // de llamar acá, y varios lo hacen FUERA de toda transacción (p. ej.
+            // ComprasService genera el asiento después de commitear la compra). Dos
+            // procesos simultáneos sobre el mismo documento —dos corridas del
+            // sincronizador desde Libro Diario y Mayores, o el sincronizador mientras
+            // alguien guarda— leen ambos "no tiene" y ambos insertan.
+            //
+            // Acá, ya dentro de la transacción, se toma el candado del documento y se
+            // vuelve a resolver: el segundo en entrar espera, ve el asiento que dejó el
+            // primero y lo ACTUALIZA en vez de duplicarlo. La decisión autoritativa de
+            // insertar-vs-actualizar es esta, no la del llamador.
+            $moduloOrigen = (string) ($cabeceraData['modulo_origen'] ?? 'manual');
+            $idRefOrigen  = !empty($cabeceraData['id_referencia_origen'])
+                ? (int) $cabeceraData['id_referencia_origen']
+                : null;
+
+            if ($idAsiento === 0
+                && $idRefOrigen !== null
+                && $moduloOrigen !== 'manual'
+                && !in_array($moduloOrigen, self::ORIGENES_MULTIASIENTO, true)
+            ) {
+                $this->repository->lockAsientoOrigen($idEmpresa, $moduloOrigen, $idRefOrigen);
+
+                $previo = $this->repository->getAsientoPorOrigen($moduloOrigen, $idRefOrigen, $idEmpresa);
+                if ($previo !== null) {
+                    $idAsiento = (int) $previo['id'];
+                }
+            }
+
             $isUpdate = $idAsiento > 0;
 
-            // Generar número de comprobante si es nuevo
+            // Generar número de comprobante si es nuevo. El candado es aparte del de arriba:
+            // el contador es de la empresa+tipo, no del documento, así que dos documentos
+            // distintos contabilizados a la vez se pisaban el número (MAX+1 sin bloquear).
             if (!$isUpdate && empty($cabeceraData['numero_comprobante'])) {
+                $this->repository->lockNumeroComprobante($idEmpresa, (string) ($cabeceraData['tipo_comprobante'] ?? 'diario'));
                 $cabeceraData['numero_comprobante'] = $this->repository->generarNumeroComprobante($idEmpresa, $cabeceraData['tipo_comprobante']);
             }
 

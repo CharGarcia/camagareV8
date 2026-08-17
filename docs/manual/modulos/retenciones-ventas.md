@@ -63,15 +63,34 @@ fiscal, el detalle de las líneas retenidas (documento sustento, código,
 concepto, base imponible, porcentaje y valor) y los totales de renta, IVA, ISD
 y total retenido. Ambos botones solo aparecen cuando la retención ya se guardó.
 
+## Qué pasa al eliminar una retención
+
+Eliminar una retención **anula también su asiento contable**, en el mismo paso.
+Antes el asiento quedaba vivo y seguía sumando en el Balance aunque la retención
+ya no existiera.
+
+El asiento no se borra: queda en estado **anulado**, así que el rastro se conserva
+y deja de afectar los reportes.
+
+Si la fecha de la retención cae en un **período contable cerrado**, la eliminación
+se rechaza. Reabra el período si realmente necesita eliminarla.
+
 ## Errores frecuentes
 
 - **"El período fiscal debe tener el formato MM/YYYY"**: escríbalo con mes y año,
   por ejemplo `07/2026`.
 - **La factura queda con saldo pendiente que nadie va a pagar**: falta registrar
   la retención que le practicó el cliente.
+- **"No se puede registrar el asiento: la fecha ... corresponde a un período
+  contable cerrado"** al eliminar: la eliminación anula el asiento, y eso no se
+  puede hacer en un período cerrado.
 
 ## Historial de cambios
 
+- **1.2** — Eliminar una retención ahora **anula su asiento contable**. Antes el
+  asiento sobrevivía a la retención y seguía afectando el Balance. Efecto
+  secundario esperado: ya no se puede eliminar una retención cuya fecha esté en un
+  período contable cerrado.
 - **1.1** — Nuevo botón **Excel** junto al de PDF en el modal: descarga el
   comprobante de la retención en `.xlsx` con el mismo detalle y totales.
 - **1.0** — Versión inicial.

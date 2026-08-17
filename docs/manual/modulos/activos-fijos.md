@@ -48,6 +48,18 @@ contabilidad no se llena de cientos de movimientos mensuales.
 | Categoría | Obligatoria, debe existir y estar activa |
 | Nombre / descripción | Obligatorio |
 
+## Qué pasa al eliminar un activo
+
+Un activo con **depreciaciones ya contabilizadas no se puede eliminar** — eso no
+cambió.
+
+Si todavía no depreció, sí se elimina, y al hacerlo se **anula también su asiento
+de alta**. Antes ese asiento sobrevivía al activo y seguía sumando en el Balance.
+El asiento no se borra: queda en estado **anulado**, así que el rastro se conserva.
+
+Si la fecha de alta cae en un **período contable cerrado**, la eliminación se
+rechaza. Reabra el período si realmente necesita eliminarlo.
+
 ## Errores frecuentes
 
 - **"La categoría seleccionada está inactiva"**: actívela o elija otra.
@@ -55,7 +67,16 @@ contabilidad no se llena de cientos de movimientos mensuales.
   no las de la categoría.
 - **Un activo no deprecia**: compruebe su fecha de alta, su vida útil y que no
   esté ya totalmente depreciado.
+- **"No se puede eliminar: el activo ya tiene depreciaciones contabilizadas"**:
+  es correcto. Dé de baja el activo en lugar de eliminarlo.
+- **"No se puede registrar el asiento: la fecha ... corresponde a un período
+  contable cerrado"** al eliminar: la eliminación anula el asiento de alta, y eso
+  no se puede hacer en un período cerrado.
 
 ## Historial de cambios
 
+- **1.1** — Eliminar un activo fijo ahora **anula su asiento de alta**. Antes ese
+  asiento sobrevivía al activo y seguía sumando en el Balance. Efecto secundario
+  esperado: ya no se puede eliminar un activo cuya fecha de alta esté en un
+  período contable cerrado.
 - **1.0** — Versión inicial.

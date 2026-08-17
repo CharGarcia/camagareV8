@@ -47,9 +47,16 @@ class ReasignarEstablecimientoRepository extends BaseRepository
         return array_keys(self::TIPOS);
     }
 
-    /** Asegura la columna id_establecimiento en retencion_venta_cabecera + backfill a la matriz (idempotente). */
+    /**
+     * Asegura la columna id_establecimiento en retencion_venta_cabecera + backfill a la matriz.
+     * Chequea PRIMERO si la columna existe (lectura barata): si ya existe, NO corre el ALTER (lock
+     * exclusivo) ni el UPDATE masivo de backfill en cada carga del módulo. El backfill queda como
+     * paso único de creación de la columna (o se corre por SQL/deploy).
+     */
     public function asegurarColumnaRetVenta(): void
     {
+        $existe = $this->db->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'retencion_venta_cabecera' AND column_name = 'id_establecimiento' LIMIT 1")->fetchColumn();
+        if ($existe !== false) { return; }
         $this->db->exec("ALTER TABLE retencion_venta_cabecera ADD COLUMN IF NOT EXISTS id_establecimiento integer");
         $this->db->exec(
             "UPDATE retencion_venta_cabecera r SET id_establecimiento = (

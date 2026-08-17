@@ -680,6 +680,43 @@ class ComprasService
         $this->repository->updateAsientoContable($idCompra, $idAsientoGenerado);
     }
 
+    /**
+     * Anula el asiento contable de la compra. Se llama al ELIMINAR el documento: un asiento
+     * que sobrevive a su compra queda huérfano y sigue sumando en el Balance —y si el mismo
+     * documento del proveedor se vuelve a registrar, la compra termina contabilizada dos veces
+     * (caso real: documento 003-002-000014325, asientos CO-000002 y CO-000038).
+     *
+     * `AsientoContableService::anular()` ya deja en NULL `compras_cabecera.id_asiento_contable`
+     * (mapa `DocumentoOrigenAsiento`), así que no hay que desvincular aparte.
+     *
+     * Participa en la transacción del llamador a propósito: si el asiento no se puede anular
+     * —p. ej. su fecha cae en un período contable cerrado— la eliminación se revierte entera,
+     * en vez de dejar la compra borrada con su asiento vivo.
+     */
+    private function anularAsientoContable(int $idCompra, int $idEmpresa, int $idUsuario): void
+    {
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+        $asientoRules   = new \App\Rules\modulos\AsientoContableRules();
+        $asientoService = new \App\Services\modulos\AsientoContableService($asientoRepo, $asientoRules, $this->logService);
+
+        // getAsientoPorOrigen ya excluye los anulados: si no devuelve nada, no hay asiento
+        // vivo que anular (nunca se generó, o alguien lo anuló antes).
+        $previo = $asientoService->getAsientoPorOrigen('compra', $idCompra, $idEmpresa);
+        if ($previo === null) {
+            return;
+        }
+
+        try {
+            $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
+        } catch (\Throwable $e) {
+            // Si otro proceso lo anuló entremedio no hay nada que corregir; cualquier otro
+            // motivo (período cerrado, error de BD) sí debe abortar la eliminación.
+            if (stripos($e->getMessage(), 'ya se encuentra anulado') === false) {
+                throw $e;
+            }
+        }
+    }
+
     public function actualizar(int $id, array $data): int
     {
         $idEmpresa = (int) ($data['id_empresa'] ?? 0);
@@ -793,6 +830,10 @@ class ComprasService
             foreach ($egresosIds as $egresoId) {
                 $egresoService->anular($egresoId, $idEmpresa, $idUsuario);
             }
+
+            // El asiento se anula ANTES del borrado lógico: `anular()` lee el asiento y su
+            // documento, y hacerlo después dejaría la compra ya marcada como eliminada.
+            $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
 
             $this->repository->eliminarLogico($id, $idUsuario);
 

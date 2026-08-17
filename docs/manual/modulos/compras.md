@@ -107,6 +107,24 @@ se envía al SRI.
 **Importante**: una compra con retención asociada **no se puede eliminar**. Hay
 que eliminar primero la retención. El sistema lo avisa con ese mismo mensaje.
 
+## Qué pasa al eliminar una compra
+
+Eliminar una compra **anula también su asiento contable**, en el mismo paso. Antes
+el asiento quedaba vivo: la compra desaparecía del listado pero seguía sumando en
+el Balance y en Cuentas por Pagar, y si el mismo documento del proveedor se volvía
+a registrar, quedaba contabilizado dos veces.
+
+El asiento no se borra: queda en estado **anulado**, así que el rastro de lo que
+existió se conserva y deja de afectar los reportes.
+
+Por eso, si la fecha de la compra cae en un **período contable cerrado**, la
+eliminación se rechaza — no se puede tocar la contabilidad de un período cerrado.
+Reabra el período si realmente necesita eliminarla.
+
+Si en su empresa quedaron asientos huérfanos de antes de este cambio, la
+**Auditoría Contable** los detecta como *huérfano* y los anula, de uno en uno o en
+lote (ver [Auditoría Contable](auditoria-contable)).
+
 ## Notas de crédito y débito de compra
 
 Las notas de crédito y débito que emite el proveedor se registran también en este
@@ -144,9 +162,17 @@ ve solo las que registró.
   SRI"**: el archivo no es un comprobante electrónico válido; regístrela a mano.
 - **El stock no subió tras registrar la compra**: registrar no es lo mismo que
   procesar la entrada. Compruebe además que el producto sea inventariable.
+- **"No se puede registrar el asiento: la fecha ... corresponde a un período
+  contable cerrado"** al eliminar: la eliminación anula el asiento, y eso no se
+  puede hacer en un período cerrado. Reabra el período.
 
 ## Historial de cambios
 
+- **1.7** — Eliminar una compra ahora **anula su asiento contable**. Antes el
+  asiento sobrevivía a la compra y seguía sumando en el Balance y en Cuentas por
+  Pagar (y duplicaba el gasto si el documento se volvía a registrar). Efecto
+  secundario esperado: ya no se puede eliminar una compra cuya fecha esté en un
+  período contable cerrado.
 - **1.6** — La entrada al inventario desde una compra ya **no exige** lote, fecha
   de caducidad ni NUP, aunque esos campos estén marcados como obligatorios en la
   configuración de la empresa (esa configuración sigue aplicando a la
