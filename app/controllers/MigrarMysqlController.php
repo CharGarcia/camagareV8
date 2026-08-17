@@ -256,12 +256,13 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
-    /** GET: lista los usuarios activos del sistema anterior aún no registrados en el nuevo (dedupe por correo). */
+    /** GET: usuarios activos del viejo de la empresa seleccionada (por RUC) aún no registrados en el nuevo. */
     public function usuariosPorMigrarAjax(): void
     {
         header('Content-Type: application/json');
         try {
-            $data = $this->service->listarUsuariosParaMigrar();
+            [$idEmpresa] = $this->resolverEmpresa();
+            $data = $this->service->listarUsuariosParaMigrar($idEmpresa);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -269,11 +270,12 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
-    /** POST: crea en el nuevo los usuarios seleccionados (mails[]) como nivel 1 y los asigna por RUC. */
+    /** POST: crea los usuarios seleccionados (mails[]) como nivel 1 y los asigna a la empresa seleccionada. */
     public function migrarUsuariosAjax(): void
     {
         header('Content-Type: application/json');
         try {
+            [$idEmpresa] = $this->resolverEmpresa();
             $mails = $_POST['mails'] ?? [];
             if (!is_array($mails)) {
                 $mails = array_filter(array_map('trim', explode(',', (string) $mails)));
@@ -283,7 +285,7 @@ class MigrarMysqlController extends Controller
             }
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
             if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
-            $data = $this->service->migrarUsuarios($mails, $idUsuario);
+            $data = $this->service->migrarUsuarios($mails, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

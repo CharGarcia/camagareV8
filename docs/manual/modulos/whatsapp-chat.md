@@ -6,7 +6,7 @@ ruta_modulo: modulos/whatsapp-chat
 tipo: modulo
 visibilidad: todos
 etiquetas: whatsapp, chat, mensajes, clientes, enviar factura, plantillas, atencion al cliente
-version: 1.0
+version: 1.1
 orden: 20
 estado: activo
 ---
@@ -32,13 +32,32 @@ Los mensajes recurrentes se definen como **plantillas**, para no reescribirlos
 cada vez y mantener un tono uniforme. Además, las plataformas de WhatsApp exigen
 plantillas aprobadas para iniciar una conversación.
 
+## Permisos
+
+Este módulo se rige por los permisos del submódulo, como el resto del sistema:
+
+| Permiso | Qué habilita |
+|---|---|
+| Ver | Abrir la bandeja, leer conversaciones y ver las respuestas rápidas |
+| Crear | Enviar mensajes, adjuntar archivos y crear respuestas rápidas |
+| Modificar | Editar respuestas rápidas existentes |
+| Eliminar | Eliminar respuestas rápidas |
+
+Las respuestas rápidas **personales** solo las edita o elimina quien las creó,
+aunque otro usuario tenga el permiso.
+
 ## Errores frecuentes
 
 - **El mensaje no se envía**: revise la configuración de WhatsApp de la empresa y
   que el cliente tenga un número válido en su ficha.
 - **El cliente no recibe el documento**: compruebe el formato del número
   (con código de país, sin espacios ni guiones).
+- **"No tiene permiso para esta acción"**: pida que le asignen el submódulo en
+  *Permisos de módulos*. Antes el módulo se abría sin permiso asignado; ahora lo
+  exige, igual que los demás.
 
 ## Historial de cambios
 
+- **1.1** — El módulo pasa a exigir el permiso del submódulo (antes entraba
+  cualquier usuario con sesión). Nueva sección *Permisos*.
 - **1.0** — Versión inicial.

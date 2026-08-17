@@ -13,46 +13,7 @@ $base = BASE_URL;
     <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver a Configuración</a>
 </div>
 
-<!-- ① Migrar usuarios del sistema anterior (nivel 1, sin correos) -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white py-3 border-bottom-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <h6 class="mb-0 fw-bold"><i class="bi bi-people text-primary me-2"></i>Migrar usuarios del sistema anterior</h6>
-        <button class="btn btn-sm btn-outline-primary" id="btnListarUsuarios"><i class="bi bi-search me-1"></i> Buscar usuarios por migrar</button>
-    </div>
-    <div class="card-body">
-        <p class="text-muted small mb-3">
-            Crea en el sistema nuevo los usuarios <b>activos</b> del anterior como <b>nivel 1</b>, solo los que
-            <b>no están registrados</b> aquí y <b>sin repetir correo</b>. Se crean con enlace de registro (fijan su
-            contraseña al ingresar) y <b>no se envía correo ahora</b>. Se asignan a las empresas que correspondan por
-            RUC (si ya están migradas).
-        </p>
-        <div id="usuariosMigrarBox" style="display:none;">
-            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
-                <input type="text" class="form-control form-control-sm" id="usrFiltro" style="max-width:280px" placeholder="Filtrar por nombre o correo…">
-                <div><a href="#" class="small me-2" id="usrTodos">Todos</a><a href="#" class="small" id="usrNinguno">Ninguno</a></div>
-                <span class="small text-muted" id="usrContador"></span>
-                <button class="btn btn-sm btn-success ms-auto" id="btnMigrarUsuarios" disabled><i class="bi bi-download me-1"></i> Migrar seleccionados</button>
-            </div>
-            <div style="max-height:340px;overflow:auto;" class="border rounded">
-                <table class="table table-sm table-hover mb-0 align-middle">
-                    <thead class="table-light" style="position:sticky;top:0;z-index:1;">
-                        <tr>
-                            <th style="width:38px"><input type="checkbox" id="usrChkAll" title="Seleccionar todos los visibles"></th>
-                            <th>Usuario</th>
-                            <th>Correo</th>
-                            <th style="width:90px" class="text-center">Cédula</th>
-                            <th>Empresas</th>
-                        </tr>
-                    </thead>
-                    <tbody id="usrTbody"></tbody>
-                </table>
-            </div>
-        </div>
-        <div id="usrResultado" class="small mt-2"></div>
-    </div>
-</div>
-
-<!-- ② Migrar las empresas del sistema anterior (registro en el nuevo, sin correos) -->
+<!-- ① Registrar las empresas del sistema anterior (registro en el nuevo, sin correos) -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white py-3 border-bottom-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h6 class="mb-0 fw-bold"><i class="bi bi-building-add text-primary me-2"></i>Registrar empresas del sistema anterior</h6>
@@ -88,6 +49,57 @@ $base = BASE_URL;
             </div>
         </div>
         <div id="empResultado" class="small mt-2"></div>
+    </div>
+</div>
+
+<!-- ② Migrar usuarios del sistema anterior (nivel 1, sin correos) -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 border-bottom-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-people text-primary me-2"></i>Migrar usuarios del sistema anterior</h6>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Selecciona una <b>empresa</b> y trae los usuarios <b>activos</b> del sistema anterior que pertenecen a esa
+            empresa (por RUC). Se crean como <b>nivel 1</b> y se <b>asignan a esa misma empresa</b>, solo los que
+            <b>no están registrados</b> aquí y <b>sin repetir correo</b>. Se crean con enlace de registro (fijan su
+            contraseña al ingresar) y <b>no se envía correo</b>.
+        </p>
+        <div class="d-flex align-items-end gap-2 mb-3 flex-wrap">
+            <div style="min-width:320px">
+                <label class="form-label small fw-semibold mb-1">Empresa (destino)</label>
+                <select id="usrEmpresa" class="form-select form-select-sm">
+                    <option value="">Seleccione una empresa…</option>
+                    <?php foreach ($empresasMigrar as $e):
+                        $est = str_pad((string)($e['establecimiento'] ?? ''), 3, '0', STR_PAD_LEFT); ?>
+                        <option value="<?= (int)$e['id'] ?>"><?= htmlspecialchars($e['razon_social']) ?> — RUC <?= htmlspecialchars($e['ruc']) ?> (<?= htmlspecialchars($est) ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="btnListarUsuarios" disabled><i class="bi bi-search me-1"></i> Buscar usuarios</button>
+        </div>
+        <div id="usuariosMigrarBox" style="display:none;">
+            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <input type="text" class="form-control form-control-sm" id="usrFiltro" style="max-width:280px" placeholder="Filtrar por nombre o correo…">
+                <div><a href="#" class="small me-2" id="usrTodos">Todos</a><a href="#" class="small" id="usrNinguno">Ninguno</a></div>
+                <span class="small text-muted" id="usrContador"></span>
+                <button class="btn btn-sm btn-success ms-auto" id="btnMigrarUsuarios" disabled><i class="bi bi-download me-1"></i> Migrar seleccionados</button>
+            </div>
+            <div style="max-height:340px;overflow:auto;" class="border rounded">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                        <tr>
+                            <th style="width:38px"><input type="checkbox" id="usrChkAll" title="Seleccionar todos los visibles"></th>
+                            <th>Usuario</th>
+                            <th>Correo</th>
+                            <th style="width:120px" class="text-center">Cédula</th>
+                            <th style="width:130px">Teléfono</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usrTbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="usrResultado" class="small mt-2"></div>
     </div>
 </div>
 
@@ -794,7 +806,7 @@ $base = BASE_URL;
         }
     });
 
-    // ── ① Migrar usuarios del sistema anterior ──
+    // ── ② Migrar usuarios del sistema anterior (por empresa) ──
     let usrData = [];
 
     function usrRender() {
@@ -806,18 +818,13 @@ $base = BASE_URL;
             const hay = (u.nombre + ' ' + u.mail + ' ' + (u.cedula || '')).toLowerCase();
             if (q !== '' && hay.indexOf(q) === -1) return;
             visibles++;
-            let emp = '<span class="text-muted">—</span>';
-            if (u.n_empresas > 0) {
-                emp = esc(u.empresas) + ' <span class="badge bg-secondary">' + u.n_empresas + '</span>';
-                if (u.empresas_en_nuevo > 0) emp += ' <span class="badge bg-success" title="Se asignará a estas empresas ya migradas">' + u.empresas_en_nuevo + ' en el nuevo</span>';
-            }
             const tr = document.createElement('tr');
             tr.innerHTML =
                 '<td><input type="checkbox" class="usr-chk" data-i="' + i + '"></td>' +
                 '<td class="fw-semibold">' + esc(u.nombre || '(sin nombre)') + '</td>' +
                 '<td class="small">' + esc(u.mail) + '</td>' +
                 '<td class="text-center small">' + esc(u.cedula || '—') + '</td>' +
-                '<td class="small">' + emp + '</td>';
+                '<td class="small">' + esc(u.telefono || '—') + '</td>';
             tb.appendChild(tr);
         });
         $('usrContador').textContent = visibles + ' de ' + usrData.length + ' usuarios por migrar';
@@ -832,24 +839,32 @@ $base = BASE_URL;
             : '<i class="bi bi-download me-1"></i> Migrar seleccionados';
     }
 
+    // El botón "Buscar usuarios" requiere una empresa seleccionada.
+    $('usrEmpresa').addEventListener('change', () => {
+        $('btnListarUsuarios').disabled = !$('usrEmpresa').value;
+        usrData = []; usrRender(); $('usuariosMigrarBox').style.display = 'none'; $('usrResultado').innerHTML = '';
+    });
+
     $('btnListarUsuarios').addEventListener('click', async () => {
+        const idEmp = $('usrEmpresa').value;
+        if (!idEmp) return;
         const btn = $('btnListarUsuarios');
         const prev = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Buscando…';
         $('usrResultado').innerHTML = '';
         try {
-            const res = await fetch(base + '/config/migrarMysql?action=usuarios-por-migrar').then(r => r.json());
+            const res = await fetch(base + '/config/migrarMysql?action=usuarios-por-migrar&id_empresa=' + encodeURIComponent(idEmp)).then(r => r.json());
             if (!res.ok) { $('usrResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
             usrData = res.data || [];
             $('usuariosMigrarBox').style.display = usrData.length ? '' : 'none';
             if (!usrData.length) {
-                $('usrResultado').innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>No hay usuarios activos pendientes: todos ya están registrados en el sistema nuevo.</span>';
+                $('usrResultado').innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>No hay usuarios activos de esta empresa pendientes por migrar (ya registrados o sin usuarios en el viejo).</span>';
             }
             usrRender();
         } catch (e) {
             $('usrResultado').innerHTML = '<span class="text-danger">Error al consultar el sistema anterior.</span>';
         } finally {
-            btn.disabled = false; btn.innerHTML = prev;
+            btn.disabled = !idEmp; btn.innerHTML = prev;
         }
     });
 
@@ -860,14 +875,18 @@ $base = BASE_URL;
     $('usrTbody').addEventListener('change', (e) => { if (e.target.classList.contains('usr-chk')) usrSync(); });
 
     $('btnMigrarUsuarios').addEventListener('click', async () => {
+        const idEmp = $('usrEmpresa').value;
+        if (!idEmp) return;
+        const empTxt = $('usrEmpresa').options[$('usrEmpresa').selectedIndex].text;
         const mails = Array.from(document.querySelectorAll('.usr-chk:checked')).map(c => usrData[+c.dataset.i].mail);
         if (!mails.length) return;
-        if (!confirm('¿Migrar ' + mails.length + ' usuario(s) como nivel 1?\n\nSe crean con enlace de registro (fijan su contraseña al ingresar); no se envía correo ahora.')) return;
+        if (!confirm('¿Migrar ' + mails.length + ' usuario(s) como nivel 1 y asignarlos a «' + empTxt + '»?\n\nSe crean con enlace de registro (fijan su contraseña al ingresar); no se envía correo.')) return;
         const btn = $('btnMigrarUsuarios');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando…';
         $('usrResultado').innerHTML = '';
         try {
             const body = new FormData();
+            body.append('id_empresa', idEmp);
             mails.forEach(m => body.append('mails[]', m));
             const res = await fetch(base + '/config/migrarMysql?action=migrar-usuarios', { method: 'POST', body }).then(r => r.json());
             if (!res.ok) { $('usrResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
@@ -890,7 +909,7 @@ $base = BASE_URL;
         }
     });
 
-    // ── ② Registrar empresas del sistema anterior ──
+    // ── ① Registrar empresas del sistema anterior ──
     let empData = [];
 
     function empRender() {

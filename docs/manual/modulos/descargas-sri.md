@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.0
+version: 1.1
 orden: 50
 estado: activo
 ---
@@ -39,10 +39,25 @@ puede generar entrada de inventario.
 Recuerde que las líneas traen los **códigos del proveedor**: para que la
 mercadería entre al inventario hay que vincularlas con productos de su catálogo.
 
+## Permisos
+
+| Permiso | Qué habilita |
+|---|---|
+| Ver | Abrir el módulo, ver la configuración, el historial y los documentos ignorados |
+| Crear | Descargar y registrar comprobantes, procesar claves, TXT y XML, e ignorar documentos |
+| Modificar | Guardar la configuración de descarga |
+| Eliminar | Quitar documentos de la lista de ignorados |
+
+La extensión de Chrome no usa estos permisos: se identifica con el token
+personal del usuario, así que sigue funcionando igual.
+
 ## Errores frecuentes
 
 - **No descarga nada**: revise las credenciales del SRI de la empresa y el rango
   de fechas.
+- **"No tiene permiso para esta acción"**: pida que le asignen el submódulo en
+  *Permisos de módulos*. Antes el módulo se abría sin permiso asignado; ahora lo
+  exige, igual que los demás.
 - **El comprobante está descargado pero no aparece en compras**: falta
   registrarlo como compra.
 - **La descarga tarda**: el portal del SRI impone sus propios tiempos; para
@@ -50,4 +65,6 @@ mercadería entre al inventario hay que vincularlas con productos de su catálog
 
 ## Historial de cambios
 
+- **1.1** — El módulo pasa a exigir el permiso del submódulo (antes entraba
+  cualquier usuario con sesión). Nueva sección *Permisos*.
 - **1.0** — Versión inicial.

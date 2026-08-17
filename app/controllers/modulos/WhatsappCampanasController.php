@@ -4,17 +4,23 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
-use App\core\Controller;
 use App\models\Cliente;
 use App\models\Empresa;
 use App\repositories\modulos\WhatsappMensajeRepository;
 use App\services\WhatsappService;
 
-class WhatsappCampanasController extends Controller
+class WhatsappCampanasController extends BaseModuloController
 {
+    private const RUTA_MODULO = 'modulos/whatsapp-campanas';
+
     private WhatsappMensajeRepository $repository;
     private WhatsappService $whatsappService;
     private Cliente $clienteModel;
+
+    protected function getRutaModulo(): string
+    {
+        return self::RUTA_MODULO;
+    }
 
     public function __construct()
     {
@@ -26,8 +32,9 @@ class WhatsappCampanasController extends Controller
 
     public function index(): void
     {
+        $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        
+
         // Verificar si la empresa tiene Whatsapp configurado
         $config = $this->db->query("SELECT phone_number_id, access_token FROM empresa_whatsapp_config WHERE id_empresa = {$idEmpresa}")->fetch(\PDO::FETCH_ASSOC);
         $configurado = !empty($config['phone_number_id']) && !empty($config['access_token']);
@@ -40,8 +47,9 @@ class WhatsappCampanasController extends Controller
 
     public function getClientesAjax(): void
     {
+        $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        
+
         // Obtener clientes activos
         // Filtramos para asegurar que tengan telfono (aunque sea por JS o en SQL)
         $sql = "SELECT id, nombre, identificacion, telefono 
@@ -59,8 +67,9 @@ class WhatsappCampanasController extends Controller
 
     public function getPlantillasAjax(): void
     {
+        $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        
+
         $sql = "SELECT nombre, idioma, componentes 
                 FROM whatsapp_plantillas 
                 WHERE id_empresa = :id_empresa AND estado_meta = 'APPROVED' AND status = true AND eliminado = false";
@@ -97,6 +106,7 @@ class WhatsappCampanasController extends Controller
 
     public function sendCampanaMessageAjax(): void
     {
+        $this->requireCrear();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         

@@ -81,7 +81,10 @@ class Permisos
 
         try {
             $model = self::model();
-            $idSub = $model->getIdSubmoduloPorRutaMvc($pathMvc);
+            // Puede haber más de un submódulo con la misma ruta (el mismo módulo
+            // colgado de dos menús): vale el permiso asignado en cualquiera de ellos.
+            $idsSub = $model->getIdsSubmoduloPorRutaMvc($pathMvc);
+            $idSub = $idsSub[0] ?? null;
 
             $base = [
                 'ver' => false, 'crear' => false, 'actualizar' => false,
@@ -93,11 +96,17 @@ class Permisos
             }
 
             $map = $model->getPermisosDeUsuario($idU, $idE);
-            if (!isset($map[$idSub])) {
+            $p = null;
+            foreach ($idsSub as $candidato) {
+                if (isset($map[$candidato])) {
+                    $p = $map[$candidato];
+                    $idSub = $candidato;
+                    break;
+                }
+            }
+            if ($p === null) {
                 return self::$cache[$key] = $base;
             }
-
-            $p = $map[$idSub];
             return self::$cache[$key] = [
                 'ver'          => !empty($p['ver']),
                 'crear'        => !empty($p['crear']),

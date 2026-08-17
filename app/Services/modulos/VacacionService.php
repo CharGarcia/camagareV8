@@ -72,8 +72,14 @@ class VacacionService
         $data = $this->prepararCalculos($data, $idEmpresa);
         $this->rules->validate($data);
 
-        // No permitir registrar vacaciones sobre un rol mensual ya pagado.
-        $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+        // No permitir registrar vacaciones sobre un rol mensual ya pagado — pero solo si
+        // esta vacación SÍ va a alimentar ese rol (afecta_rol). Un registro histórico
+        // (afecta_rol=false, p. ej. vacaciones ya tomadas y liquidadas antes de usar el
+        // sistema) no toca ningún rol, así que no debe bloquearse ni sincronizar nada:
+        // solo descuenta del saldo del empleado.
+        if ($this->esVerdadero($data['afecta_rol'] ?? true)) {
+            $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+        }
 
         $this->repo->beginTransaction();
         try {
@@ -84,7 +90,9 @@ class VacacionService
             $this->repo->rollBack();
             throw $e;
         }
-        $this->sincronizarRol($idEmpresa, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0, (int) $data['id_usuario']);
+        if ($this->esVerdadero($data['afecta_rol'] ?? true)) {
+            $this->sincronizarRol($idEmpresa, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0, (int) $data['id_usuario']);
+        }
         return $id;
     }
 
@@ -95,9 +103,17 @@ class VacacionService
         $data = $this->prepararCalculos($data, $idEmpresa);
         $this->rules->validate($data);
 
-        // Bloquear si el destino ANTERIOR o el NUEVO corresponden a un rol mensual ya pagado.
-        $this->bloquearSiRolPagado($idEmpresa, $antes['id_empleado'] ?? 0, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0);
-        $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+        $antesAfectaba = $this->esVerdadero($antes['afecta_rol'] ?? true);
+        $nuevoAfecta = $this->esVerdadero($data['afecta_rol'] ?? true);
+
+        // Bloquear si el destino ANTERIOR o el NUEVO corresponden a un rol mensual ya
+        // pagado — solo cuando ese destino realmente afecta (afectaba) un rol.
+        if ($antesAfectaba) {
+            $this->bloquearSiRolPagado($idEmpresa, $antes['id_empleado'] ?? 0, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0);
+        }
+        if ($nuevoAfecta) {
+            $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+        }
 
         $this->repo->beginTransaction();
         try {
@@ -108,9 +124,17 @@ class VacacionService
             $this->repo->rollBack();
             throw $e;
         }
-        $this->sincronizarRol($idEmpresa, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0, (int) $data['id_usuario']);
-        if ((int) ($antes['periodo_mes'] ?? 0) !== (int) ($data['periodo_mes'] ?? 0)
-            || (int) ($antes['periodo_anio'] ?? 0) !== (int) ($data['periodo_anio'] ?? 0)) {
+        // Resincroniza el rol nuevo (si aplica) y, si cambió de período o si dejó de
+        // afectar un rol que antes sí afectaba, también el rol anterior (para que ese
+        // rol deje de incluir un valor que ya no le corresponde).
+        if ($nuevoAfecta) {
+            $this->sincronizarRol($idEmpresa, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0, (int) $data['id_usuario']);
+        }
+        if ($antesAfectaba && (
+            !$nuevoAfecta
+            || (int) ($antes['periodo_mes'] ?? 0) !== (int) ($data['periodo_mes'] ?? 0)
+            || (int) ($antes['periodo_anio'] ?? 0) !== (int) ($data['periodo_anio'] ?? 0)
+        )) {
             $this->sincronizarRol($idEmpresa, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0, (int) $data['id_usuario']);
         }
     }
@@ -152,9 +176,14 @@ class VacacionService
     {
         $antes = $this->repo->getDetalle($id, $idEmpresa);
         if (!$antes) throw new Exception('Registro no encontrado.');
+        $afectaba = $this->esVerdadero($antes['afecta_rol'] ?? true);
 
-        // No permitir eliminar vacaciones que ya afectan a un rol mensual pagado.
-        $this->bloquearSiRolPagado($idEmpresa, $antes['id_empleado'] ?? 0, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0);
+        // No permitir eliminar vacaciones que ya afectan a un rol mensual pagado. Un
+        // registro histórico (afecta_rol=false) nunca tocó ningún rol, así que se puede
+        // eliminar libremente sin esta validación.
+        if ($afectaba) {
+            $this->bloquearSiRolPagado($idEmpresa, $antes['id_empleado'] ?? 0, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0);
+        }
 
         $this->repo->beginTransaction();
         try {
@@ -165,7 +194,15 @@ class VacacionService
             $this->repo->rollBack();
             throw $e;
         }
-        $this->sincronizarRol($idEmpresa, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0, $idUsuario);
+        if ($afectaba) {
+            $this->sincronizarRol($idEmpresa, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0, $idUsuario);
+        }
+    }
+
+    private function esVerdadero($v): bool
+    {
+        if (is_bool($v)) return $v;
+        return in_array(strtolower((string) $v), ['1', 't', 'true', 'si', 'sí'], true);
     }
 
     /**

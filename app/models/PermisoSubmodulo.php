@@ -479,6 +479,10 @@ class PermisoSubmodulo extends BaseModel
     {
         $r = strtolower(trim($ruta));
         $r = str_replace(['../', './'], '', $r);
+        // El ltrim va ANTES de quitar el prefijo 'sistema/': hay submódulos guardados
+        // como '/sistema/modulos/xxx' y con el orden inverso el prefijo sobrevivía
+        // (el patrón está anclado al inicio) y la ruta nunca casaba.
+        $r = ltrim($r, '/');
         $r = preg_replace('#^(sistema/)+#', '', $r);
         $r = ltrim($r, '/');
         // Unificar guión medio y bajo: el Router (toCamelCase) trata '-' y '_' como
@@ -534,6 +538,22 @@ class PermisoSubmodulo extends BaseModel
      */
     public function getIdSubmoduloPorRutaMvc(string $pathMvc): ?int
     {
+        return $this->getIdsSubmoduloPorRutaMvc($pathMvc)[0] ?? null;
+    }
+
+    /**
+     * Todos los submódulos que corresponden a una ruta MVC, en orden de preferencia.
+     *
+     * Normalmente es uno solo, pero submodulos_menu puede tener la MISMA ruta en dos
+     * filas (p. ej. 'Vehículos' colgando de Mecánica y de Car-Wash): las dos abren el
+     * mismo módulo, así que el permiso asignado en cualquiera de ellas debe valer. Si
+     * solo se mirara la primera, asignar el permiso en la otra no serviría de nada y
+     * el usuario terminaría en el dashboard con el permiso marcado en pantalla.
+     *
+     * @return int[]
+     */
+    public function getIdsSubmoduloPorRutaMvc(string $pathMvc): array
+    {
         $cfgFile = MVC_CONFIG . '/modulos_mvc.php';
         $all = is_file($cfgFile) ? require $cfgFile : [];
         $entry = $all[$pathMvc] ?? [];
@@ -546,7 +566,7 @@ class PermisoSubmodulo extends BaseModel
             $targets[$this->normalizarRutaSubmodulo((string) $lr)] = true;
         }
 
-        $idPorRuta = null;
+        $idsPorRuta = [];
         $rutaDelIdCfg = null;
         foreach ($this->listarRutasSubmodulos() as $row) {
             $id = (int) ($row['id_submodulo'] ?? 0);
@@ -560,27 +580,25 @@ class PermisoSubmodulo extends BaseModel
             if ($norm === '' || !isset($targets[$norm])) {
                 continue;
             }
-            // Si el id del config es uno de los que sí tienen esta ruta, gana él
-            // (evita elegir otro cuando hay rutas duplicadas en submodulos_menu).
+            // El id del config, si es uno de los que tienen esta ruta, va primero.
             if ($idCfg > 0 && $id === $idCfg) {
-                return $idCfg;
+                array_unshift($idsPorRuta, $id);
+                continue;
             }
-            if ($idPorRuta === null) {
-                $idPorRuta = $id;
-            }
+            $idsPorRuta[] = $id;
         }
 
-        if ($idPorRuta !== null) {
-            return $idPorRuta;
+        if ($idsPorRuta !== []) {
+            return array_values(array_unique($idsPorRuta));
         }
         // La ruta no está en submodulos_menu: solo se acepta el id del config si no
         // se pudo comprobar que pertenece a OTRA ruta (si pertenece, daría los
         // permisos de un módulo ajeno).
         if ($idCfg > 0 && $rutaDelIdCfg === null) {
-            return $idCfg;
+            return [$idCfg];
         }
 
-        return null;
+        return [];
     }
 
     /**

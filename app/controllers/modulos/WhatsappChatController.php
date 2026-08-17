@@ -2,15 +2,21 @@
 
 namespace App\controllers\modulos;
 
-use App\core\Controller;
 use App\repositories\modulos\WhatsappMensajeRepository;
 use App\services\WhatsappService;
 use App\models\WhatsappConfig;
 
-class WhatsappChatController extends Controller
+class WhatsappChatController extends BaseModuloController
 {
+    private const RUTA_MODULO = 'modulos/whatsapp-chat';
+
     private WhatsappMensajeRepository $repository;
     private WhatsappService $whatsappService;
+
+    protected function getRutaModulo(): string
+    {
+        return self::RUTA_MODULO;
+    }
 
     public function __construct()
     {
@@ -21,6 +27,7 @@ class WhatsappChatController extends Controller
 
     public function index(): void
     {
+        $this->requireLeer();
         $idEmpresa = $_SESSION['id_empresa'];
         
         // Verificar si tiene configurado
@@ -36,7 +43,7 @@ class WhatsappChatController extends Controller
 
     public function getChatsAjax(): void
     {
-        error_log("LLAMANDO A GETCHATSAJAX");
+        $this->requireLeer();
         $idEmpresa = $_SESSION['id_empresa'];
         $chats = $this->repository->getChatsList($idEmpresa);
         
@@ -45,6 +52,7 @@ class WhatsappChatController extends Controller
 
     public function countUnreadAjax(): void
     {
+        $this->requireLeer();
         $idEmpresa = $_SESSION['id_empresa'] ?? 0;
         if (!$idEmpresa) {
             echo json_encode(['ok' => false]);
@@ -57,6 +65,7 @@ class WhatsappChatController extends Controller
 
     public function getMensajesAjax(): void
     {
+        $this->requireLeer();
         $idEmpresa = $_SESSION['id_empresa'];
         $idChat    = (int)($_GET['id_chat'] ?? 0);
 
@@ -219,8 +228,9 @@ class WhatsappChatController extends Controller
 
     public function enviarMensajeAjax(): void
     {
+        $this->requireCrear();
         $idEmpresa = $_SESSION['id_empresa'];
-        
+
         $input = json_decode(file_get_contents('php://input'), true);
         $telefono = $input['telefono'] ?? '';
         $texto = $input['texto'] ?? '';
@@ -299,6 +309,7 @@ class WhatsappChatController extends Controller
 
     public function uploadMediaAjax(): void
     {
+        $this->requireCrear();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idChat = (int) ($_POST['id_chat'] ?? 0);
         $telefono = $_POST['telefono'] ?? '';
@@ -400,6 +411,7 @@ class WhatsappChatController extends Controller
             http_response_code(403);
             exit;
         }
+        $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $file      = trim($_GET['file'] ?? '');
@@ -532,6 +544,7 @@ class WhatsappChatController extends Controller
      */
     public function getRespuestasRapidas(): void
     {
+        $this->requireLeer();
         header('Content-Type: application/json');
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
@@ -585,6 +598,13 @@ class WhatsappChatController extends Controller
         $input     = json_decode(file_get_contents('php://input'), true) ?? [];
 
         $id        = (int) ($input['id'] ?? 0);
+        // Crear y editar son permisos distintos: se resuelve según venga o no un id.
+        if ($id > 0) {
+            $this->requireActualizar();
+        } else {
+            $this->requireCrear();
+        }
+
         $titulo    = trim($input['titulo']    ?? '');
         $contenido = trim($input['contenido'] ?? '');
         $tipo      = $input['tipo'] ?? 'personal'; // 'empresa' | 'personal'
@@ -649,6 +669,7 @@ class WhatsappChatController extends Controller
      */
     public function deleteRespuestaRapida(): void
     {
+        $this->requireEliminar();
         header('Content-Type: application/json');
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['ok' => false, 'error' => 'Método no permitido']);

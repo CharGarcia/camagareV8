@@ -2,9 +2,8 @@
 
 declare(strict_types=1);
 
-namespace App\Controllers\modulos;
+namespace App\controllers\modulos;
 
-use App\core\Controller;
 use App\Services\SriService;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\modulos\SriDescargaAutomaticaService;
@@ -16,14 +15,24 @@ use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\SriConfigDescargaRepository;
 use Exception;
 
-class DescargasSriController extends Controller
+/**
+ * Las acciones agente*Ajax NO llevan guard de sesión ni de permisos a propósito:
+ * las llama la extensión de Chrome del operador, que se identifica con el token
+ * personal del usuario (usuarios.agente_token), no con una sesión del navegador.
+ * El resto de acciones sí exigen el permiso del submódulo 'modulos/descargas_sri'.
+ */
+class DescargasSriController extends BaseModuloController
 {
+    private const RUTA_MODULO = 'modulos/descargas_sri';
+
+    protected function getRutaModulo(): string
+    {
+        return self::RUTA_MODULO;
+    }
+
     public function index(): void
     {
-        $this->requireAuth();
-        
-        // Descomentar cuando el módulo sea registrado en la base de datos
-        // $this->requirePermiso('descargas_sri', 'ver');
+        $this->requireLeer();
 
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $this->viewWithLayout('layouts.main', 'modulos.descargas_sri.index', [
@@ -57,7 +66,7 @@ class DescargasSriController extends Controller
      */
     public function procesarClavesAccesoAjax(): void
     {
-        $this->requireAuth();
+        $this->requireCrear();
         header('Content-Type: application/json');
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -131,7 +140,7 @@ class DescargasSriController extends Controller
 
     public function registrarComprobanteAjax(): void
     {
-        $this->requireAuth();
+        $this->requireCrear();
         header('Content-Type: application/json');
 
         $clave = $_POST['clave'] ?? '';
@@ -177,7 +186,7 @@ class DescargasSriController extends Controller
      */
     public function procesarTxtSriAjax(): void
     {
-        $this->requireAuth();
+        $this->requireCrear();
         header('Content-Type: application/json');
 
         if (!isset($_FILES['archivo_txt']) || $_FILES['archivo_txt']['error'] !== UPLOAD_ERR_OK) {
@@ -240,7 +249,7 @@ class DescargasSriController extends Controller
      */
     public function procesarArchivosXmlAjax(): void
     {
-        $this->requireAuth();
+        $this->requireCrear();
         header('Content-Type: application/json');
 
         if (!isset($_FILES['archivos_xml'])) {
@@ -315,7 +324,7 @@ class DescargasSriController extends Controller
     }
     public function listarDocumentosIgnoradosAjax(): void
     {
-        $this->requireAuth();
+        $this->requireLeer();
         header('Content-Type: application/json');
         
         $repo = new DocumentoIgnoradoRepository();
@@ -329,7 +338,7 @@ class DescargasSriController extends Controller
 
     public function agregarDocumentoIgnoradoAjax(): void
     {
-        $this->requireAuth();
+        $this->requireCrear();
         header('Content-Type: application/json');
         
         $clave = $_POST['clave_acceso'] ?? '';
@@ -367,7 +376,7 @@ class DescargasSriController extends Controller
 
     public function eliminarDocumentoIgnoradoAjax(): void
     {
-        $this->requireAuth();
+        $this->requireEliminar();
         header('Content-Type: application/json');
 
         $id = (int) ($_POST['id'] ?? 0);
@@ -392,7 +401,7 @@ class DescargasSriController extends Controller
 
     public function obtenerConfigDescargaAjax(): void
     {
-        $this->requireAuth();
+        $this->requireLeer();
         header('Content-Type: application/json');
 
         $idEmpresa  = (int)    ($_SESSION['id_empresa']  ?? 0);
@@ -421,7 +430,7 @@ class DescargasSriController extends Controller
 
     public function guardarConfigDescargaAjax(): void
     {
-        $this->requireAuth();
+        $this->requireActualizar();
         header('Content-Type: application/json');
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -442,7 +451,7 @@ class DescargasSriController extends Controller
     public function ejecutarDescargaManualAjax(): void
     {
         set_time_limit(0);
-        $this->requireAuth();
+        $this->requireCrear();
         header('Content-Type: application/json');
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -484,7 +493,7 @@ class DescargasSriController extends Controller
 
     public function historialDescargasAjax(): void
     {
-        $this->requireAuth();
+        $this->requireLeer();
         header('Content-Type: application/json');
 
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
@@ -499,7 +508,7 @@ class DescargasSriController extends Controller
 
     public function detalleLogAjax(): void
     {
-        $this->requireAuth();
+        $this->requireLeer();
         header('Content-Type: application/json');
 
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
@@ -529,7 +538,7 @@ class DescargasSriController extends Controller
      */
     public function generarAgenteTokenAjax(): void
     {
-        $this->requireAuth();
+        $this->requireLeer();
         header('Content-Type: application/json');
 
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
@@ -552,7 +561,7 @@ class DescargasSriController extends Controller
      */
     public function marcarLoginPendienteAjax(): void
     {
-        $this->requireAuth();
+        $this->requireCrear();
         header('Content-Type: application/json');
 
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
