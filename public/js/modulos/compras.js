@@ -19,10 +19,20 @@ const CMG_TIPOS_MASCARA = ['01', '03', '04', '05', '06', '09', '11', '12', '15',
 // Verificar si la empresa es Persona Natural (Acepta '1' o '01')
 const _esPersonaNatural = (window.CMG_empresa?.tipo == '1' || window.CMG_empresa?.tipo == '01');
 
-// Decimales configurables por empresa (mismo patrón que factura_venta.js) — evita truncar a un
-// número fijo de decimales lo que ya viene con más precisión desde el XML del SRI.
-const DEC_CANT = parseInt(window.CMG_empresa?.decimales_cantidad ?? 2, 10) || 2;
+// Precio sugerido al elegir un producto del catálogo (no viene de un XML, es una entrada manual):
+// se usa el decimales_precio configurado por la empresa como cantidad de decimales por defecto.
 const DEC_PRECIO = parseInt(window.CMG_empresa?.decimales_precio ?? 2, 10) || 2;
+
+// Muestra cantidad/precio_unitario TAL COMO están guardados en BD (que a su vez preserva lo que
+// trajo el XML del SRI), sin forzar un número fijo de decimales: cada proveedor puede declarar
+// una cantidad distinta de decimales, así que no hay un DEC_CANT/DEC_PRECIO de empresa que sirva
+// para esto. Solo se recortan ceros de cola sobrantes (3.120000 -> 3.12); la escala máxima de las
+// columnas (compras_detalle.cantidad/precio_unitario) es 6 decimales.
+function _fmtExacto(v) {
+    const n = parseFloat(v);
+    if (!isFinite(n)) return '0';
+    return n.toFixed(6).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     if (window.CMG_tarifasIva && window.CMG_tarifasIva.length > 0) {
@@ -1200,8 +1210,8 @@ function CMG_agregarFilaDetalle(det) {
             <input type="hidden" class="input-id-medida" value="${det.product_id_medida || det.id_medida || ''}">
             <input type="hidden" class="input-id-tipo-medida" value="${det.product_id_tipo_medida || det.id_tipo_medida || ''}">
         </td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${parseFloat(det.cantidad||1).toFixed(DEC_CANT)}" min="0.0001" step="any" oninput="CMG_recalcularFila(this)"></td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${parseFloat(det.precio_unitario||0).toFixed(DEC_PRECIO)}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="CMG_recalcularFila(this)"></td>
         <td class="text-center"><select class="form-select form-select-sm input-detalle input-iva" onchange="CMG_recalcularFila(this)">${opcIva}</select></td>
         <td class="text-end pe-4 align-middle fw-semibold"><span class="subtotal-line">0.00</span></td>
@@ -2905,14 +2915,12 @@ function mcRenderDocRelacionado(doc) {
     const nombre = _esc(doc.tipo_comprobante_nombre || doc.tipo_comprobante || 'Documento');
 
     const filas = (doc.detalles || []).map(det => {
-        const cant = parseFloat(det.cantidad || 0);
-        const pu   = parseFloat(det.precio_unitario || 0);
-        const sub  = parseFloat(det.precio_total_sin_impuesto || 0);
+        const sub = parseFloat(det.precio_total_sin_impuesto || 0);
         return `<tr>
             <td class="ps-2">${_esc(det.codigo_principal || det.producto_codigo || '')}</td>
             <td>${_esc(det.descripcion || det.producto_nombre || '')}</td>
-            <td class="text-center">${cant.toFixed(DEC_CANT)}</td>
-            <td class="text-end">${pu.toFixed(DEC_PRECIO)}</td>
+            <td class="text-center">${_fmtExacto(det.cantidad || 0)}</td>
+            <td class="text-end">${_fmtExacto(det.precio_unitario || 0)}</td>
             <td class="text-end pe-2">${sub.toFixed(2)}</td>
         </tr>`;
     }).join('') || '<tr><td colspan="5" class="text-center text-muted py-2">Sin líneas de detalle.</td></tr>';
