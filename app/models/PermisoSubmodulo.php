@@ -491,9 +491,16 @@ class PermisoSubmodulo extends BaseModel
 
     /**
      * Filas de submodulos_menu (soporta id_submodulo o id).
+     * Cacheado por request: se consulta una vez por cada ruta MVC cuyo permiso
+     * se resuelve (una vista puede preguntar por varios módulos).
      */
     private function listarRutasSubmodulos(): array
     {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
         $queries = [
             "SELECT id_submodulo, ruta FROM submodulos_menu WHERE COALESCE(status, 1) = 1",
             "SELECT id AS id_submodulo, ruta FROM submodulos_menu WHERE COALESCE(status, 1) = 1",
@@ -502,48 +509,75 @@ class PermisoSubmodulo extends BaseModel
             try {
                 $rows = $this->query($sql);
                 if (!empty($rows)) {
-                    return $rows;
+                    return $cache = $rows;
                 }
             } catch (\Throwable $e) {
                 continue;
             }
         }
 
-        return [];
+        return $cache = [];
     }
 
     /**
      * Resuelve id_submodulo para una ruta MVC (ej. modulos/clientes) usando config/modulos_mvc.php.
+     *
+     * El id_submodulo del config es solo una PISTA: los ids de submodulos_menu se
+     * asignan por instalación (cada base los genera al insertar el menú), así que un
+     * id fijo en el repositorio puede no corresponder a esa ruta en la base del
+     * cliente. Si no corresponde, el usuario no-superadmin queda sin permiso 'ver'
+     * aunque el superadmin se lo haya asignado, y el guard lo manda al dashboard.
+     *
+     * Por eso la BASE MANDA: si algún submódulo activo tiene la ruta MVC (o una de
+     * sus legacy_rutas), ese es el id. El id del config solo se usa cuando la ruta
+     * no está registrada en submodulos_menu, y nunca si apunta a otra ruta distinta.
      */
     public function getIdSubmoduloPorRutaMvc(string $pathMvc): ?int
     {
         $cfgFile = MVC_CONFIG . '/modulos_mvc.php';
         $all = is_file($cfgFile) ? require $cfgFile : [];
         $entry = $all[$pathMvc] ?? [];
+        $idCfg = (int) ($entry['id_submodulo'] ?? 0);
 
-        if (!empty($entry['id_submodulo'])) {
-            $id = (int) $entry['id_submodulo'];
-
-            return $id > 0 ? $id : null;
-        }
-        $legacy = $entry['legacy_rutas'] ?? [];
         $targets = [];
         // Soportar también la ruta MVC exacta por si el submódulo ya se guardó con esa ruta limpia en la BD
         $targets[$this->normalizarRutaSubmodulo($pathMvc)] = true;
-        
-        foreach ($legacy as $lr) {
+        foreach ($entry['legacy_rutas'] ?? [] as $lr) {
             $targets[$this->normalizarRutaSubmodulo((string) $lr)] = true;
         }
-        if ($targets === []) {
-            return null;
-        }
-        foreach ($this->listarRutasSubmodulos() as $row) {
-            $norm = $this->normalizarRutaSubmodulo((string) ($row['ruta'] ?? ''));
-            if ($norm !== '' && isset($targets[$norm])) {
-                $id = (int) ($row['id_submodulo'] ?? 0);
 
-                return $id > 0 ? $id : null;
+        $idPorRuta = null;
+        $rutaDelIdCfg = null;
+        foreach ($this->listarRutasSubmodulos() as $row) {
+            $id = (int) ($row['id_submodulo'] ?? 0);
+            if ($id <= 0) {
+                continue;
             }
+            $norm = $this->normalizarRutaSubmodulo((string) ($row['ruta'] ?? ''));
+            if ($idCfg > 0 && $id === $idCfg) {
+                $rutaDelIdCfg = $norm;
+            }
+            if ($norm === '' || !isset($targets[$norm])) {
+                continue;
+            }
+            // Si el id del config es uno de los que sí tienen esta ruta, gana él
+            // (evita elegir otro cuando hay rutas duplicadas en submodulos_menu).
+            if ($idCfg > 0 && $id === $idCfg) {
+                return $idCfg;
+            }
+            if ($idPorRuta === null) {
+                $idPorRuta = $id;
+            }
+        }
+
+        if ($idPorRuta !== null) {
+            return $idPorRuta;
+        }
+        // La ruta no está en submodulos_menu: solo se acepta el id del config si no
+        // se pudo comprobar que pertenece a OTRA ruta (si pertenece, daría los
+        // permisos de un módulo ajeno).
+        if ($idCfg > 0 && $rutaDelIdCfg === null) {
+            return $idCfg;
         }
 
         return null;

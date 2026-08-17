@@ -7,7 +7,7 @@ tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
 etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total
-version: 1.0
+version: 1.1
 orden: 10
 estado: activo
 ---
@@ -51,11 +51,29 @@ ha creado nada y no tiene acceso total.
 
 ## Por qué un módulo manda al tablero
 
-Cuando un usuario con permisos correctos entra a un módulo y el sistema lo
-devuelve al tablero, casi siempre es porque la ruta registrada en el menú no
-coincide con la ruta real del módulo. Revise que la ruta del submódulo esté
-escrita igual que la del controlador.
+Cuando un usuario entra a un módulo y el sistema lo devuelve al tablero, es
+porque no tiene el permiso **VER** de ese submódulo en la empresa activa. Revise
+en este orden:
+
+1. **El permiso está marcado para esa empresa.** Los permisos son por empresa: un
+   usuario puede tener Movimientos de Inventario en una empresa y no en otra.
+   Cambie la empresa en el selector de esta pantalla y confírmelo.
+2. **Está marcado VER, no solo Crear o Modificar.** Sin VER no se abre el módulo.
+   Desde esta versión el menú tampoco muestra los submódulos sin VER, así que un
+   enlace que ya no aparece suele ser esto.
+3. **El submódulo está activo** en el menú (los desactivados ya no se muestran).
+4. **La ruta del submódulo coincide** con la del módulo (por ejemplo
+   `modulos/inventario`). Si está mal escrita, el sistema no puede relacionar el
+   permiso con el módulo.
+
+El usuario debe recargar la pantalla después de que le asignen el permiso: el
+cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.1** — El menú deja de mostrar submódulos sin permiso VER o desactivados
+  (antes aparecían y al abrirlos devolvían al tablero). El permiso se relaciona
+  con el módulo por su ruta registrada en el menú, no por un número fijo, así que
+  ya no depende de que los identificadores coincidan entre instalaciones. Se
+  amplió el apartado "Por qué un módulo manda al tablero".
 - **1.0** — Versión inicial.

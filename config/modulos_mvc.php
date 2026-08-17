@@ -247,8 +247,9 @@ return [
 
     // Envío en lote de comprobantes electrónicos al SRI.
     // Submódulo en submodulos_menu.ruta = 'modulos/envio-lote-sri' (módulo 11, Documentos).
+    // id_submodulo = 0: se resuelve por esa ruta (el id varía según instalación).
     'modulos/envio-lote-sri' => [
-        'id_submodulo' => 190,
+        'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
 
@@ -695,8 +696,10 @@ return [
     ],
 
     // ─── SALDOS INICIALES ─────────────────────────────────────────────────────
+    // id_submodulo = 0: se resuelve por submodulos_menu.ruta. El 38 que estaba
+    // aquí pertenece a 'modulos/reporte-ventas', no a saldos iniciales.
     'modulos/saldos_iniciales' => [
-        'id_submodulo' => 38,
+        'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
 

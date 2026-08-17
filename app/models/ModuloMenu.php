@@ -34,7 +34,10 @@ class ModuloMenu extends BaseModel
     /**
      * Obtiene módulos con submodulos para el usuario y empresa actuales.
      * Nivel 3 (super admin): todos los módulos.
-     * Nivel 1-2: solo los asignados en modulos_asignados.
+     * Nivel 1-2: solo los asignados en modulos_asignados CON permiso de ver (r=1)
+     * y con el submódulo activo (status=1). Sin esos dos filtros el menú mostraba
+     * enlaces que el guard del módulo (requireLeer) después rechaza, y el usuario
+     * terminaba de vuelta en el dashboard sin ningún mensaje.
      *
      * @return array [['id_modulo','nombre_modulo','icono_modulo','submodulos'=>[['id_submodulo','nombre_submodulo','ruta','icono_submodulo']]]]
      */
@@ -71,9 +74,9 @@ class ModuloMenu extends BaseModel
         return $this->query("SELECT mm.id_modulo, mm.nombre_modulo, mm.id_icono AS mm_id_icono,
             sm.id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_icono AS sm_id_icono
             FROM modulos_asignados ma
-            INNER JOIN submodulos_menu sm ON sm.id_submodulo = ma.id_submodulo
+            INNER JOIN submodulos_menu sm ON sm.id_submodulo = ma.id_submodulo AND COALESCE(sm.status, 1) = 1
             INNER JOIN modulos_menu mm ON mm.id_modulo = ma.id_modulo
-            WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE}
+            WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE} AND COALESCE(ma.r, 0) = 1
             ORDER BY mm.nombre_modulo, sm.nombre_submodulo");
     }
 
@@ -90,9 +93,9 @@ class ModuloMenu extends BaseModel
         return $this->query("SELECT mm.id AS id_modulo, mm.nombre_modulo, mm.id_icono AS mm_id_icono,
             sm.id AS id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_icono AS sm_id_icono
             FROM modulos_asignados ma
-            INNER JOIN submodulos_menu sm ON sm.id = ma.id_submodulo
+            INNER JOIN submodulos_menu sm ON sm.id = ma.id_submodulo AND COALESCE(sm.status, 1) = 1
             INNER JOIN modulos_menu mm ON mm.id = ma.id_modulo
-            WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE}
+            WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE} AND COALESCE(ma.r, 0) = 1
             ORDER BY mm.nombre_modulo, sm.nombre_submodulo");
     }
 
