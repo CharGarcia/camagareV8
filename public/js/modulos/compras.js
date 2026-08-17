@@ -1243,14 +1243,21 @@ function CMG_recalcularFila(input) {
 }
 
 function CMG_recalcularTotales() {
+    // Redondear a centavos en cada acumulación (no solo al mostrar) — igual que factura_venta.js
+    // (r2 = v => Math.round(v*100)/100) — para que la suma de los "Subtotal"/"IVA" que se ven en
+    // pantalla coincida siempre con el "Total General": si se acumula en punto flotante sin
+    // redondear y cada caja se redondea recién al renderizarla, el total (redondeado una sola vez
+    // al final) puede diferir en centavos de la suma de las cajas ya redondeadas.
+    const r2 = v => Math.round(v * 100) / 100;
+
     let totalDesc = 0, subTotalBruto = 0;
     const grupos = {}; // Para agrupar por tarifa IVA
     const rows = document.querySelectorAll('#tbodyDetalle tr');
-    
+
     rows.forEach(tr => {
         const cant  = parseFloat(tr.querySelector('.input-cantidad')?.value || 0);
         const prec  = parseFloat(tr.querySelector('.input-precio')?.value || 0);
-        const desc  = parseFloat(tr.querySelector('.input-desc')?.value || 0);
+        const desc  = r2(parseFloat(tr.querySelector('.input-desc')?.value || 0));
         const sel   = tr.querySelector('.input-iva');
         const tarifa = sel ? parseFloat(sel.selectedOptions[0]?.dataset.tarifa || 0) : 0;
         const codPct = sel ? sel.value : '0';
@@ -1258,27 +1265,29 @@ function CMG_recalcularTotales() {
         // "0%", "No objeto de IVA", "Exento"...), igual que en facturas de venta.
         const label  = sel ? (sel.selectedOptions[0]?.text || (tarifa + '%')) : (tarifa + '%');
 
-        const brutoFila = cant * prec;
-        const netoFila  = Math.max(0, brutoFila - desc);
+        const brutoFila  = r2(cant * prec);
+        // Si el descuento de la línea supera su propio subtotal, se acota a este (evita bases
+        // negativas) y se usa ese mismo valor acotado para totalDesc — así Subtotal - Descuento
+        // sigue coincidiendo exactamente con la suma de las bases por tarifa de IVA.
+        const descLinea  = Math.min(desc, brutoFila);
+        const netoFila   = r2(brutoFila - descLinea);
 
-        subTotalBruto += brutoFila;
-        totalDesc += desc;
+        subTotalBruto = r2(subTotalBruto + brutoFila);
+        totalDesc = r2(totalDesc + descLinea);
 
         if (!grupos[codPct]) {
             grupos[codPct] = { tarifa: tarifa, label: label, base: 0, iva: 0 };
         }
-        grupos[codPct].base += netoFila;
-        grupos[codPct].iva += netoFila * (tarifa / 100);
+        grupos[codPct].base = r2(grupos[codPct].base + netoFila);
+        grupos[codPct].iva = r2(grupos[codPct].iva + r2(netoFila * (tarifa / 100)));
     });
 
     // Renderizar Subtotales por IVA
     let htmlSubtotales = '';
     let totalIva = 0;
-    let sumaBases = 0;
 
     Object.values(grupos).forEach(g => {
-        sumaBases += g.base;
-        totalIva += g.iva;
+        totalIva = r2(totalIva + g.iva);
         htmlSubtotales += `
             <div class="d-flex justify-content-between align-items-center mb-1">
                 <span class="text-muted">Subtotal ${g.label}</span>
@@ -1307,12 +1316,15 @@ function CMG_recalcularTotales() {
     }
 
     const inputPropina = document.getElementById('mcInputPropina');
-    const propina      = inputPropina ? parseFloat(inputPropina.value || 0) : 0;
-    const totalFinal   = sumaBases + totalIva + propina;
+    const propina      = r2(inputPropina ? parseFloat(inputPropina.value || 0) : 0);
+
+    // Total General = Subtotal (bruto) - Descuento + IVA + Propina, tal cual se ve en pantalla.
+    const subtotalNeto = r2(subTotalBruto - totalDesc);
+    const totalFinal    = r2(subtotalNeto + totalIva + propina);
 
     const modalEl = document.getElementById('modalCompra');
     if (modalEl) {
-        modalEl.dataset.subtotalNeto = sumaBases.toFixed(2);
+        modalEl.dataset.subtotalNeto = subtotalNeto.toFixed(2);
         modalEl.dataset.totalIva     = totalIva.toFixed(2);
     }
 
