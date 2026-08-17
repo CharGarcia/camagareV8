@@ -23,6 +23,15 @@ const _esPersonaNatural = (window.CMG_empresa?.tipo == '1' || window.CMG_empresa
 // se usa el decimales_precio configurado por la empresa como cantidad de decimales por defecto.
 const DEC_PRECIO = parseInt(window.CMG_empresa?.decimales_precio ?? 2, 10) || 2;
 
+// Redondeo a centavos compartido por CMG_recalcularFila y CMG_recalcularTotales — debe ser
+// exactamente la misma función en ambos lados. Con valores como 1500 * 1.04347 = 1565.205 (mitad
+// exacta de centavo), el binario de punto flotante puede representarlo por debajo de .205
+// (1565.2049999...) y un `.toFixed(2)` directo sobre esa multiplicación redondea para abajo
+// (1565.20), mientras que Math.round(v*100)/100 aplicado igual en los dos lugares sí redondea
+// para arriba (1565.21) de forma consistente — evita que el subtotal de una línea individual
+// no coincida con el subtotal agrupado por tarifa de IVA que lo debería igualar.
+const _r2 = v => Math.round(v * 100) / 100;
+
 // Muestra cantidad/precio_unitario TAL COMO están guardados en BD (que a su vez preserva lo que
 // trajo el XML del SRI), sin forzar un número fijo de decimales: cada proveedor puede declarar
 // una cantidad distinta de decimales, así que no hay un DEC_CANT/DEC_PRECIO de empresa que sirva
@@ -1236,19 +1245,19 @@ function CMG_recalcularFila(input) {
     const tr    = input.closest('tr');
     const cant  = parseFloat(tr.querySelector('.input-cantidad').value || 0);
     const prec  = parseFloat(tr.querySelector('.input-precio').value || 0);
-    const desc  = parseFloat(tr.querySelector('.input-desc').value || 0);
-    const neto  = Math.max(0, (cant * prec) - desc);
+    const desc  = _r2(parseFloat(tr.querySelector('.input-desc').value || 0));
+    const bruto = _r2(cant * prec);
+    const neto  = _r2(Math.max(0, bruto - Math.min(desc, bruto)));
     tr.querySelector('.subtotal-line').textContent = neto.toFixed(2);
     CMG_recalcularTotales();
 }
 
 function CMG_recalcularTotales() {
-    // Redondear a centavos en cada acumulación (no solo al mostrar) — igual que factura_venta.js
-    // (r2 = v => Math.round(v*100)/100) — para que la suma de los "Subtotal"/"IVA" que se ven en
-    // pantalla coincida siempre con el "Total General": si se acumula en punto flotante sin
-    // redondear y cada caja se redondea recién al renderizarla, el total (redondeado una sola vez
-    // al final) puede diferir en centavos de la suma de las cajas ya redondeadas.
-    const r2 = v => Math.round(v * 100) / 100;
+    // Redondear a centavos en cada acumulación (no solo al mostrar), con la MISMA función _r2 que
+    // usa CMG_recalcularFila para el subtotal de cada línea — para que la suma de los
+    // "Subtotal"/"IVA" que se ven en pantalla coincida siempre con el "Total General" y con el
+    // subtotal individual de cada línea (ver comentario de _r2 más arriba en el archivo).
+    const r2 = _r2;
 
     let totalDesc = 0, subTotalBruto = 0;
     const grupos = {}; // Para agrupar por tarifa IVA
