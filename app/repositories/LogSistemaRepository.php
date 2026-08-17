@@ -16,6 +16,18 @@ use PDO;
  */
 class LogSistemaRepository extends BaseRepository
 {
+    /**
+     * Expresión con el CONTENIDO del evento (los dos JSON de la bitácora, en texto)
+     * para poder buscar dentro del mensaje: conceptos, nombres de proveedor/cliente,
+     * números de comprobante, importes, etc.
+     *
+     * Va con `::text` porque las columnas son JSONB; el resultado es el JSON
+     * serializado, que es exactamente lo que el usuario ve en "datos crudos".
+     * OJO: es una búsqueda sin índice (secuencial sobre el rango de fechas activo),
+     * por eso es un filtro aparte y NO se agrega al texto libre por defecto.
+     */
+    private const EXPR_CONTENIDO = "(COALESCE(l.datos_nuevos::text, '') || ' ' || COALESCE(l.datos_anteriores::text, ''))";
+
     /** Columnas de ordenamiento permitidas (whitelist) mapeadas a SQL. */
     private const MAPA_ORDEN = [
         'created_at' => 'l.created_at',
@@ -194,7 +206,7 @@ class LogSistemaRepository extends BaseRepository
      * fechas) + búsqueda por texto libre y tokens.
      *
      * @param array{nivel:int,id_empresa:int} $scope
-     * @param array $filtros ['usuario','empresa','accion','tabla','desde','hasta']
+     * @param array $filtros ['usuario','empresa','accion','tabla','contenido','desde','hasta']
      * @return array{0:string,1:array}
      */
     private function construirWhere(array $scope, string $buscar, array $filtros = []): array
@@ -223,6 +235,20 @@ class LogSistemaRepository extends BaseRepository
         if (!empty($filtros['tabla'])) {
             $where .= ' AND l.tabla_afectada = :f_tabla';
             $params[':f_tabla'] = (string) $filtros['tabla'];
+        }
+        // Contenido del mensaje: busca dentro de los JSON del evento. Todas las
+        // palabras deben aparecer, en cualquier orden (misma regla que el resto
+        // de buscadores del sistema).
+        if (!empty($filtros['contenido'])) {
+            $condContenido = FiltrosBusqueda::condicionTexto(
+                [self::EXPR_CONTENIDO],
+                (string) $filtros['contenido'],
+                $params,
+                'fcont'
+            );
+            if ($condContenido !== '') {
+                $where .= " AND {$condContenido}";
+            }
         }
         if (!empty($filtros['desde'])) {
             $where .= ' AND l.created_at >= :f_desde';
@@ -253,11 +279,15 @@ class LogSistemaRepository extends BaseRepository
         // Filtros clave:valor
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
-                'usuario' => 'u.nombre',
-                'accion'  => 'l.accion',
-                'tabla'   => 'l.tabla_afectada',
-                'empresa' => 'e.nombre_comercial',
-                'ip'      => 'l.ip_usuario',
+                'usuario'   => 'u.nombre',
+                'accion'    => 'l.accion',
+                'tabla'     => 'l.tabla_afectada',
+                'empresa'   => 'e.nombre_comercial',
+                'ip'        => 'l.ip_usuario',
+                // Mismo filtro que el campo "Contenido" de la barra, en forma de token:
+                //   contenido:"DELIVERY HERO"   ·   datos:CO-000039
+                'contenido' => self::EXPR_CONTENIDO,
+                'datos'     => self::EXPR_CONTENIDO,
             ],
             'numerico' => [
                 'registro' => 'l.id_registro',

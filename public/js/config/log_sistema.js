@@ -17,7 +17,7 @@
 
     // Lee la barra de filtros y devuelve solo los que tienen valor.
     function getFiltros() {
-        const map = { fu: 'fltUsuario', fe: 'fltEmpresa', fa: 'fltAccion', ft: 'fltTabla', fd: 'fltDesde', fh: 'fltHasta' };
+        const map = { fu: 'fltUsuario', fe: 'fltEmpresa', fa: 'fltAccion', ft: 'fltTabla', fc: 'fltContenido', fd: 'fltDesde', fh: 'fltHasta' };
         const out = {};
         Object.keys(map).forEach(function (param) {
             const el = document.getElementById(map[param]);
@@ -209,6 +209,27 @@
             });
         }
 
+        // Contenido del mensaje: busca dentro del JSON del evento. Es una consulta
+        // pesada (sin índice), así que se espera un poco más que en el buscador
+        // normal y no se dispara con 1-2 letras; con Enter se fuerza igual.
+        const inputContenido = document.getElementById('fltContenido');
+        if (inputContenido) {
+            let timerContenido = null;
+            inputContenido.addEventListener('input', function () {
+                clearTimeout(timerContenido);
+                const valor = inputContenido.value.trim();
+                if (valor !== '' && valor.length < 3) return;
+                timerContenido = setTimeout(() => LOGSIS_cargarListado(1), 600);
+            });
+            inputContenido.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    clearTimeout(timerContenido);
+                    LOGSIS_cargarListado(1);
+                }
+            });
+        }
+
         document.querySelectorAll('.log-sort').forEach(function (th) {
             th.addEventListener('click', function () {
                 const col = th.getAttribute('data-col');
@@ -232,7 +253,7 @@
         const btnLimpiar = document.getElementById('btnLimpiarFiltros');
         if (btnLimpiar) {
             btnLimpiar.addEventListener('click', function () {
-                ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla'].forEach(function (id) {
+                ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla', 'fltContenido'].forEach(function (id) {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
                 });

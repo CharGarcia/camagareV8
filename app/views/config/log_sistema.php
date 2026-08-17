@@ -73,6 +73,18 @@ $verIntentos = $nivel >= 3;
             </form>
 
             <div>
+                <label class="form-label small mb-0 text-muted" for="fltContenido">
+                    Contenido del mensaje
+                    <i class="bi bi-info-circle" title="Busca dentro de los datos del evento: concepto, proveedor/cliente, N° de comprobante, importes… Mínimo 3 caracteres."></i>
+                </label>
+                <div class="input-group input-group-sm" style="width:260px;max-width:100%">
+                    <span class="input-group-text bg-white text-muted" style="height:30px;"><i class="bi bi-braces"></i></span>
+                    <input type="text" id="fltContenido" class="form-control form-control-sm" style="height:30px;"
+                           placeholder="Ej: DELIVERY HERO · CO-000039" autocomplete="off" maxlength="200">
+                </div>
+            </div>
+
+            <div>
                 <label class="form-label small mb-0 text-muted">Usuario</label>
                 <select id="fltUsuario" class="form-select form-select-sm" style="min-width:150px;height:30px;">
                     <option value="">Todos</option>
@@ -146,8 +158,15 @@ $verIntentos = $nivel >= 3;
                 Usá la barra de filtros de arriba o escribí aquí. Claves disponibles:
                 <code>usuario:nombre</code> · <code>accion:crear</code> ·
                 <code>registro:123</code> · <code>ip:190.1</code> ·
+                <code>contenido:"DELIVERY HERO"</code> ·
                 <code>fecha:2026-07-01..2026-07-08</code> · <code>fecha:&gt;=2026-07-01</code>.
                 Usá <code>-clave:valor</code> para negar y comillas para valores con espacios.
+                <div class="mt-1">
+                    <strong>Contenido del mensaje:</strong> el campo <em>Contenido del mensaje</em> (y la clave
+                    <code>contenido:</code>) busca dentro de los datos guardados del evento — concepto, proveedor
+                    o cliente, número de comprobante, importes, estado, etc. Todas las palabras que escribas deben
+                    aparecer, en cualquier orden. Es una búsqueda pesada: acotá el rango de fechas para que sea rápida.
+                </div>
             </div>
         </div>
 

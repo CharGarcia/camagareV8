@@ -192,8 +192,9 @@ class LogSistemaConsultaController extends Controller
         $filtros = $this->leerFiltros();
 
         $desc = [];
-        if ($buscar !== '')             $desc[] = 'Texto: ' . $buscar;
-        if (!empty($filtros['accion'])) $desc[] = 'Acción: ' . AuditoriaEtiquetas::accion((string) $filtros['accion']);
+        if ($buscar !== '')                $desc[] = 'Texto: ' . $buscar;
+        if (!empty($filtros['contenido'])) $desc[] = 'Contenido: ' . $filtros['contenido'];
+        if (!empty($filtros['accion']))    $desc[] = 'Acción: ' . AuditoriaEtiquetas::accion((string) $filtros['accion']);
         if (!empty($filtros['tabla'])) {
             $etMod = $this->service->etiquetaModulo($this->getScope(), (string) $filtros['tabla']);
             if ($etMod !== '') $desc[] = 'Módulo: ' . $etMod;
@@ -240,7 +241,7 @@ class LogSistemaConsultaController extends Controller
 
     /**
      * Lee y sanea los filtros explícitos de la barra de filtros.
-     * @return array{usuario:?int,empresa:?int,accion:?string,tabla:?string,desde:?string,hasta:?string}
+     * @return array{usuario:?int,empresa:?int,accion:?string,tabla:?string,contenido:?string,desde:?string,hasta:?string}
      */
     private function leerFiltros(): array
     {
@@ -248,13 +249,18 @@ class LogSistemaConsultaController extends Controller
         $desde = trim($_GET['fd'] ?? $_POST['fd'] ?? '');
         $hasta = trim($_GET['fh'] ?? $_POST['fh'] ?? '');
 
+        // Contenido del mensaje (JSON del evento): se acota a 200 caracteres para
+        // no armar una condición desmedida; la búsqueda es secuencial (sin índice).
+        $contenido = mb_substr(trim($_GET['fc'] ?? $_POST['fc'] ?? ''), 0, 200);
+
         return [
-            'usuario' => ((int) ($_GET['fu'] ?? $_POST['fu'] ?? 0)) ?: null,
-            'empresa' => ((int) ($_GET['fe'] ?? $_POST['fe'] ?? 0)) ?: null,
-            'accion'  => (trim($_GET['fa'] ?? $_POST['fa'] ?? '')) ?: null,
-            'tabla'   => (trim($_GET['ft'] ?? $_POST['ft'] ?? '')) ?: null,
-            'desde'   => preg_match($rgxFecha, $desde) ? $desde : null,
-            'hasta'   => preg_match($rgxFecha, $hasta) ? $hasta : null,
+            'usuario'   => ((int) ($_GET['fu'] ?? $_POST['fu'] ?? 0)) ?: null,
+            'empresa'   => ((int) ($_GET['fe'] ?? $_POST['fe'] ?? 0)) ?: null,
+            'accion'    => (trim($_GET['fa'] ?? $_POST['fa'] ?? '')) ?: null,
+            'tabla'     => (trim($_GET['ft'] ?? $_POST['ft'] ?? '')) ?: null,
+            'contenido' => $contenido !== '' ? $contenido : null,
+            'desde'     => preg_match($rgxFecha, $desde) ? $desde : null,
+            'hasta'     => preg_match($rgxFecha, $hasta) ? $hasta : null,
         ];
     }
 
