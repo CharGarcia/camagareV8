@@ -233,7 +233,7 @@
                       <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Caducidad</th>
                       <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP</th>
                       <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Bodega</th>
-                      <th class="py-2 small fw-bold text-muted text-center" style="width:11%;" title="Clasifica la línea: Producto Terminado (por defecto), Materia Prima o Activo Fijo. Afecta el casillero de la Declaración de IVA (Activo Fijo) y la cuenta de inventario del asiento contable (Materia Prima vs Producto Terminado), si están configuradas por separado en /config/asientos-contables.">Tipo</th>
+                      <th class="py-2 small fw-bold text-muted text-center" style="width:150px;" title="Clasifica la línea: Producto Terminado (por defecto), Materia Prima o Activo Fijo. Afecta el casillero de la Declaración de IVA (Activo Fijo) y la cuenta de inventario del asiento contable (Materia Prima vs Producto Terminado), si están configuradas por separado en /config/asientos-contables.">Tipo</th>
                       <th class="py-2 small fw-bold text-muted text-end imp-col-nacionalizado d-none" style="width:10%;">Costo Unit. Nac.</th>
                       <th class="py-2 small fw-bold text-muted text-end imp-col-nacionalizado d-none" style="width:10%;">Costo Total Nac.</th>
                       <th style="width:40px;"></th>

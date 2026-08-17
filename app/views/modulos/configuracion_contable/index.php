@@ -390,6 +390,9 @@ $base = BASE_URL;
                                     <input type="hidden" id="dim_id_categoria" required>
                                     <div class="list-group sugerencias-flotantes" id="dim_sug_categoria" style="display: none;"></div>
                                 </div>
+                                <select id="dim_anio_categoria" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
+                                    <option value="">Todos los a&ntilde;os</option>
+                                </select>
                                 <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('categoria')">
                                     <i class="bi bi-tags me-1"></i> Categor&iacute;as
                                 </button>
@@ -428,6 +431,9 @@ $base = BASE_URL;
                                     <input type="hidden" id="dim_id_marca" required>
                                     <div class="list-group sugerencias-flotantes" id="dim_sug_marca" style="display: none;"></div>
                                 </div>
+                                <select id="dim_anio_marca" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
+                                    <option value="">Todos los a&ntilde;os</option>
+                                </select>
                                 <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('marca')">
                                     <i class="bi bi-bookmark-star me-1"></i> Marcas
                                 </button>

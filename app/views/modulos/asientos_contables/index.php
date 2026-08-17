@@ -225,14 +225,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('tbodyAsientos').innerHTML = data.rows;
                     document.getElementById('wrapper-pagination').innerHTML = data.pagination;
                     document.getElementById('paginationInfo').textContent = data.info;
-
-                    document.querySelectorAll('.sortable-header').forEach(th => {
-                        const icon = th.querySelector('i');
-                        if (!icon) return;
-                        if (th.dataset.sort === currentSort) {
-                            icon.className = (currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                        } else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                    });
+                    // Los íconos de ordenamiento NO se repintan acá: los mantiene CMG_initSort
+                    // (ver abajo), y esta recarga solo reemplaza el tbody y la paginación,
+                    // nunca el thead.
                 }
             } catch (e) {}
         };
@@ -240,20 +235,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // Alias para compatibilidad con llamadas existentes (guardar, anular, etc.)
         window.cambiarPaginaAjax = (p) => window.fetchSearch(p);
 
-        document.querySelectorAll('.sortable-header').forEach(h => {
-            h.addEventListener('click', () => {
-                const f = h.dataset.sort;
-                if (currentSort === f) currentDir = currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
-                else {
-                    currentSort = f;
-                    currentDir = 'ASC';
-                }
-                if (typeof window.guardarOrdenacionVista === 'function') {
-                    window.guardarOrdenacionVista('asientos_contables', currentSort, currentDir);
-                }
+        // ── Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js) ──
+        // Antes esta vista tenía su propio binding inline, que enganchaba el clic y
+        // persistía la preferencia, pero solo pintaba el ícono de la columna activa dentro
+        // del callback de fetchSearch(). Al recargar la página —lo que hace justamente
+        // guardarOrdenacionVista— los 7 encabezados los renderiza PHP con el ícono neutro
+        // y nada volvía a marcar la columna: el listado venía bien ordenado desde el
+        // servidor, pero sin el distintivo. El motor global llama refreshIcons() también al
+        // inicializar, así que el ícono queda pintado desde la carga.
+        if (window.CMG_initSort) {
+            window.CMG_initSort('asientos_contables', function(col, dir) {
+                currentSort = col;
+                currentDir  = dir;
                 window.fetchSearch(1);
-            });
-        });
+            }, { col: currentSort, dir: currentDir });
+        }
 
         // ── Aviso de asientos pendientes de generar ─────────────────────────────────
         // Al cargar, se consulta cuántos documentos están sin asiento y se pregunta al

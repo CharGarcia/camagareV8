@@ -670,7 +670,7 @@ function IMP_agregarFilaProducto(det) {
         <td><input type="date" class="form-control form-control-sm input-imp-caducidad" value="${det.fecha_caducidad ? det.fecha_caducidad.slice(0,10) : ''}"></td>
         <td><input type="text" class="form-control form-control-sm text-center input-imp-nup" value="${IMP_esc(det.nup || '')}"></td>
         <td><select class="form-select form-select-sm input-imp-bodega">${IMP_bodegaOptionsHtml(det.id_bodega || '')}</select></td>
-        <td><select class="form-select form-select-sm input-imp-tipo-inventario" title="Clasificación de la línea">${IMP_tipoInventarioOptionsHtml(det.tipo_inventario)}</select></td>
+        <td><select class="form-select form-select-sm input-imp-tipo-inventario" style="min-width:150px" title="Clasificación de la línea">${IMP_tipoInventarioOptionsHtml(det.tipo_inventario)}</select></td>
         <td class="text-end imp-col-nacionalizado d-none"><span class="input-imp-costo-unit">${costoUnit ? costoUnit.toFixed(4) : '-'}</span></td>
         <td class="text-end imp-col-nacionalizado d-none"><span class="input-imp-costo-total">${costoTotal ? costoTotal.toFixed(2) : '-'}</span></td>
         <td class="text-center p-0 align-middle">

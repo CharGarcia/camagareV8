@@ -851,6 +851,8 @@ class ConfiguracionContableController extends BaseModuloController
      * Lista las entidades de una dimensión (cliente/proveedor/producto/categoría/marca) relevantes para
      * configurar reglas, marcando con "configurado" las que ya tienen cuentas asignadas en esa regla.
      * Proveedor: con compras · Cliente: con ventas · Producto: con movimientos · Categoría/Marca: todas.
+     * Acepta `anio` (opcional): restringe el movimiento que hace relevante a la entidad al año elegido
+     * en el selector de la vista (proveedor → compras, cliente → ventas, producto → ventas).
      */
     public function getEntidadesDimensionAjax(): void
     {
@@ -861,6 +863,8 @@ class ConfiguracionContableController extends BaseModuloController
         $tipo   = trim($_GET['tipo'] ?? '');
         $q      = trim($_GET['q'] ?? '');
         $modulo = trim($_GET['modulo'] ?? '');
+        $anio   = trim($_GET['anio'] ?? '');
+        $anio   = ctype_digit($anio) ? $anio : '';
 
         if (!in_array($tipo, ['cliente', 'proveedor', 'producto', 'categoria', 'marca', 'empleado'], true)) {
             echo json_encode(['ok' => false, 'error' => 'Tipo de dimensión no válido.']);
@@ -875,30 +879,45 @@ class ConfiguracionContableController extends BaseModuloController
             $params = [':e' => $idEmpresa, ':tref' => $tipo];
             $like = '';
 
+            // Filtro de año sobre la fecha del documento que hace relevante a la entidad. Se agrega
+            // dentro del EXISTS del movimiento; si no se envía año, la consulta queda igual que antes.
+            $filtroAnio = '';
+            $usaAnio    = false;
+
             if ($tipo === 'proveedor') {
+                if ($anio !== '') { $filtroAnio = " AND EXTRACT(YEAR FROM c.fecha_emision) = :anio"; $usaAnio = true; }
                 $sql = "SELECT ent.id, ent.razon_social AS nombre, ent.identificacion, $cfg
                         FROM proveedores ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false
-                          AND EXISTS (SELECT 1 FROM compras_cabecera c WHERE c.id_proveedor = ent.id AND c.id_empresa = :e AND c.eliminado = false)";
+                          AND EXISTS (SELECT 1 FROM compras_cabecera c WHERE c.id_proveedor = ent.id AND c.id_empresa = :e AND c.eliminado = false{$filtroAnio})";
                 $like = "(ent.razon_social ILIKE :q OR ent.identificacion ILIKE :q)";
             } elseif ($tipo === 'cliente') {
+                if ($anio !== '') { $filtroAnio = " AND EXTRACT(YEAR FROM v.fecha_emision) = :anio"; $usaAnio = true; }
                 $sql = "SELECT ent.id, ent.nombre AS nombre, ent.identificacion, $cfg
                         FROM clientes ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false
-                          AND EXISTS (SELECT 1 FROM ventas_cabecera v WHERE v.id_cliente = ent.id AND v.id_empresa = :e AND v.eliminado = false)";
+                          AND EXISTS (SELECT 1 FROM ventas_cabecera v WHERE v.id_cliente = ent.id AND v.id_empresa = :e AND v.eliminado = false{$filtroAnio})";
                 $like = "(ent.nombre ILIKE :q OR ent.identificacion ILIKE :q)";
             } elseif ($tipo === 'producto') {
                 // En compras los ítems llegan como texto libre; los productos del catálogo entran a
                 // compras vía homologación (productos_homologacion). En ventas sí van por id_producto.
                 $homol = "EXISTS (SELECT 1 FROM productos_homologacion ph
                                   WHERE ph.id_producto = ent.id AND ph.id_empresa = :e AND ph.eliminado = false)";
-                $vendido = "EXISTS (SELECT 1 FROM ventas_detalle vd WHERE vd.id_producto = ent.id)";
+                // El año solo aplica al producto vendido (la homologación no tiene fecha de movimiento).
+                $vendido = ($anio !== '')
+                    ? "EXISTS (SELECT 1 FROM ventas_detalle vd
+                               JOIN ventas_cabecera vc ON vc.id = vd.id_venta
+                               WHERE vd.id_producto = ent.id AND vc.eliminado = false
+                                 AND EXTRACT(YEAR FROM vc.fecha_emision) = :anio)"
+                    : "EXISTS (SELECT 1 FROM ventas_detalle vd WHERE vd.id_producto = ent.id)";
                 if ($modulo === 'compras') {
-                    $movim = $homol;
+                    $movim = $homol; // no usa :anio
                 } elseif ($modulo === 'ventas') {
                     $movim = $vendido;
+                    $usaAnio = ($anio !== '');
                 } else {
                     $movim = "($vendido OR $homol)";
+                    $usaAnio = ($anio !== '');
                 }
                 $sql = "SELECT ent.id, ent.nombre AS nombre, ent.codigo AS identificacion, $cfg
                         FROM productos ent
@@ -911,11 +930,34 @@ class ConfiguracionContableController extends BaseModuloController
                 $like = "(ent.nombres_apellidos ILIKE :q OR ent.identificacion ILIKE :q)";
             } else {
                 $tabla = $tipo === 'categoria' ? 'categorias' : 'marcas';
+                $colProd = $tipo === 'categoria' ? 'id_categoria' : 'id_marca';
                 $sql = "SELECT ent.id, ent.nombre AS nombre, NULL AS identificacion, $cfg
                         FROM {$tabla} ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false";
+                // Sin año se listan todas (una categoría/marca puede configurarse por adelantado).
+                // Con año, solo las que tuvieron movimiento ese año en el módulo del tipo de asiento;
+                // la categoría/marca de la línea sale del producto vinculado (compras_detalle.id_producto
+                // / ventas_detalle.id_producto), igual que resuelve AsientoBuilderService.
+                if ($anio !== '' && in_array($modulo, ['compras', 'ventas'], true)) {
+                    if ($modulo === 'compras') {
+                        $sql .= " AND EXISTS (SELECT 1 FROM compras_detalle d
+                                              JOIN compras_cabecera c ON c.id = d.id_compra
+                                              JOIN productos p ON p.id = d.id_producto
+                                              WHERE p.{$colProd} = ent.id AND c.id_empresa = :e AND c.eliminado = false
+                                                AND EXTRACT(YEAR FROM c.fecha_emision) = :anio)";
+                    } else {
+                        $sql .= " AND EXISTS (SELECT 1 FROM ventas_detalle vd
+                                              JOIN ventas_cabecera vc ON vc.id = vd.id_venta
+                                              JOIN productos p ON p.id = vd.id_producto
+                                              WHERE p.{$colProd} = ent.id AND vc.id_empresa = :e AND vc.eliminado = false
+                                                AND EXTRACT(YEAR FROM vc.fecha_emision) = :anio)";
+                    }
+                    $usaAnio = true;
+                }
                 $like = "ent.nombre ILIKE :q";
             }
+
+            if ($usaAnio) { $params[':anio'] = (int) $anio; }
 
             if ($q !== '') {
                 $sql .= " AND $like";
@@ -982,6 +1024,7 @@ class ConfiguracionContableController extends BaseModuloController
      * Lista los ítems ÚNICOS de las compras (por descripción), marcando si cada uno está homologado
      * a un producto del catálogo (productos_homologacion: id_proveedor + codigo_proveedor). Para la
      * regla por Producto/Servicio en compras, donde se contabiliza en base a los ítems de compra.
+     * Acepta `anio` (opcional) para restringir a los ítems comprados en ese año.
      */
     public function getItemsComprasAjax(): void
     {
@@ -990,6 +1033,8 @@ class ConfiguracionContableController extends BaseModuloController
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q = trim($_GET['q'] ?? '');
+        $anio = trim($_GET['anio'] ?? '');
+        $anio = ctype_digit($anio) ? $anio : '';
 
         try {
             $db = Database::getConnection();
@@ -1014,6 +1059,10 @@ class ConfiguracionContableController extends BaseModuloController
                     WHERE c.id_empresa = :e AND c.eliminado = false
                       AND COALESCE(TRIM(d.descripcion), '') <> ''";
             $params = [':e' => $idEmpresa];
+            if ($anio !== '') {
+                $sql .= " AND EXTRACT(YEAR FROM c.fecha_emision) = :anio";
+                $params[':anio'] = (int) $anio;
+            }
             if ($q !== '') {
                 $sql .= " AND TRIM(d.descripcion) ILIKE :q";
                 $params[':q'] = "%$q%";

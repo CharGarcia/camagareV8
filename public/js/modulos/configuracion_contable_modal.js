@@ -22,6 +22,16 @@
         return tipo === 'producto' && ta === 'adquisiciones_compras';
     }
 
+    // Módulo del que salen los movimientos de una dimensión: cliente siempre de ventas, proveedor
+    // siempre de compras, y las dimensiones de línea (producto/categoría/marca) según el tipo de
+    // asiento. Determina de qué documentos se sacan los años y contra qué se filtra el listado.
+    function ASIENTOPROG_moduloDeDimension(tipo, tipoAsiento) {
+        if (tipo === 'cliente') return 'ventas';
+        if (tipo === 'proveedor') return 'compras';
+        const ta = tipoAsiento || (document.getElementById('tipoAsientoSelector') || {}).value || '';
+        return (ta === 'ventas_factura' || ta === 'recibos_venta') ? 'ventas' : 'compras';
+    }
+
     // Tipo de Producción (Bien/Servicio) es un selector fijo de 2 valores, no un buscador con
     // autocompletado como el resto de dimensiones — por eso no pasa por
     // ASIENTOPROG_vincularDimAutocomplete(); este handler solo replica lo que allí hace el click
@@ -904,10 +914,8 @@
         if (contFaltantes) contFaltantes.innerHTML = '';
 
         // Filtro de años (movimientos de la empresa) para las dimensiones con filtro de año.
-        if (tipo === 'proveedor' || tipo === 'cliente' || tipo === 'producto') {
-            const modulo = (tipo === 'cliente') ? 'ventas'
-                         : (tipo === 'proveedor') ? 'compras'
-                         : ((tipoAsiento === 'ventas_factura' || tipoAsiento === 'recibos_venta') ? 'ventas' : 'compras');
+        if (tipo === 'proveedor' || tipo === 'cliente' || tipo === 'producto' || tipo === 'categoria' || tipo === 'marca') {
+            const modulo = ASIENTOPROG_moduloDeDimension(tipo, tipoAsiento);
             try {
                 const ra = await fetch(`${API_PROG}/getAniosMovimientosAjax?modulo=${modulo}`);
                 const ja = await ra.json();
@@ -1036,7 +1044,12 @@
                     try {
                         // Compras + producto → buscar ÍTEMS de compra; la clave de la regla es el nombre (texto).
                         if (ASIENTOPROG_esItemCompra(tipo)) {
-                            const ri = await fetch(`${API_PROG}/getItemsComprasAjax?q=${encodeURIComponent(q)}`);
+                            // El autocompletado respeta el mismo año que el listado, para no ofrecer
+                            // ítems fuera del período que el usuario está revisando.
+                            const selAnioItem = document.getElementById('dim_anio_producto');
+                            const anioItem = selAnioItem ? (selAnioItem.value || '') : '';
+                            const ri = await fetch(`${API_PROG}/getItemsComprasAjax?q=${encodeURIComponent(q)}`
+                                + (anioItem ? `&anio=${encodeURIComponent(anioItem)}` : ''));
                             const resi = await ri.json();
                             const items = (resi.ok && resi.data) ? resi.data : [];
                             sugDiv.innerHTML = '';
@@ -1237,23 +1250,36 @@
         // Para producto, el listado depende del módulo: en compras son los productos HOMOLOGADOS
         // (los ítems de compra son texto libre y entran al catálogo vía homologación); en ventas, los vendidos.
         const tipoAsiento = (document.getElementById('tipoAsientoSelector') || {}).value || '';
-        const modulo = (tipoAsiento === 'ventas_factura' || tipoAsiento === 'recibos_venta') ? 'ventas' : 'compras';
+        const modulo = ASIENTOPROG_moduloDeDimension(tipo, tipoAsiento);
         let etiqueta = ETIQUETA_ENTIDAD[tipo] || 'Entidades';
         if (tipo === 'producto') etiqueta = (modulo === 'compras') ? 'Productos homologados (compras)' : 'Productos vendidos';
 
-        if (titulo) titulo.innerHTML = `<i class="bi bi-card-list me-1 text-primary"></i> ${etiqueta}`;
+        // El listado respeta el año elegido en el selector de la dimensión (si lo hay y no es "Todos").
+        const selAnio = document.getElementById(`dim_anio_${tipo}`);
+        const anio = selAnio ? (selAnio.value || '') : '';
+
+        if (titulo) {
+            titulo.innerHTML = `<i class="bi bi-card-list me-1 text-primary"></i> ${etiqueta}`
+                + (anio ? ` <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1">${anio}</span>` : '');
+        }
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
         lista.innerHTML = '<div class="text-muted small py-3 text-center"><span class="spinner-border spinner-border-sm me-1"></span> Cargando...</div>';
 
         // En compras, la regla por producto se basa en los ÍTEMS de las compras (texto libre), no en
         // el catálogo. El modal los lista con una columna que indica si están homologados (informativa).
         if (tipo === 'producto' && modulo === 'compras') {
-            if (titulo) titulo.innerHTML = '<i class="bi bi-card-list me-1 text-primary"></i> Ítems de compras';
+            if (titulo) {
+                titulo.innerHTML = '<i class="bi bi-card-list me-1 text-primary"></i> Ítems de compras'
+                    + (anio ? ` <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1">${anio}</span>` : '');
+            }
             const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             let items = [];
             const pintarItems = (arr) => {
                 lista.innerHTML = '';
-                if (!arr.length) { lista.innerHTML = '<div class="text-muted small py-3 text-center">Sin ítems.</div>'; return; }
+                if (!arr.length) {
+                    lista.innerHTML = `<div class="text-muted small py-3 text-center">Sin ítems${anio ? ` en ${anio}` : ''}.</div>`;
+                    return;
+                }
                 arr.forEach(it => {
                     const row = document.createElement('button');
                     row.type = 'button';
@@ -1277,7 +1303,7 @@
                 });
             };
             try {
-                const r = await fetch(`${API_PROG}/getItemsComprasAjax`);
+                const r = await fetch(`${API_PROG}/getItemsComprasAjax${anio ? `?anio=${encodeURIComponent(anio)}` : ''}`);
                 const res = await r.json();
                 items = (res.ok && res.data) ? res.data : [];
                 pintarItems(items);
@@ -1297,7 +1323,10 @@
         let datos = [];
         const pintar = (arr) => {
             lista.innerHTML = '';
-            if (!arr.length) { lista.innerHTML = '<div class="text-muted small py-3 text-center">Sin resultados.</div>'; return; }
+            if (!arr.length) {
+                lista.innerHTML = `<div class="text-muted small py-3 text-center">Sin resultados${anio ? ` en ${anio}` : ''}.</div>`;
+                return;
+            }
             arr.forEach(p => {
                 const a = document.createElement('button');
                 a.type = 'button';
@@ -1318,7 +1347,8 @@
 
         try {
             let url = `${API_PROG}/getEntidadesDimensionAjax?tipo=${encodeURIComponent(tipo)}`;
-            if (tipo === 'producto') url += `&modulo=${encodeURIComponent(modulo)}`;
+            if (tipo === 'producto' || tipo === 'categoria' || tipo === 'marca') url += `&modulo=${encodeURIComponent(modulo)}`;
+            if (anio) url += `&anio=${encodeURIComponent(anio)}`;
             const r = await fetch(url);
             const res = await r.json();
             datos = (res.ok && res.data) ? res.data : [];

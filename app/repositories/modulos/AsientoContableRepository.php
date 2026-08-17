@@ -69,7 +69,14 @@ class AsientoContableRepository
         $stmtCount->execute($params);
         $total = (int)$stmtCount->fetchColumn();
 
-        $ordenColPermitidas = ['fecha_asiento', 'numero_comprobante', 'concepto', 'estado', 'total_debe'];
+        // Debe cubrir TODAS las columnas con `data-sort` del thead de la vista: las que
+        // falten se descartan acá en silencio y el listado se ordena por fecha_asiento, así
+        // que el usuario ve el encabezado marcado pero las filas sin reordenar.
+        // 'tipo_comprobante' y 'modulo_origen' faltaban y sí se ofrecen como ordenables.
+        $ordenColPermitidas = [
+            'fecha_asiento', 'numero_comprobante', 'tipo_comprobante',
+            'concepto', 'modulo_origen', 'total_debe', 'estado',
+        ];
         $ordenCol = in_array($ordenCol, $ordenColPermitidas, true) ? $ordenCol : 'fecha_asiento';
         $ordenDir = in_array(strtoupper($ordenDir), ['ASC', 'DESC'], true) ? strtoupper($ordenDir) : 'DESC';
 

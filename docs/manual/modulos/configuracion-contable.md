@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio
-version: 1.1
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes
+version: 1.2
 orden: 5
 estado: activo
 ---
@@ -48,6 +48,27 @@ configuración) y **Recibos de Venta**, el orden exacto de la cascada es:
    de caer a General.
 4. **General** — lo que ningún nivel anterior resolvió.
 
+## Filtrar los listados por año
+
+En las reglas por **Proveedor**, **Cliente**, **Producto**, **Categoría** y
+**Marca** hay un selector de año junto al botón que abre el listado (*Proveedores
+con compras*, *Clientes con ventas*, *Ítems de compras*, *Categorías*,
+*Marcas*…). Ese selector muestra solo los años en los que la empresa tuvo
+movimientos.
+
+Al elegir un año, el listado muestra únicamente las entidades que tuvieron
+movimiento en ese año: proveedores con compras del año, clientes con ventas del
+año, ítems comprados ese año, y las categorías y marcas de los productos que se
+movieron ese año. El año elegido aparece como etiqueta en el título del listado.
+
+Con **Todos los años** el listado se comporta como siempre: todas las entidades
+con movimiento (y, en el caso de categorías y marcas, todas las registradas, para
+poder configurarlas por adelantado).
+
+El módulo del que salen los movimientos depende del tipo de asiento: en
+*Adquisiciones de Compras/Servicios* se miran las compras; en *Ventas con
+Factura* y *Recibos de Venta*, las ventas.
+
 ## Cierre del ejercicio
 
 Entre los tipos configurables está el **cierre del ejercicio**, que necesita dos
@@ -71,6 +92,9 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.2** — Los listados de entidades (Proveedores con compras, Clientes con
+  ventas, Ítems de compras, Categorías, Marcas) ahora respetan el selector de
+  año. Se agregó ese selector a las reglas por Categoría y por Marca.
 - **1.1** — Se agregó la regla por Tipo de Producción (Bien / Servicio) en la
   cascada de Ventas con Factura, Notas de Crédito y Recibos de Venta, entre
   Producto/Categoría/Marca y General.
