@@ -30,6 +30,7 @@ class TransferenciaLoteService
     private TransferenciaLoteRules $rules;
     private LogSistemaService $log;
     private ?EmpresaRepository $empRepo = null;
+    private ?AprobacionesService $aprobService = null;
 
     public function __construct(
         ?TransferenciaLoteRepository $repo = null,
@@ -69,27 +70,39 @@ class TransferenciaLoteService
         return $this->repo->getPagosDisponibles($idEmpresa, $tipo, $buscar);
     }
 
-    // ─── Configuración de aprobación (del establecimiento) ─────────────────────
+    // ─── Configuración de aprobación (módulo Aprobaciones) ─────────────────────
+    // Antes vivía en empresa_establecimiento.transf_*; ahora la resuelve el motor
+    // de Aprobaciones por empresa (checkpoint 'pago_bancario').
 
-    public function getConfigAprobacion(int $idEmpresa): array
+    private function aprobacionesService(): AprobacionesService
     {
-        $idEst = $this->empresaRepo()->getPrimerEstablecimientoId($idEmpresa);
-        $cfg   = $idEst ? ($this->empresaRepo()->getEstablecimientoConfig($idEst) ?? []) : [];
+        if ($this->aprobService === null) {
+            $this->aprobService = new AprobacionesService();
+        }
+        return $this->aprobService;
+    }
 
-        $requiere  = !empty($cfg['transf_requiere_aprobacion']) && $cfg['transf_requiere_aprobacion'] !== 'f';
-        $notificar = !isset($cfg['transf_notificar_correo']) || ($cfg['transf_notificar_correo'] && $cfg['transf_notificar_correo'] !== 'f');
-        $aprob     = json_decode($cfg['transf_usuarios_aprobadores'] ?? '[]', true);
-        if (!is_array($aprob)) $aprob = [];
-        $aprob = array_values(array_map('intval', $aprob));
-
-        return ['requiere' => $requiere, 'notificar' => $notificar, 'aprobadores' => $aprob];
+    /**
+     * @param float|null $monto Monto total del lote. Si el checkpoint tiene monto
+     *                          mínimo, los lotes por debajo no piden aprobación.
+     */
+    public function getConfigAprobacion(int $idEmpresa, ?float $monto = null): array
+    {
+        return $this->aprobacionesService()->getConfigResuelta(
+            AprobacionesService::PAGO_BANCARIO,
+            $idEmpresa,
+            $monto
+        );
     }
 
     public function esAprobador(int $idUsuario, int $idEmpresa, int $nivel = 1): bool
     {
-        if ($nivel >= 3) return true;
-        $cfg = $this->getConfigAprobacion($idEmpresa);
-        return in_array($idUsuario, $cfg['aprobadores'], true);
+        return $this->aprobacionesService()->esAprobador(
+            AprobacionesService::PAGO_BANCARIO,
+            $idEmpresa,
+            $idUsuario,
+            $nivel
+        );
     }
 
     public function getAprobadoresNombres(int $idEmpresa): array
@@ -218,7 +231,7 @@ class TransferenciaLoteService
             throw new \InvalidArgumentException(implode(' ', $errores));
         }
 
-        $cfg = $this->getConfigAprobacion($idEmpresa);
+        $cfg = $this->getConfigAprobacion($idEmpresa, (float) ($lote['monto_total'] ?? 0));
         if (!$cfg['requiere']) {
             $this->aprobar($idLote, $idEmpresa, $idUsuario, true);
             return ['estado' => 'APROBADO'];

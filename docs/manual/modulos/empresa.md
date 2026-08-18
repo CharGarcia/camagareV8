@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa
-version: 1.6
+version: 1.7
 orden: 5
 estado: activo
 ---
@@ -60,8 +60,14 @@ los listados: siguen ahí, pero pertenecen al otro ambiente.
 ## Configuración por módulo
 
 Desde aquí se ajustan comportamientos que afectan a módulos concretos: cómo se
-presentan los ítems en la factura, si las cargas de inventario requieren
-aprobación, los textos de los correos, entre otros.
+presentan los ítems en la factura, el método de costeo del inventario, los
+textos de los correos, entre otros.
+
+Las **aprobaciones ya no se configuran aquí**. Todo lo que antes estaba en las
+pestañas *Inventario* (aprobación de cargas) y *Pagos al Banco* (aprobación de
+lotes de transferencia) se centralizó en el módulo **Aprobaciones**
+(`modulos/aprobaciones-config`), junto con los demás procesos que requieren
+autorización.
 
 ## Correo de comprobantes electrónicos
 
@@ -153,6 +159,9 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.7** — Las aprobaciones dejan de configurarse aquí: se retira la pestaña
+  **Pagos al Banco** y el bloque de aprobación de la pestaña **Inventario**.
+  Ambas se centralizaron en el módulo **Aprobaciones**.
 - **1.6** — El botón de envío de documentos legales ahora también aparece en
   estado "Pendiente de aceptación" (antes solo en "Sin enviar"), como
   "Reenviar documentos legales", para poder insistir cuando el destinatario no

@@ -16,7 +16,7 @@ use App\core\Database;
  * Flujo:
  *   1. Importación (Excel/CSV) → crea la carga (cabecera + detalle) con validación
  *      por línea. La carga queda "validada" solo si TODAS las líneas están OK.
- *   2. Si la config del establecimiento NO exige aprobación y la carga está validada,
+ *   2. Si el módulo Aprobaciones NO exige aprobación y la carga está validada,
  *      se aplica al kardex de inmediato (estado 'aprobada').
  *   3. Si exige aprobación → queda 'pendiente' y se notifica a los aprobadores.
  *   4. Aprobar → aplica cada línea al kardex (InventarioService::ajusteManual).
@@ -29,6 +29,7 @@ class CargaInventarioService
     private LogSistemaService $log;
     private ?InventarioService $invService = null;
     private ?EmpresaRepository $empRepo = null;
+    private ?AprobacionesService $aprobService = null;
 
     public function __construct(
         ?CargaInventarioRepository $repo = null,
@@ -80,28 +81,41 @@ class CargaInventarioService
         ];
     }
 
-    // ─── Configuración de aprobación (del establecimiento) ─────────────────────
+    // ─── Configuración de aprobación (módulo Aprobaciones) ─────────────────────
+    // Antes vivía en empresa_establecimiento.inv_*; ahora la resuelve el motor
+    // de Aprobaciones por empresa (checkpoint 'carga_inventario').
 
-    public function getConfigAprobacion(int $idEmpresa): array
+    private function aprobacionesService(): AprobacionesService
     {
-        $idEst = $this->empresaRepo()->getPrimerEstablecimientoId($idEmpresa);
-        $cfg   = $idEst ? ($this->empresaRepo()->getEstablecimientoConfig($idEst) ?? []) : [];
+        if ($this->aprobService === null) {
+            $this->aprobService = new AprobacionesService();
+        }
+        return $this->aprobService;
+    }
 
-        $requiere  = !empty($cfg['inv_requiere_aprobacion']) && $cfg['inv_requiere_aprobacion'] !== 'f';
-        $notificar = !isset($cfg['inv_notificar_correo']) || ($cfg['inv_notificar_correo'] && $cfg['inv_notificar_correo'] !== 'f');
-        $aprob     = json_decode($cfg['inv_usuarios_aprobadores'] ?? '[]', true);
-        if (!is_array($aprob)) $aprob = [];
-        $aprob = array_values(array_map('intval', $aprob));
-
-        return ['requiere' => $requiere, 'notificar' => $notificar, 'aprobadores' => $aprob];
+    /**
+     * @param float|null $monto Costo total de la carga. Si el checkpoint tiene
+     *                          monto mínimo configurado, las cargas por debajo
+     *                          de ese monto no piden aprobación.
+     */
+    public function getConfigAprobacion(int $idEmpresa, ?float $monto = null): array
+    {
+        return $this->aprobacionesService()->getConfigResuelta(
+            AprobacionesService::CARGA_INVENTARIO,
+            $idEmpresa,
+            $monto
+        );
     }
 
     /** ¿El usuario puede aprobar cargas? (aprobador configurado o super admin). */
     public function esAprobador(int $idUsuario, int $idEmpresa, int $nivel = 1): bool
     {
-        if ($nivel >= 3) return true;
-        $cfg = $this->getConfigAprobacion($idEmpresa);
-        return in_array($idUsuario, $cfg['aprobadores'], true);
+        return $this->aprobacionesService()->esAprobador(
+            AprobacionesService::CARGA_INVENTARIO,
+            $idEmpresa,
+            $idUsuario,
+            $nivel
+        );
     }
 
     /** Nombres de los usuarios aprobadores configurados (para mostrar quién debe aprobar). */
@@ -121,8 +135,6 @@ class CargaInventarioService
     public function crearDesdeImportacion(int $idEmpresa, int $idUsuario, string $tipoMovimiento, ?string $observacion, array $filas): array
     {
         $this->rules->validarCabecera(['tipo_movimiento' => $tipoMovimiento, 'filas' => $filas]);
-
-        $cfg = $this->getConfigAprobacion($idEmpresa);
 
         // Validar cada línea. El Excel identifica el producto por CÓDIGO principal y la
         // bodega por NOMBRE (se resuelven al id interno).
@@ -171,6 +183,14 @@ class CargaInventarioService
                 'error_linea'      => $err,
             ];
         }
+
+        // La config se resuelve con el costo total de la carga: si el checkpoint
+        // tiene monto mínimo, las cargas por debajo no piden aprobación.
+        $costoTotal = array_sum(array_map(
+            static fn(array $ln): float => (float) $ln['cantidad'] * (float) $ln['costo_unitario'],
+            $lineas
+        ));
+        $cfg = $this->getConfigAprobacion($idEmpresa, $costoTotal);
 
         $db = Database::getConnection();
         $db->beginTransaction();

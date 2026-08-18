@@ -6,7 +6,7 @@ ruta_modulo: modulos/transferencias
 tipo: modulo
 visibilidad: admin
 etiquetas: transferencias, archivo bancario, pago masivo, lote de pagos, nomina, proveedores, banco, aprobacion
-version: 1.0
+version: 1.1
 orden: 90
 estado: activo
 ---
@@ -34,6 +34,13 @@ Un lote requiere **aprobación** antes de generarse, y el sistema controla que u
 mismo egreso no entre en dos lotes distintos. Son las dos protecciones que evitan
 el error más caro posible: pagar dos veces.
 
+La aprobación se configura en el módulo **Aprobaciones**
+(`modulos/aprobaciones-config`): ahí se activa el proceso *Lotes de pago
+bancario*, se eligen los aprobadores y, si se quiere, un **monto mínimo** por
+debajo del cual el lote se aprueba solo. Si el proceso no está configurado, el
+lote se aprueba automáticamente al enviarlo. Antes esta configuración estaba en
+*Empresa → Pagos al Banco*.
+
 ## Datos bancarios del beneficiario
 
 Cada pago necesita que el proveedor o el empleado tenga registrados su **banco,
@@ -51,3 +58,4 @@ número y tipo de cuenta**. Sin esos datos, esa línea no puede ir en el archivo
 ## Historial de cambios
 
 - **1.0** — Versión inicial.
+- **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.

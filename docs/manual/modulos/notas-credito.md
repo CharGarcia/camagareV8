@@ -41,6 +41,34 @@ llevarse por delante lo que ya rebajaron las dos anteriores.
 4. Revise el total.
 5. Guarde y envíe al SRI.
 
+### Cómo leer la columna Subtotal
+
+La columna **Subtotal** de cada línea muestra el valor **neto: cantidad x precio
+unitario, menos el descuento de esa línea, y sin IVA**. Es el mismo criterio de
+la factura de venta y el mismo valor que viaja al XML del SRI y al RIDE.
+
+En el pie, el **Subtotal** es el bruto (antes de descuentos) y el descuento se
+resta en su propia línea, igual que en la factura de venta. Es decir: la suma de
+la columna Subtotal del detalle equivale a **Subtotal menos (-) Descuento**. Si
+la nota no tiene descuentos, ambos valores coinciden.
+
+Los **Subtotal 15%**, **Subtotal 0%**, etc. del pie son bases imponibles netas:
+ya tienen el descuento aplicado, de modo que el IVA que se muestra debajo es
+exactamente el porcentaje de esa base.
+
+## Si se cierra el modal sin guardar
+
+Mientras se captura una nota de crédito nueva, el sistema va guardando un
+borrador local en el navegador. Si el modal se cierra sin guardar (o si falla el
+guardado por un corte de red), al volver a **Nueva nota de crédito** aparece un
+aviso con el nombre del cliente y dos opciones: **Cargar borrador**, que repone
+cliente, motivo, documento modificado, las líneas del detalle con sus cantidades,
+precios, descuentos y tarifa de IVA, y la información adicional; o **Nueva
+nota**, que descarta el borrador y empieza en blanco.
+
+El borrador es por usuario y por empresa, y se descarta solo al guardar la nota
+o al elegir "Nueva nota".
+
 ## Editar y eliminar
 
 Solo se pueden **editar** o **eliminar** notas de crédito en estado **borrador**.
@@ -76,6 +104,14 @@ momento (no solo la página visible).
 
 ## Historial de cambios
 
+- **1.4** — Corregida la recuperación del borrador local: al elegir "Cargar
+  borrador" el modal se abría vacío (el aviso además mostraba el cliente como
+  "desconocido"). Ahora repone todos los campos y las líneas del detalle.
+- **1.3** — Corregida la columna **Subtotal** del detalle en el modal: mostraba
+  el valor con el IVA incluido, por lo que no cuadraba con el Subtotal del pie
+  ni con el documento emitido. Ahora muestra el neto sin impuestos. Los
+  subtotales por tarifa del pie pasan a calcularse sobre la base con descuento
+  aplicado, y todos los importes se redondean a 2 decimales línea por línea.
 - **1.2** — Botón **Excel** en la barra de acciones del modal, para exportar
   el detalle y totales de una nota de crédito puntual (antes solo existía
   para el listado completo).

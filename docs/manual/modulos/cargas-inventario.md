@@ -6,7 +6,7 @@ ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: carga de inventario, ajuste masivo, entrada masiva, salida masiva, conteo fisico, importar stock, aprobacion
-version: 1.0
+version: 1.1
 orden: 25
 estado: activo
 ---
@@ -44,6 +44,11 @@ aprobador la revise, y se avisa por correo a quien corresponda.
 Es una medida sensata: una carga masiva mal hecha altera el stock de cientos de
 productos de golpe.
 
+Se configura en el módulo **Aprobaciones** (`modulos/aprobaciones-config`): ahí
+se activa el proceso *Cargas de inventario*, se eligen los aprobadores y, si se
+quiere, un **monto mínimo** por debajo del cual la carga se aplica directamente.
+Antes esta configuración estaba en *Empresa → Inventario*.
+
 ## Errores frecuentes
 
 - **"Tipo de movimiento inválido"**: debe ser entrada, salida o ajuste.
@@ -55,3 +60,4 @@ productos de golpe.
 ## Historial de cambios
 
 - **1.0** — Versión inicial.
+- **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.

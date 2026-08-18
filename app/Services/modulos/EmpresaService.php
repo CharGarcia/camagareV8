@@ -429,48 +429,19 @@ class EmpresaService
         return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
     }
 
+    /**
+     * Configuración de inventario del establecimiento. La aprobación de cargas
+     * (y la de pagos al banco, que tenía su propia pestaña) se movió al módulo
+     * Aprobaciones: se configura por empresa en /modulos/aprobaciones-config.
+     */
     public function saveInventarioConfig(int $idEmpresa, array $data): bool
     {
         $idEst = (int) ($data['id_establecimiento'] ?? 0);
         if (!$idEst) $idEst = $this->repository->getPrimerEstablecimientoId($idEmpresa);
 
-        // Lista de usuarios aprobadores (puede ser más de uno) → arreglo JSON de ids.
-        $aprobadores = $data['inv_usuarios_aprobadores'] ?? [];
-        if (!is_array($aprobadores)) $aprobadores = [];
-        $aprobadores = array_values(array_unique(array_filter(
-            array_map('intval', $aprobadores),
-            static fn($x) => $x > 0
-        )));
-
-        $filtered = [
-            'metodo_costeo'            => $data['metodo_costeo'] ?? 'promedio',
-            'inv_requiere_aprobacion'  => !empty($data['inv_requiere_aprobacion']) ? 'true' : 'false',
-            'inv_notificar_correo'     => !empty($data['inv_notificar_correo']) ? 'true' : 'false',
-            'inv_usuarios_aprobadores' => json_encode($aprobadores),
-        ];
-
-        return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
-    }
-
-    public function saveTransferenciasConfig(int $idEmpresa, array $data): bool
-    {
-        $idEst = (int) ($data['id_establecimiento'] ?? 0);
-        if (!$idEst) $idEst = $this->repository->getPrimerEstablecimientoId($idEmpresa);
-
-        $aprobadores = $data['transf_usuarios_aprobadores'] ?? [];
-        if (!is_array($aprobadores)) $aprobadores = [];
-        $aprobadores = array_values(array_unique(array_filter(
-            array_map('intval', $aprobadores),
-            static fn($x) => $x > 0
-        )));
-
-        $filtered = [
-            'transf_requiere_aprobacion'  => !empty($data['transf_requiere_aprobacion']) ? 'true' : 'false',
-            'transf_notificar_correo'     => !empty($data['transf_notificar_correo']) ? 'true' : 'false',
-            'transf_usuarios_aprobadores' => json_encode($aprobadores),
-        ];
-
-        return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
+        return $this->repository->updateEstablecimientoConfig($idEst, [
+            'metodo_costeo' => $data['metodo_costeo'] ?? 'promedio',
+        ]);
     }
 
     public function saveCorreo(int $idEmpresa, array $data): bool

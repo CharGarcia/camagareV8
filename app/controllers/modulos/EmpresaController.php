@@ -173,11 +173,6 @@ class EmpresaController extends BaseModuloController
                     $res = $this->service->saveInventarioConfig($idEmpresa, $_POST);
                     echo json_encode(['ok' => $res]);
                     break;
-                case 'transferencias_config':
-                    $this->requireActualizar();
-                    $res = $this->service->saveTransferenciasConfig($idEmpresa, $_POST);
-                    echo json_encode(['ok' => $res]);
-                    break;
                 case 'enviar_documentos_legales':
                     // Se puede (re)enviar mientras no estén ACEPTADOS: sin enviar aún, o
                     // enviados pero pendientes de aceptación (para insistir/reenviar el

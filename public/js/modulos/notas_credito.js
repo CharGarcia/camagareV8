@@ -10,6 +10,10 @@
     let NC_estadoActual = 'borrador';
     let listadoTarifasIva = [];
 
+    // Redondeo monetario a 2 decimales: los importes del documento (y del XML del SRI)
+    // son siempre de 2 decimales, sin importar los decimales de presentación de la empresa.
+    const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
+
     // Inicialización al cargar el script
     document.addEventListener('DOMContentLoaded', () => {
         console.log('Notas de Crédito: DOM listo, inicializando...');
@@ -139,7 +143,10 @@
             // Verificar borrador antes de abrir
             const borradorRaw = localStorage.getItem(window.NC_STORAGE_KEY);
             if (borradorRaw) {
-                const borrador = JSON.parse(borradorRaw);
+                // El autoguardado escribe { data, timestamp } y el respaldo ante un fallo
+                // de red escribe el estado plano: se acepta cualquiera de los dos formatos.
+                const borradorRawObj = JSON.parse(borradorRaw);
+                const borrador = (borradorRawObj && borradorRawObj.data) ? borradorRawObj.data : borradorRawObj;
                 const divAviso = document.createElement('div');
                 divAviso.id = 'nc-borrador-aviso';
                 divAviso.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
@@ -850,8 +857,10 @@
         });
     }
 
-    window.NC_agregarFila = () => {
-        agregarFila();
+    // Acepta datos opcionales: el botón "Agregar línea manual" la llama sin argumentos
+    // (fila en blanco) y la restauración del borrador la llama con la línea guardada.
+    window.NC_agregarFila = (data) => {
+        agregarFila(data && !(data instanceof Event) ? data : {});
     };
 
     function agregarFila(data = {}) {
@@ -886,7 +895,7 @@
                     ${listadoTarifasIva.filter(t => t.status == 1 || t.status === '1' || t.id == idTarifaIva).map(t => `<option value="${t.id}" data-porcentaje="${t.porcentaje_iva}" data-codigo="${t.codigo}" ${t.id == idTarifaIva ? 'selected' : ''}>${t.tarifa}</option>`).join('')}
                 </select>
             </td>
-            <td class="text-end pe-4 fw-bold nc-fila-total py-1">$0.00</td>
+            <td class="text-end pe-4 fw-bold nc-fila-total py-1">0.00</td>
             <td class="py-1">
                 <button type="button" class="btn btn-link btn-sm text-danger p-0 nc-edit-only" onclick="window.NC_removerFila(this)">
                     <i class="bi bi-trash"></i>
@@ -1084,17 +1093,10 @@
         if (correo) NC_actualizarCorreoCliente(correo);
     }
 
-    window.NC_calcFila = (el) => {
-        const tr = el.closest('tr');
-        const cant = parseFloat(tr.querySelector('input[name="det_cantidad[]"]').value) || 0;
-        const prec = parseFloat(tr.querySelector('input[name="det_precio_unitario[]"]').value) || 0;
-        const desc = parseFloat(tr.querySelector('input[name="det_descuento[]"]').value) || 0;
-        
-        const subtotal = (cant * prec) - desc;
-        
-        const decP = window.nc_dec_p || 2;
-        tr.querySelector('.nc-fila-total').textContent = `$${subtotal.toLocaleString('en-US', {minimumFractionDigits: decP, maximumFractionDigits: decP})}`;
-        
+    // El subtotal de cada línea lo pinta calcTotales() (neto, sin IVA). Aquí solo se
+    // dispara el recálculo: si esta función también escribiera la celda, calcTotales()
+    // la sobreescribiría enseguida con otro valor y otro formato.
+    window.NC_calcFila = () => {
         calcTotales();
     };
 
@@ -1141,24 +1143,28 @@
             const porcIva = parseFloat(optIva.dataset.porcentaje) || 0;
             const nombreIva = optIva.text;
 
-            const baseFila = cant * prec;
-            const baseConDesc = baseFila - desc;
-            const valorIva = baseConDesc * (porcIva / 100);
+            const baseFila    = r2(cant * prec);
+            const baseConDesc = r2(baseFila - desc);
+            const valorIva    = r2(baseConDesc * (porcIva / 100));
 
-            subtotalSinImp += baseFila;
-            totalDescuento += desc;
+            subtotalSinImp = r2(subtotalSinImp + baseFila);
+            totalDescuento = r2(totalDescuento + desc);
 
+            // Los subtotales por tarifa acumulan la base NETA (con descuento aplicado),
+            // que es la base imponible real que va al XML y al RIDE.
             if (!subtotalesPorTarifa[nombreIva]) subtotalesPorTarifa[nombreIva] = 0;
-            subtotalesPorTarifa[nombreIva] += baseFila;
+            subtotalesPorTarifa[nombreIva] = r2(subtotalesPorTarifa[nombreIva] + baseConDesc);
 
             if (porcIva > 0) {
                 if (!ivasPorTarifa[nombreIva]) ivasPorTarifa[nombreIva] = 0;
-                ivasPorTarifa[nombreIva] += valorIva;
+                ivasPorTarifa[nombreIva] = r2(ivasPorTarifa[nombreIva] + valorIva);
             }
 
+            // El subtotal de la línea muestra el neto (después de descuento, SIN IVA):
+            // es el mismo valor que se guarda en precio_total_sin_impuesto.
             const decP = window.nc_dec_p || 2;
             const totalFilaEl = tr.querySelector('.nc-fila-total');
-            if (totalFilaEl) totalFilaEl.textContent = (baseConDesc + valorIva).toFixed(decP);
+            if (totalFilaEl) totalFilaEl.textContent = baseConDesc.toFixed(decP);
         });
 
         const decP = window.nc_dec_p || 2;
@@ -1191,7 +1197,7 @@
         let htmlIvas = '';
         let totalIva = 0;
         for (const [nombre, valor] of Object.entries(ivasPorTarifa)) {
-            totalIva += valor;
+            totalIva = r2(totalIva + valor);
             htmlIvas += `
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <span class="text-muted small">IVA ${nombre}</span>
@@ -1200,13 +1206,14 @@
         }
         updateLabel('nc_lbl_ivas_grupo', htmlIvas, true);
 
-        const totalNC = (subtotalSinImp - totalDescuento) + totalIva;
+        const totalSinImp = r2(subtotalSinImp - totalDescuento);
+        const totalNC     = r2(totalSinImp + totalIva);
 
         updateLabel('nc_lbl_subtotal', subtotalSinImp.toFixed(decP));
         updateLabel('nc_lbl_descuento', totalDescuento.toFixed(decP));
         updateLabel('nc_lbl_total', totalNC.toFixed(decP));
 
-        updateValue('nc_total_sin_impuestos', (subtotalSinImp - totalDescuento).toFixed(decP));
+        updateValue('nc_total_sin_impuestos', totalSinImp.toFixed(decP));
         updateValue('nc_total_descuento', totalDescuento.toFixed(decP));
         updateValue('nc_importe_total', totalNC.toFixed(decP));
     }
@@ -1287,9 +1294,11 @@
             const cant = parseFloat(tr.querySelector('input[name="det_cantidad[]"]').value);
             const prec = parseFloat(tr.querySelector('input[name="det_precio_unitario[]"]').value);
             const desc = parseFloat(tr.querySelector('input[name="det_descuento[]"]').value) || 0;
-            const base = (cant * prec) - desc;
+            // Mismo redondeo que calcTotales(): lo que se guarda coincide al centavo
+            // con lo que el usuario ve en la grilla y con lo que se emite en el XML.
+            const base = r2(r2(cant * prec) - desc);
             const porcIva = parseFloat(optIva.dataset.porcentaje) || 0;
-            const valorIva = base * (porcIva / 100);
+            const valorIva = r2(base * (porcIva / 100));
 
             detalles.push({
                 id_producto: tr.querySelector('input[name="det_id_producto[]"]').value,
@@ -1363,7 +1372,9 @@
             }
         } catch (e) {
             console.error('Error al guardar NC:', e);
-            window.NC_guardarRespaldo(payload);
+            // Se respalda el estado del formulario (no el payload de la API): es el
+            // formato que NC_restaurarRespaldo sabe volver a pintar en el modal.
+            window.NC_guardarRespaldo(NC_capturarEstado());
             Swal.fire('Error', 'No se pudo guardar la nota de crédito. Se ha guardado un borrador local.', 'error');
         } finally {
             btn.disabled = false;
@@ -1430,6 +1441,8 @@
         });
     };
 
+    // `data` debe tener el formato de NC_capturarEstado(), que es el que lee
+    // NC_restaurarRespaldo() al volver a abrir el modal.
     window.NC_guardarRespaldo = (data) => {
         localStorage.setItem(window.NC_STORAGE_KEY, JSON.stringify(data));
     };
@@ -1444,8 +1457,12 @@
         // Obsoleto, la lógica se movió a NC_abrirModalNuevo
     };
 
-    window.NC_restaurarRespaldo = (data) => {
+    window.NC_restaurarRespaldo = async (data) => {
         if (!data) return;
+
+        // Sin el catálogo de tarifas el <select> de IVA de cada línea saldría vacío y
+        // el borrador se restauraría con la tarifa perdida.
+        if (!listadoTarifasIva.length) await cargarTarifasIva();
         
         document.getElementById('nc_id_punto_emision').value = data.id_punto_emision || '';
         document.getElementById('nc_secuencial').value = data.secuencial || '';

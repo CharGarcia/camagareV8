@@ -16,6 +16,7 @@ class ImportacionesService
     private ImportacionesRepository $repository;
     private ImportacionesRules $rules;
     private LogSistemaService $logService;
+    private ?AprobacionesService $aprobService = null;
 
     public function __construct()
     {
@@ -408,31 +409,40 @@ class ImportacionesService
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * Config de aprobación de inventario (empresa_establecimiento), mismo
-     * mecanismo que CargaInventarioService::getConfigAprobacion() — se toma
-     * del primer establecimiento de la empresa.
+     * Config de aprobación de la nacionalización. Antes compartía el flag de
+     * inventario en empresa_establecimiento.inv_*; ahora es un checkpoint propio
+     * del módulo Aprobaciones ('importaciones'), independiente de las cargas.
      */
-    public function getConfigAprobacion(int $idEmpresa): array
+    private function aprobacionesService(): AprobacionesService
     {
-        $empRepo = new \App\repositories\modulos\EmpresaRepository();
-        $idEst   = $empRepo->getPrimerEstablecimientoId($idEmpresa);
-        $cfg     = $idEst ? ($empRepo->getEstablecimientoConfig($idEst) ?? []) : [];
+        if ($this->aprobService === null) {
+            $this->aprobService = new AprobacionesService();
+        }
+        return $this->aprobService;
+    }
 
-        $requiere  = !empty($cfg['inv_requiere_aprobacion']) && $cfg['inv_requiere_aprobacion'] !== 'f';
-        $notificar = !isset($cfg['inv_notificar_correo']) || ($cfg['inv_notificar_correo'] && $cfg['inv_notificar_correo'] !== 'f');
-        $aprob     = json_decode($cfg['inv_usuarios_aprobadores'] ?? '[]', true);
-        if (!is_array($aprob)) $aprob = [];
-        $aprob = array_values(array_map('intval', $aprob));
-
-        return ['requiere' => $requiere, 'notificar' => $notificar, 'aprobadores' => $aprob];
+    /**
+     * @param float|null $monto Costo total nacionalizado. Si el checkpoint tiene
+     *                          monto mínimo, por debajo de él no pide aprobación.
+     */
+    public function getConfigAprobacion(int $idEmpresa, ?float $monto = null): array
+    {
+        return $this->aprobacionesService()->getConfigResuelta(
+            AprobacionesService::IMPORTACIONES,
+            $idEmpresa,
+            $monto
+        );
     }
 
     /** ¿El usuario puede aprobar/rechazar la nacionalización? (aprobador configurado o super admin). */
     public function esAprobador(int $idUsuario, int $idEmpresa, int $nivel = 1): bool
     {
-        if ($nivel >= 3) return true;
-        $cfg = $this->getConfigAprobacion($idEmpresa);
-        return in_array($idUsuario, $cfg['aprobadores'], true);
+        return $this->aprobacionesService()->esAprobador(
+            AprobacionesService::IMPORTACIONES,
+            $idEmpresa,
+            $idUsuario,
+            $nivel
+        );
     }
 
     /** Nombres de los usuarios aprobadores configurados (para mostrar quién debe aprobar). */
@@ -478,7 +488,7 @@ class ImportacionesService
 
         $detallesConCosto = $this->calcularProrrateo($detalles, $costoTotalNacionalizado, $importacion['criterio_prorrateo']);
 
-        $cfgAprobacion = $this->getConfigAprobacion($idEmpresa);
+        $cfgAprobacion = $this->getConfigAprobacion($idEmpresa, $costoTotalNacionalizado);
 
         if ($cfgAprobacion['requiere']) {
             $db = Database::getConnection();
