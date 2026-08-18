@@ -35,9 +35,9 @@ class PermisosModulosController extends Controller
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $idUsuarioSel = (int) ($_GET['u'] ?? 0);
         $idEmpresaSel = (int) ($_GET['e'] ?? 0);
-        if ($idUsuarioSel <= 0) {
-            $idUsuarioSel = $idActual;
-        }
+        // El usuario NO se preselecciona: el selector debe quedar vacío para que se vea
+        // como un buscador (placeholder "Buscar usuario..."), igual que el de empresa.
+        // Con un nombre ya puesto, los usuarios creían que el campo no permitía buscar.
         $mostrar = isset($_GET['mostrar']) && $_GET['mostrar'] === '1';
 
         $modulos = [];
@@ -151,7 +151,7 @@ class PermisosModulosController extends Controller
         $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $buscar = trim($_GET['q'] ?? $_GET['b'] ?? '');
-        $rows = $this->modelEmpresa->getUsuariosParaSelect($idActual, $nivel, $buscar);
+        $rows = $this->modelEmpresa->getUsuariosParaSelect($idActual, $nivel, $buscar, 200);
         $out = array_map(function ($r) {
             return ['value' => (int)$r['id'], 'text' => ($r['nombre'] ?? '') . ' (' . ($r['cedula'] ?? '') . ')'];
         }, $rows);

@@ -6,8 +6,8 @@ ruta_modulo: config/permisos-modulos
 tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
-etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total
-version: 1.1
+etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscador
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -45,9 +45,15 @@ ha creado nada y no tiene acceso total.
 
 ## Cómo asignar permisos
 
-1. Elija el usuario y la empresa.
-2. Marque los permisos submódulo por submódulo.
-3. Guarde. El cambio se aplica en la siguiente pantalla que abra el usuario.
+1. **Busque el usuario.** El primer campo es un buscador: escriba parte del
+   nombre o de la cédula y elija de la lista. Arranca vacío (antes mostraba su
+   propio nombre, lo que hacía pensar que no se podía cambiar). Si el usuario no
+   aparece entre los primeros de la lista, siga escribiendo: al teclear dos o más
+   letras se consulta el resto de usuarios.
+2. Pulse **Seleccionar empresa** y elija la empresa (también es un buscador). Si
+   el usuario tiene una sola empresa asignada, se selecciona sola.
+3. Marque los permisos submódulo por submódulo.
+4. Guarde. El cambio se aplica en la siguiente pantalla que abra el usuario.
 
 ## Por qué un módulo manda al tablero
 
@@ -71,6 +77,10 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.2** — El campo de usuario ahora se comporta como buscador: empieza vacío,
+  con la indicación de escribir nombre o cédula, y busca también en el servidor
+  cuando el usuario no está en la lista precargada. Antes aparecía seleccionado el
+  usuario en sesión y daba la impresión de que no se podía buscar.
 - **1.1** — El menú deja de mostrar submódulos sin permiso VER o desactivados
   (antes aparecían y al abrirlos devolvían al tablero). El permiso se relaciona
   con el módulo por su ruta registrada en el menú, no por un número fijo, así que

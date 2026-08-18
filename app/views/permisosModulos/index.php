@@ -95,9 +95,9 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             <div id="paso1" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'none' : 'block' ?>;">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-9">
-                        <label class="form-label small">Usuario</label>
+                        <label class="form-label small" for="select-usuario"><i class="bi bi-search"></i> Buscar usuario</label>
                         <select id="select-usuario" class="form-select">
-                            <option value="">Seleccione usuario...</option>
+                            <option value="">Buscar usuario por nombre o cédula...</option>
                             <?php foreach ($opcionesUsuarios as $opt): ?>
                                 <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
                             <?php endforeach; ?>
@@ -874,8 +874,20 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
 
         var tsUsuario = new TomSelect('#select-usuario', {
             create: false,
-            placeholder: 'Buscar usuario...',
-            maxOptions: 500
+            placeholder: 'Escriba el nombre o la cédula del usuario...',
+            maxOptions: 500,
+            loadThrottle: 300,
+            // Además de los usuarios precargados, se consulta al servidor para
+            // encontrar a los que quedaron fuera del listado inicial.
+            shouldLoad: function(q) { return (q || '').length >= 2; },
+            load: function(query, callback) {
+                fetch(base + '/config/permisos-modulos?action=usuariosJson&q=' + encodeURIComponent(query), {
+                        credentials: 'same-origin'
+                    })
+                    .then(function(r) { return r.ok ? r.json() : []; })
+                    .then(function(data) { callback(Array.isArray(data) ? data : []); })
+                    .catch(function() { callback(); });
+            }
         });
 
         var tsEmpresa = new TomSelect('#select-empresa', {
