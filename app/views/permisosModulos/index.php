@@ -6,6 +6,7 @@
 /** @var int $idEmpresaSel */
 /** @var array|null $usuarioSel */
 /** @var array|null $empresaSel */
+/** @var bool $empresaAsignada */
 /** @var array $modulos */
 /** @var array $opcionesUsuarios */
 /** @var array $opcionesEmpresas */
@@ -17,6 +18,8 @@ $combosActivos = $combosActivos ?? [];
 $msg = $_SESSION['permisos_msg'] ?? null;
 unset($_SESSION['permisos_msg']);
 $limiteUsuarios = $limiteUsuarios ?? null;
+$empresaAsignada = $empresaAsignada ?? true;
+$esSuper = ($nivel ?? 1) >= 3;
 $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteUsuarios['max'];
 ?>
 <style>
@@ -55,15 +58,11 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             </span>
         <?php endif; ?>
         <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
-        <?php if (!$limiteLleno || $nivel >= 3): ?>
+        <?php // El cupo se valida contra la empresa que se elija dentro del modal, no
+              // contra la empresa activa: el administrador puede tener otra con espacio. ?>
         <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
             <i class="bi bi-person-plus"></i> Crear usuario
         </button>
-        <?php else: ?>
-        <button type="button" class="btn btn-secondary btn-sm" disabled title="Límite de usuarios alcanzado para esta empresa">
-            <i class="bi bi-person-plus"></i> Crear usuario
-        </button>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -93,6 +92,13 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             <input type="hidden" name="mostrar" value="1">
             <input type="hidden" name="u" id="input-u" value="<?= (int)$idUsuarioSel ?>">
             <div id="paso1" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'none' : 'block' ?>;">
+                <?php if ($esSuper): ?>
+                <div class="text-muted small mb-2">
+                    <i class="bi bi-info-circle"></i>
+                    Puede buscar <strong>cualquier usuario activo</strong> y <strong>cualquier empresa activa</strong> del sistema;
+                    si la empresa no está asignada al usuario, se le asigna al guardar los permisos.
+                </div>
+                <?php endif; ?>
                 <div class="row g-3 align-items-end">
                     <div class="col-md-9">
                         <label class="form-label small" for="select-usuario"><i class="bi bi-search"></i> Buscar usuario</label>
@@ -127,6 +133,11 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                             <?php endforeach; ?>
                         </select>
                         <div id="empresa-msg" class="text-danger small mt-1 d-none"><i class="bi bi-exclamation-circle"></i> Debe seleccionar una empresa.</div>
+                        <?php if ($esSuper): ?>
+                        <div id="empresa-no-asignada-aviso" class="small mt-1 d-none text-warning-emphasis">
+                            <i class="bi bi-info-circle"></i> Esta empresa <strong>no está asignada</strong> al usuario. Se le asignará al guardar los permisos.
+                        </div>
+                        <?php endif; ?>
                     </div>
                     <div class="col-md-4 d-flex align-items-end">
                         <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-eye"></i> Mostrar módulos</button>
@@ -159,6 +170,61 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
     });
 })();
 </script>
+
+<?php if (!empty($modulos) && !$empresaAsignada): ?>
+    <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 px-3" role="alert" id="alerta-empresa-no-asignada">
+        <div class="small">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            <strong>Esta empresa no está asignada a este usuario.</strong>
+            Puede marcar los permisos igualmente: la empresa se le asignará al guardar el primero.
+        </div>
+        <button type="button" id="btn-asignar-empresa" class="btn btn-warning btn-sm flex-shrink-0">
+            <i class="bi bi-building-add"></i> Asignar empresa ahora
+        </button>
+    </div>
+    <script>
+        (function() {
+            var base = '<?= $base ?>';
+            var btn = document.getElementById('btn-asignar-empresa');
+            var alerta = document.getElementById('alerta-empresa-no-asignada');
+            if (!btn) return;
+
+            btn.addEventListener('click', function() {
+                btn.disabled = true;
+                var fd = new FormData();
+                fd.append('id_usuario', '<?= (int)$idUsuarioSel ?>');
+                fd.append('id_empresa', '<?= (int)$idEmpresaSel ?>');
+
+                fetch(base + '/config/permisos-modulos?action=asignarEmpresa', {
+                        method: 'POST', body: fd, credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) {
+                        if (j.ok) {
+                            alerta.className = 'alert alert-success py-2 px-3';
+                            alerta.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Empresa asignada al usuario.';
+                        } else {
+                            btn.disabled = false;
+                            if (typeof Swal !== 'undefined') {
+                                Swal.fire({ icon: 'error', title: 'No se pudo asignar', text: j.error || 'Error al asignar la empresa.' });
+                            } else {
+                                alert(j.error || 'Error al asignar la empresa.');
+                            }
+                        }
+                    })
+                    .catch(function() {
+                        btn.disabled = false;
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo asignar la empresa.' });
+                        } else {
+                            alert('Error de conexión.');
+                        }
+                    });
+            });
+        })();
+    </script>
+<?php endif; ?>
 
 <?php if (!empty($modulos)): ?>
     <div class="card" id="card-modulos">
@@ -303,11 +369,22 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                     if (j.ok) {
                         setStatus('ok', 'Guardado');
                         actualizarIndicadorFila(row);
+                        // El primer permiso en una empresa sin asignar crea la asignación:
+                        // el aviso de arriba deja de tener sentido.
+                        if (j.empresa_asignada) marcarEmpresaAsignada();
                     } else {
                         setStatus('err', j.error || 'Error al guardar');
                     }
                 })
                 .catch(function() { setStatus('err', 'Error de conexión'); });
+            }
+
+            // Sustituye el aviso de "empresa no asignada" cuando la asignación ya se creó
+            function marcarEmpresaAsignada() {
+                var alerta = document.getElementById('alerta-empresa-no-asignada');
+                if (!alerta) return;
+                alerta.className = 'alert alert-success py-2 px-3';
+                alerta.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Empresa asignada al usuario.';
             }
 
             // Actualiza el ícono de "con permisos" junto al nombre del submódulo
@@ -546,7 +623,19 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             var tsUsu = null, tsEmp = null;
             if (typeof TomSelect !== 'undefined') {
                 tsUsu = new TomSelect('#copia-usuario', { create: false, placeholder: 'Buscar usuario...', maxOptions: 500 });
-                tsEmp = new TomSelect('#copia-empresa', { create: false, placeholder: 'Buscar empresa...', maxOptions: 500 });
+
+                var configEmpDestino = { create: false, placeholder: 'Buscar empresa...', maxOptions: 500 };
+                <?php if ($esSuper): ?>
+                // El superadministrador puede copiar hacia cualquier empresa activa; si
+                // el usuario destino no la tiene, se le asigna al copiar los permisos.
+                configEmpDestino.optgroups = [
+                    { value: 'asignadas', label: 'Empresas asignadas al usuario destino' },
+                    { value: 'otras', label: 'Otras empresas del sistema (se asignarán al copiar)' }
+                ];
+                configEmpDestino.optgroupField = 'grupo';
+                configEmpDestino.lockOptgroupOrder = true;
+                <?php endif; ?>
+                tsEmp = new TomSelect('#copia-empresa', configEmpDestino);
                 tsEmp.disable();
             }
 
@@ -741,8 +830,11 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                 })
                 .then(function(r) { return r.ok ? r.json() : []; })
                 .then(function(data) {
+                    // Solo empresas que el usuario ya tiene: en una empresa sin asignar
+                    // no hay permisos que copiar y el resultado sería borrar los actuales.
                     var filtered = data.filter(function(o) {
-                        return String(o.value) !== String(idEmpresaActual);
+                        if (String(o.value) === String(idEmpresaActual)) return false;
+                        return o.asignada !== false;
                     });
 
                     if (filtered.length === 0) {
@@ -830,21 +922,37 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
 <div class="modal fade" id="modalCrearUsuario" tabindex="-1" aria-labelledby="modalCrearUsuarioLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="<?= $base ?>/config/crear-usuario">
+            <form method="POST" action="<?= $base ?>/config/crear-usuario" id="form-crear-usuario">
+                <input type="hidden" name="redirect" value="permisos-modulos">
+                <!-- Si el correo ya está registrado no se crea otro usuario ni se reenvía
+                     la invitación: solo se le asigna la empresa elegida. -->
+                <input type="hidden" name="asignar_si_existe" value="1">
+                <input type="hidden" name="empresa_requerida" value="1">
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalCrearUsuarioLabel"><i class="bi bi-person-plus"></i> Crear usuario</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-3">Se enviará un correo al nuevo usuario para que complete su registro y defina su contraseña.</p>
-                    <div class="mb-3">
-                        <label for="crear-nombre" class="form-label">Nombre</label>
-                        <input type="text" id="crear-nombre" name="nombre" class="form-control" required placeholder="Nombre completo">
-                    </div>
+                    <p class="text-muted small mb-3">
+                        Se enviará un correo al nuevo usuario para que complete su registro y defina su contraseña.
+                        Si el correo ya está registrado, solo se le asignará la empresa.
+                    </p>
                     <div class="mb-3">
                         <label for="crear-correo" class="form-label">Correo electrónico</label>
                         <input type="email" id="crear-correo" name="correo" class="form-control" required placeholder="correo@ejemplo.com">
                     </div>
+                    <div class="mb-3">
+                        <label for="crear-empresa" class="form-label"><i class="bi bi-search"></i> Buscar empresa</label>
+                        <select id="crear-empresa" name="empresas[]" class="form-select">
+                            <option value="">Buscar empresa por nombre o RUC...</option>
+                        </select>
+                        <small class="text-muted">
+                            <?= $esSuper
+                                ? 'Puede asignar cualquier empresa activa del sistema.'
+                                : 'Solo se listan las empresas que usted tiene asignadas.' ?>
+                        </small>
+                    </div>
+                    <div id="crear-usuario-msg" class="small"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -856,8 +964,115 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
 </div>
 
 <script>
+    // Crear usuario: correo + empresa. El alta y la asignación se resuelven en el
+    // servidor; al terminar se entra directo a los permisos de ese usuario/empresa.
     window.addEventListener('load', function() {
         var base = '<?= $base ?>';
+        var formCrear = document.getElementById('form-crear-usuario');
+        if (formCrear) {
+            var selEmpresaCrear = document.getElementById('crear-empresa');
+            var msgCrear = document.getElementById('crear-usuario-msg');
+            var tsEmpresaCrear = null;
+
+            function setMsgCrear(tipo, texto) {
+                if (!msgCrear) return;
+                msgCrear.className = 'small mt-1 ' + (tipo === 'err' ? 'text-danger' : (tipo === 'ok' ? 'text-success' : 'text-secondary'));
+                msgCrear.innerHTML = texto;
+            }
+
+            function cargarEmpresasCrear(query, callback) {
+                fetch(base + '/config/permisos-modulos?action=empresasAsignablesJson&q=' + encodeURIComponent(query || ''), {
+                        credentials: 'same-origin'
+                    })
+                    .then(function(r) { return r.ok ? r.json() : []; })
+                    .then(function(data) { callback(Array.isArray(data) ? data : []); })
+                    .catch(function() { callback([]); });
+            }
+
+            if (typeof TomSelect !== 'undefined') {
+                tsEmpresaCrear = new TomSelect('#crear-empresa', {
+                    create: false,
+                    placeholder: 'Escriba el nombre o el RUC de la empresa...',
+                    maxOptions: 200,
+                    loadThrottle: 300,
+                    load: function(query, callback) { cargarEmpresasCrear(query, callback); }
+                });
+            }
+
+            // Lista inicial: así el administrador ve de una sus empresas sin escribir.
+            var modalCrear = document.getElementById('modalCrearUsuario');
+            if (modalCrear) modalCrear.addEventListener('show.bs.modal', function() {
+                setMsgCrear('', '');
+                cargarEmpresasCrear('', function(data) {
+                    if (!data.length) {
+                        setMsgCrear('err', 'No tiene empresas asignadas para asociar al usuario.');
+                        return;
+                    }
+                    if (tsEmpresaCrear) {
+                        tsEmpresaCrear.addOptions(data);
+                        tsEmpresaCrear.refreshOptions(false);
+                        if (data.length === 1) tsEmpresaCrear.setValue(data[0].value, true);
+                    } else {
+                        data.forEach(function(o) {
+                            var op = document.createElement('option');
+                            op.value = o.value; op.textContent = o.text;
+                            selEmpresaCrear.appendChild(op);
+                        });
+                    }
+                });
+            });
+
+            formCrear.addEventListener('submit', function(e) {
+                e.preventDefault();
+                var idEmp = tsEmpresaCrear ? tsEmpresaCrear.getValue() : selEmpresaCrear.value;
+                if (!idEmp) {
+                    setMsgCrear('err', '<i class="bi bi-exclamation-circle"></i> Seleccione la empresa que se le asignará.');
+                    return;
+                }
+
+                var btnSubmit = formCrear.querySelector('button[type="submit"]');
+                if (btnSubmit) btnSubmit.disabled = true;
+                setMsgCrear('', '<i class="bi bi-arrow-repeat"></i> Procesando...');
+
+                fetch(formCrear.action, {
+                        method: 'POST',
+                        body: new FormData(formCrear),
+                        credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (!res.ok) {
+                            if (btnSubmit) btnSubmit.disabled = false;
+                            setMsgCrear('err', '<i class="bi bi-x-circle-fill"></i> ' + (res.msg || 'No se pudo crear el usuario.'));
+                            return;
+                        }
+                        // Con usuario y empresa resueltos se entra directo a sus permisos.
+                        var irAPermisos = function() {
+                            if (res.id_usuario && res.id_empresa) {
+                                window.location.href = base + '/config/permisos-modulos?u=' + res.id_usuario + '&e=' + res.id_empresa + '&mostrar=1';
+                            } else {
+                                window.location.reload();
+                            }
+                        };
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                icon: res.ya_existia ? 'info' : 'success',
+                                title: res.ya_existia ? 'El usuario ya existe' : 'Usuario creado',
+                                text: res.msg
+                            }).then(irAPermisos);
+                        } else {
+                            alert(res.msg);
+                            irAPermisos();
+                        }
+                    })
+                    .catch(function() {
+                        if (btnSubmit) btnSubmit.disabled = false;
+                        setMsgCrear('err', 'Error de conexión.');
+                    });
+            });
+        }
+
         if (window.location.search.indexOf('v=1') !== -1) {
             history.replaceState({}, '', base + '/config/permisos-modulos');
         }
@@ -890,10 +1105,63 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             }
         });
 
-        var tsEmpresa = new TomSelect('#select-empresa', {
+        var esSuper = <?= $esSuper ? 'true' : 'false' ?>;
+        var avisoNoAsignada = document.getElementById('empresa-no-asignada-aviso');
+
+        var configEmpresa = {
             create: false,
             placeholder: 'Buscar empresa...',
-            maxOptions: 500
+            maxOptions: 500,
+            loadThrottle: 300,
+            shouldLoad: function(q) { return (q || '').length >= 2; },
+            load: function(query, callback) {
+                var idU = inputU.value || (tsUsuario ? tsUsuario.getValue() : '');
+                if (!idU) { callback(); return; }
+                fetch(base + '/config/permisos-modulos?action=empresasJson&u=' + encodeURIComponent(idU) + '&q=' + encodeURIComponent(query), {
+                        credentials: 'same-origin'
+                    })
+                    .then(function(r) { return r.ok ? r.json() : []; })
+                    .then(function(data) { callback(Array.isArray(data) ? data : []); })
+                    .catch(function() { callback(); });
+            }
+        };
+
+        // El superadministrador ve todas las empresas activas del sistema: se separan
+        // en el desplegable las que el usuario ya tiene de las que todavía no.
+        if (esSuper) {
+            configEmpresa.optgroups = [
+                { value: 'asignadas', label: 'Empresas asignadas al usuario' },
+                { value: 'otras', label: 'Otras empresas del sistema (se asignarán al guardar)' }
+            ];
+            configEmpresa.optgroupField = 'grupo';
+            configEmpresa.lockOptgroupOrder = true;
+        }
+
+        var tsEmpresa = new TomSelect('#select-empresa', configEmpresa);
+
+        // Las opciones que vienen escritas en el HTML solo traen valor y texto. Se
+        // completan con el grupo y la marca de asignada para que el desplegable se
+        // vea igual que cuando la lista llega por AJAX.
+        var empresasIniciales = <?= json_encode($opcionesEmpresas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?: '[]' ?>;
+        if (esSuper && Array.isArray(empresasIniciales) && empresasIniciales.length) {
+            empresasIniciales.forEach(function(o) {
+                if (tsEmpresa.options[o.value]) {
+                    tsEmpresa.updateOption(o.value, o);
+                } else {
+                    tsEmpresa.addOption(o);
+                }
+            });
+            tsEmpresa.refreshOptions(false);
+        }
+
+        tsEmpresa.on('change', function(valor) {
+            if (!avisoNoAsignada) return;
+            var opt = tsEmpresa.options[valor] || tsEmpresa.options[String(valor)];
+            if (opt && opt.asignada === false) {
+                avisoNoAsignada.classList.remove('d-none');
+            } else {
+                avisoNoAsignada.classList.add('d-none');
+            }
         });
 
         function actualizarUsuarioPaso2() {
@@ -914,18 +1182,30 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                     return r.ok ? r.json() : [];
                 })
                 .then(function(data) {
-                    if (Array.isArray(data) && data.length > 0) {
-                        tsEmpresa.addOptions(data);
-                        tsEmpresa.refreshOptions(false);
-                        // Si el usuario solo tiene una empresa asignada, se selecciona
-                        // automáticamente y se avanza directo a mostrar los submódulos.
-                        if (data.length === 1) {
-                            tsEmpresa.setValue(data[0].value, true);
-                            var empresaMsgEl = document.getElementById('empresa-msg');
-                            if (empresaMsgEl) empresaMsgEl.classList.add('d-none');
-                            var formBuscar = document.getElementById('form-permisos-buscar');
-                            if (formBuscar) formBuscar.submit();
+                    if (!Array.isArray(data) || data.length === 0) return;
+                    tsEmpresa.addOptions(data);
+                    tsEmpresa.refreshOptions(false);
+
+                    if (esSuper) {
+                        // El superadministrador siempre recibe todas las empresas del
+                        // sistema, así que no se puede avanzar solo por el conteo: se
+                        // preselecciona la única que el usuario ya tiene asignada y él
+                        // decide si la cambia por otra.
+                        var asignadas = data.filter(function(o) { return o.asignada === true; });
+                        if (asignadas.length === 1) {
+                            tsEmpresa.setValue(asignadas[0].value, true);
                         }
+                        return;
+                    }
+
+                    // Si el usuario solo tiene una empresa asignada, se selecciona
+                    // automáticamente y se avanza directo a mostrar los submódulos.
+                    if (data.length === 1) {
+                        tsEmpresa.setValue(data[0].value, true);
+                        var empresaMsgEl = document.getElementById('empresa-msg');
+                        if (empresaMsgEl) empresaMsgEl.classList.add('d-none');
+                        var formBuscar = document.getElementById('form-permisos-buscar');
+                        if (formBuscar) formBuscar.submit();
                     }
                 })
                 .catch(function() {});

@@ -491,6 +491,142 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Documentos Legales y Archivos de la Empresa -->
+                            <div class="col-12">
+                                <div class="card bg-light border-0 mt-3">
+                                    <div class="card-body p-3">
+                                        <h6 class="fw-bold mb-3 small text-primary"><i class="bi bi-file-earmark-text me-2"></i>Documentos Legales</h6>
+
+                                        <?php
+                                        $ultimoEnvioDocs = $documentosLegales[0] ?? null;
+                                        if (!$ultimoEnvioDocs) {
+                                            $docBadge = 'bg-danger';
+                                            $docTxt = 'Sin enviar';
+                                            $docIco = 'x-circle-fill';
+                                            $docTit = 'No se han enviado los documentos legales a esta empresa.';
+                                        } elseif (($ultimoEnvioDocs['estado'] ?? '') === 'aceptado') {
+                                            $docBadge = 'bg-success';
+                                            $docTxt = 'Aceptado';
+                                            $docIco = 'check-circle-fill';
+                                            $docTit = 'Aceptados el ' . date('d-m-Y H:i:s', strtotime((string) $ultimoEnvioDocs['aceptado_at']));
+                                        } else {
+                                            $docBadge = 'bg-warning text-dark';
+                                            $docTxt = 'Pendiente de aceptación';
+                                            $docIco = 'hourglass-split';
+                                            $docTit = 'Enviados el ' . date('d-m-Y H:i:s', strtotime((string) $ultimoEnvioDocs['enviado_at'])) . ', aún no aceptados.';
+                                        }
+                                        ?>
+                                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                                <span class="badge <?= $docBadge ?>" style="font-size: 0.68rem;" title="<?= htmlspecialchars($docTit) ?>">
+                                                    <i class="bi bi-<?= $docIco ?> me-1"></i><?= $docTxt ?>
+                                                </span>
+                                                <?php if ($ultimoEnvioDocs): ?>
+                                                    <span class="text-muted" style="font-size: 0.68rem;">
+                                                        Enviados el <?= date('d-m-Y H:i:s', strtotime((string) $ultimoEnvioDocs['enviado_at'])) ?>
+                                                        a <?= htmlspecialchars($ultimoEnvioDocs['correo_destino'] ?? '') ?>
+                                                        <?php if (($ultimoEnvioDocs['estado'] ?? '') === 'aceptado'): ?>
+                                                            · Aceptado por <?= htmlspecialchars($ultimoEnvioDocs['aceptado_nombre'] ?? '') ?>
+                                                            el <?= date('d-m-Y H:i:s', strtotime((string) $ultimoEnvioDocs['aceptado_at'])) ?>
+                                                        <?php endif; ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <?php if (!$ultimoEnvioDocs): ?>
+                                                <button type="button" id="btn-enviar-documentos-legales" class="btn btn-sm btn-primary" onclick="enviarDocumentosLegalesEmpresa(this)">
+                                                    <i class="bi bi-envelope-fill me-1"></i>Enviar documentos legales
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
+
+                                        <?php if (!$ultimoEnvioDocs): ?>
+                                            <div class="alert alert-secondary py-2 px-3 mb-2" style="font-size: 0.72rem;">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                Aún no se han enviado a esta empresa el <strong>Acuerdo de Uso de Datos</strong> ni el <strong>Contrato de Uso del Sistema</strong>. Puede revisarlos abajo antes de enviarlos, al correo <strong><?= htmlspecialchars($empresa['mail'] ?? '') ?></strong>.
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <div class="table-responsive mb-2">
+                                            <table class="table table-sm mb-0 align-middle" style="font-size: 0.75rem;">
+                                                <tbody>
+                                                    <tr>
+                                                        <td>
+                                                            <i class="bi bi-file-earmark-lock2 me-2 text-muted"></i>Acuerdo de Uso de Datos
+                                                            <?php if ($ultimoEnvioDocs): ?><span class="text-muted">(v<?= (int) ($ultimoEnvioDocs['acuerdo_version'] ?? 0) ?>)</span><?php endif; ?>
+                                                        </td>
+                                                        <td class="text-end">
+                                                            <a href="<?= rtrim(BASE_URL, '/') ?>/config/empresas-sistema?action=descargarDocumentoLegal&id=<?= (int) $id_empresa ?>&tipo=acuerdo_datos" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>Ver PDF</a>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td>
+                                                            <i class="bi bi-file-earmark-text me-2 text-muted"></i>Contrato de Uso del Sistema
+                                                            <?php if ($ultimoEnvioDocs): ?><span class="text-muted">(v<?= (int) ($ultimoEnvioDocs['contrato_version'] ?? 0) ?>)</span><?php endif; ?>
+                                                        </td>
+                                                        <td class="text-end">
+                                                            <a href="<?= rtrim(BASE_URL, '/') ?>/config/empresas-sistema?action=descargarDocumentoLegal&id=<?= (int) $id_empresa ?>&tipo=contrato_uso" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>Ver PDF</a>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <?php if (count($documentosLegales) > 1): ?>
+                                            <details class="mb-3" style="font-size: 0.7rem;">
+                                                <summary class="text-muted" style="cursor: pointer;">Ver envíos anteriores (<?= count($documentosLegales) - 1 ?>)</summary>
+                                                <ul class="list-unstyled mt-2 mb-0 ps-3">
+                                                    <?php foreach (array_slice($documentosLegales, 1) as $ev): ?>
+                                                        <li class="mb-1 text-muted">
+                                                            <?= date('d-m-Y H:i:s', strtotime((string) $ev['enviado_at'])) ?> —
+                                                            <?= ($ev['estado'] ?? '') === 'aceptado' ? 'Aceptado' : 'Enviado (no aceptado)' ?>
+                                                            (v<?= (int) ($ev['acuerdo_version'] ?? 0) ?> / v<?= (int) ($ev['contrato_version'] ?? 0) ?>)
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            </details>
+                                        <?php endif; ?>
+
+                                        <hr class="my-3">
+
+                                        <h6 class="fw-bold mb-3 small text-primary"><i class="bi bi-folder2-open me-2"></i>Otros Documentos Cargados</h6>
+                                        <?php if (empty($documentosEmpresa)): ?>
+                                            <div class="text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>No hay documentos adicionales cargados para esta empresa.</div>
+                                        <?php else: ?>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.75rem;">
+                                                    <thead>
+                                                        <tr class="text-muted">
+                                                            <th class="fw-normal">Tipo</th>
+                                                            <th class="fw-normal">Archivo</th>
+                                                            <th class="fw-normal">Descripción</th>
+                                                            <th class="fw-normal">Fecha</th>
+                                                            <th class="fw-normal text-end">Acción</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php
+                                                        $tiposDocTxt = ['contrato' => 'Contrato', 'ruc' => 'RUC', 'licencia' => 'Licencia', 'poder' => 'Poder', 'otro' => 'Otro'];
+                                                        foreach ($documentosEmpresa as $d):
+                                                            $tipoTxt = $tiposDocTxt[$d['tipo_documento'] ?? 'otro'] ?? 'Otro';
+                                                        ?>
+                                                            <tr>
+                                                                <td><span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size: 0.65rem;"><?= $tipoTxt ?></span></td>
+                                                                <td><?= htmlspecialchars($d['nombre_original'] ?? '') ?></td>
+                                                                <td class="text-muted"><?= htmlspecialchars($d['descripcion'] ?? '') ?></td>
+                                                                <td class="text-muted"><?= !empty($d['fecha_subida']) ? date('d-m-Y H:i:s', strtotime($d['fecha_subida'])) : '-' ?></td>
+                                                                <td class="text-end">
+                                                                    <a href="<?= rtrim(BASE_URL, '/') ?>/config/empresas-sistema?action=descargarDocumento&id=<?= (int) $d['id'] ?>" target="_blank" class="btn btn-sm btn-outline-primary" title="Descargar"><i class="bi bi-download"></i></a>
+                                                                </td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="col-12 mt-4 text-end">
@@ -1804,6 +1940,35 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             reverseButtons: true
         });
         return res.isConfirmed;
+    }
+
+    // ── Documentos Legales: enviar (solo si aún no se han enviado) ────────────
+    async function enviarDocumentosLegalesEmpresa(btn) {
+        if (!await swalConfirm('Se enviará el Acuerdo de Uso de Datos y el Contrato de Uso del Sistema al correo registrado de la empresa.', { titulo: '¿Enviar documentos legales?', confirmText: 'Sí, enviar', confirmColor: '#0d6efd' })) return;
+
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('section', 'enviar_documentos_legales');
+            const res = await fetch(`<?= $base ?>/modulos/empresa/save`, { method: 'POST', body: fd });
+            const json = await res.json();
+
+            if (json.ok) {
+                swalToastOk(json.msg || 'Documentos legales enviados');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                swalError(json.error || 'No se pudieron enviar los documentos legales');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        } catch (err) {
+            swalError('Error de conexión con el servidor');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
     }
 
     // ── Preview logo establecimiento ──────────────────────────────────────────

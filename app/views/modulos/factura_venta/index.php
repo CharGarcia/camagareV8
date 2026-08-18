@@ -1849,6 +1849,7 @@ $totalPages = $totalPagesOriginal;
                 ice_porcentaje: tr.querySelector('.input-ice-pct').value,
                 ice_codigo: tr.querySelector('.input-ice-cod').value,
                 id_medida: tr.querySelector('.input-medida')?.value || null,
+                id_pedido_detalle: tr.querySelector('.input-id-pedido-detalle')?.value || '',
                 impuestos
             });
         });
@@ -3788,6 +3789,8 @@ $totalPages = $totalPagesOriginal;
                 <input type="hidden" class="input-ice-val" value="0">
                 <input type="hidden" class="input-precio-base-original" value="0">
                 <input type="hidden" class="input-factor-original" value="1">
+                <input type="hidden" class="input-id-pedido-detalle" value="">
+
                 <div class="mt-1 container-variante d-none">
                     <select class="form-select form-select-sm input-detalle input-variante" style="font-size:0.7rem; height: 24px; padding: 0 5px;">
                         <option value="">Variantes...</option>
@@ -7667,6 +7670,8 @@ window.fvCancelarPagoNuvei = function(devRef) {
                         var fila = filas[filas.length - 1];
                         if (!fila || typeof window.fvSeleccionarProductoEnFila !== 'function') return;
                         window.fvSeleccionarProductoEnFila(linea.producto, fila);
+                        var inputPedidoDetalle = fila.querySelector('.input-id-pedido-detalle');
+                        if (inputPedidoDetalle) inputPedidoDetalle.value = linea.id_pedido_detalle || '';
                         var inputCantidad = fila.querySelector('.input-cantidad');
                         if (inputCantidad) {
                             inputCantidad.value = linea.cantidad;

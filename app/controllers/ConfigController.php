@@ -50,6 +50,8 @@ class ConfigController extends Controller
             'copiarPermisos' => 'copiarPermisos',
             'usuariosJson' => 'usuariosJson',
             'empresasJson' => 'empresasJson',
+            'asignarEmpresa' => 'asignarEmpresa',
+            'empresasAsignablesJson' => 'empresasAsignablesJson',
             default => 'index',
         };
         if (method_exists($c, $method)) {
@@ -1078,8 +1080,15 @@ class ConfigController extends Controller
                 $this->redirect($targetUrl);
             };
 
-            if ($nombre === '' || $correo === '') {
-                $fallar('Nombre y correo son obligatorios.');
+            if ($correo === '') {
+                $fallar('El correo es obligatorio.');
+            }
+            // El nombre es opcional: el modal de Permisos de módulos solo pide correo y
+            // empresa. Se guarda un nombre provisional tomado del correo; el usuario
+            // escribe su nombre real al completar el registro.
+            if ($nombre === '') {
+                $nombre = trim((string) strstr($correo, '@', true));
+                if ($nombre === '') $nombre = $correo;
             }
 
             // Empresas a asignar al nuevo usuario (solo cuando el formulario las envía,
@@ -1091,26 +1100,76 @@ class ConfigController extends Controller
             if (!empty($idsEmpresasPost)) {
                 $modelAsignadaEmp = new \App\models\EmpresaAsignada();
                 if ($nivel >= 3) {
-                    $permitidas = array_column($modelAsignadaEmp->getTodasEmpresasParaSelect(), 'id_empresa');
+                    // Cualquier empresa activa. Se comprueba una por una para no depender
+                    // del límite con que se lista el catálogo de empresas.
+                    $idsEmpresasValidas = array_values(array_filter(
+                        $idsEmpresasPost,
+                        fn($id) => $modelAsignadaEmp->getEmpresaActivaPorId((int) $id) !== null
+                    ));
                 } else {
-                    $permitidas = array_column($modelAsignadaEmp->getEmpresasDeUsuario($idAdmin), 'id_empresa');
+                    $permitidas = array_map('intval', array_column($modelAsignadaEmp->getEmpresasDeUsuario($idAdmin), 'id_empresa'));
+                    $idsEmpresasValidas = array_values(array_intersect($idsEmpresasPost, $permitidas));
                 }
-                $permitidas = array_map('intval', $permitidas);
-                $idsEmpresasValidas = array_values(array_intersect($idsEmpresasPost, $permitidas));
                 if (empty($idsEmpresasValidas)) {
                     $fallar('Las empresas seleccionadas no son válidas para su usuario.');
                 }
             }
 
-            // Validar límite de usuarios por empresa para admins (nivel < 3)
+            // Formularios que exigen empresa (modal de Permisos de módulos): sin empresa
+            // el usuario quedaría creado pero sin poder entrar a ningún lado.
+            if (!empty($_POST['empresa_requerida']) && empty($idsEmpresasValidas)) {
+                $fallar('Seleccione la empresa que se le asignará al usuario.');
+            }
+
+            // Validar límite de usuarios por empresa para admins (nivel < 3). Se valida
+            // la empresa que se va a asignar (el formulario ya permite elegirla); si el
+            // formulario no manda ninguna, se cae a la empresa activa como antes.
             if ($nivel < 3) {
-                $idEmpresaActual = (int) ($_SESSION['id_empresa'] ?? 0);
-                if ($idEmpresaActual > 0) {
-                    $modelAsignada = new \App\models\EmpresaAsignada();
-                    $limite = $modelAsignada->getLimiteUsuariosEmpresa($idEmpresaActual);
-                    if ($limite['actual'] >= $limite['max']) {
-                        $fallar("Ha alcanzado el límite de {$limite['max']} usuario(s) permitidos para esta empresa. Contacte al super administrador para ampliar el límite.");
+                $modelAsignada = new \App\models\EmpresaAsignada();
+                $empresasLimite = !empty($idsEmpresasValidas)
+                    ? $idsEmpresasValidas
+                    : array_filter([(int) ($_SESSION['id_empresa'] ?? 0)]);
+                // Si el correo es de un usuario que ya existe, las empresas que ya tiene
+                // no suman un cupo nuevo y no deben bloquear por límite.
+                $idUsuarioExistente = 0;
+                if (!empty($_POST['asignar_si_existe'])) {
+                    $yaRegistrado = (new ModelUsuario())->getUsuarioActivoPorCorreo($correo);
+                    $idUsuarioExistente = (int) ($yaRegistrado['id'] ?? 0);
+                }
+                foreach ($empresasLimite as $idEmpLimite) {
+                    if ($idUsuarioExistente > 0
+                        && $modelAsignada->estaEmpresaAsignada((int) $idEmpLimite, $idUsuarioExistente)) {
+                        continue;
                     }
+                    $limite = $modelAsignada->getLimiteUsuariosEmpresa((int) $idEmpLimite);
+                    if ($limite['actual'] >= $limite['max']) {
+                        $emp = $modelAsignada->getEmpresaActivaPorId((int) $idEmpLimite);
+                        $nombreEmp = $emp['nombre_comercial'] ?? ('la empresa #' . (int) $idEmpLimite);
+                        $fallar("{$nombreEmp} alcanzó el límite de {$limite['max']} usuario(s). Contacte al super administrador para ampliar el límite.");
+                    }
+                }
+            }
+
+            // Correo ya registrado: no se crea nada ni se reenvía la invitación, solo se
+            // asigna la empresa al usuario que ya existe para poder darle permisos.
+            // Solo cuando el formulario lo pide (asignar_si_existe), para no cambiar el
+            // comportamiento de las demás pantallas que crean usuarios.
+            if (!empty($_POST['asignar_si_existe'])) {
+                $resultadoExistente = $this->asignarUsuarioExistente(
+                    $correo,
+                    $idsEmpresasValidas,
+                    $idAdmin,
+                    $nivel
+                );
+                if ($resultadoExistente !== null) {
+                    if (!empty($resultadoExistente['error'])) {
+                        $fallar($resultadoExistente['error']);
+                    }
+                    if ($esAjax) {
+                        $this->json($resultadoExistente);
+                    }
+                    $_SESSION[$msgKey] = ['success', $resultadoExistente['msg']];
+                    $this->redirect($targetUrl);
                 }
             }
 
@@ -1139,7 +1198,13 @@ class ConfigController extends Controller
 
                 $msgExito = 'Usuario creado. Se ha enviado un correo a ' . $correo . ' para que complete su registro.';
                 if ($esAjax) {
-                    $this->json(['ok' => true, 'msg' => $msgExito]);
+                    $this->json([
+                        'ok'         => true,
+                        'msg'        => $msgExito,
+                        'id_usuario' => (int) $idNuevo,
+                        'id_empresa' => (int) ($idsEmpresasValidas[0] ?? 0),
+                        'ya_existia' => false,
+                    ]);
                 }
                 $_SESSION[$msgKey] = ['success', $msgExito];
                 $this->redirect($targetUrl);
@@ -1153,6 +1218,92 @@ class ConfigController extends Controller
         $this->redirect(BASE_URL . '/config/permisos-modulos');
     }
 
+    /**
+     * Correo ya registrado en el sistema: no se crea otro usuario ni se reenvía la
+     * invitación; solo se le asigna la empresa para poder darle permisos ahí mismo.
+     *
+     * Devuelve null si el correo no corresponde a ningún usuario (sigue el alta
+     * normal), o un arreglo con el resultado listo para responder.
+     */
+    private function asignarUsuarioExistente(string $correo, array $idsEmpresas, int $idAdmin, int $nivel): ?array
+    {
+        $modelUsuario = new ModelUsuario();
+        $existente = $modelUsuario->getUsuarioActivoPorCorreo($correo);
+
+        if (!$existente) {
+            // Puede existir pero inactivo o eliminado: no se puede continuar, pero
+            // tampoco crear otro usuario con el mismo correo.
+            if ($modelUsuario->existePorCorreo($correo)) {
+                return ['ok' => false, 'error' => 'Ya existe un usuario con ese correo, pero está inactivo. Actívelo desde Usuarios del sistema.'];
+            }
+            return null;
+        }
+
+        $idExistente = (int) ($existente['id'] ?? 0);
+        $nivelExistente = (int) ($existente['nivel'] ?? 1);
+
+        if ($idExistente <= 0) {
+            return null;
+        }
+        if ($nivelExistente >= 3) {
+            return ['ok' => false, 'error' => 'Ese correo es de un superadministrador: ya accede a todas las empresas, no necesita asignación.'];
+        }
+        if (empty($idsEmpresas)) {
+            return ['ok' => false, 'error' => 'Ya existe un usuario con ese correo. Seleccione la empresa que desea asignarle.'];
+        }
+
+        $modelEmpresa = new \App\models\EmpresaAsignada();
+        $asignadas = [];
+        $yaTenia = [];
+
+        foreach ($idsEmpresas as $idEmp) {
+            $idEmp = (int) $idEmp;
+            if ($idEmp <= 0) continue;
+            if ($modelEmpresa->estaEmpresaAsignada($idEmp, $idExistente)) {
+                $yaTenia[] = $idEmp;
+                continue;
+            }
+            if ($modelEmpresa->asignar($idEmp, $idExistente, $idAdmin)) {
+                $asignadas[] = $idEmp;
+                try {
+                    (new \App\Services\LogSistemaService())->registrar(
+                        $idAdmin,
+                        $idEmp,
+                        'asignar_empresa_usuario',
+                        'empresa_asignada',
+                        null,
+                        null,
+                        [
+                            'id_usuario' => $idExistente,
+                            'id_empresa' => $idEmp,
+                            'origen'     => 'crear-usuario-correo-existente',
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    // La auditoría no debe bloquear la operación.
+                }
+            }
+        }
+
+        // El administrador debe poder gestionar después a ese usuario.
+        $modelUsuario->agregarAUsuarioAsignado($idExistente, $idAdmin);
+
+        $idEmpresaFoco = (int) ($asignadas[0] ?? $yaTenia[0] ?? 0);
+        $empresaFoco = $idEmpresaFoco > 0 ? $modelEmpresa->getEmpresaActivaPorId($idEmpresaFoco) : null;
+        $nombreEmpresa = $empresaFoco['nombre_comercial'] ?? 'la empresa seleccionada';
+
+        $msg = empty($asignadas)
+            ? 'El usuario ya existe en el sistema y ya tenía asignada ' . $nombreEmpresa . '. Asígnele los módulos y permisos.'
+            : 'El usuario ya existe en el sistema y fue asignado a ' . $nombreEmpresa . '. Ahora asígnele los módulos y permisos.';
+
+        return [
+            'ok'         => true,
+            'msg'        => $msg,
+            'id_usuario' => $idExistente,
+            'id_empresa' => $idEmpresaFoco,
+            'ya_existia' => true,
+        ];
+    }
     /**
      * RUC del proveedor del sistema de facturación (Res. NAC-DGERCGC26-00000027).
      * Config GLOBAL (tabla configuracion_sistema), solo nivel 3. GET muestra la

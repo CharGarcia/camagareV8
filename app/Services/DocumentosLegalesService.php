@@ -11,7 +11,12 @@ use App\Services\LogSistemaService;
  * Lógica de negocio de los documentos legales (Acuerdo de uso de datos y
  * Contrato de uso del sistema).
  *
- * - Se envían automáticamente al CREAR una empresa.
+ * - NO se envían automáticamente al crear una empresa: quedan en estado
+ *   "Sin enviar" (sin fila en empresas_documentos_envios) hasta que se
+ *   envíen manualmente desde el listado de empresas-sistema.
+ * - Sí se envían automáticamente al primer guardado de una empresa migrada
+ *   marcada con notificacion_pendiente (ver EmpresasSistemaController::
+ *   enviarNotificacionesPendientes()).
  * - Se pueden reenviar manualmente a empresas ya existentes.
  * - La aceptación se registra por token con fecha, IP y navegador (evidencia).
  *

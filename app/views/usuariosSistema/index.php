@@ -180,10 +180,6 @@ $rowsHtml = $rowsHtml ?? '';
                 <div class="modal-body">
                     <p class="text-muted small mb-3">Se enviará un correo al nuevo usuario para que complete su registro y defina su contraseña.</p>
                     <div class="mb-3">
-                        <label for="crear-nombre" class="form-label">Nombre</label>
-                        <input type="text" id="crear-nombre" name="nombre" class="form-control" required placeholder="Nombre completo">
-                    </div>
-                    <div class="mb-3">
                         <label for="crear-correo" class="form-label">Correo electrónico</label>
                         <input type="email" id="crear-correo" name="correo" class="form-control" required placeholder="correo@ejemplo.com">
                     </div>
@@ -380,7 +376,7 @@ $rowsHtml = $rowsHtml ?? '';
                     <div class="tab-pane fade" id="pane-restablecer" role="tabpanel">
                         <p class="text-muted small">Se enviará un correo al usuario con un enlace para restablecer su contraseña.</p>
                         <p class="small mb-2"><strong>Correo de envío:</strong> <span id="correo-restablecer-actual" class="text-primary"></span></p>
-                        <p class="small text-info mb-2 d-none" id="correo-restablecer-aviso">Si modificó el correo en la pestaña General, se enviará al nuevo correo configurado.</p>
+                        <p class="small text-warning-emphasis mb-2 d-none" id="correo-restablecer-aviso"><i class="bi bi-exclamation-circle"></i> Modificó el correo en la pestaña General y aún no lo guarda: el envío irá al correo guardado. Guarde el cambio si quiere usar el nuevo.</p>
                         <button type="button" class="btn btn-warning" id="btn-enviar-restablecer">
                             <i class="bi bi-envelope"></i> Enviar correo para restablecer contraseña
                         </button>
@@ -416,11 +412,14 @@ $rowsHtml = $rowsHtml ?? '';
         var idUsuario = 0;
         var mailOriginal = '';
 
+        // El enlace de recuperación se valida cruzando correo + token, así que solo
+        // funciona con el correo GUARDADO. Si se cambió el correo y no se ha guardado,
+        // se avisa en lugar de prometer un envío a una dirección que no serviría.
         function actualizarCorreoRestablecer() {
-            var actual = document.getElementById('edit-mail').value.trim();
-            document.getElementById('correo-restablecer-actual').textContent = actual || '(sin correo)';
+            var enFormulario = document.getElementById('edit-mail').value.trim();
+            document.getElementById('correo-restablecer-actual').textContent = mailOriginal || '(sin correo)';
             var aviso = document.getElementById('correo-restablecer-aviso');
-            if (actual && mailOriginal !== '' && actual !== mailOriginal) {
+            if (enFormulario !== '' && mailOriginal !== '' && enFormulario !== mailOriginal) {
                 aviso.classList.remove('d-none');
             } else {
                 aviso.classList.add('d-none');
@@ -444,9 +443,11 @@ $rowsHtml = $rowsHtml ?? '';
                 chkAppMovil.checked = el.dataset.puedeAppMovil === '1';
             }
 
-            var token = el.dataset.token || '';
+            // Por estado de registro, no por token: enviar un correo de restablecimiento
+            // le graba un token nuevo a un usuario YA registrado, y con eso el bloque
+            // aparecía en usuarios que no admiten invitación (el backend la rechaza).
             var secResend = document.getElementById('section-reenviar-invitacion');
-            if (token !== '') {
+            if (el.dataset.registrado === '0') {
                 secResend.classList.remove('d-none');
             } else {
                 secResend.classList.add('d-none');
@@ -926,9 +927,7 @@ $rowsHtml = $rowsHtml ?? '';
         document.getElementById('btn-enviar-restablecer').addEventListener('click', function() {
             var btn = this;
             var msgDiv = document.getElementById('msg-restablecer');
-            var nombre = document.getElementById('info-nombre').textContent;
-            var correo = document.getElementById('edit-mail').value.trim();
-            if (!correo) {
+            if (!mailOriginal) {
                 msgDiv.textContent = 'El usuario no tiene correo registrado.';
                 msgDiv.className = 'form-text mt-2 text-danger';
                 return;
@@ -936,10 +935,9 @@ $rowsHtml = $rowsHtml ?? '';
             btn.disabled = true;
             msgDiv.textContent = 'Enviando...';
             msgDiv.className = 'form-text mt-2';
+            // Solo el id: el servidor toma el correo guardado del usuario.
             var formData = new FormData();
             formData.append('id_user', idUsuario);
-            formData.append('nombre', nombre);
-            formData.append('correo', correo);
             fetch(urlRecuperar, {
                     method: 'POST',
                     body: formData,

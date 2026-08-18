@@ -151,6 +151,15 @@ $base = BASE_URL;
             </h2>
             <div id="collapseGeneral" class="accordion-collapse collapse" aria-labelledby="headingGeneral" data-bs-parent="#acordeonConfiguracion">
                 <div class="accordion-body p-0 border-top bg-white">
+                    <!-- Rellena de una sola vez los conceptos sin cuenta con las del plan modelo -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-light">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnConfigurarSugeridas">
+                            <i class="bi bi-magic me-1"></i> Configurar cuentas sugeridas
+                        </button>
+                        <small class="text-muted">
+                            Asigna las cuentas del <b>plan de cuentas modelo</b> a los conceptos que están <b>sin cuenta</b>. No modifica los que ya tienen una.
+                        </small>
+                    </div>
                     <!-- Vista de dos columnas (Debe | Haber): ventas, compras y demás conceptos con naturaleza fija -->
                     <div id="dosColumnasGeneral" class="p-3" style="display:none;">
                         <div class="row g-3">

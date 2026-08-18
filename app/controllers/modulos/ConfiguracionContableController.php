@@ -480,6 +480,55 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Rellena con las cuentas sugeridas por el plan modelo todos los conceptos que estén SIN
+     * configurar (tipos de asiento, IVA por tarifa, formas de cobro/pago y opciones de
+     * ingreso/egreso). No sobrescribe ninguna cuenta ya asignada ni toca el plan de cuentas.
+     */
+    public function configurarSugeridasAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $planService = new \App\Services\modulos\PlanCuentaService(
+                new \App\repositories\modulos\PlanCuentaRepository(),
+                new \App\Rules\modulos\PlanCuentaRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $r = $planService->configurarCuentasSugeridas($idEmpresa, $idUsuario);
+
+            if ($r['configuradas'] === 0) {
+                $msg = $r['respetadas'] > 0
+                    ? "No había nada pendiente: los {$r['respetadas']} conceptos que cubre el plan modelo ya tienen cuenta."
+                    : 'No se encontró ninguna cuenta del plan modelo en el plan de esta empresa.';
+            } else {
+                $msg = "Se configuraron {$r['configuradas']} concepto(s).";
+                if ($r['respetadas'] > 0) {
+                    $msg .= " Se respetaron {$r['respetadas']} que ya tenían cuenta.";
+                }
+            }
+            if (!empty($r['omitidas'])) {
+                $msg .= ' Quedaron ' . count($r['omitidas']) . ' sin asignar porque su cuenta no existe en el plan de la empresa.';
+            }
+
+            echo json_encode([
+                'ok'           => true,
+                'msg'          => $msg,
+                'configuradas' => $r['configuradas'],
+                'respetadas'   => $r['respetadas'],
+                'omitidas'     => $r['omitidas'],
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Elimina lógicamente una regla de cuenta contable general al vuelo
      */
     public function eliminarReglaGeneralAjax(): void

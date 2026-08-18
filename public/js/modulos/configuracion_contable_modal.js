@@ -1565,4 +1565,57 @@
         }
     });
 
+    // ── Configurar cuentas sugeridas por el plan modelo (solo los conceptos sin cuenta) ──
+    const btnSugeridas = document.getElementById('btnConfigurarSugeridas');
+    if (btnSugeridas) {
+        btnSugeridas.addEventListener('click', async function () {
+            const confirmar = window.Swal
+                ? (await Swal.fire({
+                    title: 'Configurar cuentas sugeridas',
+                    html: 'Se asignarán las cuentas del <b>plan de cuentas modelo</b> a los conceptos que estén <b>sin cuenta</b>: tipos de asiento de ventas, recibos, compras y nómina, IVA por tarifa, cierre del ejercicio, formas de cobro/pago y opciones de ingreso/egreso.'
+                        + '<br><br>Las cuentas ya configuradas <b>no se modifican</b>, y el plan de cuentas no se toca.',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, configurar',
+                    cancelButtonText: 'Cancelar'
+                })).isConfirmed
+                : confirm('¿Asignar las cuentas del plan modelo a los conceptos sin cuenta?');
+
+            if (!confirmar) return;
+
+            const textoOriginal = btnSugeridas.innerHTML;
+            btnSugeridas.disabled = true;
+            btnSugeridas.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Configurando...';
+
+            try {
+                const resp = await fetch(`${API_PROG}/configurarSugeridasAjax`, { method: 'POST' });
+                const res = await resp.json();
+
+                if (res.ok) {
+                    let html = res.msg;
+                    if (res.omitidas && res.omitidas.length) {
+                        html += '<br><br><small class="text-muted">Sin asignar (esa cuenta no existe en el plan de la empresa):<br>'
+                            + res.omitidas.map(o => '• ' + o).join('<br>') + '</small>';
+                    }
+                    if (window.Swal) {
+                        await Swal.fire({
+                            title: res.configuradas > 0 ? '¡Listo!' : 'Sin cambios',
+                            html: html,
+                            icon: res.configuradas > 0 ? 'success' : 'info'
+                        });
+                    }
+                    if (res.configuradas > 0) location.reload();
+                } else {
+                    if (window.Swal) Swal.fire('Error', res.error || 'No se pudo configurar.', 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                if (window.Swal) Swal.fire('Error', 'Error de conexión.', 'error');
+            } finally {
+                btnSugeridas.disabled = false;
+                btnSugeridas.innerHTML = textoOriginal;
+            }
+        });
+    }
+
 })();

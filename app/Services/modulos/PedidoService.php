@@ -4,6 +4,7 @@ namespace App\Services\Modulos;
 
 use App\Repositories\Modulos\PedidoRepository;
 use App\Services\BloqueoEdicionService;
+use App\Services\LogSistemaService;
 use App\Services\SecuencialService;
 use App\core\Database;
 use Exception;
@@ -16,11 +17,13 @@ class PedidoService {
     private $repository;
     private $db;
     private BloqueoEdicionService $bloqueoService;
+    private LogSistemaService $logService;
 
     public function __construct() {
         $this->repository = new PedidoRepository();
         $this->db = Database::getConnection();
         $this->bloqueoService = new BloqueoEdicionService();
+        $this->logService = new LogSistemaService();
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array {
@@ -119,10 +122,14 @@ class PedidoService {
                 }
 
                 $id_pedido = $stmt->fetchColumn();
+
+                $this->logService->registrar($id_usuario, $id_empresa, 'CREAR_PEDIDO', 'pedidos_cabecera', (int) $id_pedido, null, $cabecera);
             } else {
                 // Actualizar Pedido
                 $id_pedido = $cabecera['id'];
-                $sql = "UPDATE pedidos_cabecera SET 
+                $cabeceraAnterior = $this->repository->obtenerPorId((int) $id_pedido, $id_empresa);
+
+                $sql = "UPDATE pedidos_cabecera SET
                         id_cliente = :id_cliente, 
                         fecha_pedido = :fecha_pedido, 
                         observaciones = :observaciones,
@@ -162,17 +169,18 @@ class PedidoService {
                     'id_empresa' => $id_empresa
                 ]);
 
-                // Eliminar detalles anteriores (Lógica de reemplazo en edición)
-                $sqlDelDet = "UPDATE pedidos_detalle SET eliminado = true 
-                             WHERE id_pedido = :id_pedido";
-                $this->db->prepare($sqlDelDet)->execute(['id_pedido' => $id_pedido]);
+                $this->logService->registrar($id_usuario, $id_empresa, 'ACTUALIZAR_PEDIDO', 'pedidos_cabecera', (int) $id_pedido, $cabeceraAnterior ?: null, $cabecera);
+
+                $this->sincronizarDetalles((int) $id_pedido, $id_empresa, $detalles);
+                $this->db->commit();
+                return $id_pedido;
             }
 
-            // Insertar Detalles
-            $sqlDet = "INSERT INTO pedidos_detalle 
+            // Insertar Detalles (pedido nuevo: no hay nada que proteger todavía)
+            $sqlDet = "INSERT INTO pedidos_detalle
                        (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total)
                        VALUES (:id_pedido, :id_producto, :cantidad, :precio, :subtotal, :iva, :total)";
-            
+
             $stmtDet = $this->db->prepare($sqlDet);
 
             foreach ($detalles as $det) {
@@ -196,6 +204,93 @@ class PedidoService {
         }
     }
 
+    /**
+     * Reemplaza el detalle de un pedido EXISTENTE respetando lo ya consumido por
+     * una Consignación de Venta o Factura de Venta (§ verificado con el usuario):
+     * las líneas ya registradas en otro documento se actualizan en su lugar
+     * (conservan su id, nunca se borran-y-reinsertan) y no se puede quitarlas ni
+     * reducir su cantidad por debajo de lo ya consumido. Las líneas realmente
+     * nuevas (sin id) se insertan; las que el usuario quitó y NO tenían consumo
+     * se dan de baja lógica normalmente.
+     */
+    private function sincronizarDetalles(int $id_pedido, int $id_empresa, array $detallesNuevos): void {
+        $existentes = $this->repository->obtenerDetalles($id_pedido, $id_empresa);
+        $consumo = $this->repository->getCantidadConsumidaPorDetalle(array_column($existentes, 'id'));
+
+        // Líneas nuevas que traen un id de pedidos_detalle real (edición in-situ).
+        $porId = [];
+        foreach ($detallesNuevos as $det) {
+            $idDet = (int) ($det['id'] ?? 0);
+            if ($idDet > 0) {
+                $porId[$idDet] = $det;
+            }
+        }
+
+        $stmtUpdate = $this->db->prepare(
+            "UPDATE pedidos_detalle SET id_producto = :id_producto, cantidad = :cantidad,
+                precio_unitario = :precio, subtotal = :subtotal, iva = :iva, total = :total
+             WHERE id = :id"
+        );
+        $stmtBaja = $this->db->prepare("UPDATE pedidos_detalle SET eliminado = true WHERE id = :id");
+
+        foreach ($existentes as $existente) {
+            $idExistente = (int) $existente['id'];
+            $consumida = (float) ($consumo[$idExistente] ?? 0);
+            $nombre = $existente['producto_nombre'] ?? ('producto #' . $existente['id_producto']);
+
+            if (!isset($porId[$idExistente])) {
+                // El usuario quitó esta línea del formulario.
+                if ($consumida > 0.0001) {
+                    throw new Exception("No se puede quitar \"{$nombre}\" del pedido: ya tiene {$consumida} registrado en una consignación o factura.");
+                }
+                $stmtBaja->execute(['id' => $idExistente]);
+                continue;
+            }
+
+            $nuevo = $porId[$idExistente];
+            unset($porId[$idExistente]);
+
+            if ($consumida > 0.0001 && (int) $nuevo['id_producto'] !== (int) $existente['id_producto']) {
+                throw new Exception("No se puede cambiar el producto de \"{$nombre}\": ya tiene {$consumida} registrado en una consignación o factura.");
+            }
+
+            $nuevaCantidad = (float) ($nuevo['cantidad'] ?? 0);
+            if ($nuevaCantidad < $consumida - 0.0001) {
+                throw new Exception("No se puede reducir la cantidad de \"{$nombre}\" a {$nuevaCantidad}: ya tiene {$consumida} registrado en una consignación o factura.");
+            }
+
+            $stmtUpdate->execute([
+                'id_producto' => $nuevo['id_producto'],
+                'cantidad' => $nuevaCantidad,
+                'precio' => $nuevo['precio_unitario'] ?? 0,
+                'subtotal' => $nuevo['subtotal'] ?? 0,
+                'iva' => $nuevo['iva'] ?? 0,
+                'total' => $nuevo['total'] ?? 0,
+                'id' => $idExistente,
+            ]);
+        }
+
+        $stmtIns = $this->db->prepare(
+            "INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total)
+             VALUES (:id_pedido, :id_producto, :cantidad, :precio, :subtotal, :iva, :total)"
+        );
+        foreach ($detallesNuevos as $det) {
+            $idDet = (int) ($det['id'] ?? 0);
+            if ($idDet > 0) {
+                continue; // ya se procesó como actualización arriba (o se ignoró un id ajeno a este pedido)
+            }
+            $stmtIns->execute([
+                'id_pedido' => $id_pedido,
+                'id_producto' => $det['id_producto'],
+                'cantidad' => $det['cantidad'],
+                'precio' => $det['precio_unitario'] ?? 0,
+                'subtotal' => $det['subtotal'] ?? 0,
+                'iva' => $det['iva'] ?? 0,
+                'total' => $det['total'] ?? 0,
+            ]);
+        }
+    }
+
     public function eliminarPedido($id, $id_empresa, $id_usuario) {
         $enUso = $this->bloqueoService->verificarLibreOPropio(self::TABLA_BLOQUEO, (int) $id, $id_empresa, $id_usuario);
         if ($enUso !== null) {
@@ -205,13 +300,24 @@ class PedidoService {
         try {
             $this->db->beginTransaction();
 
-            $sql = "UPDATE pedidos_cabecera SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :user 
+            $cabeceraAnterior = $this->repository->obtenerPorId((int) $id, $id_empresa);
+
+            $detalles = $this->repository->obtenerDetalles((int) $id, $id_empresa);
+            $consumo = $this->repository->getCantidadConsumidaPorDetalle(array_column($detalles, 'id'));
+            $totalConsumido = array_sum($consumo);
+            if ($totalConsumido > 0.0001) {
+                throw new Exception("No se puede eliminar este pedido: tiene ítems ya registrados en una consignación o factura ({$totalConsumido} unidad(es) en total).");
+            }
+
+            $sql = "UPDATE pedidos_cabecera SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :user
                     WHERE id = :id AND id_empresa = :id_empresa";
             $this->db->prepare($sql)->execute(['user' => $id_usuario, 'id' => $id, 'id_empresa' => $id_empresa]);
 
-            $sqlDet = "UPDATE pedidos_detalle SET eliminado = true 
+            $sqlDet = "UPDATE pedidos_detalle SET eliminado = true
                        WHERE id_pedido = :id";
             $this->db->prepare($sqlDet)->execute(['id' => $id]);
+
+            $this->logService->registrar($id_usuario, $id_empresa, 'ELIMINAR_PEDIDO', 'pedidos_cabecera', (int) $id, $cabeceraAnterior ?: null);
 
             $this->db->commit();
             return true;

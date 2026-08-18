@@ -313,10 +313,25 @@ class PedidosController extends BaseModuloController {
                 exit;
             }
 
+            // Cuánto de cada línea ya se registró en una Consignación o Factura previa
+            // (§ control de consumo): se factura solo lo que falta, no la cantidad
+            // original completa, para no duplicar lo que ya salió por otro documento.
+            $consumo = $this->repository->getCantidadConsumidaPorDetalle(array_column($detalles, 'id'));
+
             $productoRepo = new \App\repositories\modulos\ProductoRepository();
             $lineas = [];
             $advertencias = [];
             foreach ($detalles as $d) {
+                $idDetalle = (int) $d['id'];
+                $cantidadOriginal = (float) $d['cantidad'];
+                $consumida = (float) ($consumo[$idDetalle] ?? 0);
+                $cantidadDisponible = round($cantidadOriginal - $consumida, 4);
+
+                if ($cantidadDisponible <= 0.0001) {
+                    $advertencias[] = 'El producto "' . ($d['producto_nombre'] ?? '') . '" ya está completamente registrado en otra consignación o factura y se omitió.';
+                    continue;
+                }
+
                 $idProducto = (int) ($d['id_producto'] ?? 0);
                 $producto = $idProducto ? $productoRepo->getPorId($idProducto, $idEmpresa) : null;
                 if (!$producto) {
@@ -325,7 +340,10 @@ class PedidosController extends BaseModuloController {
                 }
                 $producto['precios_lista'] = $productoRepo->getPrecios($idProducto, $idEmpresa);
                 $producto['variantes']     = $productoRepo->getVariantes($idProducto, $idEmpresa);
-                $lineas[] = ['producto' => $producto, 'cantidad' => (float) $d['cantidad']];
+                if ($consumida > 0.0001) {
+                    $advertencias[] = 'El producto "' . $producto['nombre'] . '" ya tiene ' . $consumida . ' registrado en otra consignación o factura; se prellenó solo el saldo (' . $cantidadDisponible . ').';
+                }
+                $lineas[] = ['producto' => $producto, 'cantidad' => $cantidadDisponible, 'id_pedido_detalle' => $idDetalle];
             }
 
             if (empty($lineas)) {
@@ -461,6 +479,14 @@ class PedidosController extends BaseModuloController {
             $pedido = $this->repository->obtenerPorId($id, $_SESSION['id_empresa']);
             $detalles = $this->repository->obtenerDetalles($id, $_SESSION['id_empresa']);
 
+            // Cuánto de cada línea ya está registrado en una Consignación o Factura
+            // (no se puede quitar/reducir esa línea; la vista lo marca "Registrado").
+            $consumo = $this->repository->getCantidadConsumidaPorDetalle(array_column($detalles, 'id'));
+            foreach ($detalles as &$d) {
+                $d['cantidad_consumida'] = (float) ($consumo[(int) $d['id']] ?? 0);
+            }
+            unset($d);
+
             $this->json([
                 'status' => true,
                 'data' => [
@@ -471,6 +497,25 @@ class PedidosController extends BaseModuloController {
         } catch (Exception $e) {
             $this->json(['status' => false, 'message' => $e->getMessage()]);
         }
+    }
+
+    /** Historial de documentos (Consignación/Factura) que consumieron una línea del pedido. */
+    public function historialDetalleAjax(): void {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $idDetalle = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+            if (!$idDetalle) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+                exit;
+            }
+            $historial = $this->repository->getHistorialConsumoDetalle($idDetalle, (int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true, 'data' => $historial]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al obtener el historial: ' . $e->getMessage()]);
+        }
+        exit;
     }
 
     /**

@@ -307,15 +307,16 @@ class EmpresasSistemaController extends Controller
                 $usuarioOk  = $res['ok'];
             }
 
-            // Envío automático de los documentos legales (acuerdo de datos +
-            // contrato de uso). No interrumpe la creación si falla el correo.
-            $errDocs = (new \App\Services\DocumentosLegalesService())->enviarAEmpresaSinFallar($id, $idUsuario);
-            $msgOk = $errDocs === null
-                ? 'Empresa creada correctamente. Se enviaron los documentos legales a ' . ($data['mail'] ?? 'su correo') . '.'
-                : 'Empresa creada correctamente, pero NO se pudieron enviar los documentos legales: ' . $errDocs;
+            // Los documentos legales (acuerdo de datos + contrato de uso) ya NO se
+            // envían automáticamente al crear la empresa: quedan en estado "Sin
+            // enviar" en el listado (getEstadoPorEmpresa devuelve null porque no
+            // hay fila en empresas_documentos_envios) hasta que se envíen
+            // manualmente con el botón de sobre, igual que a cualquier empresa
+            // existente que aún no los tiene enviados.
+            $msgOk = 'Empresa creada correctamente. Los documentos legales quedan pendientes de envío.';
             $msgOk .= $msgUsuario;
 
-            $_SESSION['empresas_msg'] = [($errDocs === null && $usuarioOk) ? 'success' : 'warning', $msgOk];
+            $_SESSION['empresas_msg'] = [$usuarioOk ? 'success' : 'warning', $msgOk];
             if ($esAjax) {
                 $this->json(['ok' => true, 'msg' => $msgOk]);
                 return;

@@ -229,13 +229,13 @@ $base = BASE_URL;
                 if (data.status === 'success') {
                     msgDiv.textContent = 'Enviando correo...';
                     msgDiv.className = 'form-text text-muted';
-                    enviarCorreo(data.id_user, data.nombre, correo, msgDiv, modal).finally(function() {
+                    enviarCorreo(correo, msgDiv, modal).finally(function() {
                         btnEnviar.disabled = false;
                         spinner.classList.add('d-none');
                         textoEnviar.textContent = 'Enviar';
                     });
                 } else {
-                    msgDiv.textContent = data.message || 'No se encontró el correo en el sistema.';
+                    msgDiv.textContent = data.message || 'No se pudo procesar la solicitud.';
                     msgDiv.className = 'form-text text-danger';
                     btnEnviar.disabled = false;
                     spinner.classList.add('d-none');
@@ -251,10 +251,10 @@ $base = BASE_URL;
             });
         });
 
-        function enviarCorreo(idUser, nombre, correo, msgEl, modalEl) {
+        // Solo se envía el correo: el servidor resuelve el usuario y manda el enlace a
+        // la dirección que tiene guardada. El navegador no elige el destinatario.
+        function enviarCorreo(correo, msgEl, modalEl) {
             var formData = new FormData();
-            formData.append('id_user', idUser);
-            formData.append('nombre', nombre);
             formData.append('correo', correo);
             return fetch(urlEnviar, {
                 method: 'POST',
@@ -269,7 +269,7 @@ $base = BASE_URL;
             .catch(function() { return {}; })
             .then(function(res) {
                 if (res && res.ok === true) {
-                    msgEl.textContent = 'Revisa tu correo (y carpeta de spam) para restablecer la contraseña.';
+                    msgEl.textContent = res.msg || 'Revisa tu correo (y carpeta de spam) para restablecer la contraseña.';
                     msgEl.className = 'form-text text-success';
                     setTimeout(function() { if (modalEl) modalEl.hide(); }, 2500);
                 } else {

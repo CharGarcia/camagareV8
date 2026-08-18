@@ -8,6 +8,9 @@ use PDO;
 class PedidoRepository {
     private $db;
 
+    /** Caché por request: ¿existe ventas_detalle.id_pedido_detalle? (migración database/agregar_id_pedido_detalle_ventas.sql). */
+    private ?bool $columnaVentasDetalleExiste = null;
+
     public const COLUMNAS_ORDEN = [
         'numero_pedido', 'establecimiento', 'punto_emision', 'secuencial', 'fecha_pedido', 'cliente_nombre',
         'fecha_entrega', 'rango_horario', 'responsable_entrega',
@@ -149,6 +152,114 @@ class PedidoRepository {
                 AND d.eliminado = false";
         $stmt = $this->db->prepare($sql);
         $stmt->execute(['id_pedido' => $id_pedido]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** ¿Ya se desplegó la migración que agrega ventas_detalle.id_pedido_detalle? Degradación segura si no. */
+    private function columnaVentasDetalleExiste(): bool {
+        if ($this->columnaVentasDetalleExiste === null) {
+            $sql = "SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'ventas_detalle' AND column_name = 'id_pedido_detalle'
+                    )";
+            $this->columnaVentasDetalleExiste = (bool) $this->db->query($sql)->fetchColumn();
+        }
+        return $this->columnaVentasDetalleExiste;
+    }
+
+    /**
+     * Cantidad ya consumida (Consignación de Venta + Factura de Venta, no anuladas)
+     * por cada línea de pedidos_detalle indicada. Solo devuelve entradas para las
+     * líneas que sí tienen consumo (las demás se asumen en 0).
+     *
+     * @param int[] $idsDetalle IDs de pedidos_detalle a consultar.
+     * @return array<int,float> [id_pedido_detalle => cantidad_consumida]
+     */
+    public function getCantidadConsumidaPorDetalle(array $idsDetalle): array {
+        $idsDetalle = array_values(array_unique(array_map('intval', $idsDetalle)));
+        if (empty($idsDetalle)) {
+            return [];
+        }
+        $placeholders = implode(',', $idsDetalle);
+
+        $sqlConsignacion = "
+            SELECT cvd.id_pedido_detalle AS id, SUM(cvd.cantidad) AS cantidad
+            FROM consignaciones_ventas_detalles cvd
+            JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+            WHERE cv.eliminado = false AND cvd.eliminado = false
+              AND cvd.id_pedido_detalle IN ({$placeholders})
+            GROUP BY cvd.id_pedido_detalle
+        ";
+
+        $sqlFactura = $this->columnaVentasDetalleExiste() ? "
+            UNION ALL
+            SELECT vd.id_pedido_detalle AS id, SUM(vd.cantidad) AS cantidad
+            FROM ventas_detalle vd
+            JOIN ventas_cabecera v ON v.id = vd.id_venta
+            WHERE v.eliminado = false AND v.estado <> 'anulado'
+              AND vd.id_pedido_detalle IN ({$placeholders})
+            GROUP BY vd.id_pedido_detalle
+        " : '';
+
+        $sql = "SELECT id, SUM(cantidad) AS cantidad FROM ({$sqlConsignacion} {$sqlFactura}) t GROUP BY id";
+        $rows = $this->db->query($sql)->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        return array_map('floatval', $rows);
+    }
+
+    /**
+     * Historial de documentos que consumieron una línea del pedido (para el "ver
+     * historial" al hacer clic en el ítem): Consignaciones de Venta y Facturas de
+     * Venta que la referencian, con número, fecha y cantidad tomada.
+     *
+     * $idEmpresa es obligatorio y se valida contra el pedido dueño de la línea
+     * (no contra el documento consumidor) para que un usuario no pueda leer el
+     * historial de una línea de OTRA empresa adivinando/iterando el id.
+     *
+     * @return array<int,array{tipo:string,numero:string,fecha:?string,cantidad:float,estado:string}>
+     */
+    public function getHistorialConsumoDetalle(int $idDetalle, int $idEmpresa): array {
+        $existeYPropia = $this->db->prepare(
+            "SELECT 1 FROM pedidos_detalle d
+             JOIN pedidos_cabecera p ON p.id = d.id_pedido
+             WHERE d.id = :id AND p.id_empresa = :id_empresa"
+        );
+        $existeYPropia->execute([':id' => $idDetalle, ':id_empresa' => $idEmpresa]);
+        if (!$existeYPropia->fetchColumn()) {
+            return [];
+        }
+
+        $sqlConsignacion = "
+            SELECT 'Consignación de Venta' AS tipo,
+                   (cv.establecimiento || '-' || cv.punto_emision || '-' || cv.secuencial) AS numero,
+                   cv.fecha_emision AS fecha,
+                   cvd.cantidad AS cantidad,
+                   cv.estado AS estado
+            FROM consignaciones_ventas_detalles cvd
+            JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+            WHERE cvd.id_pedido_detalle = :id AND cv.eliminado = false AND cvd.eliminado = false
+        ";
+
+        $sqlFactura = $this->columnaVentasDetalleExiste() ? "
+            UNION ALL
+            SELECT 'Factura de Venta' AS tipo,
+                   (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial) AS numero,
+                   v.fecha_emision AS fecha,
+                   vd.cantidad AS cantidad,
+                   v.estado AS estado
+            FROM ventas_detalle vd
+            JOIN ventas_cabecera v ON v.id = vd.id_venta
+            WHERE vd.id_pedido_detalle = :id2 AND v.eliminado = false
+        " : '';
+
+        $sql = "{$sqlConsignacion} {$sqlFactura} ORDER BY fecha DESC";
+        $params = [':id' => $idDetalle];
+        if ($this->columnaVentasDetalleExiste()) {
+            $params[':id2'] = $idDetalle;
+        }
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

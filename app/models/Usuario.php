@@ -329,10 +329,37 @@ class Usuario extends BaseModel
     {
         $c = $this->escape(strtolower(trim($correo)));
         if ($c === '') return null;
-        $r = $this->query("SELECT id, nombre, mail FROM usuarios WHERE LOWER(mail) = '{$c}' AND estado = 1 AND eliminado = false LIMIT 1");
+        $r = $this->query("SELECT id, nombre, mail, nivel FROM usuarios WHERE LOWER(mail) = '{$c}' AND estado = 1 AND eliminado = false LIMIT 1");
         return $r[0] ?? null;
     }
 
+    /**
+     * Datos básicos de un usuario activo, para flujos que necesitan el correo real
+     * guardado (recuperación de contraseña) y no el que venga del navegador.
+     */
+    public function getBasicoPorId(int $id): ?array
+    {
+        $id = (int) $id;
+        if ($id <= 0) return null;
+        $r = $this->query("SELECT id, nombre, mail, nivel FROM usuarios
+            WHERE id = {$id} AND estado = 1 AND eliminado = false LIMIT 1");
+        return $r[0] ?? null;
+    }
+
+    /**
+     * True si ese usuario está bajo la gestión del administrador indicado
+     * (tabla usuario_asignado). El superadministrador no pasa por aquí: gestiona
+     * a todos.
+     */
+    public function esGestionablePorAdmin(int $idUsuario, int $idAdmin): bool
+    {
+        $idU = (int) $idUsuario;
+        $idA = (int) $idAdmin;
+        if ($idU <= 0 || $idA <= 0) return false;
+        $r = $this->query("SELECT 1 AS x FROM usuario_asignado
+            WHERE id_usuario = {$idU} AND id_adm = {$idA} LIMIT 1");
+        return !empty($r);
+    }
     /**
      * Actualiza el token de recuperación del usuario.
      */

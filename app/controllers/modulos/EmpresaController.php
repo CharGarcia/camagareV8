@@ -10,6 +10,8 @@ use App\models\Provincia;
 use App\models\Ciudad;
 use App\models\TarifaIva;
 use App\models\FormaPagoSri;
+use App\models\EmpresaDocumento;
+use App\Services\DocumentosLegalesService;
 
 class EmpresaController extends BaseModuloController
 {
@@ -46,6 +48,12 @@ class EmpresaController extends BaseModuloController
         $tiposSecuencialSoportados = $secRepo->getTiposDocumentoSoportados();
         $tiposSecuencialConflictos = $secRepo->getMapaConflictosCodDoc();
 
+        // Documentos legales (acuerdo de datos + contrato de uso) enviados/aceptados
+        // y demás documentos cargados manualmente (RUC, licencia, poder, etc.) para
+        // que el usuario de la empresa pueda verlos, sin tener que ir a Empresas del Sistema.
+        $documentosLegales = (new DocumentosLegalesService())->getEnviosDeEmpresa($idEmpresa);
+        $documentosEmpresa = (new EmpresaDocumento())->getPorEmpresa($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos.empresa.index', [
             'tiposSecuencialAgrupados' => $tiposSecuencialAgrupados,
             'tiposSecuencialSoportados' => $tiposSecuencialSoportados,
@@ -71,6 +79,8 @@ class EmpresaController extends BaseModuloController
             'ciudades' => $ciudades,
             'formasPagoSri' => $formasPagoSri,
             'usuarios_empresa' => $data['usuarios_empresa'] ?? [],
+            'documentosLegales' => $documentosLegales,
+            'documentosEmpresa' => $documentosEmpresa,
             'rutaModulo' => self::RUTA_MODULO,
             'fullWidth' => true
         ]);
@@ -167,6 +177,20 @@ class EmpresaController extends BaseModuloController
                     $this->requireActualizar();
                     $res = $this->service->saveTransferenciasConfig($idEmpresa, $_POST);
                     echo json_encode(['ok' => $res]);
+                    break;
+                case 'enviar_documentos_legales':
+                    // Solo permite enviar si todavía no hay ningún envío: reenviar a una
+                    // empresa que ya los tiene enviados/aceptados sigue siendo una acción
+                    // exclusiva del superadministrador desde Empresas del sistema.
+                    $this->requireActualizar();
+                    $yaEnviados = (new DocumentosLegalesService())->getEnviosDeEmpresa($idEmpresa);
+                    if (!empty($yaEnviados)) {
+                        echo json_encode(['ok' => false, 'error' => 'Los documentos legales ya fueron enviados a esta empresa.']);
+                        break;
+                    }
+                    $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+                    $res = (new DocumentosLegalesService())->enviarAEmpresa($idEmpresa, $idUsuario);
+                    echo json_encode(['ok' => true, 'msg' => 'Documentos legales enviados a ' . $res['correo'] . '.']);
                     break;
                 default:
                     throw new \Exception('Sección no válida');

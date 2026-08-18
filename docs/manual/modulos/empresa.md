@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente
-version: 1.3
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa
+version: 1.5
 orden: 5
 estado: activo
 ---
@@ -114,6 +114,33 @@ comprobante.
 - **Las imágenes que inserté en el cuerpo no se ven**: el editor guarda las
   imágenes dentro del texto y la mayoría de los correos (Gmail, Outlook) las
   bloquea. Use el logo del establecimiento, que sí se envía correctamente.
+## Documentos Legales y Archivos de la Empresa
+
+En la pestaña **Información General**, debajo de la tarjeta de Suscripción y
+Vigencia, hay una tarjeta con dos bloques:
+
+- **Documentos Legales**: el estado del **Acuerdo de Uso de Datos** y el
+  **Contrato de Uso del Sistema**. Muestra un badge — **Sin enviar**,
+  **Pendiente de aceptación** o **Aceptado** — la fecha de envío, el correo al
+  que se enviaron y, si ya se aceptaron, quién los aceptó y cuándo. Cada
+  documento tiene un botón **Ver PDF** para revisar su contenido: si ya se
+  enviaron, abre la versión exacta que se envió; si todavía no se han enviado,
+  abre la versión vigente, para poder revisarlos **antes** de enviarlos. Si
+  hubo más de un envío, un desplegable "Ver envíos anteriores" muestra el
+  historial.
+  - **Botón "Enviar documentos legales"**: aparece solo mientras el estado es
+    **Sin enviar**. Cualquier usuario con permiso de actualizar sobre este
+    módulo (no solo el superadministrador) puede enviarlos al correo
+    registrado de la empresa desde aquí. Una vez enviados, el botón desaparece:
+    reenviarlos a una empresa que ya los tiene enviados/aceptados sigue siendo
+    exclusivo del superadministrador, desde **Configuración → Empresas del
+    sistema**.
+- **Otros Documentos Cargados**: los archivos que el superadministrador sube
+  manualmente para la empresa (RUC, licencia, poder, contratos, etc.) desde
+  **Configuración → Empresas del sistema**, con su tipo, descripción, fecha y
+  un botón de descarga. Este bloque es solo de consulta: subir o eliminar
+  estos archivos sigue siendo una acción exclusiva de Empresas del sistema.
+
 ## Operadoras de transporte comercial (placa en la factura)
 
 La marca **"Operadora de transporte comercial (excepto taxis)"** la define el
@@ -124,6 +151,18 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.5** — En la tarjeta "Documentos Legales" ahora se puede previsualizar el
+  PDF de cada documento aunque todavía no se haya enviado (usa la versión
+  vigente), y aparece un botón "Enviar documentos legales" mientras el estado
+  sea "Sin enviar", disponible para cualquier usuario con permiso de
+  actualizar sobre el módulo (antes solo se podía enviar desde Empresas del
+  sistema).
+
+- **1.4** — Se agrega, en Información General, la tarjeta de solo lectura
+  "Documentos Legales" (estado del Acuerdo de Uso de Datos y el Contrato de
+  Uso del Sistema, con enlaces a los PDF) y "Otros Documentos Cargados" (los
+  archivos subidos manualmente desde Empresas del sistema).
 
 - **1.3** — Se rediseña el correo de comprobantes autorizados (logo, datos del
   comprobante y firma de la empresa) y se documenta la pestaña Configuración

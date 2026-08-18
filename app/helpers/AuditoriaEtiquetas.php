@@ -55,6 +55,7 @@ class AuditoriaEtiquetas
         'notas_credito_cabecera'         => 'Notas de crédito',
         'novedades'                      => 'Novedades de nómina',
         'ordenes_compra'                 => 'Órdenes de compra',
+        'pedidos_cabecera'               => 'Pedidos',
         'periodos_contables'             => 'Períodos contables',
         'plan_cuentas'                   => 'Plan de cuentas',
         'productos'                      => 'Productos',

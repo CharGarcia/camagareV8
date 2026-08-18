@@ -179,7 +179,9 @@ class UsuariosSistemaController extends Controller
             . ' data-estado="' . $estado . '"'
             . ' data-empresas="' . count($empresas) . '"'
             . ' data-puede-app-movil="' . ($puedeAppMovil ? '1' : '0') . '"'
-            . ' data-token="' . htmlspecialchars($r['token'] ?? '') . '">';
+            // El token NO se publica en el HTML: sirve para registrarse o para cambiar
+            // la contraseña. El modal solo necesita saber si el registro está pendiente.
+            . ' data-registrado="' . ($registrado ? '1' : '0') . '">';
         $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
         $html .= '<td><code>' . htmlspecialchars($r['cedula'] ?? '') . '</code></td>';
         $html .= '<td>' . htmlspecialchars($r['mail'] ?? '-') . '</td>';

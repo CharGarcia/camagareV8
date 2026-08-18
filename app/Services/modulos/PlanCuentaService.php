@@ -684,6 +684,93 @@ class PlanCuentaService
     }
 
     /**
+     * Aplica la configuración contable sugerida por el plan modelo sobre una empresa que YA
+     * tiene su plan de cuentas cargado, rellenando únicamente lo que esté sin configurar.
+     *
+     * Es la misma siembra que hace cargarModelo(), pero sin tocar el plan: en vez de crear las
+     * cuentas, las busca por código en el plan de la empresa. Sirve para empresas que ya tenían
+     * cuentas (donde el botón "Cargar Plan Modelo" está bloqueado) y para incorporar mapeos
+     * nuevos que se agreguen al modelo con el tiempo.
+     *
+     * Nunca sobrescribe una cuenta ya configurada. Si una cuenta del modelo no existe en el plan
+     * de la empresa, ese concepto se informa como omitido en vez de fallar.
+     *
+     * @return array{configuradas:int,respetadas:int,omitidas:list<string>}
+     */
+    public function configurarCuentasSugeridas(int $idEmpresa, int $idUsuario): array
+    {
+        // Códigos activos del plan de la empresa. Las claves numéricas ("1") vuelven int en PHP,
+        // de ahí el cast a string.
+        $idsPorCodigo = [];
+        foreach ($this->repository->getMapaCodigos($idEmpresa) as $codigo => $info) {
+            if (!$info['eliminado']) {
+                $idsPorCodigo[(string) $codigo] = (int) $info['id'];
+            }
+        }
+        if (empty($idsPorCodigo)) {
+            throw new Exception('La empresa todavía no tiene plan de cuentas. Cárguelo primero desde el módulo Plan de Cuentas.');
+        }
+
+        $mapeos = [];
+        $mapeosIva = [];
+        $omitidas = [];
+
+        foreach (self::getCuentasModeloArray() as $c) {
+            if (empty($c['map_asiento']) && empty($c['map_iva'])) {
+                continue;
+            }
+            $id = $idsPorCodigo[(string) $c['codigo']] ?? null;
+            if ($id === null) {
+                $omitidas[] = $c['codigo'] . ' — ' . $c['nombre'];
+                continue;
+            }
+            if (!empty($c['map_asiento'])) {
+                foreach (explode(',', (string) $c['map_asiento']) as $codigoAsiento) {
+                    $codigoAsiento = trim($codigoAsiento);
+                    if ($codigoAsiento !== '') {
+                        $mapeos[$codigoAsiento] = $id;
+                    }
+                }
+            }
+            if (!empty($c['map_iva'])) {
+                foreach (explode(',', (string) $c['map_iva']) as $regla) {
+                    $regla = trim($regla);
+                    if ($regla !== '') {
+                        $mapeosIva[$regla] = $id;
+                    }
+                }
+            }
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            $asientos = $this->sembrarConfiguracionContable($idEmpresa, $idUsuario, $mapeos, $mapeosIva);
+            $formas   = $this->sembrarCuentasFormasYOpciones($idEmpresa, $idUsuario, $idsPorCodigo);
+
+            $configuradas = $asientos['creadas'] + $formas['asignadas'];
+            $respetadas   = $asientos['respetadas'] + $formas['respetadas'];
+
+            if ($configuradas > 0) {
+                $this->logService->registrar(
+                    $idUsuario,
+                    $idEmpresa,
+                    'CONFIGURACION SUGERIDA',
+                    'asientos_programados',
+                    null,
+                    null,
+                    ['configuradas' => $configuradas, 'respetadas' => $respetadas, 'omitidas' => $omitidas]
+                );
+            }
+
+            $this->repository->commit();
+            return ['configuradas' => $configuradas, 'respetadas' => $respetadas, 'omitidas' => $omitidas];
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * Formas de cobro/pago que siembra EmpresaInicializadorService y la cuenta del plan modelo
      * que les corresponde. Se identifican por tipo + aplica_en + nombre, tal como las crea el
      * inicializador, para no tocar las que el usuario haya creado por su cuenta.

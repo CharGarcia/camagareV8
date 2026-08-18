@@ -14,6 +14,13 @@ use App\Services\SesionActivaService;
 
 class AuthController extends Controller
 {
+    /**
+     * Respuesta única de la recuperación pública de contraseña, exista o no el
+     * correo. Decir "ese correo no está registrado" permite averiguar qué cuentas
+     * hay en el sistema, que es el primer paso para atacarlas.
+     */
+    private const MSG_RECUPERACION_GENERICO = 'Si el correo está registrado, recibirá un mensaje con el enlace para restablecer su contraseña. Revise también la carpeta de spam.';
+
     public function index(): void
     {
         $this->applyLoginDebugMode();
@@ -326,7 +333,9 @@ class AuthController extends Controller
 
     /**
      * Solicitar recuperación de contraseña (AJAX).
-     * Valida que el correo exista y esté activo. Retorna id_user y nombre para el siguiente paso.
+     * NO revela si el correo existe ni devuelve el id o el nombre del usuario: el
+     * paso siguiente vuelve a resolverlos en el servidor a partir del correo, para
+     * que el navegador no pueda elegir a quién ni a dónde se envía.
      * POST: correo
      */
     public function solicitarRecuperar(): void
@@ -340,25 +349,28 @@ class AuthController extends Controller
             $this->json(['status' => 'error', 'message' => 'Correo no válido.']);
         }
 
-        $model = new Usuario();
-        $usuario = $model->getUsuarioActivoPorCorreo($correo);
-
-        if (!$usuario) {
-            $this->json(['status' => 'error', 'message' => 'El usuario no está registrado en el sistema.']);
-        }
-
+        // La respuesta es la misma exista o no la cuenta; el envío real (y su
+        // comprobación) ocurre en enviarCorreoRecuperar.
         $this->json([
             'status' => 'success',
-            'id_user' => (int) $usuario['id'],
-            'nombre' => $usuario['nombre'],
-            'message' => "Se ha enviado un correo a {$correo} para restablecer su cuenta.",
+            'message' => self::MSG_RECUPERACION_GENERICO,
         ]);
     }
 
     /**
      * Enviar correo de recuperación (AJAX).
      * Requiere configuración en correos_config con codigo recuperar_password.
-     * POST: id_user, nombre, correo
+     *
+     * SEGURIDAD: ni el usuario ni la dirección de destino se toman del POST. El
+     * enlace de recuperación permite cambiar la contraseña, así que si el navegador
+     * pudiera elegir a quién (id_user) y a dónde (correo) se envía, cualquiera
+     * pediría el enlace de una cuenta ajena y lo recibiría en su propio buzón. El
+     * destinatario es siempre el correo guardado del usuario, que además es el único
+     * que valida después /auth/confirmUser (cruza correo + token).
+     *
+     * POST público (pantalla de login): correo — se resuelve el usuario con él.
+     * POST con sesión (config/usuarios-sistema): id_user — solo usuarios que el
+     * gestor administra.
      */
     public function enviarCorreoRecuperar(): void
     {
@@ -367,16 +379,49 @@ class AuthController extends Controller
             $this->json(['ok' => false, 'error' => 'Método no permitido'], 405);
         }
 
-        $idUser = (int) ($_POST['id_user'] ?? 0);
-        $nombre = trim($_POST['nombre'] ?? '');
-        $correo = strtolower(trim($_POST['correo'] ?? ''));
+        $model = new Usuario();
+        $idSesion = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivelSesion = (int) ($_SESSION['nivel'] ?? 0);
+        // La rama de gestor solo aplica cuando la petición identifica al usuario por
+        // id (modal de config/usuarios-sistema). El modal de la pantalla de login manda
+        // solo el correo, y ese camino es siempre el público aunque haya sesión abierta.
+        $esGestor = $idSesion > 0 && $nivelSesion >= 2 && (int) ($_POST["id_user"] ?? 0) > 0;
 
-        if ($idUser <= 0 || $correo === '') {
-            $this->json(['ok' => false, 'error' => 'Faltan parámetros.']);
+        if ($esGestor) {
+            $idUser = (int) ($_POST['id_user'] ?? 0);
+            if ($idUser <= 0) {
+                $this->json(['ok' => false, 'error' => 'Faltan parámetros.']);
+            }
+            $usuario = $model->getBasicoPorId($idUser);
+            if (!$usuario) {
+                $this->json(['ok' => false, 'error' => 'El usuario no existe o está inactivo.']);
+            }
+            // Un administrador solo puede hacerlo con los usuarios que gestiona.
+            if ($nivelSesion < 3 && !$model->esGestionablePorAdmin($idUser, $idSesion)) {
+                $this->json(['ok' => false, 'error' => 'No tiene permiso para gestionar ese usuario.']);
+            }
+        } else {
+            $correoSolicitado = strtolower(trim($_POST['correo'] ?? ''));
+            if ($correoSolicitado === '' || !filter_var($correoSolicitado, FILTER_VALIDATE_EMAIL)) {
+                $this->json(['ok' => false, 'error' => 'Correo no válido.']);
+            }
+            $usuario = $model->getUsuarioActivoPorCorreo($correoSolicitado);
+            if (!$usuario) {
+                // Sin cuenta no se envía nada, pero se responde como si todo hubiera
+                // ido bien: si aquí se devolviera un error, la pantalla de login
+                // seguiría delatando qué correos existen.
+                $this->json(['ok' => true, 'msg' => self::MSG_RECUPERACION_GENERICO]);
+            }
+            $idUser = (int) $usuario['id'];
+        }
+
+        $correo = strtolower(trim((string) ($usuario['mail'] ?? '')));
+        $nombre = (string) ($usuario['nombre'] ?? '');
+        if ($correo === '') {
+            $this->json(['ok' => false, 'error' => 'El usuario no tiene correo registrado.']);
         }
 
         $token = token_recuperar();
-        $model = new Usuario();
         $model->actualizarToken($idUser, $token);
 
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
@@ -391,11 +436,19 @@ class AuthController extends Controller
             } catch (\Throwable $e) {
                 // El correo ya se envió; el registro es solo auditoría
             }
-            $this->json(['ok' => true, 'msg' => 'Correo enviado correctamente']);
+            // En el flujo público el mensaje es el mismo que cuando la cuenta no
+            // existe: si aquí dijera "enviado" y allá otra cosa, la diferencia entre
+            // ambas respuestas seguiría delatando qué correos están registrados.
+            $this->json(['ok' => true, 'msg' => $esGestor ? 'Correo enviado correctamente' : self::MSG_RECUPERACION_GENERICO]);
         } else {
             $err = $GLOBALS['LAST_EMAIL_ERROR'] ?? 'Error al enviar el correo.';
             $this->logEmailError('recuperar_password', $err);
-            $this->json(['ok' => false, 'error' => $err]);
+            // El fallo de envío tampoco se muestra en el flujo público: solo puede
+            // ocurrir con cuentas que existen, así que sería otra manera de averiguar
+            // cuáles están registradas. Queda en storage/logs/email_errors.log.
+            $this->json($esGestor
+                ? ['ok' => false, 'error' => $err]
+                : ['ok' => true, 'msg' => self::MSG_RECUPERACION_GENERICO]);
         }
     }
 

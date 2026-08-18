@@ -300,27 +300,59 @@ function agregarFilaProducto(prod = null) {
     const tbody = document.getElementById('detalle-productos');
     if (!tbody) return;
 
+    const consumida = prod ? parseFloat(prod.cantidad_consumida || 0) : 0;
+    const registrada = consumida > 0.0001;
+    const cantidadOriginal = prod ? parseFloat(prod.cantidad) : 1;
+    const badgeHtml = registrada
+        ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 mt-1" style="cursor:pointer;" onclick="verHistorialItem(this)" title="Ya registrado en una consignación o factura. Clic para ver el historial.">
+               <i class="bi bi-clock-history me-1"></i>${consumida >= cantidadOriginal ? 'Registrado' : 'Parcial ' + consumida + '/' + cantidadOriginal}
+           </span>`
+        : '';
+    const btnAccionHtml = registrada
+        ? `<button type="button" class="btn btn-link btn-sm text-info p-0 shadow-none border-0" onclick="verHistorialItem(this)" title="Ver historial (no se puede eliminar: ya está registrado)">
+               <i class="bi bi-clock-history fs-6"></i>
+           </button>`
+        : `<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales();" title="Eliminar ítem">
+               <i class="bi bi-trash3 fs-6"></i>
+           </button>`;
+
     const tr = document.createElement('tr');
     tr.className = 'row-detalle fila-detalle';
-    
+    tr.dataset.cantidadConsumida = consumida;
+
     tr.innerHTML = `
         <td class="text-center align-middle position-relative" style="width: 150px;">
-            <input type="text" class="form-control form-control-sm input-detalle input-codigo text-center border-primary border-opacity-25" placeholder="Código..." autocomplete="off" value="${prod ? prod.producto_codigo : ''}">
+            <input type="text" class="form-control form-control-sm input-detalle input-codigo text-center border-primary border-opacity-25" placeholder="Código..." autocomplete="off" value="${prod ? prod.producto_codigo : ''}" ${registrada ? 'readonly' : ''}>
         </td>
         <td class="align-middle position-relative">
-            <input type="text" class="form-control form-control-sm input-detalle input-descripcion fw-bold border-primary border-opacity-25" placeholder="Escribe o busca un producto..." autocomplete="off" value="${prod ? prod.producto_nombre : ''}">
+            <input type="text" class="form-control form-control-sm input-detalle input-descripcion fw-bold border-primary border-opacity-25" placeholder="Escribe o busca un producto..." autocomplete="off" value="${prod ? prod.producto_nombre : ''}" ${registrada ? 'readonly' : ''}>
             <input type="hidden" class="input-id-producto" value="${prod ? prod.id_producto : ''}">
+            <input type="hidden" class="input-id-detalle" value="${prod && prod.id ? prod.id : ''}">
+            <div>${badgeHtml}</div>
         </td>
         <td class="align-middle text-center" style="width: 15%;">
-            <input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${prod ? parseFloat(prod.cantidad) : 1}" step="any" oninput="calcFila(this)">
+            <input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${cantidadOriginal}" step="any" min="${consumida}" oninput="calcFila(this)">
         </td>
         <td class="text-center p-0 align-middle" style="width: 40px;">
-            <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales();" title="Eliminar ítem">
-                <i class="bi bi-trash3 fs-6"></i>
-            </button>
+            ${btnAccionHtml}
         </td>
     `;
     tbody.appendChild(tr);
+
+    if (registrada) {
+        // Fila ya registrada en otro documento: no se puede quitar ni cambiar de
+        // producto (el servidor lo vuelve a validar igual, esto es solo UX).
+        const inCant = tr.querySelector('.input-cantidad');
+        inCant.addEventListener('change', () => {
+            const val = parseFloat(inCant.value) || 0;
+            if (val < consumida) {
+                inCant.value = consumida;
+                calcFila(inCant);
+                Swal.fire({ icon: 'warning', title: 'Atención', text: `No puede bajar de ${consumida}: ya está registrado en una consignación o factura.`, target: document.getElementById('modalPedido') });
+            }
+        });
+        return;
+    }
 
     const inputCod = tr.querySelector('.input-codigo');
     const inputDesc = tr.querySelector('.input-descripcion');
@@ -415,6 +447,52 @@ function agregarFilaProducto(prod = null) {
 
     setupAutocompleteEvents(inputCod);
     setupAutocompleteEvents(inputDesc);
+}
+
+/** Historial de consignaciones/facturas que registraron una línea del pedido. */
+async function verHistorialItem(el) {
+    const tr = el.closest('tr');
+    if (!tr) return;
+    const idDetalle = tr.querySelector('.input-id-detalle')?.value;
+    const nombreProducto = tr.querySelector('.input-descripcion')?.value || 'este ítem';
+    if (!idDetalle) return;
+
+    Swal.fire({ title: 'Cargando historial...', allowOutsideClick: false, didOpen: () => Swal.showLoading(), target: document.getElementById('modalPedido') });
+    try {
+        const res = await fetch(`${window.CMG_urlBase}/historialDetalleAjax?id=${idDetalle}`);
+        const data = await res.json();
+
+        if (!data.ok) {
+            return Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo cargar el historial.', target: document.getElementById('modalPedido') });
+        }
+
+        let html;
+        if (!data.data || data.data.length === 0) {
+            html = '<p class="text-muted small mb-0">Sin movimientos registrados para este ítem.</p>';
+        } else {
+            html = '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0 small text-start">'
+                + '<thead class="table-light"><tr><th>Tipo</th><th>Número</th><th>Fecha</th><th>Cantidad</th><th>Estado</th></tr></thead><tbody>'
+                + data.data.map(h => `<tr>
+                        <td>${h.tipo}</td>
+                        <td>${h.numero || '-'}</td>
+                        <td>${h.fecha ? new Date(h.fecha).toLocaleDateString('es-EC') : '-'}</td>
+                        <td class="text-end">${parseFloat(h.cantidad).toFixed(2)}</td>
+                        <td>${h.estado || '-'}</td>
+                    </tr>`).join('')
+                + '</tbody></table></div>';
+        }
+
+        Swal.fire({
+            icon: 'info',
+            title: `Historial de "${nombreProducto}"`,
+            html,
+            confirmButtonText: 'Cerrar',
+            width: 600,
+            target: document.getElementById('modalPedido'),
+        });
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo cargar el historial.', target: document.getElementById('modalPedido') });
+    }
 }
 
 function debounce(func, wait) {
@@ -683,6 +761,7 @@ async function guardarPedido() {
 
         if (idProd && cant > 0 && descrip !== '') {
             detalles.push({
+                id: tr.querySelector('.input-id-detalle')?.value || '',
                 id_producto: idProd,
                 cantidad: cant,
                 precio_unitario: 0,
@@ -718,6 +797,7 @@ async function guardarPedido() {
         formData.append('cabecera[observaciones_internas]', cabecera.observaciones_internas);
         
         detalles.forEach((d, i) => {
+            formData.append(`detalles[${i}][id]`, d.id);
             formData.append(`detalles[${i}][id_producto]`, d.id_producto);
             formData.append(`detalles[${i}][cantidad]`, d.cantidad);
             formData.append(`detalles[${i}][precio_unitario]`, d.precio_unitario);

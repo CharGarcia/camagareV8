@@ -566,6 +566,13 @@ class FacturaVentaRepository extends BaseRepository
             $params[] = (int) $data['id_producto_variante'];
         }
 
+        // Línea de origen cuando la factura se generó desde un Pedido (botón
+        // "Facturar" en Pedidos). Ver database/agregar_id_pedido_detalle_ventas.sql.
+        if (in_array('id_pedido_detalle', $colsOpcionales) && !empty($data['id_pedido_detalle'])) {
+            $cols[]   = 'id_pedido_detalle';
+            $params[] = (int) $data['id_pedido_detalle'];
+        }
+
         $colSql = implode(', ', $cols);
         $valSql = implode(', ', array_fill(0, count($params), '?'));
         $sql    = "INSERT INTO ventas_detalle ({$colSql}) VALUES ({$valSql}) RETURNING id";

@@ -135,10 +135,6 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                 <div class="modal-body">
                     <p class="text-muted small mb-3">Se enviará un correo al nuevo usuario para que complete su registro y defina su contraseña.</p>
                     <div class="mb-3">
-                        <label for="crear-nombre" class="form-label">Nombre</label>
-                        <input type="text" id="crear-nombre" name="nombre" class="form-control" required placeholder="Nombre completo">
-                    </div>
-                    <div class="mb-3">
                         <label for="crear-correo" class="form-label">Correo electrónico</label>
                         <input type="email" id="crear-correo" name="correo" class="form-control" required placeholder="correo@ejemplo.com">
                     </div>
@@ -164,9 +160,9 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                 <input type="hidden" id="modal-id-usuario">
                 <div class="row g-2 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label small">Agregar empresa</label>
+                        <label class="form-label small" for="select-empresa"><i class="bi bi-search"></i> Buscar empresa</label>
                         <select id="select-empresa" class="form-select form-select-sm">
-                            <option value="">Cargando...</option>
+                            <option value="">Buscar empresa por nombre o RUC...</option>
                         </select>
                     </div>
                     <div class="col-md-6 d-flex align-items-end">
@@ -252,20 +248,66 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             .catch(function() { tbody.innerHTML = '<tr><td colspan="3" class="text-danger">Error al cargar</td></tr>'; });
     }
 
-    function cargarEmpresasDisponibles() {
-        selectEmpresa.innerHTML = '<option value="">Cargando...</option>';
-        fetch(base + '/config/asignar-empresas?action=empresasDisponibles&id_usuario=' + idUsuario)
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                selectEmpresa.innerHTML = '<option value="">Seleccione empresa...</option>';
-                (data.empresas || []).forEach(function(e) {
-                    var o = document.createElement('option');
-                    o.value = e.id_empresa;
-                    o.textContent = (e.nombre_comercial || '') + ' (' + (e.ruc || '') + ')';
-                    selectEmpresa.appendChild(o);
-                });
+    // Buscador de empresas disponibles. Se consulta al servidor mientras se escribe
+    // (el endpoint acepta 'q'), así no depende de que quepan todas en el desplegable.
+    var tsEmpresa = null;
+
+    function opcionesEmpresa(empresas) {
+        return (empresas || []).map(function(e) {
+            var ruc = e.ruc ? ' (' + e.ruc + ')' : '';
+            return { value: String(e.id_empresa), text: (e.nombre_comercial || 'Empresa') + ruc };
+        });
+    }
+
+    function pedirEmpresasDisponibles(query, callback) {
+        if (!idUsuario) { callback([]); return; }
+        fetch(base + '/config/asignar-empresas?action=empresasDisponibles&id_usuario=' + idUsuario + '&q=' + encodeURIComponent(query || ''), {
+                credentials: 'same-origin'
             })
-            .catch(function() { selectEmpresa.innerHTML = '<option value="">Error</option>'; });
+            .then(function(r) { return r.ok ? r.json() : { empresas: [] }; })
+            .then(function(data) { callback(opcionesEmpresa(data.empresas)); })
+            .catch(function() { callback([]); });
+    }
+
+    // El layout carga Tom Select al final del body, después de este script: por eso la
+    // inicialización espera al evento load (y se reintenta al abrir el modal).
+    function initBuscadorEmpresa() {
+        if (tsEmpresa || typeof TomSelect === 'undefined') return;
+        tsEmpresa = new TomSelect('#select-empresa', {
+            create: false,
+            placeholder: 'Escriba el nombre o el RUC de la empresa...',
+            maxOptions: 200,
+            loadThrottle: 300,
+            load: function(query, callback) { pedirEmpresasDisponibles(query, callback); }
+        });
+    }
+    window.addEventListener('load', initBuscadorEmpresa);
+
+    function cargarEmpresasDisponibles() {
+        initBuscadorEmpresa();
+        // Las empresas disponibles dependen del usuario del modal: se vacía la lista
+        // anterior antes de traer la del usuario que se acaba de abrir.
+        if (tsEmpresa) {
+            tsEmpresa.clear(true);
+            tsEmpresa.clearOptions();
+        } else {
+            selectEmpresa.innerHTML = '<option value="">Cargando...</option>';
+        }
+
+        pedirEmpresasDisponibles('', function(opciones) {
+            if (tsEmpresa) {
+                tsEmpresa.addOptions(opciones);
+                tsEmpresa.refreshOptions(false);
+                return;
+            }
+            selectEmpresa.innerHTML = '<option value="">Seleccione empresa...</option>';
+            opciones.forEach(function(o) {
+                var op = document.createElement('option');
+                op.value = o.value;
+                op.textContent = o.text;
+                selectEmpresa.appendChild(op);
+            });
+        });
     }
 
     // Búsqueda en tiempo real: reemplaza solo la tabla y la paginación vía AJAX,
@@ -311,7 +353,7 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
     }
 
     document.getElementById('btn-agregar-empresa').addEventListener('click', function() {
-        var idEmp = selectEmpresa.value;
+        var idEmp = tsEmpresa ? tsEmpresa.getValue() : selectEmpresa.value;
         if (!idEmp) { alert('Seleccione una empresa'); return; }
         var f = document.createElement('form');
         f.method = 'POST';

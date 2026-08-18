@@ -182,13 +182,16 @@ class EmpresaAsignada extends BaseModel
     {
         $idA = (int) $idActual;
         if ($nivel >= 3) {
-            $where = "WHERE u.estado = 1";
+            $where = "WHERE u.estado = 1 AND u.eliminado = false";
             $from = "usuarios u";
         } else {
-            $where = "WHERE u.estado = 1 AND u.nivel < 3 AND u.id != {$idA}";
+            // El administrador solo ve usuarios de sus propias empresas y nunca a un
+            // superadministrador (nivel 3), que no se gestiona desde esta pantalla.
+            $where = "WHERE u.estado = 1 AND u.eliminado = false AND u.nivel < 3 AND u.id != {$idA}";
             $from = "empresa_asignada ea_admin
                 INNER JOIN empresa_asignada ea_otro ON ea_otro.id_empresa = ea_admin.id_empresa AND ea_otro.id_usuario != {$idA}
-                INNER JOIN usuarios u ON u.id = ea_otro.id_usuario";
+                INNER JOIN usuarios u ON u.id = ea_otro.id_usuario
+                INNER JOIN empresas emp ON emp.id = ea_admin.id_empresa AND emp.estado = '1' AND emp.eliminado = false";
             $where .= " AND ea_admin.id_usuario = {$idA}";
         }
         if ($buscar !== '') {
@@ -238,6 +241,58 @@ class EmpresaAsignada extends BaseModel
     }
 
     /**
+     * Todas las empresas activas del sistema, marcando cuáles ya están asignadas al
+     * usuario indicado. Exclusivo del superadministrador (nivel 3): desde Permisos de
+     * módulos puede trabajar sobre cualquier empresa, esté o no asignada todavía; la
+     * asignación se crea al guardar el primer permiso.
+     * Devuelve asignada como entero (1/0) a propósito: los booleanos de PostgreSQL
+     * llegan por PDO como cadena vacía cuando son false y complican la comparación.
+     */
+    public function getTodasEmpresasConAsignacion(int $idUsuarioTarget, string $buscar = '', int $limit = 500): array
+    {
+        $idT = (int) $idUsuarioTarget;
+        $where = "WHERE e.eliminado = false AND e.estado = '1'";
+        if ($buscar !== '') {
+            $b = $this->escape($buscar);
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+        }
+        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM empresa_asignada ea
+                    WHERE ea.id_empresa = e.id AND ea.id_usuario = {$idT}
+                ) THEN 1 ELSE 0 END AS asignada
+            FROM empresas e
+            {$where}
+            ORDER BY asignada DESC, e.nombre_comercial
+            LIMIT " . (int) $limit);
+    }
+
+    /**
+     * True si el usuario ya tiene asignada esa empresa.
+     */
+    public function estaEmpresaAsignada(int $idEmpresa, int $idUsuario): bool
+    {
+        $idE = (int) $idEmpresa;
+        $idU = (int) $idUsuario;
+        if ($idE <= 0 || $idU <= 0) return false;
+        $r = $this->query("SELECT 1 AS x FROM empresa_asignada WHERE id_empresa = {$idE} AND id_usuario = {$idU} LIMIT 1");
+        return !empty($r);
+    }
+
+    /**
+     * Datos básicos de una empresa activa (para mostrar la selección aunque el
+     * usuario todavía no la tenga asignada).
+     */
+    public function getEmpresaActivaPorId(int $idEmpresa): ?array
+    {
+        $id = (int) $idEmpresa;
+        if ($id <= 0) return null;
+        $r = $this->query("SELECT id AS id_empresa, nombre_comercial, ruc FROM empresas
+            WHERE id = {$id} AND eliminado = false AND estado = '1' LIMIT 1");
+        return $r[0] ?? null;
+    }
+
+    /**
      * Usuarios activos de uno o varios niveles (p. ej. [2] = todos los administradores).
      * Usado por la asignación masiva de submódulos (superadmin).
      */
@@ -270,13 +325,37 @@ class EmpresaAsignada extends BaseModel
     }
 
     /**
+     * Empresas que el usuario actual puede asignar a otro usuario, con buscador.
+     * Superadministrador: cualquier empresa activa del sistema.
+     * Administrador: únicamente las empresas que él mismo tiene asignadas.
+     */
+    public function getEmpresasAsignablesParaSelect(int $idActual, int $nivel, string $buscar = '', int $limit = 200): array
+    {
+        if ($nivel >= 3) {
+            return $this->getTodasEmpresasParaSelect($buscar, $limit);
+        }
+
+        $idA = (int) $idActual;
+        $where = "WHERE ea.id_usuario = {$idA} AND e.eliminado = false AND e.estado = '1'";
+        if ($buscar !== '') {
+            $b = $this->escape($buscar);
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+        }
+        return $this->query("SELECT DISTINCT e.id AS id_empresa, e.nombre_comercial, e.ruc
+            FROM empresa_asignada ea
+            INNER JOIN empresas e ON e.id = ea.id_empresa
+            {$where}
+            ORDER BY e.nombre_comercial
+            LIMIT " . (int) $limit);
+    }
+    /**
      * Obtener usuario por ID (para permisos, etc.)
      */
     public function getUsuarioPorId(int $id): ?array
     {
         $id = (int) $id;
         if ($id <= 0) return null;
-        $r = $this->query("SELECT id AS id_usuario, nombre, cedula, nivel FROM usuarios WHERE id = {$id} AND estado = 1");
+        $r = $this->query("SELECT id AS id_usuario, nombre, cedula, nivel FROM usuarios WHERE id = {$id} AND estado = 1 AND eliminado = false");
         return $r[0] ?? null;
     }
 

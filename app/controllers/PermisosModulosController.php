@@ -43,18 +43,16 @@ class PermisosModulosController extends Controller
         $modulos = [];
         $usuarioSel = null;
         $empresaSel = null;
+        $empresaAsignada = true;
 
         if ($mostrar && $idUsuarioSel > 0 && $idEmpresaSel > 0) {
             if ($idUsuarioSel > 0) {
                 $usuarioSel = $this->modelEmpresa->getUsuarioPorId($idUsuarioSel);
             }
             if ($idEmpresaSel > 0 && $usuarioSel) {
-                $empresas = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioSel, $idActual, $nivel);
-                $empresaSel = $this->buscarEmpresaEnLista($empresas, $idEmpresaSel);
-                if (!$empresaSel) {
-                    $empresaSel = ['id_empresa' => $idEmpresaSel, 'nombre_comercial' => 'Empresa #' . $idEmpresaSel, 'ruc' => ''];
-                }
+                $empresaSel = $this->resolverEmpresaSel($idUsuarioSel, $idActual, $nivel, $idEmpresaSel);
             }
+            $empresaAsignada = $this->empresaEstaAsignada($idUsuarioSel, $idEmpresaSel, $usuarioSel);
             $rows = $this->modelPermiso->getModulosConSubmodulosParaPermisos($idActual, $idEmpresaSel, $nivel);
             $permisos = $this->modelPermiso->getPermisosDeUsuario($idUsuarioSel, $idEmpresaSel);
             $modulos = $this->agruparPorModuloOrdenado($rows, $permisos, $idUsuarioSel, $idEmpresaSel);
@@ -64,6 +62,7 @@ class PermisosModulosController extends Controller
                 'idEmpresaSel' => $idEmpresaSel,
                 'usuarioSel' => $usuarioSel,
                 'empresaSel' => $empresaSel,
+                'empresaAsignada' => $empresaAsignada,
                 'modulos' => $modulos,
             ];
             $this->redirect(BASE_URL . self::BASE_PATH . '?v=1');
@@ -85,17 +84,15 @@ class PermisosModulosController extends Controller
             $usuarioSel = $v['usuarioSel'] ?? null;
             $empresaSel = $v['empresaSel'] ?? null;
             $modulos = $v['modulos'] ?? [];
+            $empresaAsignada = (bool) ($v['empresaAsignada'] ?? true);
         } else {
             if ($idUsuarioSel > 0) {
                 $usuarioSel = $this->modelEmpresa->getUsuarioPorId($idUsuarioSel);
             }
             if ($idEmpresaSel > 0 && $usuarioSel) {
-                $empresas = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioSel, $idActual, $nivel);
-                $empresaSel = $this->buscarEmpresaEnLista($empresas, $idEmpresaSel);
-                if (!$empresaSel) {
-                    $empresaSel = ['id_empresa' => $idEmpresaSel, 'nombre_comercial' => 'Empresa #' . $idEmpresaSel, 'ruc' => ''];
-                }
+                $empresaSel = $this->resolverEmpresaSel($idUsuarioSel, $idActual, $nivel, $idEmpresaSel);
             }
+            $empresaAsignada = $this->empresaEstaAsignada($idUsuarioSel, $idEmpresaSel, $usuarioSel);
         }
 
         $rowsUsuarios = $this->modelEmpresa->getUsuariosParaSelect($idActual, $nivel, '', 500);
@@ -114,11 +111,20 @@ class PermisosModulosController extends Controller
             }
         }
 
-        $rowsEmpresas = $this->modelEmpresa->getEmpresasParaSelect($idUsuarioSel ?: 0, $idActual, $nivel, '', 500);
+        // El superadministrador trabaja con TODAS las empresas activas del sistema,
+        // estén o no asignadas al usuario; el administrador solo con las asignadas.
+        $rowsEmpresas = [];
+        if ($nivel >= 3) {
+            // Sin usuario elegido no hay nada que marcar como asignado: la lista la
+            // pide el JS por AJAX en cuanto se selecciona el usuario.
+            if ($idUsuarioSel > 0) {
+                $rowsEmpresas = $this->modelEmpresa->getTodasEmpresasConAsignacion($idUsuarioSel, '', 500);
+            }
+        } else {
+            $rowsEmpresas = $this->modelEmpresa->getEmpresasParaSelect($idUsuarioSel ?: 0, $idActual, $nivel, '', 500);
+        }
         $opcionesEmpresas = array_map(function ($r) {
-            $text = $r['nombre_comercial'] ?? $r['ruc'] ?? 'Empresa';
-            if (!empty($r['ruc'])) $text .= ' (' . $r['ruc'] . ')';
-            return ['value' => (int)($r['id_empresa'] ?? $r['id'] ?? 0), 'text' => $text];
+            return $this->opcionEmpresa($r);
         }, $rowsEmpresas);
 
         $limiteUsuarios = null;
@@ -136,6 +142,7 @@ class PermisosModulosController extends Controller
             'idEmpresaSel' => $idEmpresaSel,
             'usuarioSel' => $usuarioSel,
             'empresaSel' => $empresaSel,
+            'empresaAsignada' => $empresaAsignada,
             'modulos' => $modulos,
             'opcionesUsuarios' => $opcionesUsuarios,
             'opcionesEmpresas' => $opcionesEmpresas,
@@ -166,15 +173,35 @@ class PermisosModulosController extends Controller
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $idUsuario = (int) ($_GET['u'] ?? 0);
         $buscar = trim($_GET['q'] ?? $_GET['b'] ?? '');
-        $rows = $this->modelEmpresa->getEmpresasParaSelect($idUsuario, $idActual, $nivel, $buscar);
+        // Superadministrador: todas las empresas activas del sistema, marcando cuáles
+        // ya tiene asignadas el usuario. Administrador: solo las asignadas.
+        $rows = $nivel >= 3
+            ? $this->modelEmpresa->getTodasEmpresasConAsignacion($idUsuario, $buscar, 500)
+            : $this->modelEmpresa->getEmpresasParaSelect($idUsuario, $idActual, $nivel, $buscar);
         $out = array_map(function ($r) {
-            $text = $r['nombre_comercial'] ?? $r['ruc'] ?? 'Empresa';
-            if (!empty($r['ruc'])) $text .= ' (' . $r['ruc'] . ')';
-            return ['value' => (int)($r['id_empresa'] ?? $r['id'] ?? 0), 'text' => $text];
+            return $this->opcionEmpresa($r);
         }, $rows);
         $this->json($out);
     }
 
+    /**
+     * Empresas que el usuario actual puede asignar al crear un usuario. AJAX/JSON.
+     * Superadministrador: todas las empresas activas. Administrador: solo las suyas.
+     */
+    public function empresasAsignablesJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $buscar = trim($_GET['q'] ?? $_GET['b'] ?? '');
+
+        $rows = $this->modelEmpresa->getEmpresasAsignablesParaSelect($idActual, $nivel, $buscar, 200);
+        $out = array_map(function ($r) {
+            return $this->opcionEmpresa($r);
+        }, $rows);
+        $this->json($out);
+    }
     /**
      * Guardado inmediato de un solo submódulo vía AJAX (JSON).
      */
@@ -214,6 +241,15 @@ class PermisosModulosController extends Controller
             't'          => !empty($_POST['t']),
         ];
 
+        // El superadministrador puede marcar permisos en una empresa que el usuario
+        // todavía no tiene asignada: la asignación se crea aquí, si no el permiso
+        // quedaría guardado pero el usuario nunca podría entrar a esa empresa.
+        // Solo al conceder algo: desmarcar la última casilla no debe asignar nada.
+        $empresaRecienAsignada = false;
+        if (in_array(true, $p, true)) {
+            $empresaRecienAsignada = $this->asegurarEmpresaAsignada($idUsuario, $idEmpresa, $idActual, $nivel);
+        }
+
         $ok = $this->modelPermiso->guardarPermisoSubmodulo($idUsuario, $idEmpresa, $idModulo, $idSub, $p, $idActual);
 
         // Mantener la vista en sesión sincronizada
@@ -233,7 +269,15 @@ class PermisosModulosController extends Controller
             unset($mod);
         }
 
-        echo json_encode(['ok' => $ok, 'error' => $ok ? null : 'Error al guardar.']);
+        if ($ok && $empresaRecienAsignada) {
+            $_SESSION['permisos_vista']['empresaAsignada'] = true;
+        }
+
+        echo json_encode([
+            'ok'                => $ok,
+            'empresa_asignada'  => $empresaRecienAsignada,
+            'error'             => $ok ? null : 'Error al guardar.',
+        ]);
         exit;
     }
 
@@ -297,24 +341,41 @@ class PermisosModulosController extends Controller
             exit;
         }
 
-        // La empresa origen debe ser accesible para el usuario origen y para el gestor
-        $empresasOrigen = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioOrigen, $idActual, $nivel);
-        if (!$this->buscarEmpresaEnLista($empresasOrigen, $idEmpresaOrigen)) {
-            echo json_encode(['ok' => false, 'error' => 'La empresa origen no está asignada al usuario origen.']);
-            exit;
+        // Empresas válidas. El superadministrador trabaja con cualquier empresa activa
+        // del sistema (la asignación al usuario destino se crea más abajo); el
+        // administrador sigue limitado a las empresas ya asignadas.
+        if ($nivel >= 3) {
+            if (!$this->modelEmpresa->getEmpresaActivaPorId($idEmpresaOrigen)) {
+                echo json_encode(['ok' => false, 'error' => 'La empresa origen no existe o no está activa.']);
+                exit;
+            }
+            if (!$this->modelEmpresa->getEmpresaActivaPorId($idEmpresaDestino)) {
+                echo json_encode(['ok' => false, 'error' => 'La empresa destino no existe o no está activa.']);
+                exit;
+            }
+        } else {
+            // La empresa origen debe ser accesible para el usuario origen y para el gestor
+            $empresasOrigen = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioOrigen, $idActual, $nivel);
+            if (!$this->buscarEmpresaEnLista($empresasOrigen, $idEmpresaOrigen)) {
+                echo json_encode(['ok' => false, 'error' => 'La empresa origen no está asignada al usuario origen.']);
+                exit;
+            }
+
+            // La empresa destino debe estar asignada al usuario destino
+            $empresasDestino = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioDestino, $idActual, $nivel);
+            if (!$this->buscarEmpresaEnLista($empresasDestino, $idEmpresaDestino)) {
+                echo json_encode(['ok' => false, 'error' => 'La empresa destino no está asignada al usuario destino.']);
+                exit;
+            }
         }
 
-        // La empresa destino debe estar asignada al usuario destino
-        $empresasDestino = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioDestino, $idActual, $nivel);
-        if (!$this->buscarEmpresaEnLista($empresasDestino, $idEmpresaDestino)) {
-            echo json_encode(['ok' => false, 'error' => 'La empresa destino no está asignada al usuario destino.']);
-            exit;
-        }
+        $empresaRecienAsignada = $this->asegurarEmpresaAsignada($idUsuarioDestino, $idEmpresaDestino, $idActual, $nivel);
 
         $ok = $this->modelPermiso->copiarPermisosUsuario($idUsuarioOrigen, $idEmpresaOrigen, $idUsuarioDestino, $idEmpresaDestino, $idActual);
         echo json_encode([
-            'ok'    => $ok,
-            'error' => $ok ? null : 'Error al copiar los permisos.',
+            'ok'               => $ok,
+            'empresa_asignada' => $empresaRecienAsignada,
+            'error'            => $ok ? null : 'Error al copiar los permisos.',
         ]);
         exit;
     }
@@ -370,14 +431,20 @@ class PermisosModulosController extends Controller
             $this->redirect(BASE_URL . self::BASE_PATH);
         }
 
+        // Igual que en el guardado individual: si el superadministrador está asignando
+        // permisos en una empresa que el usuario no tiene, se le asigna la empresa.
+        // Un guardado que deja todo en blanco no asigna nada.
+        $empresaRecienAsignada = false;
+        if (!empty($permisos)) {
+            $empresaRecienAsignada = $this->asegurarEmpresaAsignada($idUsuario, $idEmpresa, $idActual, $nivel);
+        }
+
         if ($this->modelPermiso->guardarPermisos($idUsuario, $idEmpresa, $permisos, $idModuloPorSub, $idActual)) {
-            $_SESSION['permisos_msg'] = ['success', 'Permisos guardados correctamente.'];
+            $_SESSION['permisos_msg'] = ['success', $empresaRecienAsignada
+                ? 'Permisos guardados. La empresa se asignó al usuario.'
+                : 'Permisos guardados correctamente.'];
             $usuarioSel = $this->modelEmpresa->getUsuarioPorId($idUsuario);
-            $empresas = $this->modelEmpresa->getEmpresasParaPermisos($idUsuario, $idActual, $nivel);
-            $empresaSel = $this->buscarEmpresaEnLista($empresas, $idEmpresa);
-            if (!$empresaSel) {
-                $empresaSel = ['id_empresa' => $idEmpresa, 'nombre_comercial' => 'Empresa #' . $idEmpresa, 'ruc' => ''];
-            }
+            $empresaSel = $this->resolverEmpresaSel($idUsuario, $idActual, $nivel, $idEmpresa);
             $rows = $this->modelPermiso->getModulosConSubmodulosParaPermisos($idActual, $idEmpresa, $nivel);
             $permisosActualizados = $this->modelPermiso->getPermisosDeUsuario($idUsuario, $idEmpresa);
             $modulos = $this->agruparPorModuloOrdenado($rows, $permisosActualizados, $idUsuario, $idEmpresa);
@@ -386,6 +453,7 @@ class PermisosModulosController extends Controller
                 'idEmpresaSel' => $idEmpresa,
                 'usuarioSel' => $usuarioSel,
                 'empresaSel' => $empresaSel,
+                'empresaAsignada' => $this->empresaEstaAsignada($idUsuario, $idEmpresa, $usuarioSel),
                 'modulos' => $modulos,
             ];
         } else {
@@ -395,6 +463,154 @@ class PermisosModulosController extends Controller
         $this->redirect(BASE_URL . self::BASE_PATH . '?v=1');
     }
 
+    /**
+     * Asigna al usuario la empresa seleccionada. Exclusivo del superadministrador:
+     * desde esta pantalla puede elegir cualquier empresa activa del sistema, y esta
+     * acción crea la asignación (empresa_asignada) sin salir del módulo. AJAX/JSON.
+     */
+    public function asignarEmpresa(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(3);
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $idUsuario = (int) ($_POST['id_usuario'] ?? 0);
+        $idEmpresa = (int) ($_POST['id_empresa'] ?? 0);
+        $idActual  = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+
+        if ($idUsuario <= 0 || $idEmpresa <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+
+        $usuario = $this->modelEmpresa->getUsuarioPorId($idUsuario);
+        if (!$usuario) {
+            echo json_encode(['ok' => false, 'error' => 'El usuario no existe o está inactivo.']);
+            exit;
+        }
+        if ((int) ($usuario['nivel'] ?? 0) >= 3) {
+            echo json_encode(['ok' => false, 'error' => 'Un superadministrador ya accede a todas las empresas; no necesita asignación.']);
+            exit;
+        }
+        if (!$this->modelEmpresa->getEmpresaActivaPorId($idEmpresa)) {
+            echo json_encode(['ok' => false, 'error' => 'La empresa no existe o no está activa.']);
+            exit;
+        }
+        if ($this->modelEmpresa->estaEmpresaAsignada($idEmpresa, $idUsuario)) {
+            $_SESSION['permisos_vista']['empresaAsignada'] = true;
+            echo json_encode(['ok' => true, 'ya_estaba' => true]);
+            exit;
+        }
+
+        $ok = $this->asegurarEmpresaAsignada($idUsuario, $idEmpresa, $idActual, $nivel);
+        if ($ok) {
+            $_SESSION['permisos_vista']['empresaAsignada'] = true;
+        }
+
+        echo json_encode([
+            'ok'    => $ok,
+            'error' => $ok ? null : 'No se pudo asignar la empresa.',
+        ]);
+        exit;
+    }
+
+    /**
+     * Opcion para los selectores de empresa. Cuando la consulta trae la marca
+     * "asignada" (solo el superadministrador), se agrupa en el desplegable para
+     * distinguir las empresas que el usuario ya tiene de las que aún no.
+     */
+    private function opcionEmpresa(array $r): array
+    {
+        $text = $r['nombre_comercial'] ?? $r['ruc'] ?? 'Empresa';
+        if (!empty($r['ruc'])) $text .= ' (' . $r['ruc'] . ')';
+
+        $opt = ['value' => (int) ($r['id_empresa'] ?? $r['id'] ?? 0), 'text' => $text];
+
+        if (array_key_exists('asignada', $r)) {
+            $asignada = (int) $r['asignada'] === 1;
+            $opt['asignada'] = $asignada;
+            $opt['grupo'] = $asignada ? 'asignadas' : 'otras';
+        }
+        return $opt;
+    }
+
+    /**
+     * Empresa seleccionada para mostrarla en pantalla. El superadministrador puede
+     * trabajar con cualquier empresa activa (esté o no asignada); el administrador
+     * solo con las empresas asignadas al usuario que él también tiene.
+     */
+    private function resolverEmpresaSel(int $idUsuario, int $idActual, int $nivel, int $idEmpresa): array
+    {
+        $empresa = null;
+        if ($idEmpresa > 0) {
+            if ($nivel >= 3) {
+                $empresa = $this->modelEmpresa->getEmpresaActivaPorId($idEmpresa);
+            } else {
+                $empresas = $this->modelEmpresa->getEmpresasParaPermisos($idUsuario, $idActual, $nivel);
+                $empresa = $this->buscarEmpresaEnLista($empresas, $idEmpresa);
+            }
+        }
+        if (!$empresa) {
+            $empresa = ['id_empresa' => $idEmpresa, 'nombre_comercial' => 'Empresa #' . $idEmpresa, 'ruc' => ''];
+        }
+        return $empresa;
+    }
+
+    /**
+     * False solo cuando queda algo pendiente: el usuario destino necesita la empresa
+     * asignada y todavía no la tiene. Un superadministrador (nivel 3 destino) accede
+     * a todas las empresas sin asignación, así que nunca está pendiente.
+     */
+    private function empresaEstaAsignada(int $idUsuario, int $idEmpresa, ?array $usuarioSel): bool
+    {
+        if ($idUsuario <= 0 || $idEmpresa <= 0) return true;
+        if ((int) ($usuarioSel['nivel'] ?? 0) >= 3) return true;
+        return $this->modelEmpresa->estaEmpresaAsignada($idEmpresa, $idUsuario);
+    }
+
+    /**
+     * Crea la asignación de empresa cuando el superadministrador guarda permisos en
+     * una empresa que el usuario todavía no tiene. Sin esto el permiso quedaría
+     * guardado pero el usuario no podría entrar nunca a esa empresa.
+     * Devuelve true solo si la asignación se creó en esta llamada.
+     */
+    private function asegurarEmpresaAsignada(int $idUsuario, int $idEmpresa, int $idActual, int $nivel): bool
+    {
+        if ($nivel < 3 || $idUsuario <= 0 || $idEmpresa <= 0) return false;
+
+        $usuario = $this->modelEmpresa->getUsuarioPorId($idUsuario);
+        if (!$usuario || (int) ($usuario['nivel'] ?? 0) >= 3) return false;
+        if ($this->modelEmpresa->estaEmpresaAsignada($idEmpresa, $idUsuario)) return false;
+        if (!$this->modelEmpresa->getEmpresaActivaPorId($idEmpresa)) return false;
+
+        $ok = $this->modelEmpresa->asignar($idEmpresa, $idUsuario, $idActual);
+        if ($ok) {
+            try {
+                (new \App\Services\LogSistemaService())->registrar(
+                    $idActual,
+                    $idEmpresa,
+                    'asignar_empresa_usuario',
+                    'empresa_asignada',
+                    null,
+                    null,
+                    [
+                        'id_usuario' => $idUsuario,
+                        'id_empresa' => $idEmpresa,
+                        'origen'     => 'permisos-modulos',
+                    ]
+                );
+            } catch (\Throwable $e) {
+                // La auditoría no debe bloquear la operación.
+            }
+        }
+        return $ok;
+    }
     private function agruparPorModuloOrdenado(array $rows, array $permisos, int $idUsuario, int $idEmpresa): array
     {
         $modulos = [];
