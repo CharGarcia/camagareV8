@@ -516,6 +516,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             $docIco = 'hourglass-split';
                                             $docTit = 'Enviados el ' . date('d-m-Y H:i:s', strtotime((string) $ultimoEnvioDocs['enviado_at'])) . ', aún no aceptados.';
                                         }
+                                        // Se puede (re)enviar mientras no estén aceptados: sin enviar, o
+                                        // enviados pero pendientes de aceptación (para insistir/reenviar el enlace).
+                                        $puedeEnviarDocsLegales = !$ultimoEnvioDocs || (($ultimoEnvioDocs['estado'] ?? '') !== 'aceptado');
                                         ?>
                                         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                                             <div class="d-flex flex-wrap align-items-center gap-2">
@@ -533,9 +536,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                     </span>
                                                 <?php endif; ?>
                                             </div>
-                                            <?php if (!$ultimoEnvioDocs): ?>
+                                            <?php if ($puedeEnviarDocsLegales): ?>
                                                 <button type="button" id="btn-enviar-documentos-legales" class="btn btn-sm btn-primary" onclick="enviarDocumentosLegalesEmpresa(this)">
-                                                    <i class="bi bi-envelope-fill me-1"></i>Enviar documentos legales
+                                                    <i class="bi bi-envelope-fill me-1"></i><?= $ultimoEnvioDocs ? 'Reenviar documentos legales' : 'Enviar documentos legales' ?>
                                                 </button>
                                             <?php endif; ?>
                                         </div>

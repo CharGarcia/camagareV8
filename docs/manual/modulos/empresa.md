@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa
-version: 1.5
+version: 1.6
 orden: 5
 estado: activo
 ---
@@ -128,13 +128,14 @@ Vigencia, hay una tarjeta con dos bloques:
   abre la versión vigente, para poder revisarlos **antes** de enviarlos. Si
   hubo más de un envío, un desplegable "Ver envíos anteriores" muestra el
   historial.
-  - **Botón "Enviar documentos legales"**: aparece solo mientras el estado es
-    **Sin enviar**. Cualquier usuario con permiso de actualizar sobre este
-    módulo (no solo el superadministrador) puede enviarlos al correo
-    registrado de la empresa desde aquí. Una vez enviados, el botón desaparece:
-    reenviarlos a una empresa que ya los tiene enviados/aceptados sigue siendo
-    exclusivo del superadministrador, desde **Configuración → Empresas del
-    sistema**.
+  - **Botón "Enviar" / "Reenviar documentos legales"**: aparece mientras el
+    estado sea **Sin enviar** o **Pendiente de aceptación** (para poder
+    insistir con un reenvío si el destinatario no llegó a aceptar). Cualquier
+    usuario con permiso de actualizar sobre este módulo (no solo el
+    superadministrador) puede enviarlos al correo registrado de la empresa
+    desde aquí. El botón desaparece en cuanto el estado pasa a **Aceptado**:
+    reenviar documentos ya aceptados sigue siendo exclusivo del
+    superadministrador, desde **Configuración → Empresas del sistema**.
 - **Otros Documentos Cargados**: los archivos que el superadministrador sube
   manualmente para la empresa (RUC, licencia, poder, contratos, etc.) desde
   **Configuración → Empresas del sistema**, con su tipo, descripción, fecha y
@@ -151,6 +152,11 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.6** — El botón de envío de documentos legales ahora también aparece en
+  estado "Pendiente de aceptación" (antes solo en "Sin enviar"), como
+  "Reenviar documentos legales", para poder insistir cuando el destinatario no
+  llegó a aceptar. Sigue ocultándose una vez que el estado es "Aceptado".
 
 - **1.5** — En la tarjeta "Documentos Legales" ahora se puede previsualizar el
   PDF de cada documento aunque todavía no se haya enviado (usa la versión

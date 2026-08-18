@@ -179,13 +179,14 @@ class EmpresaController extends BaseModuloController
                     echo json_encode(['ok' => $res]);
                     break;
                 case 'enviar_documentos_legales':
-                    // Solo permite enviar si todavía no hay ningún envío: reenviar a una
-                    // empresa que ya los tiene enviados/aceptados sigue siendo una acción
-                    // exclusiva del superadministrador desde Empresas del sistema.
+                    // Se puede (re)enviar mientras no estén ACEPTADOS: sin enviar aún, o
+                    // enviados pero pendientes de aceptación (para insistir/reenviar el
+                    // enlace). Una vez aceptados, reenviar sigue siendo exclusivo del
+                    // superadministrador desde Empresas del sistema.
                     $this->requireActualizar();
-                    $yaEnviados = (new DocumentosLegalesService())->getEnviosDeEmpresa($idEmpresa);
-                    if (!empty($yaEnviados)) {
-                        echo json_encode(['ok' => false, 'error' => 'Los documentos legales ya fueron enviados a esta empresa.']);
+                    $ultimoEnvio = (new DocumentosLegalesService())->getEnviosDeEmpresa($idEmpresa)[0] ?? null;
+                    if ($ultimoEnvio && ($ultimoEnvio['estado'] ?? '') === 'aceptado') {
+                        echo json_encode(['ok' => false, 'error' => 'Los documentos legales ya fueron aceptados por esta empresa.']);
                         break;
                     }
                     $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
