@@ -66,6 +66,9 @@ class EnvioDocumentosSRIService
         }
 
         // 3. Determinar credenciales SMTP
+        // Los datos del emisor se resuelven antes porque el nombre de la empresa es el
+        // remitente visible del correo (fromName), no solo la firma del cuerpo.
+        $datosEmpresa = $this->datosEmpresaCorreo($idEmpresa);
         $tipoCorreo = $correoConfig['tipo_correo'] ?? 'camagare';
         $smtpData = null;
 
@@ -78,6 +81,9 @@ class EnvioDocumentosSRIService
                 \App\Services\ErrorLogService::registrarManual($msg, ['ruta' => 'EnvioDocumentosSRIService', 'accion' => 'enviarSiAplica']);
                 return false;
             }
+            if ($datosEmpresa['nombre'] !== '') {
+                $smtpData['fromName'] = $datosEmpresa['nombre'];
+            }
         } else {
             // Usar correo propio configurado por la empresa
             $enc = $correoConfig['ssl_habilitado'] ? 'tls' : ''; // o ssl dependiendo de la lógica, default tls
@@ -87,7 +93,7 @@ class EnvioDocumentosSRIService
                 'username' => $correoConfig['correo_emisor'] ?? '',
                 'password' => $correoConfig['password_correo_emisor'] ?? '',
                 'from' => $correoConfig['correo_emisor'] ?? '',
-                'fromName' => 'Emisor Electrónico', // Se puede mejorar con el nombre de la empresa
+                'fromName' => $datosEmpresa['nombre'] !== '' ? $datosEmpresa['nombre'] : 'Emisor Electrónico',
                 'smtpSecure' => $enc,
             ];
         }
@@ -124,24 +130,33 @@ class EnvioDocumentosSRIService
             ? number_format((float)$totalRaw, 2, '.', '') . ' $'
             : '';
 
-        // Datos del emisor y su logo (para la cabecera y la firma del correo)
-        $datosEmpresa = $this->datosEmpresaCorreo($idEmpresa);
+        // Logo del emisor para la cabecera del correo
         $logoPath     = $this->resolverLogoEmpresa($idEmpresa, isset($cabecera['id_establecimiento']) ? (int)$cabecera['id_establecimiento'] : null);
         $logoCid      = $logoPath !== '' ? 'logoempresa' : '';
 
-        $htmlCuerpo = $this->renderPlantillaDocumento([
-            'nombre_destino'       => $nombreDestino,
-            'nombre_documento'     => $nombreDocCorreo,
-            'num_comprobante'      => $numComprobante,
-            'fecha_emision'        => $fechaEmisionFmt,
-            'num_autorizacion'     => (string)$claveAcceso,
-            'valor_total'          => $valorTotalFmt,
-            'cuerpo_personalizado' => $cuerpoPersonalizado,
-            'empresa_nombre'       => $datosEmpresa['nombre'],
-            'empresa_ruc'          => $datosEmpresa['ruc'],
-            'logo_cid'             => $logoCid,
-            'anulado'              => false,
-        ]);
+        // La empresa puede elegir enviar SOLO su propio contenido, sin el diseño del
+        // sistema (Empresa > Configuración Correo). Si eligió eso pero dejó el cuerpo
+        // vacío, se usa igualmente el diseño para no enviar un correo en blanco.
+        $modoCuerpo = $correoConfig['modo_cuerpo_correo'] ?? 'diseno';
+        if ($modoCuerpo === 'propio' && trim($cuerpoPersonalizado) !== '') {
+            $htmlCuerpo = $cuerpoPersonalizado;
+            $logoPath   = '';
+            $logoCid    = '';
+        } else {
+            $htmlCuerpo = $this->renderPlantillaDocumento([
+                'nombre_destino'       => $nombreDestino,
+                'nombre_documento'     => $nombreDocCorreo,
+                'num_comprobante'      => $numComprobante,
+                'fecha_emision'        => $fechaEmisionFmt,
+                'num_autorizacion'     => (string)$claveAcceso,
+                'valor_total'          => $valorTotalFmt,
+                'cuerpo_personalizado' => $cuerpoPersonalizado,
+                'empresa_nombre'       => $datosEmpresa['nombre'],
+                'empresa_ruc'          => $datosEmpresa['ruc'],
+                'logo_cid'             => $logoCid,
+                'anulado'              => false,
+            ]);
+        }
 
         // Nombre base para los archivos adjuntos (ej: Factura_001-001-000000001)
         $baseName = str_replace(' ', '_', $nombreDocArchivo) . '_' . $numComprobante;

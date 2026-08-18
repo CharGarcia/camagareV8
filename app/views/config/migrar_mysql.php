@@ -65,15 +65,26 @@ $base = BASE_URL;
             contraseña al ingresar) y <b>no se envía correo</b>.
         </p>
         <div class="d-flex align-items-end gap-2 mb-3 flex-wrap">
-            <div style="min-width:320px">
+            <div style="min-width:360px">
                 <label class="form-label small fw-semibold mb-1">Empresa (destino)</label>
-                <select id="usrEmpresa" class="form-select form-select-sm">
-                    <option value="">Seleccione una empresa…</option>
-                    <?php foreach ($empresasMigrar as $e):
-                        $est = str_pad((string)($e['establecimiento'] ?? ''), 3, '0', STR_PAD_LEFT); ?>
-                        <option value="<?= (int)$e['id'] ?>"><?= htmlspecialchars($e['razon_social']) ?> — RUC <?= htmlspecialchars($e['ruc']) ?> (<?= htmlspecialchars($est) ?>)</option>
-                    <?php endforeach; ?>
-                </select>
+                <div class="position-relative">
+                    <input type="text" class="form-control form-control-sm" id="usrEmpresaBuscar" autocomplete="off" placeholder="Buscar empresa por nombre o RUC…">
+                    <input type="hidden" id="usrEmpresa">
+                    <div id="ddUsrEmpresas" class="list-group position-absolute w-100 shadow-sm" style="max-height:260px;overflow:auto;z-index:1050;display:none;">
+                        <?php foreach ($empresasMigrar as $e):
+                            $est = str_pad((string)($e['establecimiento'] ?? ''), 3, '0', STR_PAD_LEFT);
+                            $lbl = ($e['razon_social'] ?? '') . ' — RUC ' . ($e['ruc'] ?? '') . ' (' . $est . ')';
+                            $busq = mb_strtolower(($e['razon_social'] ?? '') . ' ' . ($e['ruc'] ?? '') . ' ' . $est, 'UTF-8'); ?>
+                            <button type="button" class="list-group-item list-group-item-action py-1 dd-usr-emp"
+                                    data-id="<?= (int)$e['id'] ?>"
+                                    data-label="<?= htmlspecialchars($lbl) ?>"
+                                    data-search="<?= htmlspecialchars($busq) ?>">
+                                <span class="fw-semibold"><?= htmlspecialchars($e['razon_social']) ?></span><br>
+                                <span class="text-muted small">RUC <?= htmlspecialchars($e['ruc']) ?> · Est. <?= htmlspecialchars($est) ?></span>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="btnListarUsuarios" disabled><i class="bi bi-search me-1"></i> Buscar usuarios</button>
         </div>
@@ -839,11 +850,30 @@ $base = BASE_URL;
             : '<i class="bi bi-download me-1"></i> Migrar seleccionados';
     }
 
-    // El botón "Buscar usuarios" requiere una empresa seleccionada.
-    $('usrEmpresa').addEventListener('change', () => {
-        $('btnListarUsuarios').disabled = !$('usrEmpresa').value;
-        usrData = []; usrRender(); $('usuariosMigrarBox').style.display = 'none'; $('usrResultado').innerHTML = '';
-    });
+    // Buscador (typeahead) de empresa destino.
+    (function () {
+        const ddU = $('ddUsrEmpresas'), buscarU = $('usrEmpresaBuscar');
+        const itemsU = Array.from(document.querySelectorAll('.dd-usr-emp'));
+        function usrReset() { // al cambiar/limpiar la empresa se descarta el listado previo
+            $('btnListarUsuarios').disabled = !$('usrEmpresa').value;
+            usrData = []; usrRender(); $('usuariosMigrarBox').style.display = 'none'; $('usrResultado').innerHTML = '';
+        }
+        function filtrarU() {
+            const q = buscarU.value.trim().toLowerCase();
+            let vis = 0;
+            itemsU.forEach(it => { const ok = q === '' || it.dataset.search.indexOf(q) !== -1; it.style.display = ok ? '' : 'none'; if (ok) vis++; });
+            ddU.style.display = vis ? 'block' : 'none';
+        }
+        buscarU.addEventListener('focus', filtrarU);
+        buscarU.addEventListener('input', () => { $('usrEmpresa').value = ''; usrReset(); filtrarU(); });
+        itemsU.forEach(it => it.addEventListener('click', () => {
+            $('usrEmpresa').value = it.dataset.id;
+            buscarU.value = it.dataset.label;
+            ddU.style.display = 'none';
+            usrReset();
+        }));
+        document.addEventListener('click', (e) => { if (!ddU.contains(e.target) && e.target !== buscarU) ddU.style.display = 'none'; });
+    })();
 
     $('btnListarUsuarios').addEventListener('click', async () => {
         const idEmp = $('usrEmpresa').value;
@@ -877,7 +907,7 @@ $base = BASE_URL;
     $('btnMigrarUsuarios').addEventListener('click', async () => {
         const idEmp = $('usrEmpresa').value;
         if (!idEmp) return;
-        const empTxt = $('usrEmpresa').options[$('usrEmpresa').selectedIndex].text;
+        const empTxt = $('usrEmpresaBuscar').value || 'la empresa seleccionada';
         const mails = Array.from(document.querySelectorAll('.usr-chk:checked')).map(c => usrData[+c.dataset.i].mail);
         if (!mails.length) return;
         if (!confirm('¿Migrar ' + mails.length + ' usuario(s) como nivel 1 y asignarlos a «' + empTxt + '»?\n\nSe crean con enlace de registro (fijan su contraseña al ingresar); no se envía correo.')) return;

@@ -671,6 +671,22 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 <input type="text" name="asunto_correo" class="form-control form-control-sm" value="<?= htmlspecialchars($correo['asunto_correo'] ?? '') ?>" placeholder="Envío de Comprobante Electrónico">
                             </div>
                             <div class="col-md-12 mt-2">
+                                <label class="form-label small fw-bold d-block">¿Cómo se envía el cuerpo del correo?</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="modo_cuerpo_correo" id="modo_cuerpo_diseno" value="diseno" <?= (($correo['modo_cuerpo_correo'] ?? 'diseno') !== 'propio') ? 'checked' : '' ?>>
+                                    <label class="form-check-label small" for="modo_cuerpo_diseno">
+                                        <strong>Usar el diseño del sistema</strong> — su texto se muestra dentro del correo diseñado, que ya incluye el logo de la empresa, los datos del comprobante (número, fecha, autorización y valor), la firma con la razón social y el pie de confidencialidad.
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="modo_cuerpo_correo" id="modo_cuerpo_propio" value="propio" <?= (($correo['modo_cuerpo_correo'] ?? 'diseno') === 'propio') ? 'checked' : '' ?>>
+                                    <label class="form-check-label small" for="modo_cuerpo_propio">
+                                        <strong>Enviar solo mi contenido</strong> — se envía únicamente lo que usted escriba abajo, sin el diseño del sistema. Escriba entonces el correo completo (saludo, mensaje y despedida). Si lo deja vacío, se usará el diseño del sistema para no enviar un correo en blanco.
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12 mt-2">
                                 <label class="form-label small fw-bold">Cuerpo del correo (Diseño HTML)</label>
                                 <!-- Contenedor para Quill -->
                                 <div id="cuerpo_correo_editor" style="height: 250px; background: white;"><?= $correo['cuerpo_correo'] ?? '' ?></div>

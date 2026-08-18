@@ -45,6 +45,17 @@ $esc = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title><?= $esc($nombreDocumento) ?></title>
+    <style>
+        /* El cuerpo personalizado se escribe con el editor Quill (modulo Empresa >
+           Configuracion Correo), que marca la alineacion con clases en vez de estilos
+           inline. Sin estas reglas el texto centrado/derecha se veria alineado a la
+           izquierda en el correo. */
+        .cmg-cuerpo-personalizado p { margin: 0 0 10px; }
+        .cmg-cuerpo-personalizado p:last-child { margin-bottom: 0; }
+        .cmg-cuerpo-personalizado .ql-align-center { text-align: center; }
+        .cmg-cuerpo-personalizado .ql-align-right  { text-align: right; }
+        .cmg-cuerpo-personalizado .ql-align-justify { text-align: justify; }
+    </style>
 </head>
 <body style="margin:0;padding:0;background:#ffffff;">
 <table align="center" cellpadding="0" cellspacing="0" border="0" width="100%"
@@ -71,7 +82,14 @@ $esc = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 Estimado(a) <strong><?= $esc($nombreDestino) ?></strong>:
             </p>
 
-            <?php if ($anulado): ?>
+            <?php if ($cuerpoPers !== ''): ?>
+                <?php /* La empresa configuro su propio texto (modulo Empresa > Configuracion Correo):
+                         reemplaza el mensaje por defecto. El numero de documento no se pierde porque
+                         en ese caso se muestra dentro de la caja de datos. */ ?>
+                <div class="cmg-cuerpo-personalizado" style="margin:0 0 18px;font-size:14px;color:<?= $TEXTO ?>;line-height:1.6;">
+                    <?= $cuerpoPers ?>
+                </div>
+            <?php elseif ($anulado): ?>
                 <p style="margin:0 0 18px;font-size:14px;color:<?= $TEXTO ?>;line-height:1.6;">
                     Le informamos que su <strong><?= $esc($nombreDocumento) ?></strong>
                     <?php if ($numComprobante !== ''): ?>
@@ -89,17 +107,14 @@ $esc = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 </p>
             <?php endif; ?>
 
-            <?php if ($cuerpoPers !== ''): ?>
-                <div style="margin:0 0 18px;font-size:14px;color:<?= $TEXTO ?>;line-height:1.6;">
-                    <?= $cuerpoPers ?>
-                </div>
-            <?php endif; ?>
-
             <!-- Datos del comprobante -->
             <table cellpadding="0" cellspacing="0" border="0" width="100%"
                    style="border-collapse:collapse;background:<?= $CAJA ?>;margin:0 0 20px;">
                 <tr>
                     <td style="padding:16px 18px;font-size:13px;color:<?= $TEXTO ?>;line-height:1.7;">
+                        <?php if ($cuerpoPers !== '' && $numComprobante !== ''): ?>
+                            <div><strong style="color:<?= $AZUL ?>;">N.&ordm; de documento:</strong> <?= $esc($numComprobante) ?></div>
+                        <?php endif; ?>
                         <?php if ($fechaEmision !== ''): ?>
                             <div><strong style="color:<?= $AZUL ?>;">Fecha de emisión:</strong> <?= $esc($fechaEmision) ?></div>
                         <?php endif; ?>

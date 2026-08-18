@@ -243,6 +243,7 @@ class EmpresaRepository extends BaseModel
             $pass = $this->escape($data['password_correo_emisor'] ?? '');
             $tipoCorreo = $this->escape($data['tipo_correo'] ?? 'camagare');
             $cuerpoCorreo = $this->escape($data['cuerpo_correo'] ?? '');
+            $modoCuerpo = ($data['modo_cuerpo_correo'] ?? 'diseno') === 'propio' ? 'propio' : 'diseno';
             $user = (int) ($_SESSION['id_usuario'] ?? 0);
 
             $check = $this->query("SELECT id FROM empresa_correo WHERE id_empresa = {$id} AND eliminado = false");
@@ -251,11 +252,12 @@ class EmpresaRepository extends BaseModel
                         ssl_habilitado = {$ssl}, envio_automatico = {$envio}, asunto_correo = '{$asunto}', host = '{$host}', 
                         puerto = {$puerto}, correo_emisor = '{$correo}', password_correo_emisor = '{$pass}',
                         tipo_correo = '{$tipoCorreo}', cuerpo_correo = '{$cuerpoCorreo}',
+                        modo_cuerpo_correo = '{$modoCuerpo}',
                         updated_at = NOW(), updated_by = {$user}
                         WHERE id_empresa = {$id}";
             } else {
-                $sql = "INSERT INTO empresa_correo (id_empresa, ssl_habilitado, envio_automatico, asunto_correo, host, puerto, correo_emisor, password_correo_emisor, tipo_correo, cuerpo_correo, created_by, updated_by)
-                        VALUES ({$id}, {$ssl}, {$envio}, '{$asunto}', '{$host}', {$puerto}, '{$correo}', '{$pass}', '{$tipoCorreo}', '{$cuerpoCorreo}', {$user}, {$user})";
+                $sql = "INSERT INTO empresa_correo (id_empresa, ssl_habilitado, envio_automatico, asunto_correo, host, puerto, correo_emisor, password_correo_emisor, tipo_correo, cuerpo_correo, modo_cuerpo_correo, created_by, updated_by)
+                        VALUES ({$id}, {$ssl}, {$envio}, '{$asunto}', '{$host}', {$puerto}, '{$correo}', '{$pass}', '{$tipoCorreo}', '{$cuerpoCorreo}', '{$modoCuerpo}', {$user}, {$user})";
             }
             $this->execute($sql);
             $this->db->commit();

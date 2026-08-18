@@ -335,11 +335,11 @@ class EmpresaInicializadorService
             "INSERT INTO empresa_correo (
                 id_empresa, tipo_correo, envio_automatico, asunto_correo,
                 ssl_habilitado, host, puerto, correo_emisor, password_correo_emisor,
-                cuerpo_correo, created_by, updated_by
+                cuerpo_correo, modo_cuerpo_correo, created_by, updated_by
              ) VALUES (
                 :id_empresa, 'camagare', TRUE, 'Nuevo documento electrónico',
                 TRUE, '', 0, '', '',
-                '', :usuario, :usuario
+                '', 'diseno', :usuario, :usuario
              )"
         );
         $stmt->execute([

@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion
-version: 1.0
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente
+version: 1.3
 orden: 5
 estado: activo
 ---
@@ -63,6 +63,42 @@ Desde aquí se ajustan comportamientos que afectan a módulos concretos: cómo s
 presentan los ítems en la factura, si las cargas de inventario requieren
 aprobación, los textos de los correos, entre otros.
 
+## Correo de comprobantes electrónicos
+
+En la pestaña **Configuración Correo** se define cómo salen los correos que el
+sistema envía cuando el SRI autoriza un comprobante (facturas, notas de crédito
+y débito, retenciones, guías de remisión y liquidaciones de compra).
+
+- **Tipo de correo**: usar el correo de Camagare o el correo propio de la
+  empresa (host, puerto, SSL, usuario y contraseña). Use **Probar Envío** antes
+  de activar el envío automático.
+- **Enviar correos de forma automática**: si está apagado, el comprobante no se
+  envía solo al autorizarse; igual se puede enviar a mano desde el documento.
+- **Asunto predeterminado del correo**: si se deja vacío, el sistema usa
+  "Comprobante Electrónico Autorizado".
+- **¿Cómo se envía el cuerpo del correo?**:
+  - *Usar el diseño del sistema* (opción por defecto): el correo sale con el
+    logo de la empresa en la cabecera, el nombre del documento y su número, una
+    caja con la fecha de emisión, el número de autorización y el valor total, la
+    firma con la razón social y el RUC, y un pie de confidencialidad. El texto
+    que usted escriba en *Cuerpo del correo* reemplaza el mensaje por defecto,
+    pero todo lo demás se mantiene.
+  - *Enviar solo mi contenido*: se envía únicamente lo que usted escriba, sin el
+    diseño del sistema. Escriba entonces el correo completo, con su saludo y su
+    despedida. Si deja el cuerpo vacío, el sistema usa igualmente su diseño para
+    no enviar un correo en blanco.
+- **Cuerpo del correo**: editor de texto con formato (títulos, negritas,
+  colores, alineación, listas, enlaces e imágenes).
+
+El logo que aparece en la cabecera del correo es el del **establecimiento** que
+emitió el documento (pestaña Establecimientos). Si el establecimiento no tiene
+logo, la cabecera muestra el nombre de la empresa en texto.
+
+El remitente que ve el destinatario es el nombre comercial de la empresa (o su
+razón social si no tiene nombre comercial).
+
+En ambos modos el correo lleva adjuntos el **PDF** y el **XML** autorizado del
+comprobante.
 ## Errores frecuentes
 
 - **Los comprobantes salen con numeración equivocada**: revise establecimiento y
@@ -72,6 +108,12 @@ aprobación, los textos de los correos, entre otros.
 - **El logo no sale en el PDF**: compruebe que esté cargado y en un formato
   admitido.
 
+- **El correo llega con dos saludos o dos despedidas**: está usando el diseño
+  del sistema y además escribió su propio saludo o firma en el cuerpo. Quite esa
+  parte de su texto, o cambie a *Enviar solo mi contenido*.
+- **Las imágenes que inserté en el cuerpo no se ven**: el editor guarda las
+  imágenes dentro del texto y la mayoría de los correos (Gmail, Outlook) las
+  bloquea. Use el logo del establecimiento, que sí se envía correctamente.
 ## Operadoras de transporte comercial (placa en la factura)
 
 La marca **"Operadora de transporte comercial (excepto taxis)"** la define el
@@ -82,6 +124,10 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.3** — Se rediseña el correo de comprobantes autorizados (logo, datos del
+  comprobante y firma de la empresa) y se documenta la pestaña Configuración
+  Correo, incluida la nueva opción para enviar solo el contenido propio.
 
 - **1.2** — Se documenta el tamaño exacto del logo en el PDF (81×25.4 mm) y el
   enlace para descargar el logo actualmente guardado en la pestaña
