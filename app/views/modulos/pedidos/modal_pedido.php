@@ -20,6 +20,12 @@
                     <span id="aviso-bloqueo-pedido-texto"></span>
                 </div>
 
+                <!-- Aviso: todas las líneas ya están registradas (Consignación/Factura); el pedido queda de solo lectura -->
+                <div id="aviso-pedido-procesado" class="alert alert-info d-flex align-items-center gap-2 mb-3 d-none" role="alert">
+                    <i class="bi bi-check2-circle"></i>
+                    <span>Este pedido ya está completamente registrado en una consignación o factura. No se puede editar.</span>
+                </div>
+
                 <!-- Acciones Rápidas Superior -->
                 <div class="d-flex justify-content-start gap-1 mb-3">
                     <?php if (\App\Helpers\Permisos::puedeCrear('modulos/clientes')): ?>
@@ -46,8 +52,8 @@
                     <?php if (\App\Helpers\Permisos::puedeCrear('modulos/factura-venta')): ?>
                     <div class="vr mx-1"></div>
 
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" id="btn-facturar-pedido" onclick="facturarPedido()" title="Generar factura de venta desde este pedido">
-                        <i class="bi bi-receipt me-1"></i>Facturar
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" id="btn-facturar-pedido" onclick="facturarPedido()" title="Generar factura de venta desde este pedido">
+                        <i class="bi bi-receipt"></i>
                     </button>
                     <?php endif; ?>
                 </div>
@@ -149,7 +155,8 @@
                                         <thead>
                                             <tr class="table-light border-bottom">
                                                 <th class="ps-3 py-2 small fw-bold text-muted text-center" style="width: 150px;">Código</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width: 70%;">Descripción <span class="text-danger">*</span></th>
+                                                <th class="py-2 small fw-bold text-muted" style="width: 60%;">Descripción <span class="text-danger">*</span></th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width: 100px;">Estado</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width: 15%;">Cant. <span class="text-danger">*</span></th>
                                                 <th style="width: 40px;"></th>
                                             </tr>
@@ -160,7 +167,7 @@
                                     </table>
                                 </div>
                                 <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="agregarFilaProducto()">
+                                    <button type="button" id="btn-agregar-linea" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="agregarFilaProducto()">
                                         <i class="bi bi-plus-circle me-1"></i> Agregar línea
                                     </button>
                                     <div class="small fw-bold text-muted pe-3">

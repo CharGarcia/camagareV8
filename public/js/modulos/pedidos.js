@@ -233,6 +233,27 @@ function PED_ocultarAvisoBloqueo() {
     PED_bloquearControles(false);
 }
 
+/**
+ * Pedido con TODAS sus líneas ya registradas en consignación/factura: no queda
+ * nada por editar ni por facturar. Reusa PED_bloquearControles() (deshabilita
+ * cabecera, "Agregar línea" y oculta Guardar/Eliminar) y además el botón
+ * "Facturar", que vive fuera del <form>.
+ */
+function bloquearPedidoProcesado(bloquear) {
+    const aviso = document.getElementById('aviso-pedido-procesado');
+    if (aviso) aviso.classList.toggle('d-none', !bloquear);
+
+    PED_bloquearControles(bloquear);
+
+    const btnFacturar = document.getElementById('btn-facturar-pedido');
+    if (btnFacturar) {
+        btnFacturar.disabled = bloquear;
+        btnFacturar.title = bloquear
+            ? 'No hay saldo pendiente: todo el pedido ya está registrado en una consignación o factura.'
+            : 'Generar factura de venta desde este pedido';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const modalEl = document.getElementById('modalPedido');
     if (modalEl) {
@@ -247,6 +268,7 @@ function nuevoPedido() {
     if (form) form.reset();
 
     PED_ocultarAvisoBloqueo();
+    bloquearPedidoProcesado(false);
 
     document.getElementById('pedido_id').value = '';
     document.getElementById('detalle-productos').innerHTML = '';
@@ -304,7 +326,7 @@ function agregarFilaProducto(prod = null) {
     const registrada = consumida > 0.0001;
     const cantidadOriginal = prod ? parseFloat(prod.cantidad) : 1;
     const badgeHtml = registrada
-        ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 mt-1" style="cursor:pointer;" onclick="verHistorialItem(this)" title="Ya registrado en una consignación o factura. Clic para ver el historial.">
+        ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="cursor:pointer;" onclick="verHistorialItem(this)" title="Ya registrado en una consignación o factura. Clic para ver el historial.">
                <i class="bi bi-clock-history me-1"></i>${consumida >= cantidadOriginal ? 'Registrado' : 'Parcial ' + consumida + '/' + cantidadOriginal}
            </span>`
         : '';
@@ -328,8 +350,8 @@ function agregarFilaProducto(prod = null) {
             <input type="text" class="form-control form-control-sm input-detalle input-descripcion fw-bold border-primary border-opacity-25" placeholder="Escribe o busca un producto..." autocomplete="off" value="${prod ? prod.producto_nombre : ''}" ${registrada ? 'readonly' : ''}>
             <input type="hidden" class="input-id-producto" value="${prod ? prod.id_producto : ''}">
             <input type="hidden" class="input-id-detalle" value="${prod && prod.id ? prod.id : ''}">
-            <div>${badgeHtml}</div>
         </td>
+        <td class="align-middle text-center">${badgeHtml}</td>
         <td class="align-middle text-center" style="width: 15%;">
             <input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${cantidadOriginal}" step="any" min="${consumida}" oninput="calcFila(this)">
         </td>
@@ -466,26 +488,30 @@ async function verHistorialItem(el) {
             return Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo cargar el historial.', target: document.getElementById('modalPedido') });
         }
 
-        let html;
+        const nombreHtml = `<div class="text-start mb-2" style="font-size:12px; font-weight:400;">
+                <i class="bi bi-box-seam me-1 text-muted"></i>${nombreProducto}
+            </div>`;
+
+        let tablaHtml;
         if (!data.data || data.data.length === 0) {
-            html = '<p class="text-muted small mb-0">Sin movimientos registrados para este ítem.</p>';
+            tablaHtml = '<p class="text-muted small mb-0 text-start">Sin movimientos registrados para este ítem.</p>';
         } else {
-            html = '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0 small text-start">'
-                + '<thead class="table-light"><tr><th>Tipo</th><th>Número</th><th>Fecha</th><th>Cantidad</th><th>Estado</th></tr></thead><tbody>'
+            tablaHtml = '<div style="overflow-x:auto; border:1px solid #dee2e6; border-radius:.375rem;">'
+                + '<table class="table table-sm align-middle mb-0 small text-start" style="white-space:nowrap;">'
+                + '<thead class="table-light"><tr><th class="ps-2">Tipo</th><th>Número</th><th>Fecha</th><th class="text-end">Cantidad</th><th class="pe-2">Estado</th></tr></thead><tbody>'
                 + data.data.map(h => `<tr>
-                        <td>${h.tipo}</td>
+                        <td class="ps-2">${h.tipo}</td>
                         <td>${h.numero || '-'}</td>
                         <td>${h.fecha ? new Date(h.fecha).toLocaleDateString('es-EC') : '-'}</td>
                         <td class="text-end">${parseFloat(h.cantidad).toFixed(2)}</td>
-                        <td>${h.estado || '-'}</td>
+                        <td class="pe-2">${h.estado || '-'}</td>
                     </tr>`).join('')
                 + '</tbody></table></div>';
         }
 
         Swal.fire({
-            icon: 'info',
-            title: `Historial de "${nombreProducto}"`,
-            html,
+            title: 'Historial del ítem',
+            html: nombreHtml + tablaHtml,
             confirmButtonText: 'Cerrar',
             width: 600,
             target: document.getElementById('modalPedido'),
@@ -883,12 +909,14 @@ async function editarPedido(id) {
             setVal('observaciones_internas', p.observaciones_internas);
 
             const tbody = document.getElementById('detalle-productos');
+            let todoRegistrado = false;
             if (tbody) {
                 tbody.innerHTML = '';
                 if (res.data.detalles && res.data.detalles.length > 0) {
                     res.data.detalles.forEach(d => {
                         agregarFilaProducto(d);
                     });
+                    todoRegistrado = res.data.detalles.every(d => parseFloat(d.cantidad_consumida || 0) >= parseFloat(d.cantidad) - 0.0001);
                 } else {
                     agregarFilaProducto();
                 }
@@ -901,12 +929,13 @@ async function editarPedido(id) {
                     : (p.numero_pedido || '');
                 elTitulo.innerHTML = `<i class="bi bi-pencil-square me-2"></i>Editar Pedido #${nroPedido}`;
             }
-            
+
             const btnEliminar = document.getElementById('btn-eliminar-modal');
             if (btnEliminar) btnEliminar.classList.remove('d-none');
 
             calcTotales();
             PED_ocultarAvisoBloqueo();
+            bloquearPedidoProcesado(todoRegistrado);
 
             const modalEl = document.getElementById('modalPedido');
             if (modalEl) {
