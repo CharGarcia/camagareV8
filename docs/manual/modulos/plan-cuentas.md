@@ -70,6 +70,7 @@ Al cargar el plan modelo se asignan las cuentas de estos grupos en
 | Compras | Cuenta por pagar, gasto, inventario, descuento, ICE, propina y ajuste por redondeo |
 | Nómina | Los siete gastos (sueldos, décimos, vacaciones, fondos de reserva, aporte patronal, desahucio) y los siete pasivos por pagar, más anticipos a empleados |
 | IVA por tarifa | IVA en ventas y en compras, tarifas 15% y 5%, para facturas y recibos |
+| Cierre del ejercicio | Cuenta de Utilidad y cuenta de Pérdida del ejercicio |
 | Formas de cobro y pago | Efectivo (Caja General) y las dos de Anticipos |
 | Opciones de ingreso/egreso | Anticipos de clientes y de proveedores, más los conceptos SRI e IESS |
 
@@ -89,8 +90,8 @@ cuenta asignada, se respeta y el mensaje final le indica cuántas se crearon y
 cuántas se respetaron.
 
 Los módulos de importaciones, consignaciones, facturas de reembolso, activos
-fijos, cierre del ejercicio y declaraciones **no** se configuran solos: sus
-cuentas se asignan a mano en Configuración Contable.
+fijos y las declaraciones **no** se configuran solos: sus cuentas se asignan a
+mano en Configuración Contable.
 
 ### Por qué el IVA se configura aparte
 
@@ -151,5 +152,6 @@ módulo y, en el peor caso, a reclasificar movimientos.
   proveedores y de clientes pasaron a grupos propios. La carga del plan modelo
   también asigna la cuenta de las formas de cobro/pago y de las opciones de
   ingreso/egreso que llevan cuenta propia, y crea los conceptos SRI e IESS si
-  faltan.
+  faltan. También deja configuradas las cuentas de Utilidad y Pérdida del
+  cierre del ejercicio, que el Balance usa para mostrar el resultado.
 - **1.0** — Versión inicial.
