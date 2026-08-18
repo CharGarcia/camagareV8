@@ -1246,23 +1246,11 @@ class FacturaVentaService
             throw new \Exception('Solo se pueden eliminar facturas en estado borrador.');
         }
 
-        // Igual que anular(): si sigue AUTORIZADA en el SRI, no se puede eliminar aquí —
-        // primero hay que anularla en el portal del SRI. Evita que el sistema quede sin
-        // ningún registro de un comprobante que el SRI todavía reporta como vigente.
-        $claveAcceso = trim((string) ($cabecera['clave_acceso'] ?? ''));
-        if ($estadoActual === 'autorizado' && $claveAcceso !== '') {
-            $tipoAmbiente = (string) ($cabecera['tipo_ambiente'] ?? '1');
-            $envioSri = new \App\Services\Sri\SriEnvioService();
-            $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);
-            $estadoSri = strtoupper($consulta['estado'] ?? '');
-            if ($estadoSri === 'AUTORIZADO') {
-                throw new \Exception(
-                    'No se puede eliminar: el documento sigue AUTORIZADO en el SRI. ' .
-                    'Primero debe anularlo en el portal del SRI; cuando deje de estar autorizado podrá eliminarlo aquí.'
-                );
-            }
-        }
-
+        // A propósito, sin verificación contra el SRI aquí (a diferencia de anular()):
+        // el caso de uso es borrar del sistema un documento cargado por error/duplicado
+        // (p. ej. ya gestionado en otro sistema, o saldos iniciales) sin intención de
+        // anularlo realmente — el registro en el SRI, si existe, no se toca ni se ve
+        // afectado por eliminar la copia local.
         $this->verificarFacturaLibre($id, $idEmpresa, $idUsuario);
 
         // Ingresos asociados: un borrador normal no tiene, pero el POS genera el Ingreso

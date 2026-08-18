@@ -340,21 +340,10 @@ class NotaDebitoService
                 throw new Exception("Solo se pueden eliminar Notas de Débito en estado borrador.");
             }
 
-            // Igual que FacturaVentaService::eliminar(): si sigue AUTORIZADA en el SRI, no se
-            // puede eliminar aquí — primero hay que anularla en el portal del SRI.
-            $claveAcceso = trim((string) ($nd['clave_acceso'] ?? ''));
-            if ($estadoActual === 'autorizado' && $claveAcceso !== '') {
-                $tipoAmbiente = (string) ($nd['tipo_ambiente'] ?? '1');
-                $envioSri = new \App\Services\Sri\SriEnvioService();
-                $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);
-                $estadoSri = strtoupper($consulta['estado'] ?? '');
-                if ($estadoSri === 'AUTORIZADO') {
-                    throw new Exception(
-                        'No se puede eliminar: el documento sigue AUTORIZADO en el SRI. ' .
-                        'Primero debe anularlo en el portal del SRI; cuando deje de estar autorizado podrá eliminarlo aquí.'
-                    );
-                }
-            }
+            // A propósito, sin verificación contra el SRI (a diferencia de FacturaVentaService::
+            // anular()): el caso de uso es borrar del sistema un documento cargado por error/
+            // duplicado sin intención de anularlo realmente — el registro en el SRI, si existe,
+            // no se ve afectado por eliminar la copia local.
 
             // Limpiar casilleros de declaración 104 (igual que anular()) — solo aplica si
             // la ND llegó a estar autorizada y a marcar algún casillero.
