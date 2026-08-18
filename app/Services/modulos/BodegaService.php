@@ -37,11 +37,12 @@ class BodegaService
         $this->repository->beginTransaction();
         try {
             $insertData = [
-                'id_empresa' => $idEmpresa,
-                'id_usuario' => (int)$data['id_usuario'],
-                'created_by' => (int)$data['id_usuario'],
-                'nombre'     => mb_strtoupper(trim($data['nombre']), 'UTF-8'),
-                'status'     => isset($data['status']) ? (bool)$data['status'] : true,
+                'id_empresa'         => $idEmpresa,
+                'id_usuario'         => (int)$data['id_usuario'],
+                'created_by'         => (int)$data['id_usuario'],
+                'nombre'             => mb_strtoupper(trim($data['nombre']), 'UTF-8'),
+                'status'             => isset($data['status']) ? (bool)$data['status'] : true,
+                'id_establecimiento' => !empty($data['id_establecimiento']) ? (int)$data['id_establecimiento'] : null,
             ];
 
             $id = $this->repository->create($insertData);
@@ -74,9 +75,10 @@ class BodegaService
         $this->repository->beginTransaction();
         try {
             $updateData = [
-                'nombre'     => mb_strtoupper(trim($data['nombre']), 'UTF-8'),
-                'status'     => isset($data['status']) ? (bool)$data['status'] : true,
-                'updated_by' => (int)$data['id_usuario']
+                'nombre'             => mb_strtoupper(trim($data['nombre']), 'UTF-8'),
+                'status'             => isset($data['status']) ? (bool)$data['status'] : true,
+                'id_establecimiento' => !empty($data['id_establecimiento']) ? (int)$data['id_establecimiento'] : null,
+                'updated_by'         => (int)$data['id_usuario']
             ];
 
             $this->repository->update($id, $idEmpresa, $updateData);

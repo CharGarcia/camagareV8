@@ -364,6 +364,15 @@ return [
         'id_submodulo' => 1,  // submodulos_menu.id = 1 (Bodegas)
         'legacy_rutas' => [],
     ],
+    // Transferencias de Inventario: mueve stock entre bodegas (y entre
+    // establecimientos del mismo RUC) en un solo paso. id_submodulo = 0 → el
+    // usuario registra el submódulo en submodulos_menu por su cuenta y asigna
+    // aquí el id real. SQL del módulo:
+    // database/migrations/20260818_create_transferencias_inventario.sql
+    'modulos/transferencias-inventario' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
 
     // ─── ADQUISICIONES (id_modulo = 309) ─────────────────────────────────────
     // 'modulos/compras'     => ['id_submodulo' => 155, 'legacy_rutas' => [...]],

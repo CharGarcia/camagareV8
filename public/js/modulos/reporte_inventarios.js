@@ -280,6 +280,10 @@ window.RI_Existencias = {
                 + th2('Máximo', 'stock_maximo', 'text-end')
                 + th2('Costo Unit.', 'costo_unitario', 'text-end')
                 + th2('Valor total', 'valor_total', 'text-end pe-3');
+        } else if (modo === 'LOTE' || modo === 'NUP' || modo === 'CADUCIDAD') {
+            th += `<th class="ps-3">Producto</th><th>Bodega</th><th>Lote</th><th>NUP</th><th>Caducidad</th>
+                   <th class="text-end">Stock</th><th class="text-end">Consignación</th><th class="text-end">Stock Total</th>
+                   <th class="text-end">Costo Unit.</th><th class="text-end pe-3">Valor total</th>`;
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Productos</th>
                    <th class="text-end">Consignación</th><th class="text-end">Stock</th><th class="text-end">Stock Total</th>
@@ -306,7 +310,8 @@ window.RI_Existencias = {
 
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
-            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', agrupar_por: 'ri-ex-agrupar',
+            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
+            fecha_corte: 'ri-ex-fecha-corte',
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });
@@ -316,7 +321,7 @@ window.RI_Existencias = {
         }
 
         const tbody = document.getElementById('ri-ex-tbody');
-        const colSpan = modo === 'NINGUNO' ? 10 : 8;
+        const colSpan = modo === 'NINGUNO' ? 10 : (modo === 'LOTE' || modo === 'NUP' || modo === 'CADUCIDAD' ? 10 : 8);
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('existencias', params, (res) => {
@@ -329,7 +334,8 @@ window.RI_Existencias = {
     exportarExcel() {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
-            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', agrupar_por: 'ri-ex-agrupar',
+            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
+            fecha_corte: 'ri-ex-fecha-corte',
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });
@@ -339,7 +345,8 @@ window.RI_Existencias = {
     exportarPDF() {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
-            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', agrupar_por: 'ri-ex-agrupar',
+            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
+            fecha_corte: 'ri-ex-fecha-corte',
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });

@@ -273,6 +273,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
     window.nd_dec_p = <?= (int)($empresa['decimales_precio'] ?? 2) ?>;
     window.ND_STORAGE_KEY = 'nd_borrador_' + <?= (int)($_SESSION['id_empresa'] ?? 0) ?> + '_' + <?= (int)($_SESSION['id_usuario'] ?? 0) ?>;
+    // Nivel 3 (superadmin) puede eliminar una ND fuera de borrador — ver
+    // NotaDebitoService::eliminar(), que hace la verificación real.
+    window.ND_ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
     // Config de empresa que necesita nota_debito.js (forma de pago por defecto).
     // Si la página ya declaró EMPRESA_CONFIG (ej. embebida en Factura de Venta), no se pisa.
     window.EMPRESA_CONFIG = window.EMPRESA_CONFIG || {

@@ -283,6 +283,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.nc_dec_p = <?= (int)($empresa['decimales_precio'] ?? 2) ?>;
     window.nc_dec_c = <?= (int)($empresa['decimales_cantidad'] ?? 2) ?>;
     window.NC_STORAGE_KEY = 'nc_borrador_' + <?= (int)($_SESSION['id_empresa'] ?? 0) ?> + '_' + <?= (int)($_SESSION['id_usuario'] ?? 0) ?>;
+    // Nivel 3 (superadmin) puede eliminar una NC fuera de borrador — ver
+    // NotaCreditoService::eliminar(), que hace la verificación real.
+    window.NC_ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
     // Ordenamiento aplicado por el servidor (preferencia del usuario).
     window.NC_ORDEN_COL = <?= json_encode($ordenCol ?? 'fecha_emision') ?>;
     window.NC_ORDEN_DIR = <?= json_encode($ordenDir ?? 'DESC') ?>;

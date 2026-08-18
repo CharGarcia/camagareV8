@@ -42,7 +42,9 @@
                             <input type="date" id="cam_fecha_cambio" class="form-control form-control-sm">
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label small mb-1">Serie</label>
+                            <label class="form-label small mb-1">
+                                Serie <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo ?? 'modulos/cambio-producto-cv', 'cam_select_serie', 'id_punto_emision') ?>
+                            </label>
                             <select id="cam_select_serie" class="form-select form-select-sm" onchange="camSerieChange()">
                                 <?php if (empty($puntos)): ?>
                                     <option value="">— Sin secuencial configurado —</option>
@@ -211,7 +213,7 @@
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cerrar</button>
                     <button type="button" class="btn btn-primary btn-sm" id="btnGuardarCambio" onclick="camGuardar()">
-                        <i class="bi bi-save me-1"></i> Guardar cambio
+                        <i class="bi bi-save me-1"></i> Guardar
                     </button>
                 </div>
             </div>
@@ -227,6 +229,8 @@
     let modal;
     let camClientesTimer = null, camDevTimer = null, camEntTimer = null;
     let camBodegas = [];   // cache de bodegas [{id,nombre}]
+    let camBloquearSecuencial = false;   // en un cambio ya guardado el número no se recalcula
+    let camSecuencialConfigurado = true; // ¿la serie activa tiene secuencial configurado?
 
     function getModal() {
         if (!modal) modal = new bootstrap.Modal(document.getElementById('modalCambio'));
@@ -296,8 +300,19 @@
         document.getElementById('btnEliminarCambio').classList.add('d-none');
         document.getElementById('cam_estado_wrapper').classList.add('d-none');
         document.getElementById('cam_fecha_cambio').value = CMG_fechaLocal();
+
+        document.getElementById('btnGuardarCambio').innerHTML = '<i class="bi bi-save me-1"></i> Guardar';
+
         const selSerie = document.getElementById('cam_select_serie');
-        if (selSerie.value) { selSerie.selectedIndex = 0; await camSerieChange(); }
+        selSerie.disabled = false;
+        camBloquearSecuencial = false;
+
+        // Serie favorita del usuario (estrella), igual que en Facturas de Venta: se aplica
+        // ANTES de pedir el secuencial para que el número corresponda a esa serie.
+        if (typeof aplicarFavoritosModal === 'function') aplicarFavoritosModal('#modalCambio');
+        if (!selSerie.value && selSerie.options.length) selSerie.selectedIndex = 0;
+        await camSerieChange();
+
         getModal().show();
     };
 
@@ -314,8 +329,9 @@
         document.getElementById('tituloModalCambio').innerHTML = '<i class="bi bi-arrow-left-right me-1"></i> Cambio ' + (row.serie || '') + '-' + (row.secuencial || '');
         camPintarBadge(row.estado);
 
+        camBloquearSecuencial = true;   // documento ya numerado: no se recalcula la numeración
         const btnG = document.getElementById('btnGuardarCambio');
-        btnG.innerHTML = '<i class="bi bi-save me-1"></i> ' + (editable ? 'Actualizar cambio' : 'Guardar cambio');
+        btnG.innerHTML = '<i class="bi bi-save me-1"></i> Actualizar';
 
         const wrap = document.getElementById('cam_estado_wrapper');
         const selEstado = document.getElementById('cam_estado_selector');
@@ -381,7 +397,15 @@
         if (!idPunto || !opt) {
             document.getElementById('cam_serie').value = '';
             document.getElementById('cam_id_punto_emision').value = '';
-            document.getElementById('cam_secuencial').value = '';
+            const inp = document.getElementById('cam_secuencial');
+            inp.value = ''; inp.dataset.sec = '';
+            inp.classList.remove('border-warning', 'border-danger');
+            // Sin punto de emisión no hay numeración posible: avisar como en Facturas de Venta.
+            if (!camBloquearSecuencial) {
+                camSecuencialConfigurado = false;
+                inp.placeholder = 'Sin serie';
+                camAvisarSecuencialNoConfigurado('serie');
+            }
             return;
         }
         const est = opt.dataset.codEst || '';
@@ -390,18 +414,68 @@
         document.getElementById('cam_id_punto_emision').value = idPunto;
         await camCargarSecuencial(idPunto);
     };
+    /** Aviso de serie/secuencial no configurados (mismo texto que Facturas de Venta). */
+    function camAvisarSecuencialNoConfigurado(tipo) {
+        const html = (tipo === 'serie')
+            ? 'No hay una serie / punto de emisión disponible.<br>Configure los puntos de emisión y sus secuenciales en <strong>Empresa → Puntos de emisión</strong> antes de emitir el cambio.'
+            : 'No están configurados los secuenciales para esta serie.<br>Configúrelos en <strong>Empresa → Puntos de emisión</strong> antes de emitir el cambio.';
+        Swal.fire({
+            icon: 'warning', title: 'Secuencial no configurado', html,
+            confirmButtonText: 'Entendido',
+            target: document.getElementById('modalCambio'),
+        });
+    }
+
     async function camCargarSecuencial(idPunto) {
-        if (!idPunto) return;
-        const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}`);
-        const data = await res.json();
-        if (!data.ok) {
-            document.getElementById('cam_secuencial').value = '';
-            Swal.fire('Atención', data.msg || 'No hay secuencial configurado.', 'warning');
+        // En un cambio ya guardado el número no se recalcula.
+        if (camBloquearSecuencial) return;
+
+        const inp = document.getElementById('cam_secuencial');
+
+        if (!idPunto) {
+            camSecuencialConfigurado = false;
+            inp.value = ''; inp.dataset.sec = ''; inp.placeholder = 'Sin serie';
+            inp.classList.remove('border-warning', 'border-danger');
+            camAvisarSecuencialNoConfigurado('serie');
             return;
         }
-        const sec = data.formateado || String(data.secuencial || '').padStart(9, '0');
-        document.getElementById('cam_secuencial').value = sec;
-        document.getElementById('cam_secuencial').dataset.sec = data.secuencial || '';
+
+        inp.placeholder = 'Cargando...';
+        try {
+            const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}`);
+            const data = await res.json();
+            if (!data.ok) {
+                camSecuencialConfigurado = false;
+                inp.value = ''; inp.dataset.sec = ''; inp.placeholder = '000000001';
+                inp.classList.add('border-danger');
+                camAvisarSecuencialNoConfigurado('secuencial');
+                return;
+            }
+
+            inp.value = data.formateado || String(data.secuencial || '').padStart(9, '0');
+            inp.dataset.sec = data.secuencial || '';
+            inp.placeholder = '000000001';
+
+            // Aviso visual cuando el número recuperado es un hueco de la numeración.
+            if (data.es_gap) {
+                inp.classList.add('border-warning');
+                inp.title = data.detalle || 'Número faltante recuperado';
+            } else {
+                inp.classList.remove('border-warning');
+                inp.title = data.detalle || 'Siguiente consecutivo';
+            }
+
+            camSecuencialConfigurado = (data.configurado !== false);
+            if (!camSecuencialConfigurado) {
+                inp.classList.add('border-danger');
+                camAvisarSecuencialNoConfigurado('secuencial');
+            } else {
+                inp.classList.remove('border-danger');
+            }
+        } catch (e) {
+            console.error('Error cargando secuencial', e);
+            inp.placeholder = '000000001';
+        }
     }
 
     // ─── Cliente ──────────────────────────────────────────────────────────────
@@ -427,6 +501,35 @@
             dd.classList.remove('d-none');
         }, 300);
     };
+    /**
+     * Limpia por completo la selección de cliente (input visible + ocultos + dropdown) y
+     * las devoluciones, que dependen del cliente.
+     */
+    function camLimpiarCliente() {
+        document.getElementById('cam_cliente_busqueda').value = '';
+        document.getElementById('cam_id_cliente').value = '';
+        document.getElementById('cam_cliente_email').value = '';
+        document.getElementById('cam_clientes_dropdown').classList.add('d-none');
+        clearTimeout(camClientesTimer);
+        vaciarDev();
+        const busqDev = document.getElementById('cam_dev_busqueda');
+        busqDev.value = '';
+        busqDev.disabled = true;
+        document.getElementById('cam_dev_dropdown').classList.add('d-none');
+        camRecalcular();
+    }
+    window.camLimpiarCliente = camLimpiarCliente;
+
+    // Con un cliente ya fijado el input muestra una etiqueta ("identificación — nombre"):
+    // Backspace/Delete limpian TODA la selección de una vez, no letra por letra
+    // (CLAUDE.md §9, inputs de búsqueda con selección tipo "chip").
+    document.getElementById('cam_cliente_busqueda').addEventListener('keydown', (e) => {
+        if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+        if (!document.getElementById('cam_id_cliente').value) return;
+        e.preventDefault();
+        camLimpiarCliente();
+    });
+
     function camSeleccionarCliente(c) {
         document.getElementById('cam_id_cliente').value = c.id;
         document.getElementById('cam_cliente_email').value = c.email || '';
@@ -710,7 +813,11 @@
     window.camGuardar = async function () {
         const idCliente = document.getElementById('cam_id_cliente').value;
         if (!idCliente) { Swal.fire('Atención', 'Seleccione un cliente.', 'warning'); return; }
-        if (!document.getElementById('cam_secuencial').value) { Swal.fire('Atención', 'Falta el secuencial. Configure el punto de emisión.', 'warning'); return; }
+        // La numeración solo se exige al EMITIR: un documento ya guardado conserva la suya.
+        if (!document.getElementById('cam_id').value) {
+            if (!document.getElementById('cam_id_punto_emision').value) { camAvisarSecuencialNoConfigurado('serie'); return; }
+            if (!document.getElementById('cam_secuencial').value || !camSecuencialConfigurado) { camAvisarSecuencialNoConfigurado('secuencial'); return; }
+        }
 
         const devoluciones = [];
         document.querySelectorAll('#cam_dev_body tr[data-key]').forEach(tr => {

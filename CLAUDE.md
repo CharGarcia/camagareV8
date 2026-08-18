@@ -248,6 +248,12 @@ eliminado (boolean), deleted_at, deleted_by
 - Diseño estandarizado: mismos campos, botones, orden y estilo en todas.
 - El botón **Eliminar** va en el **footer, a la izquierda**.
 - Las **pestañas** dentro de un modal deben poder **ocultarse/mostrarse por cada usuario**.
+- **Nada de pestaña "Información"**: en los módulos nuevos NO se agrega una pestaña
+  *Información* (tarjeta de permisos + datos de auditoría) al modal. Los permisos ya se
+  administran en `/config/permisos-modulos` y el historial del registro se consulta en
+  `log_sistema`; ocupar una pestaña con eso solo estorba. Si algún dato de registro
+  (quién y cuándo) aporta al usuario, va como una línea discreta al pie del contenido
+  del modal, no como pestaña.
 - Tablas dentro de modales con **filas compactas**: `<td class="p-0">` e inputs con
   `style="padding:0 4px;height:20px;font-size:0.78rem;"`.
 - **Barra de acciones de documento (regla general)**: los botones de **PDF, Correo y WhatsApp** (y otras acciones de documento como XML, ticket, duplicar, enviar al SRI) van en una **barra de acciones superior** al **inicio del cuerpo del modal**, **antes de las pestañas/contenido** — NO sueltos dentro de una pestaña. Es una fila horizontal `d-flex gap-1 align-items-center flex-wrap` con borde inferior; los botones son `btn btn-sm btn-outline-*` solo con ícono (`bi-file-earmark-pdf` rojo, `bi-envelope` info, `bi-whatsapp` verde) y `title`. Agrupar sets con un separador `<div class="vr mx-1"></div>`. Referencia canónica: el modal de **Facturas de Venta** (`app/views/modulos/factura_venta/index.php`, "Barra de Acciones Superior"). Cada acción valida primero que el documento esté guardado.

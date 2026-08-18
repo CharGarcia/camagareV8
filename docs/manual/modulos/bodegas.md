@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/bodegas
 tipo: modulo
 visibilidad: todos
-etiquetas: bodegas, bodega, almacen, deposito, sucursal, ubicacion, stock por bodega, responsable
-version: 1.0
+etiquetas: bodegas, bodega, almacen, deposito, sucursal, ubicacion, stock por bodega, responsable, establecimiento de la bodega, local, en que establecimiento esta la bodega
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -24,9 +24,21 @@ la única forma de saber dónde está realmente la mercadería.
 1. Pulse **Nuevo**.
 2. Escriba el **nombre** (máximo 100 caracteres).
 3. Elija el **usuario responsable**.
-4. Guarde.
+4. Indique el **establecimiento** donde está físicamente la bodega (opcional).
+5. Guarde.
 
-Ambos campos son obligatorios.
+El nombre y el responsable son obligatorios.
+
+## Establecimiento de la bodega
+
+Indica en cuál de los locales de la empresa (Empresa → Establecimientos) está la
+bodega. Sirve sobre todo para las **Transferencias de Inventario**: cuando la
+bodega de origen y la de destino pertenecen a establecimientos distintos, el
+traslado se marca como *entre establecimientos* y habilita la generación de la
+**guía de remisión**.
+
+Si se deja en *Sin asignar*, la bodega sigue funcionando igual en todo lo demás;
+solo que sus transferencias nunca se considerarán entre establecimientos.
 
 ## Acceso por usuario
 
@@ -51,4 +63,7 @@ movimientos. Si ya no se usa, es preferible dejarla sin stock y no operar con el
 
 ## Historial de cambios
 
+- **1.1** — Se agrega el campo **Establecimiento**: indica en qué local está la
+  bodega y permite que las Transferencias de Inventario detecten los traslados
+  entre establecimientos.
 - **1.0** — Versión inicial.

@@ -9,6 +9,7 @@
     let listadoTarifasIva = [];
     let listadoFormasPago = [];
     let formasPagoListas = null; // Promise: resuelve cuando listadoFormasPago ya tiene datos.
+    let ND_estadoActual = 'borrador'; // usado por ND_eliminar() para el aviso de eliminación forzada
 
     document.addEventListener('DOMContentLoaded', () => {
         initModal();
@@ -374,6 +375,7 @@
     };
 
     function toggleBotonesAccion(habilitar, estado = 'borrador') {
+        ND_estadoActual = estado; // usado por ND_eliminar() para el aviso de eliminación forzada
         const esAutorizado = (estado === 'autorizado');
         const esAnulado = (estado === 'anulado');
         const esBorrador = (estado === 'borrador');
@@ -385,10 +387,21 @@
         document.getElementById('nd-btn-correo').disabled = !habilitar || !esAutorizado;
         document.getElementById('btnGuardarND').disabled = esAutorizado || esAnulado;
 
+        // Eliminar también aparece fuera de borrador para el superadmin (nivel 3) —
+        // ver NotaDebitoService::eliminar().
         const btnEliminar = document.getElementById('btnEliminarND');
         const btnAnular = document.getElementById('btnAnularND');
+        const puedeEliminarForzado = !!window.ND_ES_SUPERADMIN && !esBorrador;
 
-        if (btnEliminar) btnEliminar.classList.toggle('d-none', !habilitar || !esBorrador);
+        if (btnEliminar) {
+            btnEliminar.classList.toggle('d-none', !habilitar || !(esBorrador || puedeEliminarForzado));
+            btnEliminar.innerHTML = puedeEliminarForzado
+                ? '<i class="bi bi-trash3 me-1"></i> Eliminar (superadmin)'
+                : '<i class="bi bi-trash3 me-1"></i> Eliminar';
+            btnEliminar.title = puedeEliminarForzado
+                ? 'Elimina la ND aunque no esté en borrador. Solo superadmin.'
+                : '';
+        }
         if (btnAnular) btnAnular.classList.toggle('d-none', !habilitar || !esAutorizado);
     }
 
@@ -1370,9 +1383,13 @@
         const id = document.getElementById('nd_id').value;
         if (!id) return;
 
+        const esForzado = !!window.ND_ES_SUPERADMIN && ND_estadoActual !== 'borrador';
+
         const result = await Swal.fire({
             title: '¿Eliminar Borrador?',
-            text: 'Esta acción eliminará permanentemente la nota de débito.',
+            text: esForzado
+                ? `Esta Nota de Débito está "${ND_estadoActual}", no en borrador. Como superadmin puedes eliminarla igual: se revertirán el asiento contable y los casilleros de IVA. No se puede deshacer.`
+                : 'Esta acción eliminará permanentemente la nota de débito.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Sí, eliminar',

@@ -59,8 +59,14 @@ class GuiasRemisionController extends BaseModuloController
             }
         }
 
+        // Precarga enviada por otro módulo (hoy: Transferencias de Inventario).
+        // Viaja por sesión, no por la URL, y se consume una sola vez.
+        $prefill = $_SESSION['gr_prefill'] ?? null;
+        unset($_SESSION['gr_prefill']);
+
         $this->viewWithLayout('layouts.main', 'modulos/guias_remision/index', [
             'titulo'          => 'Guías de Remisión',
+            'prefill'         => $prefill,
             'perm'            => $perm,
             'rows'            => $result['rows'],
             'total'           => $total,

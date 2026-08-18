@@ -319,7 +319,12 @@ class NotaDebitoService
         }
     }
 
-    public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
+    /**
+     * $esSuperAdmin (nivel 3) permite eliminar una ND que NO está en borrador
+     * (autorizada o anulada) — misma excepción que FacturaVentaService::eliminar(),
+     * para el caso de un documento cargado por error que no se quiere conservar.
+     */
+    public function eliminar(int $id, int $idEmpresa, int $idUsuario, bool $esSuperAdmin = false): void
     {
         $db = Database::getConnection();
         $db->beginTransaction();
@@ -330,9 +335,31 @@ class NotaDebitoService
                 throw new Exception("Nota de Débito no encontrada.");
             }
 
-            if ($nd['estado'] !== 'borrador') {
+            $estadoActual = $nd['estado'] ?? '';
+            if ($estadoActual !== 'borrador' && !$esSuperAdmin) {
                 throw new Exception("Solo se pueden eliminar Notas de Débito en estado borrador.");
             }
+
+            // Igual que FacturaVentaService::eliminar(): si sigue AUTORIZADA en el SRI, no se
+            // puede eliminar aquí — primero hay que anularla en el portal del SRI.
+            $claveAcceso = trim((string) ($nd['clave_acceso'] ?? ''));
+            if ($estadoActual === 'autorizado' && $claveAcceso !== '') {
+                $tipoAmbiente = (string) ($nd['tipo_ambiente'] ?? '1');
+                $envioSri = new \App\Services\Sri\SriEnvioService();
+                $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);
+                $estadoSri = strtoupper($consulta['estado'] ?? '');
+                if ($estadoSri === 'AUTORIZADO') {
+                    throw new Exception(
+                        'No se puede eliminar: el documento sigue AUTORIZADO en el SRI. ' .
+                        'Primero debe anularlo en el portal del SRI; cuando deje de estar autorizado podrá eliminarlo aquí.'
+                    );
+                }
+            }
+
+            // Limpiar casilleros de declaración 104 (igual que anular()) — solo aplica si
+            // la ND llegó a estar autorizada y a marcar algún casillero.
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de debito', $id);
 
             $idAsientoNd = (int)($nd['id_asiento_contable'] ?? 0);
             if ($idAsientoNd > 0) {
@@ -355,11 +382,11 @@ class NotaDebitoService
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
-                'eliminar',
+                $estadoActual !== 'borrador' ? 'eliminar_forzado_superadmin' : 'eliminar',
                 'nota_debito_cabecera',
                 $id,
                 $nd,
-                null
+                ['estado_previo' => $estadoActual]
             );
 
             $db->commit();

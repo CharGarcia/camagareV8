@@ -1625,19 +1625,22 @@ class FacturaVentaController extends BaseModuloController
         $id        = (int) ($_POST['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
+        // Nivel 3 (superadmin) puede eliminar una factura fuera de borrador — excepción
+        // explícita a la regla general; FacturaVentaService::eliminar() hace la verificación
+        // real (esto es solo para no bloquear la petición acá con el mensaje genérico).
+        $esSuperAdmin = (int) ($_SESSION['nivel'] ?? 1) === 3;
 
         if (!$id) {
             echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
             exit;
         }
 
-        // Solo se puede eliminar si está en estado borrador
         $factura = $this->repository->getPorId($id);
         if (!$factura || (int)($factura['id_empresa'] ?? 0) !== $idEmpresa) {
             echo json_encode(['ok' => false, 'mensaje' => 'Factura no encontrada.']);
             exit;
         }
-        if (($factura['estado'] ?? '') !== 'borrador') {
+        if (($factura['estado'] ?? '') !== 'borrador' && !$esSuperAdmin) {
             echo json_encode(['ok' => false, 'mensaje' => 'Solo se pueden eliminar facturas en estado borrador.']);
             exit;
         }
@@ -1645,7 +1648,7 @@ class FacturaVentaController extends BaseModuloController
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
-            $this->service->eliminar($id, $idEmpresa, $idUsuario);
+            $this->service->eliminar($id, $idEmpresa, $idUsuario, $esSuperAdmin);
             $db->commit();
             echo json_encode(['ok' => true, 'mensaje' => 'Factura eliminada correctamente.']);
         } catch (\Throwable $e) {

@@ -10,6 +10,23 @@ use Exception;
  */
 class CambioProductoCvRules
 {
+    /**
+     * Numeración obligatoria al EMITIR (solo en la creación, igual que Facturas de Venta):
+     * sin punto de emisión y secuencial el documento quedaría sin número de serie.
+     */
+    public function validarNumeracion(array $data): void
+    {
+        if (empty($data['id_punto_emision'])) {
+            throw new Exception("Debe seleccionar la serie (punto de emisión). Configúrela en Empresa → Secuenciales.");
+        }
+        if (trim((string) preg_replace('/\D/', '', (string)($data['secuencial'] ?? ''))) === '') {
+            throw new Exception("Falta el secuencial del documento. Recargue el formulario e intente nuevamente.");
+        }
+        if (trim((string)($data['serie'] ?? '')) === '') {
+            throw new Exception("Falta la serie del documento (establecimiento-punto de emisión).");
+        }
+    }
+
     public function validarCreacion(array $data): void
     {
         if (empty($data['id_cliente'])) {

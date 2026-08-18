@@ -424,6 +424,7 @@
     };
 
     function toggleBotonesAccion(habilitar, estado = 'borrador') {
+        NC_estadoActual = estado; // usado por NC_eliminar() para el aviso de eliminación forzada
         const esAutorizado = (estado === 'autorizado');
         const esAnulado = (estado === 'anulado');
         const esBorrador = (estado === 'borrador');
@@ -435,11 +436,21 @@
         document.getElementById('nc-btn-correo').disabled = !habilitar || !esAutorizado;
         document.getElementById('btnGuardarNC').disabled = esAutorizado || esAnulado;
 
-        // Botones footer (Eliminar/Anular)
+        // Botones footer (Eliminar/Anular). Eliminar también aparece fuera de
+        // borrador para el superadmin (nivel 3) — ver NotaCreditoService::eliminar().
         const btnEliminar = document.getElementById('btnEliminarNC');
         const btnAnular = document.getElementById('btnAnularNC');
-        
-        if (btnEliminar) btnEliminar.classList.toggle('d-none', !habilitar || !esBorrador);
+        const puedeEliminarForzado = !!window.NC_ES_SUPERADMIN && !esBorrador;
+
+        if (btnEliminar) {
+            btnEliminar.classList.toggle('d-none', !habilitar || !(esBorrador || puedeEliminarForzado));
+            btnEliminar.innerHTML = puedeEliminarForzado
+                ? '<i class="bi bi-trash3 me-1"></i> Eliminar (superadmin)'
+                : '<i class="bi bi-trash3 me-1"></i> Eliminar';
+            btnEliminar.title = puedeEliminarForzado
+                ? 'Elimina la NC aunque no esté en borrador. Solo superadmin.'
+                : '';
+        }
         if (btnAnular) btnAnular.classList.toggle('d-none', !habilitar || !esAutorizado);
     }
 
@@ -1648,9 +1659,13 @@
         const id = document.getElementById('nc_id').value;
         if (!id) return;
 
+        const esForzado = !!window.NC_ES_SUPERADMIN && NC_estadoActual !== 'borrador';
+
         const result = await Swal.fire({
             title: '¿Eliminar Borrador?',
-            text: 'Esta acción eliminará permanentemente la nota de crédito.',
+            text: esForzado
+                ? `Esta Nota de Crédito está "${NC_estadoActual}", no en borrador. Como superadmin puedes eliminarla igual: se revertirán inventario, asiento contable y casilleros de IVA. No se puede deshacer.`
+                : 'Esta acción eliminará permanentemente la nota de crédito.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Sí, eliminar',

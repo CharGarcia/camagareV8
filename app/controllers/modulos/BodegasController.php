@@ -57,8 +57,13 @@ class BodegasController extends BaseModuloController
 
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
+        // Establecimientos de la empresa: cada bodega puede indicar en cuál está
+        // (lo consumen las Transferencias de Inventario).
+        $establecimientos = (new \App\models\Empresa())->getEstablecimientos($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos.bodegas.index', [
             'titulo'     => 'Bodegas',
+            'establecimientos' => $establecimientos,
             'fullWidth'  => true,
             'perm'       => $perm,
             'rutaModulo' => self::RUTA_MODULO,
@@ -463,8 +468,12 @@ class BodegasController extends BaseModuloController
     private function recogerDatosFormulario(): array
     {
         return [
-            'nombre' => trim($_POST['nombre'] ?? ''),
-            'status' => (int) ($_POST['status'] ?? 1),
+            'nombre'             => trim($_POST['nombre'] ?? ''),
+            'status'             => (int) ($_POST['status'] ?? 1),
+            // Establecimiento al que pertenece la bodega: lo usan las
+            // Transferencias de Inventario para saber cuándo el traslado cruza
+            // de un local a otro del mismo RUC. Vacío = sin asignar.
+            'id_establecimiento' => (int) ($_POST['id_establecimiento'] ?? 0) ?: null,
         ];
     }
 }

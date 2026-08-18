@@ -193,6 +193,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <option value="0">Inactivo</option>
                                     </select>
                                 </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold d-flex align-items-center">
+                                        Establecimiento <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('bodegas', 'bodega_id_establecimiento', 'id_establecimiento') ?>
+                                    </label>
+                                    <select name="id_establecimiento" id="bodega_id_establecimiento" class="form-select form-select-sm">
+                                        <option value="">Sin asignar</option>
+                                        <?php foreach (($establecimientos ?? []) as $est): ?>
+                                            <option value="<?= (int) $est['id'] ?>">
+                                                <?= htmlspecialchars(($est['codigo'] ?? '') . ' - ' . ($est['nombre'] ?? '')) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text small">Local donde está físicamente la bodega. Define cuándo una transferencia de inventario cruza de un establecimiento a otro.</div>
+                                </div>
                             </div>
                         </div>
 
@@ -375,6 +389,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('bodega_nombre').value = data.nombre || '';
             const isInactive = data.status === false || data.status === 'false' || data.status === 0 || data.status === '0' || data.status === 'f';
             document.getElementById('bodega_status').value = isInactive ? '0' : '1';
+            const selEst = document.getElementById('bodega_id_establecimiento');
+            if (selEst) selEst.value = data.id_establecimiento ? String(data.id_establecimiento) : '';
 
             document.getElementById('tituloModal').textContent = 'Editar Bodega';
             document.getElementById('btnEliminar')?.classList.remove('d-none');

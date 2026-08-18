@@ -247,4 +247,50 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             el.onclick = function() { abrirModalGR(this); };
         });
     });
+
+    <?php if (!empty($prefill)): ?>
+    /* ── Precarga desde otro módulo (Transferencias de Inventario) ──
+       Abre el modal de una guía nueva con los productos, direcciones y motivo
+       del documento de origen. El destinatario, transportista y placa los
+       completa el usuario. */
+    (function () {
+        const PRE = <?= json_encode($prefill, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
+
+        function aplicarPrefill() {
+            if (typeof window.GR_abrirCrear !== 'function') { setTimeout(aplicarPrefill, 200); return; }
+            window.GR_abrirCrear();
+
+            // Se aplica después de abrir para que no lo pise el restablecimiento
+            // de un borrador guardado en el navegador.
+            setTimeout(() => {
+                const set = (id, valor) => { const e = document.getElementById(id); if (e && valor) e.value = valor; };
+                set('gr-fecha-emision', PRE.fecha);
+                set('gr-fecha-inicio',  PRE.fecha);
+                set('gr-fecha-fin',     PRE.fecha);
+                set('gr-motivo',        PRE.motivo);
+                set('gr-partida',       PRE.direccion_partida);
+                set('gr-destino',       PRE.direccion_destino);
+                set('gr-cod-est-destino', PRE.cod_est_destino);
+
+                const tbody = document.getElementById('gr-tbody-detalle');
+                if (tbody) tbody.innerHTML = '';
+                (PRE.items || []).forEach(it => window.GR_agregarLinea(it));
+                if (typeof window.GR_actualizarNumeracion === 'function') window.GR_actualizarNumeracion();
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Guía precargada',
+                        html: 'Datos tomados de la transferencia <strong>' + PRE.numero + '</strong>.<br>'
+                            + 'Complete el destinatario, el transportista y la placa antes de guardar.',
+                        confirmButtonColor: '#0d6efd',
+                        target: document.getElementById('modalGuiaRemision') || document.body,
+                    });
+                }
+            }, 400);
+        }
+
+        document.addEventListener('DOMContentLoaded', aplicarPrefill);
+    })();
+    <?php endif; ?>
 </script>

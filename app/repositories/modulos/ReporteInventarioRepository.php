@@ -132,9 +132,16 @@ class ReporteInventarioRepository extends BaseRepository
      * cero o negativo incluido) aunque su fila en productos_bodegas esté ausente o eliminada
      * (caché desincronizado; ver docs/manual/modulos/reporte-inventarios.md, pestaña Auditoría).
      * productos_bodegas (pb) queda como LEFT JOIN solo para leer stock_minimo/stock_maximo.
+     *
+     * $fechaCorte (opcional): si viene, el saldo/costo/consignado se calculan "a esa fecha"
+     * (solo movimientos/consignaciones hasta ese día), en vez del saldo corriente de hoy.
      */
-    private function baseExistencias(string $where): string
+    private function baseExistencias(string $where, bool $conFechaCorte = false): string
     {
+        $condCorteKardex = $conFechaCorte ? " AND k.fecha_movimiento <= :fecha_corte" : "";
+        $condCorteUnion  = $conFechaCorte ? " AND fecha_movimiento <= :fecha_corte" : "";
+        $condCorteCv     = $conFechaCorte ? " AND cv.fecha_emision <= :fecha_corte" : "";
+
         return "
             SELECT * FROM (
                 SELECT u.id_producto, u.id_bodega, COALESCE(pb.stock_minimo, 0) AS stock_minimo,
@@ -149,12 +156,12 @@ class ReporteInventarioRepository extends BaseRepository
                        COALESCE((
                            SELECT SUM(k.cantidad) FROM inventario_kardex k
                            WHERE k.id_producto = u.id_producto AND k.id_bodega = u.id_bodega
-                             AND k.id_empresa = u.id_empresa AND k.eliminado = false
+                             AND k.id_empresa = u.id_empresa AND k.eliminado = false{$condCorteKardex}
                        ), 0) AS stock_actual,
                        COALESCE((
                            SELECT k.costo_unitario FROM inventario_kardex k
                            WHERE k.id_producto = u.id_producto AND k.id_bodega = u.id_bodega
-                             AND k.id_empresa = u.id_empresa AND k.eliminado = false
+                             AND k.id_empresa = u.id_empresa AND k.eliminado = false{$condCorteKardex}
                            ORDER BY k.fecha_movimiento DESC, k.id DESC LIMIT 1
                        ), 0) AS costo_unitario,
                        COALESCE((
@@ -164,14 +171,14 @@ class ReporteInventarioRepository extends BaseRepository
                            FROM consignaciones_ventas_detalles cvd
                            INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                            WHERE cvd.id_producto = u.id_producto AND cvd.id_bodega = u.id_bodega
-                             AND cvd.id_empresa = u.id_empresa AND cvd.eliminado = false AND cv.eliminado = false
+                             AND cvd.id_empresa = u.id_empresa AND cvd.eliminado = false AND cv.eliminado = false{$condCorteCv}
                        ), 0) AS consignado
                 FROM (
                     SELECT id_empresa, id_producto, id_bodega FROM productos_bodegas
                     WHERE id_empresa = :id_empresa AND eliminado = false
                     UNION
                     SELECT id_empresa, id_producto, id_bodega FROM inventario_kardex
-                    WHERE id_empresa = :id_empresa AND eliminado = false
+                    WHERE id_empresa = :id_empresa AND eliminado = false{$condCorteUnion}
                 ) u
                 INNER JOIN productos p ON p.id = u.id_producto AND p.id_empresa = u.id_empresa
                 INNER JOIN bodegas b ON b.id = u.id_bodega
@@ -208,10 +215,19 @@ class ReporteInventarioRepository extends BaseRepository
     public function getExistenciasDetalle(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
-        $sql = "SELECT * FROM (" . $this->wrapValorYEstado($this->baseExistencias($where)) . ") e WHERE 1=1";
+        $conFechaCorte = !empty($filtros['fecha_corte']);
+        if ($conFechaCorte) {
+            $params[':fecha_corte'] = $filtros['fecha_corte'];
+        }
+        $sql = "SELECT * FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $conFechaCorte)) . ") e WHERE 1=1";
         if (!empty($filtros['estado_stock'])) {
             $sql .= " AND e.estado_stock = :estado_stock";
             $params[':estado_stock'] = $filtros['estado_stock'];
+        }
+        if (($filtros['consignado'] ?? '') === 'CON') {
+            $sql .= " AND e.consignado > 0";
+        } elseif (($filtros['consignado'] ?? '') === 'SIN') {
+            $sql .= " AND e.consignado = 0";
         }
 
         $orden = in_array($filtros['orden'] ?? '', self::SORT_COLUMNAS_EXISTENCIAS, true) ? $filtros['orden'] : 'producto_nombre';
@@ -226,7 +242,18 @@ class ReporteInventarioRepository extends BaseRepository
     private function getExistenciasAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
-        $base = $this->wrapValorYEstado($this->baseExistencias($where));
+        $conFechaCorte = !empty($filtros['fecha_corte']);
+        if ($conFechaCorte) {
+            $params[':fecha_corte'] = $filtros['fecha_corte'];
+        }
+        $base = $this->wrapValorYEstado($this->baseExistencias($where, $conFechaCorte));
+
+        $whereConsignado = '';
+        if (($filtros['consignado'] ?? '') === 'CON') {
+            $whereConsignado = ' WHERE consignado > 0';
+        } elseif (($filtros['consignado'] ?? '') === 'SIN') {
+            $whereConsignado = ' WHERE consignado = 0';
+        }
 
         $sql = "SELECT * FROM (
                     SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo,
@@ -238,7 +265,7 @@ class ReporteInventarioRepository extends BaseRepository
                            SUM(valor_total) AS valor_total,
                            CASE WHEN SUM(stock_actual) > 0 THEN SUM(valor_total) / SUM(stock_actual) ELSE 0 END AS costo_unitario,
                            COUNT(DISTINCT id_producto) AS cantidad_productos
-                    FROM ({$base}) t
+                    FROM ({$base}) t{$whereConsignado}
                     GROUP BY {$campoId}
                 ) g
                 ORDER BY valor_total DESC";
@@ -263,9 +290,136 @@ class ReporteInventarioRepository extends BaseRepository
         return $this->getExistenciasAgrupado($idEmpresa, $filtros, 'id_bodega', 'bodega_nombre');
     }
 
+    // ── Agrupado por Lote / NUP / Caducidad: a diferencia de Producto/Categoría/Bodega
+    // (que suman el stock_actual ya calculado por producto×bodega), aquí el desglose es
+    // POR DEBAJO de ese nivel — productos_bodegas no guarda el stock por lote/NUP/caducidad
+    // (ver comentario en baseExistencias()), así que se agrupa directo desde inventario_kardex.
+
+    private function buildWhereExistenciasKardex(int $idEmpresa, array $filtros): array
+    {
+        $where = "k.id_empresa = :id_empresa AND k.eliminado = false
+                   AND p.eliminado = false AND p.inventariable = true
+                   AND b.eliminado = false";
+        $params = [':id_empresa' => $idEmpresa];
+
+        if (!empty($filtros['id_bodega'])) {
+            $where .= " AND k.id_bodega = :id_bodega";
+            $params[':id_bodega'] = (int) $filtros['id_bodega'];
+        }
+        if (!empty($filtros['id_categoria'])) {
+            $where .= " AND p.id_categoria = :id_categoria";
+            $params[':id_categoria'] = (int) $filtros['id_categoria'];
+        }
+        if (!empty($filtros['id_marca'])) {
+            $where .= " AND p.id_marca = :id_marca";
+            $params[':id_marca'] = (int) $filtros['id_marca'];
+        }
+        if (!empty($filtros['id_producto'])) {
+            $where .= " AND k.id_producto = :id_producto";
+            $params[':id_producto'] = (int) $filtros['id_producto'];
+        }
+        if (!empty($filtros['buscar'])) {
+            $where .= " AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar)";
+            $params[':buscar'] = '%' . $filtros['buscar'] . '%';
+        }
+        if (!empty($filtros['numero_lote'])) {
+            $where .= " AND k.numero_lote ILIKE :numero_lote";
+            $params[':numero_lote'] = '%' . $filtros['numero_lote'] . '%';
+        }
+        if (!empty($filtros['nup'])) {
+            $where .= " AND k.nup ILIKE :nup";
+            $params[':nup'] = '%' . $filtros['nup'] . '%';
+        }
+        if (!empty($filtros['fecha_caducidad_desde'])) {
+            $where .= " AND k.fecha_caducidad >= :fecha_caducidad_desde";
+            $params[':fecha_caducidad_desde'] = $filtros['fecha_caducidad_desde'];
+        }
+        if (!empty($filtros['fecha_caducidad_hasta'])) {
+            $where .= " AND k.fecha_caducidad <= :fecha_caducidad_hasta";
+            $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
+        }
+        if (!empty($filtros['fecha_corte'])) {
+            $where .= " AND k.fecha_movimiento <= :fecha_corte";
+            $params[':fecha_corte'] = $filtros['fecha_corte'];
+        }
+
+        return [$where, $params];
+    }
+
+    /**
+     * Detalle por lote: agrupa SIEMPRE por los 3 campos juntos (lote, NUP, caducidad) —
+     * en la práctica viajan juntos en cada movimiento del kardex, así que separarlos
+     * perdería la relación entre ellos. Incluye "consignado" (cuánto de ese mismo
+     * lote/NUP/caducidad está en poder de clientes) para poder comparar, por lote,
+     * cuánto hay en bodega propia vs. cuánto está consignado. $ordenPrincipal solo
+     * cambia el criterio de orden por el que se navega (Por Lote/Por NUP/Por Caducidad),
+     * no las columnas — las 3 siempre están presentes.
+     */
+    private function getExistenciasPorDetalle(int $idEmpresa, array $filtros, string $ordenPrincipal): array
+    {
+        list($where, $params) = $this->buildWhereExistenciasKardex($idEmpresa, $filtros);
+        $condCorteCv = !empty($filtros['fecha_corte']) ? " AND cv.fecha_emision <= :fecha_corte" : "";
+
+        $sql = "SELECT *, (stock_actual * costo_unitario) AS valor_total,
+                       (stock_actual + consignado) AS stock_total
+                FROM (
+                    SELECT k.id_producto, k.id_bodega, k.numero_lote AS lote, k.nup, k.fecha_caducidad,
+                           p.codigo AS producto_codigo, p.nombre AS producto_nombre,
+                           COALESCE(cat.nombre, 'Sin categoría') AS categoria_nombre,
+                           COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,
+                           b.nombre AS bodega_nombre,
+                           SUM(k.cantidad) AS stock_actual,
+                           (ARRAY_AGG(k.costo_unitario ORDER BY k.fecha_movimiento DESC, k.id DESC))[1] AS costo_unitario,
+                           COALESCE((
+                               SELECT SUM(cvd.cantidad
+                                          - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
+                                          - COALESCE((" . $this->sqlFacturadoCv() . "), 0))
+                               FROM consignaciones_ventas_detalles cvd
+                               INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                               WHERE cvd.id_producto = k.id_producto AND cvd.id_bodega = k.id_bodega
+                                 AND cvd.id_empresa = k.id_empresa AND cvd.eliminado = false AND cv.eliminado = false
+                                 AND cvd.lote IS NOT DISTINCT FROM k.numero_lote
+                                 AND cvd.nup IS NOT DISTINCT FROM k.nup
+                                 AND cvd.fecha_caducidad IS NOT DISTINCT FROM k.fecha_caducidad{$condCorteCv}
+                           ), 0) AS consignado
+                    FROM inventario_kardex k
+                    INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
+                    INNER JOIN bodegas b ON b.id = k.id_bodega
+                    LEFT JOIN categorias cat ON cat.id = p.id_categoria
+                    LEFT JOIN marcas mar ON mar.id = p.id_marca
+                    WHERE {$where}
+                    GROUP BY k.id_empresa, k.id_producto, k.id_bodega, k.numero_lote, k.nup, k.fecha_caducidad,
+                             p.codigo, p.nombre, cat.nombre, mar.nombre, b.nombre
+                ) t
+                ORDER BY producto_nombre ASC, bodega_nombre ASC, {$ordenPrincipal} ASC NULLS LAST";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getExistenciasAgrupadoLote(int $idEmpresa, array $filtros): array
+    {
+        return $this->getExistenciasPorDetalle($idEmpresa, $filtros, 'lote');
+    }
+
+    public function getExistenciasAgrupadoNup(int $idEmpresa, array $filtros): array
+    {
+        return $this->getExistenciasPorDetalle($idEmpresa, $filtros, 'nup');
+    }
+
+    public function getExistenciasAgrupadoCaducidad(int $idEmpresa, array $filtros): array
+    {
+        return $this->getExistenciasPorDetalle($idEmpresa, $filtros, 'fecha_caducidad');
+    }
+
     public function getExistenciasKpis(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
+        $conFechaCorte = !empty($filtros['fecha_corte']);
+        if ($conFechaCorte) {
+            $params[':fecha_corte'] = $filtros['fecha_corte'];
+        }
         $sql = "SELECT
                     COUNT(*) AS total_filas,
                     COUNT(DISTINCT id_producto) AS total_productos,
@@ -273,7 +427,7 @@ class ReporteInventarioRepository extends BaseRepository
                     COUNT(*) FILTER (WHERE estado_stock = 'QUIEBRE') AS en_quiebre,
                     COUNT(*) FILTER (WHERE estado_stock = 'ALERTA')  AS en_alerta,
                     COUNT(*) FILTER (WHERE estado_stock = 'EXCESO')  AS en_exceso
-                FROM (" . $this->wrapValorYEstado($this->baseExistencias($where)) . ") e";
+                FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $conFechaCorte)) . ") e";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);

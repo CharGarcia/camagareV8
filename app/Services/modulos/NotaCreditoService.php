@@ -366,7 +366,12 @@ class NotaCreditoService
         }
     }
 
-    public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
+    /**
+     * $esSuperAdmin (nivel 3) permite eliminar una NC que NO está en borrador
+     * (autorizada o anulada) — misma excepción que FacturaVentaService::eliminar(),
+     * para el caso de un documento cargado por error que no se quiere conservar.
+     */
+    public function eliminar(int $id, int $idEmpresa, int $idUsuario, bool $esSuperAdmin = false): void
     {
         $db = Database::getConnection();
         $db->beginTransaction();
@@ -377,8 +382,25 @@ class NotaCreditoService
                 throw new Exception("Nota de Crédito no encontrada.");
             }
 
-            if ($nc['estado'] !== 'borrador') {
+            $estadoActual = $nc['estado'] ?? '';
+            if ($estadoActual !== 'borrador' && !$esSuperAdmin) {
                 throw new Exception("Solo se pueden eliminar Notas de Crédito en estado borrador.");
+            }
+
+            // Igual que FacturaVentaService::eliminar(): si sigue AUTORIZADA en el SRI, no se
+            // puede eliminar aquí — primero hay que anularla en el portal del SRI.
+            $claveAcceso = trim((string) ($nc['clave_acceso'] ?? ''));
+            if ($estadoActual === 'autorizado' && $claveAcceso !== '') {
+                $tipoAmbiente = (string) ($nc['tipo_ambiente'] ?? '1');
+                $envioSri = new \App\Services\Sri\SriEnvioService();
+                $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);
+                $estadoSri = strtoupper($consulta['estado'] ?? '');
+                if ($estadoSri === 'AUTORIZADO') {
+                    throw new Exception(
+                        'No se puede eliminar: el documento sigue AUTORIZADO en el SRI. ' .
+                        'Primero debe anularlo en el portal del SRI; cuando deje de estar autorizado podrá eliminarlo aquí.'
+                    );
+                }
             }
 
             // Revertir inventario (tolerante: no bloquear la eliminación si el
@@ -413,16 +435,21 @@ class NotaCreditoService
             (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
                 ->eliminar($idEmpresa, 'nota_credito_venta', $id, $idUsuario);
 
+            // Limpiar casilleros de declaración 104 (igual que anular()) — solo aplica si
+            // la NC llegó a estar autorizada y a marcar algún casillero.
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $id);
+
             $this->repository->eliminarLogico($id, $idUsuario);
 
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
-                'eliminar',
+                $estadoActual !== 'borrador' ? 'eliminar_forzado_superadmin' : 'eliminar',
                 'notas_credito_cabecera',
                 $id,
                 $nc,
-                null
+                ['estado_previo' => $estadoActual]
             );
 
             $db->commit();

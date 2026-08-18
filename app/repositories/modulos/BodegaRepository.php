@@ -66,43 +66,79 @@ class BodegaRepository extends BaseRepository
         ];
     }
 
+    /**
+     * ¿La tabla ya tiene la columna id_establecimiento? La agrega la migración
+     * de Transferencias de Inventario
+     * (database/migrations/20260818_create_transferencias_inventario.sql). Se
+     * consulta una sola vez por request (lectura barata, sin locks) para que
+     * Bodegas siga funcionando en bases donde ese SQL todavía no se corrió.
+     */
+    private function tieneColumnaEstablecimiento(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            $st = $this->db->query(
+                "SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'bodegas' AND column_name = 'id_establecimiento'"
+            );
+            $existe = (bool) $st->fetchColumn();
+        }
+        return $existe;
+    }
+
     public function create(array $data): int
     {
-        $sql = "INSERT INTO {$this->table} (
-                    id_empresa, id_usuario, created_by, nombre,
-                    status, eliminado, created_at
-                ) VALUES (
-                    :id_empresa, :id_usuario, :created_by, :nombre,
-                    :status, :eliminado, CURRENT_TIMESTAMP
-                )";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $conEst = $this->tieneColumnaEstablecimiento();
+        $cols   = 'id_empresa, id_usuario, created_by, nombre, status, eliminado, created_at';
+        $vals   = ':id_empresa, :id_usuario, :created_by, :nombre, :status, :eliminado, CURRENT_TIMESTAMP';
+        if ($conEst) {
+            $cols .= ', id_establecimiento';
+            $vals .= ', :id_establecimiento';
+        }
+
+        $params = [
             ':id_empresa'   => $data['id_empresa'],
             ':id_usuario'   => $data['id_usuario'],
             ':created_by'   => $data['created_by'],
             ':nombre'       => $data['nombre'],
             ':status'       => $data['status'] ? 'true' : 'false',
             ':eliminado'    => 'false'
-        ]);
+        ];
+        if ($conEst) {
+            $params[':id_establecimiento'] = !empty($data['id_establecimiento']) ? (int) $data['id_establecimiento'] : null;
+        }
+
+        $st = $this->db->prepare("INSERT INTO {$this->table} ({$cols}) VALUES ({$vals})");
+        $st->execute($params);
         return $this->lastInsertId();
     }
 
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $sql = "UPDATE {$this->table} SET 
+        $conEst = $this->tieneColumnaEstablecimiento();
+        $setEst = $conEst ? ', id_establecimiento = :id_establecimiento' : '';
+
+        $sql = "UPDATE {$this->table} SET
                 nombre = :nombre,
                 status = :status,
                 updated_by = :updated_by,
                 updated_at = CURRENT_TIMESTAMP
+                {$setEst}
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
-        $st = $this->db->prepare($sql);
-        return $st->execute([
+
+        $params = [
             ':nombre'     => $data['nombre'],
             ':status'     => $data['status'] ? 'true' : 'false',
             ':updated_by' => $data['updated_by'],
             ':id'         => $id,
             ':id_empresa' => $idEmpresa
-        ]);
+        ];
+        if ($conEst) {
+            $params[':id_establecimiento'] = !empty($data['id_establecimiento']) ? (int) $data['id_establecimiento'] : null;
+        }
+
+        $st = $this->db->prepare($sql);
+        return $st->execute($params);
     }
 
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array

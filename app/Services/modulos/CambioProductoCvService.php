@@ -24,6 +24,9 @@ use Exception;
  */
 class CambioProductoCvService
 {
+    /** Tipo de documento en empresa_secuencial / SecuencialRepository::DOCUMENT_MAP. */
+    private const TIPO_SECUENCIAL = 'Cambios de productos';
+
     private CambioProductoCvRepository $repository;
     private CambioProductoCvRules $rules;
     private LogSistemaService $logService;
@@ -70,24 +73,40 @@ class CambioProductoCvService
     public function crear(array $data): int
     {
         $this->rules->validarCreacion($data);
+        $this->rules->validarNumeracion($data);
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
         $empresaConfig = $data['empresa_config'] ?? [];
 
+        $idPunto      = empty($data['id_punto_emision']) ? 0 : (int) $data['id_punto_emision'];
+        $tipoAmbiente = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
+        $secuencial   = str_pad((string) preg_replace('/\D/', '', (string)($data['secuencial'] ?? '')), 9, '0', STR_PAD_LEFT);
+
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
+
+            // Numeración, igual que en Facturas de Venta: el secuencial se calcula por AJAX al
+            // abrir el modal, así que aquí —ya dentro de la transacción— se toma el candado del
+            // punto de emisión (CLAUDE.md §8; se libera solo al COMMIT/ROLLBACK) y se comprueba
+            // que nadie lo haya usado entre medio.
+            if ($idPunto > 0) {
+                (new \App\repositories\SecuencialRepository())->lockSecuencial($idPunto, self::TIPO_SECUENCIAL);
+            }
+            if ($this->repository->existeSecuencial($idEmpresa, $idPunto, $secuencial, $tipoAmbiente)) {
+                throw new Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
+            }
 
             $cabecera = [
                 'id_empresa'              => $idEmpresa,
                 'fecha_cambio'            => $data['fecha_cambio'],
                 'serie'                   => $data['serie'] ?? '',
-                'secuencial'              => str_pad((string)($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT),
+                'secuencial'              => $secuencial,
                 'id_punto_emision'        => empty($data['id_punto_emision']) ? null : (int) $data['id_punto_emision'],
                 'establecimiento'         => $data['establecimiento'] ?? null,
                 'punto_emision'           => $data['punto_emision'] ?? null,
-                'tipo_ambiente'           => (string) ($empresaConfig['tipo_ambiente'] ?? '1'),
+                'tipo_ambiente'           => $tipoAmbiente,
                 'id_cliente'              => (int) $data['id_cliente'],
                 'id_responsable_traslado' => empty($data['id_responsable_traslado']) ? null : (int) $data['id_responsable_traslado'],
                 'motivo'                  => $data['motivo'] ?? null,

@@ -126,12 +126,27 @@
                                 </select>
                             </div>
                             <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Consignado</label>
+                                <select id="ri-ex-consignado" class="form-select form-select-sm shadow-none border" style="width:130px;">
+                                    <option value="">Todos</option>
+                                    <option value="CON">Con consignado</option>
+                                    <option value="SIN">Sin consignado</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Saldo a fecha</label>
+                                <input type="date" id="ri-ex-fecha-corte" class="form-control form-control-sm shadow-none border" style="width:115px;" title="Muestra el saldo que había hasta esta fecha, en vez del saldo de hoy">
+                            </div>
+                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
                                 <select id="ri-ex-agrupar" class="form-select form-select-sm shadow-none border" style="width:150px;">
                                     <option value="NINGUNO">Detallado</option>
                                     <option value="PRODUCTO">Por Producto</option>
                                     <option value="CATEGORIA">Por Categoría</option>
                                     <option value="BODEGA">Por Bodega</option>
+                                    <option value="LOTE">Por Lote</option>
+                                    <option value="NUP">Por NUP</option>
+                                    <option value="CADUCIDAD">Por Caducidad</option>
                                 </select>
                             </div>
                             <div>
@@ -142,6 +157,9 @@
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">NUP</label>
                                 <input type="text" id="ri-ex-nup" class="form-control form-control-sm shadow-none border" style="width:110px;" placeholder="NUP">
                             </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap align-items-start gap-2">
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Caducidad desde</label>
                                 <input type="date" id="ri-ex-caducidad-desde" class="form-control form-control-sm shadow-none border" style="width:115px;">
@@ -150,7 +168,7 @@
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Caducidad hasta</label>
                                 <input type="date" id="ri-ex-caducidad-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;">
                             </div>
-                            <div class="position-relative" style="flex:1 1 200px;">
+                            <div class="position-relative" style="flex:0 1 640px;">
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
@@ -257,9 +275,6 @@
                                     <?php foreach (($marcas ?? []) as $m): ?><option value="<?= (int) $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?></option><?php endforeach; ?>
                                 </select>
                             </div>
-                        </div>
-
-                        <div class="d-flex flex-wrap align-items-start gap-2">
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Origen</label>
                                 <select id="ri-mv-origen" class="form-select form-select-sm shadow-none border" style="width:150px;">
@@ -278,6 +293,21 @@
                                     <?php foreach (($usuarios ?? []) as $u): ?><option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['nombre']) ?></option><?php endforeach; ?>
                                 </select>
                             </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap align-items-start gap-2">
+                            <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
+                                <select id="ri-mv-agrupar" class="form-select form-select-sm shadow-none border" style="width:150px;">
+                                    <option value="NINGUNO">Detallado</option>
+                                    <option value="PRODUCTO">Por Producto</option>
+                                    <option value="BODEGA">Por Bodega</option>
+                                    <option value="TIPO">Por Tipo</option>
+                                    <option value="ORIGEN">Por Origen</option>
+                                    <option value="FECHA">Por Fecha</option>
+                                    <option value="MES">Por Mes</option>
+                                </select>
+                            </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Lote</label>
                                 <input type="text" id="ri-mv-lote" class="form-control form-control-sm shadow-none border" style="width:110px;" placeholder="Nro. lote">
@@ -294,10 +324,6 @@
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Caducidad hasta</label>
                                 <input type="date" id="ri-mv-caducidad-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;">
                             </div>
-                            <div style="flex:1 1 150px;">
-                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Observaciones</label>
-                                <input type="text" id="ri-mv-observaciones" class="form-control form-control-sm shadow-none border" placeholder="Observaciones">
-                            </div>
                             <div class="position-relative" style="flex:1 1 200px;">
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
                                 <div class="input-group input-group-sm">
@@ -309,17 +335,9 @@
                                 <div id="ri-mv-dropdown-producto" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                                 <small class="text-muted fst-italic" id="ri-mv-producto-seleccionado"></small>
                             </div>
-                            <div>
-                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
-                                <select id="ri-mv-agrupar" class="form-select form-select-sm shadow-none border" style="width:150px;">
-                                    <option value="NINGUNO">Detallado</option>
-                                    <option value="PRODUCTO">Por Producto</option>
-                                    <option value="BODEGA">Por Bodega</option>
-                                    <option value="TIPO">Por Tipo</option>
-                                    <option value="ORIGEN">Por Origen</option>
-                                    <option value="FECHA">Por Fecha</option>
-                                    <option value="MES">Por Mes</option>
-                                </select>
+                            <div style="flex:1 1 150px;">
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Observaciones</label>
+                                <input type="text" id="ri-mv-observaciones" class="form-control form-control-sm shadow-none border" placeholder="Observaciones">
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>

@@ -1226,15 +1226,41 @@ class FacturaVentaService
         }
     }
 
-    public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
+    /**
+     * $esSuperAdmin (nivel 3) permite eliminar una factura que NO está en borrador
+     * (autorizada o anulada) — excepción explícita a la regla general, para el caso
+     * de una factura cargada por error (p. ej. al traer saldos iniciales) que el
+     * usuario no quiere conservar. Reutiliza toda la reversión de anular() (ingresos,
+     * asiento, inventario, consignación, casilleros IVA) antes de la eliminación
+     * lógica; para nivel 1-2 el comportamiento es exactamente el de antes.
+     */
+    public function eliminar(int $id, int $idEmpresa, int $idUsuario, bool $esSuperAdmin = false): void
     {
         $cabecera = $this->repository->getPorId($id);
         if (!$cabecera || (int)$cabecera['id_empresa'] !== $idEmpresa) {
             throw new \Exception('Factura no encontrada.');
         }
 
-        if (($cabecera['estado'] ?? '') !== 'borrador') {
+        $estadoActual = $cabecera['estado'] ?? '';
+        if ($estadoActual !== 'borrador' && !$esSuperAdmin) {
             throw new \Exception('Solo se pueden eliminar facturas en estado borrador.');
+        }
+
+        // Igual que anular(): si sigue AUTORIZADA en el SRI, no se puede eliminar aquí —
+        // primero hay que anularla en el portal del SRI. Evita que el sistema quede sin
+        // ningún registro de un comprobante que el SRI todavía reporta como vigente.
+        $claveAcceso = trim((string) ($cabecera['clave_acceso'] ?? ''));
+        if ($estadoActual === 'autorizado' && $claveAcceso !== '') {
+            $tipoAmbiente = (string) ($cabecera['tipo_ambiente'] ?? '1');
+            $envioSri = new \App\Services\Sri\SriEnvioService();
+            $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);
+            $estadoSri = strtoupper($consulta['estado'] ?? '');
+            if ($estadoSri === 'AUTORIZADO') {
+                throw new \Exception(
+                    'No se puede eliminar: el documento sigue AUTORIZADO en el SRI. ' .
+                    'Primero debe anularlo en el portal del SRI; cuando deje de estar autorizado podrá eliminarlo aquí.'
+                );
+            }
         }
 
         $this->verificarFacturaLibre($id, $idEmpresa, $idUsuario);
@@ -1296,14 +1322,19 @@ class FacturaVentaService
             // Si la factura provino de una consignación, deshacer el reingreso y liberar el saldo.
             $this->reversarConsignacionSiAplica($id, $idEmpresa, $idUsuario);
 
+            // Limpiar casilleros de declaración 104 (igual que anular()) — solo aplica si la
+            // factura llegó a estar autorizada y a marcar algún casillero.
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'facturas de venta', $id);
+
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
-                'ELIMINAR',
+                $estadoActual !== 'borrador' ? 'ELIMINAR_FORZADO_SUPERADMIN' : 'ELIMINAR',
                 'ventas_cabecera',
                 $id,
                 $cabecera,
-                ['id_venta' => $id, 'eliminado' => true]
+                ['id_venta' => $id, 'eliminado' => true, 'estado_previo' => $estadoActual]
             );
 
             if ($managedTransaction) $db->commit();

@@ -81,6 +81,8 @@ class ReporteInventariosController extends BaseModuloController
             'id_marca'     => $_REQUEST['id_marca']     ?? '',
             'id_producto'  => $_REQUEST['id_producto']  ?? '',
             'estado_stock' => $_REQUEST['estado_stock'] ?? '',
+            'consignado'   => $_REQUEST['consignado'] ?? '',
+            'fecha_corte'  => $_REQUEST['fecha_corte'] ?? '',
             'numero_lote'  => trim($_REQUEST['numero_lote'] ?? ''),
             'nup'          => trim($_REQUEST['nup'] ?? ''),
             'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
@@ -187,15 +189,24 @@ class ReporteInventariosController extends BaseModuloController
         $modo = $filtros['agrupar_por'];
 
         $rows = match ($modo) {
-            'PRODUCTO'  => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
-            'CATEGORIA' => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
-            'BODEGA'    => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
-            default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
+            'PRODUCTO'   => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
+            'CATEGORIA'  => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
+            'BODEGA'     => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
+            'LOTE'       => $this->repository->getExistenciasAgrupadoLote($idEmpresa, $filtros),
+            'NUP'        => $this->repository->getExistenciasAgrupadoNup($idEmpresa, $filtros),
+            'CADUCIDAD'  => $this->repository->getExistenciasAgrupadoCaducidad($idEmpresa, $filtros),
+            default      => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
         };
         $kpis = $this->repository->getExistenciasKpis($idEmpresa, $filtros);
 
+        $colSpan = match ($modo) {
+            'NINGUNO' => 10,
+            'LOTE', 'NUP', 'CADUCIDAD' => 10,
+            default   => 8,
+        };
+
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $modo === 'NINGUNO' ? 10 : 8),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $colSpan),
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
@@ -327,6 +338,22 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['stock_total'] ?? 0), 2) . '</td>'
                 . '<td class="text-end small text-muted">' . number_format($stockMinimo, 2) . '</td>'
                 . '<td class="text-end small text-muted">' . number_format($stockMaximo, 2) . '</td>'
+                . '<td class="text-end">' . $costo . '</td>'
+                . '<td class="text-end fw-bold text-primary">' . $valor . '</td>'
+                . '</tr>';
+        }
+
+        if (in_array($modo, ['LOTE', 'NUP', 'CADUCIDAD'], true)) {
+            $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '—';
+            return '<tr>'
+                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
+                . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
+                . '<td class="small">' . htmlspecialchars($r['lote'] ?? '' ?: '—') . '</td>'
+                . '<td class="small">' . htmlspecialchars($r['nup'] ?? '' ?: '—') . '</td>'
+                . '<td class="small">' . $cad . '</td>'
+                . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
+                . '<td class="text-end small text-info">' . number_format((float) ($r['consignado'] ?? 0), 2) . '</td>'
+                . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['stock_total'] ?? 0), 2) . '</td>'
                 . '<td class="text-end">' . $costo . '</td>'
                 . '<td class="text-end fw-bold text-primary">' . $valor . '</td>'
                 . '</tr>';
@@ -904,6 +931,9 @@ class ReporteInventariosController extends BaseModuloController
                     'PRODUCTO'  => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
                     'CATEGORIA' => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
                     'BODEGA'    => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
+                    'LOTE'      => $this->repository->getExistenciasAgrupadoLote($idEmpresa, $filtros),
+                    'NUP'       => $this->repository->getExistenciasAgrupadoNup($idEmpresa, $filtros),
+                    'CADUCIDAD' => $this->repository->getExistenciasAgrupadoCaducidad($idEmpresa, $filtros),
                     default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
@@ -913,6 +943,17 @@ class ReporteInventariosController extends BaseModuloController
                         (float) $r['consignado'], (float) $r['stock_actual'], (float) $r['stock_total'], (float) $r['stock_minimo'], (float) $r['stock_maximo'],
                         (float) $r['costo_unitario'], (float) $r['valor_total'], $r['estado_stock'] ?? '',
                     ], $rows);
+                } elseif (in_array($modo, ['LOTE', 'NUP', 'CADUCIDAD'], true)) {
+                    $headers = ['Producto', 'Código', 'Bodega', 'Lote', 'NUP', 'Caducidad', 'Stock', 'Consignación', 'Stock Total', 'Costo Unit.', 'Valor total'];
+                    $data = array_map(function ($r) {
+                        $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '';
+                        return [
+                            $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? '',
+                            $r['lote'] ?? '', $r['nup'] ?? '', $cad,
+                            (float) $r['stock_actual'], (float) $r['consignado'], (float) $r['stock_total'],
+                            (float) $r['costo_unitario'], (float) $r['valor_total'],
+                        ];
+                    }, $rows);
                 } else {
                     $headers = ['Grupo', 'Productos', 'Consignación', 'Stock', 'Stock Total', 'Costo Unit.', 'Valor total'];
                     $data = array_map(fn($r) => [

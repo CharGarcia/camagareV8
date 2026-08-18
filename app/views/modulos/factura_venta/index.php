@@ -1477,6 +1477,9 @@ $totalPages = $totalPagesOriginal;
     const USUARIO_NOMBRE = '<?= htmlspecialchars($_SESSION['nombre'] ?? '', ENT_QUOTES) ?>';
     // Alias cortos para uso frecuente
     const PERM_ACTUALIZAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
+    // Nivel 3 (superadmin) puede eliminar una factura fuera de borrador — ver
+    // FacturaVentaService::eliminar(). El backend valida esto igual, esto es solo UI.
+    const ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
     const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio;
     const DEC_CANT = EMPRESA_CONFIG.decimales_cantidad;
 
@@ -4988,15 +4991,24 @@ $totalPages = $totalPagesOriginal;
         if (rucLbl) rucLbl.textContent = data.cliente_ruc || '';
         if (infoBarCliente) infoBarCliente.classList.remove('d-none');
 
-        // BotÃ³n eliminar: solo visible para borradores con permiso
+        // Botón eliminar: visible para borradores con permiso, y además para el
+        // superadmin (nivel 3) en cualquier otro estado — caso: una factura cargada
+        // por error (p. ej. saldos iniciales) que no se quiere conservar.
         const btnElim = document.getElementById('btnEliminarFacturaModal');
         const btnAnular = document.getElementById('btnAnularFacturaModal');
         const esBorrador = (data.estado || '') === 'borrador';
         const esAnulado = (data.estado || '') === 'anulado';
+        const puedeEliminarForzado = ES_SUPERADMIN && !esBorrador && <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>;
 
         if (btnElim) {
-            if (esBorrador && <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>) {
+            if ((esBorrador && <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>) || puedeEliminarForzado) {
                 btnElim.classList.remove('d-none');
+                btnElim.innerHTML = puedeEliminarForzado
+                    ? '<i class="bi bi-trash3 me-1"></i> Eliminar (superadmin)'
+                    : '<i class="bi bi-trash3 me-1"></i> Eliminar borrador';
+                btnElim.title = puedeEliminarForzado
+                    ? 'Elimina la factura aunque no esté en borrador. Solo superadmin.'
+                    : '';
             } else {
                 btnElim.classList.add('d-none');
             }
@@ -5642,9 +5654,14 @@ $totalPages = $totalPagesOriginal;
     window.eliminarFacturaBorrador = async function() {
         if (!FV_ID_ACTIVO) return;
 
+        const estadoActual = (document.getElementById('sri-badge-estado')?.textContent || '').toLowerCase().trim();
+        const esForzado = ES_SUPERADMIN && estadoActual !== 'borrador' && estadoActual !== '';
+
         const result = await Swal.fire({
             title: '¿Estas seguro?',
-            text: "Esta accion eliminara el borrador permanentemente y no se puede deshacer.",
+            text: esForzado
+                ? `Esta factura está "${estadoActual}", no en borrador. Como superadmin puedes eliminarla igual: se revertirán inventario, asiento contable, cobros asociados y consignación (si aplica), y el registro se elimina permanentemente. No se puede deshacer.`
+                : "Esta accion eliminara el borrador permanentemente y no se puede deshacer.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',

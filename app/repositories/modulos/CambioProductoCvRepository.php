@@ -312,6 +312,40 @@ class CambioProductoCvRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * ¿Ya está usado ese secuencial en el mismo punto de emisión y ambiente?
+     *
+     * Misma defensa que Facturas de Venta (FacturaVentaRepository::existeSecuencial):
+     * el número se calcula por AJAX al abrir el modal, así que entre ese cálculo y el
+     * guardado otro usuario pudo haber emitido con el mismo número. Se compara por
+     * VALOR numérico porque el secuencial puede estar guardado con o sin ceros a la
+     * izquierda ('100' vs '000000100').
+     */
+    public function existeSecuencial(int $idEmpresa, int $idPunto, string $secuencial, string $tipoAmbiente, ?int $excluirId = null): bool
+    {
+        $num = (int) preg_replace('/\D/', '', $secuencial);
+        if ($idPunto <= 0 || $num <= 0) {
+            return false;
+        }
+
+        $sql = "SELECT COUNT(*)
+                FROM cambios_producto_cv
+                WHERE id_empresa = :e AND id_punto_emision = :p
+                  AND COALESCE(tipo_ambiente, '1') = :ta
+                  AND eliminado = false
+                  AND CAST(NULLIF(regexp_replace(COALESCE(secuencial, ''), '\D', '', 'g'), '') AS BIGINT) = :sec";
+        $params = [':e' => $idEmpresa, ':p' => $idPunto, ':ta' => $tipoAmbiente, ':sec' => $num];
+
+        if ($excluirId !== null) {
+            $sql .= " AND id <> :ex";
+            $params[':ex'] = $excluirId;
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (int) $st->fetchColumn() > 0;
+    }
+
     /** Datos del producto de catálogo para una línea de ENTREGA (autoritativo). */
     public function getProductoParaEntrega(int $idProducto, int $idEmpresa): ?array
     {

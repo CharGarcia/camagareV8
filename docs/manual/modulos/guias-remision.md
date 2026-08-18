@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia
-version: 1.5
+etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos
+version: 1.6
 orden: 55
 estado: activo
 ---
@@ -137,8 +137,19 @@ traslado entre bodegas).
 - **El stock no bajó al emitir la guía**: es correcto, la guía no mueve
   inventario.
 
+## Guía a partir de una transferencia de inventario
+
+Si el traslado corresponde a una **Transferencia de Inventario entre
+establecimientos**, no hace falta volver a escribir el detalle: en el documento
+de la transferencia hay un botón **Guía de remisión** que abre este módulo con la
+fecha, el motivo, las direcciones de partida y destino y los productos ya
+cargados. Solo queda completar el **destinatario**, el **transportista** y la
+**placa**, y emitirla como cualquier otra guía.
+
 ## Historial de cambios
 
+- **1.6** — La guía se puede precargar desde una **Transferencia de Inventario**
+  entre establecimientos (productos, direcciones y motivo ya cargados).
 - **1.5** — Nuevo botón **Excel** junto al de PDF en el modal: descarga el mismo
   comprobante en `.xlsx`, adaptado a un documento de transporte (sin totales
   monetarios): cabecera de traslado, transportista y detalle de productos/cantidades.

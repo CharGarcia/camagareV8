@@ -621,9 +621,12 @@ class NotaDebitoController extends BaseModuloController
         $id        = (int) ($_POST['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
+        // Nivel 3 (superadmin) puede eliminar fuera de borrador — ver
+        // NotaDebitoService::eliminar(), que hace la verificación real.
+        $esSuperAdmin = (int) ($_SESSION['nivel'] ?? 1) === 3;
 
         try {
-            $this->service->eliminar($id, $idEmpresa, $idUsuario);
+            $this->service->eliminar($id, $idEmpresa, $idUsuario, $esSuperAdmin);
             echo json_encode(['ok' => true, 'mensaje' => 'Nota de débito eliminada correctamente.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
