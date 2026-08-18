@@ -236,7 +236,14 @@ class EmpresaInicializadorService
      *   - "Anticipos Clientes"    → ANTICIPO_CLIENTE  (ingreso)
      *   - "Anticipos Proveedores" → ANTICIPO_PROVEEDOR (egreso)
      *   - "Nómina"                → ROL               (egreso, pago de roles de pago)
-     * Cada una se verifica de forma independiente por comportamiento.
+     * Y dos conceptos sin módulo detrás, para los pagos recurrentes al fisco:
+     *   - "SRI"                   → GENERAL           (egreso)
+     *   - "IESS"                  → GENERAL           (egreso)
+     * Cada una se verifica de forma independiente por comportamiento, salvo las dos
+     * GENERAL, que se verifican por nombre (GENERAL no identifica a una sola opción).
+     * Ninguna nace con cuenta contable: cuando se crea la empresa todavía no existe el
+     * plan de cuentas. Las cuentas se asignan al cargar el plan modelo, en
+     * PlanCuentaService::sembrarCuentasFormasYOpciones().
      */
     private function crearOpcionesIngresoEgresoDefault(int $idEmpresa, int $idUsuario): void
     {
@@ -248,6 +255,11 @@ class EmpresaInicializadorService
             ['nombre' => 'Anticipos Clientes',    'comportamiento' => 'ANTICIPO_CLIENTE',   'ingresos' => 'true',  'egresos' => 'false'],
             ['nombre' => 'Anticipos Proveedores', 'comportamiento' => 'ANTICIPO_PROVEEDOR', 'ingresos' => 'false', 'egresos' => 'true'],
             ['nombre' => 'Nómina',                'comportamiento' => 'ROL',               'ingresos' => 'false', 'egresos' => 'true'],
+            // Conceptos sin módulo detrás (comportamiento GENERAL): llevan su propia cuenta
+            // contable, que se asigna al cargar el plan modelo (aquí todavía no hay cuentas).
+            // Al ser ambos GENERAL, se verifican por nombre y no por comportamiento.
+            ['nombre' => 'SRI',                   'comportamiento' => 'GENERAL',           'ingresos' => 'false', 'egresos' => 'true'],
+            ['nombre' => 'IESS',                  'comportamiento' => 'GENERAL',           'ingresos' => 'false', 'egresos' => 'true'],
         ];
 
         try {
@@ -259,6 +271,12 @@ class EmpresaInicializadorService
                  WHERE id_empresa = :id_empresa AND comportamiento = :comp AND eliminado = false
                  LIMIT 1"
             );
+            // GENERAL no identifica a una sola opción: para esas se busca por nombre.
+            $checkNombre = $this->db->prepare(
+                "SELECT 1 FROM empresa_opciones_ingreso_egreso
+                 WHERE id_empresa = :id_empresa AND UPPER(TRIM(nombre)) = :nombre AND eliminado = false
+                 LIMIT 1"
+            );
             $insert = $this->db->prepare(
                 "INSERT INTO empresa_opciones_ingreso_egreso (
                     id_empresa, nombre, aplica_ingresos, aplica_egresos, comportamiento, estado, created_by, created_at, eliminado
@@ -268,9 +286,16 @@ class EmpresaInicializadorService
             );
 
             foreach ($opciones as $o) {
-                $check->execute([':id_empresa' => $idEmpresa, ':comp' => $o['comportamiento']]);
-                if ($check->fetchColumn()) {
-                    continue;
+                if ($o['comportamiento'] === 'GENERAL') {
+                    $checkNombre->execute([':id_empresa' => $idEmpresa, ':nombre' => mb_strtoupper($o['nombre'])]);
+                    if ($checkNombre->fetchColumn()) {
+                        continue;
+                    }
+                } else {
+                    $check->execute([':id_empresa' => $idEmpresa, ':comp' => $o['comportamiento']]);
+                    if ($check->fetchColumn()) {
+                        continue;
+                    }
                 }
                 $insert->execute([
                     ':id_empresa' => $idEmpresa,

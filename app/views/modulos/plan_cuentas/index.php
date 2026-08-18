@@ -455,10 +455,10 @@ $proyectos  = $proyectos ?? [];
         window.cargarPlanModelo = async function() {
             const result = await Swal.fire({
                 title: 'Cargar Plan Modelo',
-                text: 'Se cargarán las cuentas faltantes de la estructura contable comercial estándar. ¿Deseas continuar?',
+                html: 'Se cargarán las cuentas de la estructura contable comercial estándar y, además, se <b>configurarán automáticamente los tipos de asiento</b> de ventas, recibos de venta, compras, nómina y el IVA por tarifa.<br><br>Las configuraciones que ya existan <b>no se modifican</b>.<br><br>¿Deseas continuar?',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Sí, cargar cuentas',
+                confirmButtonText: 'Sí, cargar y configurar',
                 cancelButtonText: 'Cancelar'
             });
 
@@ -466,8 +466,8 @@ $proyectos  = $proyectos ?? [];
 
             try {
                 const formData = new FormData();
-                formData.append('configurar', 'false');
-                
+                formData.append('configurar', 'true');
+
                 const resp = await fetch(`${urlBase}/cargarModeloAjax`, {
                     method: 'POST',
                     body: formData

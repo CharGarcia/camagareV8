@@ -529,12 +529,14 @@ class PlanCuentasController extends BaseModuloController
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             
-            // Cabeceras
-            $headers = ['Código', 'Nombre', 'Código SRI', 'Supercias ESF', 'Supercias ERI', 'Supercias ECP Cod.', 'Supercias ECP Sub.', 'Map Asiento'];
+            // Cabeceras. Las 8 primeras son las que lee importExcel(), en este orden exacto.
+            // "Map IVA" va al final y es informativa: la importación la ignora (el IVA se
+            // configura por tarifa, no por tipo de asiento).
+            $headers = ['Código', 'Nombre', 'Código SRI', 'Supercias ESF', 'Supercias ERI', 'Supercias ECP Cod.', 'Supercias ECP Sub.', 'Map Asiento', 'Map IVA'];
             foreach ($headers as $col => $text) {
                 $sheet->setCellValueByColumnAndRow($col + 1, 1, $text);
             }
-            
+
             $modelo = \App\Services\modulos\PlanCuentaService::getCuentasModeloArray();
             $data = [];
             foreach ($modelo as $m) {
@@ -546,18 +548,19 @@ class PlanCuentasController extends BaseModuloController
                     (string)($m['supercias_eri'] ?? ''),
                     (string)($m['supercias_ecp_codigo'] ?? ''),
                     (string)($m['supercias_ecp_subcodigo'] ?? ''),
-                    (string)($m['map_asiento'] ?? '')
+                    (string)($m['map_asiento'] ?? ''),
+                    (string)($m['map_iva'] ?? '')
                 ];
             }
-            
+
             foreach ($data as $rowIdx => $rowData) {
                 foreach ($rowData as $colIdx => $val) {
                     $sheet->setCellValueByColumnAndRow($colIdx + 1, $rowIdx + 2, $val);
                 }
             }
-            
+
             // Formato cabecera
-            $sheet->getStyle('A1:E1')->getFont()->setBold(true);
+            $sheet->getStyle('A1:I1')->getFont()->setBold(true);
             $sheet->getColumnDimension('A')->setAutoSize(true);
             $sheet->getColumnDimension('B')->setAutoSize(true);
             

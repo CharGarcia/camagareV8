@@ -6,7 +6,7 @@ ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
 etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque
-version: 1.1
+version: 1.2
 orden: 70
 estado: activo
 ---
@@ -47,6 +47,16 @@ Cada forma de pago apunta a una cuenta contable. Es lo que hace que un cobro en
 efectivo y uno por banco terminen en cuentas distintas sin que nadie lo indique
 en cada documento.
 
+Al crear una empresa, las formas por defecto nacen **sin cuenta**, porque en ese
+momento todavía no existe el plan de cuentas. Se les asigna sola al pulsar
+**Cargar Plan Modelo** en [Plan de cuentas](plan-cuentas.md): Efectivo recibe
+Caja General, y las dos de Anticipos sus cuentas de anticipo. **Tarjeta,
+Payphone y Nuvei quedan a propósito sin cuenta**: por esas vías el dinero no
+entra al instante ni por su valor nominal (llega con la liquidación del
+procesador, ya neta de comisión), así que la cuenta se decide por empresa y se
+asigna aquí a mano. Mientras no la tengan, un cobro por esas vías genera un
+asiento sin la contrapartida del dinero.
+
 **Una cuenta de tipo Banco/Cheque no puede compartirse con una forma que no
 sea bancaria.** [Control Bancario](control-bancario.md) arma el mayor de una
 cuenta bancaria filtrando directamente por esa cuenta contable, sin importar
@@ -78,6 +88,9 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
+- **1.2** — La carga del plan modelo ahora asigna sola la cuenta de las formas
+  por defecto (Efectivo y las dos de Anticipos). Tarjeta, Payphone y Nuvei
+  siguen sin cuenta a propósito.
 - **1.1** — Nueva validación: una forma NO bancaria ya no puede guardar la
   misma cuenta contable que una forma de tipo Banco/Cheque (causaba que sus
   movimientos aparecieran mezclados en Control Bancario).
