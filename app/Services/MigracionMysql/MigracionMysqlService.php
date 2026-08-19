@@ -2518,7 +2518,7 @@ class MigracionMysqlService
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
 
         $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
-        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
+        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque, detalle_pago FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
         // Forma de cobro BANCARIA: cuando el pago viejo trae id_cuenta>0 (codigo_forma_pago='0'), enlaza a la
         // cuenta bancaria migrada (empresa_formas_pago tipo BANCO). Preferir el mapa; get-or-create de respaldo.
         $mapCuenta  = $this->mapaDe($pg, $idEmpresa, 'cuentas_bancarias'); // old id_cuenta -> forma
@@ -2535,7 +2535,7 @@ class MigracionMysqlService
 
         $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_ingreso_concepto, id_cliente, monto_total, observaciones, estado, recibo_de, id_recibo_cliente, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
+        $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
                   FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
@@ -2624,7 +2624,7 @@ class MigracionMysqlService
                 $formaStmt->execute([':cd' => $cod]);
                 foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
                     $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
-                    $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
+                    $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
                 }
 
                 if (!$idIngExist) {
@@ -2668,7 +2668,7 @@ class MigracionMysqlService
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
 
         $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
-        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
+        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque, detalle_pago FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
         // Forma de pago BANCARIA por id_cuenta (ver ingresos): enlaza a la cuenta bancaria migrada.
         $mapCuenta = $this->mapaDe($pg, $idEmpresa, 'cuentas_bancarias');
         $mapFormaP = $this->mapaDe($pg, $idEmpresa, 'formas_pago');
@@ -2685,7 +2685,7 @@ class MigracionMysqlService
 
         $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, id_egreso_concepto, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'PROVEEDOR', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
+        $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
                   FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
@@ -2776,7 +2776,7 @@ class MigracionMysqlService
                 $formaStmt->execute([':cd' => $cod]);
                 foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
                     $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
-                    $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
+                    $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
                 }
 
                 if (!$idEgrExist) {
@@ -4703,6 +4703,27 @@ class MigracionMysqlService
         $cad = self::fechaCorta($vencimiento);
         if ($cad === null || $cad < '2000-01-01') { $cad = self::fechaCorta($fechaItem); }
         return $cad;
+    }
+
+    /**
+     * Tipo de operación bancaria para el pago migrado de un ingreso/egreso. Solo aplica cuando el pago
+     * usa una CUENTA de banco ($idCuenta > 0); en efectivo/otras formas devuelve null. El viejo guarda
+     * la letra en `formas_pagos_ing_egr.detalle_pago`: T=Transferencia, D=Depósito, C=Cheque. Mapea a
+     * los valores del módulo nuevo (DEPOSITO/TRANSFERENCIA/CHEQUE). Fallback: si hay nº de cheque → CHEQUE,
+     * si no → TRANSFERENCIA.
+     */
+    private static function tipoOperacionBancaria($detalle, int $idCuenta, $cheque): ?string
+    {
+        if ($idCuenta <= 0) { return null; }
+        $d = strtoupper(trim((string) $detalle));
+        if ($d !== '') {
+            switch ($d[0]) {
+                case 'T': return 'TRANSFERENCIA';
+                case 'D': return 'DEPOSITO';
+                case 'C': return 'CHEQUE';
+            }
+        }
+        return ((int) $cheque > 0) ? 'CHEQUE' : 'TRANSFERENCIA';
     }
 
     /** Infiere el tipo de identificación SRI a partir del número. */
