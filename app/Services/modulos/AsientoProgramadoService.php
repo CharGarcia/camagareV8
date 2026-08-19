@@ -32,6 +32,7 @@ class AsientoProgramadoService
     public function registrar(array $data, int $idEmpresa, int $idUsuario): int
     {
         $this->rules->validar($data);
+        $this->validarNaturalezaCuenta($data, $idEmpresa);
 
         $idAsientoTipo = (int) $data['id_asiento_tipo'];
         $idReferencia = !empty($data['id_referencia']) ? (int) $data['id_referencia'] : null;
@@ -89,6 +90,7 @@ class AsientoProgramadoService
     public function actualizar(int $id, array $data, int $idEmpresa, int $idUsuario): bool
     {
         $this->rules->validar($data);
+        $this->validarNaturalezaCuenta($data, $idEmpresa);
 
         $idAsientoTipo = (int) $data['id_asiento_tipo'];
         $idReferencia = !empty($data['id_referencia']) ? (int) $data['id_referencia'] : null;
@@ -140,6 +142,78 @@ class AsientoProgramadoService
             $this->db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Clase del plan de cuentas (primer dígito del código) que admite cada valor de
+     * asientos_tipo.tipo_cuenta. Costo y gasto conviven en 5 o en 5/6 según el plan de cada
+     * empresa (mismo criterio que PlanCuentaRepository::searchCuentas, que es quien filtra el
+     * buscador de cuentas de la pantalla).
+     */
+    private const CLASES_POR_TIPO_CUENTA = [
+        'activo'      => ['1'],
+        'pasivo'      => ['2'],
+        'patrimonio'  => ['3'],
+        'ingreso'     => ['4'],
+        'costo'       => ['5', '6'],
+        'gasto'       => ['5', '6'],
+        'costo_gasto' => ['5', '6'],
+    ];
+
+    /**
+     * Impide guardar una cuenta cuya naturaleza contradice al concepto (p. ej. una cuenta de
+     * Ingresos 4.x en el concepto "Cuenta por cobrar"). El buscador de cuentas de la pantalla ya
+     * acota las opciones por asientos_tipo.tipo_cuenta, pero es solo del lado del cliente: sin
+     * esta comprobación, cualquier desajuste del catálogo (o una petición hecha a mano) deja la
+     * cuenta mal grabada y TODAS las facturas de esa empresa se contabilizan mal sin ningún aviso
+     * —fue exactamente lo ocurrido con reglas por Cliente/Producto del slot PORCOBRARFACTURAVENTA;
+     * ver database/diagnosticos/20260819_cxc_ventas_cuenta_incorrecta.sql.
+     *
+     * Solo valida cuando el concepto declara `tipo_cuenta` y todas sus entradas son conocidas: un
+     * concepto sin restricción declarada (o con un valor nuevo) se deja pasar como hasta ahora.
+     */
+    private function validarNaturalezaCuenta(array $data, int $idEmpresa): void
+    {
+        $idAsientoTipo = (int) ($data['id_asiento_tipo'] ?? 0);
+        $idCuenta      = (int) ($data['id_cuenta'] ?? 0);
+        // Las reglas sin concepto base (IVA por tarifa, retenciones, formas y opciones) usan
+        // id_asiento_tipo = 0: no hay naturaleza declarada contra la cual comparar.
+        if ($idAsientoTipo <= 0 || $idCuenta <= 0) {
+            return;
+        }
+
+        $info = $this->repo->getConceptoYCuentaParaValidar($idAsientoTipo, $idCuenta, $idEmpresa);
+        if ($info === null || trim((string) $info['tipo_cuenta']) === '') {
+            return;
+        }
+
+        $clasesPermitidas = [];
+        foreach (explode(',', strtolower((string) $info['tipo_cuenta'])) as $tipo) {
+            $tipo = trim($tipo);
+            if ($tipo === '') {
+                continue;
+            }
+            if (!isset(self::CLASES_POR_TIPO_CUENTA[$tipo])) {
+                return; // valor no reconocido: no bloquear por algo que este código no sabe interpretar
+            }
+            $clasesPermitidas = array_merge($clasesPermitidas, self::CLASES_POR_TIPO_CUENTA[$tipo]);
+        }
+        if (empty($clasesPermitidas)) {
+            return;
+        }
+
+        if (in_array(substr((string) $info['cuenta_codigo'], 0, 1), $clasesPermitidas, true)) {
+            return;
+        }
+
+        throw new Exception(sprintf(
+            'La cuenta %s - %s no corresponde al concepto «%s», que admite cuentas de tipo: %s. '
+            . 'Elija una cuenta de esa naturaleza (o corrija el tipo de cuenta del concepto en Asientos Tipo).',
+            $info['cuenta_codigo'],
+            $info['cuenta_nombre'],
+            $info['concepto'],
+            str_replace(',', ', ', (string) $info['tipo_cuenta'])
+        ));
     }
 
     /**

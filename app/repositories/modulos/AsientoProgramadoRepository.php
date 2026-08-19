@@ -591,6 +591,34 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Datos que necesita el guardián de naturaleza de cuenta (ver
+     * AsientoProgramadoService::validarNaturalezaCuenta): qué clases de cuenta admite el concepto
+     * (asientos_tipo.tipo_cuenta, CSV: activo|pasivo|patrimonio|ingreso|costo|gasto) y qué código
+     * tiene la cuenta que se le quiere asignar.
+     *
+     * @return array{concepto:string, codigo_concepto:string, tipo_cuenta:string, cuenta_codigo:string, cuenta_nombre:string}|null
+     */
+    public function getConceptoYCuentaParaValidar(int $idAsientoTipo, int $idCuenta, int $idEmpresa): ?array
+    {
+        $sql = "SELECT at.referencia AS concepto,
+                       at.codigo     AS codigo_concepto,
+                       COALESCE(at.tipo_cuenta, '') AS tipo_cuenta,
+                       pc.codigo     AS cuenta_codigo,
+                       pc.nombre     AS cuenta_nombre
+                FROM asientos_tipo at
+                JOIN plan_cuentas pc ON pc.id = :id_cuenta AND pc.id_empresa = :id_empresa AND pc.eliminado = false
+                WHERE at.id = :id_tipo AND at.eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_tipo'    => $idAsientoTipo,
+            ':id_cuenta'  => $idCuenta,
+            ':id_empresa' => $idEmpresa,
+        ]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
      * Obtiene la preferencia de método de contabilización de la empresa para un tipo de asiento.
      */
     public function getMetodoPreferencia(int $idEmpresa, string $tipoAsiento): string

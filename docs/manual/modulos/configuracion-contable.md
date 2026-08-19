@@ -68,6 +68,24 @@ configuración) y **Recibos de Venta**, el orden exacto de la cascada es:
    de caer a General.
 4. **General** — lo que ningún nivel anterior resolvió.
 
+## Cada concepto admite un solo tipo de cuenta
+
+Cada concepto (*Cuenta por cobrar*, *Subtotal*, *IVA*, *Costo de Ventas*,
+*Inventario*…) admite cuentas de una naturaleza concreta: la cartera solo acepta
+cuentas de **activo**, el subtotal solo cuentas de **ingreso**, el IVA solo de
+**pasivo**, y así. El buscador de cuentas de cada campo ya ofrece únicamente las
+cuentas de esa naturaleza.
+
+Si aun así se intenta guardar una cuenta que no corresponde, el sistema la
+rechaza con un mensaje que dice qué tipo de cuenta espera ese concepto. La
+comprobación aplica igual a la configuración General y a las reglas por Cliente,
+Producto, Categoría, Marca y Tipo de Producción.
+
+Esto evita el error más caro de esta pantalla: poner la cuenta de ventas en el
+campo *Cuenta por cobrar* de un producto o un cliente. Como esa regla gana a la
+general, todas las facturas de ese producto o cliente pasan a debitar ingresos en
+lugar de cartera, y el error solo se nota al revisar el balance.
+
 ## Filtrar los listados por año
 
 En las reglas por **Proveedor**, **Cliente**, **Producto**, **Categoría** y
@@ -109,9 +127,18 @@ documento o en la ficha de la entidad implicada.
 - **Un documento no genera asiento**: falta configurar su tipo de operación.
 - **El asiento va a una cuenta que no corresponde**: revise primero la ficha del
   producto, cliente o forma de pago; su cuenta manda sobre la general.
+- **Todas las facturas debitan una cuenta de ventas en lugar de la cartera**:
+  hay una regla por Cliente o por Producto con la cuenta de ingresos puesta en el
+  concepto *Cuenta por cobrar*. Corríjala en la pestaña de esa dimensión (o
+  bórrela para que herede la cuenta general) y vuelva a generar los asientos de
+  los documentos afectados.
 
 ## Historial de cambios
 
+- **1.4** — Cada concepto acepta únicamente cuentas de la naturaleza que le
+  corresponde (la cartera de ventas, solo cuentas de activo). El sistema rechaza
+  el guardado si la cuenta no cuadra, tanto en la configuración General como en
+  las reglas por entidad.
 - **1.3** — Nuevo botón "Configurar cuentas sugeridas" en Configuración
   General: asigna las cuentas del plan de cuentas modelo a los conceptos que
   estén sin cuenta, sin tocar los que ya la tienen.
