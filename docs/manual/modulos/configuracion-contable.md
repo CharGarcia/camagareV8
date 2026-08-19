@@ -81,22 +81,49 @@ Todas las tarjetas aparecen **plegadas** al entrar, para poder recorrer la lista
 de un vistazo. No hace falta abrirlas para saber cuáles necesitan atención: la
 propia cabecera indica *faltan N* o *completa*.
 
-Dentro de cada columna aparecen:
+Dentro de cada columna hay una línea por concepto, con un campo donde se escribe
+o se busca la cuenta. El campo dice de un vistazo cómo está ese concepto hoy:
 
-- Las cuentas propias de esa entidad, con el código de cuenta y el botón para
-  quitarlas.
-- En rojo y con la marca *sin cuenta*, los conceptos que no tienen cuenta **ni en
-  esta ficha ni en la configuración General**. Esos son los que hay que atender:
-  dejan el asiento incompleto.
+- **Con cuenta propia**: muestra la cuenta asignada a esa entidad y, al lado, el
+  botón para quitarla.
+- **Vacío con la nota gris `General: …`**: la entidad no tiene cuenta propia, pero
+  la configuración General resuelve ese concepto. No hay nada que hacer, salvo
+  que se quiera una cuenta distinta para esta entidad en concreto.
+- **Vacío con la nota roja `sin cuenta` y el borde rojo**: no hay cuenta ni en
+  esta ficha ni en la General. Esos son los que hay que atender: dejan el asiento
+  incompleto.
 
 La cabecera de la tarjeta resume el estado: cuántas cuentas propias tiene y si
 queda algo sin resolver (*completa* o *faltan N*). Al pie, una línea indica
-cuántos conceptos más se resuelven con la cuenta General — esos no hace falta
-configurarlos aquí, la cascada ya los cubre.
+cuántos conceptos más se resuelven con la cuenta General.
 
 Así se distingue a simple vista, por ejemplo, un producto al que solo se le
 asignó la cuenta de ingresos de otro que además tiene su propia cartera o su
 costo, y se ve enseguida de qué lado del asiento falta algo.
+
+## Agregar y quitar reglas por entidad
+
+El alta se hace en dos pasos:
+
+1. En el buscador de la parte superior de la pestaña se elige la entidad
+   (cliente, producto, categoría…) y se pulsa **Agregar**. Su tarjeta aparece
+   arriba de la lista, ya desplegada y todavía sin cuentas.
+2. Dentro de la tarjeta se va asignando la cuenta de cada concepto. **Cada cuenta
+   se guarda sola** al elegirla de la lista, sin botón de guardar; si se borra el
+   contenido del campo, esa cuenta se quita.
+
+Una ficha sin ninguna cuenta asignada no queda registrada: si se agrega una
+entidad y no se le pone nada, al volver a entrar simplemente no aparece.
+
+Dentro de cada tarjeta, el botón **Copiar cuentas de General** rellena de una vez
+los conceptos que aún no tienen cuenta propia con las de la configuración
+General, para partir de esa base y ajustar solo lo que cambie. No pisa lo que ya
+esté asignado en la ficha.
+
+El botón de la papelera de la cabecera elimina **toda la configuración de esa
+entidad** de una vez: pide confirmación y, al aceptar, esa entidad vuelve a
+contabilizarse con la configuración General. Solo afecta al tipo de asiento que
+se esté viendo — si el mismo producto tiene reglas en Compras, esas se conservan.
 
 ## Cada concepto admite un solo tipo de cuenta
 
@@ -165,6 +192,10 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.6** — El alta de reglas por entidad se divide en dos pasos: primero se
+  agrega la entidad y luego se asignan las cuentas dentro de su tarjeta, que se
+  guardan una a una al elegirlas. Cada tarjeta incorpora *Copiar cuentas de
+  General* y un botón para eliminar toda su configuración de golpe.
 - **1.5** — Las reglas por entidad (Cliente, Proveedor, Producto, Categoría,
   Marca, Tipo de Producción, Ítem de compra) pasan de una tabla plana a **una
   tarjeta plegable por entidad**, una por fila y ordenadas por nombre, con sus

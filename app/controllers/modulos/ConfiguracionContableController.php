@@ -1506,6 +1506,90 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Elimina TODAS las reglas que una entidad (cliente, producto, categoría…) tiene para un tipo
+     * de asiento: la ficha completa, no un concepto suelto. Esa entidad pasa a contabilizarse con
+     * la configuración General.
+     *
+     * Va una por una a través del servicio —en vez de un UPDATE masivo— para que cada baja quede
+     * en la auditoría con su registro anterior, igual que cuando se elimina desde la pantalla.
+     */
+    public function eliminarReglasEntidadAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $tipoAsiento     = trim($_POST['tipo_asiento'] ?? '');
+        $tipoReferencia  = trim($_POST['tipo_referencia'] ?? '');
+        $idReferencia    = (int) ($_POST['id_referencia'] ?? 0);
+        $referenciaTexto = trim($_POST['referencia_texto'] ?? '');
+        $esItem = ($tipoReferencia === 'item_compra');
+
+        if ($tipoAsiento === '' || $tipoReferencia === '' || ($esItem ? $referenciaTexto === '' : $idReferencia <= 0)) {
+            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos.']);
+            exit;
+        }
+
+        try {
+            $db = Database::getConnection();
+
+            // Reglas de esa entidad para ESTE tipo de asiento: las de concepto (unidas a
+            // asientos_tipo) y los overrides de IVA por tarifa (id_asiento_tipo = 0, que no tienen
+            // concepto y se distinguen por la dirección del documento).
+            $direccionIva = match ($tipoAsiento) {
+                'adquisiciones_compras' => 'compra',
+                'recibos_venta'         => 'recibo',
+                default                 => 'venta',
+            };
+            $condEntidad = $esItem ? 'TRIM(ap.referencia_texto) = :ref' : 'ap.id_referencia = :ref';
+
+            $sql = "SELECT ap.id
+                    FROM asientos_programados ap
+                    LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                    WHERE ap.id_empresa = :emp
+                      AND ap.tipo_referencia = :tipo_ref
+                      AND {$condEntidad}
+                      AND ap.eliminado = false
+                      AND (
+                            at.tipo_asiento = :tipo_asiento
+                         OR (ap.id_asiento_tipo = 0 AND ap.codigo_tarifa_iva IS NOT NULL AND ap.direccion_iva = :dir)
+                      )";
+            $st = $db->prepare($sql);
+            $st->execute([
+                ':emp'          => $idEmpresa,
+                ':tipo_ref'     => $tipoReferencia,
+                ':ref'          => $esItem ? $referenciaTexto : $idReferencia,
+                ':tipo_asiento' => $tipoAsiento,
+                ':dir'          => $direccionIva,
+            ]);
+            $ids = $st->fetchAll(PDO::FETCH_COLUMN);
+
+            if (empty($ids)) {
+                echo json_encode(['ok' => true, 'msg' => 'Esta ficha no tenía cuentas configuradas.', 'eliminadas' => 0]);
+                exit;
+            }
+
+            $eliminadas = 0;
+            foreach ($ids as $id) {
+                $this->service->eliminar((int) $id, $idEmpresa, $idUsuario);
+                $eliminadas++;
+            }
+
+            echo json_encode([
+                'ok'         => true,
+                'msg'        => "Se eliminaron {$eliminadas} cuenta(s) de esta ficha.",
+                'eliminadas' => $eliminadas,
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Ordena las reglas de una dimensión por el NOMBRE de la entidad (producto, cliente, categoría…)
      * y, dentro de cada una, por concepto.
      *

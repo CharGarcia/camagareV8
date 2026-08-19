@@ -248,9 +248,8 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_cliente"></div>
-                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_cliente"></div></div>
                         <div class="col-12 mt-4 text-end">
-                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
+                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
                         </div>
                     </form>
                     <div class="row g-2" id="dimCards_cliente"></div>
@@ -285,9 +284,8 @@ $base = BASE_URL;
                                 </button>
                             </div>
                         </div>
-                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_empleado"></div></div>
                         <div class="col-12 mt-4 text-end">
-                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
+                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
                         </div>
                     </form>
                     <div class="row g-2" id="dimCards_empleado"></div>
@@ -328,9 +326,8 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_proveedor"></div>
-                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_proveedor"></div></div>
                         <div class="col-12 mt-4 text-end">
-                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
+                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
                         </div>
                     </form>
                     <div class="row g-2" id="dimCards_proveedor"></div>
@@ -366,8 +363,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_producto"></div>
-                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_producto"></div></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
+                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_producto"></div>
                 </div>
@@ -402,8 +398,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_categoria"></div>
-                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_categoria"></div></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
+                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_categoria"></div>
                 </div>
@@ -438,8 +433,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_marca"></div>
-                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_marca"></div></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
+                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_marca"></div>
                 </div>
@@ -471,8 +465,7 @@ $base = BASE_URL;
                             <input type="hidden" id="dim_id_tipo_produccion" required>
                         </div>
                         <div class="col-12" id="dim_faltantes_tipo_produccion"></div>
-                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_tipo_produccion"></div></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
+                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_tipo_produccion"></div>
                 </div>

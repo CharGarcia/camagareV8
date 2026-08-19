@@ -905,7 +905,9 @@
     /**
      * Carga dinámicamente las reglas correspondientes a una dimensión contable.
      */
-    window.ASIENTOPROG_cargarDim = async function (tipo) {
+    // abrirIdx: índice de la tarjeta que debe quedar desplegada tras recargar (al guardar una
+    // cuenta se vuelve a pintar la lista y, sin esto, la ficha en edición se cerraría sola).
+    window.ASIENTOPROG_cargarDim = async function (tipo, abrirIdx = null) {
         const selector = document.getElementById('tipoAsientoSelector');
         const tipoAsiento = selector.value;
         if (!tipoAsiento) return;
@@ -928,47 +930,8 @@
             } catch (e) { /* noop */ }
         }
 
-        // Renderizar los inputs de cuenta en dos columnas (Debe | Haber), igual que la sección General.
-        // Incluye tanto los conceptos normales (id_asiento_tipo > 0) como las tarifas de IVA (overrides
-        // por dimensión, id_asiento_tipo = 0 con tipo_referencia iva_ventas_factura/iva_compras_factura/iva_recibos_venta).
-        const container = document.getElementById(`inputsDinamicos_${tipo}`);
-        if (container) {
-            const conceptos = (window.CONCEPTOS_CONFIGURADOS || []).filter(c => parseInt(c.id_asiento_tipo) > 0 || ASIENTOPROG_esConceptoIva(c));
-            if (conceptos.length > 0) {
-                const tarjeta = (item) => {
-                    const key = ASIENTOPROG_dimKey(item);
-                    return `
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold text-dark mb-1"><i class="bi bi-journal-bookmark text-primary me-1"></i> ${item.concepto}</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_cuenta_search_${tipo}_${key}" placeholder="Buscar cuenta..." autocomplete="off">
-                            <input type="hidden" id="dim_cuenta_id_${tipo}_${key}">
-                            <div class="list-group sugerencias-flotantes" id="dim_cuenta_sug_${tipo}_${key}" style="display: none;"></div>
-                        </div>
-                    </div>`;
-                };
-                const esDebe = (c) => (c.debe_haber || 'debe').toLowerCase() === 'debe';
-                const debeHtml  = conceptos.filter(esDebe).map(tarjeta).join('')          || '<div class="text-muted small py-1">Sin conceptos.</div>';
-                const haberHtml = conceptos.filter(c => !esDebe(c)).map(tarjeta).join('')  || '<div class="text-muted small py-1">Sin conceptos.</div>';
-                container.innerHTML = `
-                    <div class="col-12 mb-1 d-flex align-items-center gap-2 flex-wrap">
-                        <button type="button" class="btn btn-outline-secondary btn-sm fw-bold" onclick="ASIENTOPROG_copiarDeGeneral('${tipo}')">
-                            <i class="bi bi-clipboard-check me-1"></i> Copiar cuentas de General
-                        </button>
-                        <span class="small text-muted">Precarga las cuentas de la configuración General; luego ajuste solo las que necesite.</span>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="fw-bold small mb-2 px-2 py-1 rounded" style="background:#E6F1FB; color:#0C447C;"><i class="bi bi-arrow-down-right me-1"></i> Debe</div>
-                        ${debeHtml}
-                    </div>
-                    <div class="col-md-6">
-                        <div class="fw-bold small mb-2 px-2 py-1 rounded" style="background:#FAEEDA; color:#633806;"><i class="bi bi-arrow-up-right me-1"></i> Haber</div>
-                        ${haberHtml}
-                    </div>`;
-            } else {
-                container.innerHTML = '<div class="col-12 text-center text-muted small py-2"><i class="bi bi-info-circle me-1"></i> Debe configurar y cargar conceptos en la sección General primero.</div>';
-            }
-        }
+        // Los campos de cuenta ya no viven en el formulario de alta: se editan dentro de la
+        // tarjeta de cada entidad (ver ASIENTOPROG_tarjetasDim), que es donde también se consultan.
 
         const cards = document.getElementById(`dimCards_${tipo}`);
         if (!cards) return;
@@ -981,12 +944,23 @@
             const res = await resp.json();
 
             if (res.ok) {
-                cards.innerHTML = res.data.length === 0
-                    ? `<div class="col-12 text-center py-3 text-muted small">No se han registrado asociaciones para ${tipo}s.</div>`
-                    : ASIENTOPROG_tarjetasDim(tipo, res.data);
+                const html = ASIENTOPROG_tarjetasDim(tipo, res.data);
+                cards.innerHTML = html || `<div class="col-12 text-center py-3 text-muted small">No se han registrado asociaciones para ${tipo}s.</div>`;
 
-                // Inicializar autocompletados de búsqueda de esa dimensión si no han sido vinculados aún
+                // Inicializar autocompletados: el del buscador de entidad y los de las cuentas de
+                // cada tarjeta (que además guardan al vuelo).
                 ASIENTOPROG_vincularDimAutocomplete(tipo);
+                ASIENTOPROG_vincularCuentasTarjetas(tipo);
+
+                // Al recargar tras guardar una cuenta, dejar abierta la ficha que se estaba editando.
+                if (abrirIdx !== null && abrirIdx !== undefined && window.bootstrap) {
+                    const panel = document.getElementById(`dimAcc_${tipo}_${abrirIdx}`);
+                    if (panel) {
+                        bootstrap.Collapse.getOrCreateInstance(panel).show();
+                        const btn = panel.closest('.card')?.querySelector('.btn[data-bs-toggle="collapse"]');
+                        if (btn) btn.classList.remove('collapsed');
+                    }
+                }
             } else {
                 cards.innerHTML = `<div class="col-12 text-center py-3 text-danger small">Error: ${ASIENTOPROG_esc(res.error)}</div>`;
             }
@@ -1008,6 +982,14 @@
      * Los que la entidad no configura pero la General sí resuelve no se listan uno a uno (no son
      * un problema: la cascada los cubre); se resumen en una línea al pie de la tarjeta.
      */
+    /**
+     * Entidad que el usuario acaba de agregar con el buscador de cada dimensión, por tipo:
+     * { producto: {id, nombre}, cliente: {...} }. Vive solo en la pantalla — una ficha sin
+     * ninguna cuenta asignada no se guarda en la base (no habría nada que guardar), así que se
+     * recuerda aquí para poder mostrar su tarjeta vacía y que el usuario la llene.
+     */
+    const ASIENTOPROG_dimNueva = {};
+
     function ASIENTOPROG_tarjetasDim(tipo, filas) {
         const conceptos = (window.CONCEPTOS_CONFIGURADOS || []);
         // Clave de agrupación: el id de la entidad (o su nombre en los ítems de compra, que no
@@ -1016,55 +998,80 @@
         const esIvaFila = (f) => parseInt(f.id_asiento_tipo) === 0 && f.codigo_tarifa_iva != null;
 
         const grupos = new Map();
+
+        // Entidad recién agregada con el buscador: todavía no tiene ninguna cuenta, así que el
+        // backend no la devuelve. Se antepone aquí para que su ficha exista y se pueda llenar.
+        const nueva = ASIENTOPROG_dimNueva[tipo];
+        if (nueva) {
+            grupos.set(`nueva:${nueva.id}`, { nombre: nueva.nombre, filas: [], refId: nueva.id, esNueva: true });
+        }
+
         filas.forEach(f => {
             const k = claveEnt(f);
-            if (!grupos.has(k)) grupos.set(k, { nombre: f.dimension_nombre || '(sin nombre)', filas: [] });
-            grupos.get(k).filas.push(f);
+            // Si la entidad recién agregada ya tenía reglas, es la misma ficha: no duplicarla.
+            const kNueva = nueva ? `nueva:${nueva.id}` : null;
+            const mismaQueNueva = nueva && String(nueva.id) === String(ASIENTOPROG_esItemCompra(tipo) ? f.dimension_nombre : f.id_referencia);
+            const clave = mismaQueNueva ? kNueva : k;
+            if (!grupos.has(clave)) grupos.set(clave, { nombre: f.dimension_nombre || '(sin nombre)', filas: [] });
+            grupos.get(clave).filas.push(f);
+            if (mismaQueNueva) grupos.get(clave).nombre = f.dimension_nombre || nueva.nombre;
         });
 
-        const lineaPropia = (f) => `
-            <div class="d-flex justify-content-between align-items-center gap-1 border-bottom py-1">
-                <span class="small text-truncate" title="${ASIENTOPROG_esc(f.asiento_tipo_referencia)}">${ASIENTOPROG_esc(f.asiento_tipo_referencia)}</span>
-                <span class="d-flex align-items-center gap-1 text-nowrap">
-                    <span class="small fw-medium text-primary" title="${ASIENTOPROG_esc(f.cuenta_codigo + ' - ' + f.cuenta_nombre)}">${ASIENTOPROG_esc(f.cuenta_codigo)}</span>
-                    <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1" onclick="ASIENTOPROG_eliminarDim(${f.id}, '${tipo}')" title="Quitar esta cuenta">
-                        <i class="bi bi-trash small"></i>
-                    </button>
-                </span>
+        // Fila EDITABLE de un concepto dentro de la tarjeta: el input trae la cuenta propia si la
+        // tiene; si no, el marcador de posición dice qué pasa hoy con ese concepto (lo cubre la
+        // General, o no lo cubre nadie). Se guarda al vuelo al elegir cuenta y se quita al vaciarlo.
+        const lineaConcepto = (c, propia, idx) => {
+            const key       = ASIENTOPROG_dimKey(c);
+            const inputId   = `dimc_${tipo}_${idx}_${key}`;
+            const valor     = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
+            const general   = c.cuenta_codigo ? `${c.cuenta_codigo}` : '';
+            const marcador  = general ? `General: ${general}` : 'sin cuenta';
+            const claseSin  = (!propia && !c.id_cuenta) ? ' border-danger' : '';
+            return `
+            <div class="d-flex align-items-center gap-1 border-bottom py-1">
+                <span class="small text-truncate" style="flex:0 0 42%;" title="${ASIENTOPROG_esc(c.concepto)}">${ASIENTOPROG_esc(c.concepto)}</span>
+                <div class="position-relative flex-grow-1">
+                    <input type="text" class="form-control form-control-sm py-0 bg-white text-dark${claseSin}" style="height:26px; font-size:.78rem;"
+                           id="${inputId}" value="${ASIENTOPROG_esc(valor)}" placeholder="${ASIENTOPROG_esc(marcador)}" autocomplete="off"
+                           data-tipo="${tipo}" data-idx="${idx}"
+                           data-asiento-tipo="${c.id_asiento_tipo}"
+                           data-tarifa-iva="${ASIENTOPROG_esConceptoIva(c) ? c.id_referencia : ''}"
+                           data-tipo-cuenta="${ASIENTOPROG_esc(c.tipo_cuenta || '')}"
+                           data-regla="${propia ? propia.id : ''}">
+                    <div class="list-group sugerencias-flotantes" id="${inputId}_sug" style="display:none;"></div>
+                </div>
+                <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1${propia ? '' : ' invisible'}"
+                        onclick="ASIENTOPROG_eliminarDim(${propia ? propia.id : 0}, '${tipo}')" title="Quitar esta cuenta">
+                    <i class="bi bi-trash small"></i>
+                </button>
             </div>`;
+        };
 
-        const lineaFaltante = (nombre) => `
-            <div class="d-flex justify-content-between align-items-center gap-1 border-bottom py-1">
-                <span class="small text-danger text-truncate" title="${ASIENTOPROG_esc(nombre)}">${ASIENTOPROG_esc(nombre)}</span>
-                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 small text-nowrap">sin cuenta</span>
-            </div>`;
-
-        const columna = (titulo, fondo, color, icono, propias, faltantes) => `
+        const columna = (titulo, fondo, color, icono, filasHtml) => `
             <div class="col-6">
                 <div class="fw-bold small mb-1 px-2 py-1 rounded" style="background:${fondo}; color:${color};">
                     <i class="bi ${icono} me-1"></i>${titulo}
                 </div>
-                ${propias.map(lineaPropia).join('')}
-                ${faltantes.map(c => lineaFaltante(c.concepto)).join('')}
-                ${(!propias.length && !faltantes.length) ? '<div class="small text-muted py-1">—</div>' : ''}
+                ${filasHtml || '<div class="small text-muted py-1">—</div>'}
             </div>`;
 
         let html = '';
         let indice = 0;   // sufijo de los ids de los paneles plegables (únicos por dimensión)
         grupos.forEach(g => {
-            // ¿Qué conceptos tiene configurados ESTA entidad? (el IVA se cruza por tarifa)
-            const tienePropia = (c) => parseInt(c.id_asiento_tipo) > 0
-                ? g.filas.some(f => parseInt(f.id_asiento_tipo) === parseInt(c.id_asiento_tipo))
-                : g.filas.some(f => esIvaFila(f) && String(f.codigo_tarifa_iva) === String(c.id_referencia));
+            const idx = indice;
+            // Regla propia de la entidad para un concepto (el IVA se cruza por tarifa, no por id)
+            const propiaDe = (c) => parseInt(c.id_asiento_tipo) > 0
+                ? g.filas.find(f => parseInt(f.id_asiento_tipo) === parseInt(c.id_asiento_tipo))
+                : g.filas.find(f => esIvaFila(f) && String(f.codigo_tarifa_iva) === String(c.id_referencia));
 
-            const faltantes = conceptos.filter(c => !c.id_cuenta && !tienePropia(c));   // ni aquí ni en General
-            const heredados = conceptos.filter(c => c.id_cuenta && !tienePropia(c)).length;
+            const faltantes = conceptos.filter(c => !c.id_cuenta && !propiaDe(c));   // ni aquí ni en General
+            const heredados = conceptos.filter(c => c.id_cuenta && !propiaDe(c)).length;
 
             const esDebe = (x) => ((x.debe_haber || 'debe') + '').toLowerCase() === 'debe';
-            const propiasDebe  = g.filas.filter(esDebe);
-            const propiasHaber = g.filas.filter(x => !esDebe(x));
-            const faltaDebe    = faltantes.filter(esDebe);
-            const faltaHaber   = faltantes.filter(x => !esDebe(x));
+            const filasDe = (lado) => conceptos
+                .filter(c => (lado === 'debe') === esDebe(c))
+                .map(c => lineaConcepto(c, propiaDe(c), idx))
+                .join('');
 
             // Sin la configuración General cargada no hay con qué comparar: se omite el estado en
             // vez de afirmar "completa" sin saberlo.
@@ -1077,13 +1084,18 @@
             // Una entidad por fila, plegable. TODAS arrancan encogidas: el badge de estado de la
             // cabecera ya dice si a esa entidad le falta alguna cuenta, así que no hace falta
             // abrirlas para detectarlo.
-            const idPanel = `dimAcc_${tipo}_${indice++}`;
+            const idPanel = `dimAcc_${tipo}_${idx}`;
+
+            // Clave de la entidad para guardar/eliminar: id numérico, salvo en los ítems de compra,
+            // cuya regla se identifica por el NOMBRE (referencia_texto).
+            const refId    = g.filas.length ? (g.filas[0].id_referencia ?? '') : (g.refId ?? '');
+            const refTexto = ASIENTOPROG_esItemCompra(tipo) ? g.nombre : '';
 
             html += `
-            <div class="col-12">
+            <div class="col-12" data-dim-card="${idx}" data-ref-id="${ASIENTOPROG_esc(String(refId ?? ''))}" data-ref-texto="${ASIENTOPROG_esc(refTexto)}">
                 <div class="card border">
-                    <div class="card-header bg-white p-0">
-                        <button class="btn btn-link w-100 d-flex justify-content-between align-items-center gap-2 py-2 px-3 text-decoration-none shadow-none collapsed"
+                    <div class="card-header bg-white p-0 d-flex align-items-center">
+                        <button class="btn btn-link flex-grow-1 d-flex justify-content-between align-items-center gap-2 py-2 px-3 text-decoration-none shadow-none collapsed"
                                 type="button" data-bs-toggle="collapse" data-bs-target="#${idPanel}"
                                 aria-expanded="false" aria-controls="${idPanel}">
                             <span class="fw-bold text-dark text-truncate" title="${ASIENTOPROG_esc(g.nombre)}">${ASIENTOPROG_esc(g.nombre)}</span>
@@ -1093,18 +1105,32 @@
                                 <i class="bi bi-chevron-down text-muted small ms-1"></i>
                             </span>
                         </button>
+                        <button type="button" class="btn btn-link text-danger px-3 border-0 shadow-none${g.filas.length ? '' : ' invisible'}"
+                                onclick="ASIENTOPROG_eliminarConfiguracionEntidad('${tipo}', ${idx})"
+                                title="Eliminar toda la configuración de esta ficha">
+                            <i class="bi bi-trash"></i>
+                        </button>
                     </div>
                     <div id="${idPanel}" class="collapse">
                         <div class="card-body p-2 border-top">
                             <div class="row g-2">
-                                ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', propiasDebe,  faltaDebe)}
-                                ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   propiasHaber, faltaHaber)}
+                                ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', filasDe('debe'))}
+                                ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   filasDe('haber'))}
                             </div>
-                            ${heredados ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Otros ${heredados} concepto(s) usan la cuenta de la configuración General.</div>` : ''}
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
+                                <span class="small text-muted">
+                                    ${heredados ? `<i class="bi bi-info-circle me-1"></i>Otros ${heredados} concepto(s) usan la cuenta de la configuración General.` : ''}
+                                </span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" style="font-size:.75rem;"
+                                        onclick="ASIENTOPROG_copiarDeGeneral('${tipo}', ${idx})">
+                                    <i class="bi bi-clipboard-check me-1"></i>Copiar cuentas de General
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>`;
+            indice++;
         });
 
         return html;
@@ -1207,120 +1233,80 @@
             });
         }
 
-        // Autocomplete de Cuentas Contables dinámicas según conceptos configurados
-        if (window.CONCEPTOS_CONFIGURADOS) {
-            window.CONCEPTOS_CONFIGURADOS.forEach(item => {
-                const key = ASIENTOPROG_dimKey(item);
-                const inputId = `dim_cuenta_search_${tipo}_${key}`;
-                const hiddenId = `dim_cuenta_id_${tipo}_${key}`;
-                const sugId = `dim_cuenta_sug_${tipo}_${key}`;
-                const tipoCuenta = item.tipo_cuenta || '';
-
-                const cInput = document.getElementById(inputId);
-                const cHidden = document.getElementById(hiddenId);
-                const cSug = document.getElementById(sugId);
-
-                if (!cInput || cInput.dataset.autocompleteBound) return;
-                cInput.dataset.autocompleteBound = "true";
-
-                cInput.addEventListener('input', function () {
-                    const q = cInput.value.trim();
-                    if (q === '') {
-                        cHidden.value = '';
-                        cSug.style.display = 'none';
-                        return;
-                    }
-                    if (q.length < 2) {
-                        cSug.style.display = 'none';
-                        return;
-                    }
-
-                    clearTimeout(debounceTimer);
-                    debounceTimer = setTimeout(async () => {
-                        try {
-                            const r = await fetch(`${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas?q=${encodeURIComponent(q)}&tipo=${encodeURIComponent(tipoCuenta)}`);
-                            const res = await r.json();
-
-                            cSug.innerHTML = '';
-                            if (res.ok && res.data && res.data.length > 0) {
-                                res.data.forEach(c => {
-                                    const btn = document.createElement('button');
-                                    btn.type = 'button';
-                                    btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small text-dark bg-white';
-                                    btn.textContent = `${c.codigo} - ${c.nombre}`;
-                                    btn.addEventListener('click', () => {
-                                        cInput.value = `${c.codigo} - ${c.nombre}`;
-                                        cHidden.value = c.id;
-                                        cSug.style.display = 'none';
-                                    });
-                                    cSug.appendChild(btn);
-                                });
-                                cSug.style.display = 'block';
-                                activeDropdown = cSug;
-                            } else {
-                                cSug.style.display = 'none';
-                            }
-                        } catch (e) {
-                            console.error(e);
-                        }
-                    }, 300);
-                });
-            });
-        }
+        // Las cuentas ya no se escriben en este formulario (solo elige la entidad): cada concepto
+        // se edita dentro de su tarjeta y se guarda al vuelo — ver ASIENTOPROG_vincularCuentasTarjetas.
     }
 
     /**
      * Agrega asíncronamente una nueva regla de dimensión.
      */
     /**
-     * Copia las cuentas configuradas en la sección General a los inputs de la dimensión activa
-     * (Cliente/Proveedor/Producto/Categoría/Marca), para que el usuario solo ajuste lo que quiera.
-     * Excluye el IVA por tarifa (id_asiento_tipo = 0), que se configura en General.
+     * Copia a UNA ficha las cuentas que la configuración General ya tiene resueltas, guardándolas
+     * al vuelo como reglas propias de esa entidad. Sirve para partir de la base y ajustar solo lo
+     * que cambie. Los conceptos que ya tienen cuenta propia en la ficha no se tocan.
      */
-    window.ASIENTOPROG_copiarDeGeneral = async function (tipo) {
+    window.ASIENTOPROG_copiarDeGeneral = async function (tipo, idx) {
         const selTipo = document.getElementById('tipoAsientoSelector');
         const tipoAsiento = selTipo ? selTipo.value : '';
+        const ref = ASIENTOPROG_refDeTarjeta(tipo, idx);
+        if (!tipoAsiento || !ref) return;
 
         // Releer la configuración General MÁS RECIENTE (puede haber cambiado en esta sesión sin
         // recargar la página). Así se copian también las cuentas recién asignadas en General.
         let conceptos = window.CONCEPTOS_CONFIGURADOS || [];
-        if (tipoAsiento) {
-            try {
-                const resp = await fetch(`${API_PROG}/cargarConfiguracionAjax?tipo_asiento=${tipoAsiento}`);
-                const res = await resp.json();
-                if (res.ok && Array.isArray(res.data)) {
-                    conceptos = res.data;
-                    window.CONCEPTOS_CONFIGURADOS = res.data;
-                }
-            } catch (e) { /* fallback: usar lo que ya está en memoria */ }
-        }
+        try {
+            const res = await (await fetch(`${API_PROG}/cargarConfiguracionAjax?tipo_asiento=${tipoAsiento}`)).json();
+            if (res.ok && Array.isArray(res.data)) {
+                conceptos = res.data;
+                window.CONCEPTOS_CONFIGURADOS = res.data;
+            }
+        } catch (e) { /* fallback: usar lo que ya está en memoria */ }
+
+        const card = document.querySelector(`#dimCards_${tipo} [data-dim-card="${idx}"]`);
+        if (!card) return;
 
         const esConceptoValido = (c) => parseInt(c.id_asiento_tipo) > 0 || ASIENTOPROG_esConceptoIva(c);
         const aplicables = conceptos.filter(c => esConceptoValido(c) && c.id_cuenta);
         const sinCuenta  = conceptos.filter(c => esConceptoValido(c) && !c.id_cuenta).length;
-        let copiadas = 0;
-        aplicables.forEach(item => {
-            const key = ASIENTOPROG_dimKey(item);
-            const search = document.getElementById(`dim_cuenta_search_${tipo}_${key}`);
-            const hidden = document.getElementById(`dim_cuenta_id_${tipo}_${key}`);
-            if (search && hidden) {
-                search.value = `${item.cuenta_codigo} - ${item.cuenta_nombre}`;
-                hidden.value = item.id_cuenta;
-                search.classList.remove('is-invalid', 'border-danger');
-                copiadas++;
-            }
-        });
 
-        if (window.Swal) {
-            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2600, timerProgressBar: true });
-            let msg;
-            if (copiadas === 0) {
-                msg = 'No hay cuentas configuradas en General para copiar.';
+        let copiadas = 0;
+        for (const item of aplicables) {
+            const input = document.getElementById(`dimc_${tipo}_${idx}_${ASIENTOPROG_dimKey(item)}`);
+            if (!input || input.dataset.regla) continue;   // ya tiene cuenta propia: no se pisa
+
+            const fd = new FormData();
+            fd.append('id_asiento_tipo', item.id_asiento_tipo.toString());
+            fd.append('id_cuenta', item.id_cuenta);
+            fd.append('tipo_asiento', tipoAsiento);
+            if (ASIENTOPROG_esConceptoIva(item)) fd.append('codigo_tarifa_iva', item.id_referencia.toString());
+            if (ASIENTOPROG_esItemCompra(tipo)) {
+                fd.append('tipo_referencia', 'item_compra');
+                fd.append('referencia_texto', ref.texto || ref.id);
             } else {
-                msg = `Se copiaron ${copiadas} cuenta(s) de General.`;
-                if (sinCuenta > 0) msg += ` (${sinCuenta} concepto(s) siguen sin cuenta en General: configúrelos allí para poder copiarlos.)`;
+                fd.append('tipo_referencia', tipo);
+                fd.append('id_referencia', ref.id);
             }
-            Toast.fire({ icon: copiadas > 0 ? 'success' : 'info', title: msg });
+            try {
+                const res = await (await fetch(`${API_PROG}/guardarReglaDimensionAjax`, { method: 'POST', body: fd })).json();
+                if (res.ok) copiadas++;
+            } catch (e) { console.error(e); }
+        }
+
+        let msg;
+        if (copiadas === 0) {
+            msg = 'No había cuentas de General que copiar (o esta ficha ya las tiene todas).';
+        } else {
+            msg = `Se copiaron ${copiadas} cuenta(s) de General.`;
+            if (sinCuenta > 0) msg += ` (${sinCuenta} concepto(s) siguen sin cuenta en General: configúrelos allí.)`;
+        }
+        if (window.Swal) {
+            Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2600, timerProgressBar: true })
+                .fire({ icon: copiadas > 0 ? 'success' : 'info', title: msg });
+        }
+
+        if (copiadas > 0) {
+            delete ASIENTOPROG_dimNueva[tipo];
+            ASIENTOPROG_cargarDim(tipo, idx);
         }
     };
 
@@ -1505,15 +1491,24 @@
         }
     };
 
+    /**
+     * Paso 1 del alta: solo REGISTRA la entidad elegida y abre su ficha. Las cuentas se asignan
+     * después, concepto por concepto, dentro de la propia tarjeta (se guardan al vuelo).
+     *
+     * Antes este mismo formulario pedía la entidad y las cuentas de todos los conceptos a la vez,
+     * y no dejaba guardar si no se llenaba al menos una: para revisar o completar una ficha había
+     * que rellenarla entera de nuevo.
+     */
     window.ASIENTOPROG_agregarDim = async function (e, tipo) {
         e.preventDefault();
 
         const selector = document.getElementById('tipoAsientoSelector');
-        const tipoAsiento = selector.value;
+        const tipoAsiento = selector ? selector.value : '';
         if (!tipoAsiento) return;
 
         const esItem = ASIENTOPROG_esItemCompra(tipo);
         const idRef = document.getElementById(`dim_id_${tipo}`).value;
+        const nombre = document.getElementById(`dim_search_${tipo}`).value.trim();
         if (!idRef) {
             const msg = esItem ? 'Debe seleccionar un ítem de compra de la lista.' : 'Debe seleccionar una entidad de la lista desplegable.';
             if (window.Swal) Swal.fire('Atención', msg, 'warning');
@@ -1521,83 +1516,182 @@
             return;
         }
 
-        const promesas = [];
-        let guardoAlgo = false;
+        ASIENTOPROG_dimNueva[tipo] = { id: idRef, nombre: nombre || idRef };
 
-        if (window.CONCEPTOS_CONFIGURADOS) {
-            window.CONCEPTOS_CONFIGURADOS.forEach(item => {
-                const key = ASIENTOPROG_dimKey(item);
-                const hiddenInput = document.getElementById(`dim_cuenta_id_${tipo}_${key}`);
-                const idCuenta = hiddenInput ? hiddenInput.value : '';
+        document.getElementById(`dim_search_${tipo}`).value = '';
+        document.getElementById(`dim_id_${tipo}`).value = '';
 
-                if (idCuenta) {
-                    guardoAlgo = true;
-                    const fd = new FormData();
-                    fd.append('id_asiento_tipo', item.id_asiento_tipo.toString());
-                    fd.append('id_cuenta', idCuenta);
-                    fd.append('tipo_asiento', tipoAsiento);
-                    if (ASIENTOPROG_esConceptoIva(item)) {
-                        // Override de cuenta de IVA por esta tarifa, para esta dimensión/ítem específico.
-                        fd.append('codigo_tarifa_iva', item.id_referencia.toString());
-                    }
-                    if (esItem) {
-                        // La clave de la regla es el NOMBRE del ítem (texto), no un id.
-                        fd.append('tipo_referencia', 'item_compra');
-                        fd.append('referencia_texto', idRef);
-                    } else {
-                        fd.append('id_referencia', idRef);
-                        fd.append('tipo_referencia', tipo);
-                    }
+        await ASIENTOPROG_cargarDim(tipo);
 
-                    promesas.push(
-                        fetch(`${API_PROG}/guardarReglaDimensionAjax`, {
-                            method: 'POST',
-                            body: fd
-                        }).then(r => r.json())
-                    );
-                }
-            });
+        // Abrir la ficha recién agregada (siempre es la primera) para poder llenarla enseguida.
+        const cards = document.getElementById(`dimCards_${tipo}`);
+        const primera = cards ? cards.querySelector('[data-dim-card] .collapse') : null;
+        if (primera && window.bootstrap) {
+            bootstrap.Collapse.getOrCreateInstance(primera).show();
+            const btn = cards.querySelector('[data-dim-card] .card-header .btn[data-bs-toggle="collapse"]');
+            if (btn) btn.classList.remove('collapsed');
         }
+    };
 
-        if (!guardoAlgo) {
-            if (window.Swal) Swal.fire('Atención', 'Debe asignar al menos una cuenta contable a los conceptos.', 'warning');
-            else alert('Debe asignar al menos una cuenta contable a los conceptos.');
-            return;
+    /**
+     * Autocompletado + guardado AL VUELO de las cuentas dentro de las tarjetas de dimensión.
+     * Al elegir una cuenta se guarda esa regla sola; al vaciar el campo se elimina. Mismo
+     * comportamiento que la configuración General, para no tener dos formas de guardar.
+     */
+    function ASIENTOPROG_vincularCuentasTarjetas(tipo) {
+        const cont = document.getElementById(`dimCards_${tipo}`);
+        if (!cont) return;
+
+        cont.querySelectorAll('input[data-asiento-tipo]').forEach(input => {
+            if (input.dataset.bound) return;
+            input.dataset.bound = 'true';
+            const sug = document.getElementById(`${input.id}_sug`);
+
+            input.addEventListener('input', function () {
+                const q = input.value.trim();
+                if (q === '') {
+                    // Campo vaciado: si esa regla existía, se quita (sin preguntar: es un solo concepto).
+                    const idRegla = input.dataset.regla;
+                    if (idRegla) ASIENTOPROG_quitarCuentaTarjeta(tipo, idRegla);
+                    if (sug) sug.style.display = 'none';
+                    return;
+                }
+                if (q.length < 2) { if (sug) sug.style.display = 'none'; return; }
+
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(async () => {
+                    try {
+                        const r = await fetch(`${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas?q=${encodeURIComponent(q)}&tipo=${encodeURIComponent(input.dataset.tipoCuenta || '')}`);
+                        const res = await r.json();
+                        sug.innerHTML = '';
+                        if (res.ok && res.data && res.data.length > 0) {
+                            res.data.forEach(c => {
+                                const btn = document.createElement('button');
+                                btn.type = 'button';
+                                btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small text-dark bg-white';
+                                btn.textContent = `${c.codigo} - ${c.nombre}`;
+                                btn.addEventListener('click', () => {
+                                    input.value = `${c.codigo} - ${c.nombre}`;
+                                    sug.style.display = 'none';
+                                    ASIENTOPROG_guardarCuentaTarjeta(tipo, input, c.id);
+                                });
+                                sug.appendChild(btn);
+                            });
+                            sug.style.display = 'block';
+                            activeDropdown = sug;
+                        } else {
+                            sug.style.display = 'none';
+                        }
+                    } catch (err) { console.error(err); }
+                }, 300);
+            });
+        });
+    }
+
+    /** Datos de la entidad (id o nombre) a la que pertenece una tarjeta. */
+    function ASIENTOPROG_refDeTarjeta(tipo, idx) {
+        const card = document.querySelector(`#dimCards_${tipo} [data-dim-card="${idx}"]`);
+        if (!card) return null;
+        return { id: card.dataset.refId || '', texto: card.dataset.refTexto || '' };
+    }
+
+    /** Guarda (o actualiza) la cuenta de UN concepto de una ficha. */
+    async function ASIENTOPROG_guardarCuentaTarjeta(tipo, input, idCuenta) {
+        const selector = document.getElementById('tipoAsientoSelector');
+        const tipoAsiento = selector ? selector.value : '';
+        const ref = ASIENTOPROG_refDeTarjeta(tipo, input.dataset.idx);
+        if (!tipoAsiento || !ref) return;
+
+        const fd = new FormData();
+        fd.append('id_asiento_tipo', input.dataset.asientoTipo || '0');
+        fd.append('id_cuenta', idCuenta);
+        fd.append('tipo_asiento', tipoAsiento);
+        if (input.dataset.tarifaIva) fd.append('codigo_tarifa_iva', input.dataset.tarifaIva);
+        if (ASIENTOPROG_esItemCompra(tipo)) {
+            fd.append('tipo_referencia', 'item_compra');
+            fd.append('referencia_texto', ref.texto || ref.id);
+        } else {
+            fd.append('tipo_referencia', tipo);
+            fd.append('id_referencia', ref.id);
         }
 
         try {
-            const resultados = await Promise.all(promesas);
-            const errores = resultados.filter(r => !r.ok);
+            const res = await (await fetch(`${API_PROG}/guardarReglaDimensionAjax`, { method: 'POST', body: fd })).json();
+            if (!res.ok) {
+                if (window.Swal) Swal.fire('No se pudo guardar', res.error || 'Error al guardar la cuenta.', 'error');
+                else alert(res.error || 'Error al guardar la cuenta.');
+                return;
+            }
+            ASIENTOPROG_toast('Cuenta guardada.');
+            delete ASIENTOPROG_dimNueva[tipo];          // ya tiene reglas: sale de la lista del backend
+            ASIENTOPROG_cargarDim(tipo, input.dataset.idx);
+        } catch (err) { console.error(err); }
+    }
 
-            if (errores.length === 0) {
-                // Limpiar entidad principal
-                document.getElementById(`dim_search_${tipo}`).value = '';
-                document.getElementById(`dim_id_${tipo}`).value = '';
+    /** Quita la cuenta de UN concepto (al vaciar su campo). */
+    async function ASIENTOPROG_quitarCuentaTarjeta(tipo, idRegla) {
+        const fd = new FormData();
+        fd.append('id', idRegla);
+        try {
+            const res = await (await fetch(`${API_PROG}/eliminarReglaDimensionAjax`, { method: 'POST', body: fd })).json();
+            if (res.ok) {
+                ASIENTOPROG_toast('Cuenta quitada.');
+                ASIENTOPROG_cargarDim(tipo);
+            }
+        } catch (err) { console.error(err); }
+    }
 
-                if (window.Swal) {
-                    const Toast = Swal.mixin({
-                        toast: true,
-                        position: 'top-end',
-                        showConfirmButton: false,
-                        timer: 2000,
-                        timerProgressBar: true
-                    });
-                    Toast.fire({
-                        icon: 'success',
-                        title: 'Asociaciones guardadas correctamente.'
-                    });
-                }
+    /** Elimina TODAS las cuentas configuradas para una ficha (botón de la cabecera del acordeón). */
+    window.ASIENTOPROG_eliminarConfiguracionEntidad = async function (tipo, idx) {
+        const selector = document.getElementById('tipoAsientoSelector');
+        const tipoAsiento = selector ? selector.value : '';
+        const ref = ASIENTOPROG_refDeTarjeta(tipo, idx);
+        if (!tipoAsiento || !ref) return;
 
+        const card = document.querySelector(`#dimCards_${tipo} [data-dim-card="${idx}"]`);
+        const nombre = card ? (card.querySelector('.card-header .fw-bold')?.textContent || '') : '';
+
+        if (window.Swal) {
+            const conf = await Swal.fire({
+                title: '¿Eliminar toda la configuración?',
+                html: `Se quitarán <b>todas</b> las cuentas configuradas para <b>${ASIENTOPROG_esc(nombre)}</b>.<br>` +
+                      'Esa entidad pasará a contabilizarse con la configuración General.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Sí, eliminar todo',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!conf.isConfirmed) return;
+        } else if (!confirm('¿Eliminar toda la configuración de esta ficha?')) {
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('tipo_asiento', tipoAsiento);
+        fd.append('tipo_referencia', ASIENTOPROG_esItemCompra(tipo) ? 'item_compra' : tipo);
+        if (ASIENTOPROG_esItemCompra(tipo)) fd.append('referencia_texto', ref.texto || ref.id);
+        else fd.append('id_referencia', ref.id);
+
+        try {
+            const res = await (await fetch(`${API_PROG}/eliminarReglasEntidadAjax`, { method: 'POST', body: fd })).json();
+            if (res.ok) {
+                ASIENTOPROG_toast(res.msg || 'Configuración eliminada.');
+                delete ASIENTOPROG_dimNueva[tipo];
                 ASIENTOPROG_cargarDim(tipo);
             } else {
-                const msgError = errores.map(e => e.error).filter(Boolean).join(' | ');
-                if (window.Swal) Swal.fire('Error', msgError || 'Algunas asociaciones no pudieron guardarse.', 'error');
-                else alert(msgError || 'Algunas asociaciones no pudieron guardarse.');
+                if (window.Swal) Swal.fire('Error', res.error || 'No se pudo eliminar.', 'error');
+                else alert(res.error || 'No se pudo eliminar.');
             }
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (err) { console.error(err); }
     };
+
+    /** Aviso breve, no bloqueante (mismo estilo que el resto del módulo). */
+    function ASIENTOPROG_toast(titulo) {
+        if (!window.Swal) return;
+        Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1600, timerProgressBar: true })
+            .fire({ icon: 'success', title: titulo });
+    }
 
     /**
      * Elimina una asociación de dimensión específica.
