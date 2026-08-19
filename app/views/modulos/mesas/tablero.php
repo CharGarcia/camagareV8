@@ -18,6 +18,8 @@
  * @var array  $sesion
  * @var array  $mesas
  * @var string $empresaNombre
+ * @var array  $estacionesKds  Estaciones para los accesos a la pantalla de preparación; vacío si el usuario no ve modulos/kds
+ * @var string $rutaKds
  */
 $base = rtrim(BASE_URL ?? '', '/');
 $rutaAjax = $base . '/' . $rutaModulo;
@@ -87,9 +89,46 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 <small class="text-white-50">Cajero: <?= htmlspecialchars($sesion['cajero_nombre'] ?? '—') ?></small>
             </div>
         </div>
-        <a href="<?= $base ?>/modulos/caja-pos?volver=mesas" class="btn btn-sm btn-outline-light" title="Abrir o cerrar el turno de caja compartido">
-            <i class="bi bi-clock-history me-1"></i>Turno de caja
-        </a>
+        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+            <?php
+            // Pantalla de preparación (KDS): un acceso por estación. Hasta 3
+            // caben como botones sueltos; de ahí en adelante se agrupan en un
+            // desplegable para no desbordar el header en tablet. Siempre en
+            // pestaña nueva: el tablero es la pantalla de trabajo del salón y
+            // no debe perderse al mirar la cocina.
+            $estacionesKds = $estacionesKds ?? [];
+            $rutaKds = $base . '/' . ($rutaKds ?? 'modulos/kds');
+            $iconoEstacion = static function (string $tipo): string {
+                return ['cocina' => 'bi-fire', 'barra' => 'bi-cup-straw'][$tipo] ?? 'bi-egg-fried';
+            };
+            ?>
+            <?php if (count($estacionesKds) > 0 && count($estacionesKds) <= 3): ?>
+                <?php foreach ($estacionesKds as $e): ?>
+                    <a href="<?= $rutaKds ?>?id_estacion=<?= (int) $e['id'] ?>" target="_blank" rel="noopener"
+                       class="btn btn-sm btn-outline-light" title="Ver la pantalla de preparación de <?= htmlspecialchars($e['nombre']) ?>">
+                        <i class="bi <?= $iconoEstacion((string) ($e['tipo'] ?? '')) ?> me-1"></i><?= htmlspecialchars($e['nombre']) ?>
+                    </a>
+                <?php endforeach; ?>
+            <?php elseif (count($estacionesKds) > 3): ?>
+                <div class="dropdown">
+                    <button type="button" class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Ver una pantalla de preparación">
+                        <i class="bi bi-egg-fried me-1"></i>Preparación
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <?php foreach ($estacionesKds as $e): ?>
+                            <li>
+                                <a class="dropdown-item" href="<?= $rutaKds ?>?id_estacion=<?= (int) $e['id'] ?>" target="_blank" rel="noopener">
+                                    <i class="bi <?= $iconoEstacion((string) ($e['tipo'] ?? '')) ?> me-2 text-muted"></i><?= htmlspecialchars($e['nombre']) ?>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+            <a href="<?= $base ?>/modulos/caja-pos?volver=mesas" class="btn btn-sm btn-outline-light" title="Abrir o cerrar el turno de caja compartido">
+                <i class="bi bi-clock-history me-1"></i>Turno de caja
+            </a>
+        </div>
     </div>
 
     <div class="mt-zonas-wrap">

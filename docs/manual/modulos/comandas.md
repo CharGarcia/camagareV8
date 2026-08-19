@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta
-version: 1.0
+etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, recargo, total con iva
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -28,6 +28,69 @@ Una comanda cerrada **no admite cambios**: el sistema avisa de que *no está
 abierta*. Si hay que corregir algo después de cerrarla, la corrección va sobre el
 documento de venta, no sobre la comanda.
 
+## El total que ve el mesero
+
+Al pie de la comanda se muestra el **subtotal**, el **IVA** desglosado por tarifa
+y el **Total**. Ese total es el valor **con impuestos incluidos**: es lo que el
+cliente va a pagar, no la suma de precios sin IVA.
+
+El IVA que se muestra aquí es informativo y sirve para que nadie tenga que
+calcularlo de cabeza al leer la cuenta. Al cobrar, el sistema vuelve a resolver
+el impuesto de cada ítem desde el producto, así que el documento de venta manda
+siempre sobre esta vista previa.
+
+El mismo criterio se aplica en todo el recorrido del cobro: el importe de cada
+mesa en el tablero, el **Total seleccionado** al dividir la cuenta y el **Total
+a cobrar** del pago están todos con impuestos incluidos. Así, si una cuenta pasa
+el límite de venta a Consumidor Final, el aviso salta al elegir los ítems y no
+recién al confirmar el pago.
+
+## El recargo por servicio (el 10%)
+
+El recargo por servicio del salón se configura en **Empresa → Facturación →
+Recargo por servicio (restaurantes)**.
+
+Antes hay que activar, en esa misma pantalla, **¿Mostrar el campo de propina en
+la factura?**. No es un capricho: el recargo se emite justamente en el campo de
+propina del comprobante, así que sin él no hay dónde ponerlo. Mientras esté
+apagado, las opciones del recargo se ven bloqueadas; y si se apaga después, el
+recargo deja de cobrarse —también en las cuentas que ya estén abiertas en el
+salón—, aunque el porcentaje configurado se conserva para cuando se vuelva a
+activar.
+
+Con la propina activa, el recargo tiene tres estados:
+
+- **No se cobra**: la comanda no muestra ninguna línea de servicio.
+- **Obligatorio**: toda comanda lo lleva y no se puede quitar desde el salón.
+- **Opcional**: toda comanda lo lleva, pero el mesero puede retirarlo con el
+  enlace **Quitar** del pie de la comanda cuando el cliente no quiere pagarlo, y
+  volver a aplicarlo si se arrepiente.
+
+El porcentaje también se configura ahí, y **no puede pasar del 10%**: en el
+comprobante este valor viaja en el campo de **propina**, y el SRI rechaza un
+comprobante cuya propina supere el 10% del subtotal.
+
+### Cómo se calcula y dónde aparece
+
+Se calcula sobre el **subtotal sin impuestos** y se suma **después del IVA**: no
+forma parte de la base imponible, así que el 10% no paga IVA. En la factura o el
+recibo aparece como una línea de propina bajo los impuestos.
+
+El porcentaje queda **congelado al abrir la mesa**. Si mañana se cambia la
+configuración, las cuentas que ya están abiertas en el salón conservan el
+porcentaje que se les prometió al cliente; las nuevas nacen con el nuevo. Si una
+comanda se abrió antes de que existiera el recargo y no tiene porcentaje propio,
+se le aplica el vigente.
+
+**Obligatorio manda sobre lo que diga la comanda**: al cambiar el
+establecimiento a *obligatorio*, el recargo aparece de inmediato en todas las
+cuentas abiertas, incluidas las que un mesero hubiera dejado sin recargo cuando
+la configuración estaba en *opcional*. No hay que cerrar mesas ni reabrirlas.
+
+Al **dividir la cuenta**, cada parte carga su propio recargo, proporcional a lo
+que se le cobra. Lo mismo vale para el cliente que paga desde el QR de la mesa:
+ve el recargo antes de confirmar y paga exactamente lo que dirá su comprobante.
+
 ## Anular con motivo
 
 Anular una comanda **que ya tiene ítems** exige indicar un **motivo**. No es
@@ -45,13 +108,22 @@ Una comanda vacía se anula sin más.
 | Ítem | Hay que seleccionar un producto o un ítem del menú |
 | Cantidad | Mayor a cero |
 | Motivo de anulación | Obligatorio si la comanda ya tiene ítems |
+| Recargo por servicio | Máximo 10% del subtotal; solo se puede quitar si el establecimiento lo tiene como opcional |
 
 ## Errores frecuentes
 
 - **"La mesa no está disponible"**: ya tiene una comanda abierta.
 - **"La comanda no está abierta; no se puede modificar"**: ya fue cerrada.
 - **"Indica un motivo para anularla"**: la comanda tiene consumos registrados.
+- **"El recargo por servicio es obligatorio en este establecimiento"**: así está
+  configurado en Empresa → Facturación; cámbielo a *opcional* si el salón debe
+  poder retirarlo.
 
 ## Historial de cambios
 
+- **1.2** — Recargo por servicio (el 10%) cobrado como propina, supeditado al
+  campo de propina de la factura: se configura por
+  establecimiento como obligatorio u opcional, con su porcentaje.
+- **1.1** — El total de la comanda se muestra con impuestos incluidos, con el
+  subtotal y el IVA desglosado.
 - **1.0** — Versión inicial.

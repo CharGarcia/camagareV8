@@ -64,7 +64,10 @@ class ComandaService
 
     public function getTablero(int $idEmpresa): array
     {
-        return $this->repository->getTablero($idEmpresa);
+        // El importe de cada mesa incluye el recargo por servicio, así que el
+        // repositorio necesita saber cómo está configurado (ver getTablero).
+        $servicio = $this->getConfigServicio($idEmpresa);
+        return $this->repository->getTablero($idEmpresa, $servicio['modo'], $servicio['porcentaje']);
     }
 
     // ─── Abrir comanda ────────────────────────────────────────────────────────
@@ -89,17 +92,24 @@ class ComandaService
             $this->repository->bloquearNumeracion($idEmpresa);
             $numero = $this->repository->getSiguienteNumero($idEmpresa);
 
+            // El recargo por servicio se congela al abrir la mesa: si mañana
+            // cambian el porcentaje en la configuración, las cuentas que están
+            // en el salón siguen con el que se les prometió al cliente.
+            $servicio = $this->getConfigServicio($idEmpresa);
+
             $cabecera = [
-                'id_empresa'        => $idEmpresa,
-                'id_mesa'           => $idMesa,
-                'id_usuario_mesero' => $idUsuario,
-                'id_caja_sesion'    => !empty($data['id_caja_sesion']) ? (int) $data['id_caja_sesion'] : null,
-                'numero_comanda'    => $numero,
-                'estado'            => 'abierta',
-                'id_cliente'        => !empty($data['id_cliente']) ? (int) $data['id_cliente'] : null,
-                'comensales'        => !empty($data['comensales']) ? (int) $data['comensales'] : null,
-                'observaciones'     => trim((string) ($data['observaciones'] ?? '')) ?: null,
-                'created_by'        => $idUsuario,
+                'id_empresa'          => $idEmpresa,
+                'id_mesa'             => $idMesa,
+                'id_usuario_mesero'   => $idUsuario,
+                'id_caja_sesion'      => !empty($data['id_caja_sesion']) ? (int) $data['id_caja_sesion'] : null,
+                'numero_comanda'      => $numero,
+                'estado'              => 'abierta',
+                'id_cliente'          => !empty($data['id_cliente']) ? (int) $data['id_cliente'] : null,
+                'comensales'          => !empty($data['comensales']) ? (int) $data['comensales'] : null,
+                'observaciones'       => trim((string) ($data['observaciones'] ?? '')) ?: null,
+                'created_by'          => $idUsuario,
+                'aplica_servicio'     => $servicio['modo'] !== 'no',
+                'porcentaje_servicio' => $servicio['modo'] !== 'no' ? $servicio['porcentaje'] : 0.0,
             ];
             $idComanda = $this->repository->crear($cabecera);
 
@@ -145,6 +155,11 @@ class ComandaService
         $c['detalles'] = $this->repository->getLineas($idComanda, $idEmpresa);
         $c['total']    = $this->repository->getTotal($idComanda);
         $c['grupos']   = $this->getGrupos($idComanda, $idEmpresa);
+        // Porcentaje de recargo que se le va a cobrar de verdad (0 = ninguno),
+        // ya resueltas las reglas del establecimiento. La pantalla usa este
+        // número y no el crudo de la comanda, para no prometer algo distinto
+        // de lo que hará el cobro.
+        $c['servicio_efectivo'] = $this->porcentajeServicioComanda($c);
         return $c;
     }
 
@@ -463,6 +478,96 @@ class ComandaService
             if ($this->db->inTransaction()) $this->db->rollBack();
             throw $e;
         }
+    }
+
+    // ─── Recargo por servicio (el "10%") ───────────────────────────────────────
+
+    /**
+     * Configuración del recargo por servicio del establecimiento
+     * ('no' | 'obligatorio' | 'opcional' + porcentaje). La resuelve
+     * PosVentaService, que es el motor de cobro compartido por el salón y el
+     * mostrador — así ambos puntos de venta obedecen la misma configuración.
+     */
+    public function getConfigServicio(int $idEmpresa): array
+    {
+        return $this->ventaService->getConfigServicio($idEmpresa);
+    }
+
+    /**
+     * Enciende o apaga el recargo por servicio de una comanda. Solo tiene
+     * sentido cuando el establecimiento lo tiene en 'opcional': es el caso del
+     * cliente que no quiere pagar el 10%.
+     */
+    public function cambiarServicio(int $idComanda, int $idEmpresa, int $idUsuario, bool $aplica): void
+    {
+        $comanda = $this->repository->find($idComanda, $idEmpresa);
+        $this->rules->validarPuedeModificar($comanda);
+
+        $servicio = $this->getConfigServicio($idEmpresa);
+        $this->rules->validarServicio($servicio['modo'], (float) ($comanda['porcentaje_servicio'] ?? 0));
+
+        // Si la comanda se abrió antes de configurar el servicio, no tiene
+        // porcentaje guardado: se le aplica el vigente al encenderlo.
+        $porcentaje = (float) ($comanda['porcentaje_servicio'] ?? 0);
+        if ($aplica && $porcentaje <= 0) {
+            $porcentaje = $servicio['porcentaje'];
+        }
+
+        $update = [
+            // El bool de PHP llega a Postgres como cadena vacía por PDO; se manda el literal.
+            'aplica_servicio'     => $aplica ? 'true' : 'false',
+            'porcentaje_servicio' => $porcentaje,
+            'updated_by'          => $idUsuario,
+        ];
+
+        $this->db->beginTransaction();
+        try {
+            $this->repository->actualizarCabecera($idComanda, $idEmpresa, $update);
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'ACTUALIZAR_COMANDA', 'comandas', $idComanda,
+                ['aplica_servicio' => $comanda['aplica_servicio'] ?? null],
+                ['aplica_servicio' => $aplica, 'porcentaje_servicio' => $porcentaje]
+            );
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Porcentaje de recargo que debe cobrarse a esta comanda. El monto lo
+     * calcula PosVentaService sobre el subtotal real del documento, así que al
+     * dividir la cuenta cada parte carga el suyo sin hacer cuentas aparte.
+     */
+    public function porcentajeServicioComanda(array $comanda): float
+    {
+        $cfg = $this->getConfigServicio((int) $comanda['id_empresa']);
+
+        // Apagado (o sin campo de propina en la factura): no se cobra ni en las
+        // cuentas ya abiertas. Es lo mismo que ve el mesero en pantalla, y
+        // cobrar algo invisible sería peor que perder el recargo de una mesa.
+        if ($cfg['modo'] === 'no') {
+            return 0.0;
+        }
+
+        // Obligatorio manda sobre el estado de la comanda: lo llevan también las
+        // que se abrieron antes de configurarlo, y las que alguien dejó sin
+        // recargo cuando el establecimiento todavía estaba en "opcional".
+        // El 'f' de Postgres es truthy en PHP: hay que compararlo a mano.
+        $aplica = !(empty($comanda['aplica_servicio']) || $comanda['aplica_servicio'] === 'f');
+        if ($cfg['modo'] === 'obligatorio') {
+            $aplica = true;
+        }
+        if (!$aplica) {
+            return 0.0;
+        }
+
+        // El porcentaje de la comanda es un snapshot del momento en que se
+        // abrió; si no tiene (se abrió antes de que existiera el recargo), se
+        // usa el vigente.
+        $pct = (float) ($comanda['porcentaje_servicio'] ?? 0);
+        return $pct > 0 ? $pct : $cfg['porcentaje'];
     }
 
     // ─── Cobro / división de cuenta ────────────────────────────────────────────
@@ -937,6 +1042,10 @@ class ComandaService
             'numero_operacion'        => $datosPago['numero_operacion'] ?? '',
             'fecha_cobro'             => $datosPago['fecha_cobro'] ?? '',
             'id_bodega'               => $datosPago['id_bodega'] ?? 0,
+            // Recargo por servicio: se manda el porcentaje y PosVentaService lo
+            // aplica sobre el subtotal de ESTE documento, así cada parte de una
+            // cuenta dividida carga lo suyo. Viaja al comprobante como <propina>.
+            'porcentaje_propina'      => $this->porcentajeServicioComanda($comanda),
         ], $empresaConfig);
 
         try {

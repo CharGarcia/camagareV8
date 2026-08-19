@@ -45,19 +45,29 @@ class EgresoRules
             throw new Exception("El egreso debe tener al menos una línea de detalle o documento.");
         }
 
+        // Un egreso puede combinar documentos de módulo (Compra/Liquidación/Nómina/...) con
+        // líneas MANUAL ("otros conceptos") a la vez. Si se mezclan, cada línea MANUAL debe
+        // traer su propia cuenta contable: sin eso, el asiento la clasificaría por defecto en
+        // la cuenta "oficial" del concepto de cabecera (p. ej. Cuentas por Pagar de la compra),
+        // metiendo mal un gasto que no tiene relación con esa cartera.
+        $tiposDetalle = array_unique(array_map(fn($d) => $d['tipo_documento'] ?? '', $data['detalles']));
+        $hayModulo = !empty(array_diff($tiposDetalle, ['MANUAL']));
+
         $totalDetalle = 0;
         foreach ($data['detalles'] as $idx => $det) {
             $monto = (float) ($det['monto_pagado'] ?? 0);
             if ($monto <= 0) {
                 throw new Exception("El monto a pagar en la línea #" . ($idx + 1) . " debe ser mayor a 0.");
             }
-            
+
             $tipoDoc = $det['tipo_documento'] ?? '';
             if ($tipoDoc !== 'MANUAL') {
                 $saldoAnt = (float) ($det['saldo_anterior'] ?? 0);
                 if ($monto > $saldoAnt + 0.01) {
                      throw new Exception("En la línea #" . ($idx + 1) . ", el monto a pagar ($" . number_format($monto, 2) . ") no puede superar el saldo pendiente ($" . number_format($saldoAnt, 2) . ").");
                 }
+            } elseif ($hayModulo && empty($det['id_cuenta_contable'])) {
+                throw new Exception("La línea #" . ($idx + 1) . " (otros conceptos) debe indicar su cuenta contable, porque este egreso también paga un documento de otro tipo.");
             }
 
             $totalDetalle += $monto;

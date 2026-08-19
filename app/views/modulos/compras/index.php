@@ -99,7 +99,17 @@ $to         = $to         ?? 0;
 <?= \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <h5 class="mb-0 fw-bold"><i class="bi bi-cart3"></i> <?= htmlspecialchars($titulo ?? 'Compras') ?></h5>
+    <h5 class="mb-0 fw-bold">
+        <i class="bi bi-cart3"></i> <?= htmlspecialchars($titulo ?? 'Compras') ?>
+        <?php if (!empty($pendientesAprob)): ?>
+            <?php // Atajo al filtro: quien tiene que aprobar llega en un clic. ?>
+            <a href="#" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 text-decoration-none ms-2"
+               style="font-size:.7rem;" onclick="CMG_filtrarPendientesAprobacion(); return false;"
+               title="Ver las compras pendientes de aprobación">
+                <i class="bi bi-hourglass-split me-1"></i><?= (int) $pendientesAprob ?> pendiente<?= $pendientesAprob > 1 ? 's' : '' ?> de aprobación
+            </a>
+        <?php endif; ?>
+    </h5>
     <?php if ($perm['crear']): ?>
         <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalCompraCrear()">
             <i class="bi bi-plus-lg"></i> Nueva
@@ -140,12 +150,19 @@ $to         = $to         ?? 0;
                                 fn($tc) => ['v' => $tc['codigo_comprobante'], 'l' => $tc['codigo_comprobante'] . ' - ' . $tc['comprobante']],
                                 $tiposComprobante ?? []
                             ), JSON_UNESCAPED_UNICODE) ?> },
+                            { key: 'estado',         label: 'Estado',            icon: 'bi-flag',            type: 'select', options: [
+                                { v: 'registrado',           l: 'Registrado' },
+                                { v: 'pendiente_aprobacion', l: 'Pendiente de aprobación' },
+                                { v: 'rechazada',            l: 'Rechazada' },
+                                { v: 'anulado',              l: 'Anulado' },
+                            ]},
                         ],
                         quickFilters: [
                             { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
                             { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
                             { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
                             { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
+                            { id: 'qf_pend_aprob', label: 'Pend. aprobación', mk: () => ({ key: 'estado', op: '=', value: 'pendiente_aprobacion', display: 'Pendiente de aprobación' }) },
                         ],
                         onApply: () => window.CMG_fetchSearch && window.CMG_fetchSearch(1),
                     }).init();
@@ -229,13 +246,7 @@ $to         = $to         ?? 0;
                                 $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
                             }
                             
-                            $estado = $r['estado'] ?? 'borrador';
-                            $estadoClass = match ($estado) {
-                                'registrado'             => 'bg-success bg-opacity-10 text-success border-success',
-                                'anulado'                => 'bg-danger bg-opacity-10 text-danger border-danger',
-                                'borrador'               => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
-                                default                  => 'bg-primary bg-opacity-10 text-primary border-primary',
-                            };
+                            $estadoBadge = \App\controllers\modulos\ComprasController::badgeEstado($r['estado'] ?? null);
                         ?>
                             <tr class="compra-row" role="button" tabindex="0"
                                 data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>'
@@ -257,7 +268,7 @@ $to         = $to         ?? 0;
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-center" data-col="estado_pago"><?= $estadoPagoBadge ?></td>
-                                <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span></td>
+                                <td class="text-center pe-3" data-col="estado"><?= $estadoBadge ?></td>
                             </tr>
                     <?php endforeach;
                     endif; ?>
@@ -278,6 +289,20 @@ $to         = $to         ?? 0;
         crear: <?= $perm['crear'] ? 'true' : 'false' ?>,
         actualizar: <?= $perm['actualizar'] ? 'true' : 'false' ?>,
         eliminar: <?= $perm['eliminar'] ? 'true' : 'false' ?>
+    };
+    // Aprobación de compras (checkpoint 'aprobacion_compras'): el modal decide
+    // con esto si muestra los botones de Aprobar/Rechazar.
+    window.COMPRAS_ES_APROBADOR = <?= !empty($esAprobador) ? 'true' : 'false' ?>;
+    window.COMPRAS_APROBADORES  = <?= json_encode($aprobadoresNombres ?? [], JSON_UNESCAPED_UNICODE) ?>;
+    window.COMPRAS_ID_USUARIO   = <?= (int) ($_SESSION['id_usuario'] ?? 0) ?>;
+    window.COMPRAS_NIVEL        = <?= (int) ($nivelUsuario ?? 1) ?>;
+
+    /** Atajo del badge del título: deja el listado solo con las pendientes. */
+    window.CMG_filtrarPendientesAprobacion = function () {
+        const input = document.getElementById('inputBuscarCompras');
+        if (!input) return;
+        input.value = 'estado:pendiente_aprobacion';
+        if (window.CMG_fetchSearch) window.CMG_fetchSearch(1);
     };
     window.CMG_formasPago = <?= json_encode(array_values($formasPago ?? [])) ?>;
     window.CMG_tarifasIva = <?= json_encode(array_values($tarifasIva ?? [])) ?>;

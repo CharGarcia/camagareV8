@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar
-version: 1.1
+etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura
+version: 1.3
 orden: 10
 estado: activo
 ---
@@ -40,6 +40,36 @@ suma no coincide.
 
 Si es un ingreso que no cobra ninguna factura, elija el **concepto** que
 corresponda en lugar de documentos pendientes.
+
+## Combinar varios conceptos en un mismo ingreso
+
+Un ingreso puede cobrar **a la vez** una factura de venta, un recibo de venta
+y/o "Otros conceptos" (dinero recibido sin documento) — no hace falta un
+ingreso separado por cada tipo. Los botones de concepto de la barra superior
+ya no son excluyentes: cada uno **agrega** documentos a lo ya cargado, en vez
+de reemplazarlo.
+
+- **"Documentos"** y **"Otros conceptos"** se muestran siempre juntos: use el
+  buscador de documentos pendientes para las facturas/recibos, y el botón
+  **"+ Agregar línea"** de "Otros conceptos" para el resto.
+- **Cuenta contable obligatoria por línea manual cuando se mezcla**: si el
+  ingreso combina un documento de módulo con líneas de "Otros conceptos", cada
+  línea manual debe traer su propia cuenta contable (buscador integrado en esa
+  misma cuadrícula). Sin eso, el sistema no sabe si ese ingreso es parte de la
+  cartera del documento (p. ej. Cuentas por Cobrar de la factura) o una cuenta
+  totalmente distinta, así que lo exige explícito antes de guardar.
+- El total del ingreso es la suma de **ambos bloques**.
+
+### Botones que solo aparecen si hay algo que cobrar
+
+Los botones de concepto ligados a un documento (**Factura de venta**,
+**Recibo de venta**, **Factura de reembolso**) solo se muestran si la empresa
+tiene al menos un documento pendiente de ese tipo. Si no hay ninguna factura,
+recibo o reembolso pendiente, el botón correspondiente no aparece.
+
+Los demás conceptos (los que no dependen de buscar un documento, como
+**Anticipo Cliente**, o cualquiera del desplegable "Otro concepto…")
+**siempre se muestran**, sin importar si hay pendientes o no.
 
 ## Campos obligatorios
 
@@ -113,6 +143,15 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **1.3** — Los botones de concepto ligados a documento (Factura de venta,
+  Recibo de venta, Factura de reembolso) solo se muestran si hay algún
+  pendiente de ese tipo en la empresa. Se quitó el botón "Agregar documentos"
+  (redundante con los botones de concepto de la barra superior).
+- **1.2** — Los conceptos del ingreso (Factura de venta, Recibo de venta, Otros
+  conceptos...) dejan de ser excluyentes: se pueden combinar en un mismo
+  ingreso (p. ej. el cobro de una factura + un ingreso sin documento). Exige
+  cuenta contable explícita en las líneas manuales cuando se mezclan con un
+  documento de módulo.
 - **1.1** — Botón para exportar el comprobante a Excel, junto al de PDF, en la
   barra de acciones superior del modal.
 - **1.0** — Versión inicial.

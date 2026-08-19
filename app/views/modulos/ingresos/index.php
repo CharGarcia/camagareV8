@@ -294,7 +294,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     </button>
                     <!-- Conceptos de ingreso (derecha): los relacionados con un módulo van como botón; el resto en un selector -->
                     <?php
-                        $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
+                        // Botones ligados a un tipo de documento (Factura de venta/Recibo de venta/Factura
+                        // reembolso): solo se muestran si hay algún documento pendiente de ese tipo en la
+                        // empresa. Los demás botones (p. ej. Anticipo Cliente, sin búsqueda de documentos)
+                        // siempre se muestran.
+                        $comportamientosDocDriven = ['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'];
+                        $conPendientes = $comportamientosConPendientes ?? [];
+                        $conceptosBoton  = array_values(array_filter($conceptos, function ($c) use ($comportamientosDocDriven, $conPendientes) {
+                            $comp = $c['comportamiento'] ?? 'GENERAL';
+                            if ($comp === 'GENERAL') return false;
+                            if (in_array($comp, $comportamientosDocDriven, true) && !in_array($comp, $conPendientes, true)) return false;
+                            return true;
+                        }));
                         $conceptosSelect = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') === 'GENERAL'));
                     ?>
                     <div id="concepto-btns-group" class="ms-auto d-flex gap-1 align-items-center flex-wrap">
@@ -426,9 +437,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <div class="d-flex align-items-center gap-2 mb-2">
                                             <h6 class="small fw-bold mb-0 text-secondary">Documentos seleccionados</h6>
                                             <span id="m-lbl-status-pend" class="badge bg-light text-muted border d-none">Cargando...</span>
-                                            <button type="button" id="m-btn-add-docs" class="btn btn-link btn-sm p-0 ms-auto text-decoration-none fw-bold" onclick="abrirModalDocsPendientes()">
-                                                <i class="bi bi-plus-circle me-1"></i> Agregar documentos
-                                            </button>
                                         </div>
                                         <div class="table-responsive border rounded mb-3" style="max-height: 220px;">
                                             <table class="table table-sm table-detalle mb-0">
@@ -453,7 +461,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     </div>
 
                                     <!-- Tabla para OTROS CONCEPTOS (Manual) -->
-                                    <div id="m-block-otros" class="d-none">
+                                    <div id="m-block-otros" class="mt-2">
+                                        <h6 class="small fw-bold mb-2 text-secondary"><i class="bi bi-plus-circle-dotted me-1"></i>Otros conceptos <span class="fw-normal text-muted">(sin documento — pueden combinarse con los de arriba)</span></h6>
                                         <div class="border rounded-3 overflow-hidden bg-white shadow-sm mt-2">
                                             <div class="table-responsive" style="max-height: 220px;">
                                                 <table class="table table-sm table-detalle mb-0 text-nowrap align-middle">
@@ -517,7 +526,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label small fw-bold">Monto</label>
-                                            <input type="number" id="m-add-cobro-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" value="0.00">
+                                            <input type="number" id="m-add-cobro-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" min="0" value="0.00">
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small fw-bold d-block">&nbsp;</label>
@@ -730,97 +739,59 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function seleccionarConceptoGeneralIngreso(id) {
         const sel = document.getElementById('m-select-concepto');
-        if (!sel || sel.value == id) return;
-        const hayDatos = docPendientes.length > 0
-                      || detalleManual.some(d => d.descripcion.trim() !== '' || parseFloat(d.monto) > 0)
-                      || formasPagoData.length > 0;
-        const aplicarCambio = () => { sel.value = id; manejarCambioConceptoIngreso(sel); };
-        if (hayDatos) {
-            Swal.fire({
-                title: '¿Cambiar concepto?',
-                text: 'Al cambiar el concepto se eliminará toda la información de detalle que has agregado. ¿Deseas continuar?',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="bi bi-trash3 me-1"></i> Sí, cambiar',
-                cancelButtonText: 'Cancelar',
-            }).then(result => {
-                if (result.isConfirmed) aplicarCambio();
-                else sincronizarBotonesConcepto(sel.value);
-            });
-        } else {
-            aplicarCambio();
-        }
+        if (!sel || sel.value == id || !id) return;
+        sel.value = id;
+        manejarCambioConceptoIngreso(sel);
+        // Concepto general (sin relación con módulos): dejar una línea manual lista con su cuenta.
+        if (detalleManual.length === 0) agregarFilaManualIngreso();
     }
 
+    /**
+     * Sincroniza el concepto "tocado" y re-renderiza. Los conceptos (Factura de venta,
+     * Recibo de venta, Otros conceptos, etc.) YA NO son excluyentes entre sí: un mismo
+     * ingreso puede combinar, p. ej., el cobro de una factura con un "Otro concepto" sin
+     * documento — lo cargado se conserva siempre, nunca se borra al tocar otro concepto.
+     */
     function manejarCambioConceptoIngreso(sel) {
         const opt = sel.options[sel.selectedIndex];
         const comp = opt ? (opt.dataset.comportamiento || 'GENERAL') : 'GENERAL';
 
         sincronizarBotonesConcepto(sel.value);
         document.getElementById('m-input-tipo-ingreso').value = comp;
-
-        // Limpiar detalle y pagos
-        docPendientes = [];
-        detalleManual = [];
-        formasPagoData = [];
-        clientesCargados = {};
-        actualizarInfoClientesCargados();
         renderDetalles();
         renderPagos();
         recalcularTotales();
-
-        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
-            document.getElementById('m-block-facturas').classList.remove('d-none');
-            document.getElementById('m-block-otros').classList.add('d-none');
-            abrirModalDocsPendientes();
-        } else {
-            document.getElementById('m-block-facturas').classList.add('d-none');
-            document.getElementById('m-block-otros').classList.remove('d-none');
-        }
     }
 
     // Click en botones de concepto
     document.querySelectorAll('.concepto-ingreso-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
-            const sel = document.getElementById('m-select-concepto');
-            const comp = this.dataset.comportamiento || 'GENERAL';
-
-            if (sel.value == this.dataset.id) {
-                // Mismo concepto ya seleccionado → re-abrir el modal de documentos pendientes.
-                if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
-                    abrirModalDocsPendientes();
-                }
-                return;
-            }
-
-            const hayDatos = docPendientes.length > 0
-                        || detalleManual.some(d => d.descripcion.trim() !== '' || parseFloat(d.monto) > 0);
-
-            const aplicarCambio = () => {
-                sel.value = this.dataset.id;
-                manejarCambioConceptoIngreso(sel);
-            };
-
-            if (hayDatos) {
-                Swal.fire({
-                    title: '¿Cambiar concepto?',
-                    text: 'Al cambiar el concepto se eliminará toda la información de detalle que has agregado. ¿Deseas continuar?',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#d33',
-                    cancelButtonColor: '#6c757d',
-                    confirmButtonText: '<i class="bi bi-trash3 me-1"></i> Sí, cambiar',
-                    cancelButtonText: 'Cancelar',
-                }).then(result => {
-                    if (result.isConfirmed) aplicarCambio();
-                });
-            } else {
-                aplicarCambio();
-            }
-        });
+        btn.addEventListener('click', function () { ingOnClickConceptoBtn(this); });
     });
+
+    /**
+     * Click de un botón de concepto (Factura de venta/Recibo de venta/etc.), tanto los
+     * que ya existen al cargar la página como los creados al vuelo desde "+ Crear Opción
+     * de Ingreso" (ver window.onOpcionCreada). Compartido para que se comporten igual.
+     */
+    function ingOnClickConceptoBtn(btn) {
+        const sel  = document.getElementById('m-select-concepto');
+        const comp = btn.dataset.comportamiento || 'GENERAL';
+
+        // Ya es el ÚLTIMO concepto tocado → re-abrir el modal de docs pendientes
+        // (no hace falta "seleccionarlo" de nuevo, los conceptos ya no son excluyentes).
+        if (sel.value == btn.dataset.id) {
+            if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
+                abrirModalDocsPendientes();
+            }
+            return;
+        }
+
+        sel.value = btn.dataset.id;
+        manejarCambioConceptoIngreso(sel);
+        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
+            setTimeout(abrirModalDocsPendientes, 150);
+        }
+    }
 
     // ── Autocomplete "Recibo de" ────────────────────────────────────────────
     function fetchClientesReciboDe(q) {
@@ -1337,24 +1308,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         recalcularTotales();
     }
 
+    // Documentos (Factura/Recibo/Factura reembolso) y "Otros conceptos" (líneas manuales)
+    // ya NO son excluyentes: un mismo ingreso puede combinarlos (p. ej. el cobro de una
+    // factura + un ingreso sin documento). Se renderizan siempre los dos bloques.
     function renderDetalles() {
-        const tipo = document.getElementById('m-input-tipo-ingreso').value;
+        renderDocsPendientesIngreso();
+        renderManualIngreso();
+    }
+
+    function renderDocsPendientesIngreso() {
         const esHistorico = !!document.getElementById('m-input-id').value;
-        const isObsReadOnly = document.getElementById('m-input-observaciones').disabled;
+        const tbody = document.getElementById('m-tbody-docs-pendientes');
+        tbody.innerHTML = '';
 
-        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
-            const tbody = document.getElementById('m-tbody-docs-pendientes');
-            tbody.innerHTML = '';
+        if (docPendientes.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3 small">Use el buscador para añadir documentos pendientes de uno o más clientes — puede combinarlos con "Otros conceptos".</td></tr>';
+            return;
+        }
 
-            const btnAddDocs = document.getElementById('m-btn-add-docs');
-            if (btnAddDocs) btnAddDocs.style.display = esHistorico ? 'none' : '';
-
-            if (docPendientes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3 small">Use el buscador para añadir documentos pendientes de uno o más clientes.</td></tr>';
-                return;
-            }
-
-            docPendientes.forEach((f, idx) => {
+        docPendientes.forEach((f, idx) => {
                 const tr = document.createElement('tr');
                 const tieneItems = Array.isArray(f.items) && f.items.length > 0;
                 const disInput = (!f.seleccionado || esHistorico || tieneItems) ? 'disabled' : '';
@@ -1380,7 +1352,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <td class="text-end">$${f.monto_doc.toFixed(2)}</td>
                     <td class="text-end">
                         <input type="number" class="form-control form-control-sm input-numeric text-end px-1 input-monto-cobrar"
-                               style="height:26px;" step="0.01"
+                               style="height:26px;" step="0.01" min="0"
                                value="${f.cobrado > 0 ? f.cobrado.toFixed(2) : ''}"
                                ${disInput}
                                oninput="actualizarMontoDoc(${idx}, this)">
@@ -1410,16 +1382,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     tbody.appendChild(trItems);
                 }
             });
-        } else {
-            const tbody = document.getElementById('m-tbody-otros-manual');
-            tbody.innerHTML = '';
-            
-            // Si está vacío y no está en lectura, inicializar línea inteligente
-            if (detalleManual.length === 0 && !isObsReadOnly) {
-                detalleManual.push({ descripcion: '', monto: 0, ...ingConceptoCuentaActual() });
-            }
+    }
 
-            if (detalleManual.length === 0) {
+    function renderManualIngreso() {
+        const isObsReadOnly = document.getElementById('m-input-observaciones').disabled;
+        const tbody = document.getElementById('m-tbody-otros-manual');
+        tbody.innerHTML = '';
+
+        // Primera fila vacía automática solo en un ingreso recién abierto y aún sin ningún
+        // documento ni línea manual (arranque rápido); si ya hay documentos cargados,
+        // agregar una línea manual es una acción explícita del botón "+ Agregar línea".
+        if (detalleManual.length === 0 && docPendientes.length === 0 && !isObsReadOnly) {
+            detalleManual.push({ descripcion: '', monto: 0, ...ingConceptoCuentaActual() });
+        }
+
+        if (detalleManual.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 small text-muted">Sin registros asignados.</td></tr>';
             } else {
                 detalleManual.forEach((d, idx) => {
@@ -1451,6 +1428,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 value="${d.monto > 0 ? d.monto.toFixed(2) : ''}"
                                 placeholder="0.00"
                                 step="0.01"
+                                min="0"
                                 ${isObsReadOnly ? 'disabled' : ''}
                                 oninput="actualizarManualIngresoMonto(${idx}, this.value)">
                         </td>
@@ -1460,14 +1438,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     `;
                     tbody.appendChild(tr);
                 });
-            }
-            
-            const btnAddLine = document.querySelector('#m-block-otros button.btn-link');
-            if (btnAddLine) btnAddLine.style.display = isObsReadOnly ? 'none' : '';
-            
-            const itemsCounter = document.getElementById('m-man-count-items');
-            if (itemsCounter) itemsCounter.innerText = detalleManual.length;
         }
+
+        const btnAddLine = document.querySelector('#m-block-otros button.btn-link');
+        if (btnAddLine) btnAddLine.style.display = isObsReadOnly ? 'none' : '';
+
+        const itemsCounter = document.getElementById('m-man-count-items');
+        if (itemsCounter) itemsCounter.innerText = detalleManual.length;
     }
 
     function toggleDoc(idx, state) {
@@ -1483,7 +1460,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function actualizarMontoDoc(idx, el) {
-        let v = parseFloat(el.value) || 0;
+        const crudo = parseFloat(el.value) || 0;
+        let v = Math.max(0, crudo);
         const max = docPendientes[idx].saldo_ant;
 
         if (v > max) {
@@ -1493,6 +1471,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (typeof showToast === 'function') {
                 showToast(`El monto no puede exceder el saldo ($${max.toFixed(2)})`, 'warning');
             }
+        } else if (v !== crudo) {
+            el.value = v > 0 ? v.toFixed(2) : ''; // se ingresó un valor negativo
         }
 
         docPendientes[idx].cobrado = v;
@@ -1506,8 +1486,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     // ── Cuenta contable por línea ─────────────────────────────────────────────
-    // Cuenta por defecto = la del concepto seleccionado (puede cambiarse por línea).
+    // Cuenta por defecto = la del último concepto tocado (puede cambiarse por línea).
+    // Si ya hay documentos de módulo cargados (Factura/Recibo), NO se prellena: ese
+    // "último concepto tocado" normalmente es el del documento (p. ej. su cuenta de
+    // Cuentas por Cobrar), que sería la incorrecta para un renglón de "otros conceptos"
+    // sin relación con esa cartera — mejor forzar la elección explícita.
     function ingConceptoCuentaActual() {
+        if (docPendientes.length > 0) return {};
         const sel = document.getElementById('m-select-concepto');
         const opt = sel ? sel.options[sel.selectedIndex] : null;
         if (!opt) return {};
@@ -1582,7 +1567,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function actualizarManualIngresoMonto(idx, val) {
         if (detalleManual[idx]) {
-            detalleManual[idx].monto = parseFloat(val) || 0;
+            detalleManual[idx].monto = Math.max(0, parseFloat(val) || 0);
             recalcularTotales();
         }
     }
@@ -1689,16 +1674,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function recalcularTotales() {
-        const tipo = document.getElementById('m-input-tipo-ingreso').value;
+        // Documentos y "Otros conceptos" se suman juntos: ya no son excluyentes.
         let total = 0;
-
-        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
-            docPendientes.filter(f => f.seleccionado).forEach(f => {
-                total += f.cobrado;
-            });
-        } else {
-            detalleManual.forEach(d => total += d.monto);
-        }
+        docPendientes.filter(f => f.seleccionado).forEach(f => total += f.cobrado);
+        detalleManual.forEach(d => total += d.monto);
 
         document.getElementById('m-final-total').innerText = '$ ' + total.toFixed(2);
         document.getElementById('m-sumary-total-doc').innerText = '$ ' + total.toFixed(2);
@@ -1858,70 +1837,76 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             return;
         }
 
-        // Armar Detalles
-        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
-            const sel = docPendientes.filter(f => f.seleccionado && f.cobrado > 0);
-            if (sel.length === 0) {
-                Swal.fire('Sin Selección', 'Debe seleccionar al menos un documento y definir monto.', 'warning');
+        // Documentos pendientes (Factura/Recibo/Factura reembolso) y "Otros conceptos"
+        // (líneas manuales) se combinan en el mismo ingreso: ya no son excluyentes.
+        const docsSel = docPendientes.filter(f => f.seleccionado && f.cobrado > 0);
+        const manualCon = detalleManual.filter(d => d.descripcion.trim() !== '' || d.monto > 0);
+
+        if (docsSel.length === 0 && manualCon.length === 0) {
+            Swal.fire('Atención', 'Agregue al menos un documento pendiente o un concepto/ítem manual.', 'warning');
+            return;
+        }
+
+        if (manualCon.some(d => d.monto <= 0)) {
+            Swal.fire('Atención', 'Todos los montos en la cuadrícula de "Otros conceptos" deben ser superiores a cero.', 'warning');
+            return;
+        }
+
+        // Si se mezcla un documento de módulo con líneas manuales, cada línea manual debe
+        // traer SU PROPIA cuenta contable: si no, heredaría por defecto la cuenta "oficial"
+        // del último concepto tocado (p. ej. Cuentas por Cobrar de la factura), clasificando
+        // mal un ingreso que no tiene nada que ver con esa cartera.
+        if (docsSel.length > 0 && manualCon.length > 0) {
+            const sinCuenta = manualCon.find(d => !d.id_cuenta);
+            if (sinCuenta) {
+                Swal.fire('Falta cuenta contable', `Indique la cuenta contable de la línea "${sinCuenta.descripcion || 'Otros conceptos'}": al combinarla con un documento (factura, recibo, etc.) no se puede asumir una cuenta por defecto.`, 'warning');
                 return;
             }
-            sel.forEach(s => {
-                if (Array.isArray(s.items) && s.items.length > 0) {
-                    // Un renglón por ítem cobrado (mismo documento de referencia; el saldo se calcula por SUMA)
-                    s.items.forEach(it => {
-                        if ((it.cobrado || 0) <= 0) return;
-                        const tItem = it.total || it.cobrado;
-                        data.detalles.push({
-                            tipo_documento:          s.tipo_documento || 'FACTURA',
-                            id_referencia_documento: s.id,
-                            numero_documento:        s.numero,
-                            fecha_documento:         s.fecha || '',
-                            descripcion:             `${s.numero} · ${it.desc}`,
-                            monto_documento:         tItem,
-                            saldo_anterior:          tItem,
-                            monto_cobrado:           it.cobrado,
-                            saldo_actual:            Math.max(0, tItem - it.cobrado)
-                        });
-                    });
-                } else {
+        }
+
+        manualCon.forEach(d => {
+            data.detalles.push({
+                tipo_documento: 'OTRO',
+                descripcion: d.descripcion,
+                monto_documento: d.monto,
+                saldo_anterior: d.monto,
+                monto_cobrado: d.monto,
+                saldo_actual: 0,
+                id_cuenta_contable: d.id_cuenta || null
+            });
+        });
+
+        docsSel.forEach(s => {
+            if (Array.isArray(s.items) && s.items.length > 0) {
+                // Un renglón por ítem cobrado (mismo documento de referencia; el saldo se calcula por SUMA)
+                s.items.forEach(it => {
+                    if ((it.cobrado || 0) <= 0) return;
+                    const tItem = it.total || it.cobrado;
                     data.detalles.push({
                         tipo_documento:          s.tipo_documento || 'FACTURA',
                         id_referencia_documento: s.id,
                         numero_documento:        s.numero,
                         fecha_documento:         s.fecha || '',
-                        monto_documento:         s.monto_doc,
-                        saldo_anterior:          s.saldo_ant,
-                        monto_cobrado:           s.cobrado,
-                        saldo_actual:            s.saldo_ant - s.cobrado
+                        descripcion:             `${s.numero} · ${it.desc}`,
+                        monto_documento:         tItem,
+                        saldo_anterior:          tItem,
+                        monto_cobrado:           it.cobrado,
+                        saldo_actual:            Math.max(0, tItem - it.cobrado)
                     });
-                }
-            });
-        } else {
-            // Filtrar conceptos en blanco
-            const finalDets = detalleManual.filter(d => d.descripcion.trim() !== '' || d.monto > 0);
-            if (finalDets.length === 0) {
-                Swal.fire('Detalles Vacíos', 'Debe registrar al menos un concepto y monto válido.', 'warning');
-                return;
-            }
-
-            // Validar montos positivos
-            if (finalDets.some(d => d.monto <= 0)) {
-                Swal.fire('Atención', 'Todos los montos en la cuadrícula deben ser superiores a cero.', 'warning');
-                return;
-            }
-
-            finalDets.forEach(d => {
-                data.detalles.push({
-                    tipo_documento: 'OTRO',
-                    descripcion: d.descripcion,
-                    monto_documento: d.monto,
-                    saldo_anterior: d.monto,
-                    monto_cobrado: d.monto,
-                    saldo_actual: 0,
-                    id_cuenta_contable: d.id_cuenta || null
                 });
-            });
-        }
+            } else {
+                data.detalles.push({
+                    tipo_documento:          s.tipo_documento || 'FACTURA',
+                    id_referencia_documento: s.id,
+                    numero_documento:        s.numero,
+                    fecha_documento:         s.fecha || '',
+                    monto_documento:         s.monto_doc,
+                    saldo_anterior:          s.saldo_ant,
+                    monto_cobrado:           s.cobrado,
+                    saldo_actual:            s.saldo_ant - s.cobrado
+                });
+            }
+        });
 
         // Sum total
         data.monto_total = data.detalles.reduce((a, b) => a + b.monto_cobrado, 0);
@@ -1934,18 +1919,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         // ── Validar fecha de emisión vs fechas de documentos ──────────────────
-        if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(tipo)) {
-            for (const d of data.detalles) {
-                if (d.fecha_documento && data.fecha_emision < d.fecha_documento) {
-                    const fEmision  = data.fecha_emision.split('-').reverse().join('/');
-                    const fDoc      = d.fecha_documento.split('-').reverse().join('/');
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Fecha inválida',
-                        html: `La fecha de emisión <strong>${fEmision}</strong> no puede ser anterior a la fecha del documento <strong>${d.numero_documento}</strong> (${fDoc}).`
-                    });
-                    return;
-                }
+        for (const d of docsSel) {
+            if (d.fecha && data.fecha_emision < d.fecha) {
+                const fEmision  = data.fecha_emision.split('-').reverse().join('/');
+                const fDoc      = d.fecha.split('-').reverse().join('/');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Fecha inválida',
+                    html: `La fecha de emisión <strong>${fEmision}</strong> no puede ser anterior a la fecha del documento <strong>${d.numero}</strong> (${fDoc}).`
+                });
+                return;
             }
         }
 
@@ -2148,75 +2131,67 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     fecha_cobro: p.fecha_cobro
                 }));
 
-                if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
-                    document.getElementById('m-input-id-cliente').value = ing.id_cliente || '';
-                    document.getElementById('m-block-facturas').classList.remove('d-none');
-                    document.getElementById('m-block-otros').classList.add('d-none');
+                // Documentos (Factura/Recibo/Factura reembolso) y "Otros conceptos" ya no son
+                // excluyentes: un ingreso guardado puede traer ambos a la vez. Se separan por
+                // tipo_documento y se hidratan los dos bloques juntos.
+                document.getElementById('m-input-id-cliente').value = ing.id_cliente || '';
 
-                    // Reconstruir docPendientes agrupando por documento (varias filas = cobro por ítems)
-                    docPendientes = [];
-                    const _grupos = {};
-                    (ing.detalles || []).forEach(d => {
-                        const tipoDoc = d.tipo_documento || 'FACTURA';
-                        const key = tipoDoc + ':' + d.id_referencia_documento;
-                        const prefItem = (d.numero_documento || '') + ' · ';
-                        const esItem = (d.descripcion || '').startsWith(prefItem);
-                        if (!_grupos[key]) {
-                            _grupos[key] = {
-                                id:             d.id_referencia_documento,
-                                tipo_documento: tipoDoc,
-                                numero:         d.numero_documento,
-                                fecha:          d.fecha_documento || '',
-                                cliente_nombre: d.cliente_nombre || '',
-                                monto_doc:      0,
-                                saldo_ant:      0,
-                                cobrado:        0,
-                                items:          [],
-                                _hasItems:      false,
-                                seleccionado:   true
-                            };
-                            docPendientes.push(_grupos[key]);
-                        }
-                        const g = _grupos[key];
-                        g.monto_doc += parseFloat(d.monto_documento || 0);
-                        g.saldo_ant += parseFloat(d.saldo_anterior || 0);
-                        g.cobrado   += parseFloat(d.monto_cobrado || 0);
-                        if (esItem) {
-                            g._hasItems = true;
-                            g.items.push({ desc: (d.descripcion || '').slice(prefItem.length) || d.numero_documento, cobrado: parseFloat(d.monto_cobrado || 0), total: parseFloat(d.monto_documento || 0) });
-                        }
-                        if (d.id_cliente) clientesCargados[d.id_cliente] = d.cliente_nombre || '';
-                    });
-                    // Los documentos sin renglones de ítem se muestran como documento simple
-                    docPendientes.forEach(g => { if (!g._hasItems) g.items = null; delete g._hasItems; });
-                    actualizarInfoClientesCargados();
-                    renderDetalles();
-                    renderPagos();
-                    recalcularTotales();
-
-                    // Si está anulado, forzar desactivación de inputs tras renderizado dinámico
-                    if (esAnulado) {
-                        document.querySelectorAll('.chk-sel-doc, .input-monto-cobrar').forEach(el => el.disabled = true);
-                    }
-
-                } else {
-                    // Modo GENERAL Conceptos (Ya el select de concepto se hidrató al inicio del fetch)
-                    document.getElementById('m-block-facturas').classList.add('d-none');
-                    document.getElementById('m-block-otros').classList.remove('d-none');
-                    
-                    detalleManual = (ing.detalles || []).map(d => ({
+                detalleManual = (ing.detalles || [])
+                    .filter(d => (d.tipo_documento || 'OTRO') === 'OTRO')
+                    .map(d => ({
                         descripcion: d.descripcion || 'Detalle',
                         monto: parseFloat(d.monto_cobrado),
                         id_cuenta: d.id_cuenta_contable ? parseInt(d.id_cuenta_contable) : 0,
                         cuenta_codigo: d.cuenta_codigo || '',
                         cuenta_nombre: d.cuenta_nombre || ''
                     }));
-                    
-                    renderDetalles();
-                    renderPagos();
-                    recalcularTotales();
+
+                // Reconstruir docPendientes agrupando por documento (varias filas = cobro por ítems)
+                docPendientes = [];
+                const _grupos = {};
+                (ing.detalles || []).filter(d => (d.tipo_documento || 'OTRO') !== 'OTRO').forEach(d => {
+                    const tipoDoc = d.tipo_documento || 'FACTURA';
+                    const key = tipoDoc + ':' + d.id_referencia_documento;
+                    const prefItem = (d.numero_documento || '') + ' · ';
+                    const esItem = (d.descripcion || '').startsWith(prefItem);
+                    if (!_grupos[key]) {
+                        _grupos[key] = {
+                            id:             d.id_referencia_documento,
+                            tipo_documento: tipoDoc,
+                            numero:         d.numero_documento,
+                            fecha:          d.fecha_documento || '',
+                            cliente_nombre: d.cliente_nombre || '',
+                            monto_doc:      0,
+                            saldo_ant:      0,
+                            cobrado:        0,
+                            items:          [],
+                            _hasItems:      false,
+                            seleccionado:   true
+                        };
+                        docPendientes.push(_grupos[key]);
+                    }
+                    const g = _grupos[key];
+                    g.monto_doc += parseFloat(d.monto_documento || 0);
+                    g.saldo_ant += parseFloat(d.saldo_anterior || 0);
+                    g.cobrado   += parseFloat(d.monto_cobrado || 0);
+                    if (esItem) {
+                        g._hasItems = true;
+                        g.items.push({ desc: (d.descripcion || '').slice(prefItem.length) || d.numero_documento, cobrado: parseFloat(d.monto_cobrado || 0), total: parseFloat(d.monto_documento || 0) });
+                    }
+                    if (d.id_cliente) clientesCargados[d.id_cliente] = d.cliente_nombre || '';
+                });
+                // Los documentos sin renglones de ítem se muestran como documento simple
+                docPendientes.forEach(g => { if (!g._hasItems) g.items = null; delete g._hasItems; });
+                actualizarInfoClientesCargados();
+                renderDetalles();
+                renderPagos();
+                recalcularTotales();
+
+                // Si está anulado, forzar desactivación de inputs tras renderizado dinámico
+                if (esAnulado) {
+                    document.querySelectorAll('.chk-sel-doc, .input-monto-cobrar').forEach(el => el.disabled = true);
                 }
-                
+
                 // Bloquear adición de cobros si está anulado
                 if (esAnulado) {
                     document.getElementById('m-add-cobro-forma').disabled = true;
@@ -2807,24 +2782,7 @@ window.onOpcionCreada = function (id, nombre, comportamiento) {
         btn.dataset.id = id;
         btn.dataset.comportamiento = comportamiento;
         btn.textContent = nombre;
-        btn.addEventListener('click', function () {
-            if (sel.value == this.dataset.id) return;
-            const hayDatos = docPendientes.length > 0
-                          || detalleManual.some(d => d.descripcion.trim() !== '' || parseFloat(d.monto) > 0);
-            const aplicar = () => { sel.value = this.dataset.id; manejarCambioConceptoIngreso(sel); };
-            if (hayDatos) {
-                Swal.fire({
-                    title: '¿Cambiar concepto?',
-                    text: 'Al cambiar el concepto se eliminará toda la información de detalle que has agregado. ¿Deseas continuar?',
-                    icon: 'warning', showCancelButton: true,
-                    confirmButtonColor: '#d33', cancelButtonColor: '#6c757d',
-                    confirmButtonText: '<i class="bi bi-trash3 me-1"></i> Sí, cambiar',
-                    cancelButtonText: 'Cancelar'
-                }).then(r => { if (r.isConfirmed) aplicar(); });
-            } else {
-                aplicar();
-            }
-        });
+        btn.addEventListener('click', function () { ingOnClickConceptoBtn(this); });
         // Insertar antes del selector general para conservar el orden
         if (selGen) grupo.insertBefore(btn, selGen); else grupo.appendChild(btn);
     }

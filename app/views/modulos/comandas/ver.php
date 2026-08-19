@@ -151,6 +151,17 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <div class="cm-lineas" id="cm-lineas"></div>
             <div id="cm-grupos" class="px-3"></div>
             <div class="cm-totales">
+                <div class="row"><div><span class="text-muted">Subtotal</span><span id="cm-subtotal">$0.00</span></div></div>
+                <div id="cm-impuestos"></div>
+                <div class="row d-none" id="cm-fila-servicio">
+                    <div>
+                        <span class="text-muted">
+                            <span id="cm-servicio-label">Servicio</span>
+                            <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline d-none" id="cm-btn-quitar-servicio" style="font-size:.72rem;"></button>
+                        </span>
+                        <span id="cm-servicio">$0.00</span>
+                    </div>
+                </div>
                 <div class="row total"><div><span>Total</span><span id="cm-total">$0.00</span></div></div>
             </div>
             <?php if (!empty($perm['crear']) && ($comanda['estado'] ?? '') === 'abierta'): ?>
@@ -193,7 +204,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         </div>
         <div id="cb-lista-lineas" class="mb-3"></div>
         <div class="d-flex justify-content-between fw-semibold border-top pt-2">
-          <span>Total seleccionado</span><span id="cb-total-sel">$0.00</span>
+          <span>Total seleccionado <small class="text-muted fw-normal">(IVA incluido)</small></span><span id="cb-total-sel">$0.00</span>
         </div>
       </div>
       <div class="modal-footer">
@@ -395,12 +406,27 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const OBLIGATORIO_LOTES = <?= $toBool($empresaConfig['obligatorio_lotes'] ?? false) ? 'true' : 'false' ?>;
     const OBLIGATORIO_CADUCIDAD = <?= $toBool($empresaConfig['obligatorio_caducidad'] ?? false) ? 'true' : 'false' ?>;
     const OBLIGATORIO_NUP = <?= $toBool($empresaConfig['obligatorio_nup'] ?? false) ? 'true' : 'false' ?>;
+    // Recargo por servicio (el "10%" de restaurantes). Se cobra como PROPINA en
+    // el comprobante: se calcula sobre la base sin impuestos y se suma después
+    // del IVA, que es como lo admite el XML del SRI (campo <propina>, topado al
+    // 10% del subtotal).
+    // El modo lo fija el establecimiento: 'no' | 'obligatorio' | 'opcional'.
+    // Solo en 'opcional' el mesero puede quitarlo de una cuenta concreta.
+    // servicio_efectivo lo resuelve ComandaService: ya trae aplicadas las reglas
+    // (obligatorio manda sobre el estado de la comanda, apagado gana siempre),
+    // así que 0 significa "no se cobra" sin más análisis en la pantalla.
+    const SERVICIO_MODO = <?= json_encode((string) ($empresaConfig['servicio_restaurante'] ?? 'no')) ?>;
+    let porcentajeServicio = <?= (float) ($comanda['servicio_efectivo'] ?? 0) ?>;
+    let aplicaServicio = porcentajeServicio > 0;
+
     // Venta a Consumidor Final: mismo límite configurado en empresa → Facturación (PosVentaService lo vuelve a exigir al cobrar).
     const LIMITE_CONSUMIDOR_FINAL = <?= (float) ($empresaConfig['valor_limite_consumidor_final'] ?? 50) ?>;
     const $grid = document.getElementById('cm-grid');
     const $buscar = document.getElementById('cm-buscar');
     const $lineas = document.getElementById('cm-lineas');
     const $total = document.getElementById('cm-total');
+    const $subtotal = document.getElementById('cm-subtotal');
+    const $impuestos = document.getElementById('cm-impuestos');
     const $grupos = document.getElementById('cm-grupos');
     let detalles = <?= json_encode($comanda['detalles'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
     let grupos = <?= json_encode($comanda['grupos'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
@@ -423,6 +449,97 @@ $rutaAjax = $base . '/' . $rutaModulo;
     }
     function swalToast(icon, title) {
         Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2200, timerProgressBar: true });
+    }
+
+    // ─── Totales de la comanda ──────────────────────────────────────────────
+    // comanda_detalle.subtotal es la base SIN impuestos, así que el "Total" que
+    // ve el mesero (y el cliente en la cuenta) tiene que sumarle el IVA: es el
+    // valor que se va a cobrar.
+    // El IVA se redondea LÍNEA POR LÍNEA y luego se suma, exactamente como lo
+    // hace PosVentaService::cobrar() al emitir el documento. Agruparlo por
+    // tarifa y redondear el grupo daría a veces un centavo distinto del que
+    // termina en la factura, y esa diferencia la ve el cliente al comparar la
+    // cuenta con su comprobante.
+    // El porcentaje es el informativo de ComandaRepository::getLineas(); al
+    // cobrar, PosVentaService lo resuelve de nuevo desde el producto — esto
+    // muestra, no decide.
+    const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+
+    // El recargo por servicio se calcula sobre la base sin impuestos de ESE
+    // conjunto de líneas, así que al dividir la cuenta cada parte carga el suyo
+    // — igual que PosVentaService, que aplica el porcentaje sobre el subtotal
+    // del documento al emitirlo.
+    function calcularTotales(vivas) {
+        let subtotal = 0, totalImpuestos = 0;
+        const impuestos = {};
+        vivas.forEach(d => {
+            const base = round2(d.subtotal);
+            subtotal = round2(subtotal + base);
+            const pct = parseFloat(d.porcentaje_iva || 0);
+            if (pct > 0) {
+                const lbl = `IVA ${pct}%`;
+                const iva = round2(base * pct / 100);
+                impuestos[lbl] = round2((impuestos[lbl] || 0) + iva);
+                totalImpuestos = round2(totalImpuestos + iva);
+            }
+        });
+        const servicio = (aplicaServicio && porcentajeServicio > 0)
+            ? round2(subtotal * porcentajeServicio / 100)
+            : 0;
+        return { subtotal, impuestos, totalImpuestos, servicio, total: round2(subtotal + totalImpuestos + servicio) };
+    }
+
+    /**
+     * Pie de la comanda: línea del recargo por servicio.
+     * - 'no'          → la fila no existe.
+     * - 'obligatorio' → se ve el valor, sin botón: nadie lo quita desde el salón.
+     * - 'opcional'    → se ve con un enlace para quitarlo/volver a ponerlo. Si
+     *                   está quitado, la fila sigue visible (en gris, con el
+     *                   ofrecimiento de aplicarlo) para que no se olvide.
+     */
+    function renderServicio(valor) {
+        const $fila = document.getElementById('cm-fila-servicio');
+        const $btn = document.getElementById('cm-btn-quitar-servicio');
+        if (!$fila) return;
+
+        const hayServicio = SERVICIO_MODO !== 'no' && (aplicaServicio || SERVICIO_MODO === 'opcional');
+        $fila.classList.toggle('d-none', !hayServicio);
+        if (!hayServicio) return;
+
+        const pct = porcentajeServicio > 0 ? porcentajeServicio : 0;
+        document.getElementById('cm-servicio-label').textContent =
+            aplicaServicio ? `Servicio ${pct}%` : 'Servicio (no aplicado)';
+        document.getElementById('cm-servicio').textContent = money(aplicaServicio ? valor : 0);
+
+        const puedeCambiar = SERVICIO_MODO === 'opcional' && PUEDE_ACTUALIZAR;
+        $btn.classList.toggle('d-none', !puedeCambiar);
+        if (puedeCambiar) {
+            $btn.textContent = aplicaServicio ? 'Quitar' : 'Aplicar';
+            $btn.className = 'btn btn-link btn-sm p-0 ms-1 align-baseline ' + (aplicaServicio ? 'text-danger' : 'text-success');
+            $btn.style.fontSize = '.72rem';
+        }
+    }
+
+    const $btnServicio = document.getElementById('cm-btn-quitar-servicio');
+    if ($btnServicio) {
+        $btnServicio.addEventListener('click', async () => {
+            const nuevo = !aplicaServicio;
+            $btnServicio.disabled = true;
+            try {
+                const fd = new FormData();
+                fd.append('id', ID_COMANDA);
+                fd.append('aplica', nuevo ? '1' : '0');
+                const r = await fetch(AJAX + '/cambiarServicioAjax', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (!d.ok) { swalError(d.error || 'No se pudo cambiar el servicio.'); return; }
+                swalToast('success', d.msg);
+                await refrescarComanda();
+            } catch (e) {
+                swalError('Error de conexión.');
+            } finally {
+                $btnServicio.disabled = false;
+            }
+        });
     }
 
     const ESTADO_LABEL = {
@@ -468,8 +585,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 </div>`;
             }).join('');
         }
-        const total = vivas.reduce((a, d) => a + parseFloat(d.subtotal || 0), 0);
-        $total.textContent = money(total);
+        const t = calcularTotales(vivas);
+        $subtotal.textContent = money(t.subtotal);
+        $impuestos.innerHTML = Object.entries(t.impuestos).map(([lbl, val]) =>
+            `<div class="row"><div><span class="text-muted">${lbl}</span><span>${money(val)}</span></div></div>`).join('');
+        renderServicio(t.servicio);
+        $total.textContent = money(t.total);
         renderGrupos();
         actualizarBadgePendientes();
         actualizarAvisoListos();
@@ -535,7 +656,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         if (!grupos.length) { $grupos.innerHTML = ''; return; }
         $grupos.innerHTML = grupos.map(g => {
             const [label, color] = ESTADO_GRUPO_LABEL[g.estado] || ['—', 'secondary'];
-            const monto = (g.lineas || []).reduce((a, l) => a + parseFloat(l.subtotal || 0), 0);
+            const monto = calcularTotales(g.lineas || []).total; // con IVA: es lo que se le cobra a esa cuenta
             const doc = g.estado === 'cobrado' ? `<div class="doc">${escapeHtml(g.tipo_documento || '')} ${escapeHtml(g.numero_documento || '')}</div>` : '';
             const solicitud = (g.origen === 'qr' && g.estado === 'pendiente')
                 ? `<div class="doc"><i class="bi bi-qrcode me-1"></i>Pedido desde el QR — ${escapeHtml(g.cliente_nombre || '')} (${g.tipo_documento_solicitado === 'FACTURA' ? 'Factura' : 'Recibo'})</div>`
@@ -566,6 +687,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 detalles = d.data.detalles || [];
                 grupos = d.data.grupos || [];
                 solicitaAsistencia = !!d.data.solicita_asistencia;
+                // Otro usuario (o un cambio de configuración) pudo alterar el recargo.
+                porcentajeServicio = parseFloat(d.data.servicio_efectivo || 0);
+                aplicaServicio = porcentajeServicio > 0;
                 renderLineas();
                 if (d.data.estado === 'cerrada') {
                     swalToast('success', 'Cuenta cerrada; la mesa quedó disponible.');
@@ -1044,19 +1168,23 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 const enPreparacion = d.estado_linea === 'preparando';
                 return `
                 <label class="cb-linea${enPreparacion ? ' text-muted' : ''}">
-                    <input type="checkbox" class="form-check-input cb-check" data-id="${d.id}" data-monto="${d.subtotal}" ${enPreparacion ? 'disabled' : 'checked'}>
+                    <input type="checkbox" class="form-check-input cb-check" data-id="${d.id}" ${enPreparacion ? 'disabled' : 'checked'}>
                     <span class="desc">${escapeHtml(d.cantidad)} x ${escapeHtml(d.descripcion)}${enPreparacion ? ' <span class="badge bg-warning-subtle text-warning-emphasis">en preparación</span>' : ''}</span>
-                    <span class="total">${money(d.subtotal)}</span>
+                    <span class="total">${money(calcularTotales([d]).total)}</span>
                 </label>`;
             }).join('');
         }
         recalcularSeleccion();
     }
 
+    /** Líneas realmente marcadas en el modal de cobro (para totalizarlas con el mismo criterio que el pie de la comanda). */
+    function lineasSeleccionadasCobro() {
+        const ids = new Set(Array.from($cbLista.querySelectorAll('.cb-check:checked')).map(c => String(c.dataset.id)));
+        return detalles.filter(d => ids.has(String(d.id)));
+    }
+
     function recalcularSeleccion() {
-        const total = Array.from($cbLista.querySelectorAll('.cb-check:checked'))
-            .reduce((a, c) => a + parseFloat(c.dataset.monto || 0), 0);
-        $cbTotalSel.textContent = money(total);
+        $cbTotalSel.textContent = money(calcularTotales(lineasSeleccionadasCobro()).total);
     }
 
     function actualizarModoSplit() {
@@ -1167,7 +1295,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
     document.getElementById('cb-btn-armar').addEventListener('click', async () => {
         const ids = Array.from($cbLista.querySelectorAll('.cb-check:checked')).map(c => c.dataset.id);
         if (!ids.length) { swalError('Selecciona al menos un ítem.'); return; }
-        const monto = Array.from($cbLista.querySelectorAll('.cb-check:checked')).reduce((a, c) => a + parseFloat(c.dataset.monto || 0), 0);
+        const monto = calcularTotales(lineasSeleccionadasCobro()).total;
         const esPartes = document.getElementById('cb-modo-partes').checked;
 
         if (esPartes) {
@@ -1502,17 +1630,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         if (!vivas.length) return;
         const fmt = (n) => parseFloat(n || 0).toFixed(2);
 
-        let subtotal = 0, totalIva = 0;
-        const impMap = {};
-        vivas.forEach(d => {
-            const base = parseFloat(d.subtotal || 0);
-            subtotal += base;
-            const pct = parseFloat(d.porcentaje_iva || 0);
-            const lbl = `IVA ${pct}%`;
-            impMap[lbl] = (impMap[lbl] || 0) + (base * pct / 100);
-        });
-        Object.values(impMap).forEach(v => totalIva += v);
-        const total = subtotal + totalIva;
+        const { subtotal, impuestos: impMap, servicio, total } = calcularTotales(vivas);
 
         const lineas = vivas.map(d => {
             const pct = parseFloat(d.porcentaje_iva || 0);
@@ -1560,6 +1678,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <table class="totales">
                 <tr><td>Subtotal</td><td style="text-align:right;">$${fmt(subtotal)}</td></tr>
                 ${ivaLineas}
+                ${servicio > 0 ? `<tr><td>Servicio ${porcentajeServicio}%</td><td style="text-align:right;">$${fmt(servicio)}</td></tr>` : ''}
                 <tr><td>TOTAL A PAGAR</td><td style="text-align:right;">$${fmt(total)}</td></tr>
             </table>
             <hr class="sep">

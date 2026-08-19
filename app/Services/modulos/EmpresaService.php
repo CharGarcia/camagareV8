@@ -35,6 +35,9 @@ class EmpresaService
                 // Las columnas aún no existen — migración pendiente
                 // El sistema funciona con valores por defecto hasta que se ejecute la migración
             }
+            // Recargo por servicio: consulta aparte porque se tolera que su
+            // migración todavía no esté (ver getConfigServicioRestaurante).
+            $empresa = array_merge($empresa ?? [], $this->repository->getConfigServicioRestaurante($idEstPrincipal));
         }
 
         // Suscripción del sistema — regla de resolución:
@@ -424,7 +427,40 @@ class EmpresaService
             $data['id_forma_pago_sri_def'] = 'NULL';
         }
 
-        $fields = array_merge($boolFields, ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'calculo_iva_facturacion', 'factura_agrupar_items']);
+        $fields = array_merge($boolFields, [
+            'valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'calculo_iva_facturacion',
+            'factura_agrupar_items',
+        ]);
+
+        // Recargo por servicio del POS Restaurante: se emite como propina, y la
+        // Ficha Técnica del SRI la topa al 10% del subtotal — de ahí el máximo.
+        // Solo se guarda si la migración ya creó las columnas; si no, guardar el
+        // resto de la configuración de Facturación seguiría funcionando igual.
+        if ($this->repository->tieneColumnasServicioRestaurante()) {
+            $modoServicio = strtolower(trim((string) ($data['servicio_restaurante'] ?? 'no')));
+            $data['servicio_restaurante'] = in_array($modoServicio, ['obligatorio', 'opcional'], true) ? $modoServicio : 'no';
+            // El recargo se emite EN el campo de propina del comprobante: si ese
+            // campo está desactivado, no hay dónde ponerlo. Se guarda apagado en
+            // vez de dejar una configuración que la operación ignoraría.
+            if ($data['mostrar_propina_factura'] !== 'true') {
+                $data['servicio_restaurante'] = 'no';
+            }
+            $fields[] = 'servicio_restaurante';
+
+            // El porcentaje solo se toca si vino en el formulario: con la
+            // propina apagada el campo va deshabilitado y el navegador no lo
+            // envía, y no hay razón para pisar el valor que el local tenía
+            // configurado.
+            if (isset($data['servicio_restaurante_porcentaje']) && $data['servicio_restaurante_porcentaje'] !== '') {
+                $pctServicio = (float) $data['servicio_restaurante_porcentaje'];
+                // Sin recargo no hay porcentaje que guardar: se deja en 0 para
+                // que lo almacenado diga lo mismo que la pantalla.
+                $data['servicio_restaurante_porcentaje'] = $data['servicio_restaurante'] === 'no'
+                    ? 0.0
+                    : round(max(0.0, min(10.0, $pctServicio)), 2);
+                $fields[] = 'servicio_restaurante_porcentaje';
+            }
+        }
         $filtered = array_intersect_key($data, array_flip($fields));
         return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
     }

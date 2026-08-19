@@ -46,6 +46,25 @@ class DocumentoAutomatedRegisterService
     /** XML recibido TAL CUAL (sobre de autorización del SRI); es lo que se guarda en detalle_xml. */
     private ?string $xmlOriginal = null;
 
+    private ?\App\Services\modulos\ComprasService $comprasService = null;
+
+    /**
+     * Compras que quedaron pendientes de aprobación en esta corrida.
+     *
+     * El registro desde el SRI se hace en LOTE (un XML por vuelta del bucle en
+     * DescargasSriController), así que notificar dentro de insertarCompra()
+     * mandaría un correo por comprobante. Se acumulan aquí y el llamador cierra
+     * con notificarComprasPendientes(): un solo correo con todas.
+     */
+    private array $comprasPendientes = [];
+
+    /**
+     * Desactiva la aprobación para esta instancia. Lo usan las importaciones de
+     * histórico (ImportarAntiguo), donde los documentos ya ocurrieron: someterlos
+     * a aprobación los dejaría sin asiento y sin poder pagarse.
+     */
+    public bool $omitirAprobacion = false;
+
     public function __construct()
     {
         $this->clienteRepo = new ClienteRepository();
@@ -332,11 +351,17 @@ class DocumentoAutomatedRegisterService
                 // Generar retención automática
                 $msgRet = " | " . $this->generarRetencionAutomatica($idCompra, $idProv, $idEmpresa, $idUsuario, $xml, $esGastoPersonal);
                 
-                // Generar egreso automático si aplica (Solo Facturas emitidas a la empresa)
-                $totalCompra = (float)($info->importeTotal ?? 0);
-                $numDoc = (string)$it->estab . '-' . (string)$it->ptoEmi . '-' . (string)$it->secuencial;
-                $fechaEmisionDoc = $this->formatearFecha((string)$info->fechaEmision);
-                $msgEgreso = $this->generarEgresoAutomatico($idCompra, $idProv, $idEmpresa, $idUsuario, $totalCompra, $numDoc, $fechaEmisionDoc);
+                // Generar egreso automático si aplica (Solo Facturas emitidas a la empresa).
+                // Si la compra quedó pendiente de aprobación NO se paga sola: el
+                // egreso es justamente lo que el checkpoint retiene hasta autorizar.
+                if ($this->esComprapendiente($idCompra)) {
+                    $msgEgreso = ' | Pendiente de aprobación: el pago se registrará cuando se apruebe.';
+                } else {
+                    $totalCompra = (float)($info->importeTotal ?? 0);
+                    $numDoc = (string)$it->estab . '-' . (string)$it->ptoEmi . '-' . (string)$it->secuencial;
+                    $fechaEmisionDoc = $this->formatearFecha((string)$info->fechaEmision);
+                    $msgEgreso = $this->generarEgresoAutomatico($idCompra, $idProv, $idEmpresa, $idUsuario, $totalCompra, $numDoc, $fechaEmisionDoc);
+                }
             }
 
             $msg = $esGastoPersonal ? "Gasto Personal registrado con éxito." : "Compra registrada con éxito.";
@@ -446,6 +471,67 @@ class DocumentoAutomatedRegisterService
         }
     }
 
+    // ─── Aprobación de compras (checkpoint 'aprobacion_compras') ──────────────
+
+    private function comprasService(): \App\Services\modulos\ComprasService
+    {
+        if ($this->comprasService === null) {
+            $this->comprasService = new \App\Services\modulos\ComprasService();
+        }
+        return $this->comprasService;
+    }
+
+    /** ¿Esta compra recién insertada quedó esperando aprobación? */
+    private function esComprapendiente(int $idCompra): bool
+    {
+        foreach ($this->comprasPendientes as $c) {
+            if ((int) $c['id'] === $idCompra) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Envía UN correo con todas las compras que quedaron pendientes en esta
+     * corrida y vacía la lista. El llamador la invoca al terminar de procesar el
+     * lote; si no quedó ninguna pendiente no hace nada.
+     *
+     * @return int Cuántas compras se reportaron.
+     */
+    public function notificarComprasPendientes(): int
+    {
+        if (empty($this->comprasPendientes)) return 0;
+
+        $pendientes = $this->comprasPendientes;
+        $this->comprasPendientes = [];
+
+        try {
+            $this->comprasService()->notificarLotePendiente($pendientes);
+        } catch (\Throwable $e) {
+            // El correo no puede tumbar un registro que ya se guardó: las compras
+            // quedan igualmente pendientes y visibles en el listado.
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+        }
+
+        return count($pendientes);
+    }
+
+    /**
+     * Red de seguridad: hay ocho sitios que registran comprobantes en lote (la
+     * pantalla de Descargas SRI, el agente automático, la API v1…). En vez de
+     * exigirle a cada uno que recuerde cerrar, el aviso sale también al liberar
+     * el servicio. Es idempotente: notificarComprasPendientes() vacía la lista,
+     * así que llamarlo antes a mano —cuando conviene enviarlo dentro de la
+     * petición— no duplica el correo.
+     */
+    public function __destruct()
+    {
+        try {
+            $this->notificarComprasPendientes();
+        } catch (\Throwable $e) {
+            // Un destructor nunca debe propagar: el registro ya está guardado.
+        }
+    }
+
     private function insertarCompra(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario, string $ambiente, bool $esGastoPersonal = false, ?int $idSustento = null): int
     {
         $it          = $xml->infoTributaria;
@@ -519,11 +605,33 @@ class DocumentoAutomatedRegisterService
                 $motivoDoc     = trim((string)($info->motivo ?? '')) ?: null;
             }
 
+            // Aprobación de compras (checkpoint 'aprobacion_compras'): si la
+            // empresa lo exige, la compra nace pendiente también cuando entra
+            // por el SRI. El correo NO se manda aquí (esto corre en lote): se
+            // acumula y lo envía notificarComprasPendientes() al cerrar.
+            // Solo se someten a aprobación los documentos que crean obligación de
+            // pago: factura (01) y liquidación de compra (03). Las notas de
+            // crédito (04) y débito (05) viven en esta misma tabla pero son
+            // ajustes del saldo, y dejarlas pendientes descuadraría la cartera
+            // (los cálculos de saldo restan las NC sin mirar su estado).
+            $aprobableAprob = in_array($codDoc, ['01', '03'], true);
+
+            // Se usa $total (resuelto arriba según el tipo de documento) y no
+            // $info->importeTotal: en una nota de crédito el monto vive en
+            // valorModificacion y en una de débito en valorTotal, así que
+            // importeTotal daría 0 y ninguna alcanzaría el monto mínimo.
+            $requiereAprob = $aprobableAprob
+                && !$this->omitirAprobacion
+                && $this->comprasService()->getConfigAprobacion($idEmpresa, (float) $total)['requiere'];
+
             // 1. Cabecera
             $idCompra = $this->compraRepo->insertCabecera([
                 'id_empresa' => $idEmpresa,
                 'id_proveedor' => $idProv,
                 'id_usuario' => $idUsuario,
+                'estado' => $requiereAprob
+                    ? \App\Services\modulos\ComprasService::ESTADO_PENDIENTE
+                    : \App\Services\modulos\ComprasService::ESTADO_REGISTRADO,
                 'id_sustento_tributario' => $idSustento,
                 'tipo_comprobante' => $codDoc,
                 'documento_modificado' => $docModificado,
@@ -656,6 +764,15 @@ class DocumentoAutomatedRegisterService
             // 5. Persistir XML original
             $db->prepare("UPDATE compras_cabecera SET detalle_xml = ? WHERE id = ?")
                ->execute([$xmlStr, $idCompra]);
+
+            // 6. Aprobación pendiente: token para el enlace del correo. La
+            //    notificación se acumula y sale una sola al cerrar el lote.
+            if ($requiereAprob) {
+                $token = bin2hex(random_bytes(24));
+                $db->prepare("UPDATE compras_cabecera SET token_aprobacion = ? WHERE id = ?")
+                   ->execute([$token, $idCompra]);
+                $this->comprasPendientes[] = ['id' => $idCompra, 'id_empresa' => $idEmpresa, 'token' => $token];
+            }
 
             $db->commit();
             return $idCompra;

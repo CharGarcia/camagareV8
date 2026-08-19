@@ -773,6 +773,10 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND cv.id_vendedor = :id_vendedor";
             $params[':id_vendedor'] = (int) $filtros['id_vendedor'];
         }
+        if (!empty($filtros['id_responsable_traslado'])) {
+            $where .= " AND cv.id_responsable_traslado = :id_responsable_traslado";
+            $params[':id_responsable_traslado'] = (int) $filtros['id_responsable_traslado'];
+        }
         if (!empty($filtros['fecha_desde'])) {
             $where .= " AND cv.fecha_emision >= :fecha_desde";
             $params[':fecha_desde'] = $filtros['fecha_desde'];
@@ -816,6 +820,7 @@ class ReporteInventarioRepository extends BaseRepository
                 SELECT cv.id AS id_consignacion, cv.secuencial, cv.fecha_emision, cv.estado,
                        cv.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                        cv.id_vendedor, COALESCE(v.nombre, '-') AS vendedor_nombre,
+                       cv.id_responsable_traslado, COALESCE(rt.nombre, '-') AS responsable_traslado_nombre,
                        cvd.id AS id_detalle, cvd.id_producto,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        cvd.id_bodega, COALESCE(bo.nombre, '-') AS bodega_nombre,
@@ -835,6 +840,7 @@ class ReporteInventarioRepository extends BaseRepository
                 LEFT JOIN bodegas bo ON bo.id = cvd.id_bodega
                 INNER JOIN clientes c ON c.id = cv.id_cliente
                 LEFT JOIN vendedores v ON v.id = cv.id_vendedor
+                LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
                 WHERE {$where}
             ) base
         ";
@@ -871,6 +877,7 @@ class ReporteInventarioRepository extends BaseRepository
                        MAX(s.estado) AS estado, MAX(s.id_cliente) AS id_cliente,
                        MAX(s.cliente_nombre) AS cliente_nombre, MAX(s.cliente_identificacion) AS cliente_identificacion,
                        MAX(s.vendedor_nombre) AS vendedor_nombre,
+                       MAX(s.responsable_traslado_nombre) AS responsable_traslado_nombre,
                        COUNT(DISTINCT s.id_producto) AS cantidad_productos,
                        SUM(s.saldo) AS saldo, SUM(s.valor_saldo) AS valor_saldo
                 FROM ({$base}) s
@@ -892,6 +899,38 @@ class ReporteInventarioRepository extends BaseRepository
                 ORDER BY s.producto_nombre ASC";
         $st = $this->db->prepare($sql);
         $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Documentos de RETORNO que explican la cantidad "Retornado" de una línea de consignación puntual. */
+    public function getRetornosDeLineaConsignacion(int $idEmpresa, int $idDetalleConsignacion): array
+    {
+        $sql = "SELECT rc.id, rc.serie, rc.secuencial, rc.fecha_retorno, rc.estado, rc.motivo,
+                       rcd.cantidad, rcd.total
+                FROM retornos_cv_detalles rcd
+                INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno
+                WHERE rcd.id_consignacion_detalle = :id_detalle
+                  AND rcd.id_empresa = :id_empresa AND rcd.eliminado = false
+                  AND rc.eliminado = false AND rc.estado = 'Emitida'
+                ORDER BY rc.fecha_retorno ASC, rc.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_detalle' => $idDetalleConsignacion, ':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Documentos de FACTURA que explican la cantidad "Facturado" de una línea de consignación puntual. */
+    public function getFacturasDeLineaConsignacion(int $idEmpresa, int $idDetalleConsignacion): array
+    {
+        $sql = "SELECT cf.id, cf.id_factura, cf.serie, cf.secuencial, cf.fecha_emision, cf.estado,
+                       cfd.cantidad, cfd.total
+                FROM consignaciones_facturas_detalles cfd
+                INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                WHERE cfd.id_consignacion_detalle = :id_detalle
+                  AND cfd.id_empresa = :id_empresa AND cfd.eliminado = false
+                  AND cf.eliminado = false AND cf.estado = 'facturada'
+                ORDER BY cf.fecha_emision ASC, cf.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_detalle' => $idDetalleConsignacion, ':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

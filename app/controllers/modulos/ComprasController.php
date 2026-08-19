@@ -28,6 +28,95 @@ class ComprasController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // APROBACIÓN DE COMPRAS (checkpoint 'aprobacion_compras')
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Badge del estado de la compra. Vive aquí porque lo pintan dos sitios (la
+     * carga inicial de la vista y searchAjax) y tienen que coincidir.
+     */
+    public static function badgeEstado(?string $estado): string
+    {
+        $estado = $estado ?: 'registrado';
+
+        [$clase, $etiqueta] = match ($estado) {
+            ComprasService::ESTADO_PENDIENTE => ['bg-warning bg-opacity-10 text-warning border-warning', 'Pend. aprobación'],
+            ComprasService::ESTADO_RECHAZADA => ['bg-danger bg-opacity-10 text-danger border-danger',    'Rechazada'],
+            'registrado'                     => ['bg-success bg-opacity-10 text-success border-success', 'Registrado'],
+            'anulado'                        => ['bg-danger bg-opacity-10 text-danger border-danger',    'Anulado'],
+            'borrador'                       => ['bg-secondary bg-opacity-10 text-secondary border-secondary', 'Borrador'],
+            default                          => ['bg-primary bg-opacity-10 text-primary border-primary', ucfirst($estado)],
+        };
+
+        return '<span class="badge ' . $clase . ' border border-opacity-25">' . htmlspecialchars($etiqueta, ENT_QUOTES, 'UTF-8') . '</span>';
+    }
+
+    /**
+     * Corta cualquier acción que dependa de una compra ya autorizada (pagarla,
+     * procesar su inventario). Mientras espera aprobación, la compra existe como
+     * documento recibido pero no produce efectos.
+     */
+    private function bloquearSiPendienteAprobacion(int $idCompra, int $idEmpresa, ?array $compra = null): void
+    {
+        $compra = $compra ?? $this->repository->getPorId($idCompra, $idEmpresa);
+        $estado = $compra['estado'] ?? '';
+
+        if ($estado === ComprasService::ESTADO_PENDIENTE) {
+            throw new \Exception('La compra está pendiente de aprobación. Debe ser aprobada antes de continuar.');
+        }
+        if ($estado === ComprasService::ESTADO_RECHAZADA) {
+            throw new \Exception('La compra fue rechazada y no puede procesarse.');
+        }
+    }
+
+    public function aprobarAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+        $idCompra  = (int) ($_POST['id_compra'] ?? 0);
+
+        try {
+            $res = $this->service->aprobarCompra($idCompra, $idEmpresa, $idUsuario, false, $nivel);
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => 'Compra aprobada.',
+                'aviso'   => $res['aviso_asiento'] ?? null,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo aprobar la compra.']);
+        }
+    }
+
+    public function rechazarAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+        $idCompra  = (int) ($_POST['id_compra'] ?? 0);
+        $motivo    = trim((string) ($_POST['motivo'] ?? ''));
+
+        try {
+            $this->service->rechazarCompra($idCompra, $idEmpresa, $idUsuario, $motivo, false, $nivel);
+            echo json_encode(['ok' => true, 'mensaje' => 'Compra rechazada.']);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo rechazar la compra.']);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // INDEX
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -55,9 +144,16 @@ class ComprasController extends BaseModuloController
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = !empty($establecimientos) ? $empresaModel->getPuntosEmision((int)$establecimientos[0]['id']) : [];
 
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+
         $this->viewWithLayout('layouts.main', 'modulos/compras/index', [
             'titulo'             => 'Compras',
             'perm'               => $perm,
+            // Aprobación de compras (checkpoint 'aprobacion_compras')
+            'esAprobador'        => $this->service->esAprobador((int) $_SESSION['id_usuario'], $idEmpresa, $nivel),
+            'aprobadoresNombres' => $this->service->getAprobadoresNombres($idEmpresa),
+            'pendientesAprob'    => $this->service->contarPendientesAprobacion($idEmpresa),
+            'nivelUsuario'       => $nivel,
             'rows'               => $result['rows'],
             'total'              => $total,
             'page'               => $page,
@@ -138,14 +234,7 @@ class ComprasController extends BaseModuloController
                     $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
                 }
 
-                $estado      = $r['estado'] ?? 'borrador';
-                $estadoClass = match ($estado) {
-                    'registrado'             => 'bg-success bg-opacity-10 text-success border-success',
-                    'anulado'                => 'bg-danger bg-opacity-10 text-danger border-danger',
-                    'borrador'               => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
-                    default                  => 'bg-primary bg-opacity-10 text-primary border-primary',
-                };
-                $estadoBadge = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . ucfirst($estado) . '</span>';
+                $estadoBadge = self::badgeEstado($r['estado'] ?? null);
 
                 // Celda de Saldo: N/A para notas de crédito; color según pendiente.
                 if (($r['tipo_comprobante'] ?? '') === '04') {
@@ -955,6 +1044,8 @@ class ComprasController extends BaseModuloController
             // Obtener los datos de la compra para pre-armar el egreso
             $compra = $this->repository->getPorId($idCompra, $idEmpresa);
             if (!$compra) throw new \Exception("Compra no encontrada.");
+
+            $this->bloquearSiPendienteAprobacion($idCompra, $idEmpresa, $compra);
             
             // Armar el payload para el EgresoService
             // Necesitamos secuencial correlativo
@@ -1331,6 +1422,8 @@ class ComprasController extends BaseModuloController
             if (!$idCompra || empty($items)) {
                 throw new \Exception('Datos insuficientes para procesar inventario.');
             }
+
+            $this->bloquearSiPendienteAprobacion($idCompra, $idEmpresa);
 
             // Obtener datos de cabecera para las observaciones
             $db = \App\core\Database::getConnection();

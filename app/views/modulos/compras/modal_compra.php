@@ -28,6 +28,22 @@
           <button type="button" class="btn btn-outline-success btn-sm px-2 d-none" id="mcBtnExcel" onclick="mcExportarExcel()" title="Exportar Excel">
             <i class="bi bi-file-earmark-excel fs-6"></i>
           </button>
+
+          <!-- Aprobación de la compra (checkpoint 'aprobacion_compras'). Solo se
+               muestran cuando la compra está pendiente y el usuario es aprobador. -->
+          <div class="vr mx-1 d-none" id="mcAprobSep"></div>
+          <button type="button" class="btn btn-success btn-sm px-2 d-none" id="mcBtnAprobar" onclick="mcAprobarCompra()" title="Aprobar esta compra">
+            <i class="bi bi-check-lg fs-6"></i> Aprobar
+          </button>
+          <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="mcBtnRechazar" onclick="mcRechazarCompra()" title="Rechazar esta compra">
+            <i class="bi bi-x-lg fs-6"></i> Rechazar
+          </button>
+        </div>
+
+        <!-- Aviso de compra pendiente / rechazada -->
+        <div id="mcAprobAviso" class="alert d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-0 border-0 border-bottom d-none">
+          <i class="bi bi-hourglass-split" id="mcAprobAvisoIcono"></i>
+          <span class="small" id="mcAprobAvisoTexto"></span>
         </div>
 
         <!-- Aviso de solo lectura (compra migrada o período contable cerrado) -->

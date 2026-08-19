@@ -47,10 +47,11 @@ class ReporteInventariosController extends BaseModuloController
         $bodegas    = (new BodegaRepository())->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
         $categorias = (new CategoriaRepository())->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC', null)['rows'];
         $marcas     = (new MarcaRepository())->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC', null)['rows'];
-        $vendedores = (new VendedorRepository())->getVendedoresActivos($idEmpresa);
-        $usuarios   = (new InventarioRepository())->getUsuariosConMovimientos($idEmpresa);
-        $origenes   = (new InventarioRepository())->getTiposReferencia($idEmpresa);
-        $anios      = $this->repository->getAniosMovimientos($idEmpresa);
+        $vendedores    = (new VendedorRepository())->getVendedoresActivos($idEmpresa);
+        $usuarios      = (new InventarioRepository())->getUsuariosConMovimientos($idEmpresa);
+        $origenes      = (new InventarioRepository())->getTiposReferencia($idEmpresa);
+        $anios         = $this->repository->getAniosMovimientos($idEmpresa);
+        $responsables  = (new \App\repositories\modulos\ResponsableTrasladoRepository())->listarPorEmpresa($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos/reporte_inventarios/index', [
             'titulo'     => 'Reporte de Inventarios',
@@ -64,6 +65,7 @@ class ReporteInventariosController extends BaseModuloController
             'usuarios'   => $usuarios,
             'origenes'   => $origenes,
             'anios'      => $anios,
+            'responsables' => $responsables,
             'fullWidth'  => true,
             'base'       => BASE_URL,
         ]);
@@ -135,6 +137,7 @@ class ReporteInventariosController extends BaseModuloController
             'id_producto'        => $_REQUEST['id_producto'] ?? '',
             'id_bodega'          => $_REQUEST['id_bodega']   ?? '',
             'id_vendedor'        => $_REQUEST['id_vendedor'] ?? '',
+            'id_responsable_traslado' => $_REQUEST['id_responsable_traslado'] ?? '',
             'fecha_desde'        => $_REQUEST['fecha_desde'] ?? '',
             'fecha_hasta'        => $_REQUEST['fecha_hasta'] ?? '',
             'numero_lote'        => trim($_REQUEST['numero_lote'] ?? ''),
@@ -271,7 +274,7 @@ class ReporteInventariosController extends BaseModuloController
         $kpis = $this->repository->getConsignacionesKpis($idEmpresa, $filtros);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 6 : 3),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 7 : 3),
             'rawData'    => $rows,
             'kpis'       => $kpis,
             'agrupacion' => $modo,
@@ -435,6 +438,7 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td class="small">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '<br><small class="text-muted">' . htmlspecialchars($r['secuencial'] ?? '') . '</small></td>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['cliente_identificacion'] ?? '') . '</small></td>'
                 . '<td class="small">' . htmlspecialchars($r['vendedor_nombre'] ?? '-') . '</td>'
+                . '<td class="small">' . htmlspecialchars($r['responsable_traslado_nombre'] ?? '-') . '</td>'
                 . '<td class="text-center">' . (int) ($r['cantidad_productos'] ?? 0) . '</td>'
                 . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'
                 . '<td class="text-center"><span class="badge ' . $badgeClass . '">' . htmlspecialchars($estado) . '</span></td>'
@@ -476,14 +480,30 @@ class ReporteInventariosController extends BaseModuloController
     /** Fila de línea de producto dentro del modal de detalle de una consignación. */
     private function filaConsignacionDetalleLinea(array $r): string
     {
+        $idDetalle = (int) ($r['id_detalle'] ?? 0);
+        $retornado = (float) ($r['cantidad_retornada'] ?? 0);
+        $facturado = (float) ($r['cantidad_facturada'] ?? 0);
+
+        $tdRetornado = $retornado > 0
+            ? '<td class="text-end small"><a href="#" class="link-primary text-decoration-underline"'
+                . ' onclick="window.RI_Consignaciones.verDocumentosLinea(' . $idDetalle . ', \'retorno\'); return false;"'
+                . ' title="Ver retornos que explican esta cantidad">' . number_format($retornado, 2) . '</a></td>'
+            : '<td class="text-end small">' . number_format($retornado, 2) . '</td>';
+
+        $tdFacturado = $facturado > 0
+            ? '<td class="text-end small"><a href="#" class="link-primary text-decoration-underline"'
+                . ' onclick="window.RI_Consignaciones.verDocumentosLinea(' . $idDetalle . ', \'factura\'); return false;"'
+                . ' title="Ver facturas que explican esta cantidad">' . number_format($facturado, 2) . '</a></td>'
+            : '<td class="text-end small">' . number_format($facturado, 2) . '</td>';
+
         return '<tr>'
             . '<td class="small">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['nup'] ?? '-') . '</td>'
             . '<td class="text-end small">' . number_format((float) ($r['cantidad_consignada'] ?? 0), 2) . '</td>'
-            . '<td class="text-end small">' . number_format((float) ($r['cantidad_retornada'] ?? 0), 2) . '</td>'
-            . '<td class="text-end small">' . number_format((float) ($r['cantidad_facturada'] ?? 0), 2) . '</td>'
+            . $tdRetornado
+            . $tdFacturado
             . '<td class="text-end small fw-bold">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
             . '</tr>';
     }
@@ -718,9 +738,53 @@ class ReporteInventariosController extends BaseModuloController
                     'cliente'       => $cab['cliente_nombre'] ?? '',
                     'identificacion'=> $cab['cliente_identificacion'] ?? '',
                     'vendedor'      => $cab['vendedor_nombre'] ?? '-',
+                    'responsable'   => $cab['responsable_traslado_nombre'] ?? '-',
                     'estado'        => $cab['estado'] ?? '',
                 ],
                 'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 8),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Fila de documento (retorno o factura) dentro del sub-modal de una línea de consignación. */
+    private function filaDocumentoLinea(array $r, string $tipo): string
+    {
+        $fecha = $tipo === 'retorno' ? ($r['fecha_retorno'] ?? '') : ($r['fecha_emision'] ?? '');
+        $doc = trim(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''), '-');
+        return '<tr>'
+            . '<td class="small">' . (!empty($fecha) ? date('d-m-Y', strtotime($fecha)) : '-') . '</td>'
+            . '<td class="small fw-bold">' . htmlspecialchars($doc) . '</td>'
+            . '<td class="text-end small">' . number_format((float) ($r['cantidad'] ?? 0), 2) . '</td>'
+            . '<td class="text-end small">' . number_format((float) ($r['total'] ?? 0), 2) . '</td>'
+            . '</tr>';
+    }
+
+    /** Documentos (retornos o facturas) que explican la cantidad Retornado/Facturado de una línea de consignación. */
+    public function verDocumentosLineaConsignacionAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idDetalle = (int) ($_REQUEST['id_detalle'] ?? 0);
+            $tipo = $_REQUEST['tipo'] ?? '';
+            if ($idDetalle <= 0 || !in_array($tipo, ['retorno', 'factura'], true)) {
+                throw new \InvalidArgumentException('Parámetros no válidos.');
+            }
+
+            $rows = $tipo === 'retorno'
+                ? $this->repository->getRetornosDeLineaConsignacion($idEmpresa, $idDetalle)
+                : $this->repository->getFacturasDeLineaConsignacion($idEmpresa, $idDetalle);
+
+            echo json_encode([
+                'ok'    => true,
+                'tipo'  => $tipo,
+                'rows'  => $this->renderRows($rows, fn($r) => $this->filaDocumentoLinea($r, $tipo), 4),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -908,10 +972,10 @@ class ReporteInventariosController extends BaseModuloController
                     default    => $this->repository->getConsignacionesDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Producto', 'Bodega', 'Consignado', 'Saldo', 'Valor a costo'];
+                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Responsable de traslado', 'Producto', 'Bodega', 'Consignado', 'Saldo', 'Valor a costo'];
                     $data = array_map(fn($r) => [
                         date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
-                        $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '',
+                        $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '', $r['responsable_traslado_nombre'] ?? '',
                         $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
                         (float) $r['cantidad_consignada'], (float) $r['saldo'], (float) $r['valor_saldo'],
                     ], $rows);

@@ -38,6 +38,56 @@ class PosVentaService
         $this->db = Database::getConnection();
     }
 
+    /**
+     * Recargo por servicio configurado para la empresa, resuelto ya con sus
+     * reglas. Vive aquí porque lo comparten los dos puntos de venta: el salón
+     * (comandas) y el mostrador (caja-pos).
+     *
+     * modo: 'no' | 'obligatorio' | 'opcional'. Sale 'no' —aunque esté
+     * configurado— en dos casos:
+     *  - "Mostrar el campo de propina en la factura" está apagado: el recargo
+     *    se emite EN ese campo, sin él no hay dónde ponerlo.
+     *  - La migración del recargo todavía no se ejecutó.
+     */
+    public function getConfigServicio(int $idEmpresa): array
+    {
+        $establecimientos = (new \App\models\Empresa())->getEstablecimientos($idEmpresa);
+        $idEst = (int) ($establecimientos[0]['id'] ?? 0);
+        $cfg = $idEst > 0
+            ? (new \App\repositories\modulos\EmpresaRepository())->getConfigServicioRestaurante($idEst)
+            : [];
+
+        $propinaActiva = in_array((string) ($cfg['mostrar_propina_factura'] ?? 'false'), ['t', 'true', '1'], true)
+            || ($cfg['mostrar_propina_factura'] ?? false) === true;
+
+        $modo = (string) ($cfg['servicio_restaurante'] ?? 'no');
+        if (!$propinaActiva || !in_array($modo, ['no', 'obligatorio', 'opcional'], true)) {
+            $modo = 'no';
+        }
+        $porcentaje = (float) ($cfg['servicio_restaurante_porcentaje'] ?? 0);
+        return [
+            'modo'       => $modo,
+            'porcentaje' => $modo === 'no' ? 0.0 : min(10.0, max(0.0, $porcentaje)),
+        ];
+    }
+
+    /**
+     * Porcentaje que se debe cobrar en una venta suelta (mostrador), según lo
+     * configurado y lo que pidió el cajero. En 'obligatorio' no importa lo que
+     * llegue de la pantalla: se cobra igual.
+     */
+    public function porcentajeServicioVenta(int $idEmpresa, bool $pedidoPorElCajero): float
+    {
+        $cfg = $this->getConfigServicio($idEmpresa);
+        if ($cfg['modo'] === 'no') {
+            return 0.0;
+        }
+        if ($cfg['modo'] === 'obligatorio') {
+            return $cfg['porcentaje'];
+        }
+        return $pedidoPorElCajero ? $cfg['porcentaje'] : 0.0;
+    }
+
     public function cobrar(array $data, array $empresaConfig): array
     {
         $idEmpresa = (int) $data['id_empresa'];
@@ -132,7 +182,18 @@ class PosVentaService
         $totalSinImp = round($totalSinImp, 2);
         $totalDesc = round($totalDesc, 2);
         $ivaTotal = round($ivaTotal, 2);
-        $importeTotal = round($totalSinImp + $ivaTotal, 2);
+
+        // Recargo por servicio ("el 10%"), que viaja al comprobante como
+        // PROPINA: se suma DESPUÉS del IVA porque no forma base imponible.
+        // Se recibe el PORCENTAJE, no el monto: quien cobra (salón o mostrador)
+        // decide si aplica, pero el valor lo calcula siempre este servicio
+        // sobre el subtotal real del documento. Así la propina nunca puede
+        // superar el 10% que exige la Ficha Técnica del SRI —el comprobante
+        // sería rechazado— ni depender de una cifra armada en el navegador.
+        $pctPropina = min(10.0, max(0.0, (float) ($data['porcentaje_propina'] ?? 0)));
+        $propina = round($totalSinImp * $pctPropina / 100, 2);
+
+        $importeTotal = round($totalSinImp + $ivaTotal + $propina, 2);
 
         $idCliente = (int) ($data['id_cliente'] ?? 0);
         if ($idCliente > 0) {
@@ -217,7 +278,7 @@ class PosVentaService
             'total_sin_impuestos' => $totalSinImp,
             'total_descuento' => $totalDesc,
             'total_ice' => 0,
-            'propina' => 0,
+            'propina' => $propina,
             'importe_total' => $importeTotal,
             'detalles' => $det,
             'pagos' => [[

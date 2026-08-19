@@ -67,21 +67,106 @@ class AprobacionesRepository extends BaseRepository
 
     // ─── Configuración por empresa ──────────────────────────────────────────────
 
-    /** Aprobaciones que la empresa configuró (el listado del módulo). */
-    public function getConfiguradas(int $idEmpresa): array
+    /** Columnas por las que se puede ordenar el listado (whitelist del `sort`). */
+    private const ORDEN = [
+        'modulo'      => 't.modulo_ruta',
+        'proceso'     => 't.nombre',
+        'aprobadores' => 'jsonb_array_length(c.usuarios_aprobadores)',
+        'umbral'      => 'c.umbral_monto',
+        'estado'      => 'c.requiere_aprobacion',
+    ];
+
+    /**
+     * Separador entre nombres de aprobadores. Se usa el carácter de control
+     * "unit separator" y no una coma porque una razón social sí puede llevar
+     * coma y partiría el nombre en dos al mostrarlo.
+     */
+    public const SEP_APROBADORES = "\x1F";
+
+    /** Nombres de los aprobadores resueltos desde el JSONB de ids, para listar/exportar. */
+    private const SQL_APROBADORES = "(SELECT string_agg(u.nombre, E'\\x1F' ORDER BY u.nombre)
+              FROM usuarios u
+              WHERE u.id IN (SELECT jsonb_array_elements_text(c.usuarios_aprobadores)::int))";
+
+    /**
+     * Aprobaciones que la empresa configuró (el listado del módulo), con buscador,
+     * ordenamiento y paginación. `$perPage = 0` devuelve todo (exportaciones).
+     */
+    public function getListado(
+        int $idEmpresa,
+        string $buscar = '',
+        int $page = 1,
+        int $perPage = 20,
+        string $ordenCol = 'modulo',
+        string $ordenDir = 'ASC'
+    ): array {
+        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+
+        $where  = "WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND t.activo = true";
+        $params = [':id_empresa' => $idEmpresa];
+
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            // El texto libre también busca por nombre de aprobador: "¿quién aprueba
+            // qué?" es la pregunta natural en este módulo.
+            $where .= " AND (t.nombre ILIKE :b OR t.descripcion ILIKE :b OR t.modulo_ruta ILIKE :b"
+                . " OR EXISTS (SELECT 1 FROM usuarios u2
+                               WHERE u2.id IN (SELECT jsonb_array_elements_text(c.usuarios_aprobadores)::int)
+                                 AND u2.nombre ILIKE :b))";
+            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+        }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'proceso'    => 't.nombre',
+                'aprobacion' => 't.nombre',
+                'modulo'     => 't.modulo_ruta',
+                'aprobador'  => self::SQL_APROBADORES,
+            ],
+            // El estado se compara como texto ('activa'/'inactiva'): comparar el
+            // boolean crudo contra la cadena que escribe el usuario reventaría en PG.
+            'exacto'   => ['estado' => "CASE WHEN c.requiere_aprobacion THEN 'activa' ELSE 'inactiva' END"],
+            'numerico' => ['monto' => 'c.umbral_monto', 'umbral' => 'c.umbral_monto'],
+        ]);
+
+        $from = "FROM aprobaciones_config c
+                 INNER JOIN aprobaciones_tipos t ON t.id = c.id_tipo
+                 {$where}";
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) {$from}");
+        $stCount->execute($params);
+        $total = (int) $stCount->fetchColumn();
+
+        $orderExpr = self::ORDEN[$ordenCol] ?? self::ORDEN['modulo'];
+        $limitSql  = '';
+        if ($perPage > 0) {
+            $offset   = max(0, ($page - 1) * $perPage);
+            $limitSql = " LIMIT {$perPage} OFFSET {$offset}";
+        }
+
+        $sql = "SELECT c.id AS id_config, c.id_tipo, c.requiere_aprobacion,
+                       c.usuarios_aprobadores, c.umbral_monto,
+                       c.created_at, c.updated_at,
+                       t.codigo, t.nombre, t.descripcion, t.modulo_ruta,
+                       " . self::SQL_APROBADORES . " AS aprobadores_nombres
+                {$from}
+                ORDER BY {$orderExpr} {$dir}, t.nombre ASC
+                {$limitSql}";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /** Ids de tipo ya configurados en la empresa (para saber si un alta es alta o edición). */
+    public function getTiposConfigurados(int $idEmpresa): array
     {
         $st = $this->db->prepare(
-            "SELECT c.id AS id_config, c.id_tipo, c.requiere_aprobacion,
-                    c.usuarios_aprobadores, c.umbral_monto,
-                    c.created_at, c.updated_at,
-                    t.codigo, t.nombre, t.descripcion, t.modulo_ruta
-             FROM aprobaciones_config c
-             INNER JOIN aprobaciones_tipos t ON t.id = c.id_tipo
-             WHERE c.id_empresa = :e AND c.eliminado = false AND t.activo = true
-             ORDER BY t.modulo_ruta ASC, t.nombre ASC"
+            "SELECT id_tipo FROM aprobaciones_config WHERE id_empresa = :e AND eliminado = false"
         );
         $st->execute([':e' => $idEmpresa]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function getConfigPorTipoId(int $idEmpresa, int $idTipo): ?array

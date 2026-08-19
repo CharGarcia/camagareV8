@@ -47,6 +47,14 @@ class IngresoRules
 
     private function validarTotalesDetallePagos(array $data, float $total): void
     {
+        // Un ingreso puede combinar documentos de módulo (Factura/Recibo/Factura reembolso/...)
+        // con líneas OTRO ("otros conceptos") a la vez. Si se mezclan, cada línea OTRO debe
+        // traer su propia cuenta contable: sin eso, el asiento la clasificaría por defecto en
+        // la cuenta "oficial" del concepto de cabecera (p. ej. Cuentas por Cobrar de la
+        // factura), metiendo mal un ingreso que no tiene relación con esa cartera.
+        $tiposDetalle = array_unique(array_map(fn($d) => $d['tipo_documento'] ?? '', $data['detalles']));
+        $hayModulo = !empty(array_diff($tiposDetalle, ['OTRO']));
+
         // Suma de Detalles
         $sumDetalles = 0.0;
         foreach ($data['detalles'] as $d) {
@@ -57,14 +65,20 @@ class IngresoRules
                 throw new \Exception('El monto cobrado en los detalles debe ser mayor a cero.');
             }
 
+            $tipoDoc = $d['tipo_documento'] ?? '';
+
             // Validar tope de saldo si es una factura
-            if (($d['tipo_documento'] ?? '') === 'FACTURA' && round($cob, 2) > round($saldoAnt, 2)) {
+            if ($tipoDoc === 'FACTURA' && round($cob, 2) > round($saldoAnt, 2)) {
                 throw new \Exception(sprintf(
                     'El monto a cobrar ($%s) en el documento %s no puede exceder el saldo pendiente ($%s).',
                     number_format($cob, 2),
                     htmlspecialchars($d['numero_documento'] ?? ''),
                     number_format($saldoAnt, 2)
                 ));
+            }
+
+            if ($tipoDoc === 'OTRO' && $hayModulo && empty($d['id_cuenta_contable'])) {
+                throw new \Exception('Una línea de "otros conceptos" debe indicar su cuenta contable, porque este ingreso también cobra un documento de otro tipo.');
             }
 
             $sumDetalles += $cob;

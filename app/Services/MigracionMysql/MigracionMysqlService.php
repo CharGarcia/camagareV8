@@ -3504,8 +3504,12 @@ class MigracionMysqlService
         $idEstMatriz = (int) $pg->query("SELECT id FROM empresa_establecimiento WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY codigo ASC LIMIT 1")->fetchColumn() ?: null;
 
         $insCab = $pg->prepare(
-            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_comprobante, documento_modificado, id_sustento_tributario, autorizacion_desde, autorizacion_hasta, fecha_caducidad, deducible, tipo_ambiente, id_usuario, created_by, id_establecimiento)
-             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, :treg, :tcomp, :docmod, :sust, :ad, :ah, :fcad, :ded, :amb, :u, :cb, :idest) RETURNING id"
+            // estado = 'registrado' explícito: el DEFAULT de la columna es 'borrador',
+            // un estado que Compras no usa. Desde que el listado lee el estado real
+            // (aprobación de compras), dejarlo al DEFAULT mostraría las migradas como
+            // borrador. Una compra migrada ya ocurrió: no se somete a aprobación.
+            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_comprobante, documento_modificado, id_sustento_tributario, autorizacion_desde, autorizacion_hasta, fecha_caducidad, deducible, tipo_ambiente, id_usuario, created_by, id_establecimiento, estado)
+             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, :treg, :tcomp, :docmod, :sust, :ad, :ah, :fcad, :ded, :amb, :u, :cb, :idest, 'registrado') RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO compras_detalle (id_compra, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)

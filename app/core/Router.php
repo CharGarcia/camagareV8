@@ -145,6 +145,14 @@ class Router
                 $action        = in_array($sub, ['aprobar', 'rechazar'], true) ? $sub : 'index';
             }
 
+            // /aprobar-compra/{token}[/aprobar|/rechazar] → aprobación pública por token (sin auth)
+            if (($parts[0] ?? '') === 'aprobar-compra') {
+                $controller    = 'ComprasAprobacion';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $sub           = $parts[2] ?? '';
+                $action        = in_array($sub, ['aprobar', 'rechazar'], true) ? $sub : 'index';
+            }
+
             // /aprobar-importacion/{token}[/aprobar|/rechazar] → aprobación pública por token (sin auth)
             if (($parts[0] ?? '') === 'aprobar-importacion') {
                 $controller    = 'ImportacionesAprobacion';

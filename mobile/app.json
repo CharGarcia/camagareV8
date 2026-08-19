@@ -55,7 +55,8 @@
         {
           "cameraPermission": "CaMaGaRe usa la cámara para escanear el código QR y tomar la selfie al marcar tu asistencia."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

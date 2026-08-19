@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden
-version: 1.6
+version: 1.8
 orden: 20
 estado: activo
 ---
@@ -162,12 +162,62 @@ ve solo las que registró.
   SRI"**: el archivo no es un comprobante electrónico válido; regístrela a mano.
 - **El stock no subió tras registrar la compra**: registrar no es lo mismo que
   procesar la entrada. Compruebe además que el producto sea inventariable.
+- **"La compra está pendiente de aprobación"** al pagar o al procesar el
+  inventario: la empresa exige aprobar las compras. Un aprobador debe autorizarla
+  primero (por el correo o desde el listado).
+- **"No puede aprobar una compra que usted mismo registró"**: la autorización
+  tiene que darla otra persona. Es intencional.
+- **La compra no generó asiento contable**: si está pendiente de aprobación, el
+  asiento se genera al aprobarla, no al registrarla.
 - **"No se puede registrar el asiento: la fecha ... corresponde a un período
   contable cerrado"** al eliminar: la eliminación anula el asiento, y eso no se
   puede hacer en un período cerrado. Reabra el período.
 
+## Aprobación de compras
+
+Si la empresa lo configura en el módulo **Aprobaciones**, una compra registrada
+a mano queda **pendiente de aprobación** en lugar de quedar registrada de una
+vez. Mientras esté pendiente:
+
+- **no se puede pagar** (no se le registra el egreso),
+- **no se puede procesar su inventario** (no mueve stock),
+- **no se genera su asiento contable**.
+
+Los aprobadores reciben un correo con un enlace para aprobar o rechazar sin
+iniciar sesión, y también pueden hacerlo abriendo la compra desde el listado
+(botones *Aprobar* y *Rechazar* arriba del modal). Al aprobarla pasa a
+**Registrado** y recién entonces se genera su asiento y se habilitan el pago y
+el inventario. Si la rechazan, la compra **no se elimina**: queda como
+*Rechazada* con el motivo, para que haya rastro de que el documento llegó y se
+decidió no aceptarlo.
+
+Quien registra la compra **no puede aprobarla** (salvo un superadministrador):
+la autorización tiene que venir de otra persona. En el buscador, el filtro
+rápido *Pend. aprobación* deja el listado solo con las que esperan decisión, y
+el título del módulo muestra cuántas hay.
+
+Dos cosas que conviene tener claras:
+
+- La aprobación aplica **a toda compra nueva**, tanto la que se captura a mano
+  como la que entra por la **descarga del SRI**. Cuando se registra un lote de
+  comprobantes, los aprobadores reciben **un solo correo** con la lista de todas
+  las que quedaron pendientes, no uno por documento. Además, una compra del SRI
+  que quede pendiente **no genera su pago automático**: el egreso se registra
+  cuando se apruebe.
+- Quedan fuera los **documentos históricos**: las compras que vienen de una
+  migración o de una importación de datos antiguos entran como registradas. Son
+  operaciones que ya ocurrieron; ponerlas a esperar aprobación las dejaría sin
+  asiento y sin poder pagarse.
+- Si en Aprobaciones se configuró un **monto mínimo**, las compras por debajo de
+  ese valor se registran directamente, sin pedir autorización.
+
 ## Historial de cambios
 
+- **1.8** — Nueva **aprobación de compras**: si se activa en el módulo
+  Aprobaciones, la compra registrada a mano queda pendiente y no se puede pagar,
+  ni procesar su inventario, ni se genera su asiento hasta autorizarla. Se añade
+  el filtro por **Estado** en el buscador. Nota: la columna de estado ya existía
+  pero el listado mostraba siempre "Registrado"; ahora refleja el estado real.
 - **1.7** — Eliminar una compra ahora **anula su asiento contable**. Antes el
   asiento sobrevivía a la compra y seguía sumando en el Balance y en Cuentas por
   Pagar (y duplicaba el gasto si el documento se volvía a registrar). Efecto

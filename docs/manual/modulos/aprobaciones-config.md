@@ -34,7 +34,7 @@ Procesos disponibles hoy:
 | Inventario | Cargas de inventario | La carga no afecta el stock hasta ser aprobada |
 | Inventario | Nacionalización de importaciones | El costo no se postea al kardex hasta ser aprobado |
 | Tesorería | Lotes de pago bancario | No se puede generar el archivo del banco hasta aprobar el lote |
-| Compras | Aprobación de compras | Revisión de las compras ya registradas |
+| Compras | Registro de compras | La compra no se puede pagar, ni procesar su inventario, ni se asienta hasta ser aprobada |
 
 La lista crece a medida que se enganchan más módulos: usted no la escribe, la
 elige.
@@ -59,9 +59,25 @@ elige.
    **Monto mínimo**. Déjelo vacío para que siempre se pida.
 6. Guarde. La aprobación aparece en el listado y **entra en vigor de inmediato**.
 
-Para cambiar los aprobadores o el monto de una aprobación existente, pulse el
-lápiz de la fila. Para quitarla del todo, use **Eliminar** dentro de ese mismo
-modal.
+Para cambiar los aprobadores o el monto de una aprobación existente, **haga clic
+en su fila**. Para quitarla del todo, use **Eliminar** dentro de ese mismo modal.
+
+### Buscar en el listado
+
+El buscador acepta texto libre —que busca por proceso, módulo y **también por
+nombre de aprobador**, para responder "¿qué aprueba fulano?"— y filtros
+`clave:valor`:
+
+| Filtro | Ejemplo | Qué hace |
+|--------|---------|----------|
+| `proceso:` | `proceso:cargas` | Por nombre del proceso |
+| `modulo:` | `modulo:transferencias` | Por módulo dueño |
+| `aprobador:` | `aprobador:"Ana Pérez"` | Aprobaciones donde esa persona autoriza |
+| `estado:` | `estado:activa` | Activas o inactivas |
+| `monto:` | `monto:>1000` | Por monto mínimo configurado |
+
+El listado se ordena pulsando el encabezado de cada columna, y se exporta a
+**PDF** y **Excel** respetando la búsqueda y el orden aplicados.
 
 ## Campos del formulario
 
@@ -117,8 +133,16 @@ emergencia para cuando el aprobador configurado no está disponible.
   aprobación* y el costo no se postea hasta autorizarla.
 - **Transferencias (Pagos al Banco)**: si está activo, el lote queda *pendiente*
   y el archivo bancario no se genera hasta la aprobación.
-- En los tres casos, el aprobador puede resolver desde el **enlace del correo**,
+- **Compras**: si está activo, **toda compra nueva** queda *pendiente* —tanto la
+  capturada a mano como la descargada del SRI—; no se puede pagar, ni procesar su
+  inventario, ni se genera su asiento contable hasta autorizarla. Cuando entra un
+  lote de comprobantes del SRI sale **un solo correo** con todas las pendientes.
+  Quedan fuera los documentos históricos (migraciones e importaciones de datos
+  antiguos), que entran ya registrados.
+- En todos los casos, el aprobador puede resolver desde el **enlace del correo**,
   sin necesidad de iniciar sesión.
+- **Quien registra un documento no puede aprobarlo** (salvo un
+  superadministrador): la autorización debe venir de otra persona.
 
 ## Errores frecuentes
 

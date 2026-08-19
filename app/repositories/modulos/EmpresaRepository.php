@@ -495,6 +495,52 @@ class EmpresaRepository extends BaseModel
         return $res[0] ?? null;
     }
 
+    /**
+     * Recargo por servicio del POS Restaurante (se emite como propina).
+     *
+     * Va aparte de getEstablecimientoConfig() a propósito: esa consulta la usan
+     * la emisión de facturas y recibos, y si el código llegara al servidor antes
+     * que la migración 20260819_servicio_restaurante_propina.sql, incluir aquí
+     * columnas inexistentes tumbaría toda la facturación. Así, mientras falte la
+     * migración, el servicio simplemente queda apagado.
+     */
+    public function getConfigServicioRestaurante(int $idEst): array
+    {
+        $default = [
+            'servicio_restaurante'            => 'no',
+            'servicio_restaurante_porcentaje' => 0.0,
+            'mostrar_propina_factura'         => 'false',
+        ];
+        if (!$this->tieneColumnasServicioRestaurante()) {
+            return $default;
+        }
+        $id = (int) $idEst;
+        // mostrar_propina_factura viaja aquí porque es el interruptor maestro:
+        // sin campo de propina en el comprobante no hay dónde emitir el recargo
+        // (quien aplica esa regla es ComandaService::getConfigServicio).
+        $res = $this->query("SELECT servicio_restaurante, servicio_restaurante_porcentaje, mostrar_propina_factura
+                             FROM empresa_establecimiento
+                             WHERE id = {$id} AND eliminado = false");
+        return $res[0] ?? $default;
+    }
+
+    /** Cacheado por request: el esquema no cambia a media petición. */
+    public function tieneColumnasServicioRestaurante(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            try {
+                $res = $this->query("SELECT 1 FROM information_schema.columns
+                                     WHERE table_name = 'empresa_establecimiento'
+                                       AND column_name = 'servicio_restaurante'");
+                $existe = !empty($res);
+            } catch (\Throwable $e) {
+                $existe = false;
+            }
+        }
+        return $existe;
+    }
+
     public function updateEstablecimientoConfig(int $idEst, array $data): bool
     {
         $id   = (int) $idEst;
@@ -510,6 +556,7 @@ class EmpresaRepository extends BaseModel
             'id_forma_pago_sri_def',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
             'mostrar_propina_factura',
+            'servicio_restaurante', 'servicio_restaurante_porcentaje',
             'factura_agrupar_items', 'factura_item_mostrar_unidad',
             'factura_item_mostrar_lote', 'factura_item_mostrar_caducidad',
             'factura_item_mostrar_nup',

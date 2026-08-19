@@ -237,6 +237,10 @@ class ImportarAntiguoService
         $scanner = $this->nuevoScanner();
         $scanner->conectar();
         $register = new DocumentoAutomatedRegisterService();
+        // Esto trae histórico ya ocurrido: no se somete a la aprobación de
+        // compras (quedaría sin asiento y sin poder pagarse, y avisaría de
+        // documentos de hace años como si estuvieran esperando decisión).
+        $register->omitirAprobacion = true;
 
         try {
             foreach ($pendientes as $item) {

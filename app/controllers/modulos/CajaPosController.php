@@ -96,6 +96,8 @@ class CajaPosController extends BaseModuloController
             'mostrarUnidadMedida' => $toBool($estConfig['mostrar_unidad_medida'] ?? true),
             'unidadesMedida' => (new \App\repositories\modulos\FacturaVentaRepository())->getUnidadesMedida($idEmpresa),
             'limiteConsumidorFinal' => (float) ($estConfig['valor_limite_consumidor_final'] ?? 50),
+            // Recargo por servicio: la misma configuración que usa el salón.
+            'servicio' => $this->ventaService->getConfigServicio($idEmpresa),
             'puedeFactura' => \App\Helpers\Permisos::puedeCrear('modulos/factura-venta'),
             'puedeRecibo' => \App\Helpers\Permisos::puedeCrear('modulos/recibo-venta'),
             'bodegas' => (new Empresa())->getBodegas($idEmpresa),
@@ -445,6 +447,13 @@ class CajaPosController extends BaseModuloController
                 'id_bodega' => $idBodega,
                 'tipo_documento' => $tipoDocumento,
                 'items' => $items,
+                // Recargo por servicio: la pantalla solo dice si el cajero lo
+                // dejó puesto; el porcentaje (y si se puede quitar) lo decide
+                // la configuración, no el navegador.
+                'porcentaje_propina' => $this->ventaService->porcentajeServicioVenta(
+                    $idEmpresa,
+                    in_array((string) ($_POST['aplica_servicio'] ?? ''), ['1', 'true', 'on'], true)
+                ),
             ], $this->getEmpresaConfig($idEmpresa));
 
             $this->json(['ok' => true, 'msg' => 'Venta registrada correctamente.', 'data' => $res]);

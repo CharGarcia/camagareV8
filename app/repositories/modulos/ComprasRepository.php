@@ -83,6 +83,9 @@ class ComprasRepository extends BaseRepository
             'exacto' => [
                 'tipo_comprobante' => 'c.tipo_comprobante',
                 'tipo'             => 'c.tipo_comprobante',
+                // El estado dejó de ser un literal fijo con la aprobación de
+                // compras: 'registrado', 'pendiente_aprobacion', 'rechazada'…
+                'estado'           => 'c.estado',
             ],
             'fecha' => [
                 'fecha'          => 'c.fecha_emision',
@@ -135,7 +138,6 @@ class ComprasRepository extends BaseRepository
 
         $sql = "SELECT c.*,
                        (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0)) AS monto_iva,
-                       'registrado' AS estado,
                        p.razon_social      AS proveedor_nombre,
                        p.identificacion    AS proveedor_ruc,
                        st.nombre           AS sustento_nombre,
@@ -165,7 +167,9 @@ class ComprasRepository extends BaseRepository
     /**
      * Compras del rango de fechas para exportación masiva (Descargas Masivas).
      * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
-     * No filtra por estado: en Compras esa columna quedó fija en 'registrado' (ver getPorId/getListado).
+     * No filtra por estado: una compra pendiente de aprobación ya está registrada
+     * como documento recibido (lo que la aprobación detiene es pagarla, procesar
+     * su inventario y asentarla), así que también debe salir en la descarga.
      */
     public function getParaDescargaMasiva(int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta, ?int $numeroDesde, ?int $numeroHasta, ?int $idUsuarioFiltro): array
     {
@@ -245,7 +249,6 @@ class ComprasRepository extends BaseRepository
 
         $sql = "SELECT c.*,
                        (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0)) AS monto_iva,
-                       'registrado' AS estado,
                        p.razon_social          AS proveedor_nombre,
                        p.identificacion        AS proveedor_ruc,
                        p.direccion             AS proveedor_direccion,
@@ -513,11 +516,11 @@ class ComprasRepository extends BaseRepository
                     total_sin_impuestos, total_descuento, importe_total, propina,
                     autorizacion_desde, autorizacion_hasta, fecha_caducidad,
                     tipo_registro, deducible, documento_modificado, motivo,
-                    observaciones, created_by, updated_by, id_usuario, tipo_ambiente
+                    observaciones, estado, created_by, updated_by, id_usuario, tipo_ambiente
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                 ) RETURNING id";
 
@@ -547,6 +550,10 @@ class ComprasRepository extends BaseRepository
             $data['documento_modificado'] ?? null,
             $data['motivo'] ?? null,
             $data['observaciones'] ?? null,
+            // El DEFAULT de la columna es 'borrador', un estado que Compras nunca
+            // usó: el estado real lo decide el Service (registrado, o pendiente
+            // de aprobación si la empresa exige aprobar las compras).
+            $data['estado'] ?? 'registrado',
             (int)   $data['id_usuario'], // created_by
             (int)   $data['id_usuario'], // updated_by
             (int)   $data['id_usuario'], // id_usuario
@@ -855,6 +862,86 @@ class ComprasRepository extends BaseRepository
             "UPDATE compras_cabecera SET estado = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
             [$estado, $idUsuario, $id]
         );
+    }
+
+    // ─── Aprobación de compras (checkpoint 'aprobacion_compras') ───────────────
+
+    /** Guarda el token con el que el aprobador entra desde el enlace del correo. */
+    public function setTokenAprobacion(int $id, string $token): void
+    {
+        $this->query(
+            "UPDATE compras_cabecera SET token_aprobacion = ?, updated_at = NOW() WHERE id = ?",
+            [$token, $id]
+        );
+    }
+
+    /**
+     * Resuelve la compra a partir del token del correo. Es un flujo PÚBLICO (sin
+     * sesión), así que valida aquí mismo que la empresa dueña siga activa: si no
+     * lo está, el token se comporta como si no existiera (CLAUDE.md §6).
+     */
+    public function getPorTokenAprobacion(string $token): ?array
+    {
+        $rows = $this->query(
+            "SELECT c.*,
+                    p.razon_social   AS proveedor_nombre,
+                    p.identificacion AS proveedor_ruc,
+                    u.nombre         AS creado_por_nombre,
+                    e.nombre         AS empresa_nombre
+               FROM compras_cabecera c
+               INNER JOIN empresas e     ON e.id = c.id_empresa
+               INNER JOIN proveedores p  ON p.id = c.id_proveedor
+               LEFT  JOIN usuarios u     ON u.id = c.created_by
+              WHERE c.token_aprobacion = ?
+                AND c.eliminado = false
+                AND e.estado = '1'
+                AND e.eliminado = false
+              LIMIT 1",
+            [$token]
+        )->fetchAll(\PDO::FETCH_ASSOC);
+
+        return $rows[0] ?? null;
+    }
+
+    /**
+     * Cierra el flujo de aprobación. El token se limpia siempre: un enlace de
+     * correo ya usado no debe volver a resolver a nada.
+     */
+    public function resolverAprobacion(int $id, string $estado, int $idUsuario, ?string $motivo = null): void
+    {
+        $this->query(
+            "UPDATE compras_cabecera
+                SET estado = ?, aprobado_by = ?, aprobado_at = NOW(),
+                    motivo_rechazo = ?, token_aprobacion = NULL,
+                    updated_by = ?, updated_at = NOW()
+              WHERE id = ?",
+            [$estado, $idUsuario, $motivo, $idUsuario, $id]
+        );
+    }
+
+    /** Nombre y correo de los usuarios aprobadores (para notificar y mostrar). */
+    public function getNombresUsuarios(array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (empty($ids)) return [];
+
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        return $this->query(
+            "SELECT id, nombre, mail FROM usuarios WHERE id IN ($ph) ORDER BY nombre ASC",
+            $ids
+        )->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Cuántas compras esperan aprobación en la empresa (badge del listado). */
+    public function contarPendientesAprobacion(int $idEmpresa): int
+    {
+        $rows = $this->query(
+            "SELECT COUNT(*) AS n FROM compras_cabecera
+              WHERE id_empresa = ? AND estado = 'pendiente_aprobacion' AND eliminado = false",
+            [$idEmpresa]
+        )->fetchAll(\PDO::FETCH_ASSOC);
+
+        return (int) ($rows[0]['n'] ?? 0);
     }
 
     public function eliminarLogico(int $id, int $idUsuario): void

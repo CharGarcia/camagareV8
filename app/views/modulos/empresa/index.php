@@ -1539,6 +1539,101 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <label class="form-check-label small fw-bold" for="sw_propina">¿Mostrar el campo de propina en la factura?</label>
                                             <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Habilita el campo de propina en el pie de la factura (aplicable a ciertos sectores).</div>
                                         </div>
+                                        <?php
+                                            // Recargo por servicio del POS Restaurante. Va colgando del
+                                            // switch de propina —con sangría y borde— porque no es una
+                                            // opción independiente: se emite EN ese campo del
+                                            // comprobante. De ahí también el tope del 10%, que es del
+                                            // SRI y no una decisión del sistema.
+                                            $servModo = (string) ($empresa['servicio_restaurante'] ?? 'no');
+                                            $servPct  = (float) ($empresa['servicio_restaurante_porcentaje'] ?? 10);
+                                            $propinaOn = (($empresa['mostrar_propina_factura'] ?? false) === 'true'
+                                                       || ($empresa['mostrar_propina_factura'] ?? false) === true);
+                                        ?>
+                                        <div class="ms-4 ps-3 mb-3 border-start border-2 border-success <?= $propinaOn ? '' : 'd-none' ?>" id="bloque_servicio_restaurante">
+                                            <label class="form-label small fw-bold mb-1">Recargo por servicio (restaurantes)</label>
+                                            <div class="form-text mt-0 sub-text mb-2" style="font-size:0.65rem;">
+                                                El "10%" que se cobra en el salón. Se aplica a las comandas del POS Restaurante y se emite
+                                                en el comprobante como <strong>propina</strong>: se calcula sobre el subtotal y se suma
+                                                después del IVA, sin formar parte de la base imponible. El SRI no acepta una propina mayor
+                                                al 10% del subtotal, así que ese es el tope.
+                                            </div>
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-bold mb-1" for="sel_servicio_restaurante">¿Se cobra recargo por servicio?</label>
+                                                    <select class="form-select form-select-sm" name="servicio_restaurante" id="sel_servicio_restaurante" <?= $propinaOn ? '' : 'disabled' ?>>
+                                                        <option value="no" <?= $servModo === 'no' ? 'selected' : '' ?>>No se cobra</option>
+                                                        <option value="obligatorio" <?= $servModo === 'obligatorio' ? 'selected' : '' ?>>Obligatorio</option>
+                                                        <option value="opcional" <?= $servModo === 'opcional' ? 'selected' : '' ?>>Opcional</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-bold mb-1" for="inp_servicio_pct">Porcentaje</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="number" class="form-control" name="servicio_restaurante_porcentaje" id="inp_servicio_pct"
+                                                               min="0" max="10" step="0.01"
+                                                               value="<?= number_format($servModo === 'no' ? 0 : $servPct, 2, '.', '') ?>"
+                                                               <?= $servModo === 'no' ? 'readonly' : '' ?> <?= $propinaOn ? '' : 'disabled' ?>>
+                                                        <span class="input-group-text">%</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-12">
+                                                    <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">
+                                                        <strong>Obligatorio</strong>: toda comanda lo lleva y el salón no puede quitarlo.
+                                                        <strong>Opcional</strong>: también lo lleva, pero el mesero puede retirarlo cuando
+                                                        el cliente no quiere pagarlo. El porcentaje se calcula sobre el subtotal, máximo 10%.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <script>
+                                        // El recargo por servicio vive dentro del campo de propina del
+                                        // comprobante: sin ese campo no hay dónde emitirlo, así que al
+                                        // apagar el switch la tarjeta entera desaparece (el servidor
+                                        // igual fuerza "No se cobra" al guardar — la pantalla no puede
+                                        // prometer algo que el cobro no hará).
+                                        // Los campos se deshabilitan además de ocultarse: un input
+                                        // oculto pero activo sigue entrando en la validación del
+                                        // formulario, y un valor fuera de rango bloquearía el guardado
+                                        // con un error que nadie puede ver.
+                                        (function () {
+                                            const sw = document.getElementById('sw_propina');
+                                            const bloque = document.getElementById('bloque_servicio_restaurante');
+                                            const sel = document.getElementById('sel_servicio_restaurante');
+                                            const pct = document.getElementById('inp_servicio_pct');
+                                            if (!sw || !sel || !pct || !bloque) return;
+
+                                            // Con "No se cobra" el porcentaje se muestra en 0 y bloqueado:
+                                            // un 10% escrito junto a "no se cobra" es una contradicción a la
+                                            // vista. Se recuerda el último valor real para devolverlo si el
+                                            // usuario vuelve a activar el recargo.
+                                            let ultimoPct = parseFloat(pct.value) > 0 ? pct.value : '10.00';
+
+                                            function sincronizarModo() {
+                                                const cobra = sel.value !== 'no';
+                                                if (cobra) {
+                                                    if (parseFloat(pct.value) <= 0) pct.value = ultimoPct;
+                                                } else {
+                                                    if (parseFloat(pct.value) > 0) ultimoPct = pct.value;
+                                                    pct.value = '0.00';
+                                                }
+                                                pct.readOnly = !cobra;
+                                            }
+
+                                            function sincronizar() {
+                                                const on = sw.checked;
+                                                bloque.classList.toggle('d-none', !on);
+                                                sel.disabled = !on;
+                                                pct.disabled = !on;
+                                                if (!on) sel.value = 'no';
+                                                sincronizarModo();
+                                            }
+
+                                            sel.addEventListener('change', sincronizarModo);
+                                            sw.addEventListener('change', sincronizar);
+                                            sincronizar();
+                                        })();
+                                        </script>
                                     </div>
                                 </div>
                                 <?php

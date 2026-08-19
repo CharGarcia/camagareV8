@@ -176,6 +176,29 @@ class ComandasController extends BaseModuloController
         }
     }
 
+    /**
+     * Enciende o apaga el recargo por servicio (el "10%") de la comanda. Solo
+     * lo acepta cuando el establecimiento lo tiene configurado como 'opcional'
+     * — ComandaRules::validarServicio() es quien lo decide.
+     */
+    public function cambiarServicioAjax(): void
+    {
+        $this->requireActualizar();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $id = (int) ($_POST['id'] ?? 0);
+            if ($id <= 0) throw new Exception('Comanda no válida.');
+            $aplica = in_array((string) ($_POST['aplica'] ?? ''), ['1', 'true', 'on'], true);
+            $this->service->cambiarServicio($id, $idEmpresa, $idUsuario, $aplica);
+            $this->json(['ok' => true, 'msg' => $aplica ? 'Servicio aplicado.' : 'Servicio retirado de la cuenta.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
     public function actualizarCabeceraAjax(): void
     {
         $this->requireActualizar();
@@ -596,6 +619,14 @@ class ComandasController extends BaseModuloController
                 // Migración de configuración pendiente — se usan valores por defecto.
             }
         }
+        // Recargo por servicio (se cobra como propina): se toma ya resuelto del
+        // Service, que es quien aplica las reglas — entre ellas que el campo de
+        // propina de la factura esté activo. Así la pantalla no puede mostrar un
+        // recargo que el cobro no va a aplicar.
+        $servicio = $this->service->getConfigServicio($idEmpresa);
+        $empresaData['servicio_restaurante'] = $servicio['modo'];
+        $empresaData['servicio_restaurante_porcentaje'] = $servicio['porcentaje'];
+
         return $empresaData;
     }
 }

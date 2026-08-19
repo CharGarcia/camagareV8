@@ -94,6 +94,18 @@ class IngresosController extends BaseModuloController
 
         $conceptos   = $this->service->getConceptosIngreso($idEmpresa);
 
+        // Los botones de concepto ligados a un módulo (Factura de venta/Recibo de
+        // venta/Factura reembolso) solo se muestran si hay algún documento pendiente de
+        // ese tipo en la empresa; los conceptos sin búsqueda de documentos (GENERAL,
+        // Anticipo Cliente) no dependen de esto y siempre se muestran.
+        $comportamientosConPendientes = [];
+        foreach (['FACTURA' => 'FACTURA_VENTA', 'RECIBO' => 'RECIBO_VENTA', 'FACTURA_REEMBOLSO' => 'FACTURA_REEMBOLSO'] as $tipoDoc => $comportamiento) {
+            $chk = $this->repository->buscarDocumentosPendientes($idEmpresa, '', null, $tipoDoc);
+            if (!empty($chk['data'])) {
+                $comportamientosConPendientes[] = $comportamiento;
+            }
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos/ingresos/index', [
             'titulo'            => 'Ingresos',
             'perm'              => $perm,

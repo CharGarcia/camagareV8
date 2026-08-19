@@ -383,6 +383,182 @@ if (!function_exists('enviar_correo_recuperar_clave')) {
     }
 }
 
+if (!function_exists('notificar_compra_pendiente')) {
+    /**
+     * Notifica a los aprobadores que hay una compra pendiente de aprobación.
+     * Usa la configuración del sistema (correos_config: recuperar_password).
+     *
+     * @param string[] $destinatarios Correos de los aprobadores.
+     * @param array    $data          numero, proveedor, fecha, total, empresa, creador, url.
+     */
+    function notificar_compra_pendiente(array $destinatarios, array $data): bool
+    {
+        $destinatarios = array_values(array_filter(array_map('trim', $destinatarios), static fn($c) => $c !== '' && filter_var($c, FILTER_VALIDATE_EMAIL)));
+        if (empty($destinatarios)) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'Sin destinatarios válidos';
+            return false;
+        }
+
+        $base = \App\services\EmailConfigService::getDataForSendEmail('recuperar_password');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config (codigo: recuperar_password)';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth = true;
+            $mail->Username = $base['emisor'];
+            $mail->Password = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port = $base['port'];
+            $mail->CharSet = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            foreach ($destinatarios as $c) { $mail->addAddress($c); }
+            $mail->Subject = 'Compra pendiente de aprobación ' . ($data['numero'] ?? '');
+
+            $e = static fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
+            $url = $data['url'] ?? '';
+            $mail->Body = '
+                <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;">
+                    <h2 style="color:#2563eb;">Compra pendiente de aprobación</h2>
+                    <p>Hay una compra que requiere su aprobación en <strong>' . $e($data['empresa']) . '</strong>.</p>
+                    <table style="border-collapse:collapse;font-size:14px;">
+                        <tr><td style="padding:4px 12px;color:#666;">Documento</td><td style="padding:4px 12px;"><strong>' . $e($data['numero']) . '</strong></td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Proveedor</td><td style="padding:4px 12px;">' . $e($data['proveedor']) . '</td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Fecha</td><td style="padding:4px 12px;">' . $e($data['fecha']) . '</td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Total</td><td style="padding:4px 12px;"><strong>$ ' . $e($data['total']) . '</strong></td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Registrada por</td><td style="padding:4px 12px;">' . $e($data['creador']) . '</td></tr>
+                    </table>
+                    ' . ($url ? '<p style="margin-top:20px;"><a href="' . $e($url) . '" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Revisar y aprobar</a></p>' : '') . '
+                    <p style="color:#888;font-size:12px;margin-top:24px;">Mientras la compra esté pendiente no se puede pagar, ni procesar su inventario, ni se genera su asiento contable.</p>
+                </div>';
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $ex) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $ex->getMessage();
+            error_log('Mailer Error (compra pendiente): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+}
+
+if (!function_exists('notificar_compras_pendientes_lote')) {
+    /**
+     * Notifica en UN correo varias compras pendientes de aprobación. Lo usa el
+     * registro automático desde el SRI, que procesa un lote de comprobantes: un
+     * correo por documento sería inmanejable.
+     *
+     * @param string[] $destinatarios Correos de los aprobadores.
+     * @param array    $data          empresa, compras[] (numero, proveedor, fecha, total, url).
+     */
+    function notificar_compras_pendientes_lote(array $destinatarios, array $data): bool
+    {
+        $destinatarios = array_values(array_filter(array_map('trim', $destinatarios), static fn($c) => $c !== '' && filter_var($c, FILTER_VALIDATE_EMAIL)));
+        if (empty($destinatarios)) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'Sin destinatarios válidos';
+            return false;
+        }
+        $compras = $data['compras'] ?? [];
+        if (empty($compras)) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'Sin compras que notificar';
+            return false;
+        }
+
+        $base = \App\services\EmailConfigService::getDataForSendEmail('recuperar_password');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config (codigo: recuperar_password)';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth = true;
+            $mail->Username = $base['emisor'];
+            $mail->Password = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port = $base['port'];
+            $mail->CharSet = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $n = count($compras);
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            foreach ($destinatarios as $c) { $mail->addAddress($c); }
+            $mail->Subject = $n === 1
+                ? 'Compra pendiente de aprobación'
+                : $n . ' compras pendientes de aprobación';
+
+            $e = static fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
+
+            $filas = '';
+            foreach ($compras as $c) {
+                $filas .= '<tr>'
+                    . '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;"><strong>' . $e($c['numero']) . '</strong></td>'
+                    . '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">' . $e($c['proveedor']) . '</td>'
+                    . '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">' . $e($c['fecha']) . '</td>'
+                    . '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">$ ' . $e($c['total']) . '</td>'
+                    . '<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;"><a href="' . $e($c['url']) . '" style="color:#2563eb;">Revisar</a></td>'
+                    . '</tr>';
+            }
+
+            $mail->Body = '
+                <div style="font-family:Arial,sans-serif;color:#333;max-width:720px;margin:auto;">
+                    <h2 style="color:#2563eb;">' . ($n === 1 ? 'Compra pendiente de aprobación' : $n . ' compras pendientes de aprobación') . '</h2>
+                    <p>Se registraron comprobantes que requieren su aprobación en <strong>' . $e($data['empresa']) . '</strong>.</p>
+                    <table style="border-collapse:collapse;font-size:13px;width:100%;">
+                        <thead>
+                            <tr style="background:#f8fafc;">
+                                <th style="padding:6px 10px;text-align:left;">Documento</th>
+                                <th style="padding:6px 10px;text-align:left;">Proveedor</th>
+                                <th style="padding:6px 10px;text-align:left;">Fecha</th>
+                                <th style="padding:6px 10px;text-align:right;">Total</th>
+                                <th style="padding:6px 10px;text-align:left;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>' . $filas . '</tbody>
+                    </table>
+                    <p style="color:#888;font-size:12px;margin-top:24px;">Mientras cada compra esté pendiente no se puede pagar, ni procesar su inventario, ni se genera su asiento contable.</p>
+                </div>';
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $ex) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $ex->getMessage();
+            error_log('Mailer Error (compras pendientes lote): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+}
+
 if (!function_exists('enviar_correo_notificacion_tarea')) {
     /**
      * Envía notificaciones a los clientes sobre cambios de estado en sus tareas.

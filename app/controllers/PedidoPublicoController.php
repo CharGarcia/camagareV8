@@ -314,9 +314,18 @@ class PedidoPublicoController extends Controller
                 throw new Exception('Esta cuenta no tiene ítems por cobrar.');
             }
 
+            // Recargo por servicio de esta cuenta: se resuelve con el MISMO
+            // método que usa el cobro, porque el documento que se emite al
+            // aprobarse el pago (ComandaService::cobrarGrupo) lo incluye como
+            // propina. Si aquí se calculara aparte, el cliente podría pagar algo
+            // distinto de lo que dice su comprobante.
+            $servicio = round($totalBase * $this->comandaService->porcentajeServicioComanda($comanda) / 100, 2);
+
             $pp = new \App\Services\PayphoneService($ppRepo);
             $cajita = $pp->prepararCajita($idEmpresa, [
-                'monto'           => \App\Services\PayphoneService::dolaresACentavos($totalBase + $totalIva),
+                // 'impuesto' es solo el IVA: la propina no es impuesto, pero sí
+                // forma parte del monto que se cobra.
+                'monto'           => \App\Services\PayphoneService::dolaresACentavos($totalBase + $totalIva + $servicio),
                 'impuesto'        => \App\Services\PayphoneService::dolaresACentavos($totalIva),
                 'descripcion'     => 'Mesa ' . ($mesa['nombre'] ?? '') . ' — Cuenta ' . ($grupo['etiqueta'] ?? $idGrupo),
                 'modulo'          => 'comanda_grupo_cobro',

@@ -252,6 +252,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 <div class="row">
                     <div><span>Subtotal</span><span id="pv-subtotal">$0.00</span></div>
                     <div><span>IVA</span><span id="pv-iva">$0.00</span></div>
+                    <div class="d-none" id="pv-fila-servicio">
+                        <span>
+                            <span id="pv-servicio-label">Servicio</span>
+                            <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline d-none" id="pv-btn-servicio" style="font-size:.72rem;"></button>
+                        </span>
+                        <span id="pv-servicio">$0.00</span>
+                    </div>
                 </div>
                 <div class="row total">
                     <div><span>Total</span><span id="pv-total">$0.00</span></div>
@@ -1004,7 +1011,8 @@ $rutaAjax = $base . '/' . $rutaModulo;
             impMap[lbl] = (impMap[lbl] || 0) + ivaLinea;
         });
         Object.values(impMap).forEach(v => totalIva += v);
-        const total = subtotal + totalIva;
+        const servicioPrevia = (aplicaServicio && SERVICIO_PCT > 0) ? Math.round(subtotal * SERVICIO_PCT) / 100 : 0;
+        const total = subtotal + totalIva + servicioPrevia;
 
         const lineas = cart.map(l => {
             const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
@@ -1059,6 +1067,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <table class="totales">
                 <tr><td>Subtotal</td><td style="text-align:right;">$${fmt(subtotal)}</td></tr>
                 ${ivaLineas}
+                ${servicioPrevia > 0 ? `<tr><td>Servicio ${SERVICIO_PCT}%</td><td style="text-align:right;">$${fmt(servicioPrevia)}</td></tr>` : ''}
                 <tr><td>TOTAL A PAGAR</td><td style="text-align:right;">$${fmt(total)}</td></tr>
             </table>
             ${nombreForma ? `<hr class="sep"><div class="bold" style="font-size:9px;">Forma de pago seleccionada</div><div>${escapeHtml(nombreForma)}</div>` : ''}
@@ -1465,6 +1474,49 @@ $rutaAjax = $base . '/' . $rutaModulo;
         });
     }
 
+    // Recargo por servicio ("el 10%"), la misma configuración que usa el salón.
+    // Se cobra como PROPINA en el comprobante: sobre el subtotal, después del
+    // IVA y sin formar base imponible. En 'obligatorio' el cajero no lo puede
+    // quitar; en 'opcional' arranca puesto y se puede retirar por venta.
+    // El monto definitivo lo calcula PosVentaService al cobrar — esto es lo que
+    // ve el cliente antes de pagar.
+    const SERVICIO_MODO = <?= json_encode((string) ($servicio['modo'] ?? 'no')) ?>;
+    const SERVICIO_PCT = <?= (float) ($servicio['porcentaje'] ?? 0) ?>;
+    let aplicaServicio = SERVICIO_MODO !== 'no';
+
+    /**
+     * Fila del recargo en los totales del carrito.
+     * - 'no'          → no aparece.
+     * - 'obligatorio' → se ve el valor, sin opción de quitarlo.
+     * - 'opcional'    → con enlace Quitar/Aplicar. Quitado sigue visible, para
+     *                   que el cajero no lo dé por perdido sin darse cuenta.
+     */
+    function renderServicio(valor) {
+        const $fila = document.getElementById('pv-fila-servicio');
+        const $btn = document.getElementById('pv-btn-servicio');
+        if (!$fila) return;
+        if (SERVICIO_MODO === 'no') { $fila.classList.add('d-none'); return; }
+
+        $fila.classList.remove('d-none');
+        document.getElementById('pv-servicio-label').textContent =
+            aplicaServicio ? 'Servicio ' + SERVICIO_PCT + '%' : 'Servicio (no aplicado)';
+        document.getElementById('pv-servicio').textContent = money(aplicaServicio ? valor : 0);
+
+        const puedeCambiar = SERVICIO_MODO === 'opcional';
+        $btn.classList.toggle('d-none', !puedeCambiar);
+        if (puedeCambiar) {
+            $btn.textContent = aplicaServicio ? 'Quitar' : 'Aplicar';
+            $btn.className = 'btn btn-link btn-sm p-0 ms-1 align-baseline ' + (aplicaServicio ? 'text-danger' : 'text-success');
+            $btn.style.fontSize = '.72rem';
+        }
+    }
+
+    document.getElementById('pv-btn-servicio')?.addEventListener('click', () => {
+        // Solo afecta a la venta en curso: no hay nada que guardar hasta cobrar.
+        aplicaServicio = !aplicaServicio;
+        renderCart();
+    });
+
     function totalCarrito() {
         let subtotal = 0, iva = 0;
         cart.forEach(l => {
@@ -1472,7 +1524,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
             subtotal += baseNeta;
             iva += baseNeta * l.pct_iva / 100;
         });
-        return { subtotal, iva, total: subtotal + iva };
+        const servicio = (aplicaServicio && SERVICIO_PCT > 0)
+            ? Math.round(subtotal * SERVICIO_PCT) / 100
+            : 0;
+        return { subtotal, iva, servicio, total: subtotal + iva + servicio };
     }
 
     function cambiarCantidad(uid, delta) {
@@ -1593,10 +1648,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
             });
         }
 
-        const { subtotal, iva, total } = totalCarrito();
+        const { subtotal, iva, servicio, total } = totalCarrito();
         document.getElementById('pv-subtotal').textContent = money(subtotal);
         document.getElementById('pv-iva').textContent = money(iva);
         document.getElementById('pv-total').textContent = money(total);
+        renderServicio(servicio);
 
         const $avisoCf = document.getElementById('pv-aviso-cf');
         const superaLimiteSinCliente = !clienteSeleccionado && total >= LIMITE_CONSUMIDOR_FINAL;
@@ -1986,6 +2042,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
         fd.append('id_cliente', clienteSeleccionado ? clienteSeleccionado.id : '');
         fd.append('id_bodega', getIdBodega() || '');
         fd.append('tipo_documento', getTipoDocumento() || 'RECIBO');
+        // Solo dice si el cajero lo dejó puesto: el porcentaje y si se permite
+        // quitarlo los resuelve el servidor desde la configuración.
+        fd.append('aplica_servicio', aplicaServicio ? '1' : '0');
         if (bancoVisible) {
             fd.append('tipo_operacion_bancaria', $tipoOpBanco.value);
             fd.append('numero_operacion', $numOpBanco.value.trim());

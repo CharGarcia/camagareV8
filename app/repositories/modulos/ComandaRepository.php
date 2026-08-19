@@ -29,13 +29,61 @@ class ComandaRepository extends BaseRepository
      * las mesas (a diferencia del listado CRUD de mesas, que sí filtra por
      * created_by cuando el usuario no tiene acceso total).
      */
-    public function getTablero(int $idEmpresa): array
+    /**
+     * ¿Está aplicada la migración del recargo por servicio
+     * (20260819_servicio_restaurante_propina.sql)? Se consulta una vez por
+     * request. Mientras falte, el módulo funciona como antes —sin servicio—
+     * en vez de romperse porque el código llegó al servidor antes que el SQL.
+     */
+    public function tieneColumnasServicio(): bool
     {
+        static $existe = null;
+        if ($existe === null) {
+            try {
+                $st = $this->db->query("SELECT 1 FROM information_schema.columns
+                                        WHERE table_name = 'comandas' AND column_name = 'aplica_servicio'");
+                $existe = (bool) $st->fetchColumn();
+            } catch (\Throwable $e) {
+                $existe = false;
+            }
+        }
+        return $existe;
+    }
+
+    /**
+     * @param string $modoServicio 'no' | 'obligatorio' | 'opcional', ya resuelto
+     *                             por PosVentaService::getConfigServicio().
+     * @param float  $pctVigente   Porcentaje configurado, para las comandas que
+     *                             se abrieron antes de que existiera el recargo
+     *                             y no tienen snapshot propio.
+     */
+    public function getTablero(int $idEmpresa, string $modoServicio = 'no', float $pctVigente = 0.0): array
+    {
+        // Misma regla que ComandaService::porcentajeServicioComanda(): con
+        // 'obligatorio' el recargo va sí o sí, sin mirar el estado de la
+        // comanda; con 'opcional' manda lo que decidió el mesero.
+        $conServicio = $this->tieneColumnasServicio() && $modoServicio !== 'no';
+        $pct = "COALESCE(NULLIF(c.porcentaje_servicio, 0), " . (float) $pctVigente . ")";
+        $condicion = $modoServicio === 'obligatorio' ? "c.id IS NOT NULL" : "COALESCE(c.aplica_servicio, false)";
+        $exprServicio = "CASE WHEN {$condicion}
+                              THEN ROUND(COALESCE(dt.base, 0) * {$pct} / 100.0, 2)
+                              ELSE 0 END";
+
+        $selServicio = $conServicio
+            ? "CASE WHEN {$condicion} THEN true ELSE false END AS aplica_servicio,
+               CASE WHEN {$condicion} THEN {$pct} ELSE 0 END AS porcentaje_servicio,
+               {$exprServicio} AS servicio_comanda,"
+            : "false AS aplica_servicio, 0 AS porcentaje_servicio, 0 AS servicio_comanda,";
+        $sumaServicio = $conServicio ? "+ {$exprServicio}" : "";
+
         $sql = "SELECT m.id, m.nombre, m.estado, m.capacidad, m.ubicacion, m.pos_x, m.pos_y,
                        c.id AS id_comanda, c.numero_comanda, c.fecha_apertura, c.comensales,
                        c.id_usuario_mesero, u.nombre AS mesero_nombre,
                        COALESCE(c.solicita_asistencia, false) AS solicita_asistencia,
-                       COALESCE(dt.total, 0) AS total_comanda,
+                       -- Recargo por servicio (el 10%): sobre la base sin impuestos,
+                       -- igual que la propina del comprobante.
+                       {$selServicio}
+                       COALESCE(dt.base, 0) + COALESCE(dt.iva, 0) {$sumaServicio} AS total_comanda,
                        COALESCE(dt.items, 0) AS items_comanda,
                        COALESCE(dt.pendientes, 0) AS pendientes_comanda,
                        COALESCE(dt.listos, 0) AS listos_comanda
@@ -43,17 +91,28 @@ class ComandaRepository extends BaseRepository
                 LEFT JOIN comandas c ON c.id_mesa = m.id AND c.estado = 'abierta' AND c.eliminado = false
                 LEFT JOIN usuarios u ON u.id = c.id_usuario_mesero
                 LEFT JOIN (
-                    SELECT id_comanda, SUM(subtotal) AS total, COUNT(*) AS items,
-                           COUNT(*) FILTER (WHERE estado_linea = 'pendiente') AS pendientes,
-                           COUNT(*) FILTER (WHERE estado_linea = 'listo') AS listos
-                    FROM comanda_detalle
-                    WHERE eliminado = false AND estado_linea != 'anulado'
-                    GROUP BY id_comanda
+                    -- El total de la mesa se muestra CON impuestos: es lo que va a
+                    -- pagar el cliente. El IVA se redondea línea por línea y se
+                    -- suma, igual que PosVentaService::cobrar() al emitir el
+                    -- documento, para que el tablero, el pie de la comanda y la
+                    -- factura digan el mismo número.
+                    SELECT d.id_comanda,
+                           SUM(d.subtotal) AS base,
+                           SUM(ROUND(d.subtotal * COALESCE(tp.porcentaje_iva, tm.porcentaje_iva, 0) / 100.0, 2)) AS iva,
+                           COUNT(*) AS items,
+                           COUNT(*) FILTER (WHERE d.estado_linea = 'pendiente') AS pendientes,
+                           COUNT(*) FILTER (WHERE d.estado_linea = 'listo') AS listos
+                    FROM comanda_detalle d
+                    " . self::SQL_JOIN_IVA . "
+                    WHERE d.id_empresa = :e2 AND d.eliminado = false AND d.estado_linea != 'anulado'
+                    GROUP BY d.id_comanda
                 ) dt ON dt.id_comanda = c.id
                 WHERE m.id_empresa = :e AND m.eliminado = false
                 ORDER BY m.nombre ASC";
         $st = $this->db->prepare($sql);
-        $st->execute([':e' => $idEmpresa]);
+        // :e2 repite el valor de :e — con consultas preparadas reales no se
+        // puede reusar el mismo placeholder en dos sitios.
+        $st->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -106,15 +165,11 @@ class ComandaRepository extends BaseRepository
 
     public function crear(array $data): int
     {
-        $sql = "INSERT INTO comandas (
-                    id_empresa, id_mesa, id_usuario_mesero, id_caja_sesion, numero_comanda,
-                    estado, id_cliente, comensales, observaciones, created_by
-                ) VALUES (
-                    :id_empresa, :id_mesa, :id_usuario_mesero, :id_caja_sesion, :numero_comanda,
-                    :estado, :id_cliente, :comensales, :observaciones, :created_by
-                ) RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $cols = "id_empresa, id_mesa, id_usuario_mesero, id_caja_sesion, numero_comanda,
+                 estado, id_cliente, comensales, observaciones, created_by";
+        $vals = ":id_empresa, :id_mesa, :id_usuario_mesero, :id_caja_sesion, :numero_comanda,
+                 :estado, :id_cliente, :comensales, :observaciones, :created_by";
+        $params = [
             ':id_empresa'        => $data['id_empresa'],
             ':id_mesa'           => $data['id_mesa'],
             ':id_usuario_mesero' => $data['id_usuario_mesero'],
@@ -125,7 +180,19 @@ class ComandaRepository extends BaseRepository
             ':comensales'        => $data['comensales'] ?? null,
             ':observaciones'     => $data['observaciones'] ?? null,
             ':created_by'        => $data['created_by'],
-        ]);
+        ];
+
+        if ($this->tieneColumnasServicio()) {
+            $cols .= ", aplica_servicio, porcentaje_servicio";
+            $vals .= ", :aplica_servicio, :porcentaje_servicio";
+            // Booleano a Postgres por PDO: 'true'/'false' como texto — el false
+            // de PHP viaja como cadena vacía y pgsql lo rechaza.
+            $params[':aplica_servicio']     = !empty($data['aplica_servicio']) ? 'true' : 'false';
+            $params[':porcentaje_servicio'] = (float) ($data['porcentaje_servicio'] ?? 0);
+        }
+
+        $st = $this->db->prepare("INSERT INTO comandas ({$cols}) VALUES ({$vals}) RETURNING id");
+        $st->execute($params);
         return (int) $st->fetchColumn();
     }
 
@@ -186,19 +253,25 @@ class ComandaRepository extends BaseRepository
 
     // ─── LÍNEAS ────────────────────────────────────────────────────────────────
 
-    /** porcentaje_iva es solo informativo (para la "vista previa" de la cuenta antes de cobrar) — al cobrar, PosVentaService resuelve el IVA de nuevo desde el producto, esto no lo reemplaza. */
-    public function getLineas(int $idComanda, int $idEmpresa): array
-    {
-        // El % de IVA se resuelve primero del producto vinculado y, si no hay
-        // uno (ítem puro del Menú), del tarifa_iva propio del menu_item —
-        // mismo criterio que MenuRepository::getDisponibles().
-        $sql = "SELECT d.*, p.codigo AS producto_codigo,
-                       COALESCE(tp.porcentaje_iva, tm.porcentaje_iva, 0) AS porcentaje_iva
-                FROM comanda_detalle d
-                LEFT JOIN productos p ON p.id = d.id_producto
+    /**
+     * % de IVA de una línea (alias 'd'): primero el del producto vinculado y, si
+     * no hay uno (ítem puro del Menú), el del tarifa_iva propio del menu_item —
+     * mismo criterio que MenuRepository::getDisponibles(). Es informativo: sirve
+     * para que la pantalla muestre el total que se va a cobrar (IVA incluido);
+     * al cobrar, PosVentaService resuelve el impuesto de nuevo desde el
+     * producto, esto no lo reemplaza.
+     */
+    private const SQL_SELECT_IVA = "COALESCE(tp.porcentaje_iva, tm.porcentaje_iva, 0) AS porcentaje_iva";
+    private const SQL_JOIN_IVA = "LEFT JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN tarifa_iva tp ON tp.id = p.tarifa_iva
                 LEFT JOIN menu_items mi ON mi.id = d.id_menu_item
-                LEFT JOIN tarifa_iva tm ON tm.id = mi.id_tarifa_iva
+                LEFT JOIN tarifa_iva tm ON tm.id = mi.id_tarifa_iva";
+
+    public function getLineas(int $idComanda, int $idEmpresa): array
+    {
+        $sql = "SELECT d.*, p.codigo AS producto_codigo, " . self::SQL_SELECT_IVA . "
+                FROM comanda_detalle d
+                " . self::SQL_JOIN_IVA . "
                 WHERE d.id_comanda = :id AND d.id_empresa = :e AND d.eliminado = false
                 ORDER BY d.id ASC";
         $st = $this->db->prepare($sql);
@@ -429,8 +502,10 @@ class ComandaRepository extends BaseRepository
     /** Líneas del pool compartido de una división en partes iguales (para armar los ítems fraccionados de cada parte al cobrar). */
     public function getLineasDelPoolPartes(int $idGrupoRaiz, int $idEmpresa): array
     {
-        $sql = "SELECT d.* FROM comanda_detalle d
+        $sql = "SELECT d.*, " . self::SQL_SELECT_IVA . "
+                FROM comanda_detalle d
                 JOIN comanda_grupo_partes_lineas gpl ON gpl.id_linea = d.id
+                " . self::SQL_JOIN_IVA . "
                 WHERE gpl.id_grupo_raiz = :g AND d.id_empresa = :e AND d.eliminado = false
                 ORDER BY d.id ASC";
         $st = $this->db->prepare($sql);
@@ -516,9 +591,11 @@ class ComandaRepository extends BaseRepository
 
     public function getLineasDelGrupo(int $idGrupo, int $idEmpresa): array
     {
-        $sql = "SELECT * FROM comanda_detalle
-                WHERE id_grupo_cobro = :g AND id_empresa = :e AND eliminado = false
-                ORDER BY id ASC";
+        $sql = "SELECT d.*, " . self::SQL_SELECT_IVA . "
+                FROM comanda_detalle d
+                " . self::SQL_JOIN_IVA . "
+                WHERE d.id_grupo_cobro = :g AND d.id_empresa = :e AND d.eliminado = false
+                ORDER BY d.id ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':g' => $idGrupo, ':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);

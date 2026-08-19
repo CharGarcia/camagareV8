@@ -499,6 +499,13 @@
                                 </select>
                             </div>
                             <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Responsable traslado</label>
+                                <select id="ri-cv-responsable" class="form-select form-select-sm shadow-none border" style="width:150px;">
+                                    <option value="">Todos</option>
+                                    <?php foreach (($responsables ?? []) as $r): ?><option value="<?= (int) $r['id'] ?>"><?= htmlspecialchars($r['nombre']) ?></option><?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Desde</label>
                                 <input type="date" id="ri-cv-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;">
                             </div>
@@ -567,7 +574,7 @@
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-cv-thead"></thead>
                             <tbody id="ri-cv-tbody">
-                                <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -672,6 +679,7 @@
                     <div class="col-md-4"><span class="text-muted">Cliente:</span> <span id="ri-cv-modal-cliente" class="fw-bold"></span></div>
                     <div class="col-md-2"><span class="text-muted">Vendedor:</span> <span id="ri-cv-modal-vendedor" class="fw-bold"></span></div>
                     <div class="col-md-3"><span class="text-muted">Estado:</span> <span id="ri-cv-modal-estado" class="fw-bold"></span></div>
+                    <div class="col-md-3"><span class="text-muted">Responsable traslado:</span> <span id="ri-cv-modal-responsable" class="fw-bold"></span></div>
                 </div>
                 <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0">
@@ -694,6 +702,65 @@
         </div>
     </div>
 </div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SUB-MODAL: DOCUMENTOS (RETORNO/FACTURA) DE UNA LÍNEA DE CONSIGNACIÓN -->
+<!-- Se abre ENCIMA del modal de detalle de consignación (que queda fijo/abierto
+     detrás) — mismo patrón de z-index que app/views/modulos/proformas/modal_proforma.php
+     (memoria: modales-anidados-zindex-5060). -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="ri-cv-modal-linea-docs" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold mb-0">
+                    <i class="bi bi-file-earmark-text text-primary me-2"></i><span id="ri-cv-docs-titulo">Documentos</span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr class="text-secondary">
+                                <th>Fecha</th><th>Documento</th>
+                                <th class="text-end">Cantidad</th><th class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ri-cv-docs-tbody">
+                            <tr><td colspan="4" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // app.css fuerza globalmente `.modal { z-index:5060 !important }` y
+    // `.modal-backdrop { z-index:5055 !important }` — para que este sub-modal se abra
+    // ENCIMA del modal de detalle de consignación (que se queda fijo/abierto detrás),
+    // hay que subirlo por encima de 5060 con inline !important (única forma de ganarle
+    // a la regla global). Ver memoria: modales-anidados-zindex-5060.
+    var Z_SUBMODAL = 5080;
+    var Z_BACKDROP = 5075;
+    document.addEventListener('show.bs.modal', function (ev) {
+        if (ev.target.id !== 'ri-cv-modal-linea-docs') return;
+        ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
+        setTimeout(function () {
+            var bds = document.querySelectorAll('.modal-backdrop');
+            if (bds.length) {
+                bds[bds.length - 1].style.setProperty('z-index', String(Z_BACKDROP), 'important');
+            }
+        }, 0);
+    });
+})();
+</script>
 
 <!-- ════════════════════════════════════════════════════════ -->
 <!-- MODAL: EDITAR MÍNIMO/MÁXIMO/CATEGORÍA (Existencias) -->

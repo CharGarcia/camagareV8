@@ -215,6 +215,9 @@ $ajax = $base . '/pedido/' . $token;
 </div>
 
 <div class="pq-footer">
+    <div class="total-row d-none" id="pq-fila-servicio" style="font-size:.85rem;font-weight:500;">
+        <span class="text-muted" id="pq-servicio-label">Servicio</span><span id="pq-servicio">$0.00</span>
+    </div>
     <div class="total-row"><span>Total</span><span id="pq-total">$0.00</span></div>
     <button type="button" class="btn btn-success w-100" id="pq-btn-confirmar" disabled>
         <i class="bi bi-send me-1"></i>Confirmar pedido <span id="pq-badge-confirmar" class="badge bg-light text-success ms-1 d-none"></span>
@@ -229,6 +232,9 @@ $ajax = $base . '/pedido/' . $token;
     const AJAX = "<?= $ajax ?>";
     let detalles = <?= json_encode($comanda['detalles'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
     let solicitaAsistencia = <?= !empty($comanda['solicita_asistencia']) ? 'true' : 'false' ?>;
+    <?php $svcOn = in_array((string) ($comanda['aplica_servicio'] ?? ''), ['1', 't', 'true'], true) || ($comanda['aplica_servicio'] ?? false) === true; ?>
+    const APLICA_SERVICIO = <?= $svcOn ? 'true' : 'false' ?>;
+    const PORCENTAJE_SERVICIO = <?= (float) ($comanda['porcentaje_servicio'] ?? 0) ?>;
     const DOC_PERMITIDOS = { factura: <?= !empty($documentos['factura']) ? 'true' : 'false' ?>, recibo: <?= !empty($documentos['recibo']) ? 'true' : 'false' ?> };
     let menu = [];
     const mdCuenta = new bootstrap.Modal(document.getElementById('mdCuenta'));
@@ -254,6 +260,15 @@ $ajax = $base . '/pedido/' . $token;
     // real vuelve a resolver el IVA desde el producto, esto no lo reemplaza.
     function lineaConIva(d) {
         return parseFloat(d.subtotal || 0) * (1 + parseFloat(d.porcentaje_iva || 0) / 100);
+    }
+
+    // Recargo por servicio ("el 10%"): sobre la base sin impuestos, igual que
+    // en el salón y que la propina del comprobante. Se le muestra al cliente
+    // aparte para que sepa qué está pagando antes de confirmar.
+    function servicioDe(lineas) {
+        if (!APLICA_SERVICIO || PORCENTAJE_SERVICIO <= 0) return 0;
+        const base = lineas.reduce((a, d) => a + parseFloat(d.subtotal || 0), 0);
+        return Math.round(base * PORCENTAJE_SERVICIO) / 100;
     }
 
     function renderMenu() {
@@ -299,7 +314,14 @@ $ajax = $base . '/pedido/' . $token;
             }).join('');
         }
 
-        const total = vivas.reduce((a, d) => a + lineaConIva(d), 0);
+        const servicio = servicioDe(vivas);
+        const $filaSrv = document.getElementById('pq-fila-servicio');
+        $filaSrv.classList.toggle('d-none', servicio <= 0);
+        if (servicio > 0) {
+            document.getElementById('pq-servicio-label').textContent = `Servicio ${PORCENTAJE_SERVICIO}%`;
+            document.getElementById('pq-servicio').textContent = money(servicio);
+        }
+        const total = vivas.reduce((a, d) => a + lineaConIva(d), 0) + servicio;
         document.getElementById('pq-total').textContent = money(total);
 
         const pendientes = vivas.filter(d => d.estado_linea === 'pendiente').length;
@@ -429,9 +451,12 @@ $ajax = $base . '/pedido/' . $token;
     }
 
     function recalcularTotalCuenta() {
-        const total = Array.from(document.querySelectorAll('#pq-cuenta-items .form-check-input:checked'))
-            .reduce((a, chk) => a + parseFloat(chk.dataset.total || 0), 0);
-        document.getElementById('pq-cuenta-total').textContent = money(total);
+        const marcados = Array.from(document.querySelectorAll('#pq-cuenta-items .form-check-input:checked'));
+        const total = marcados.reduce((a, chk) => a + parseFloat(chk.dataset.total || 0), 0);
+        // El recargo por servicio de esta parte de la cuenta, para que el total
+        // que ve el cliente sea el mismo que le va a cobrar Payphone.
+        const servicio = servicioDe(marcados.map(chk => ({ subtotal: chk.dataset.base })));
+        document.getElementById('pq-cuenta-total').textContent = money(total + servicio);
     }
 
     function configurarSelectorDocumento() {
@@ -459,7 +484,7 @@ $ajax = $base . '/pedido/' . $token;
         if (!lineas.length) { swalError('No tienes ítems entregados pendientes por pagar.'); return; }
         document.getElementById('pq-cuenta-items').innerHTML = lineas.map(d => `
             <label class="pq-cuenta-item mb-0">
-                <input type="checkbox" class="form-check-input mt-0" checked data-total="${lineaConIva(d)}">
+                <input type="checkbox" class="form-check-input mt-0" checked data-total="${lineaConIva(d)}" data-base="${d.subtotal}">
                 <span class="nombre">${escapeHtml(d.cantidad)} x ${escapeHtml(d.descripcion)}</span>
                 <span class="total">${money(lineaConIva(d))}</span>
             </label>`).join('');

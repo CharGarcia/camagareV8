@@ -6,22 +6,28 @@ namespace App\controllers\modulos;
 
 use App\repositories\modulos\CajaSesionRepository;
 use App\repositories\modulos\ComandaRepository;
+use App\repositories\modulos\MenuRepository;
 use App\repositories\modulos\MesaRepository;
 use App\Rules\modulos\CajaSesionRules;
 use App\Rules\modulos\ComandaRules;
+use App\Rules\modulos\MenuRules;
 use App\Rules\modulos\MesaRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\CajaSesionService;
 use App\Services\modulos\ComandaService;
+use App\Services\modulos\MenuService;
 use App\Services\modulos\MesaService;
 use App\Services\modulos\PosVentaService;
 
 class MesasController extends BaseModuloController
 {
     private const RUTA_MODULO = 'modulos/mesas';
+    /** Pantalla de preparación (KDS): otro submódulo, con sus propios permisos. */
+    private const RUTA_KDS = 'modulos/kds';
     private MesaService $service;
     private ComandaService $comandaService;
     private CajaSesionService $cajaService;
+    private MenuService $menuService;
 
     public function __construct()
     {
@@ -33,6 +39,7 @@ class MesasController extends BaseModuloController
         $this->cajaService = new CajaSesionService(new CajaSesionRepository(), new CajaSesionRules(), $logService);
         $ventaService = new PosVentaService($this->cajaService, $logService);
         $this->comandaService = new ComandaService(new ComandaRepository(), new ComandaRules(), $repo, $logService, $ventaService);
+        $this->menuService = new MenuService(new MenuRepository(), new MenuRules(), $logService);
     }
 
     protected function getRutaModulo(): string
@@ -71,6 +78,13 @@ class MesasController extends BaseModuloController
         $empresaModel = new \App\models\Empresa();
         $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
 
+        // Accesos directos a la pantalla de preparación (KDS), uno por estación.
+        // El KDS es otro submódulo: si el usuario del salón no tiene permiso de
+        // lectura sobre él, no se le ofrecen los botones (abrirlos solo lo
+        // devolvería al menú).
+        $permKds = \App\Helpers\Permisos::porRuta(self::RUTA_KDS);
+        $estacionesKds = !empty($permKds['ver']) ? $this->menuService->getEstaciones($idEmpresa) : [];
+
         $this->view('modulos.mesas.tablero', [
             'titulo'         => 'Mesas',
             'rutaModulo'     => self::RUTA_MODULO,
@@ -79,6 +93,8 @@ class MesasController extends BaseModuloController
             'sesion'         => $sesion,
             'mesas'          => $this->comandaService->getTablero($idEmpresa),
             'empresaNombre'  => $empresa['nombre_comercial'] ?? $empresa['nombre'] ?? '',
+            'estacionesKds'  => $estacionesKds,
+            'rutaKds'        => self::RUTA_KDS,
         ]);
     }
 

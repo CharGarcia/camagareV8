@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque
-version: 1.3
+etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura
+version: 1.5
 orden: 20
 estado: activo
 ---
@@ -45,6 +45,41 @@ seleccionar.
    pagando, total o parcialmente.
 5. En formas de pago, indique cómo salió el dinero. Puede combinar varias.
 6. Guarde.
+
+## Combinar varios conceptos en un mismo egreso
+
+Un egreso puede pagar **a la vez** una factura de compra, una liquidación,
+roles pendientes y/o "Otros conceptos" (gastos sin documento, como un pago que
+no tiene factura de compra que lo respalde) — no hace falta un egreso separado
+por cada tipo. Los botones de concepto de la barra superior ya no son
+excluyentes: cada uno **agrega** documentos a lo ya cargado, en vez de
+reemplazarlo.
+
+- **"Documentos"** y **"Otros conceptos"** se muestran siempre juntos: use el
+  buscador de documentos pendientes para las facturas/liquidaciones/roles, y
+  el botón **"+ Agregar línea"** de "Otros conceptos" para el resto.
+- El **beneficiario es único por egreso** (un solo Proveedor o un solo
+  Empleado, nunca ambos): si el concepto que elige implica un beneficiario
+  distinto al ya usado (p. ej. pasar de un concepto de Proveedor a uno de
+  Nómina), el sistema avisa que se perderá lo ya cargado antes de continuar.
+- **Cuenta contable obligatoria por línea manual cuando se mezcla**: si el
+  egreso combina un documento de módulo con líneas de "Otros conceptos", cada
+  línea manual debe traer su propia cuenta contable (buscador integrado en esa
+  misma cuadrícula). Sin eso, el sistema no sabe si ese gasto es parte de la
+  cartera del documento (p. ej. Cuentas por Pagar de la compra) o una cuenta
+  totalmente distinta, así que lo exige explícito antes de guardar.
+- El total del egreso es la suma de **ambos bloques**.
+
+### Botones que solo aparecen si hay algo que pagar
+
+Los botones de concepto ligados a un documento (**Compra**, **Liquidación**,
+**Nómina**) solo se muestran si la empresa tiene al menos un documento
+pendiente de ese tipo. Si no hay ninguna factura de compra, liquidación o rol
+pendiente, el botón correspondiente no aparece — no tendría nada que buscar.
+
+Los demás conceptos (los que no dependen de buscar un documento, como
+**Anticipo Proveedor**, o cualquiera del desplegable "Otro concepto…": SRI,
+IESS, etc.) **siempre se muestran**, sin importar si hay pendientes o no.
 
 ## Reglas que aplica el sistema
 
@@ -155,6 +190,15 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.5** — Los botones de concepto ligados a documento (Compra, Liquidación,
+  Nómina) solo se muestran si hay algún pendiente de ese tipo en la empresa.
+  Se quitó el botón "Agregar documentos" (redundante con los botones de
+  concepto de la barra superior).
+- **1.4** — Los conceptos del egreso (Compra, Liquidación, Nómina, Otros
+  conceptos...) dejan de ser excluyentes: se pueden combinar en un mismo
+  egreso (p. ej. una factura de compra + un gasto sin factura). Exige cuenta
+  contable explícita en las líneas manuales cuando se mezclan con un
+  documento de módulo.
 - **1.3** — Anular un cheque puntual sin anular el egreso: queda como
   historial visible, deja de contarse en el total y se puede cubrir con otra
   forma de pago desde el mismo modal.

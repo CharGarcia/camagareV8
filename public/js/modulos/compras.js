@@ -340,9 +340,137 @@ function CMG_poblarModal(d) {
     // Pestaña de detalle de reembolso (factura recibida codDocReembolso=41)
     mcActualizarPestanaReembolso(d);
 
+    // Estado de aprobación: avisa si está pendiente/rechazada y ofrece los
+    // botones de Aprobar/Rechazar a quien esté autorizado.
+    mcAplicarEstadoAprobacion(d);
+
     // Solo lectura total: compra migrada o período contable cerrado
     // (se aplica al final para que prevalezca sobre el bloqueo de electrónica).
     mcAplicarSoloLectura(d);
+}
+
+/**
+ * Pinta el estado de aprobación de la compra (checkpoint 'aprobacion_compras').
+ * Mientras está pendiente no se puede pagar ni procesar su inventario: el aviso
+ * lo explica y los botones solo aparecen para un aprobador.
+ */
+function mcAplicarEstadoAprobacion(d) {
+    const sep       = document.getElementById('mcAprobSep');
+    const btnOk     = document.getElementById('mcBtnAprobar');
+    const btnNo     = document.getElementById('mcBtnRechazar');
+    const aviso     = document.getElementById('mcAprobAviso');
+    const avisoTxt  = document.getElementById('mcAprobAvisoTexto');
+    const avisoIco  = document.getElementById('mcAprobAvisoIcono');
+
+    const ocultar = el => el?.classList.add('d-none');
+    [sep, btnOk, btnNo, aviso].forEach(ocultar);
+    if (aviso) aviso.className = 'alert d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-0 border-0 border-bottom d-none';
+
+    const estado = d.estado || '';
+    if (estado !== 'pendiente_aprobacion' && estado !== 'rechazada') return;
+
+    if (estado === 'rechazada') {
+        if (avisoIco) avisoIco.className = 'bi bi-x-octagon-fill';
+        if (avisoTxt) {
+            avisoTxt.textContent = 'Esta compra fue rechazada'
+                + (d.motivo_rechazo ? ': ' + d.motivo_rechazo : '.')
+                + ' No puede pagarse ni procesar su inventario.';
+        }
+        aviso?.classList.remove('d-none');
+        aviso?.classList.add('alert-danger');
+        return;
+    }
+
+    // Pendiente de aprobación
+    if (avisoIco) avisoIco.className = 'bi bi-hourglass-split';
+    if (avisoTxt) {
+        avisoTxt.textContent = 'Compra pendiente de aprobación'
+            + (window.COMPRAS_APROBADORES && window.COMPRAS_APROBADORES.length
+                ? ' (' + window.COMPRAS_APROBADORES.join(', ') + ')'
+                : '')
+            + '. Hasta que se apruebe no se puede pagar, ni procesar su inventario, ni se genera su asiento contable.';
+    }
+    aviso?.classList.remove('d-none');
+    aviso?.classList.add('alert-warning');
+
+    // Segregación de funciones: quien la registró no la aprueba (salvo super admin).
+    const esPropia = String(d.created_by || '') === String(window.COMPRAS_ID_USUARIO || '');
+    const puede = window.COMPRAS_ES_APROBADOR && (!esPropia || window.COMPRAS_NIVEL >= 3);
+    if (!puede) return;
+
+    [sep, btnOk, btnNo].forEach(el => el?.classList.remove('d-none'));
+}
+
+async function mcAprobarCompra() {
+    const id = document.getElementById('mcId')?.value;
+    if (!id) return;
+
+    const conf = await Swal.fire({
+        icon: 'question',
+        title: '¿Aprobar esta compra?',
+        text: 'Se generará su asiento contable y quedará disponible para pagar y procesar inventario.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, aprobar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#16a34a'
+    });
+    if (!conf.isConfirmed) return;
+
+    const fd = new FormData();
+    fd.append('id_compra', id);
+    try {
+        const res  = await fetch(`${BASE_URL}/modulos/compras/aprobarAjax`, { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!json.ok) {
+            Swal.fire('No se pudo aprobar', json.error || 'Error desconocido.', 'error');
+            return;
+        }
+        await Swal.fire({
+            icon: json.aviso ? 'warning' : 'success',
+            title: 'Compra aprobada',
+            text: json.aviso || '',
+            timer: json.aviso ? undefined : 1400,
+            showConfirmButton: !!json.aviso
+        });
+        window.location.reload();
+    } catch (e) {
+        Swal.fire('Error de conexión', 'No se pudo contactar al servidor.', 'error');
+    }
+}
+
+async function mcRechazarCompra() {
+    const id = document.getElementById('mcId')?.value;
+    if (!id) return;
+
+    const { value: motivo, isConfirmed } = await Swal.fire({
+        icon: 'warning',
+        title: 'Rechazar la compra',
+        input: 'textarea',
+        inputLabel: 'Motivo del rechazo',
+        inputPlaceholder: 'Explique por qué rechaza esta compra…',
+        inputValidator: v => (!v || !v.trim()) ? 'Indique el motivo del rechazo.' : undefined,
+        showCancelButton: true,
+        confirmButtonText: 'Confirmar rechazo',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545'
+    });
+    if (!isConfirmed) return;
+
+    const fd = new FormData();
+    fd.append('id_compra', id);
+    fd.append('motivo', motivo.trim());
+    try {
+        const res  = await fetch(`${BASE_URL}/modulos/compras/rechazarAjax`, { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!json.ok) {
+            Swal.fire('No se pudo rechazar', json.error || 'Error desconocido.', 'error');
+            return;
+        }
+        await Swal.fire({ icon: 'success', title: 'Compra rechazada', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (e) {
+        Swal.fire('Error de conexión', 'No se pudo contactar al servidor.', 'error');
+    }
 }
 
 /**

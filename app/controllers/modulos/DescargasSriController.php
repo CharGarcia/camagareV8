@@ -134,6 +134,10 @@ class DescargasSriController extends BaseModuloController
             ];
         }
 
+        // Aprobación de compras: un solo correo con todas las que quedaron
+        // pendientes en este lote, en vez de uno por comprobante.
+        $registerService->notificarComprasPendientes();
+
         echo json_encode(['ok' => true, 'resultados' => $resultados]);
         exit;
     }
@@ -171,6 +175,10 @@ class DescargasSriController extends BaseModuloController
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
 
             $res = $registerService->procesarYRegistrar($xmlString, $idEmpresa, $idUsuario);
+
+            // Aprobación de compras: si el comprobante quedó pendiente, avisa a
+            // los aprobadores (aquí es uno solo, pero usa el mismo camino que el lote).
+            $registerService->notificarComprasPendientes();
 
             echo json_encode($res);
 
@@ -318,6 +326,10 @@ class DescargasSriController extends BaseModuloController
         } finally {
             $db->prepare('SELECT pg_advisory_unlock(?, hashtext(?))')->execute([$lockNs, $ruc]);
         }
+
+        // Aprobación de compras: un solo correo con todas las que quedaron
+        // pendientes en este lote, en vez de uno por comprobante.
+        $registerService->notificarComprasPendientes();
 
         echo json_encode(['ok' => true, 'resultados' => $resultados, 'total' => $total]);
         exit;

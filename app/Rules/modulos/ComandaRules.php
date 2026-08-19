@@ -39,6 +39,39 @@ class ComandaRules
         }
     }
 
+    /**
+     * Recargo por servicio (el "10%" de restaurantes) — se cobra en el campo
+     * <propina> del comprobante.
+     *
+     * Dos límites, y ninguno es negociable:
+     *  - Solo se puede encender/apagar desde el salón si el establecimiento lo
+     *    tiene configurado como 'opcional'. En 'obligatorio' lo lleva toda
+     *    comanda y nadie lo quita desde aquí; en 'no' no existe.
+     *  - El porcentaje no puede pasar de 10: la Ficha Técnica del SRI valida
+     *    que la propina no supere el 10% del subtotal, y un comprobante que lo
+     *    exceda es rechazado.
+     */
+    public function validarServicio(string $modoEstablecimiento, float $porcentaje): void
+    {
+        if ($modoEstablecimiento === 'no') {
+            throw new Exception('Este establecimiento no cobra recargo por servicio. Actívalo en Empresa → Facturación.');
+        }
+        if ($modoEstablecimiento === 'obligatorio') {
+            throw new Exception('El recargo por servicio es obligatorio en este establecimiento; no se puede quitar desde la comanda.');
+        }
+        $this->validarPorcentajeServicio($porcentaje);
+    }
+
+    public function validarPorcentajeServicio(float $porcentaje): void
+    {
+        if ($porcentaje < 0) {
+            throw new Exception('El porcentaje de servicio no puede ser negativo.');
+        }
+        if ($porcentaje > 10) {
+            throw new Exception('El recargo por servicio no puede superar el 10% del subtotal (límite del SRI para la propina).');
+        }
+    }
+
     public function validarLinea(array $item): void
     {
         if (empty($item['id_producto']) && empty($item['id_menu_item'])) {

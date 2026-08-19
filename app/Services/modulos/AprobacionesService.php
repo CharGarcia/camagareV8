@@ -52,15 +52,33 @@ class AprobacionesService
 
     // ─── Pantalla de configuración ──────────────────────────────────────────────
 
-    /** Aprobaciones que la empresa configuró (listado del módulo). */
-    public function getListado(int $idEmpresa): array
-    {
-        $rows = $this->repo->getConfiguradas($idEmpresa);
-        foreach ($rows as &$r) {
+    /**
+     * Aprobaciones que la empresa configuró (listado del módulo), con buscador,
+     * ordenamiento y paginación. `$perPage = 0` devuelve todo (exportaciones).
+     *
+     * @return array{rows: array, total: int}
+     */
+    public function getListado(
+        int $idEmpresa,
+        string $buscar = '',
+        int $page = 1,
+        int $perPage = 20,
+        string $ordenCol = 'modulo',
+        string $ordenDir = 'ASC'
+    ): array {
+        $result = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        foreach ($result['rows'] as &$r) {
             $r['usuarios_aprobadores'] = $this->decodeAprobadores($r['usuarios_aprobadores'] ?? '[]');
             $r['requiere_aprobacion']  = $this->esVerdadero($r['requiere_aprobacion'] ?? null);
         }
-        return $rows;
+        unset($r);
+        return $result;
+    }
+
+    /** Ids de checkpoint ya configurados en la empresa. */
+    public function getTiposConfigurados(int $idEmpresa): array
+    {
+        return $this->repo->getTiposConfigurados($idEmpresa);
     }
 
     /** Checkpoints que la empresa aún no configuró (select del modal "Nueva aprobación"). */
@@ -167,14 +185,26 @@ class AprobacionesService
             'umbral'      => null,
         ];
 
-        $tipo = $this->repo->getTipoPorCodigo($codigoTipo);
-        if (!$tipo) {
+        try {
+            $tipo = $this->repo->getTipoPorCodigo($codigoTipo);
+            if (!$tipo) {
+                return $this->cacheConfig[$clave] = $vacio;
+            }
+            $vacio['id_tipo'] = (int) $tipo['id'];
+            $vacio['nombre']  = $tipo['nombre'];
+
+            $cfg = $this->repo->getConfigPorTipoId($idEmpresa, (int) $tipo['id']);
+        } catch (\Throwable $e) {
+            // Este motor lo consultan módulos centrales (Compras, Inventario,
+            // Tesorería) en su camino de guardado. Si sus tablas todavía no
+            // existen —código desplegado antes que el SQL— no puede tumbar el
+            // registro de un documento: sin configuración, no hay aprobación.
+            \App\Services\ErrorLogService::registrar($e, [
+                'ruta' => static::class, 'accion' => 'getConfigCheckpoint', 'tipo' => $codigoTipo,
+            ]);
             return $this->cacheConfig[$clave] = $vacio;
         }
-        $vacio['id_tipo'] = (int) $tipo['id'];
-        $vacio['nombre']  = $tipo['nombre'];
 
-        $cfg = $this->repo->getConfigPorTipoId($idEmpresa, (int) $tipo['id']);
         if (!$cfg) {
             return $this->cacheConfig[$clave] = $vacio;
         }

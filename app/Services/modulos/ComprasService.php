@@ -20,6 +20,13 @@ class ComprasService
     private LogSistemaService $logService;
     private PeriodosContablesService $periodosService;
     private ?string $lastAsientoWarning = null;
+    private ?AprobacionesService $aprobService = null;
+    private ?\App\repositories\modulos\EmpresaRepository $empRepo = null;
+
+    /** Estado de una compra que espera autorización (checkpoint 'aprobacion_compras'). */
+    public const ESTADO_PENDIENTE = 'pendiente_aprobacion';
+    public const ESTADO_REGISTRADO = 'registrado';
+    public const ESTADO_RECHAZADA = 'rechazada';
 
     public function __construct()
     {
@@ -56,6 +63,23 @@ class ComprasService
             }
 
             $data = $this->calcularTotales($data);
+
+            // ¿La empresa exige aprobar las compras? Se consulta con el importe
+            // total para respetar el monto mínimo configurado en el módulo
+            // Aprobaciones. Si la exige, la compra nace pendiente: no se puede
+            // pagar, ni procesar su inventario, ni se genera su asiento.
+            //
+            // Solo aplica a los documentos que crean obligación de pago: factura
+            // (01) y liquidación de compra (03). Las notas de crédito (04) y
+            // débito (05) comparten esta tabla pero son ajustes del saldo, y
+            // dejarlas pendientes descuadraría la cartera (los cálculos de saldo
+            // restan las NC sin mirar su estado).
+            $cfgAprob = ['requiere' => false, 'aprobadores' => []];
+            if (in_array((string) ($data['tipo_comprobante'] ?? '01'), ['01', '03'], true)) {
+                $cfgAprob = $this->getConfigAprobacion($idEmpresa, (float) ($data['importe_total'] ?? 0));
+            }
+            $data['estado'] = $cfgAprob['requiere'] ? self::ESTADO_PENDIENTE : self::ESTADO_REGISTRADO;
+
             $idCompra = $this->repository->insertCabecera($data);
 
             $this->sincronizarDetalles($idCompra, $data['detalles'] ?? []);
@@ -77,9 +101,280 @@ class ComprasService
             throw $e;
         }
 
+        if (($data['estado'] ?? '') === self::ESTADO_PENDIENTE) {
+            // Pendiente: no se asienta todavía (el asiento lo genera la aprobación).
+            // El token permite aprobar desde el enlace del correo, sin sesión.
+            $token = bin2hex(random_bytes(24));
+            $this->repository->setTokenAprobacion($idCompra, $token);
+            try {
+                $this->notificarAprobadores($idEmpresa, $idCompra, $cfgAprob['aprobadores'], $token, $idUsuario);
+            } catch (\Throwable $e) {
+                // Un fallo de correo no puede tumbar la compra ya guardada; queda
+                // igualmente pendiente y visible en el listado.
+            }
+            return $idCompra;
+        }
+
         // Asiento contable FUERA de la transacción: un fallo no revierte la compra ya guardada.
         $this->generarAsientoTrasGuardar($idCompra, $data);
         return $idCompra;
+    }
+
+    // ─── Aprobación de la compra (checkpoint 'aprobacion_compras') ─────────────
+
+    private function aprobacionesService(): AprobacionesService
+    {
+        if ($this->aprobService === null) {
+            $this->aprobService = new AprobacionesService();
+        }
+        return $this->aprobService;
+    }
+
+    private function empresaRepo(): \App\repositories\modulos\EmpresaRepository
+    {
+        if ($this->empRepo === null) {
+            $this->empRepo = new \App\repositories\modulos\EmpresaRepository();
+        }
+        return $this->empRepo;
+    }
+
+    /**
+     * @param float|null $monto Importe total de la compra. Si el checkpoint tiene
+     *                          monto mínimo, por debajo de él no pide aprobación.
+     */
+    public function getConfigAprobacion(int $idEmpresa, ?float $monto = null): array
+    {
+        return $this->aprobacionesService()->getConfigResuelta(
+            AprobacionesService::COMPRAS,
+            $idEmpresa,
+            $monto
+        );
+    }
+
+    /** ¿El usuario puede aprobar compras? (aprobador configurado o super admin). */
+    public function esAprobador(int $idUsuario, int $idEmpresa, int $nivel = 1): bool
+    {
+        return $this->aprobacionesService()->esAprobador(
+            AprobacionesService::COMPRAS,
+            $idEmpresa,
+            $idUsuario,
+            $nivel
+        );
+    }
+
+    /** Nombres de los aprobadores configurados (para mostrar quién debe aprobar). */
+    public function getAprobadoresNombres(int $idEmpresa): array
+    {
+        $cfg = $this->getConfigAprobacion($idEmpresa);
+        if (empty($cfg['aprobadores'])) return [];
+        return array_column($this->repository->getNombresUsuarios($cfg['aprobadores']), 'nombre');
+    }
+
+    public function getPorTokenAprobacion(string $token): ?array
+    {
+        $compra = $this->repository->getPorTokenAprobacion($token);
+        // El token solo sirve mientras la compra siga esperando: una vez resuelta
+        // el enlace del correo deja de ser válido.
+        return ($compra && $compra['estado'] === self::ESTADO_PENDIENTE) ? $compra : null;
+    }
+
+    public function contarPendientesAprobacion(int $idEmpresa): int
+    {
+        return $this->repository->contarPendientesAprobacion($idEmpresa);
+    }
+
+    /**
+     * Aprueba la compra: pasa a 'registrado' y recién entonces se genera su
+     * asiento contable (a partir de ahí ya se puede pagar y procesar inventario).
+     *
+     * @param bool $auto true cuando la aprobación viene del enlace del correo con
+     *                   token válido (la autorización ya la dio el token).
+     */
+    public function aprobarCompra(int $idCompra, int $idEmpresa, int $idUsuario, bool $auto = false, int $nivel = 1): array
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) {
+            throw new \InvalidArgumentException('Compra no encontrada.');
+        }
+        if (($compra['estado'] ?? '') !== self::ESTADO_PENDIENTE) {
+            throw new \InvalidArgumentException('Esta compra ya no está pendiente de aprobación.');
+        }
+        if (!$auto && !$this->esAprobador($idUsuario, $idEmpresa, $nivel)) {
+            throw new \InvalidArgumentException('No está autorizado para aprobar compras.');
+        }
+        // Segregación de funciones: quien registra la compra no la aprueba (salvo super admin).
+        if (!$auto && $nivel < 3 && (int) ($compra['created_by'] ?? 0) === $idUsuario) {
+            throw new \InvalidArgumentException('No puede aprobar una compra que usted mismo registró. Debe aprobarla otro usuario autorizado.');
+        }
+
+        $this->repository->resolverAprobacion($idCompra, self::ESTADO_REGISTRADO, $idUsuario);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'APROBAR_COMPRA', 'compras_cabecera', $idCompra,
+            ['estado' => self::ESTADO_PENDIENTE],
+            ['estado' => self::ESTADO_REGISTRADO, 'total' => $compra['importe_total'] ?? 0]
+        );
+
+        // El asiento se posponía mientras estaba pendiente: se genera ahora.
+        $numDoc = ($compra['establecimiento_prov'] ?? '') . '-'
+                . ($compra['punto_emision_prov'] ?? '') . '-'
+                . ($compra['secuencial_prov'] ?? '');
+        try {
+            $this->procesarAsientoContable($idCompra, $compra, $numDoc);
+        } catch (\Throwable $e) {
+            // Igual que en el registro directo: un fallo contable no revierte la
+            // aprobación; queda el aviso para regenerar el asiento.
+            $this->lastAsientoWarning = $e->getMessage();
+        }
+
+        return ['estado' => self::ESTADO_REGISTRADO, 'aviso_asiento' => $this->lastAsientoWarning];
+    }
+
+    /**
+     * Rechaza la compra. No se elimina: queda registrada como 'rechazada' con el
+     * motivo, para que quede rastro de que el documento llegó y se decidió no
+     * aceptarlo. Sigue sin poder pagarse ni asentarse.
+     */
+    public function rechazarCompra(int $idCompra, int $idEmpresa, int $idUsuario, string $motivo, bool $auto = false, int $nivel = 1): array
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) {
+            throw new \InvalidArgumentException('Compra no encontrada.');
+        }
+        if (($compra['estado'] ?? '') !== self::ESTADO_PENDIENTE) {
+            throw new \InvalidArgumentException('Esta compra ya no está pendiente de aprobación.');
+        }
+        if (!$auto && !$this->esAprobador($idUsuario, $idEmpresa, $nivel)) {
+            throw new \InvalidArgumentException('No está autorizado para aprobar compras.');
+        }
+        $motivo = trim($motivo);
+        if ($motivo === '') {
+            throw new \InvalidArgumentException('Indique el motivo del rechazo.');
+        }
+
+        $this->repository->resolverAprobacion($idCompra, self::ESTADO_RECHAZADA, $idUsuario, $motivo);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'RECHAZAR_COMPRA', 'compras_cabecera', $idCompra,
+            ['estado' => self::ESTADO_PENDIENTE],
+            ['estado' => self::ESTADO_RECHAZADA, 'motivo' => $motivo]
+        );
+
+        return ['estado' => self::ESTADO_RECHAZADA];
+    }
+
+    /**
+     * Notifica en UN solo correo varias compras que quedaron pendientes a la vez.
+     * Lo usa el registro automático desde el SRI, que procesa un lote de XML: un
+     * correo por comprobante sería inmanejable.
+     *
+     * @param array $pendientes Filas [id, id_empresa, token] de esta corrida.
+     */
+    public function notificarLotePendiente(array $pendientes): void
+    {
+        if (empty($pendientes)) return;
+
+        // El lote siempre es de una misma empresa (el registro va por empresa activa).
+        $idEmpresa = (int) ($pendientes[0]['id_empresa'] ?? 0);
+        if (!$idEmpresa) return;
+
+        $cfg = $this->getConfigAprobacion($idEmpresa);
+        $correos = $this->correosAprobadores($cfg['aprobadores'], 0);
+        if (empty($correos)) {
+            $this->logService->registrar(0, $idEmpresa, 'notificar_compra_sin_correo', 'compras_cabecera', null, null, ['aprobadores' => $cfg['aprobadores']]);
+            return;
+        }
+
+        $publicUrl = $this->urlPublica();
+        $filas = [];
+        foreach ($pendientes as $p) {
+            $compra = $this->repository->getPorId((int) $p['id'], $idEmpresa);
+            if (!$compra) continue;
+            $filas[] = [
+                'numero'    => ($compra['establecimiento_prov'] ?? '') . '-'
+                             . ($compra['punto_emision_prov'] ?? '') . '-'
+                             . ($compra['secuencial_prov'] ?? ''),
+                'proveedor' => $compra['proveedor_nombre'] ?? '',
+                'fecha'     => !empty($compra['fecha_emision']) ? date('d-m-Y', strtotime($compra['fecha_emision'])) : '',
+                'total'     => number_format((float) ($compra['importe_total'] ?? 0), 2),
+                'url'       => $publicUrl . '/aprobar-compra/' . $p['token'],
+            ];
+        }
+        if (empty($filas)) return;
+
+        $emp = $this->empresaRepo()->getEmisorConfig($idEmpresa) ?? [];
+
+        require_once MVC_APP . '/helpers/mail.php';
+        $ok = notificar_compras_pendientes_lote($correos, [
+            'empresa' => $emp['nombre_comercial'] ?? ($emp['nombre'] ?? ''),
+            'compras' => $filas,
+        ]);
+
+        $this->logService->registrar(
+            0, $idEmpresa,
+            $ok ? 'notificar_compra_ok' : 'notificar_compra_error',
+            'compras_cabecera', null, null,
+            ['correos' => $correos, 'compras' => count($filas), 'error' => $ok ? null : ($GLOBALS['LAST_EMAIL_ERROR'] ?? null)]
+        );
+    }
+
+    /** URL absoluta del sistema (BASE_URL es relativa y no sirve en un correo). */
+    private function urlPublica(): string
+    {
+        $url = (defined('APP_URL') && APP_URL !== '') ? APP_URL : (defined('BASE_URL') ? BASE_URL : '');
+        return rtrim($url, '/');
+    }
+
+    /**
+     * Correos de los aprobadores, excluyendo a quien registró el documento
+     * (segregación de funciones). Con $creadorId = 0 no excluye a nadie.
+     */
+    private function correosAprobadores(array $idsAprobadores, int $creadorId): array
+    {
+        $ids = array_values(array_filter($idsAprobadores, static fn($id) => (int) $id !== $creadorId));
+        if (empty($ids)) return [];
+
+        return array_values(array_filter(array_map(
+            static fn($u) => trim((string) ($u['mail'] ?? '')),
+            $this->repository->getNombresUsuarios($ids)
+        )));
+    }
+
+    /** Notifica por correo a los aprobadores que hay una compra esperando. */
+    private function notificarAprobadores(int $idEmpresa, int $idCompra, array $idsAprobadores, ?string $token, int $creadorId): void
+    {
+        // Segregación: no se pide aprobación a quien registró la compra.
+        $correos = $this->correosAprobadores($idsAprobadores, $creadorId);
+        if (empty($correos)) {
+            $this->logService->registrar(0, $idEmpresa, 'notificar_compra_sin_correo', 'compras_cabecera', $idCompra, null, ['aprobadores' => $idsAprobadores]);
+            return;
+        }
+
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) return;
+
+        $emp = $this->empresaRepo()->getEmisorConfig($idEmpresa) ?? [];
+
+        $publicUrl = $this->urlPublica();
+        $url = $token ? ($publicUrl . '/aprobar-compra/' . $token) : ($publicUrl . '/modulos/compras');
+
+        require_once MVC_APP . '/helpers/mail.php';
+        $ok = notificar_compra_pendiente($correos, [
+            'numero'    => ($compra['establecimiento_prov'] ?? '') . '-'
+                         . ($compra['punto_emision_prov'] ?? '') . '-'
+                         . ($compra['secuencial_prov'] ?? ''),
+            'proveedor' => $compra['proveedor_nombre'] ?? '',
+            'fecha'     => !empty($compra['fecha_emision']) ? date('d-m-Y', strtotime($compra['fecha_emision'])) : '',
+            'total'     => number_format((float) ($compra['importe_total'] ?? 0), 2),
+            'empresa'   => $emp['nombre_comercial'] ?? ($emp['nombre'] ?? ''),
+            'creador'   => $compra['usuario_nombre'] ?? '',
+            'url'       => $url,
+        ]);
+
+        $this->logService->registrar(
+            0, $idEmpresa,
+            $ok ? 'notificar_compra_ok' : 'notificar_compra_error',
+            'compras_cabecera', $idCompra, null,
+            ['correos' => $correos, 'error' => $ok ? null : ($GLOBALS['LAST_EMAIL_ERROR'] ?? null)]
+        );
     }
 
     public function getPorId(int $id, int $idEmpresa): ?array
@@ -615,6 +910,16 @@ class ComprasService
     {
         $cabecera = $this->repository->getPorId($idCompra);
         if (!$cabecera) return;
+
+        // Una compra que espera aprobación (o que fue rechazada) todavía no debe
+        // llegar a la contabilidad: su asiento lo genera la aprobación. Sin esto,
+        // la sincronización masiva de asientos lo crearía por detrás y anularía
+        // el sentido del checkpoint.
+        $estado = $cabecera['estado'] ?? '';
+        if ($estado === self::ESTADO_PENDIENTE || $estado === self::ESTADO_RECHAZADA) {
+            return;
+        }
+
         $numDoc = ($cabecera['establecimiento_prov'] ?? '') . '-'
                 . ($cabecera['punto_emision_prov'] ?? '') . '-'
                 . ($cabecera['secuencial_prov'] ?? '');

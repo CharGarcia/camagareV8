@@ -506,11 +506,12 @@ window.RI_Consignaciones = {
     },
 
     modalInstance: null,
+    docsModalInstance: null,
 
     dibujarCabecera(modo) {
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
-            th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Vendedor</th>
+            th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Vendedor</th><th>Responsable traslado</th>
                    <th class="text-center">Productos</th><th class="text-end">Saldo</th>
                    <th class="text-center pe-3">Estado</th>`;
         } else {
@@ -527,7 +528,7 @@ window.RI_Consignaciones = {
         }
         const tbody = document.getElementById('ri-cv-modal-tbody');
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
-        ['secuencial', 'fecha', 'cliente', 'vendedor', 'estado'].forEach(k => {
+        ['secuencial', 'fecha', 'cliente', 'vendedor', 'responsable', 'estado'].forEach(k => {
             document.getElementById('ri-cv-modal-' + k).textContent = '';
         });
         this.modalInstance.show();
@@ -544,6 +545,7 @@ window.RI_Consignaciones = {
                 document.getElementById('ri-cv-modal-fecha').textContent = c.fecha_emision || '';
                 document.getElementById('ri-cv-modal-cliente').textContent = c.cliente + (c.identificacion ? ` (${c.identificacion})` : '');
                 document.getElementById('ri-cv-modal-vendedor').textContent = c.vendedor || '-';
+                document.getElementById('ri-cv-modal-responsable').textContent = c.responsable || '-';
                 document.getElementById('ri-cv-modal-estado').textContent = c.estado || '';
                 tbody.innerHTML = res.rows;
             })
@@ -553,13 +555,39 @@ window.RI_Consignaciones = {
             });
     },
 
+    /** Sub-modal (encima del de detalle, que queda fijo/abierto detrás): documentos de
+     *  retorno o factura que explican la cantidad Retornado/Facturado de una línea. */
+    verDocumentosLinea(idDetalle, tipo) {
+        if (!this.docsModalInstance) {
+            this.docsModalInstance = new bootstrap.Modal(document.getElementById('ri-cv-modal-linea-docs'));
+        }
+        const tbody = document.getElementById('ri-cv-docs-tbody');
+        document.getElementById('ri-cv-docs-titulo').textContent = tipo === 'retorno' ? 'Retornos de esta línea' : 'Facturas de esta línea';
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        this.docsModalInstance.show();
+
+        fetch(BASE_URL + '/' + RUTA_MODULO + '/verDocumentosLineaConsignacionAjax?id_detalle=' + encodeURIComponent(idDetalle) + '&tipo=' + encodeURIComponent(tipo))
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = res.rows;
+            })
+            .catch(err => {
+                console.error(err);
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
+            });
+    },
+
     generar() {
         const modo = document.getElementById('ri-cv-agrupar').value;
         this.dibujarCabecera(modo);
 
         const params = RI_paramsFromIds({
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
-            id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
+            id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor', id_responsable_traslado: 'ri-cv-responsable',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
             numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',
@@ -568,7 +596,7 @@ window.RI_Consignaciones = {
         });
 
         const tbody = document.getElementById('ri-cv-tbody');
-        const colSpan = modo === 'NINGUNO' ? 6 : 3;
+        const colSpan = modo === 'NINGUNO' ? 7 : 3;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('consignaciones', params, (res) => {
@@ -589,7 +617,7 @@ window.RI_Consignaciones = {
     _filtros() {
         const params = RI_paramsFromIds({
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
-            id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor',
+            id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor', id_responsable_traslado: 'ri-cv-responsable',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
             numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',

@@ -80,6 +80,18 @@ class EgresosController extends BaseModuloController
 
         $conceptos  = $this->service->getConceptosEgreso($idEmpresa);
 
+        // Los botones de concepto ligados a un módulo (Compra/Liquidación/Nómina) solo se
+        // muestran si hay algún documento pendiente de ese tipo en la empresa; los conceptos
+        // sin módulo (GENERAL) y sin búsqueda de documentos (p. ej. Anticipo Proveedor) no
+        // dependen de esto y siempre se muestran.
+        $comportamientosConPendientes = [];
+        foreach (['COMPRA', 'LIQUIDACION', 'ROL'] as $tipoDoc) {
+            $chk = $this->repository->buscarDocumentosPendientesEgreso($idEmpresa, '', $tipoDoc);
+            if (!empty($chk['data'])) {
+                $comportamientosConPendientes[] = $tipoDoc;
+            }
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos/egresos/index', [
             'titulo'            => 'Egresos',
             'perm'              => $perm,
@@ -100,6 +112,7 @@ class EgresosController extends BaseModuloController
             'puntos'            => $puntos,
             'formasPago'        => $formasPago,
             'conceptos'         => $conceptos,
+            'comportamientosConPendientes' => $comportamientosConPendientes,
             'fullWidth'         => true,
         ]);
     }
