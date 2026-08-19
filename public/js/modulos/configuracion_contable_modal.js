@@ -1050,6 +1050,7 @@
             </div>`;
 
         let html = '';
+        let indice = 0;   // sufijo de los ids de los paneles plegables (únicos por dimensión)
         grupos.forEach(g => {
             // ¿Qué conceptos tiene configurados ESTA entidad? (el IVA se cruza por tarifa)
             const tienePropia = (c) => parseInt(c.id_asiento_tipo) > 0
@@ -1073,22 +1074,34 @@
                     ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 small" title="Conceptos sin cuenta ni en esta ficha ni en la configuración General">faltan ${faltantes.length}</span>`
                     : '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small" title="Ningún concepto queda sin cuenta: los que no están aquí los cubre la configuración General"><i class="bi bi-check2 me-1"></i>completa</span>');
 
+            // Una entidad por fila, plegable. Las que tienen conceptos sin cuenta arrancan
+            // ABIERTAS (es lo que hay que atender); las que están completas, plegadas.
+            const idPanel = `dimAcc_${tipo}_${indice++}`;
+            const abierta = faltantes.length > 0;
+
             html += `
-            <div class="col-12 col-xl-6">
-                <div class="card border h-100">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-2 py-2 px-3">
-                        <span class="fw-bold text-dark text-truncate" title="${ASIENTOPROG_esc(g.nombre)}">${ASIENTOPROG_esc(g.nombre)}</span>
-                        <span class="d-flex align-items-center gap-1 text-nowrap">
-                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 small">${g.filas.length} cuenta(s)</span>
-                            ${estado}
-                        </span>
+            <div class="col-12">
+                <div class="card border">
+                    <div class="card-header bg-white p-0">
+                        <button class="btn btn-link w-100 d-flex justify-content-between align-items-center gap-2 py-2 px-3 text-decoration-none shadow-none${abierta ? '' : ' collapsed'}"
+                                type="button" data-bs-toggle="collapse" data-bs-target="#${idPanel}"
+                                aria-expanded="${abierta}" aria-controls="${idPanel}">
+                            <span class="fw-bold text-dark text-truncate" title="${ASIENTOPROG_esc(g.nombre)}">${ASIENTOPROG_esc(g.nombre)}</span>
+                            <span class="d-flex align-items-center gap-1 text-nowrap">
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 small">${g.filas.length} cuenta(s)</span>
+                                ${estado}
+                                <i class="bi bi-chevron-down text-muted small ms-1"></i>
+                            </span>
+                        </button>
                     </div>
-                    <div class="card-body p-2">
-                        <div class="row g-2">
-                            ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', propiasDebe,  faltaDebe)}
-                            ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   propiasHaber, faltaHaber)}
+                    <div id="${idPanel}" class="collapse${abierta ? ' show' : ''}">
+                        <div class="card-body p-2 border-top">
+                            <div class="row g-2">
+                                ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', propiasDebe,  faltaDebe)}
+                                ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   propiasHaber, faltaHaber)}
+                            </div>
+                            ${heredados ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Otros ${heredados} concepto(s) usan la cuenta de la configuración General.</div>` : ''}
                         </div>
-                        ${heredados ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Otros ${heredados} concepto(s) usan la cuenta de la configuración General.</div>` : ''}
                     </div>
                 </div>
             </div>`;

@@ -68,6 +68,20 @@ $base = BASE_URL;
         box-shadow: none;
         border-color: rgba(13, 110, 253, 0.25);
     }
+
+    /* Tarjetas plegables de las reglas por entidad (una por fila, ver ASIENTOPROG_tarjetasDim).
+       El chevron apunta hacia abajo cuando el panel está abierto y hacia la izquierda al plegarse. */
+    [id^="dimCards_"] .card-header .btn .bi-chevron-down {
+        transition: transform .2s ease;
+    }
+
+    [id^="dimCards_"] .card-header .btn.collapsed .bi-chevron-down {
+        transform: rotate(-90deg);
+    }
+
+    [id^="dimCards_"] .card-header .btn:hover {
+        background-color: rgba(13, 110, 253, 0.04);
+    }
 </style>
 
 <!-- Cabecera de Página -->
