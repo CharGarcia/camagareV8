@@ -77,9 +77,9 @@ despliega al hacer clic en su título, y reúne todas las cuentas de ese product
 (o cliente, o categoría), incluidas las de IVA por tarifa, repartidas en dos
 columnas: **Debe** a la izquierda y **Haber** a la derecha.
 
-Al abrir la pestaña, las entidades a las que les falta alguna cuenta aparecen
-**desplegadas** y las que están completas, plegadas: así lo pendiente queda a la
-vista sin tener que abrirlas una por una.
+Todas las tarjetas aparecen **plegadas** al entrar, para poder recorrer la lista
+de un vistazo. No hace falta abrirlas para saber cuáles necesitan atención: la
+propia cabecera indica *faltan N* o *completa*.
 
 Dentro de cada columna aparecen:
 
@@ -170,7 +170,7 @@ documento o en la ficha de la entidad implicada.
   tarjeta plegable por entidad**, una por fila y ordenadas por nombre, con sus
   cuentas separadas en Debe y Haber, aviso de los conceptos que quedan sin cuenta
   en ningún nivel y resumen de los que se resuelven con la configuración General.
-  Las entidades incompletas se muestran desplegadas al entrar.
+  Las tarjetas arrancan plegadas; su cabecera ya indica si falta alguna cuenta.
 - **1.4** — Cada concepto acepta únicamente cuentas de la naturaleza que le
   corresponde (la cartera de ventas, solo cuentas de activo). El sistema rechaza
   el guardado si la cuenta no cuadra, tanto en la configuración General como en
