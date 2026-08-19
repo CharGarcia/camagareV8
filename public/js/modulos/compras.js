@@ -962,6 +962,10 @@ window.CMG_seleccionarProducto = function(p) {
     }
 
     // --- SELECCIÓN NORMAL (Desde el buscador principal de productos) ---
+    // precio_unitario NO se autocompleta: el campo del producto que existe hoy
+    // (costo_producto) no está garantizado como el costo real de compra, y mostrar
+    // cualquier precio del catálogo aquí puede confundirse con el de venta. Se deja
+    // en 0 para que el usuario lo ingrese con el precio real del comprobante.
     const iva = parseFloat(p.porcentaje_iva || p.iva || _ivaDefault);
     CMG_agregarFilaDetalle({
         id_producto: p.id,
@@ -969,7 +973,7 @@ window.CMG_seleccionarProducto = function(p) {
         codigo: p.codigo_principal || p.codigo,
         descripcion: p.nombre,
         cantidad: 1,
-        precio_unitario: parseFloat(p.costo_producto || p.costo || 0),
+        precio_unitario: 0,
         descuento: 0,
         id_medida: p.id_medida,
         id_tipo_medida: p.id_tipo_medida,
@@ -1970,14 +1974,9 @@ async function mcConsultarHomologacion(idProv, codigoProv, tr) {
                     inputDesc.value = prod.nombre;
                 }
 
-                // Si el precio es 0, poner el costo sugerido
-                const inputPrecio = tr.querySelector('.input-precio');
-                if (inputPrecio && parseFloat(inputPrecio.value || 0) === 0) {
-                    inputPrecio.value = parseFloat(prod.costo || 0).toFixed(DEC_PRECIO);
-                    // Ya no es el precio del XML: invalida el subtotal "declarado" de la línea
-                    // para que a partir de ahora se recalcule en vivo (ver CMG_recalcularTotales).
-                    tr.dataset.subtotalOriginal = '';
-                }
+                // El precio NO se autocompleta desde el producto (ver misma nota en
+                // CMG_seleccionarProducto): el usuario ingresa el precio real del
+                // comprobante, no un costo sugerido del catálogo.
                 
                 // Sincronizar con la pestaña de inventario
                 mcSincronizarInventario();

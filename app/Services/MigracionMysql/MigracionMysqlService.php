@@ -2517,8 +2517,26 @@ class MigracionMysqlService
         }
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
 
-        $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
-        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque, detalle_pago FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
+        // PRE-CARGA por lote (evita ~3 round-trips al MySQL viejo por documento): detalle (con el cliente de
+        // la factura referenciada vía LEFT JOIN) y formas de pago del RANGO completo, agrupados por documento.
+        $dateCl = '';
+        if ($desde && preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) >= " . $mysql->quote($desde); }
+        if ($hasta && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) <= " . $mysql->quote($hasta); }
+        $detByDoc = [];
+        foreach ($mysql->query("SELECT d.codigo_documento AS cd, d.valor_ing_egr, d.detalle_ing_egr, d.codigo_documento_cv, ef.id_cliente AS fac_cliente
+                                  FROM detalle_ingresos_egresos d
+                                  JOIN ingresos_egresos ie ON ie.codigo_documento = d.codigo_documento
+                                  LEFT JOIN encabezado_factura ef ON ef.id_encabezado_factura = d.codigo_documento_cv
+                                 WHERE d.tipo_documento = 'INGRESO' AND ie.tipo_ing_egr = 'INGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+            $detByDoc[(string) $r['cd']][] = $r;
+        }
+        $formaByDoc = [];
+        foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.cheque, f.detalle_pago
+                                  FROM formas_pagos_ing_egr f
+                                  JOIN ingresos_egresos ie ON ie.codigo_documento = f.codigo_documento
+                                 WHERE f.tipo_documento = 'INGRESO' AND ie.tipo_ing_egr = 'INGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+            $formaByDoc[(string) $r['cd']][] = $r;
+        }
         // Forma de cobro BANCARIA: cuando el pago viejo trae id_cuenta>0 (codigo_forma_pago='0'), enlaza a la
         // cuenta bancaria migrada (empresa_formas_pago tipo BANCO). Preferir el mapa; get-or-create de respaldo.
         $mapCuenta  = $this->mapaDe($pg, $idEmpresa, 'cuentas_bancarias'); // old id_cuenta -> forma
@@ -2527,7 +2545,6 @@ class MigracionMysqlService
         $insMapCta  = $this->stmtMap($pg, 'cuentas_bancarias');
         $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
-        $oldFacCli   = $mysql->prepare("SELECT id_cliente FROM encabezado_factura WHERE id_encabezado_factura = :id LIMIT 1");
         $mapIngreso  = $this->mapaDe($pg, $idEmpresa, 'ingresos'); // para reconciliar al re-correr
         $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, tipo_ingreso = ?, id_ingreso_concepto = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
@@ -2551,16 +2568,14 @@ class MigracionMysqlService
 
             try {
                 $pg->beginTransaction();
-                $detStmt->execute([':cd' => $cod]);
-                $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+                $dets = $detByDoc[$cod] ?? [];
 
-                // Cliente: desde la factura vieja referenciada (funciona aunque la factura no se haya migrado)
+                // Cliente: desde la factura vieja referenciada (funciona aunque la factura no se haya migrado).
+                // El id_cliente de la factura viene pre-cargado en el batch (LEFT JOIN encabezado_factura).
                 $idCliente = null;
                 foreach ($dets as $d) {
-                    $facOld = (int) $d['codigo_documento_cv'];
-                    if ($facOld <= 0) { continue; }
-                    $oldFacCli->execute([':id' => $facOld]);
-                    $oldCli = (int) $oldFacCli->fetchColumn();
+                    if ((int) $d['codigo_documento_cv'] <= 0) { continue; }
+                    $oldCli = (int) ($d['fac_cliente'] ?? 0);
                     if ($oldCli > 0) {
                         $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, $oldCli, $idEmpresa, $idUsuario, $mysql, $pg);
                         if ($idCliente) { break; }
@@ -2621,8 +2636,7 @@ class MigracionMysqlService
                     $insDet->execute([$idIng, $tdoc, $idRef, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
                 }
 
-                $formaStmt->execute([':cd' => $cod]);
-                foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                foreach ($formaByDoc[$cod] ?? [] as $f) {
                     $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
                     $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
                 }
@@ -2667,8 +2681,29 @@ class MigracionMysqlService
         }
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
 
-        $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
-        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque, detalle_pago FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
+        // PRE-CARGA por lote (evita ~3 round-trips al MySQL viejo por documento): detalle + formas de pago del
+        // RANGO, agrupados por documento; y el proveedor de la compra referenciada en un mapa (código → proveedor).
+        $dateCl = '';
+        if ($desde && preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) >= " . $mysql->quote($desde); }
+        if ($hasta && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) <= " . $mysql->quote($hasta); }
+        $detByDoc = [];
+        foreach ($mysql->query("SELECT d.codigo_documento AS cd, d.valor_ing_egr, d.detalle_ing_egr, d.codigo_documento_cv
+                                  FROM detalle_ingresos_egresos d
+                                  JOIN ingresos_egresos ie ON ie.codigo_documento = d.codigo_documento
+                                 WHERE d.tipo_documento = 'EGRESO' AND ie.tipo_ing_egr = 'EGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+            $detByDoc[(string) $r['cd']][] = $r;
+        }
+        $formaByDoc = [];
+        foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.cheque, f.detalle_pago
+                                  FROM formas_pagos_ing_egr f
+                                  JOIN ingresos_egresos ie ON ie.codigo_documento = f.codigo_documento
+                                 WHERE f.tipo_documento = 'EGRESO' AND ie.tipo_ing_egr = 'EGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+            $formaByDoc[(string) $r['cd']][] = $r;
+        }
+        $compProvByCod = []; // codigo_documento de la compra → id_proveedor (para el proveedor del egreso desde su compra)
+        foreach ($mysql->query("SELECT codigo_documento, id_proveedor FROM encabezado_compra WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $r) {
+            $compProvByCod[(string) $r['codigo_documento']] = (int) $r['id_proveedor'];
+        }
         // Forma de pago BANCARIA por id_cuenta (ver ingresos): enlaza a la cuenta bancaria migrada.
         $mapCuenta = $this->mapaDe($pg, $idEmpresa, 'cuentas_bancarias');
         $mapFormaP = $this->mapaDe($pg, $idEmpresa, 'formas_pago');
@@ -2677,7 +2712,6 @@ class MigracionMysqlService
 
         $mapProv     = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
-        $oldCompProv = $mysql->prepare("SELECT id_proveedor FROM encabezado_compra WHERE codigo_documento = :cd LIMIT 1");
         $mapEgreso   = $this->mapaDe($pg, $idEmpresa, 'egresos'); // para reconciliar al re-correr
         $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, tipo_egreso = ?, id_egreso_concepto = ?, id_proveedor = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
@@ -2701,16 +2735,15 @@ class MigracionMysqlService
 
             try {
                 $pg->beginTransaction();
-                $detStmt->execute([':cd' => $cod]);
-                $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+                $dets = $detByDoc[$cod] ?? [];
 
-                // Proveedor: desde la compra vieja referenciada (funciona aunque la compra no se haya migrado)
+                // Proveedor: desde la compra vieja referenciada (funciona aunque la compra no se haya migrado).
+                // El proveedor de la compra viene del mapa pre-cargado (codigo_documento → id_proveedor).
                 $idProv = null;
                 foreach ($dets as $d) {
                     $cdv = (string) $d['codigo_documento_cv'];
                     if ($cdv === '') { continue; }
-                    $oldCompProv->execute([':cd' => $cdv]);
-                    $oldP = (int) $oldCompProv->fetchColumn();
+                    $oldP = $compProvByCod[$cdv] ?? 0;
                     if ($oldP > 0) {
                         $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, $oldP, $idEmpresa, $idUsuario, $mysql, $pg);
                         if ($idProv) { break; }
@@ -2773,8 +2806,7 @@ class MigracionMysqlService
                     $insDet->execute([$idEgr, $tdoc, $idRef, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
                 }
 
-                $formaStmt->execute([':cd' => $cod]);
-                foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                foreach ($formaByDoc[$cod] ?? [] as $f) {
                     $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
                     $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
                 }
