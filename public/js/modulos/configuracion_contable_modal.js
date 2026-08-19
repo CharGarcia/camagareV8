@@ -973,7 +973,7 @@
         const tbody = document.getElementById(`tbodyDim_${tipo}`);
         if (!tbody) return;
 
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asociaciones...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asociaciones...</td></tr>';
 
         try {
             const refType = ASIENTOPROG_esItemCompra(tipo) ? 'item_compra' : tipo;
@@ -983,13 +983,14 @@
             if (res.ok) {
                 tbody.innerHTML = '';
                 if (res.data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones para ${tipo}s.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para ${tipo}s.</td></tr>`;
                 } else {
                     res.data.forEach(item => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td class="ps-4 fw-bold text-dark">${item.dimension_nombre}</td>
                             <td class="small text-muted">${item.asiento_tipo_referencia}</td>
+                            <td class="text-center">${ASIENTOPROG_naturalezaBadge((item.debe_haber || 'debe').toLowerCase())}</td>
                             <td class="fw-medium text-primary">${item.cuenta_codigo} - ${item.cuenta_nombre}</td>
                             <td class="text-center">
                                 <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarDim(${item.id}, '${tipo}')" title="Eliminar Asociación">
@@ -1004,11 +1005,11 @@
                 // Inicializar autocompletados de búsqueda de esa dimensión si no han sido vinculados aún
                 ASIENTOPROG_vincularDimAutocomplete(tipo);
             } else {
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-danger">Error: ${res.error}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-danger">Error: ${res.error}</td></tr>`;
             }
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-danger">Error de conexión al cargar datos.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-danger">Error de conexión al cargar datos.</td></tr>`;
         }
     };
 

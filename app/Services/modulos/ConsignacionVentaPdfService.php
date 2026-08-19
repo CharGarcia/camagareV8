@@ -134,45 +134,60 @@ class ConsignacionVentaPdfService
         $entrega = trim($fmtFecha($c['fecha_entrega'] ?? '') . ' '
             . $fmtHora($c['hora_entrega_desde'] ?? '')
             . (($c['hora_entrega_hasta'] ?? '') ? ' - ' . $fmtHora($c['hora_entrega_hasta'] ?? '') : ''));
+        $obs = trim((string)($c['observaciones'] ?? ''));
 
-        $boxH = 34;
+        $lblW = 30; $valW = 63; $lbl2W = 30; // col1 (label+val) + col2 (label+val)
+        $val2W = $w - 4 - $lblW - $valW - $lbl2W;
+        $fontVal = 8.5;
+        $lineH   = 4.0; // alto por línea (mm) para el valor multilínea
+
+        // Filas: [label1, valor1, label2, valor2]. Todos los valores (cliente, dirección,
+        // observaciones, etc.) se muestran completos en varias líneas si no caben en una.
+        $filas = [
+            ['Cliente:', (string)($c['cliente_nombre'] ?? '—'), 'Fecha emisión:', $fmtFecha($c['fecha_emision'] ?? '')],
+            ['Identificación:', (string)($c['cliente_identificacion'] ?? ''), 'Asesor:', (string)($c['vendedor_nombre'] ?? '—')],
+            ['Dirección:', (string)($c['cliente_direccion'] ?? ''), 'Resp. traslado:', (string)($c['responsable_traslado_nombre'] ?? '—')],
+            ['Punto partida:', (string)($c['punto_partida'] ?? ''), 'Punto llegada:', (string)($c['punto_llegada'] ?? '')],
+            ['Entrega:', $entrega !== '' ? $entrega : '—', 'Observaciones:', $obs !== '' ? $obs : '—'],
+        ];
+
+        // Altura real de cada fila = máximo de líneas que necesitan sus dos valores.
+        $pdf->SetFont('helvetica', '', $fontVal);
+        $alturas = [];
+        foreach ($filas as $f) {
+            $n1 = max(1, $pdf->getNumLines($f[1] !== '' ? $f[1] : ' ', $valW));
+            $n2 = max(1, $pdf->getNumLines($f[3] !== '' ? $f[3] : ' ', $val2W));
+            $alturas[] = max($n1, $n2) * $lineH;
+        }
+        $boxH = array_sum($alturas) + 3;
+
         $pdf->SetLineWidth(0.2);
         $pdf->SetDrawColor(120, 120, 120);
         $pdf->SetFillColor(245, 245, 245);
         $pdf->RoundedRect($mL, $y, $w, $boxH, 1.5, '1111', 'DF');
 
-        $lblW = 30; $valW = 63; $lbl2W = 30; // col1 (label+val) + col2 (label+val)
-        $val2W = $w - 4 - $lblW - $valW - $lbl2W;
+        $yy = $y + 1.5;
+        foreach ($filas as $i => $f) {
+            $h = $alturas[$i];
 
-        $par = function (string $l1, string $v1, string $l2, string $v2) use ($pdf, $mL, $lblW, $valW, $lbl2W, $val2W) {
-            $pdf->SetX($mL + 2);
+            $pdf->SetXY($mL + 2, $yy);
             $pdf->SetFont('helvetica', 'B', 8);
-            $pdf->Cell($lblW, 5, $l1, 0, 0, 'L');
-            $pdf->SetFont('helvetica', '', 8.5);
-            $pdf->Cell($valW, 5, $this->ajustarTexto($v1, $valW), 0, 0, 'L');
+            $pdf->MultiCell($lblW, $h, $f[0], 0, 'L', false, 0, '', '', true, 0, false, true, $h, 'T');
+
+            $pdf->SetXY($mL + 2 + $lblW, $yy);
+            $pdf->SetFont('helvetica', '', $fontVal);
+            $pdf->MultiCell($valW, $h, $f[1], 0, 'L', false, 0, '', '', true, 0, false, true, $h, 'T');
+
+            $pdf->SetXY($mL + 2 + $lblW + $valW, $yy);
             $pdf->SetFont('helvetica', 'B', 8);
-            $pdf->Cell($lbl2W, 5, $l2, 0, 0, 'L');
-            $pdf->SetFont('helvetica', '', 8.5);
-            $pdf->Cell($val2W, 5, $this->ajustarTexto($v2, $val2W), 0, 1, 'L');
-        };
+            $pdf->MultiCell($lbl2W, $h, $f[2], 0, 'L', false, 0, '', '', true, 0, false, true, $h, 'T');
 
-        $pdf->SetXY($mL + 2, $y + 1.5);
-        $par('Cliente:', (string)($c['cliente_nombre'] ?? '—'), 'Fecha emisión:', $fmtFecha($c['fecha_emision'] ?? ''));
-        $par('Identificación:', (string)($c['cliente_identificacion'] ?? ''), 'Asesor:', (string)($c['vendedor_nombre'] ?? '—'));
-        $par('Dirección:', (string)($c['cliente_direccion'] ?? ''), 'Resp. traslado:', (string)($c['responsable_traslado_nombre'] ?? '—'));
-        $par('Punto partida:', (string)($c['punto_partida'] ?? ''), 'Punto llegada:', (string)($c['punto_llegada'] ?? ''));
+            $pdf->SetXY($mL + 2 + $lblW + $valW + $lbl2W, $yy);
+            $pdf->SetFont('helvetica', '', $fontVal);
+            $pdf->MultiCell($val2W, $h, $f[3], 0, 'L', false, 0, '', '', true, 0, false, true, $h, 'T');
 
-        // Entrega + observaciones
-        $obs = trim((string)($c['observaciones'] ?? ''));
-        $pdf->SetX($mL + 2);
-        $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->Cell($lblW, 5, 'Entrega:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', '', 8.5);
-        $pdf->Cell($valW, 5, $this->ajustarTexto($entrega !== '' ? $entrega : '—', $valW), 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->Cell($lbl2W, 5, 'Observaciones:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', '', 8.5);
-        $pdf->Cell($val2W, 5, $this->ajustarTexto($obs !== '' ? $obs : '—', $val2W), 0, 1, 'L');
+            $yy += $h;
+        }
 
         return $y + $boxH;
     }
@@ -333,18 +348,5 @@ class ConsignacionVentaPdfService
             }
         }
         return '';
-    }
-
-    /** Recorta un texto (con …) para que quepa en $ancho mm con la fuente actual. */
-    private function ajustarTexto(string $txto, float $ancho): string
-    {
-        $txto = trim($txto);
-        if ($txto === '' || $this->pdf->GetStringWidth($txto) <= $ancho) {
-            return $txto;
-        }
-        while ($txto !== '' && $this->pdf->GetStringWidth($txto . '…') > $ancho) {
-            $txto = mb_substr($txto, 0, -1);
-        }
-        return rtrim($txto) . '…';
     }
 }

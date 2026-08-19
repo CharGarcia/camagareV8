@@ -241,8 +241,8 @@ $base = BASE_URL;
                     </form>
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Cliente</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_cliente"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones para clientes.</td></tr></tbody>
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Cliente</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_cliente"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para clientes.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -283,8 +283,8 @@ $base = BASE_URL;
                     </form>
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Empleado</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_empleado"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado cuentas por empleado.</td></tr></tbody>
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Empleado</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_empleado"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado cuentas por empleado.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -331,8 +331,8 @@ $base = BASE_URL;
                     </form>
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Proveedor</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_proveedor"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones para proveedores.</td></tr></tbody>
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Proveedor</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_proveedor"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para proveedores.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -372,8 +372,8 @@ $base = BASE_URL;
                     </form>
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Producto / Servicio</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_producto"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones para productos.</td></tr></tbody>
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Producto / Servicio</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_producto"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para productos.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -413,8 +413,8 @@ $base = BASE_URL;
                     </form>
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Categor&iacute;a</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_categoria"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones para categor&iacute;as.</td></tr></tbody>
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Categor&iacute;a</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_categoria"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para categor&iacute;as.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -454,8 +454,8 @@ $base = BASE_URL;
                     </form>
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Marca</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_marca"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones para marcas.</td></tr></tbody>
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Marca</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_marca"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para marcas.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -492,8 +492,8 @@ $base = BASE_URL;
                     </form>
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Tipo</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_tipo_produccion"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado asociaciones por tipo de producci&oacute;n.</td></tr></tbody>
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Tipo</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_tipo_produccion"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones por tipo de producci&oacute;n.</td></tr></tbody>
                         </table>
                     </div>
                 </div>

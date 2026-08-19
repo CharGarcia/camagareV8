@@ -68,6 +68,18 @@ configuración) y **Recibos de Venta**, el orden exacto de la cascada es:
    de caer a General.
 4. **General** — lo que ningún nivel anterior resolvió.
 
+## Cómo se lee la lista de reglas por entidad
+
+En las pestañas de reglas por Cliente, Proveedor, Producto, Categoría, Marca, Tipo
+de Producción e Ítem de compra, la tabla de asociaciones ya guardadas se ordena
+**por el nombre de la entidad**, de modo que todas las cuentas de un mismo
+producto (o cliente, o categoría) quedan juntas, incluidas las de IVA por tarifa.
+
+Cada fila indica además si ese concepto va al **Debe** o al **Haber**, con la
+misma etiqueta que usa la configuración General. Sirve para revisar de un vistazo
+que la cuenta asignada tenga sentido: lo que va al Debe en una venta es la
+cartera y el costo; al Haber, los ingresos, el IVA y el inventario.
+
 ## Cada concepto admite un solo tipo de cuenta
 
 Cada concepto (*Cuenta por cobrar*, *Subtotal*, *IVA*, *Costo de Ventas*,
@@ -135,6 +147,10 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.5** — Las reglas por entidad (Cliente, Proveedor, Producto, Categoría,
+  Marca, Tipo de Producción, Ítem de compra) se listan ordenadas por el nombre de
+  la entidad, con todas sus cuentas juntas, y muestran una columna con la
+  naturaleza (Debe / Haber) de cada concepto.
 - **1.4** — Cada concepto acepta únicamente cuentas de la naturaleza que le
   corresponde (la cartera de ventas, solo cuentas de activo). El sistema rechaza
   el guardado si la cuenta no cuadra, tanto en la configuración General como en

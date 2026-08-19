@@ -1328,6 +1328,7 @@ class ConfiguracionContableController extends BaseModuloController
             if ($tipoReferencia === 'item_compra') {
                 $sql = "SELECT ap.id, ap.id_asiento_tipo, ap.id_cuenta, ap.id_referencia, ap.tipo_referencia,
                                at.referencia AS asiento_tipo_referencia,
+                               at.debe_haber,
                                pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                                ap.referencia_texto AS dimension_nombre
                         FROM asientos_programados ap
@@ -1348,6 +1349,10 @@ class ConfiguracionContableController extends BaseModuloController
                 $sqlIva = "SELECT ap.id, ap.id_asiento_tipo, ap.id_cuenta, ap.id_referencia, ap.tipo_referencia,
                                   ap.codigo_tarifa_iva,
                                   CONCAT('IVA ', COALESCE(ti.tarifa, ap.codigo_tarifa_iva || '%')) AS asiento_tipo_referencia,
+                                  -- El IVA no tiene fila en asientos_tipo: su naturaleza la fija la
+                                  -- dirección — en compras es crédito tributario (Debe), en ventas
+                                  -- y recibos es IVA por pagar (Haber).
+                                  ? AS debe_haber,
                                   pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                                   ap.referencia_texto AS dimension_nombre
                            FROM asientos_programados ap
@@ -1357,10 +1362,10 @@ class ConfiguracionContableController extends BaseModuloController
                              AND ap.codigo_tarifa_iva IS NOT NULL AND ap.direccion_iva = ? AND ap.eliminado = false
                            ORDER BY dimension_nombre ASC";
                 $stIva = $db->prepare($sqlIva);
-                $stIva->execute([$idEmpresa, $direccionIva]);
+                $stIva->execute([$direccionIva === 'compra' ? 'debe' : 'haber', $idEmpresa, $direccionIva]);
                 $rows = array_merge($rows, $stIva->fetchAll(PDO::FETCH_ASSOC));
 
-                echo json_encode(['ok' => true, 'data' => $rows]);
+                echo json_encode(['ok' => true, 'data' => $this->ordenarReglasDimension($rows)]);
                 exit;
             }
 
@@ -1374,6 +1379,7 @@ class ConfiguracionContableController extends BaseModuloController
                                ap.id_referencia,
                                ap.tipo_referencia,
                                at.referencia AS asiento_tipo_referencia,
+                               at.debe_haber,
                                pc.codigo AS cuenta_codigo,
                                pc.nombre AS cuenta_nombre,
                                (CASE ap.id_referencia WHEN 1 THEN 'Bien' WHEN 2 THEN 'Servicio' ELSE 'Desconocido' END) AS dimension_nombre
@@ -1387,7 +1393,7 @@ class ConfiguracionContableController extends BaseModuloController
                         ORDER BY ap.id_referencia ASC";
                 $st = $db->prepare($sql);
                 $st->execute([$idEmpresa, $tipoAsiento]);
-                echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+                echo json_encode(['ok' => true, 'data' => $this->ordenarReglasDimension($st->fetchAll(PDO::FETCH_ASSOC))]);
                 exit;
             }
 
@@ -1435,7 +1441,8 @@ class ConfiguracionContableController extends BaseModuloController
                            ap.id_referencia, 
                            ap.tipo_referencia,
                            at.referencia AS asiento_tipo_referencia,
-                           pc.codigo AS cuenta_codigo, 
+                           at.debe_haber,
+                           pc.codigo AS cuenta_codigo,
                            pc.nombre AS cuenta_nombre,
                            ref.{$joinField} AS dimension_nombre
                     FROM asientos_programados ap
@@ -1468,6 +1475,9 @@ class ConfiguracionContableController extends BaseModuloController
                                   ap.tipo_referencia,
                                   ap.codigo_tarifa_iva,
                                   CONCAT('IVA ', COALESCE(ti.tarifa, ap.codigo_tarifa_iva || '%')) AS asiento_tipo_referencia,
+                                  -- Ver nota en el bloque de item_compra: el IVA no tiene fila en
+                                  -- asientos_tipo, su naturaleza la fija la dirección del documento.
+                                  ? AS debe_haber,
                                   pc.codigo AS cuenta_codigo,
                                   pc.nombre AS cuenta_nombre,
                                   ref.{$joinField} AS dimension_nombre
@@ -1483,16 +1493,46 @@ class ConfiguracionContableController extends BaseModuloController
                              AND ap.eliminado = false
                            ORDER BY dimension_nombre ASC";
                 $stIva = $db->prepare($sqlIva);
-                $stIva->execute([$idEmpresa, $tipoReferencia, $direccionIva]);
+                $stIva->execute([$direccionIva === 'compra' ? 'debe' : 'haber', $idEmpresa, $tipoReferencia, $direccionIva]);
                 $rows = array_merge($rows, $stIva->fetchAll(PDO::FETCH_ASSOC));
             }
 
-            echo json_encode(['ok' => true, 'data' => $rows]);
+            echo json_encode(['ok' => true, 'data' => $this->ordenarReglasDimension($rows)]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Ordena las reglas de una dimensión por el NOMBRE de la entidad (producto, cliente, categoría…)
+     * y, dentro de cada una, por concepto.
+     *
+     * Hace falta ordenar aquí y no solo en SQL porque los overrides de cuenta de IVA viven en otra
+     * consulta (id_asiento_tipo = 0) y se anexan con array_merge: aunque cada consulta venga
+     * ordenada, el resultado combinado dejaba todas las filas de IVA al final, separadas de la
+     * entidad a la que pertenecen. Así cada entidad queda con TODAS sus reglas juntas.
+     *
+     * Comparación natural e insensible a mayúsculas/acentos: los nombres de producto suelen venir
+     * en mayúsculas y con tildes, y el orden del motor de base de datos depende de su collation.
+     */
+    private function ordenarReglasDimension(array $rows): array
+    {
+        $clave = static function (?string $texto): string {
+            $t = mb_strtolower(trim((string) $texto), 'UTF-8');
+            return strtr($t, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
+        };
+
+        usort($rows, static function (array $a, array $b) use ($clave) {
+            $cmp = strnatcasecmp($clave($a['dimension_nombre'] ?? ''), $clave($b['dimension_nombre'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            return strnatcasecmp($clave($a['asiento_tipo_referencia'] ?? ''), $clave($b['asiento_tipo_referencia'] ?? ''));
+        });
+
+        return $rows;
     }
 
     /**
