@@ -37,6 +37,16 @@ class ReciboVentaPdfService
 
     private function renderizar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa): void
     {
+        // Normalizar a Unicode NFC: texto pegado desde macOS suele llegar en
+        // forma descompuesta (letra + marca diacrítica suelta) y la fuente
+        // core de TCPDF no tiene glifo para la marca suelta (sale como "?"
+        // pegado a la letra, p. ej. "MONSEN?OR"). Ver TextoUnicodeHelper.
+        $cabecera      = \App\Helpers\TextoUnicodeHelper::nfcArray($cabecera);
+        $detalles      = \App\Helpers\TextoUnicodeHelper::nfcArray($detalles);
+        $pagos         = \App\Helpers\TextoUnicodeHelper::nfcArray($pagos);
+        $infoAdicional = \App\Helpers\TextoUnicodeHelper::nfcArray($infoAdicional);
+        $empresa       = \App\Helpers\TextoUnicodeHelper::nfcArray($empresa);
+
         // Decimales configurados por la empresa (igual que en el sistema/UI).
         $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
         $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));

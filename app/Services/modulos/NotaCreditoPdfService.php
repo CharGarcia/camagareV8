@@ -46,6 +46,15 @@ class NotaCreditoPdfService
 
     private function renderizar(array $nc, array $detalles, array $infoAdicional, array $empresa): void
     {
+        // Normalizar a Unicode NFC: texto pegado desde macOS suele llegar en
+        // forma descompuesta (letra + marca diacrítica suelta) y la fuente
+        // core de TCPDF no tiene glifo para la marca suelta (sale como "?"
+        // pegado a la letra, p. ej. "MONSEN?OR"). Ver TextoUnicodeHelper.
+        $nc            = \App\Helpers\TextoUnicodeHelper::nfcArray($nc);
+        $detalles      = \App\Helpers\TextoUnicodeHelper::nfcArray($detalles);
+        $infoAdicional = \App\Helpers\TextoUnicodeHelper::nfcArray($infoAdicional);
+        $empresa       = \App\Helpers\TextoUnicodeHelper::nfcArray($empresa);
+
         // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
         // guardado en $infoAdicional desde NotaCreditoService::crear() para los
         // documentos nuevos; no se inyecta aquí para no aplicarlo a los ya emitidos.

@@ -616,6 +616,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         Swal.fire({ icon: 'error', title: 'Error', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
     }
 
+    // Guardar/Eliminar se deshabilitan mientras corre la petición. El modal es el
+    // mismo nodo del DOM en cada apertura, así que si no se restauran al terminar,
+    // el siguiente "Nuevo"/"Editar" los muestra todavía en "Guardando...".
+    function resetBotonesModal() {
+        const btnG = document.getElementById('btnGuardarMenu');
+        if (btnG) { btnG.disabled = false; btnG.innerHTML = '<i class="bi bi-check-lg"></i> Guardar'; }
+        const btnE = document.getElementById('btnEliminarMenu');
+        if (btnE) { btnE.disabled = false; btnE.innerHTML = '<i class="bi bi-trash"></i> Eliminar'; }
+    }
+
     function resetProducto() {
         document.getElementById('menu_producto_id').value = '';
         document.getElementById('menu_producto_texto').value = '';
@@ -632,6 +642,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     window.abrirModalMenuCrear = function () {
         form.reset();
+        resetBotonesModal();
         volverATabGeneral();
         document.getElementById('menu_id').value = '';
         document.getElementById('menu_imagen').value = '';
@@ -651,6 +662,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.abrirModalMenuEditar = function (row) {
         const d = JSON.parse(row.dataset.row);
         form.reset();
+        resetBotonesModal();
         volverATabGeneral();
         document.getElementById('menu_id').value = d.id;
         document.getElementById('menu_nombre').value = d.nombre || '';
@@ -790,11 +802,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     fetchSearch(window.currentPage || 1);
                 } else {
                     swalError(json.error || 'No se pudo guardar el ítem.');
-                    btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
                 }
             } catch (err) {
                 swalError('Error de conexión al guardar.');
-                btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            } finally {
+                resetBotonesModal();
             }
         });
     }
@@ -809,6 +821,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (!isConfirmed) return;
         const btn = document.getElementById('btnEliminarMenu');
         btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Eliminando...';
         try {
             const fd = new FormData();
             fd.append('id_eliminar', id);
@@ -820,9 +833,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 fetchSearch(window.currentPage || 1);
             } else {
                 swalError(json.error || 'No se pudo eliminar.');
-                btn.disabled = false;
             }
-        } catch (err) { swalError('Error de conexión.'); btn.disabled = false; }
+        } catch (err) {
+            swalError('Error de conexión.');
+        } finally {
+            resetBotonesModal();
+        }
     };
 
     const inputBuscar = document.getElementById('buscarMenu');

@@ -37,6 +37,16 @@ class FacturaVentaPdfService
 
     private function renderizar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa): void
     {
+        // Normalizar a Unicode NFC: texto pegado desde macOS suele llegar en
+        // forma descompuesta (letra + marca diacrítica suelta) y la fuente
+        // core de TCPDF no tiene glifo para la marca suelta (sale como "?"
+        // pegado a la letra, p. ej. "MONSEN?OR"). Ver TextoUnicodeHelper.
+        $cabecera      = \App\Helpers\TextoUnicodeHelper::nfcArray($cabecera);
+        $detalles      = \App\Helpers\TextoUnicodeHelper::nfcArray($detalles);
+        $pagos         = \App\Helpers\TextoUnicodeHelper::nfcArray($pagos);
+        $infoAdicional = \App\Helpers\TextoUnicodeHelper::nfcArray($infoAdicional);
+        $empresa       = \App\Helpers\TextoUnicodeHelper::nfcArray($empresa);
+
         // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
         // guardado en $infoAdicional desde FacturaVentaService::crear() para los
         // documentos nuevos; no se inyecta aquí para no aplicarlo a los ya emitidos.

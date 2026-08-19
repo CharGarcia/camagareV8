@@ -43,6 +43,17 @@ class NotaDebitoPdfService
 
     private function renderizar(array $nd, array $motivos, array $impuestos, array $pagos, array $infoAdicional, array $empresa): void
     {
+        // Normalizar a Unicode NFC: texto pegado desde macOS suele llegar en
+        // forma descompuesta (letra + marca diacrítica suelta) y la fuente
+        // core de TCPDF no tiene glifo para la marca suelta (sale como "?"
+        // pegado a la letra, p. ej. "MONSEN?OR"). Ver TextoUnicodeHelper.
+        $nd            = \App\Helpers\TextoUnicodeHelper::nfcArray($nd);
+        $motivos       = \App\Helpers\TextoUnicodeHelper::nfcArray($motivos);
+        $impuestos     = \App\Helpers\TextoUnicodeHelper::nfcArray($impuestos);
+        $pagos         = \App\Helpers\TextoUnicodeHelper::nfcArray($pagos);
+        $infoAdicional = \App\Helpers\TextoUnicodeHelper::nfcArray($infoAdicional);
+        $empresa       = \App\Helpers\TextoUnicodeHelper::nfcArray($empresa);
+
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
