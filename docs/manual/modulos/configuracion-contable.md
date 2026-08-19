@@ -68,17 +68,30 @@ configuración) y **Recibos de Venta**, el orden exacto de la cascada es:
    de caer a General.
 4. **General** — lo que ningún nivel anterior resolvió.
 
-## Cómo se lee la lista de reglas por entidad
+## Cómo se leen las reglas por entidad
 
 En las pestañas de reglas por Cliente, Proveedor, Producto, Categoría, Marca, Tipo
-de Producción e Ítem de compra, la tabla de asociaciones ya guardadas se ordena
-**por el nombre de la entidad**, de modo que todas las cuentas de un mismo
-producto (o cliente, o categoría) quedan juntas, incluidas las de IVA por tarifa.
+de Producción e Ítem de compra, lo configurado se muestra en **una tarjeta por
+entidad**, ordenadas por nombre. Cada tarjeta reúne todas las cuentas de ese
+producto (o cliente, o categoría), incluidas las de IVA por tarifa, repartidas en
+dos columnas: **Debe** a la izquierda y **Haber** a la derecha.
 
-Cada fila indica además si ese concepto va al **Debe** o al **Haber**, con la
-misma etiqueta que usa la configuración General. Sirve para revisar de un vistazo
-que la cuenta asignada tenga sentido: lo que va al Debe en una venta es la
-cartera y el costo; al Haber, los ingresos, el IVA y el inventario.
+Dentro de cada columna aparecen:
+
+- Las cuentas propias de esa entidad, con el código de cuenta y el botón para
+  quitarlas.
+- En rojo y con la marca *sin cuenta*, los conceptos que no tienen cuenta **ni en
+  esta ficha ni en la configuración General**. Esos son los que hay que atender:
+  dejan el asiento incompleto.
+
+La cabecera de la tarjeta resume el estado: cuántas cuentas propias tiene y si
+queda algo sin resolver (*completa* o *faltan N*). Al pie, una línea indica
+cuántos conceptos más se resuelven con la cuenta General — esos no hace falta
+configurarlos aquí, la cascada ya los cubre.
+
+Así se distingue a simple vista, por ejemplo, un producto al que solo se le
+asignó la cuenta de ingresos de otro que además tiene su propia cartera o su
+costo, y se ve enseguida de qué lado del asiento falta algo.
 
 ## Cada concepto admite un solo tipo de cuenta
 
@@ -148,9 +161,10 @@ documento o en la ficha de la entidad implicada.
 ## Historial de cambios
 
 - **1.5** — Las reglas por entidad (Cliente, Proveedor, Producto, Categoría,
-  Marca, Tipo de Producción, Ítem de compra) se listan ordenadas por el nombre de
-  la entidad, con todas sus cuentas juntas, y muestran una columna con la
-  naturaleza (Debe / Haber) de cada concepto.
+  Marca, Tipo de Producción, Ítem de compra) pasan de una tabla plana a **una
+  tarjeta por entidad**, ordenadas por nombre, con sus cuentas separadas en Debe
+  y Haber, aviso de los conceptos que quedan sin cuenta en ningún nivel y resumen
+  de los que se resuelven con la configuración General.
 - **1.4** — Cada concepto acepta únicamente cuentas de la naturaleza que le
   corresponde (la cartera de ventas, solo cuentas de activo). El sistema rechaza
   el guardado si la cuenta no cuadra, tanto en la configuración General como en

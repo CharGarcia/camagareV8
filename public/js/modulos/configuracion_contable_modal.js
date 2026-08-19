@@ -970,10 +970,10 @@
             }
         }
 
-        const tbody = document.getElementById(`tbodyDim_${tipo}`);
-        if (!tbody) return;
+        const cards = document.getElementById(`dimCards_${tipo}`);
+        if (!cards) return;
 
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asociaciones...</td></tr>';
+        cards.innerHTML = '<div class="col-12 text-center py-3 text-muted small"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asociaciones...</div>';
 
         try {
             const refType = ASIENTOPROG_esItemCompra(tipo) ? 'item_compra' : tipo;
@@ -981,37 +981,121 @@
             const res = await resp.json();
 
             if (res.ok) {
-                tbody.innerHTML = '';
-                if (res.data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para ${tipo}s.</td></tr>`;
-                } else {
-                    res.data.forEach(item => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td class="ps-4 fw-bold text-dark">${item.dimension_nombre}</td>
-                            <td class="small text-muted">${item.asiento_tipo_referencia}</td>
-                            <td class="text-center">${ASIENTOPROG_naturalezaBadge((item.debe_haber || 'debe').toLowerCase())}</td>
-                            <td class="fw-medium text-primary">${item.cuenta_codigo} - ${item.cuenta_nombre}</td>
-                            <td class="text-center">
-                                <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarDim(${item.id}, '${tipo}')" title="Eliminar Asociación">
-                                    <i class="bi bi-trash fs-5"></i>
-                                </button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
-                }
+                cards.innerHTML = res.data.length === 0
+                    ? `<div class="col-12 text-center py-3 text-muted small">No se han registrado asociaciones para ${tipo}s.</div>`
+                    : ASIENTOPROG_tarjetasDim(tipo, res.data);
 
                 // Inicializar autocompletados de búsqueda de esa dimensión si no han sido vinculados aún
                 ASIENTOPROG_vincularDimAutocomplete(tipo);
             } else {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-danger">Error: ${res.error}</td></tr>`;
+                cards.innerHTML = `<div class="col-12 text-center py-3 text-danger small">Error: ${ASIENTOPROG_esc(res.error)}</div>`;
             }
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-danger">Error de conexión al cargar datos.</td></tr>`;
+            cards.innerHTML = '<div class="col-12 text-center py-3 text-danger small">Error de conexión al cargar datos.</div>';
         }
     };
+
+    /**
+     * Una TARJETA por entidad (producto, cliente, categoría…) con sus conceptos repartidos en
+     * Debe y Haber. Sustituye a la tabla plana, donde las reglas de una misma entidad se leían
+     * como filas sueltas y no se veía qué le faltaba.
+     *
+     * Cada lado muestra:
+     *   - los conceptos con cuenta PROPIA de esa entidad (con su cuenta y el botón de quitar);
+     *   - los que no tienen cuenta ni aquí ni en la configuración General → en rojo, porque esos
+     *     sí dejan el asiento incompleto.
+     * Los que la entidad no configura pero la General sí resuelve no se listan uno a uno (no son
+     * un problema: la cascada los cubre); se resumen en una línea al pie de la tarjeta.
+     */
+    function ASIENTOPROG_tarjetasDim(tipo, filas) {
+        const conceptos = (window.CONCEPTOS_CONFIGURADOS || []);
+        // Clave de agrupación: el id de la entidad (o su nombre en los ítems de compra, que no
+        // tienen id). Nunca el nombre a secas: dos entidades distintas pueden llamarse igual.
+        const claveEnt = (f) => `${f.id_referencia != null ? f.id_referencia : ''}|${f.id_referencia == null ? (f.dimension_nombre || '') : ''}`;
+        const esIvaFila = (f) => parseInt(f.id_asiento_tipo) === 0 && f.codigo_tarifa_iva != null;
+
+        const grupos = new Map();
+        filas.forEach(f => {
+            const k = claveEnt(f);
+            if (!grupos.has(k)) grupos.set(k, { nombre: f.dimension_nombre || '(sin nombre)', filas: [] });
+            grupos.get(k).filas.push(f);
+        });
+
+        const lineaPropia = (f) => `
+            <div class="d-flex justify-content-between align-items-center gap-1 border-bottom py-1">
+                <span class="small text-truncate" title="${ASIENTOPROG_esc(f.asiento_tipo_referencia)}">${ASIENTOPROG_esc(f.asiento_tipo_referencia)}</span>
+                <span class="d-flex align-items-center gap-1 text-nowrap">
+                    <span class="small fw-medium text-primary" title="${ASIENTOPROG_esc(f.cuenta_codigo + ' - ' + f.cuenta_nombre)}">${ASIENTOPROG_esc(f.cuenta_codigo)}</span>
+                    <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1" onclick="ASIENTOPROG_eliminarDim(${f.id}, '${tipo}')" title="Quitar esta cuenta">
+                        <i class="bi bi-trash small"></i>
+                    </button>
+                </span>
+            </div>`;
+
+        const lineaFaltante = (nombre) => `
+            <div class="d-flex justify-content-between align-items-center gap-1 border-bottom py-1">
+                <span class="small text-danger text-truncate" title="${ASIENTOPROG_esc(nombre)}">${ASIENTOPROG_esc(nombre)}</span>
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 small text-nowrap">sin cuenta</span>
+            </div>`;
+
+        const columna = (titulo, fondo, color, icono, propias, faltantes) => `
+            <div class="col-6">
+                <div class="fw-bold small mb-1 px-2 py-1 rounded" style="background:${fondo}; color:${color};">
+                    <i class="bi ${icono} me-1"></i>${titulo}
+                </div>
+                ${propias.map(lineaPropia).join('')}
+                ${faltantes.map(c => lineaFaltante(c.concepto)).join('')}
+                ${(!propias.length && !faltantes.length) ? '<div class="small text-muted py-1">—</div>' : ''}
+            </div>`;
+
+        let html = '';
+        grupos.forEach(g => {
+            // ¿Qué conceptos tiene configurados ESTA entidad? (el IVA se cruza por tarifa)
+            const tienePropia = (c) => parseInt(c.id_asiento_tipo) > 0
+                ? g.filas.some(f => parseInt(f.id_asiento_tipo) === parseInt(c.id_asiento_tipo))
+                : g.filas.some(f => esIvaFila(f) && String(f.codigo_tarifa_iva) === String(c.id_referencia));
+
+            const faltantes = conceptos.filter(c => !c.id_cuenta && !tienePropia(c));   // ni aquí ni en General
+            const heredados = conceptos.filter(c => c.id_cuenta && !tienePropia(c)).length;
+
+            const esDebe = (x) => ((x.debe_haber || 'debe') + '').toLowerCase() === 'debe';
+            const propiasDebe  = g.filas.filter(esDebe);
+            const propiasHaber = g.filas.filter(x => !esDebe(x));
+            const faltaDebe    = faltantes.filter(esDebe);
+            const faltaHaber   = faltantes.filter(x => !esDebe(x));
+
+            // Sin la configuración General cargada no hay con qué comparar: se omite el estado en
+            // vez de afirmar "completa" sin saberlo.
+            const estado = !conceptos.length
+                ? ''
+                : (faltantes.length
+                    ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 small" title="Conceptos sin cuenta ni en esta ficha ni en la configuración General">faltan ${faltantes.length}</span>`
+                    : '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small" title="Ningún concepto queda sin cuenta: los que no están aquí los cubre la configuración General"><i class="bi bi-check2 me-1"></i>completa</span>');
+
+            html += `
+            <div class="col-12 col-xl-6">
+                <div class="card border h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-2 py-2 px-3">
+                        <span class="fw-bold text-dark text-truncate" title="${ASIENTOPROG_esc(g.nombre)}">${ASIENTOPROG_esc(g.nombre)}</span>
+                        <span class="d-flex align-items-center gap-1 text-nowrap">
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 small">${g.filas.length} cuenta(s)</span>
+                            ${estado}
+                        </span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="row g-2">
+                            ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', propiasDebe,  faltaDebe)}
+                            ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   propiasHaber, faltaHaber)}
+                        </div>
+                        ${heredados ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Otros ${heredados} concepto(s) usan la cuenta de la configuración General.</div>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        return html;
+    }
 
     /**
      * Vincula el comportamiento autocomplete a los buscadores de la dimensión.

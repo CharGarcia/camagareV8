@@ -239,12 +239,7 @@ $base = BASE_URL;
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
                         </div>
                     </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Cliente</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_cliente"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para clientes.</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="row g-2" id="dimCards_cliente"></div>
                 </div>
             </div>
         </div>
@@ -281,12 +276,7 @@ $base = BASE_URL;
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
                         </div>
                     </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Empleado</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_empleado"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado cuentas por empleado.</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="row g-2" id="dimCards_empleado"></div>
                 </div>
             </div>
         </div>
@@ -329,12 +319,7 @@ $base = BASE_URL;
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
                         </div>
                     </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Proveedor</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_proveedor"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para proveedores.</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="row g-2" id="dimCards_proveedor"></div>
                 </div>
             </div>
         </div>
@@ -370,12 +355,7 @@ $base = BASE_URL;
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_producto"></div></div>
                         <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
                     </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Producto / Servicio</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_producto"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para productos.</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="row g-2" id="dimCards_producto"></div>
                 </div>
             </div>
         </div>
@@ -411,12 +391,7 @@ $base = BASE_URL;
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_categoria"></div></div>
                         <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
                     </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Categor&iacute;a</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_categoria"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para categor&iacute;as.</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="row g-2" id="dimCards_categoria"></div>
                 </div>
             </div>
         </div>
@@ -452,12 +427,7 @@ $base = BASE_URL;
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_marca"></div></div>
                         <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
                     </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Marca</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_marca"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones para marcas.</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="row g-2" id="dimCards_marca"></div>
                 </div>
             </div>
         </div>
@@ -490,12 +460,7 @@ $base = BASE_URL;
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_tipo_produccion"></div></div>
                         <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button></div>
                     </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle table-interactiva">
-                            <thead class="table-light"><tr><th class="ps-4 py-2">Tipo</th><th class="py-2">Concepto / Referencia</th><th class="text-center py-2" style="width: 12%">Naturaleza</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
-                            <tbody id="tbodyDim_tipo_produccion"><tr><td colspan="5" class="text-center py-3 text-muted">No se han registrado asociaciones por tipo de producci&oacute;n.</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="row g-2" id="dimCards_tipo_produccion"></div>
                 </div>
             </div>
         </div>
