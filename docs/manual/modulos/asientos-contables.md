@@ -48,6 +48,19 @@ Además:
 - **De diario**: los escribe el contador. Son los únicos que se mantienen tal
   cual se escribieron.
 
+## Aviso antes de generar asientos en masa
+
+Al sincronizar asientos, antes de contabilizar nada el sistema revisa la
+configuración contable de la empresa y avisa de lo que encuentre: conceptos o
+formas de cobro/pago sin cuenta, y **cuentas cuya naturaleza no corresponde al
+concepto** (por ejemplo una cuenta de ventas puesta en *Cuenta por cobrar*, o una
+cuenta de caja en un concepto de nómina).
+
+Ese último aviso conviene atenderlo antes de continuar: la sincronización genera
+los asientos con las cuentas tal como estén configuradas, así que un concepto mal
+apuntado se propaga a todos los documentos de golpe y el error solo se nota al
+revisar el balance.
+
 ## Diferencias de centavos
 
 En documentos con impuestos, la base y el IVA pueden dejar diferencias de un
@@ -89,6 +102,9 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.2** — Al sincronizar asientos, el resumen previo avisa también de las
+  cuentas configuradas con una naturaleza que no corresponde al concepto, antes
+  de generar los asientos.
 - **1.1** — Botones de impresión en PDF y Excel del asiento, y botón para ver
   el documento origen (factura, compra, egreso, etc.) sin salir del modal.
 - **1.0** — Versión inicial.

@@ -75,8 +75,10 @@ class MigracionConfigContableService
         $pg    = Database::getConnection();
 
         // Slots nuevos por código, y plan de cuentas nuevo por código de la casa.
+        // tipo_cuenta viaja para poder descartar las equivalencias cuya cuenta destino tiene una
+        // naturaleza incompatible con el concepto (ver estado 'incompatible' más abajo).
         $slotPorCodigo = [];
-        foreach ($pg->query("SELECT id, tipo_asiento, referencia, codigo FROM asientos_tipo WHERE eliminado = false") as $r) {
+        foreach ($pg->query("SELECT id, tipo_asiento, referencia, codigo, tipo_cuenta FROM asientos_tipo WHERE eliminado = false") as $r) {
             $slotPorCodigo[(string) $r['codigo']] = $r;
         }
         $ctaPorCodigo = [];
@@ -106,7 +108,7 @@ class MigracionConfigContableService
                  ORDER BY ap.tipo_asiento, at.id_asiento_tipo";
 
         $filas = [];
-        $res   = ['total' => 0, 'listas' => 0, 'sin_slot' => 0, 'sin_cuenta' => 0, 'ya' => 0];
+        $res   = ['total' => 0, 'listas' => 0, 'sin_slot' => 0, 'sin_cuenta' => 0, 'ya' => 0, 'incompatible' => 0];
 
         foreach ($mysql->query($sql) as $r) {
             $res['total']++;
@@ -118,8 +120,18 @@ class MigracionConfigContableService
             $codCasa     = $codCtaVieja !== '' ? MigracionMysqlService::codigoCasaPublico($codCtaVieja) : '';
             $cta         = $codCasa !== '' ? ($ctaPorCodigo[$codCasa] ?? null) : null;
 
+            // Naturaleza incompatible: la cuenta del sistema viejo existe en el plan nuevo, pero es
+            // de una clase que ese concepto no admite (p. ej. una cuenta de Ventas para la Cuenta
+            // por Cobrar). Importarla dejaría TODAS las facturas de la empresa mal contabilizadas,
+            // igual que ocurrió configurándola a mano — así que se muestra y no se puede marcar.
+            $incompatible = $slot !== null && $cta !== null
+                && !\App\Services\modulos\AsientoProgramadoService::cuentaCompatible(
+                    (string) ($slot['tipo_cuenta'] ?? ''), (string) $cta['codigo']
+                );
+
             if ($slot === null)      { $estado = 'sin_slot';   $res['sin_slot']++; }
             elseif ($cta === null)   { $estado = 'sin_cuenta'; $res['sin_cuenta']++; }
+            elseif ($incompatible)   { $estado = 'incompatible'; $res['incompatible']++; }
             else {
                 $estado = isset($yaConfig[$codNuevo]) ? 'ya_configurada' : 'lista';
                 if ($estado === 'ya_configurada') { $res['ya']++; } else { $res['listas']++; }
@@ -135,6 +147,8 @@ class MigracionConfigContableService
                 'cuenta_nueva'   => $cta !== null ? ($cta['codigo'] . ' · ' . $cta['nombre']) : null,
                 // Código que se buscó en el plan nuevo: permite explicar al usuario qué cuenta falta.
                 'cod_casa'       => $codCasa,
+                // Solo en estado 'incompatible': qué naturaleza esperaba el concepto destino.
+                'tipo_cuenta'    => $incompatible ? (string) ($slot['tipo_cuenta'] ?? '') : null,
                 'id_cuenta'      => $cta !== null ? (int) $cta['id'] : null,
                 'estado'         => $estado,
             ];
@@ -151,12 +165,29 @@ class MigracionConfigContableService
     public function aplicar(int $idEmpresa, int $idUsuario, array $seleccion): array
     {
         $pg  = Database::getConnection();
-        $res = ['aplicadas' => 0, 'actualizadas' => 0, 'errores' => 0];
+        $res = ['aplicadas' => 0, 'actualizadas' => 0, 'errores' => 0, 'descartadas' => 0, 'motivos' => []];
 
+        // Naturaleza declarada de cada concepto, para rechazar aquí también lo que la
+        // previsualización marca como 'incompatible': esta selección llega por POST y no tiene por
+        // qué coincidir con lo que se mostró en pantalla.
+        $tipoCuentaPorSlot = [];
+        foreach ($pg->query("SELECT id, referencia, COALESCE(tipo_cuenta, '') AS tipo_cuenta FROM asientos_tipo WHERE eliminado = false") as $r) {
+            $tipoCuentaPorSlot[(int) $r['id']] = ['referencia' => (string) $r['referencia'], 'tipo_cuenta' => (string) $r['tipo_cuenta']];
+        }
+        $codigoCuenta = $pg->prepare("SELECT codigo FROM plan_cuentas WHERE id = ? AND id_empresa = ? AND eliminado = false LIMIT 1");
+
+        // La regla general vive con tipo_referencia = 'asientos tipo' O con el nombre del tipo de
+        // asiento ('ventas_factura', …): el lector acepta las dos formas (ver
+        // AsientoProgramadoRepository::getReglasGeneralesPorConcepto), así que aquí hay que
+        // buscarlas igual. Mirando solo 'asientos tipo' se insertaba una SEGUNDA regla general
+        // para un concepto que ya la tenía en el otro formato, y el motor entonces leía dos filas
+        // del mismo concepto y duplicaba su línea en todos los asientos de la empresa.
         $buscar = $pg->prepare(
-            "SELECT id FROM asientos_programados
-              WHERE id_empresa = ? AND id_asiento_tipo = ? AND id_referencia = ?
-                AND tipo_referencia = 'asientos tipo' AND eliminado = false LIMIT 1"
+            "SELECT ap.id FROM asientos_programados ap
+               JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+              WHERE ap.id_empresa = ? AND ap.id_asiento_tipo = ? AND ap.id_referencia = ?
+                AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = at.tipo_asiento)
+                AND ap.eliminado = false LIMIT 1"
         );
         $upd = $pg->prepare("UPDATE asientos_programados SET id_cuenta = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $ins = $pg->prepare(
@@ -168,6 +199,24 @@ class MigracionConfigContableService
             $idTipo   = (int) ($s['id_asiento_tipo'] ?? 0);
             $idCuenta = (int) ($s['id_cuenta'] ?? 0);
             if ($idTipo <= 0 || $idCuenta <= 0) { $res['errores']++; continue; }
+
+            // Naturaleza incompatible → no se importa. Es preferible dejar el concepto sin cuenta
+            // (el motor avisa y no genera el asiento) a grabar una cuenta que contabilizaría mal
+            // todos los documentos de la empresa en silencio.
+            $codigoCuenta->execute([$idCuenta, $idEmpresa]);
+            $codCta = (string) ($codigoCuenta->fetchColumn() ?: '');
+            $slot   = $tipoCuentaPorSlot[$idTipo] ?? null;
+            if ($slot !== null && !\App\Services\modulos\AsientoProgramadoService::cuentaCompatible($slot['tipo_cuenta'], $codCta)) {
+                $res['descartadas']++;
+                $res['motivos'][] = sprintf(
+                    'La cuenta %s no se importó en «%s»: ese concepto admite cuentas de tipo %s.',
+                    $codCta !== '' ? $codCta : "#{$idCuenta}",
+                    $slot['referencia'],
+                    str_replace(',', ', ', $slot['tipo_cuenta'])
+                );
+                continue;
+            }
+
             try {
                 $pg->beginTransaction();
                 $buscar->execute([$idEmpresa, $idTipo, $idTipo]);

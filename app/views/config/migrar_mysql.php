@@ -719,6 +719,7 @@ $base = BASE_URL;
                 `<b class="text-success">${fmt(r.listas)}</b> listas para aplicar · ` +
                 `<b class="${r.sin_slot ? 'text-warning' : ''}">${fmt(r.sin_slot)}</b> sin equivalente · ` +
                 `<b class="${r.sin_cuenta ? 'text-danger' : ''}">${fmt(r.sin_cuenta)}</b> sin cuenta · ` +
+                (r.incompatible ? `<b class="text-danger">${fmt(r.incompatible)}</b> con cuenta incompatible · ` : '') +
                 `<b>${fmt(r.ya)}</b> ya configuradas`;
 
             // Nada marcable: casi siempre es que falta migrar el plan de cuentas (Paso 1).
@@ -743,7 +744,8 @@ $base = BASE_URL;
                 lista:          '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Lista</span>',
                 ya_configurada: '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Ya configurada</span>',
                 sin_slot:       '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Sin equivalente</span>',
-                sin_cuenta:     '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Sin cuenta</span>'
+                sin_cuenta:     '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Sin cuenta</span>',
+                incompatible:   '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Cuenta incompatible</span>'
             };
 
             let filas = '';
@@ -760,7 +762,9 @@ $base = BASE_URL;
                         <td class="small">${esc(f.cuenta_vieja)}</td>
                         <td class="small">${f.slot_nuevo ? esc(f.slot_nuevo) : '<i>(sin equivalente)</i>'}</td>
                         <td class="small">${f.cuenta_nueva
-                            ? esc(f.cuenta_nueva)
+                            ? (f.estado === 'incompatible'
+                                ? `${esc(f.cuenta_nueva)}<br><span class="text-danger">este concepto admite cuentas de tipo <b>${esc((f.tipo_cuenta || '').replace(/,/g, ', '))}</b></span>`
+                                : esc(f.cuenta_nueva))
                             : (f.estado === 'sin_cuenta'
                                 ? `<span class="text-danger">falta <b>${esc(f.cod_casa)}</b> en el plan</span>`
                                 : '—')}</td>

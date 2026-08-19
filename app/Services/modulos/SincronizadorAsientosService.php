@@ -597,6 +597,48 @@ class SincronizadorAsientosService
             // Tabla inexistente (migración pendiente): omitir sin romper.
         }
 
+        // Reglas cuya cuenta contradice la naturaleza del concepto (p. ej. la cuenta de Ventas
+        // puesta en "Cuenta por cobrar"). No basta con que la pantalla lo impida hoy: una regla
+        // grabada antes de esa validación, o importada del sistema viejo, sigue viva — y aquí se
+        // van a generar asientos en masa con ella. Vale más avisarlo ANTES de contabilizar miles
+        // de documentos que descubrirlo revisando el balance (caso real: empresas 1 y 37, ver
+        // database/diagnosticos/20260819_cxc_ventas_cuenta_incorrecta.sql).
+        try {
+            $st = $db->prepare(
+                "SELECT at.referencia AS concepto, at.tipo_cuenta, ap.tipo_referencia,
+                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                   FROM asientos_programados ap
+                   JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                   JOIN plan_cuentas pc  ON pc.id = ap.id_cuenta
+                  WHERE ap.id_empresa = ? AND ap.eliminado = false
+                    AND COALESCE(TRIM(at.tipo_cuenta), '') <> ''
+                  ORDER BY at.referencia"
+            );
+            $st->execute([$idEmpresa]);
+            $incompatibles = [];
+            foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $regla) {
+                if (\App\Services\modulos\AsientoProgramadoService::cuentaCompatible($regla['tipo_cuenta'], $regla['cuenta_codigo'])) {
+                    continue;
+                }
+                $nivel = in_array($regla['tipo_referencia'], ['asientos tipo', ''], true) || str_contains((string) $regla['tipo_referencia'], '_')
+                    ? 'General'
+                    : ucfirst((string) $regla['tipo_referencia']);
+                $incompatibles[] = sprintf(
+                    '«%s» (%s) → %s %s, que es de tipo distinto a: %s',
+                    $regla['concepto'], $nivel, $regla['cuenta_codigo'], $regla['cuenta_nombre'],
+                    str_replace(',', ', ', (string) $regla['tipo_cuenta'])
+                );
+            }
+            if (!empty($incompatibles)) {
+                $this->warnings[] = 'Hay ' . count($incompatibles) . ' cuenta(s) configurada(s) con una naturaleza que no corresponde al concepto. '
+                    . 'Los asientos que se generen las usarán tal cual: corríjalas en Configuración Contable antes de continuar. '
+                    . implode(' · ', array_slice($incompatibles, 0, 5))
+                    . (count($incompatibles) > 5 ? ' · y ' . (count($incompatibles) - 5) . ' más.' : '');
+            }
+        } catch (\Throwable $e) {
+            // Catálogo o columnas aún sin migrar: omitir sin romper la sincronización.
+        }
+
         // Formas de Cobro/Pago activas sin cuenta contable
         try {
             $st = $db->prepare("SELECT COUNT(*) FROM empresa_formas_pago

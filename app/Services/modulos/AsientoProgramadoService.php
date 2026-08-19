@@ -161,6 +161,46 @@ class AsientoProgramadoService
     ];
 
     /**
+     * ¿Una cuenta del plan encaja en la naturaleza que declara un concepto?
+     *
+     * Punto único de la comprobación: lo usan el guardado de reglas (validarNaturalezaCuenta),
+     * la importación de configuración del sistema viejo (MigracionConfigContableService) y el
+     * aviso previo de la sincronización de asientos (SincronizadorAsientosService).
+     *
+     * Devuelve true —permisivo— cuando no hay con qué comparar: concepto sin `tipo_cuenta`
+     * declarado, valor no reconocido por este código, o código de cuenta vacío. Solo devuelve
+     * false ante una incompatibilidad segura.
+     *
+     * @param string|null $tipoCuenta   CSV de asientos_tipo.tipo_cuenta (activo,pasivo,…)
+     * @param string|null $codigoCuenta código de plan_cuentas (su primer dígito es la clase)
+     */
+    public static function cuentaCompatible(?string $tipoCuenta, ?string $codigoCuenta): bool
+    {
+        $tipoCuenta   = trim((string) $tipoCuenta);
+        $codigoCuenta = trim((string) $codigoCuenta);
+        if ($tipoCuenta === '' || $codigoCuenta === '') {
+            return true;
+        }
+
+        $clasesPermitidas = [];
+        foreach (explode(',', strtolower($tipoCuenta)) as $tipo) {
+            $tipo = trim($tipo);
+            if ($tipo === '') {
+                continue;
+            }
+            if (!isset(self::CLASES_POR_TIPO_CUENTA[$tipo])) {
+                return true; // valor no reconocido: no bloquear por algo que este código no sabe interpretar
+            }
+            $clasesPermitidas = array_merge($clasesPermitidas, self::CLASES_POR_TIPO_CUENTA[$tipo]);
+        }
+        if (empty($clasesPermitidas)) {
+            return true;
+        }
+
+        return in_array(substr($codigoCuenta, 0, 1), $clasesPermitidas, true);
+    }
+
+    /**
      * Impide guardar una cuenta cuya naturaleza contradice al concepto (p. ej. una cuenta de
      * Ingresos 4.x en el concepto "Cuenta por cobrar"). El buscador de cuentas de la pantalla ya
      * acota las opciones por asientos_tipo.tipo_cuenta, pero es solo del lado del cliente: sin
@@ -183,26 +223,10 @@ class AsientoProgramadoService
         }
 
         $info = $this->repo->getConceptoYCuentaParaValidar($idAsientoTipo, $idCuenta, $idEmpresa);
-        if ($info === null || trim((string) $info['tipo_cuenta']) === '') {
+        if ($info === null) {
             return;
         }
-
-        $clasesPermitidas = [];
-        foreach (explode(',', strtolower((string) $info['tipo_cuenta'])) as $tipo) {
-            $tipo = trim($tipo);
-            if ($tipo === '') {
-                continue;
-            }
-            if (!isset(self::CLASES_POR_TIPO_CUENTA[$tipo])) {
-                return; // valor no reconocido: no bloquear por algo que este código no sabe interpretar
-            }
-            $clasesPermitidas = array_merge($clasesPermitidas, self::CLASES_POR_TIPO_CUENTA[$tipo]);
-        }
-        if (empty($clasesPermitidas)) {
-            return;
-        }
-
-        if (in_array(substr((string) $info['cuenta_codigo'], 0, 1), $clasesPermitidas, true)) {
+        if (self::cuentaCompatible($info['tipo_cuenta'], $info['cuenta_codigo'])) {
             return;
         }
 

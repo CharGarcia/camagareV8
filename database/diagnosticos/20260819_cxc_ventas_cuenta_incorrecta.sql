@@ -173,6 +173,51 @@ ORDER BY ap.id_empresa, at.tipo_asiento, at.codigo;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 7) BARRIDO COMPLETO (todos los conceptos, todas las empresas): reglas cuya cuenta contradice
+--    la naturaleza declarada por su concepto en `asientos_tipo.tipo_cuenta`. Es el mismo criterio
+--    que aplican el guardado de reglas (AsientoProgramadoService::cuentaCompatible) y el aviso
+--    previo de la sincronización, así que esta consulta muestra justo lo que el sistema rechazaría
+--    hoy. Útil más allá de ventas: en pruebas apareció una empresa con TODA la nómina apuntando a
+--    una cuenta de caja.
+--    Requiere haber aplicado database/migrations/20260819_asientos_tipo_naturaleza_cuenta.sql
+--    (sin él, los conceptos sin naturaleza declarada no se pueden evaluar).
+-- ─────────────────────────────────────────────────────────────────────────────
+SELECT ap.id_empresa,
+       e.nombre_comercial,
+       at.tipo_asiento,
+       at.codigo         AS concepto,
+       at.referencia,
+       at.tipo_cuenta    AS naturaleza_esperada,
+       ap.tipo_referencia AS nivel,
+       pc.codigo         AS cuenta_codigo,
+       pc.nombre         AS cuenta_nombre
+FROM asientos_programados ap
+JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+JOIN plan_cuentas pc  ON pc.id = ap.id_cuenta
+JOIN empresas e       ON e.id  = ap.id_empresa
+WHERE ap.eliminado = false
+  AND COALESCE(TRIM(at.tipo_cuenta), '') <> ''
+  AND NOT EXISTS (
+      -- ¿la clase de la cuenta está entre las que admite el concepto?
+      SELECT 1
+      FROM unnest(string_to_array(lower(at.tipo_cuenta), ',')) AS t(tipo)
+      WHERE LEFT(pc.codigo, 1) = ANY (
+          CASE trim(t.tipo)
+              WHEN 'activo'      THEN ARRAY['1']
+              WHEN 'pasivo'      THEN ARRAY['2']
+              WHEN 'patrimonio'  THEN ARRAY['3']
+              WHEN 'ingreso'     THEN ARRAY['4']
+              WHEN 'costo'       THEN ARRAY['5','6']
+              WHEN 'gasto'       THEN ARRAY['5','6']
+              WHEN 'costo_gasto' THEN ARRAY['5','6']
+              ELSE ARRAY[LEFT(pc.codigo, 1)]   -- valor no reconocido: no marcar
+          END
+      )
+  )
+ORDER BY ap.id_empresa, at.tipo_asiento, at.codigo;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 6) Alcance en dinero: cuánto se cargó a cuentas que no son de activo en el Debe de los
 --    asientos de venta, por empresa y cuenta.
 -- ─────────────────────────────────────────────────────────────────────────────
