@@ -5125,7 +5125,14 @@ $totalPages = $totalPagesOriginal;
 
             // â”€â”€ Vendedor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const selVendedor = document.getElementById('m-select-vendedor');
-            if (selVendedor) selVendedor.value = cab.id_vendedor || '';
+            if (selVendedor) {
+                selVendedor.value = cab.id_vendedor || '';
+                // La fila fija "vendedor" de info adicional se excluye a propósito
+                // de la reconstrucción genérica de abajo (ver NOMBRES_FIJOS); sin
+                // esta llamada, reabrir una factura que ya tenía vendedor la deja
+                // sin esa fila y el próximo guardado la borra de la BD.
+                actualizarInfoVendedor(selVendedor);
+            }
 
             // â”€â”€ SRI: Clave de acceso, Ambiente y EmisiÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const elClaveAcceso = document.getElementById('sri-clave-acceso');
