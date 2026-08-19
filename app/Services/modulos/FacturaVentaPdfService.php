@@ -432,30 +432,52 @@ class FacturaVentaPdfService
         $yBox += $lh + 1;
 
         // Fila 3: Dirección | Teléfono | Correo
-        // El correo puede traer varias direcciones separadas por coma (caso real:
-        // clientes con distintos destinatarios para facturación). En vez de
-        // comprimir el texto en una sola línea (se monta/ilegible), se envuelve en
-        // varias líneas con MultiCell y el recuadro crece según lo que ocupe.
+        // Cualquiera de los tres puede traer texto largo (dirección extensa,
+        // varios correos separados por coma). En vez de comprimir el texto en
+        // una sola línea (se monta/se sale de la caja), cada valor se envuelve
+        // en varias líneas con MultiCell, y el recuadro crece según el más
+        // alto de los tres bloques.
         $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->SetXY($mL + 2, $yBox + 1);
-        $pdf->Cell(15, $lh, 'Direccion:', 0, 0, 'L');
-        $pdf->Cell(60, $lh, $cab['cliente_direccion'] ?? '', 0, 0, 'L');
-        $pdf->Cell(16, $lh, 'Telefono:', 0, 0, 'L');
-        $pdf->Cell(26, $lh, $cab['cliente_telefono'] ?? '', 0, 0, 'L');
-        $pdf->Cell(14, $lh, 'Correo:', 0, 0, 'L');
+        $lineH3 = 3.6;
 
-        $correoX = $pdf->GetX();
-        $correoY = $pdf->GetY();
-        $correoW = $cW - 2 - 15 - 60 - 16 - 26 - 14;
-        $correoVal = $cab['cliente_email'] ?? '';
-        $emailLineH = 3.6;
-        $nEmail = max(1, $pdf->getNumLines($correoVal, $correoW));
+        $dirLabelW = 15;
+        $dirValW   = 60;
+        $telLabelW = 16;
+        $telValW   = 26;
+        $corLabelW = 14;
+        $corValW   = $cW - 2 - $dirLabelW - $dirValW - $telLabelW - $telValW - $corLabelW;
 
-        $pdf->SetXY($correoX, $correoY);
-        $pdf->MultiCell($correoW, $emailLineH, $correoVal, 0, 'L', false, 1);
+        $rowX = $mL + 2;
+        $rowY = $yBox + 1;
 
-        $correoBlockH = max($lh, $nEmail * $emailLineH);
-        $yBox += $correoBlockH + 2;
+        // Dirección
+        $pdf->SetXY($rowX, $rowY);
+        $pdf->Cell($dirLabelW, $lh, 'Direccion:', 0, 0, 'L');
+        $dirVal = $cab['cliente_direccion'] ?? '';
+        $nDir = max(1, $pdf->getNumLines($dirVal, $dirValW));
+        $pdf->SetXY($rowX + $dirLabelW, $rowY);
+        $pdf->MultiCell($dirValW, $lineH3, $dirVal, 0, 'L', false, 1);
+
+        // Teléfono
+        $telX = $rowX + $dirLabelW + $dirValW;
+        $pdf->SetXY($telX, $rowY);
+        $pdf->Cell($telLabelW, $lh, 'Telefono:', 0, 0, 'L');
+        $telVal = $cab['cliente_telefono'] ?? '';
+        $nTel = max(1, $pdf->getNumLines($telVal, $telValW));
+        $pdf->SetXY($telX + $telLabelW, $rowY);
+        $pdf->MultiCell($telValW, $lineH3, $telVal, 0, 'L', false, 1);
+
+        // Correo
+        $corX = $telX + $telLabelW + $telValW;
+        $pdf->SetXY($corX, $rowY);
+        $pdf->Cell($corLabelW, $lh, 'Correo:', 0, 0, 'L');
+        $corVal = $cab['cliente_email'] ?? '';
+        $nCor = max(1, $pdf->getNumLines($corVal, $corValW));
+        $pdf->SetXY($corX + $corLabelW, $rowY);
+        $pdf->MultiCell($corValW, $lineH3, $corVal, 0, 'L', false, 1);
+
+        $fila3H = max($lh, $nDir * $lineH3, $nTel * $lineH3, $nCor * $lineH3);
+        $yBox = $rowY + $fila3H + 1;
 
         // Borde de la caja
         $pdf->Rect($mL, $y, $cW, $yBox - $y, 'D');

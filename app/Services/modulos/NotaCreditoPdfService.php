@@ -370,11 +370,20 @@ class NotaCreditoPdfService
         $yBox += $lh + 1;
 
         // Fila 3: Dirección
+        // Se envuelve con MultiCell (una dirección larga no debe salirse de la
+        // caja) y el recuadro crece según lo que ocupe.
         $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->SetXY($mL + 2, $yBox + 1);
-        $pdf->Cell(15, $lh, 'Dirección:', 0, 0, 'L');
-        $pdf->Cell($cW - 17, $lh, $cab['cliente_direccion'] ?? '', 0, 1, 'L');
-        $yBox += $lh + 2;
+        $lineH3 = 3.6;
+        $dirLabelW = 15;
+        $dirValW = $cW - 2 - $dirLabelW;
+        $rowY = $yBox + 1;
+        $pdf->SetXY($mL + 2, $rowY);
+        $pdf->Cell($dirLabelW, $lh, 'Dirección:', 0, 0, 'L');
+        $dirVal = $cab['cliente_direccion'] ?? '';
+        $nDir = max(1, $pdf->getNumLines($dirVal, $dirValW));
+        $pdf->SetXY($mL + 2 + $dirLabelW, $rowY);
+        $pdf->MultiCell($dirValW, $lineH3, $dirVal, 0, 'L', false, 1);
+        $yBox = $rowY + max($lh, $nDir * $lineH3) + 2;
 
         $pdf->Rect($mL, $y, $cW, $yBox - $y, 'D');
         return $yBox;
