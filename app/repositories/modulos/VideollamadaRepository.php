@@ -19,6 +19,14 @@ use PDO;
  */
 class VideollamadaRepository extends BaseRepository
 {
+    /**
+     * Cada cuánto, como máximo, se escribe el latido de una sala en la base.
+     * Es el compromiso entre precisión y carga: con 60 segundos, el cierre
+     * automático puede tardar hasta un minuto de más, y a cambio una reunión de
+     * seis personas genera una escritura por minuto en vez de seis por segundo.
+     */
+    private const LATIDO_SEGUNDOS = 60;
+
     public function __construct()
     {
         parent::__construct('videollamadas_salas');
@@ -214,6 +222,67 @@ class VideollamadaRepository extends BaseRepository
     public function invalidarCachePoll(int $idSala, int $idEmpresa): void
     {
         \App\Helpers\Cache::delete('vc:poll:' . $idEmpresa . ':' . $idSala);
+    }
+
+    /**
+     * Refresca el latido de la sala: "aquí dentro todavía hay alguien".
+     *
+     * Es la ÚNICA marca en base de datos de que la reunión sigue viva. Hace
+     * falta porque la presencia real vive en memoria (APCu) y el cron, que
+     * corre en CLI, no puede verla.
+     *
+     * ── Por qué lleva doble freno ───────────────────────────────────────────
+     * Lo llama el poll de señalización, o sea CADA participante CADA segundo.
+     * Escribir ahí sin freno sería peor que el problema que resuelve:
+     *   1) Freno en memoria: si ya se latió hace menos de LATIDO_SEGUNDOS, ni
+     *      siquiera se abre una consulta. La marca es por SALA y APCu la
+     *      comparten todos los procesos de Apache, así que seis participantes
+     *      producen UN latido por minuto, no seis por segundo.
+     *   2) Freno en el propio SQL: la misma condición va en el WHERE. Sirve de
+     *      red cuando no hay APCu (XAMPP local): la consulta se ejecuta, pero
+     *      no toca ninguna fila y no genera escritura real.
+     */
+    public function marcarLatidoSala(int $idSala, int $idEmpresa): void
+    {
+        $clave = 'vc:latido:' . $idEmpresa . ':' . $idSala;
+        if (\App\Helpers\Cache::get($clave) !== null) {
+            return;
+        }
+        \App\Helpers\Cache::set($clave, 1, self::LATIDO_SEGUNDOS);
+
+        $segundos = self::LATIDO_SEGUNDOS;
+        $sql = "UPDATE videollamadas_salas
+                SET ultimo_latido = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :emp AND eliminado = FALSE
+                  AND estado = 'en_curso'
+                  AND (ultimo_latido IS NULL
+                       OR ultimo_latido < CURRENT_TIMESTAMP - INTERVAL '{$segundos} seconds')";
+        $this->query($sql, [':id' => $idSala, ':emp' => $idEmpresa]);
+    }
+
+    /**
+     * Reuniones que siguen "en curso" pero llevan más de N minutos sin señales
+     * de vida. Es la cola del cierre automático por inactividad.
+     *
+     * No filtra por empresa a propósito: la ejecuta el cron para todo el
+     * sistema, igual que getSalasPorRecordar().
+     *
+     * El COALESCE cubre las salas que nunca latieron: las que se pusieron en
+     * curso antes de que existiera la columna, y aquellas donde el anfitrión
+     * dio "Iniciar" y nadie llegó a entrar. En esos casos la referencia es
+     * cuándo se puso en curso.
+     */
+    public function getSalasInactivas(int $minutos): array
+    {
+        $sql = "SELECT s.id, s.id_empresa, s.codigo, s.titulo, s.estado, s.id_anfitrion,
+                       COALESCE(s.ultimo_latido, s.iniciada_at, s.updated_at, s.created_at) AS ultima_senal
+                FROM videollamadas_salas s
+                WHERE s.eliminado = FALSE
+                  AND s.estado = 'en_curso'
+                  AND COALESCE(s.ultimo_latido, s.iniciada_at, s.updated_at, s.created_at)
+                      < CURRENT_TIMESTAMP - (:minutos * INTERVAL '1 minute')
+                ORDER BY s.id";
+        return $this->query($sql, [':minutos' => $minutos])->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function existeCodigo(string $codigo): bool
@@ -491,6 +560,44 @@ class VideollamadaRepository extends BaseRepository
                 WHERE id_sala = :sala AND id_empresa = :emp AND id_usuario = :usr
                   AND estado = 'conectado' AND eliminado = FALSE";
         $this->query($sql, [':sala' => $idSala, ':emp' => $idEmpresa, ':usr' => $idUsuario]);
+    }
+
+    /**
+     * Cierra de oficio a los participantes que quedaron marcados como
+     * conectados en una sala que se va a finalizar.
+     *
+     * Hace falta porque `marcarDesconexion()` solo corre en la salida
+     * explícita: quien cierra la pestaña, pierde la conexión o apaga el equipo
+     * se queda en 'conectado' para siempre, y su tiempo de permanencia nunca se
+     * cierra.
+     *
+     * El tiempo se acumula HASTA LA ÚLTIMA SEÑAL DE VIDA de la sala, no hasta
+     * ahora: si la reunión se quedó sola a las 10:00 y el cron la cierra a las
+     * 10:11, nadie estuvo dentro esos once minutos y no deben contarse. Ese
+     * corte es el mismo COALESCE que usa getSalasInactivas().
+     *
+     * @return int Cuántos participantes se cerraron.
+     */
+    public function desconectarParticipantesSala(int $idSala, int $idEmpresa): int
+    {
+        $sql = "UPDATE videollamadas_participantes p
+                SET estado = 'desconectado',
+                    segundos_conectado = p.segundos_conectado + GREATEST(0,
+                        EXTRACT(EPOCH FROM (c.corte - COALESCE(p.ultima_conexion, c.corte)))::int),
+                    updated_at = CURRENT_TIMESTAMP
+                FROM (
+                    SELECT COALESCE(ultimo_latido, iniciada_at, updated_at, created_at) AS corte
+                    FROM videollamadas_salas
+                    WHERE id = :sala_corte AND id_empresa = :emp_corte AND eliminado = FALSE
+                ) c
+                WHERE p.id_sala = :sala AND p.id_empresa = :emp
+                  AND p.estado = 'conectado' AND p.eliminado = FALSE";
+        return $this->query($sql, [
+            ':sala_corte' => $idSala,
+            ':emp_corte'  => $idEmpresa,
+            ':sala'       => $idSala,
+            ':emp'        => $idEmpresa,
+        ])->rowCount();
     }
 
     /**

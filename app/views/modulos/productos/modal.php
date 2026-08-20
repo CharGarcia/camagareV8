@@ -47,6 +47,10 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
     }
 }
 
+#modalProducto .modal-dialog {
+    max-width: 880px;
+}
+
 /* Líneas editables de la pestaña Precios (estilo Factura de Venta). */
 .table-detalle-precios td { vertical-align: middle; padding: 4px 6px; }
 .table-detalle-precios .input-precio-linea {
@@ -95,11 +99,6 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link py-2 small" id="tab-clasificacion-btn" data-bs-toggle="tab" href="#pane-clasificacion" role="tab">
-                                    <i class="bi bi-diagram-3 me-1"></i> Clasificación
-                                </a>
-                            </li>
-                            <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-componentes-btn" data-bs-toggle="tab" href="#pane-componentes" role="tab">
                                     <i class="bi bi-puzzle me-1"></i> Componentes
                                 </a>
@@ -116,7 +115,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-info-btn" data-bs-toggle="tab" href="#pane-info" role="tab">
-                                    <i class="bi bi-info-circle me-1"></i> Información
+                                    <i class="bi bi-card-list me-1"></i> Detalles
                                 </a>
                             </li>
                         </ul>
@@ -125,11 +124,10 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                             $pestanasConfig = [
                                 'tab-inventario-btn' => 'Inventario',
                                 'tab-precios-btn' => 'Precios',
-                                'tab-clasificacion-btn' => 'Clasificación',
                                 'tab-componentes-btn' => 'Componentes',
                                 'tab-variantes-btn' => 'Variantes',
                                 'tab-homologaciones-btn' => 'Homologaciones',
-                                'tab-info-btn' => 'Información'
+                                'tab-info-btn' => 'Detalles'
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfigProd ?? [], 'productos');
                             ?>
@@ -156,6 +154,13 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                             <label class="form-check-label small fw-semibold" for="prod_opc_venta">
                                                 <i class="bi bi-bag-check text-primary me-1"></i>Venta
                                             </label>
+                                        </div>
+                                        <div class="ms-auto d-flex align-items-center gap-2">
+                                            <span class="small fw-bold text-muted"><i class="bi bi-flag me-1"></i>Estado:</span>
+                                            <select name="status" id="prod_status" class="form-select form-select-sm shadow-none border-secondary-subtle" style="width:130px">
+                                                <option value="1">Activo</option>
+                                                <option value="0">Inactivo</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
@@ -308,32 +313,6 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                             </div>
                         </div>
 
-                        <!-- TAB CLASIFICACIÓN -->
-                        <div class="tab-pane fade" id="pane-clasificacion" role="tabpanel">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold text-muted">Categoría</label>
-                                    <div class="input-group input-group-sm">
-                                        <select name="id_categoria" id="prod_id_categoria" class="form-select shadow-none"></select>
-                                        <?php if (\App\Helpers\Permisos::puedeCrear('modulos/categorias')): ?>
-                                        <button type="button" class="btn btn-outline-primary" onclick="abrirModalCategoriaCrear()"><i class="bi bi-plus-circle"></i></button>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold text-muted">Marca</label>
-                                    <div class="input-group input-group-sm">
-                                        <select name="id_marca" id="prod_id_marca" class="form-select shadow-none"></select>
-                                        <?php if (\App\Helpers\Permisos::puedeCrear('modulos/marcas')): ?>
-                                        <button type="button" class="btn btn-outline-primary" onclick="abrirModalMarcaCrear()"><i class="bi bi-plus-circle"></i></button>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-
-
                         <!-- TAB COMPONENTES -->
                         <div class="tab-pane fade" id="pane-componentes" role="tabpanel">
                             <div class="card border-0 bg-light bg-opacity-50 mb-3">
@@ -449,35 +428,60 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                             </div>
                         </div>
 
-                        <!-- TAB INFO -->
+                        <!-- TAB DETALLES -->
                         <div class="tab-pane fade" id="pane-info" role="tabpanel">
-                            <div class="row g-3 mb-3">
+                            <div class="row g-3">
                                 <div class="col-md-6">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Estado del Registro</label>
-                                    <select name="status" id="prod_status" class="form-select form-select-sm shadow-none border-secondary-subtle">
-                                        <option value="1">Activo</option>
-                                        <option value="0">Inactivo</option>
-                                    </select>
+                                    <div class="card border h-100">
+                                        <div class="card-body">
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold text-muted">Categoría</label>
+                                                <div class="input-group input-group-sm">
+                                                    <select name="id_categoria" id="prod_id_categoria" class="form-select shadow-none"></select>
+                                                    <?php if (\App\Helpers\Permisos::puedeCrear('modulos/categorias')): ?>
+                                                    <button type="button" class="btn btn-outline-primary" onclick="abrirModalCategoriaCrear()"><i class="bi bi-plus-circle"></i></button>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold text-muted">Marca</label>
+                                                <div class="input-group input-group-sm">
+                                                    <select name="id_marca" id="prod_id_marca" class="form-select shadow-none"></select>
+                                                    <?php if (\App\Helpers\Permisos::puedeCrear('modulos/marcas')): ?>
+                                                    <button type="button" class="btn btn-outline-primary" onclick="abrirModalMarcaCrear()"><i class="bi bi-plus-circle"></i></button>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                            <div class="mb-0">
+                                                <label class="form-label small fw-bold text-muted">Ubicación</label>
+                                                <input type="text" name="ubicacion" id="prod_ubicacion" class="form-control form-control-sm shadow-none" list="prod_ubicaciones_list" placeholder="Ej: Bodega principal, Pasillo 2" maxlength="150" autocomplete="off">
+                                                <datalist id="prod_ubicaciones_list"></datalist>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label mb-2 small fw-bold text-muted">Imagen del Producto</label>
-                                <div class="d-flex flex-column align-items-start gap-2">
-                                    <div id="imagePreview" class="rounded border bg-light d-flex align-items-center justify-content-center overflow-hidden"
-                                         style="width:200px;height:200px;cursor:pointer" onclick="document.getElementById('inputImage').click()" title="Clic para cambiar imagen">
-                                        <i class="bi bi-image text-muted" style="font-size:3rem;opacity:0.25"></i>
+                                <div class="col-md-6">
+                                    <div class="card border h-100">
+                                        <div class="card-body">
+                                            <label class="form-label mb-2 small fw-bold text-muted">Imagen del Producto</label>
+                                            <div class="d-flex flex-column align-items-start gap-2">
+                                                <div id="imagePreview" class="rounded border bg-light d-flex align-items-center justify-content-center overflow-hidden"
+                                                     style="width:200px;height:200px;cursor:pointer" onclick="document.getElementById('inputImage').click()" title="Clic para cambiar imagen">
+                                                    <i class="bi bi-image text-muted" style="font-size:3rem;opacity:0.25"></i>
+                                                </div>
+                                                <div class="d-flex gap-2">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('inputImage').click()">
+                                                        <i class="bi bi-upload me-1"></i> Subir imagen
+                                                    </button>
+                                                    <button type="button" id="btnRemoveImage" class="btn btn-outline-danger btn-sm d-none" onclick="removerImagen()">
+                                                        <i class="bi bi-trash me-1"></i> Quitar
+                                                    </button>
+                                                </div>
+                                                <input type="hidden" name="imagen" id="prod_imagen">
+                                                <input type="file" id="inputImage" class="d-none" accept="image/*" onchange="uploadProductImage(this)">
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('inputImage').click()">
-                                            <i class="bi bi-upload me-1"></i> Subir imagen
-                                        </button>
-                                        <button type="button" id="btnRemoveImage" class="btn btn-outline-danger btn-sm d-none" onclick="removerImagen()">
-                                            <i class="bi bi-trash me-1"></i> Quitar
-                                        </button>
-                                    </div>
-                                    <input type="hidden" name="imagen" id="prod_imagen">
-                                    <input type="file" id="inputImage" class="d-none" accept="image/*" onchange="uploadProductImage(this)">
                                 </div>
                             </div>
 

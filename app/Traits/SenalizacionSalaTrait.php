@@ -58,6 +58,13 @@ trait SenalizacionSalaTrait
 
             $senal = new SenalizacionService();
 
+            // Señal de vida de la sala, para el cierre automático por
+            // inactividad. Va antes de repartir a la antesala a propósito: el
+            // que espera a que lo admitan también es alguien dentro.
+            if ($sala['estado'] === 'en_curso') {
+                $this->salaRepository()->marcarLatidoSala($ctx['id_sala'], $ctx['id_empresa']);
+            }
+
             // El anfitrión y los moderadores nunca hacen antesala: alguien tiene
             // que estar dentro para poder admitir a los demás.
             $debeEsperar = !empty($sala['sala_espera']) && !$ctx['manda_sala'];
@@ -110,6 +117,18 @@ trait SenalizacionSalaTrait
         try {
             $senal = new SenalizacionService();
             $datos = $this->salaRepository()->getDatosPoll($ctx['id_sala'], $ctx['id_empresa']);
+
+            // Latido de la sala: mientras alguien siga preguntando, la reunión
+            // está viva y el cron no debe cerrarla. Es lo único que llega a la
+            // base desde aquí, y va con freno propio (ver marcarLatidoSala):
+            // como mucho una escritura por minuto y por sala, sin importar
+            // cuánta gente esté poleando.
+            //
+            // Se hace ANTES de la rama de sala de espera porque esa rama corta
+            // la petición, y quien aguarda en la antesala cuenta como presencia.
+            if ($datos['estado'] === 'en_curso') {
+                $this->salaRepository()->marcarLatidoSala($ctx['id_sala'], $ctx['id_empresa']);
+            }
 
             if (filter_var($_GET['espera'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
                 $this->responderEspera($senal, $ctx, $datos);

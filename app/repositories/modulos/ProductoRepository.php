@@ -12,7 +12,8 @@ class ProductoRepository extends BaseRepository
         'codigo', 'nombre', 'precio_base', 'status', 'tipo_produccion',
         'nombre_categoria', 'nombre_marca', 'codigo_auxiliar', 'codigo_barras',
         'nombre_medida', 'nombre_tarifa_iva', 'valor_iva', 'pvp',
-        'inventariable', 'stock_minimo', 'stock_maximo', 'valor_ice', 'saldo_actual'
+        'inventariable', 'stock_minimo', 'stock_maximo', 'valor_ice', 'saldo_actual',
+        'ubicacion'
     ];
 
     public function __construct()
@@ -89,6 +90,7 @@ class ProductoRepository extends BaseRepository
                 'categoria'     => 'cat.nombre',
                 'marca'         => 'mar.nombre',
                 'medida'        => 'um.nombre',
+                'ubicacion'     => 'p.ubicacion',
             ],
             'exacto'   => [
                 'estado'       => 'p.status',
@@ -252,13 +254,13 @@ class ProductoRepository extends BaseRepository
                     codigo_auxiliar, codigo_barras, precio_base, tipo_produccion,
                     tarifa_iva, id_medida, id_tipo_medida, status, valor_ice, codigo_ice,
                     nombre_ice, inventariable, id_categoria, id_marca, imagen, costo_producto,
-                    eliminado, created_at, stock_minimo, stock_maximo, id_ice, opciones
+                    eliminado, created_at, stock_minimo, stock_maximo, id_ice, opciones, ubicacion
                 ) VALUES (
                     :id_empresa, :id_usuario, :created_by, :codigo, :nombre,
                     :codigo_auxiliar, :codigo_barras, :precio_base, :tipo_produccion,
                     :tarifa_iva, :id_medida, :id_tipo_medida, :status, :valor_ice, :codigo_ice,
                     :nombre_ice, :inventariable, :id_categoria, :id_marca, :imagen, :costo_producto,
-                    :eliminado, CURRENT_TIMESTAMP, :stock_minimo, :stock_maximo, :id_ice, :opciones
+                    :eliminado, CURRENT_TIMESTAMP, :stock_minimo, :stock_maximo, :id_ice, :opciones, :ubicacion
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -288,6 +290,7 @@ class ProductoRepository extends BaseRepository
             ':stock_maximo'           => $data['stock_maximo'] ?? 0,
             ':id_ice'                 => !empty($data['id_ice']) ? (int)$data['id_ice'] : null,
             ':opciones'               => $data['opciones'] ?? '{"compra":true,"venta":true}',
+            ':ubicacion'              => !empty($data['ubicacion']) ? $data['ubicacion'] : null,
         ]);
         return (int) $this->lastInsertId();
     }
@@ -317,6 +320,7 @@ class ProductoRepository extends BaseRepository
                 stock_maximo = :stock_maximo,
                 id_ice = :id_ice,
                 opciones = :opciones,
+                ubicacion = :ubicacion,
                 id_usuario = :id_usuario,
                 updated_by = :updated_by,
                 updated_at = CURRENT_TIMESTAMP
@@ -345,6 +349,7 @@ class ProductoRepository extends BaseRepository
             ':stock_maximo'           => $data['stock_maximo'] ?? 0,
             ':id_ice'                 => !empty($data['id_ice']) ? (int)$data['id_ice'] : null,
             ':opciones'               => $data['opciones'] ?? '{"compra":true,"venta":true}',
+            ':ubicacion'              => !empty($data['ubicacion']) ? $data['ubicacion'] : null,
             ':id_usuario'             => $data['id_usuario'],
             ':updated_by'             => $data['id_usuario'],
             ':id'                     => $id,
@@ -1031,6 +1036,18 @@ class ProductoRepository extends BaseRepository
                             ORDER BY p.nombre ASC LIMIT ?");
         $st->execute($params);
         return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Ubicaciones distintas ya usadas por productos de la empresa (para el autocompletado del campo). */
+    public function getUbicacionesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT ubicacion FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND eliminado = false
+                  AND ubicacion IS NOT NULL AND ubicacion != ''
+                ORDER BY ubicacion ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_COLUMN);
     }
 
     public function softDeleteHomologacion(int $id, int $idEmpresa, int $idUsuario): bool

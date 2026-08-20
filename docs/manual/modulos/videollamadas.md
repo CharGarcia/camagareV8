@@ -5,8 +5,8 @@ categoria: Comunicaciones
 ruta_modulo: modulos/videollamadas
 tipo: modulo
 visibilidad: todos
-etiquetas: videollamada, video llamada, videoconferencia, reunion, reuniones, meet, zoom, llamada, conferencia, camara, microfono, sala, sala de espera, juntas, capacitacion, compartir pantalla, chat, levantar la mano
-version: 1.5
+etiquetas: videollamada, video llamada, videoconferencia, reunion, reuniones, meet, zoom, llamada, conferencia, camara, microfono, sala, sala de espera, juntas, capacitacion, compartir pantalla, chat, levantar la mano, reunion abierta, en curso, finalizar, cerrar reunion, se quedo abierta, reunion colgada, inactividad, volver a entrar, reingresar, se me cayo la reunion
+version: 1.6
 orden: 0
 estado: activo
 ---
@@ -163,6 +163,48 @@ que permite que la reunión siga fluida en conexiones normales.
 Con dos personas se usa la máxima calidad; de ahí en adelante va bajando por
 tramos. Al compartir pantalla no se reduce, para que el texto siga legible.
 
+### Si se sale y quiere volver
+
+Puede volver a entrar cuantas veces necesite mientras la reunión siga **en
+curso**: si se le cayó el internet, cerró la pestaña sin querer o tuvo que
+atender otra cosa, entre otra vez desde el mismo sitio (el módulo o su enlace) y
+retoma donde estaba. Su tiempo de permanencia se suma, no se reinicia.
+
+Lo único que ya no permite volver es una reunión **finalizada**: ahí hay que
+crear una nueva.
+
+## Cierre automático de reuniones abandonadas
+
+Una reunión que nadie finaliza a mano **se cierra sola a los diez minutos de
+quedarse vacía**.
+
+Es frecuente que la última persona no pulse *Colgar* y simplemente cierre la
+ventana, apague el equipo o pierda la conexión. Antes, esa reunión quedaba
+marcada como "En curso" para siempre: aparecía como reunión activa en el listado
+y no se la podía eliminar. Ahora el sistema revisa cada minuto las reuniones en
+curso y finaliza las que llevan más de diez minutos **sin una sola persona
+dentro**.
+
+Puntos importantes:
+
+- **No corta reuniones vivas.** Mientras quede alguien conectado —aunque no
+  hable, aunque tenga la cámara apagada— la reunión se mantiene abierta sin
+  límite. También cuenta como presencia quien está esperando en la sala de
+  espera a que lo admitan.
+- **Los diez minutos se cuentan desde que se queda vacía**, no desde que empezó.
+  Una reunión de tres horas con gente dentro no se toca.
+- **A quien se salió no le afecta**: si la reunión sigue viva porque hay otros
+  participantes, puede volver a entrar normalmente. Solo se cierra cuando ya no
+  queda nadie.
+- **También cierra a los participantes que quedaron colgados**, para que el
+  registro de asistencia quede correcto. El tiempo de permanencia se corta en la
+  última señal real de la reunión, no en el momento en que el sistema hace la
+  limpieza: nadie aparece con diez minutos de más.
+- **Queda constancia.** El cierre se anota en la bitácora de la reunión y en la
+  auditoría del sistema con el motivo (inactividad), así que se distingue de una
+  reunión que el anfitrión finalizó a propósito.
+- Aplica **a todas las reuniones por igual**, incluidas las permanentes.
+
 ## Configuración
 
 Está repartida en dos sitios, según a quién afecte cada cosa.
@@ -255,6 +297,11 @@ El nivel 3 (superadministrador) siempre ve todo.
   mano.
 - **Solo el anfitrión inicia y finaliza** la reunión, salvo que otro usuario tenga
   permiso de acceso total.
+- **Una reunión en curso que se queda vacía se finaliza sola a los diez minutos.**
+  Se cuenta desde la última persona que estuvo dentro, no desde el inicio de la
+  reunión, y mientras quede alguien conectado no se cierra nunca.
+- **Se puede volver a entrar a una reunión en curso** las veces que haga falta.
+  Solo una reunión finalizada o cancelada cierra la puerta.
 - **Los invitados externos necesitan que la opción esté activada**. Cada uno
   recibe un enlace propio con su token de acceso.
 - **Nada se borra**: eliminar una reunión la marca como eliminada, no la borra de
@@ -285,7 +332,12 @@ El nivel 3 (superadministrador) siempre ve todo.
 - **Un participante no recibió la invitación**: revise que tenga correo
   registrado en la pestaña Participantes. El mensaje de resultado dice cuántos
   quedaron sin correo.
-- **"No se puede eliminar una reunión en curso"**: finalícela primero.
+- **"No se puede eliminar una reunión en curso"**: finalícela primero. Si nadie
+  la finalizó y ya no queda nadie dentro, espere: el sistema la cierra sola a los
+  diez minutos.
+- **"Esta reunión ya no está disponible"** al intentar volver a entrar: la
+  reunión se finalizó mientras usted estaba fuera, sea porque el anfitrión la
+  cerró o porque se quedó vacía más de diez minutos. Hay que crear una nueva.
 - **"El navegador bloqueó el acceso"** al probar la cámara: el navegador tiene
   denegado el permiso para este sitio. Se habilita desde el candado de la barra de
   direcciones.
@@ -308,6 +360,10 @@ El nivel 3 (superadministrador) siempre ve todo.
 
 ## Historial de cambios
 
+- **1.6** — Las reuniones que quedan en curso sin nadie dentro se finalizan solas
+  a los diez minutos, y los participantes que se quedaron colgados por cerrar la
+  ventana sin pulsar Colgar se cierran junto con ellas. Mientras haya alguien
+  conectado la reunión no se toca, y quien se salió puede volver a entrar.
 - **1.5** — La configuración se reparte según a quién afecta: los servidores
   (globales del sistema) pasan a **Configuración → Videollamadas**, y los límites
   de cada empresa quedan en el botón **Configurar** del propio módulo.

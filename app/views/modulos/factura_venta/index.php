@@ -462,7 +462,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
                         <button id="m-btn-sri" type="button" class="btn btn-outline-primary btn-sm" onclick="enviarAlSri()"><i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI</button>
                         <button id="m-btn-duplicar" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="duplicarFactura()" title="Duplicar"><i class="bi bi-copy"></i></button>
+                        <?php if (!empty($permRecibo['ver'])): ?>
                         <button id="m-btn-recibo" type="button" class="btn btn-outline-secondary btn-sm" onclick="generarReciboVenta()" title="Generar recibo de venta"><i class="bi bi-receipt me-1"></i>Recibo</button>
+                        <?php endif; ?>
                         <div class="vr mx-1"></div>
                         <button id="m-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                         <button id="m-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="exportarXml()" title="Exportar XML"><i class="bi bi-file-earmark-code"></i></button>

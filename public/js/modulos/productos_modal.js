@@ -85,6 +85,11 @@
             selIce.innerHTML = html;
         }
 
+        const dlUbic = document.getElementById('prod_ubicaciones_list');
+        if (dlUbic && Array.isArray(datosCatalogos.ubicaciones)) {
+            dlUbic.innerHTML = datosCatalogos.ubicaciones.map(u => `<option value="${escapeHtml(u)}"></option>`).join('');
+        }
+
         window.calcularPreciosTotales();
         window.actualizarValorICE();
     }
@@ -544,7 +549,7 @@
         document.getElementById('prod_status').value = data.status ?? 1;
         document.getElementById('prod_id_categoria').value = data.id_categoria || '';
         document.getElementById('prod_id_marca').value = data.id_marca || '';
-        document.getElementById('prod_id_marca').value = data.id_marca || '';
+        document.getElementById('prod_ubicacion').value = data.ubicacion || '';
         
 
 

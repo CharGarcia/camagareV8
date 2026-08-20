@@ -119,7 +119,7 @@ class ProductosController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="18" class="text-center py-5 text-muted"><i class="bi bi-box fs-3 d-block mb-2"></i>No se encontraron productos.</td></tr>';
+            echo '<tr><td colspan="19" class="text-center py-5 text-muted"><i class="bi bi-box fs-3 d-block mb-2"></i>No se encontraron productos.</td></tr>';
         } else {
                 foreach ($rows as $r) {
                 $statusBadge = ((int)($r['status'] ?? 1) == 1)
@@ -140,6 +140,7 @@ class ProductosController extends BaseModuloController
                         <td data-col="nombre_categoria">' . htmlspecialchars((string)($r['nombre_categoria'] ?? '—')) . '</td>
                         <td data-col="nombre_marca">' . htmlspecialchars((string)($r['nombre_marca'] ?? '—')) . '</td>
                         <td data-col="nombre_medida">' . htmlspecialchars((string)($r['nombre_medida'] ?? '—')) . '</td>
+                        <td data-col="ubicacion">' . htmlspecialchars((string)($r['ubicacion'] ?? '—')) . '</td>
                         <td class="text-end fw-medium" data-col="precio_base">$' . number_format((float)($r['precio_base'] ?? 0), $decPrecio) . '</td>
                         <td class="text-center" data-col="nombre_tarifa_iva"><span class="small">' . htmlspecialchars((string)($r['nombre_tarifa_iva'] ?? '—')) . '</span></td>
                         <td class="text-end text-muted" data-col="valor_iva">$' . number_format((float)($r['valor_iva'] ?? 0), $decPrecio) . '</td>
@@ -381,6 +382,11 @@ class ProductosController extends BaseModuloController
             $data['medida_default'] = $medidasServiceDefault->getMedidaDefaultUnidad($idEmpresa);
         } catch (\Throwable $e) {}
 
+        // 11. Ubicaciones ya usadas por otros productos (autocompletado del campo)
+        try {
+            $data['ubicaciones'] = (new ProductoRepository())->getUbicacionesDistintas($idEmpresa);
+        } catch (\Throwable $e) {}
+
         echo json_encode(['ok' => true, 'data' => $data]);
         exit;
     }
@@ -545,10 +551,11 @@ class ProductosController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 15%">Código</th>
-                            <th style="width: 45%">Nombre / Razón</th>
-                            <th style="width: 15%">Categoría</th>
-                            <th style="width: 15%">Marca</th>
+                            <th style="width: 12%">Código</th>
+                            <th style="width: 38%">Nombre / Razón</th>
+                            <th style="width: 13%">Categoría</th>
+                            <th style="width: 12%">Marca</th>
+                            <th style="width: 15%">Ubicación</th>
                             <th style="width: 10%">Precio</th>
                         </tr>
                     </thead>
@@ -559,6 +566,7 @@ class ProductosController extends BaseModuloController
                                 <td><?= htmlspecialchars((string)($r['nombre'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['nombre_categoria'] ?? '-')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['nombre_marca'] ?? '-')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['ubicacion'] ?? '-')) ?></td>
                                 <td>$<?= number_format((float)($r['precio_base'] ?? 0), $decPrecio) ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -604,7 +612,7 @@ class ProductosController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Tipo IVA', 'Precio Base', 'IVA', 'ICE', 'PVP', 'Costo', 'Margen', 'Utilidad %', 'Saldo', 'Unidad', 'Estado'];
+            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Ubicación', 'Tipo IVA', 'Precio Base', 'IVA', 'ICE', 'PVP', 'Costo', 'Margen', 'Utilidad %', 'Saldo', 'Unidad', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
                 // Saldo solo para productos que manejan inventario (suma de todas las bodegas).
@@ -624,6 +632,7 @@ class ProductosController extends BaseModuloController
                     (string)($r['nombre'] ?? ''),
                     (string)($r['nombre_categoria'] ?? ''),
                     (string)($r['nombre_marca'] ?? ''),
+                    (string)($r['ubicacion'] ?? ''),
                     (string)($r['nombre_tarifa_iva'] ?? ''),
                     number_format($precioBase, $decPrecio),
                     number_format((float)($r['valor_iva'] ?? 0), $decPrecio),
@@ -822,6 +831,7 @@ class ProductosController extends BaseModuloController
 
             'id_categoria'          => empty($_POST['id_categoria']) ? null : (int)$_POST['id_categoria'],
             'id_marca'              => empty($_POST['id_marca']) ? null : (int)$_POST['id_marca'],
+            'ubicacion'             => trim($_POST['ubicacion'] ?? ''),
             'imagen'                => trim($_POST['imagen'] ?? ''),
             'costo_producto'        => empty($_POST['costo_producto']) ? 0 : (float)$_POST['costo_producto'],
             // OJO: el modal estándar de edición de producto no gestiona bodegas (no manda

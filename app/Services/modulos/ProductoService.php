@@ -93,6 +93,7 @@ class ProductoService
                 'stock_minimo'          => !empty($data['stock_minimo']) ? (float)$data['stock_minimo'] : 0,
                 'stock_maximo'          => !empty($data['stock_maximo']) ? (float)$data['stock_maximo'] : 0,
                 'opciones'              => !empty($data['opciones']) ? $data['opciones'] : '{"compra":true,"venta":true}',
+                'ubicacion'             => !empty($data['ubicacion']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['ubicacion'])) : null,
             ];
 
             $id = $this->repository->create($insertData);
@@ -375,6 +376,7 @@ class ProductoService
                 'stock_minimo'          => !empty($data['stock_minimo']) ? (float)$data['stock_minimo'] : 0,
                 'stock_maximo'          => !empty($data['stock_maximo']) ? (float)$data['stock_maximo'] : 0,
                 'opciones'              => !empty($data['opciones']) ? $data['opciones'] : '{"compra":true,"venta":true}',
+                'ubicacion'             => !empty($data['ubicacion']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['ubicacion'])) : null,
             ];
 
             $this->repository->update($id, $idEmpresa, $updateData);

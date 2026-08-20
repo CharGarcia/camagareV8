@@ -113,6 +113,7 @@ class FacturaVentaController extends BaseModuloController
         $permGR = $this->permisosModuloPorRuta('modulos/guias_remision');
         $permClientes  = $this->permisosModuloPorRuta('modulos/clientes');
         $permProductos = $this->permisosModuloPorRuta('modulos/productos');
+        $permRecibo    = $this->permisosModuloPorRuta('modulos/recibo-venta');
 
         // Igual que en NotaDebitoController::index(): solo se ofrecen como Serie
         // de la ND los puntos de emisión con el secuencial de "Nota de débito"
@@ -135,6 +136,7 @@ class FacturaVentaController extends BaseModuloController
             'permGR'      => $permGR,
             'permClientes'  => $permClientes,
             'permProductos' => $permProductos,
+            'permRecibo'    => $permRecibo,
             'rows'        => $result['rows'],
             'total'       => $total,
             'page'        => $page,

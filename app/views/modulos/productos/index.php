@@ -85,6 +85,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { key: 'categoria',    label: 'Categoría',        icon: 'bi-folder',          type: 'text' },
                             { key: 'marca',        label: 'Marca',            icon: 'bi-patch-check',     type: 'text' },
                             { key: 'medida',       label: 'Unidad de medida', icon: 'bi-rulers',          type: 'text' },
+                            { key: 'ubicacion',    label: 'Ubicación',        icon: 'bi-geo-alt',         type: 'text' },
                             { key: 'precio',       label: 'Precio base',      icon: 'bi-currency-dollar', type: 'number_range' },
                             { key: 'stock',        label: 'Stock',            icon: 'bi-boxes',           type: 'number_range' },
                             { key: 'stock_min',    label: 'Stock mínimo',     icon: 'bi-arrow-down-circle', type: 'number_range' },
@@ -125,6 +126,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'nombre_categoria' => 'Categoría',
                     'nombre_marca' => 'Marca',
                     'nombre_medida' => 'Medida',
+                    'ubicacion' => 'Ubicación',
                     'precio_base' => 'Precio Base',
                     'nombre_tarifa_iva' => 'Tipo IVA',
                     'valor_iva' => 'Valor IVA',
@@ -175,6 +177,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" data-sort="nombre_categoria" role="button" data-col="nombre_categoria">Categoría <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="nombre_marca" role="button" data-col="nombre_marca">Marca <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="nombre_medida" role="button" data-col="nombre_medida">Medida <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="ubicacion" role="button" data-col="ubicacion">Ubicación <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" data-sort="precio_base" role="button" data-col="precio_base">P. Base <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" data-sort="nombre_tarifa_iva" role="button" data-col="nombre_tarifa_iva">Tipo IVA <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" data-sort="valor_iva" role="button" data-col="valor_iva">Val. IVA <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -190,7 +193,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyProductos">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="18" class="text-center py-5 text-muted">No se encontraron productos.</td>
+                            <td colspan="19" class="text-center py-5 text-muted">No se encontraron productos.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -205,6 +208,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="nombre_categoria"><?= htmlspecialchars((string)($r['nombre_categoria'] ?? '-')) ?></td>
                                 <td data-col="nombre_marca"><?= htmlspecialchars((string)($r['nombre_marca'] ?? '-')) ?></td>
                                 <td data-col="nombre_medida"><?= htmlspecialchars((string)($r['nombre_medida'] ?? '-')) ?></td>
+                                <td data-col="ubicacion"><?= htmlspecialchars((string)($r['ubicacion'] ?? '-')) ?></td>
                                 <td class="text-end fw-medium" data-col="precio_base">$<?= number_format((float)($r['precio_base'] ?? 0), $decPrecio) ?></td>
                                 <td class="text-center" data-col="nombre_tarifa_iva"><span class="small"><?= htmlspecialchars((string)($r['nombre_tarifa_iva'] ?? '-')) ?></span></td>
                                 <td class="text-end text-muted" data-col="valor_iva">$<?= number_format((float)($r['valor_iva'] ?? 0), $decPrecio) ?></td>

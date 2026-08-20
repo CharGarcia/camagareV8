@@ -109,6 +109,17 @@ try {
     if ($rec['salas'] > 0) {
         echo "[" . date('Y-m-d H:i:s') . "] Videollamadas: {$rec['salas']} reunión(es) recordada(s), {$rec['correos']} correo(s).\n";
     }
+
+    // Cierre de reuniones abandonadas. También en CADA tick: una sala colgada
+    // en 'en_curso' bloquea su eliminación y aparece como reunión activa, así
+    // que conviene limpiarla pronto. No necesita marca de "ya corrí": la
+    // condición es el latido de cada sala, y una vez finalizada deja de
+    // aparecer en la cola.
+    $inact = $svcVc->finalizarInactivas(10);
+    if ($inact['salas'] > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] Videollamadas: {$inact['salas']} reunión(es) finalizada(s) por inactividad, "
+            . "{$inact['participantes']} participante(s) cerrado(s).\n";
+    }
 } catch (\Throwable $e) {
     // Si el módulo aún no está desplegado (faltan las tablas), el resto sigue.
     echo "[" . date('Y-m-d H:i:s') . "] Error en recordatorios de videollamadas: " . $e->getMessage() . "\n";

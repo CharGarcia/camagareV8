@@ -340,6 +340,94 @@ class VideollamadaService
         return $ok;
     }
 
+    /**
+     * Cierra las reuniones que quedaron "en curso" sin nadie dentro.
+     *
+     * Lo ejecuta el cron en cada tick. Una reunión no se finaliza sola mientras
+     * alguien la esté usando: el poll de señalización refresca `ultimo_latido`
+     * mientras haya UN participante conectado — incluido quien espera en la
+     * antesala. Solo cuando ese latido lleva más de $minutos sin refrescarse se
+     * da por abandonada. Por eso quien se sale y vuelve encuentra la reunión
+     * abierta: mientras quede gente dentro, la sala sigue viva.
+     *
+     * Cada sala va en su propia transacción y con su propio try/catch: una que
+     * falle no debe frenar a las demás ni dejar el cron a medias.
+     *
+     * @return array{salas:int, participantes:int}
+     */
+    public function finalizarInactivas(int $minutos = 10): array
+    {
+        $salas = $this->repository->getSalasInactivas($minutos);
+        $totalSalas = 0;
+        $totalParticipantes = 0;
+
+        foreach ($salas as $s) {
+            $idSala    = (int) $s['id'];
+            $idEmpresa = (int) $s['id_empresa'];
+
+            $db = Database::getConnection();
+            $inTrans = $db->inTransaction();
+            if (!$inTrans) {
+                $db->beginTransaction();
+            }
+
+            try {
+                // Primero los participantes, y el orden importa: su tiempo de
+                // permanencia se corta con la última señal de la sala, y
+                // cambiarEstado() pisa `updated_at`, que es uno de los
+                // respaldos de esa referencia.
+                $cerrados = $this->repository->desconectarParticipantesSala($idSala, $idEmpresa);
+
+                // Sin usuario responsable (0): el cierre lo decide el sistema,
+                // no una persona. Misma convención que los recordatorios.
+                $this->repository->cambiarEstado($idSala, $idEmpresa, 'finalizada', 0);
+
+                $this->repository->registrarEvento(
+                    $idEmpresa,
+                    $idSala,
+                    null,
+                    'sala_finalizada',
+                    [
+                        'motivo'                => 'inactividad',
+                        'minutos_sin_actividad' => $minutos,
+                        'ultima_senal'          => (string) ($s['ultima_senal'] ?? ''),
+                        'participantes_cerrados' => $cerrados,
+                    ],
+                    null
+                );
+
+                $this->logService->registrar(
+                    0,
+                    $idEmpresa,
+                    'FINALIZAR_INACTIVIDAD',
+                    'videollamadas_salas',
+                    $idSala,
+                    ['estado' => 'en_curso'],
+                    [
+                        'estado'                => 'finalizada',
+                        'motivo'                => 'Sin participantes conectados por más de ' . $minutos . ' minutos',
+                        'ultima_senal'          => (string) ($s['ultima_senal'] ?? ''),
+                        'participantes_cerrados' => $cerrados,
+                    ]
+                );
+
+                if (!$inTrans) {
+                    $db->commit();
+                }
+
+                $totalSalas++;
+                $totalParticipantes += $cerrados;
+            } catch (\Throwable $e) {
+                if (!$inTrans && $db->inTransaction()) {
+                    $db->rollBack();
+                }
+                error_log('Videollamadas: cierre por inactividad de la sala ' . $idSala . ' falló: ' . $e->getMessage());
+            }
+        }
+
+        return ['salas' => $totalSalas, 'participantes' => $totalParticipantes];
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  Invitaciones por correo
     // ────────────────────────────────────────────────────────────────────
