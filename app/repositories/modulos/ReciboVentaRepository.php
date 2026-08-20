@@ -225,7 +225,7 @@ class ReciboVentaRepository extends BaseRepository
     {
         $sql = "SELECT d.*, COALESCE(p.nombre, d.descripcion) as producto_nombre, p.codigo as producto_codigo,
                        p.id_tipo_medida, p.id_medida as id_medida_base,
-                       p.tipo_produccion, p.inventariable
+                       p.tipo_produccion, p.inventariable, p.ubicacion as producto_ubicacion
                 FROM recibos_venta_detalle d
                 LEFT JOIN productos p ON d.id_producto = p.id
                 WHERE d.id_recibo = ?

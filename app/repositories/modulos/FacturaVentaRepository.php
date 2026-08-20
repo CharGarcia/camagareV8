@@ -371,7 +371,7 @@ class FacturaVentaRepository extends BaseRepository
         // histórico debe seguir mostrando su unidad aunque el catálogo cambie.
         $sql = "SELECT d.*, COALESCE(p.nombre, d.descripcion) as producto_nombre, p.codigo as producto_codigo,
                        p.id_tipo_medida, p.id_medida as id_medida_base,
-                       p.tipo_produccion, p.inventariable,
+                       p.tipo_produccion, p.inventariable, p.ubicacion as producto_ubicacion,
                        um.abreviatura as unidad_abreviatura, um.nombre as unidad_nombre
                 FROM ventas_detalle d
                 LEFT JOIN productos p ON d.id_producto = p.id

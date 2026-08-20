@@ -3235,6 +3235,9 @@ $totalPages = $totalPagesOriginal;
                 <div class="mt-1 small fw-bold text-muted span-saldo-info d-none" style="font-size:0.68rem;">
                     <i class="bi bi-box-seam me-1 text-primary"></i>Saldo: <span class="lbl-saldo-valor">0.00</span>
                 </div>
+                <span class="span-ubicacion-info d-none" style="position:absolute; top:4px; right:6px; cursor:default; z-index:2;">
+                    <i class="bi bi-geo-alt-fill text-secondary"></i>
+                </span>
             </td>
             <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
             <td class="${EMPRESA_CONFIG.mostrar_unidad_medida ? '' : 'd-none'}">
@@ -3316,6 +3319,18 @@ $totalPages = $totalPagesOriginal;
             row.dataset.inventariable = p.inventariable;
             row.querySelector('.input-precio-base-original').value = p.precio_base;
             row.querySelector('.input-casillero').value = p.id_casillero_venta || '';
+
+            // Ubicación física del producto (módulo Productos): ícono con tooltip, solo si existe.
+            const spanUbic = row.querySelector('.span-ubicacion-info');
+            if (spanUbic) {
+                if (p.ubicacion) {
+                    spanUbic.title = 'Ubicación: ' + p.ubicacion;
+                    spanUbic.classList.remove('d-none');
+                } else {
+                    spanUbic.title = '';
+                    spanUbic.classList.add('d-none');
+                }
+            }
 
             // Datos de ICE
             row.querySelector('.input-ice-pct').value = p.valor_ice || 0;
@@ -4498,6 +4513,18 @@ $totalPages = $totalPagesOriginal;
                 tr.querySelector('.input-desc').value = parseFloat(d.descuento || 0).toFixed(2);
                 const inputAdi = tr.querySelector('.input-adicional');
                 if (inputAdi) inputAdi.value = d.info_adicional || '';
+
+                // Ubicación física del producto (dato en vivo, no se guarda en el detalle).
+                const spanUbicReload = tr.querySelector('.span-ubicacion-info');
+                if (spanUbicReload) {
+                    if (d.producto_ubicacion) {
+                        spanUbicReload.title = 'Ubicación: ' + d.producto_ubicacion;
+                        spanUbicReload.classList.remove('d-none');
+                    } else {
+                        spanUbicReload.title = '';
+                        spanUbicReload.classList.add('d-none');
+                    }
+                }
 
                 // Control de visibilidad de Lotes, Caducidad y NUP segÃºn configuraciÃ³n y tipo de producto
                 // 'sin_lote' y la fecha de hoy son valores centinela que se guardan siempre en
