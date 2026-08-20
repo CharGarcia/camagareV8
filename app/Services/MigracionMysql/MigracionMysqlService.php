@@ -1777,11 +1777,15 @@ class MigracionMysqlService
         $cod = self::codigoCasa($cod); // reformatea al plan nuevo (nivel 3 a 1 dígito)
         if (isset($cuentaPorCod[$cod])) { return $mapCuenta[$oldId] = $cuentaPorCod[$cod]; }
         $nivel = (int) ($info['nivel'] ?: (substr_count($cod, '.') + 1));
+        $usaSp = $pg->inTransaction();
+        if ($usaSp) { $pg->exec('SAVEPOINT sp_cta'); }
         try {
             $ins = $pg->prepare("INSERT INTO plan_cuentas (id_empresa, id_usuario, codigo, nivel, nombre, status, created_by) VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING id");
             $ins->execute([$idEmpresa, $idUsuario, $cod, $nivel, ((string) $info['nombre'] !== '' ? (string) $info['nombre'] : $cod), $idUsuario]);
             $id = (int) $ins->fetchColumn();
+            if ($usaSp) { $pg->exec('RELEASE SAVEPOINT sp_cta'); }
         } catch (Throwable $e) {
+            if ($usaSp) { $pg->exec('ROLLBACK TO SAVEPOINT sp_cta'); }
             $q = $pg->prepare("SELECT id FROM plan_cuentas WHERE id_empresa = ? AND codigo = ? LIMIT 1");
             $q->execute([$idEmpresa, $cod]);
             $id = (int) $q->fetchColumn();
@@ -4325,11 +4329,17 @@ class MigracionMysqlService
         }
         $tipo   = trim((string) $c['tipo_id']) ?: self::inferirTipoId($ident);
         $nombre = trim((string) $c['nombre']) ?: $ident;
+        // SAVEPOINT: si el INSERT falla (p. ej. identificación duplicada), un ROLLBACK TO SAVEPOINT
+        // "des-aborta" la transacción del llamador para poder hacer el SELECT de respaldo sin 25P02.
+        $usaSp = $pg->inTransaction();
+        if ($usaSp) { $pg->exec('SAVEPOINT sp_cli'); }
         try {
             $ins = $pg->prepare("INSERT INTO clientes (id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email, direccion, plazo, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) RETURNING id");
             $ins->execute([$idEmpresa, $idUsuario, $nombre, $tipo, $ident, self::nz($c['telefono']), self::nz($c['email']), self::nz($c['direccion']), (int) ($c['plazo'] ?? 0), $idUsuario]);
             $id = (int) $ins->fetchColumn();
+            if ($usaSp) { $pg->exec('RELEASE SAVEPOINT sp_cli'); }
         } catch (Throwable $e) {
+            if ($usaSp) { $pg->exec('ROLLBACK TO SAVEPOINT sp_cli'); }
             $q = $pg->prepare("SELECT id FROM clientes WHERE id_empresa = ? AND identificacion = ? LIMIT 1");
             $q->execute([$idEmpresa, $ident]);
             $id = (int) $q->fetchColumn();
@@ -4357,11 +4367,15 @@ class MigracionMysqlService
         }
         $tipo = trim((string) $c['tipo_id_proveedor']) ?: self::inferirTipoId($ident);
         $rs   = trim((string) $c['razon_social']) ?: (trim((string) $c['nombre_comercial']) ?: $ident);
+        $usaSp = $pg->inTransaction();
+        if ($usaSp) { $pg->exec('SAVEPOINT sp_prov'); }
         try {
             $ins = $pg->prepare("INSERT INTO proveedores (id_empresa, id_usuario, razon_social, nombre_comercial, tipo_id_proveedor, identificacion, email, direccion, telefono, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
             $ins->execute([$idEmpresa, $idUsuario, $rs, self::nz($c['nombre_comercial']), $tipo, $ident, self::nz($c['mail_proveedor']), self::nz($c['dir_proveedor']), self::nz($c['telf_proveedor']), $idUsuario]);
             $id = (int) $ins->fetchColumn();
+            if ($usaSp) { $pg->exec('RELEASE SAVEPOINT sp_prov'); }
         } catch (Throwable $e) {
+            if ($usaSp) { $pg->exec('ROLLBACK TO SAVEPOINT sp_prov'); }
             $q = $pg->prepare("SELECT id FROM proveedores WHERE id_empresa = ? AND identificacion = ? LIMIT 1");
             $q->execute([$idEmpresa, $ident]);
             $id = (int) $q->fetchColumn();
@@ -4404,11 +4418,15 @@ class MigracionMysqlService
         }
 
         // Sin cliente viejo con ese RUC: crear uno mínimo (identificación desde la clave).
+        $usaSp = $pg->inTransaction();
+        if ($usaSp) { $pg->exec('SAVEPOINT sp_click'); }
         try {
             $ins = $pg->prepare("INSERT INTO clientes (id_empresa, id_usuario, nombre, tipo_id, identificacion, status, created_by) VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING id");
             $ins->execute([$idEmpresa, $idUsuario, $ruc, self::inferirTipoId($ruc), $ruc, $idUsuario]);
             $id = (int) $ins->fetchColumn();
+            if ($usaSp) { $pg->exec('RELEASE SAVEPOINT sp_click'); }
         } catch (Throwable $e) {
+            if ($usaSp) { $pg->exec('ROLLBACK TO SAVEPOINT sp_click'); }
             $q = $pg->prepare("SELECT id FROM clientes WHERE id_empresa = ? AND identificacion = ? LIMIT 1");
             $q->execute([$idEmpresa, $ruc]);
             $id = (int) $q->fetchColumn();
@@ -4472,11 +4490,15 @@ class MigracionMysqlService
             return $prodPorCod[$codigo];
         }
         $iva = $this->ivaIdPorCodigo($pg, $ivaCode); // id de tarifa_iva por CÓDIGO SRI (no el código)
+        $usaSp = $pg->inTransaction();
+        if ($usaSp) { $pg->exec('SAVEPOINT sp_prod'); }
         try {
             $ins = $pg->prepare("INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, status, inventariable, id_usuario, created_by) VALUES (?, ?, ?, '', '', 0, '01', ?, 1, false, ?, ?) RETURNING id");
             $ins->execute([$idEmpresa, $codigo, ($nombre !== '' ? $nombre : $codigo), $iva, $idUsuario, $idUsuario]);
             $id = (int) $ins->fetchColumn();
+            if ($usaSp) { $pg->exec('RELEASE SAVEPOINT sp_prod'); }
         } catch (Throwable $e) {
+            if ($usaSp) { $pg->exec('ROLLBACK TO SAVEPOINT sp_prod'); }
             $q = $pg->prepare("SELECT id FROM productos WHERE id_empresa = ? AND codigo = ? LIMIT 1");
             $q->execute([$idEmpresa, $codigo]);
             $id = (int) $q->fetchColumn();
