@@ -156,9 +156,17 @@ class SecuencialRepository
             return null;
         }
 
-        $sql = "SELECT id_punto_emision FROM empresa_secuencial
-                 WHERE id_empresa = :id_empresa AND tipo_documento = :tipo AND eliminado = false
-                   AND id_punto_emision <> :id_punto_excluir
+        // JOIN contra empresa_punto_emision (y no solo empresa_secuencial.eliminado):
+        // un punto eliminado puede dejar secuenciales huérfanos si se borró antes de
+        // que deletePuntoEmision() diera de baja también sus secuenciales (datos ya
+        // en producción de antes de ese fix) — sin este JOIN, ese huérfano seguiría
+        // bloqueando el tipo en cualquier punto nuevo aunque el original ya no exista.
+        $sql = "SELECT es.id_punto_emision
+                  FROM empresa_secuencial es
+                  INNER JOIN empresa_punto_emision pe ON pe.id = es.id_punto_emision
+                 WHERE es.id_empresa = :id_empresa AND es.tipo_documento = :tipo
+                   AND es.eliminado = false AND pe.eliminado = false
+                   AND es.id_punto_emision <> :id_punto_excluir
                  LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([

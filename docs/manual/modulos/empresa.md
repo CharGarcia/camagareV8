@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo
-version: 1.11
+version: 1.12
 orden: 5
 estado: activo
 ---
@@ -195,6 +195,15 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.12** — Corregido: al eliminar un punto de emisión, ahora también se dan
+  de baja los tipos de secuencial que tenía configurados (antes quedaban
+  huérfanos). Esto causaba que un tipo de "único punto por empresa" (p. ej.
+  Facturas de reembolso) siguiera bloqueado en cualquier punto nuevo aunque
+  el punto original que lo tenía ya se hubiera eliminado. Requiere correr en
+  el servidor la migración
+  `20260820_limpiar_secuenciales_huerfanos_punto_eliminado.sql` para reparar
+  los huérfanos que ya existan en la base de datos.
 
 - **1.11** — Pestaña Secuenciales: se quita el botón "CREAR TODOS LOS TIPOS DE
   SECUENCIALES" que solo aparecía en un punto sin secuenciales — ahora el

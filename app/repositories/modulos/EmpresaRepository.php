@@ -643,10 +643,32 @@ class EmpresaRepository extends BaseModel
     public function deletePuntoEmision(int $idPunto, int $idEmpresa): bool
     {
         $id = (int) $idPunto;
+        $idEmp = (int) $idEmpresa;
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
-        $sql = "UPDATE empresa_punto_emision SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
-                WHERE id = {$id} AND id_empresa = {$idEmpresa}";
-        return $this->execute($sql);
+
+        $this->db->beginTransaction();
+        try {
+            $ok = $this->execute(
+                "UPDATE empresa_punto_emision SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                 WHERE id = {$id} AND id_empresa = {$idEmp}"
+            );
+
+            // Da de baja también los tipos de secuencial configurados en este punto:
+            // si no, quedan huérfanos (eliminado = false apuntando a un punto ya
+            // eliminado) y, por ejemplo, un tipo de "único punto por empresa" (ver
+            // SecuencialRepository::TIPOS_PUNTO_UNICO) seguiría bloqueado en
+            // cualquier otro punto aunque el que lo tenía ya no exista.
+            $this->execute(
+                "UPDATE empresa_secuencial SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                 WHERE id_punto_emision = {$id} AND id_empresa = {$idEmp} AND eliminado = false"
+            );
+
+            $this->db->commit();
+            return $ok;
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
     }
 
     /**
