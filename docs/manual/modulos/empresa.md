@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales
-version: 1.10
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo
+version: 1.11
 orden: 5
 estado: activo
 ---
@@ -155,40 +155,35 @@ número inicial de cada tipo de comprobante (factura, nota de crédito, ingreso,
 egreso, pedido, etc.). El sistema detecta huecos desde ese número y nunca
 asigna uno menor al configurado.
 
-- **Crear todos los tipos**: al entrar a un punto sin secuenciales, el botón
-  **"CREAR TODOS LOS TIPOS DE SECUENCIALES"** crea de una vez todos los tipos
-  de documento que soporta el sistema, sin duplicar los que ya existan en ese
-  punto. Dos tipos que ante el SRI son el **mismo comprobante** (mismo codDoc
-  — p. ej. *Facturas de venta* y *Facturas de reembolso*) nunca se crean
-  juntos en el mismo punto: compartirlo duplicaría el número de documento
-  ante el SRI, así que solo se crea el primero de cada grupo.
 - **Agregar un tipo puntual**: el selector **"Agregar Tipo Documento"** solo
-  ofrece los tipos que todavía faltan en ese punto (y respeta la misma regla
-  de no mezclar tipos del mismo codDoc). Sirve para volver a agregar un tipo
-  que se eliminó, o para un tipo personalizado ("Otro").
+  ofrece los tipos que todavía faltan en ese punto, sea un punto nuevo (sin
+  ningún secuencial) o uno que ya tiene varios. Sirve para volver a agregar
+  un tipo que se eliminó, o para un tipo personalizado ("Otro").
 - **Agregar todos los faltantes**: junto al botón "Agregar" hay un botón
-  **"Agregar todos los faltantes"** para cuando el punto ya tiene algunos
-  tipos configurados pero faltan varios — los agrega todos de una vez, con el
-  mismo resultado que agregarlos uno por uno desde el selector (mismas reglas
-  de no duplicar ni mezclar codDoc).
+  **"Agregar todos los faltantes"** que agrega de una vez todos los tipos que
+  todavía faltan en ese punto, con el mismo resultado que agregarlos uno por
+  uno desde el selector (mismas reglas de no duplicar ni mezclar codDoc).
 - **Eliminar un tipo**: el ícono de papelera junto a cada tipo lo elimina
-  (baja lógica). El sistema **bloquea la eliminación** si ese tipo ya tiene
-  documentos emitidos en ese punto — hay que dejarlo como está, no se puede
-  perder el control de una numeración ya usada.
+  (baja lógica) — solo ese tipo, no afecta a los demás. El sistema
+  **bloquea la eliminación** si ese tipo ya tiene documentos emitidos en ese
+  punto — hay que dejarlo como está, no se puede perder el control de una
+  numeración ya usada.
 - El nombre de cada tipo se edita con el ícono de lápiz, y debe coincidir
   **exacto** (mayúsculas y tildes incluidas) con el nombre que espera el
   módulo correspondiente; si no coincide, ese módulo no toma la numeración
   configurada aquí.
+- **Tipos con un único punto por empresa**: "Facturas de reembolso" solo
+  puede estar configurada en **un** punto de emisión de toda la empresa (el
+  resto del sistema asume que existe uno solo). Si ya está en otro punto, no
+  aparece en el selector "Agregar Tipo Documento" de este; para moverla, hay
+  que **eliminarla** del punto actual antes de poder agregarla en otro.
 - **Puntos inactivos**: la lista de puntos de la izquierda muestra **todos**
   los puntos de emisión, activos e inactivos (badge **Inactivo**) — por
   ejemplo, el punto dedicado a **Facturas de Reembolso** que se crea
   automáticamente (inactivo) al dar de alta la empresa. Un punto inactivo se
   puede configurar aquí igual que cualquier otro, incluso con **otros tipos
   de documento** además del que le dio origen, pero no podrá **emitir**
-  documentos hasta activarlo en la pestaña **Puntos de Emisión**. Para usar
-  "Facturas de reembolso" en un punto distinto al dedicado, basta con
-  agregarlo desde el selector "Agregar Tipo Documento" en cualquier punto que
-  no tenga ya "Facturas de venta" (mismo codDoc, no pueden compartir punto).
+  documentos hasta activarlo en la pestaña **Puntos de Emisión**.
 
 ## Operadoras de transporte comercial (placa en la factura)
 
@@ -200,6 +195,16 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.11** — Pestaña Secuenciales: se quita el botón "CREAR TODOS LOS TIPOS DE
+  SECUENCIALES" que solo aparecía en un punto sin secuenciales — ahora el
+  selector "Agregar Tipo Documento" y "Agregar todos los faltantes" están
+  siempre disponibles, incluso en un punto nuevo. Se agrega la regla de
+  **"un único punto por empresa"** para tipos como Facturas de reembolso: no
+  se puede configurar en más de un punto de emisión a la vez. Corregido
+  además un bug donde eliminar un tipo podía dejar en blanco (visualmente,
+  sin tocar la base de datos) el resto de tipos del mismo punto, por una
+  llamada a una función ya retirada.
 
 - **1.10** — Nuevo botón **"Agregar todos los faltantes"** junto a "Agregar"
   en la pestaña Secuenciales: agrega de una vez todos los tipos de documento

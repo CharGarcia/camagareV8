@@ -712,15 +712,21 @@ class EmpresaService
                         "Compartir el punto duplicaría el número de documento entre ambos. Use una serie distinta."
                     );
                 }
+
+                // Tipos de un único punto por empresa (ej. Facturas de reembolso):
+                // bloquear si ya está configurado en otro punto de esta empresa.
+                $idPuntoConTipo = $this->secuencialRepository->getPuntoConTipoUnico($nombre, $idEmpresa, $idPunto);
+                if ($idPuntoConTipo !== null) {
+                    throw new \Exception(
+                        "No se puede configurar \"{$nombre}\" en este punto de emisión: ya está configurado en otro " .
+                        "punto de esta empresa, y este tipo de documento solo puede existir en un único punto."
+                    );
+                }
+
                 $this->repository->updateSecuencial($idPunto, $nombre, $valor, $idEmpresa);
             }
         }
         return true;
-    }
-
-    public function crearSecuencialesIniciales(int $idPunto, int $idEmpresa): bool
-    {
-        return $this->repository->crearSecuencialesIniciales($idPunto, $idEmpresa);
     }
 
     public function getSecuencialesByPunto(int $idPunto, int $idEmpresa): array

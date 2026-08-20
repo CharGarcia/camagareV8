@@ -64,6 +64,17 @@ class SecuencialRepository
     ];
 
     /**
+     * Tipos de documento que solo pueden tener UN punto de emisión por empresa
+     * (no varios, a diferencia del resto de tipos que sí pueden repetirse en
+     * distintos puntos — p. ej. "Facturas de venta" en varias cajas). Hoy:
+     * "Facturas de reembolso" — el sistema busca/crea un único punto dedicado
+     * al dar de alta la empresa (ver
+     * EmpresaInicializadorService::obtenerOCrearPuntoEmisionReembolso) y el
+     * resto del flujo de Reembolso asume que existe solo uno.
+     */
+    private const TIPOS_PUNTO_UNICO = ['Facturas de reembolso'];
+
+    /**
      * Agrupación por área de los tipos de documento soportados (solo para mostrar
      * en la ayuda de la pestaña Secuenciales). Los nombres deben coincidir EXACTO
      * con las claves de DOCUMENT_MAP.
@@ -123,6 +134,40 @@ class SecuencialRepository
             }
         }
         return [];
+    }
+
+    /** Tipos de documento que solo pueden existir en un único punto de emisión por empresa (ver TIPOS_PUNTO_UNICO). */
+    public function getTiposPuntoUnico(): array
+    {
+        return self::TIPOS_PUNTO_UNICO;
+    }
+
+    /**
+     * Para un tipo de TIPOS_PUNTO_UNICO: el id del punto de emisión (de esta
+     * empresa) que ya lo tiene configurado, excluyendo $idPuntoExcluir. Null si
+     * el tipo no está en TIPOS_PUNTO_UNICO o si ningún otro punto lo tiene.
+     * Usar antes de crear ese tipo en un punto nuevo: si devuelve un id, no
+     * debe ofrecerse/crearse ahí, porque el resto del sistema asume un único
+     * punto para ese tipo.
+     */
+    public function getPuntoConTipoUnico(string $tipoDocumento, int $idEmpresa, int $idPuntoExcluir = 0): ?int
+    {
+        if (!in_array($tipoDocumento, self::TIPOS_PUNTO_UNICO, true)) {
+            return null;
+        }
+
+        $sql = "SELECT id_punto_emision FROM empresa_secuencial
+                 WHERE id_empresa = :id_empresa AND tipo_documento = :tipo AND eliminado = false
+                   AND id_punto_emision <> :id_punto_excluir
+                 LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa'        => $idEmpresa,
+            ':tipo'              => $tipoDocumento,
+            ':id_punto_excluir'  => $idPuntoExcluir,
+        ]);
+        $row = $st->fetchColumn();
+        return $row !== false ? (int) $row : null;
     }
 
     /**

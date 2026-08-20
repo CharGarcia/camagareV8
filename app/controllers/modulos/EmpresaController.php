@@ -143,16 +143,6 @@ class EmpresaController extends BaseModuloController
                     $res = $this->service->saveSecuenciales($idPunto, $secuenciales, $idEmpresa);
                     echo json_encode(['ok' => $res]);
                     break;
-                case 'secuenciales_iniciales':
-                    $this->requireActualizar();
-                    $idPunto = (int) ($_POST['id_punto_emision'] ?? 0);
-                    if ($idPunto <= 0) {
-                        echo json_encode(['ok' => false, 'msg' => 'Punto de emisión no válido.']);
-                        break;
-                    }
-                    $this->service->crearSecuencialesIniciales($idPunto, $idEmpresa);
-                    echo json_encode(['ok' => true, 'msg' => 'Secuenciales iniciales creados correctamente.']);
-                    break;
                 case 'decimales':
                     $this->requireActualizar();
                     $res = $this->service->saveDecimales($idEmpresa, $_POST);
@@ -312,7 +302,19 @@ class EmpresaController extends BaseModuloController
             $idPunto = (int)($_GET['id_punto'] ?? 0);
             $idEmpresa = (int)($_SESSION['id_empresa'] ?? 0);
             $data = $this->service->getSecuencialesByPunto($idPunto, $idEmpresa);
-            echo json_encode(['ok' => true, 'data' => $data]);
+
+            // Tipos de "un único punto por empresa" (ej. Facturas de reembolso) que ya
+            // están configurados en OTRO punto: el selector "Agregar Tipo Documento" de
+            // este punto no debe ofrecerlos.
+            $secRepo = new \App\repositories\SecuencialRepository();
+            $tiposBloqueados = [];
+            foreach ($secRepo->getTiposPuntoUnico() as $tipo) {
+                if ($secRepo->getPuntoConTipoUnico($tipo, $idEmpresa, $idPunto) !== null) {
+                    $tiposBloqueados[] = $tipo;
+                }
+            }
+
+            echo json_encode(['ok' => true, 'data' => $data, 'tipos_bloqueados' => $tiposBloqueados]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

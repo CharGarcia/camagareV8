@@ -1131,12 +1131,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 <div class="small text-muted mt-3" style="font-size:0.76rem;">
                                     <strong>Cómo crearlos desde aquí:</strong>
                                     <ul class="mb-0 mt-1 ps-3">
-                                        <li>Al entrar a un punto sin secuenciales, use el botón que crea <strong>todos los tipos disponibles</strong> automáticamente, sin duplicar los que ya existan en ese punto.</li>
-                                        <li>Para agregar un tipo puntual (por ejemplo si eliminó uno y lo necesita de nuevo, o uno personalizado), elija el tipo en el <strong>selector "Agregar Tipo Documento"</strong> — solo aparecen los que faltan en ese punto — y presione <strong>Agregar</strong>.</li>
-                                        <li>Si el punto ya tiene algunos tipos pero faltan varios, el botón <strong>"Agregar todos los faltantes"</strong> (junto a Agregar) los agrega todos de una vez, con el mismo resultado que agregarlos uno por uno.</li>
+                                        <li>En cualquier punto, activo o recién creado, elija el tipo en el <strong>selector "Agregar Tipo Documento"</strong> — solo aparecen los que faltan en ese punto — y presione <strong>Agregar</strong> (o escriba uno personalizado con "Otro").</li>
+                                        <li>Si faltan varios tipos, el botón <strong>"Agregar todos los faltantes"</strong> (junto a Agregar) los agrega todos de una vez, con el mismo resultado que agregarlos uno por uno.</li>
                                         <li>Puede <strong>editar</strong> el nombre (ícono lápiz) y el <strong>número inicial</strong> de cada uno, y luego <strong>Guardar</strong>.</li>
                                         <li>Puede <strong>eliminar</strong> un tipo (ícono papelera) mientras no tenga documentos emitidos en ese punto; si ya los tiene, el sistema lo bloquea.</li>
                                         <li>Dos tipos que ante el SRI son el mismo comprobante (mismo codDoc, p. ej. Facturas de venta / Facturas de reembolso) nunca se crean juntos en el mismo punto: numerarían el mismo documento dos veces.</li>
+                                        <li>Algunos tipos (p. ej. <strong>Facturas de reembolso</strong>) solo pueden existir en <strong>un único punto</strong> de toda la empresa: si ya está configurado en otro punto, no aparece en el selector de este.</li>
                                         <li>Un punto marcado <strong>Inactivo</strong> (p. ej. el que se crea automáticamente para Facturas de Reembolso) se puede configurar aquí igual que cualquier otro — incluso con otros tipos de documento, no solo el que le dio origen — pero no podrá emitir documentos hasta activarlo en la pestaña <strong>Puntos de Emisión</strong>.</li>
                                     </ul>
                                 </div>
@@ -2088,66 +2088,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
 
-    function _setBtnSecuencialesEstado(tieneRegistros) {
-        const btn = document.getElementById('btn-guardar-sec');
-        const btnAgregar = document.getElementById('btn-agregar-sec');
-        const btnAgregarTodos = document.getElementById('btn-agregar-todos-sec');
-        if (!btn) return;
-        if (tieneRegistros) {
-            btn.type = 'submit';
-            btn.className = 'btn btn-primary btn-sm px-4 rounded-pill shadow-sm fw-bold';
-            btn.innerHTML = '<i class="bi bi-save me-1"></i>GUARDAR SECUENCIALES';
-            btn.onclick = null;
-            if (btnAgregar) btnAgregar.style.display = '';
-            if (btnAgregarTodos) btnAgregarTodos.style.display = '';
-            const selAdd = document.getElementById('sec-add-tipo');
-            if (selAdd) selAdd.style.display = '';
-        } else {
-            btn.type = 'button';
-            btn.className = 'btn btn-success btn-sm px-4 rounded-pill shadow-sm fw-bold';
-            btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>CREAR TODOS LOS TIPOS DE SECUENCIALES';
-            btn.onclick = crearSecuencialesIniciales;
-            if (btnAgregar) btnAgregar.style.display = 'none';
-            if (btnAgregarTodos) btnAgregarTodos.style.display = 'none';
-            const selAdd = document.getElementById('sec-add-tipo');
-            if (selAdd) selAdd.style.display = 'none';
-        }
-    }
-
-    async function crearSecuencialesIniciales() {
-        const idPunto = document.getElementById('sec-punto-id').value;
-        if (!idPunto) return;
-
-        const btn = document.getElementById('btn-guardar-sec');
-        const msgContainer = document.querySelector('#form-secuenciales .form-msg');
-        if (msgContainer) msgContainer.innerHTML = '';
-
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Creando...';
-
-        try {
-            const fd = new FormData();
-            fd.append('section', 'secuenciales_iniciales');
-            fd.append('id_punto_emision', idPunto);
-            const res = await fetch(`<?= $base ?>/modulos/empresa/save`, { method: 'POST', body: fd });
-            const json = await res.json();
-
-            if (json.ok) {
-                const link = document.querySelector('#secuenciales-puntos-list a.active');
-                if (link) await cargarSecuenciales(link, parseInt(idPunto));
-            } else {
-                const errMsg = json.error || json.msg || 'Error al crear los secuenciales iniciales.';
-                swalError(errMsg);
-                btn.disabled = false;
-                _setBtnSecuencialesEstado(false);
-            }
-        } catch (e) {
-            swalError('Error de conexión con el servidor.');
-            btn.disabled = false;
-            _setBtnSecuencialesEstado(false);
-        }
-    }
-
     async function eliminarSecuencial(id, btn) {
         if (!await swalConfirm('Esta acción no se puede deshacer. Si este tipo ya tiene documentos emitidos en este punto de emisión, no se podrá eliminar.', { titulo: '¿Eliminar este tipo de secuencial?', confirmText: 'Sí, eliminar' })) return;
 
@@ -2165,8 +2105,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 if (fila) fila.remove();
                 refrescarSelectorTipos();
                 if (!document.querySelector('#secuenciales-fields [name$="[valor]"]')) {
-                    document.getElementById('secuenciales-fields').innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear todos los tipos disponibles.</div>';
-                    _setBtnSecuencialesEstado(false);
+                    document.getElementById('secuenciales-fields').innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Agréguelos con el selector de abajo.</div>';
                 }
             } else {
                 swalError(res.error || 'No se pudo eliminar');
@@ -2193,10 +2132,10 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             container.innerHTML = '';
 
             if (json.ok) {
+                secTiposBloqueadosOtroPunto = json.tipos_bloqueados || [];
                 const data = json.data;
                 if (!data || data.length === 0) {
-                    container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear todos los tipos disponibles.</div>';
-                    _setBtnSecuencialesEstado(false);
+                    container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Agréguelos con el selector de abajo.</div>';
                     refrescarSelectorTipos();
                     return;
                 }
@@ -2234,7 +2173,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     `;
                     container.appendChild(div);
                 }
-                _setBtnSecuencialesEstado(true);
                 refrescarSelectorTipos();
             }
         } catch (err) {
@@ -2246,6 +2184,10 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     const APP_SEC_TIPOS = <?= json_encode(array_values($tiposSecuencialSoportados ?? []), JSON_UNESCAPED_UNICODE) ?>;
     // Tipos que comparten codDoc SRI (no pueden coexistir en el mismo punto de emisión — ej. Facturas de venta / Facturas de reembolso).
     const APP_SEC_CONFLICTOS_CODDOC = <?= json_encode($tiposSecuencialConflictos ?? [], JSON_UNESCAPED_UNICODE) ?>;
+    // Tipos de "un único punto por empresa" (ej. Facturas de reembolso) ya configurados en
+    // OTRO punto de esta empresa — lo llena cargarSecuenciales() con lo que devuelve el
+    // backend (tipos_bloqueados) cada vez que se selecciona un punto.
+    let secTiposBloqueadosOtroPunto = [];
 
     function _secEscape(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -2264,7 +2206,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     // Repuebla el selector con los tipos soportados que aún NO existen en el punto + opción "Otro".
     // Excluye también los tipos que comparten codDoc SRI con uno ya presente (ver
     // APP_SEC_CONFLICTOS_CODDOC): compartir punto de emisión duplicaría el número
-    // de documento ante el SRI (ej. Facturas de venta / Facturas de reembolso).
+    // de documento ante el SRI (ej. Facturas de venta / Facturas de reembolso). Y excluye
+    // los tipos de "un único punto por empresa" (ej. Facturas de reembolso) que ya están
+    // configurados en otro punto (ver secTiposBloqueadosOtroPunto).
     function refrescarSelectorTipos() {
         const sel = document.getElementById('sec-add-tipo');
         if (!sel) return;
@@ -2274,9 +2218,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             const original = APP_SEC_TIPOS.find(t => t.toLowerCase() === p);
             (APP_SEC_CONFLICTOS_CODDOC[original] || []).forEach(c => enConflicto.add(c.toLowerCase()));
         });
+        const bloqueadosOtroPunto = new Set(secTiposBloqueadosOtroPunto.map(t => t.toLowerCase()));
         let html = '<option value="">Agregar Tipo Documento…</option>';
         APP_SEC_TIPOS.forEach(t => {
-            if (!presentes.includes(t.toLowerCase()) && !enConflicto.has(t.toLowerCase())) {
+            const tl = t.toLowerCase();
+            if (!presentes.includes(tl) && !enConflicto.has(tl) && !bloqueadosOtroPunto.has(tl)) {
                 html += `<option value="${_secEscape(t)}">${_secEscape(t)}</option>`;
             }
         });
@@ -2318,7 +2264,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             </div>
         `;
         container.appendChild(div);
-        _setBtnSecuencialesEstado(true);
         refrescarSelectorTipos();
     }
 
@@ -2350,6 +2295,10 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         const presentes = _secNombresPresentes();
         if (presentes.includes(name.toLowerCase())) {
             swalInfo('Ese tipo de documento ya existe en este punto de emisión.', 'Duplicado');
+            return;
+        }
+        if (secTiposBloqueadosOtroPunto.map(t => t.toLowerCase()).includes(name.toLowerCase())) {
+            swalInfo('Este tipo de documento ya está configurado en otro punto de emisión de esta empresa. Solo puede existir en uno.', 'No disponible');
             return;
         }
         _agregarCampoSecuencial(name);
