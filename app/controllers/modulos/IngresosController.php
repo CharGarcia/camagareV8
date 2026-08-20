@@ -127,6 +127,7 @@ class IngresosController extends BaseModuloController
             'puntos'            => $puntos,
             'formasCobro'       => $formasCobro,
             'conceptos'         => $conceptos,
+            'comportamientosConPendientes' => $comportamientosConPendientes,
             'fullWidth'         => true,
         ]);
     }
