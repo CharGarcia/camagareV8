@@ -27,8 +27,8 @@
                 <!-- Pestañas -->
                 <div class="d-flex align-items-center bg-light px-3 pt-2">
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1" id="tabsModalTraspaso" role="tablist">
-                        <li class="nav-item"><a class="nav-link active py-2 small fw-bold" id="tab-trp-gen-btn" data-bs-toggle="tab" href="#trp-tab-general" role="tab"><i class="bi bi-card-text me-1"></i> General</a></li>
-                        <li class="nav-item"><a class="nav-link py-2 small fw-bold" id="tab-trp-cnt-btn" data-bs-toggle="tab" href="#trp-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                        <li class="nav-item"><a class="nav-link active py-2 small fw-bold" id="tab-trp-gen-btn" data-bs-toggle="tab" data-bs-target="#trp-tab-general" href="#trp-tab-general" role="tab"><i class="bi bi-card-text me-1"></i> General</a></li>
+                        <li class="nav-item"><a class="nav-link py-2 small fw-bold" id="tab-trp-cnt-btn" data-bs-toggle="tab" data-bs-target="#trp-tab-contable" href="#trp-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                     </ul>
                     <div class="ms-2">
                         <?php

@@ -63,12 +63,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap tab-pestaña" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link active py-2 small" id="susc-tab-servicios-btn" data-bs-toggle="tab" href="#pane-susc-servicios" role="tab" title="Detalle suscripción">
+                                <a class="nav-link active py-2 small" id="susc-tab-servicios-btn" data-bs-toggle="tab" data-bs-target="#pane-susc-servicios" href="#pane-susc-servicios" role="tab" title="Detalle suscripción">
                                     <i class="bi bi-receipt me-1"></i>Detalle suscripción
                                 </a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link py-2 small" id="susc-tab-cobro-btn" data-bs-toggle="tab" href="#pane-susc-cobro" role="tab" title="Forma de pago">
+                                <a class="nav-link py-2 small" id="susc-tab-cobro-btn" data-bs-toggle="tab" data-bs-target="#pane-susc-cobro" href="#pane-susc-cobro" role="tab" title="Forma de pago">
                                     <i class="bi bi-credit-card me-1"></i>Forma de pago
                                 </a>
                             </li>

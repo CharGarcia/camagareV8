@@ -38,9 +38,9 @@ $formasPago       = $formasPago       ?? [];
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1" role="tablist">
-                            <li class="nav-item"><a class="nav-link active py-2 small" data-bs-toggle="tab" href="#pane-fexqr-general"><i class="bi bi-sliders me-1"></i>Configuración</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-fexqr-items"><i class="bi bi-list-ul me-1"></i>Productos / Servicios</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-fexqr-mensajes"><i class="bi bi-chat-text me-1"></i>Mensajes</a></li>
+                            <li class="nav-item"><a class="nav-link active py-2 small" data-bs-toggle="tab" data-bs-target="#pane-fexqr-general" href="#pane-fexqr-general"><i class="bi bi-sliders me-1"></i>Configuración</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" data-bs-target="#pane-fexqr-items" href="#pane-fexqr-items"><i class="bi bi-list-ul me-1"></i>Productos / Servicios</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" data-bs-target="#pane-fexqr-mensajes" href="#pane-fexqr-mensajes"><i class="bi bi-chat-text me-1"></i>Mensajes</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php

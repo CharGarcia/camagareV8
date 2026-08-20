@@ -289,6 +289,15 @@ function CMG_poblarModal(d) {
         document.getElementById('mcPlazoSRI').value = d.pagos[0].unidad_tiempo || 'Días';
     }
 
+    // Información adicional (nombre/valor, viene como objeto desde ComprasService::getPorId)
+    const tbodyInfo = document.getElementById('mc-tbody-info-adicional');
+    if (tbodyInfo) {
+        tbodyInfo.innerHTML = '';
+        if (d.adicionales && typeof d.adicionales === 'object') {
+            Object.entries(d.adicionales).forEach(([nombre, valor]) => mcAgregarInfoAdicional(nombre, valor));
+        }
+    }
+
     CMG_recalcularTotales();
 
     // Botones según permisos
@@ -614,6 +623,15 @@ function mcActualizarBloqueoCampos() {
 
     const plazoSRI = document.getElementById('mcPlazoSRI');
     if (plazoSRI) plazoSRI.disabled = isElectronico;
+
+    // Bloquear pestaña de Información Adicional (editar filas existentes, quitarlas
+    // con el botón de basurero de cada fila, y agregar campos nuevos)
+    const tbodyInfoAdicional = document.getElementById('mc-tbody-info-adicional');
+    if (tbodyInfoAdicional) {
+        tbodyInfoAdicional.querySelectorAll('input, select, button').forEach(el => el.disabled = isElectronico);
+    }
+    const btnAddInfoAdicional = document.querySelector('button[onclick="mcAgregarInfoAdicional()"]');
+    if (btnAddInfoAdicional) btnAddInfoAdicional.disabled = isElectronico;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -650,6 +668,7 @@ function CMG_resetModal() {
     
     if (document.getElementById('tbodyDetalle')) document.getElementById('tbodyDetalle').innerHTML = '';
     if (document.getElementById('mc-container-pagos-sri')) document.getElementById('mc-container-pagos-sri').innerHTML = '';
+    if (document.getElementById('mc-tbody-info-adicional')) document.getElementById('mc-tbody-info-adicional').innerHTML = '';
 
     // Compra nueva = tipo_registro 'fisica' por defecto (ver arriba); su forma de
     // pago SRI se preselecciona en '20' (Otros con utilización del sistema
@@ -1756,7 +1775,8 @@ window.CMG_guardar = async function() {
         parte_relacionada: document.getElementById('mcParteRelacionada').checked,
         observaciones: document.getElementById('mcObservaciones').value,
         propina: parseFloat(document.getElementById('mcInputPropina').value || 0),
-        detalles, pagos, retenciones: []
+        detalles, pagos, retenciones: [],
+        adicionales: mcRecolectarInfoAdicional()
     };
 
     const btn = document.getElementById('btnGuardarCompra');
@@ -1830,6 +1850,31 @@ window.CMG_eliminar = async function() {
         Swal.fire('Error', data.mensaje, 'error');
     }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INFORMACIÓN ADICIONAL (campos libres nombre/valor, equivalente a <infoAdicional>)
+// ─────────────────────────────────────────────────────────────────────────────
+window.mcAgregarInfoAdicional = function(nombre = '', valor = '') {
+    const tbody = document.getElementById('mc-tbody-info-adicional');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td class="p-0"><input type="text" class="form-control form-control-sm border-0 input-info-nombre" style="padding:0 4px;height:20px;font-size:0.78rem;" value="${_esc(nombre)}" placeholder="Nombre..."></td>
+        <td class="p-0"><input type="text" class="form-control form-control-sm border-0 input-info-valor" style="padding:0 4px;height:20px;font-size:0.78rem;" value="${_esc(valor)}" placeholder="Valor..."></td>
+        <td class="p-0 text-center"><button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="this.closest('tr').remove()" title="Quitar"><i class="bi bi-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+};
+
+function mcRecolectarInfoAdicional() {
+    const adicionales = {};
+    document.querySelectorAll('#mc-tbody-info-adicional tr').forEach(tr => {
+        const nombre = tr.querySelector('.input-info-nombre')?.value.trim();
+        const valor  = tr.querySelector('.input-info-valor')?.value.trim();
+        if (nombre && valor) adicionales[nombre] = valor;
+    });
+    return adicionales;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS

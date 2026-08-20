@@ -55,25 +55,25 @@
         <!-- Pestañas -->
         <div class="d-flex align-items-center bg-light px-3 pt-2">
           <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="mcTabs" role="tablist">
-            <li class="nav-item"><a class="nav-link active" id="tab_compra" data-bs-toggle="tab" href="#tabDetalleCompra" role="tab"><i class="bi bi-receipt me-1"></i>Detalle de Compra</a></li>
-            <li class="nav-item"><a class="nav-link" id="tab_asiento" data-bs-toggle="tab" href="#tabAsiento" role="tab"><i class="bi bi-calculator me-1"></i>Asiento contable</a></li>
-            <li class="nav-item"><a class="nav-link" id="tab_pagos" data-bs-toggle="tab" href="#tabPagos" role="tab"><i class="bi bi-credit-card me-1"></i>Pagos</a></li>
-            <li class="nav-item"><a class="nav-link" id="tab-inventario-tab" data-bs-toggle="tab" href="#tabInventario" role="tab"><i class="bi bi-box-seam me-1"></i>Inventario</a></li>
-            <li class="nav-item"><a class="nav-link" id="tab-retenciones-tab" data-bs-toggle="tab" href="#tabRetenciones" role="tab"><i class="bi bi-file-earmark-text me-1"></i>Retenciones</a></li>
+            <li class="nav-item"><a class="nav-link active" id="tab_compra" data-bs-toggle="tab" data-bs-target="#tabDetalleCompra" href="#tabDetalleCompra" role="tab"><i class="bi bi-receipt me-1"></i>Detalle de Compra</a></li>
+            <li class="nav-item"><a class="nav-link" id="tab_asiento" data-bs-toggle="tab" data-bs-target="#tabAsiento" href="#tabAsiento" role="tab"><i class="bi bi-calculator me-1"></i>Asiento contable</a></li>
+            <li class="nav-item"><a class="nav-link" id="tab_pagos" data-bs-toggle="tab" data-bs-target="#tabPagos" href="#tabPagos" role="tab"><i class="bi bi-credit-card me-1"></i>Pagos</a></li>
+            <li class="nav-item"><a class="nav-link" id="tab-inventario-tab" data-bs-toggle="tab" data-bs-target="#tabInventario" href="#tabInventario" role="tab"><i class="bi bi-box-seam me-1"></i>Inventario</a></li>
+            <li class="nav-item"><a class="nav-link" id="tab-retenciones-tab" data-bs-toggle="tab" data-bs-target="#tabRetenciones" href="#tabRetenciones" role="tab"><i class="bi bi-file-earmark-text me-1"></i>Retenciones</a></li>
             <?php if (\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')): ?>
-            <li class="nav-item"><a class="nav-link" id="tab_orden_compra" data-bs-toggle="tab" href="#tabOrdenCompra" role="tab"><i class="bi bi-cart3 me-1"></i>Orden de Compra<span id="oc-tab-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 d-none">1</span></a></li>
+            <li class="nav-item"><a class="nav-link" id="tab_orden_compra" data-bs-toggle="tab" data-bs-target="#tabOrdenCompra" href="#tabOrdenCompra" role="tab"><i class="bi bi-cart3 me-1"></i>Orden de Compra<span id="oc-tab-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 d-none">1</span></a></li>
             <?php endif; ?>
-            <li class="nav-item d-none" id="tab-relacionados-li"><a class="nav-link" id="tab-relacionados-tab" data-bs-toggle="tab" href="#tabRelacionados" role="tab"><i class="bi bi-link-45deg me-1"></i><span id="tab-relacionados-label">Documento Relacionado</span></a></li>
-            <li class="nav-item d-none" id="tab-reembolso-li"><a class="nav-link" id="tab-reembolso-tab" data-bs-toggle="tab" href="#tabReembolso" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Detalle de Reembolso</a></li>
+            <li class="nav-item d-none" id="tab-relacionados-li"><a class="nav-link" id="tab-relacionados-tab" data-bs-toggle="tab" data-bs-target="#tabRelacionados" href="#tabRelacionados" role="tab"><i class="bi bi-link-45deg me-1"></i><span id="tab-relacionados-label">Documento Relacionado</span></a></li>
+            <li class="nav-item d-none" id="tab-reembolso-li"><a class="nav-link" id="tab-reembolso-tab" data-bs-toggle="tab" data-bs-target="#tabReembolso" href="#tabReembolso" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Detalle de Reembolso</a></li>
           </ul>
           <div class="ms-auto pb-1">
             <?php
             $pestanasConfig = [
-              'tab_asiento'      => 'Asiento contable',
-              'tab_pagos'        => 'Pagos',
-              'tab_inventario'   => 'Inventario',
-              'tab_retenciones'  => 'Retenciones',
-              'tab_orden_compra' => 'Orden de Compra',
+              'tabAsiento'      => 'Asiento contable',
+              'tabPagos'        => 'Pagos',
+              'tabInventario'   => 'Inventario',
+              'tabRetenciones'  => 'Retenciones',
+              'tabOrdenCompra'  => 'Orden de Compra',
             ];
             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/compras');
             ?>
@@ -263,7 +263,10 @@
               <div class="col-md-8">
                 <ul class="nav nav-tabs nav-tabs-sm mb-2" id="mc-subtabs-compra" role="tablist">
                   <li class="nav-item">
-                    <button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-pagos-sri" type="button">Formas de pago SRI</button>
+                    <button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-info-adicional" type="button">Info Adicional</button>
+                  </li>
+                  <li class="nav-item">
+                    <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-pagos-sri" type="button">Formas de pago SRI</button>
                   </li>
                   <li class="nav-item">
                     <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-credito" type="button">Crédito</button>
@@ -276,8 +279,27 @@
                   </li>
                 </ul>
                 <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height: 120px;">
+                  <!-- Información Adicional: campos libres nombre/valor, equivalente al
+                       bloque <infoAdicional> del XML del SRI. Se guardan en compras_info_adicional. -->
+                  <div class="tab-pane fade show active" id="mc-subtab-info-adicional" role="tabpanel">
+                    <div class="border rounded-3 overflow-hidden bg-white">
+                      <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th class="ps-2 py-1 small fw-bold text-muted" style="width: 35%;">Nombre</th>
+                            <th class="py-1 small fw-bold text-muted">Valor</th>
+                            <th class="py-1 small fw-bold text-muted text-center" style="width: 40px;"></th>
+                          </tr>
+                        </thead>
+                        <tbody id="mc-tbody-info-adicional"></tbody>
+                      </table>
+                    </div>
+                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none small mt-1" onclick="mcAgregarInfoAdicional()">
+                      <i class="bi bi-plus-circle me-1"></i>Agregar campo
+                    </button>
+                  </div>
                   <!-- Formas de Pago SRI -->
-                  <div class="tab-pane fade show active" id="mc-subtab-pagos-sri" role="tabpanel">
+                  <div class="tab-pane fade" id="mc-subtab-pagos-sri" role="tabpanel">
                     <div id="mc-container-pagos-sri">
                       <div class="row g-2 align-items-center mb-1 row-pago-sri">
                         <div class="col-7">
@@ -808,19 +830,6 @@
             </div>
           </div>
           <?php endif; ?>
-
-          <!-- ════════════════════════════════════════
-               TAB 5: INFORMACIÓN (Placeholder)
-               ════════════════════════════════════════ -->
-          <div class="tab-pane fade" id="tabInformacion" role="tabpanel">
-            <div class="p-3">
-              <div class="d-flex flex-column align-items-center justify-content-center py-5 text-muted">
-                <i class="bi bi-info-circle fs-1 mb-3 text-info opacity-50"></i>
-                <h6 class="fw-semibold">Auditoría e Información</h6>
-                <p class="text-center small">La información de auditoría y estados se mostrará aquí.</p>
-              </div>
-            </div>
-          </div>
 
           <!-- ════════════════════════════════════════
                TAB: DOCUMENTOS RELACIONADOS

@@ -61,22 +61,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap tab-pestaña" id="tabsCons" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link active" id="cons-tab-general-btn" data-bs-toggle="tab" href="#cons-tab-general" role="tab" title="General"><i class="bi bi-info-circle me-1"></i> General</a>
+                                <a class="nav-link active" id="cons-tab-general-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-general" href="#cons-tab-general" role="tab" title="General"><i class="bi bi-info-circle me-1"></i> General</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-asiento-btn" data-bs-toggle="tab" href="#cons-tab-asiento" role="tab" title="Asiento Contable"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
+                                <a class="nav-link" id="cons-tab-asiento-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-asiento" href="#cons-tab-asiento" role="tab" title="Asiento Contable"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-resumen-btn" data-bs-toggle="tab" href="#cons-tab-resumen" role="tab" title="Resumen"><i class="bi bi-list-columns-reverse me-1"></i> Resumen</a>
+                                <a class="nav-link" id="cons-tab-resumen-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-resumen" href="#cons-tab-resumen" role="tab" title="Resumen"><i class="bi bi-list-columns-reverse me-1"></i> Resumen</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-guias-btn" data-bs-toggle="tab" href="#cons-tab-guias" role="tab" title="Guías Remisión"><i class="bi bi-truck me-1"></i> Guías Remisión</a>
+                                <a class="nav-link" id="cons-tab-guias-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-guias" href="#cons-tab-guias" role="tab" title="Guías Remisión"><i class="bi bi-truck me-1"></i> Guías Remisión</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-pedidos-btn" data-bs-toggle="tab" href="#cons-tab-pedidos" role="tab" title="Pedidos"><i class="bi bi-cart3 me-1"></i> Pedidos</a>
+                                <a class="nav-link" id="cons-tab-pedidos-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-pedidos" href="#cons-tab-pedidos" role="tab" title="Pedidos"><i class="bi bi-cart3 me-1"></i> Pedidos</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-entrega-btn" data-bs-toggle="tab" href="#cons-tab-entrega" role="tab" title="Entrega"><i class="bi bi-geo-alt me-1"></i> Entrega</a>
+                                <a class="nav-link" id="cons-tab-entrega-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-entrega" href="#cons-tab-entrega" role="tab" title="Entrega"><i class="bi bi-geo-alt me-1"></i> Entrega</a>
                             </li>
                         </ul>
                         <div class="pb-1 flex-shrink-0">

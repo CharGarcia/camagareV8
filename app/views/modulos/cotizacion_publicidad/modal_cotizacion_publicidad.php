@@ -125,25 +125,25 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsCotizacion" role="tablist">
                         <li class="nav-item">
                             <a class="nav-link active py-2 small" id="cp-tab-cotizacion-btn"
-                               data-bs-toggle="tab" href="#cp-tab-cotizacion" role="tab" style="white-space:nowrap;">
+                               data-bs-toggle="tab" data-bs-target="#cp-tab-cotizacion" href="#cp-tab-cotizacion" role="tab" style="white-space:nowrap;">
                                 <i class="bi bi-megaphone me-1"></i>Cotización
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link py-2 small" id="cp-tab-costos-btn"
-                               data-bs-toggle="tab" href="#cp-tab-costos" role="tab" style="white-space:nowrap;">
+                               data-bs-toggle="tab" data-bs-target="#cp-tab-costos" href="#cp-tab-costos" role="tab" style="white-space:nowrap;">
                                 <i class="bi bi-cash-coin me-1"></i>Costos
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link py-2 small" id="cp-tab-facturas-btn"
-                               data-bs-toggle="tab" href="#cp-tab-facturas" role="tab" style="white-space:nowrap;">
+                               data-bs-toggle="tab" data-bs-target="#cp-tab-facturas" href="#cp-tab-facturas" role="tab" style="white-space:nowrap;">
                                 <i class="bi bi-receipt me-1"></i>Facturas
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link py-2 small" id="cp-tab-resumen-btn"
-                               data-bs-toggle="tab" href="#cp-tab-resumen" role="tab" style="white-space:nowrap;">
+                               data-bs-toggle="tab" data-bs-target="#cp-tab-resumen" href="#cp-tab-resumen" role="tab" style="white-space:nowrap;">
                                 <i class="bi bi-graph-up-arrow me-1"></i>Resumen
                             </a>
                         </li>

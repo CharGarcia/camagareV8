@@ -36,6 +36,7 @@ class MigrarMysqlController extends Controller
         $db = Database::getConnection();
         $empresas = $db->query(
             "SELECT id, ruc, establecimiento,
+                    nombre, nombre_comercial,
                     COALESCE(NULLIF(nombre_comercial,''), nombre) AS razon_social
                FROM empresas
               WHERE eliminado = false
@@ -318,9 +319,10 @@ class MigrarMysqlController extends Controller
             if (!$bases) {
                 throw new \RuntimeException('No se seleccionó ninguna empresa para migrar.');
             }
-            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $idUsuario  = (int) ($_SESSION['id_usuario'] ?? 0);
+            $crearAdmin = in_array((string) ($_POST['crear_admin'] ?? '0'), ['1', 'true', 'on'], true);
             if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
-            $data = $this->service->migrarEmpresas($bases, $idUsuario);
+            $data = $this->service->migrarEmpresas($bases, $idUsuario, $crearAdmin);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

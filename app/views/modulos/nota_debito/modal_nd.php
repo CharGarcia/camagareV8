@@ -36,10 +36,10 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="ndTabs" role="tablist">
-                            <li class="nav-item"><a class="nav-link active py-2 small" id="tab-nd-principal-btn" data-bs-toggle="tab" href="#tab-nd-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-plus me-1"></i> Nota de débito</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-factura-btn" data-bs-toggle="tab" href="#tab-nd-factura" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Factura relacionada</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-contable-btn" data-bs-toggle="tab" href="#tab-nd-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-sri-btn" data-bs-toggle="tab" href="#tab-nd-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
+                            <li class="nav-item"><a class="nav-link active py-2 small" id="tab-nd-principal-btn" data-bs-toggle="tab" data-bs-target="#tab-nd-principal" href="#tab-nd-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-plus me-1"></i> Nota de débito</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-factura-btn" data-bs-toggle="tab" data-bs-target="#tab-nd-factura" href="#tab-nd-factura" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Factura relacionada</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-contable-btn" data-bs-toggle="tab" data-bs-target="#tab-nd-contable" href="#tab-nd-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-sri-btn" data-bs-toggle="tab" data-bs-target="#tab-nd-sri" href="#tab-nd-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php

@@ -4880,7 +4880,7 @@ class MigracionMysqlService
      * @param string[] $basesSeleccionadas  RUC base (10 díg.)
      * @return array{migradas:int,omitidas:int,detalle:array<int,array<string,mixed>>}
      */
-    public function migrarEmpresas(array $basesSeleccionadas, int $idUsuario): array
+    public function migrarEmpresas(array $basesSeleccionadas, int $idUsuario, bool $crearAdmin = false): array
     {
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
@@ -4981,20 +4981,24 @@ class MigracionMysqlService
                 }
                 $det['establecimientos'] = $nEst;
 
-                // 4) Usuario administrador (nivel 2) SIN enviar correo.
-                $correo = trim((string) $matriz['mail']);
-                if ($correo !== '' && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
-                    if ($modelUsuario->existePorCorreo($correo)) {
-                        $det['usuario'] = 'omitido (correo ya registrado)';
-                    } else {
-                        $nombreU = trim((string) $matriz['nom_rep_legal']);
-                        if ($nombreU === '') { $nombreU = trim((string) ($matriz['nombre_comercial'] ?: $matriz['nombre'])) ?: 'Administrador'; }
-                        $u = $modelUsuario->crearPorCorreo($nombreU, $correo, $idUsuario, 2);
-                        $asignada->asignar($idEmpresa, (int) $u['id'], $idUsuario);
-                        $det['usuario'] = 'creado';
-                    }
+                // 4) Usuario administrador (nivel 2) SIN enviar correo. Solo si se solicitó.
+                if (!$crearAdmin) {
+                    $det['usuario'] = 'no solicitado';
                 } else {
-                    $det['usuario'] = 'sin correo válido';
+                    $correo = trim((string) $matriz['mail']);
+                    if ($correo !== '' && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+                        if ($modelUsuario->existePorCorreo($correo)) {
+                            $det['usuario'] = 'omitido (correo ya registrado)';
+                        } else {
+                            $nombreU = trim((string) $matriz['nom_rep_legal']);
+                            if ($nombreU === '') { $nombreU = trim((string) ($matriz['nombre_comercial'] ?: $matriz['nombre'])) ?: 'Administrador'; }
+                            $u = $modelUsuario->crearPorCorreo($nombreU, $correo, $idUsuario, 2);
+                            $asignada->asignar($idEmpresa, (int) $u['id'], $idUsuario);
+                            $det['usuario'] = 'creado';
+                        }
+                    } else {
+                        $det['usuario'] = 'sin correo válido';
+                    }
                 }
 
                 // 5) Registro en el mapa (trazabilidad; no participa de "Eliminar migrados").

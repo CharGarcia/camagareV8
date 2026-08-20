@@ -22,16 +22,20 @@ $base = BASE_URL;
     <div class="card-body">
         <p class="text-muted small mb-3">
             Crea en el sistema nuevo las empresas <b>activas</b> del sistema anterior que <b>aún no existen</b> aquí.
-            Se registra <b>una empresa por contribuyente</b> (RUC base) con todos sus establecimientos, su usuario
-            administrador y en ambiente <b>producción</b>. <b>No se envía ningún correo</b>: la invitación del usuario
-            y los documentos legales se enviarán cuando edites y <b>guardes</b> la empresa por primera vez.
+            Se registra <b>una empresa por contribuyente</b> (RUC base) con todos sus establecimientos y en ambiente
+            <b>producción</b>. <b>No se envía ningún correo</b>: los documentos legales se enviarán cuando edites y
+            <b>guardes</b> la empresa por primera vez. El <b>usuario administrador</b> solo se crea si marcas la casilla.
         </p>
         <div id="empresasMigrarBox" style="display:none;">
             <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
                 <input type="text" class="form-control form-control-sm" id="empFiltro" style="max-width:280px" placeholder="Filtrar por nombre o RUC…">
                 <div><a href="#" class="small me-2" id="empTodas">Todas</a><a href="#" class="small" id="empNinguna">Ninguna</a></div>
                 <span class="small text-muted" id="empContador"></span>
-                <button class="btn btn-sm btn-success ms-auto" id="btnMigrarEmpresas" disabled><i class="bi bi-download me-1"></i> Migrar seleccionadas</button>
+                <div class="form-check ms-auto mb-0" title="Crea un usuario nivel 2 (Administrador) con el correo de la empresa, sin enviar invitación.">
+                    <input class="form-check-input" type="checkbox" id="empCrearAdmin">
+                    <label class="form-check-label small" for="empCrearAdmin">Crear usuario administrador</label>
+                </div>
+                <button class="btn btn-sm btn-success" id="btnMigrarEmpresas" disabled><i class="bi bi-download me-1"></i> Migrar seleccionadas</button>
             </div>
             <div style="max-height:340px;overflow:auto;" class="border rounded">
                 <table class="table table-sm table-hover mb-0 align-middle">
@@ -131,13 +135,14 @@ $base = BASE_URL;
                     <label class="form-label fw-semibold small">Empresa (destino)</label>
                     <div class="position-relative">
                         <input type="text" class="form-control" id="selEmpresaBuscar" autocomplete="off"
-                               placeholder="Buscar por nombre, RUC o establecimiento…">
+                               placeholder="Buscar por razón social, nombre comercial, RUC o establecimiento…">
                         <input type="hidden" id="selEmpresa">
                         <div id="ddEmpresas" class="list-group position-absolute w-100 shadow-sm"
                              style="max-height:260px;overflow:auto;z-index:1050;display:none;">
                             <?php foreach ($empresasMigrar as $e):
                                 $est = str_pad((string)($e['establecimiento'] ?? ''), 3, '0', STR_PAD_LEFT);
-                                $busq = mb_strtolower(($e['razon_social'] ?? '') . ' ' . ($e['ruc'] ?? '') . ' ' . $est, 'UTF-8');
+                                // Buscar por nombre comercial Y razón social (nombre), además de RUC y establecimiento.
+                                $busq = mb_strtolower(($e['nombre_comercial'] ?? '') . ' ' . ($e['nombre'] ?? '') . ' ' . ($e['razon_social'] ?? '') . ' ' . ($e['ruc'] ?? '') . ' ' . $est, 'UTF-8');
                             ?>
                                 <button type="button" class="list-group-item list-group-item-action py-1 dd-emp"
                                         data-id="<?= (int)$e['id'] ?>"
@@ -1009,13 +1014,17 @@ $base = BASE_URL;
     $('btnMigrarEmpresas').addEventListener('click', async () => {
         const bases = Array.from(document.querySelectorAll('.emp-chk:checked')).map(c => empData[+c.dataset.i].base);
         if (!bases.length) return;
-        if (!confirm('¿Registrar ' + bases.length + ' empresa(s) en el sistema nuevo?\n\nNo se enviará ningún correo ahora; la invitación y los documentos legales se enviarán cuando edites y guardes cada empresa.')) return;
+        const crearAdmin = $('empCrearAdmin').checked;
+        if (!confirm('¿Registrar ' + bases.length + ' empresa(s) en el sistema nuevo?' +
+            (crearAdmin ? '\n\nSe creará un usuario administrador (nivel 2) por empresa con el correo del contribuyente.' : '\n\nNo se creará ningún usuario administrador.') +
+            '\n\nNo se enviará ningún correo ahora; la invitación y los documentos legales se enviarán cuando edites y guardes cada empresa.')) return;
         const btn = $('btnMigrarEmpresas');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando…';
         $('empResultado').innerHTML = '';
         try {
             const body = new FormData();
             bases.forEach(b => body.append('bases[]', b));
+            body.append('crear_admin', crearAdmin ? '1' : '0');
             const res = await fetch(base + '/config/migrarMysql?action=migrar-empresas', { method: 'POST', body }).then(r => r.json());
             if (!res.ok) { $('empResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
             const d = res.data;

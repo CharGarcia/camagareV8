@@ -38,9 +38,9 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="ncTabs" role="tablist">
-                            <li class="nav-item"><a class="nav-link active py-2 small" id="tab-nc-principal-btn" data-bs-toggle="tab" href="#tab-nc-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-minus me-1"></i> Nota de crédito</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nc-contable-btn" data-bs-toggle="tab" href="#tab-nc-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nc-sri-btn" data-bs-toggle="tab" href="#tab-nc-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
+                            <li class="nav-item"><a class="nav-link active py-2 small" id="tab-nc-principal-btn" data-bs-toggle="tab" data-bs-target="#tab-nc-principal" href="#tab-nc-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-minus me-1"></i> Nota de crédito</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nc-contable-btn" data-bs-toggle="tab" data-bs-target="#tab-nc-contable" href="#tab-nc-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-nc-sri-btn" data-bs-toggle="tab" data-bs-target="#tab-nc-sri" href="#tab-nc-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php

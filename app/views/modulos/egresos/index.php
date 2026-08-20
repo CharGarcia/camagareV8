@@ -337,8 +337,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <!-- Pestañas Principales -->
                 <div class="d-flex align-items-center bg-light px-3 pt-2">
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsModalEgreso" role="tablist">
-                        <li class="nav-item"><a class="nav-link active py-2 small fw-bold" id="tab-egreso-gen-btn" data-bs-toggle="tab" href="#eg-tab-general" role="tab"><i class="bi bi-card-text me-1"></i> General</a></li>
-                        <li class="nav-item"><a class="nav-link py-2 small fw-bold" id="tab-egreso-cnt-btn" data-bs-toggle="tab" href="#eg-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                        <li class="nav-item"><a class="nav-link active py-2 small fw-bold" id="tab-egreso-gen-btn" data-bs-toggle="tab" data-bs-target="#eg-tab-general" href="#eg-tab-general" role="tab"><i class="bi bi-card-text me-1"></i> General</a></li>
+                        <li class="nav-item"><a class="nav-link py-2 small fw-bold" id="tab-egreso-cnt-btn" data-bs-toggle="tab" data-bs-target="#eg-tab-contable" href="#eg-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                     </ul>
                     <div class="ms-2">
                         <?php

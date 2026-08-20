@@ -49,17 +49,17 @@
                 <div class="d-flex align-items-center bg-light px-3 pt-2">
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1" id="vcTabs" role="tablist">
                         <li class="nav-item">
-                            <a class="nav-link active py-2 small fw-bold" data-bs-toggle="tab" href="#vc-tab-general" role="tab">
+                            <a class="nav-link active py-2 small fw-bold" data-bs-toggle="tab" data-bs-target="#vc-tab-general" href="#vc-tab-general" role="tab">
                                 <i class="bi bi-card-text me-1"></i> General
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link py-2 small fw-bold" data-bs-toggle="tab" href="#vc-tab-participantes" role="tab">
+                            <a class="nav-link py-2 small fw-bold" data-bs-toggle="tab" data-bs-target="#vc-tab-participantes" href="#vc-tab-participantes" role="tab">
                                 <i class="bi bi-people me-1"></i> Participantes
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link py-2 small fw-bold" data-bs-toggle="tab" href="#vc-tab-info" role="tab">
+                            <a class="nav-link py-2 small fw-bold" data-bs-toggle="tab" data-bs-target="#vc-tab-info" href="#vc-tab-info" role="tab">
                                 <i class="bi bi-info-circle me-1"></i> Información
                             </a>
                         </li>

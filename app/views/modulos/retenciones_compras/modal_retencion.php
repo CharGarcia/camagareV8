@@ -58,9 +58,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="retTabs" role="tablist">
-                            <li class="nav-item"><a class="nav-link active py-2 small" data-bs-toggle="tab" href="#tab-ret-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Retención</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-asiento-btn" data-bs-toggle="tab" href="#tab-ret-asiento" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-sri-btn" data-bs-toggle="tab" href="#tab-ret-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
+                            <li class="nav-item"><a class="nav-link active py-2 small" data-bs-toggle="tab" data-bs-target="#tab-ret-principal" href="#tab-ret-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Retención</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-asiento-btn" data-bs-toggle="tab" data-bs-target="#tab-ret-asiento" href="#tab-ret-asiento" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-sri-btn" data-bs-toggle="tab" data-bs-target="#tab-ret-sri" href="#tab-ret-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php

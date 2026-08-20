@@ -74,25 +74,25 @@ if (!defined('LEAFLET_LOADED')) {
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap tab-pestaña" id="tabsProveedor" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link active" id="prov-tab-general-btn" data-bs-toggle="tab" href="#prov-tab-general" role="tab" title="General"><i class="bi bi-person-vcard me-1"></i> General</a>
+                                <a class="nav-link active" id="prov-tab-general-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-general" href="#prov-tab-general" role="tab" title="General"><i class="bi bi-person-vcard me-1"></i> General</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="prov-tab-comercial-btn" data-bs-toggle="tab" href="#prov-tab-comercial" role="tab" title="Comercial"><i class="bi bi-shop me-1"></i> Comercial</a>
+                                <a class="nav-link" id="prov-tab-comercial-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-comercial" href="#prov-tab-comercial" role="tab" title="Comercial"><i class="bi bi-shop me-1"></i> Comercial</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="prov-tab-banco-btn" data-bs-toggle="tab" href="#prov-tab-banco" role="tab" title="Banco"><i class="bi bi-bank me-1"></i> Banco</a>
+                                <a class="nav-link" id="prov-tab-banco-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-banco" href="#prov-tab-banco" role="tab" title="Banco"><i class="bi bi-bank me-1"></i> Banco</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="prov-tab-retenciones-btn" data-bs-toggle="tab" href="#prov-tab-retenciones" role="tab" title="Retenciones"><i class="bi bi-percent me-1"></i> Retenciones</a>
+                                <a class="nav-link" id="prov-tab-retenciones-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-retenciones" href="#prov-tab-retenciones" role="tab" title="Retenciones"><i class="bi bi-percent me-1"></i> Retenciones</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="prov-tab-pagos-btn" data-bs-toggle="tab" href="#prov-tab-pagos" role="tab" title="Pagos"><i class="bi bi-cash-coin me-1"></i> Pagos</a>
+                                <a class="nav-link" id="prov-tab-pagos-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-pagos" href="#prov-tab-pagos" role="tab" title="Pagos"><i class="bi bi-cash-coin me-1"></i> Pagos</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="prov-tab-sri-btn" data-bs-toggle="tab" href="#prov-tab-sri" role="tab" title="SRI"><i class="bi bi-file-earmark-text me-1"></i> SRI</a>
+                                <a class="nav-link" id="prov-tab-sri-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-sri" href="#prov-tab-sri" role="tab" title="SRI"><i class="bi bi-file-earmark-text me-1"></i> SRI</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="prov-tab-ubicacion-btn" data-bs-toggle="tab" href="#prov-pane-ubicacion" role="tab" title="Ubicación"><i class="bi bi-geo-alt-fill me-1"></i> Ubicación</a>
+                                <a class="nav-link" id="prov-tab-ubicacion-btn" data-bs-toggle="tab" data-bs-target="#prov-pane-ubicacion" href="#prov-pane-ubicacion" role="tab" title="Ubicación"><i class="bi bi-geo-alt-fill me-1"></i> Ubicación</a>
                             </li>
                         </ul>
                         <div class="pb-1 flex-shrink-0">
@@ -103,7 +103,7 @@ if (!defined('LEAFLET_LOADED')) {
                                 'prov-tab-retenciones'=> 'Retenciones',
                                 'prov-tab-pagos'      => 'Pagos',
                                 'prov-tab-sri'        => 'SRI',
-                                'prov-tab-ubicacion'  => 'Ubicación',
+                                'prov-pane-ubicacion' => 'Ubicación',
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigProv, $vistaConfigProv ?? [], 'proveedores');
                             ?>

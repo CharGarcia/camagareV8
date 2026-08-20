@@ -295,8 +295,20 @@ class Empresa extends BaseModel
         // su factura exige la placa del vehículo en XML y PDF.
         $operadoraTransporte = $this->esValorVerdadero($data['factura_operadora_transporte'] ?? null) ? 'true' : 'false';
 
-        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado, id_suscripcion, factura_operadora_transporte, es_matriz)
-            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql}, {$idSuscSql}, '{$operadoraTransporte}', {$esMatrizSql})";
+        // Régimen SRI por defecto = General (si no se especifica uno). No se deja NULL
+        // ni se depende del default de la columna (varía entre esquemas).
+        $idRegimen = isset($data['id_tipo_regimen']) && (int) $data['id_tipo_regimen'] > 0
+            ? (int) $data['id_tipo_regimen']
+            : $this->idRegimenGeneral();
+        $idRegimenSql = $idRegimen > 0 ? (string) $idRegimen : 'NULL';
+
+        // Agente de retención: número de resolución del SRI (solo dígitos, máx. 8) o
+        // '' si no aplica. Vacío por defecto (NO se hereda ningún "No" de la columna).
+        $agenteRet    = substr(preg_replace('/\D+/', '', (string) ($data['agente_retencion'] ?? '')), 0, 8);
+        $agenteRetEsc = $this->escape($agenteRet);
+
+        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado, id_suscripcion, factura_operadora_transporte, es_matriz, id_tipo_regimen, agente_retencion)
+            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql}, {$idSuscSql}, '{$operadoraTransporte}', {$esMatrizSql}, {$idRegimenSql}, '{$agenteRetEsc}')";
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
 
@@ -314,6 +326,26 @@ class Empresa extends BaseModel
         $this->execute($sqlBod);
 
         return $id;
+    }
+
+    /**
+     * Id del régimen "General" del catálogo tipo_regimen. La PK del catálogo es
+     * id_tipo_regimen o id según la versión del esquema; se prueba primero por
+     * código '1' y luego por nombre. Fallback 1 (General suele ser el primero).
+     */
+    private function idRegimenGeneral(): int
+    {
+        foreach (['id_tipo_regimen', 'id'] as $pk) {
+            try {
+                $r = $this->query("SELECT {$pk} AS id FROM tipo_regimen WHERE codigo = '1' OR LOWER(nombre) = 'general' ORDER BY {$pk} LIMIT 1");
+                if (!empty($r[0]['id'])) {
+                    return (int) $r[0]['id'];
+                }
+            } catch (\Throwable $e) {
+                // Esquema con otra PK: probar la siguiente.
+            }
+        }
+        return 1;
     }
 
     /**

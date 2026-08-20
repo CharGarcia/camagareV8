@@ -45,12 +45,12 @@
         <!-- Pestañas -->
         <div class="d-flex align-items-center bg-light px-3 pt-2">
           <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="impTabs" role="tablist">
-            <li class="nav-item"><a class="nav-link active" id="imp-tab-general" data-bs-toggle="tab" href="#impTabGeneral" role="tab"><i class="bi bi-card-list me-1"></i>Datos generales</a></li>
-            <li class="nav-item"><a class="nav-link" id="imp-tab-productos" data-bs-toggle="tab" href="#impTabProductos" role="tab"><i class="bi bi-box-seam me-1"></i>Productos (FOB)</a></li>
-            <li class="nav-item"><a class="nav-link" id="imp-tab-facturas" data-bs-toggle="tab" href="#impTabFacturas" role="tab"><i class="bi bi-receipt me-1"></i>Facturas del exterior</a></li>
-            <li class="nav-item"><a class="nav-link" id="imp-tab-gastos" data-bs-toggle="tab" href="#impTabGastos" role="tab"><i class="bi bi-cash-coin me-1"></i>Gastos de nacionalización</a></li>
-            <li class="nav-item"><a class="nav-link" id="imp-tab-prorrateo" data-bs-toggle="tab" href="#impTabProrrateo" role="tab"><i class="bi bi-pie-chart me-1"></i>Prorrateo / Resumen</a></li>
-            <li class="nav-item"><a class="nav-link" id="imp-tab-asiento" data-bs-toggle="tab" href="#impTabAsiento" role="tab"><i class="bi bi-calculator me-1"></i>Asiento contable</a></li>
+            <li class="nav-item"><a class="nav-link active" id="imp-tab-general" data-bs-toggle="tab" data-bs-target="#impTabGeneral" href="#impTabGeneral" role="tab"><i class="bi bi-card-list me-1"></i>Datos generales</a></li>
+            <li class="nav-item"><a class="nav-link" id="imp-tab-productos" data-bs-toggle="tab" data-bs-target="#impTabProductos" href="#impTabProductos" role="tab"><i class="bi bi-box-seam me-1"></i>Productos (FOB)</a></li>
+            <li class="nav-item"><a class="nav-link" id="imp-tab-facturas" data-bs-toggle="tab" data-bs-target="#impTabFacturas" href="#impTabFacturas" role="tab"><i class="bi bi-receipt me-1"></i>Facturas del exterior</a></li>
+            <li class="nav-item"><a class="nav-link" id="imp-tab-gastos" data-bs-toggle="tab" data-bs-target="#impTabGastos" href="#impTabGastos" role="tab"><i class="bi bi-cash-coin me-1"></i>Gastos de nacionalización</a></li>
+            <li class="nav-item"><a class="nav-link" id="imp-tab-prorrateo" data-bs-toggle="tab" data-bs-target="#impTabProrrateo" href="#impTabProrrateo" role="tab"><i class="bi bi-pie-chart me-1"></i>Prorrateo / Resumen</a></li>
+            <li class="nav-item"><a class="nav-link" id="imp-tab-asiento" data-bs-toggle="tab" data-bs-target="#impTabAsiento" href="#impTabAsiento" role="tab"><i class="bi bi-calculator me-1"></i>Asiento contable</a></li>
           </ul>
           <div class="ms-auto pb-1">
             <?php

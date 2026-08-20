@@ -330,7 +330,7 @@ $pestanasConfigLiq = [
                                 $visible = !isset($vistaConfig['__pestanas_ocultas__']) || !in_array($p['target'], $vistaConfig['__pestanas_ocultas__']);
                             ?>
                                 <li class="nav-item <?= $visible ? '' : 'd-none' ?>" role="presentation" id="li-<?= $p['id'] ?>">
-                                    <a class="nav-link <?= $p['id'] === 'tab-liq-compra-btn' ? 'active' : '' ?> py-2 small" id="<?= $p['id'] ?>" data-bs-toggle="tab" href="#<?= $p['target'] ?>" role="tab">
+                                    <a class="nav-link <?= $p['id'] === 'tab-liq-compra-btn' ? 'active' : '' ?> py-2 small" id="<?= $p['id'] ?>" data-bs-toggle="tab" data-bs-target="#<?= $p['target'] ?>" href="#<?= $p['target'] ?>" role="tab">
                                         <i class="bi <?= $p['icon'] ?> me-1"></i><?= $p['label'] ?>
                                     </a>
                                 </li>
