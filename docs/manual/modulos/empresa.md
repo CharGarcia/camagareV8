@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales
-version: 1.9
+version: 1.10
 orden: 5
 estado: activo
 ---
@@ -166,6 +166,11 @@ asigna uno menor al configurado.
   ofrece los tipos que todavía faltan en ese punto (y respeta la misma regla
   de no mezclar tipos del mismo codDoc). Sirve para volver a agregar un tipo
   que se eliminó, o para un tipo personalizado ("Otro").
+- **Agregar todos los faltantes**: junto al botón "Agregar" hay un botón
+  **"Agregar todos los faltantes"** para cuando el punto ya tiene algunos
+  tipos configurados pero faltan varios — los agrega todos de una vez, con el
+  mismo resultado que agregarlos uno por uno desde el selector (mismas reglas
+  de no duplicar ni mezclar codDoc).
 - **Eliminar un tipo**: el ícono de papelera junto a cada tipo lo elimina
   (baja lógica). El sistema **bloquea la eliminación** si ese tipo ya tiene
   documentos emitidos en ese punto — hay que dejarlo como está, no se puede
@@ -195,6 +200,12 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.10** — Nuevo botón **"Agregar todos los faltantes"** junto a "Agregar"
+  en la pestaña Secuenciales: agrega de una vez todos los tipos de documento
+  que aún faltan en el punto seleccionado (aunque ya tenga algunos
+  configurados), respetando las mismas reglas de no duplicar ni mezclar
+  tipos del mismo codDoc SRI.
 
 - **1.9** — Corregido: la pestaña Secuenciales ocultaba los puntos de emisión
   **inactivos** (incluido el punto dedicado a Facturas de Reembolso, que

@@ -743,7 +743,7 @@ class EmpresaService
         $maxUsado = $this->secuencialRepository->getMaxSecuencialUsado((int) $row['id_punto_emision'], (string) $row['tipo_documento']);
         if ($maxUsado > 0) {
             throw new \Exception(
-                'No se puede eliminar "' . $row['tipo_documento'] . '": ya hay documentos emitidos con este tipo en este punto de emisión (numeración actual: ' . $maxUsado . ').'
+                'No se puede eliminar "' . $row['tipo_documento'] . '": ya hay documentos emitidos con este tipo en este punto de emisión.'
             );
         }
 

@@ -1132,7 +1132,8 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     <strong>Cómo crearlos desde aquí:</strong>
                                     <ul class="mb-0 mt-1 ps-3">
                                         <li>Al entrar a un punto sin secuenciales, use el botón que crea <strong>todos los tipos disponibles</strong> automáticamente, sin duplicar los que ya existan en ese punto.</li>
-                                        <li>Para agregar un tipo puntual (por ejemplo si eliminó uno y lo necesita de nuevo, o uno personalizado), elija el tipo en el <strong>selector "Agregar Tipo Documento"</strong> — solo aparecen los que faltan en ese punto.</li>
+                                        <li>Para agregar un tipo puntual (por ejemplo si eliminó uno y lo necesita de nuevo, o uno personalizado), elija el tipo en el <strong>selector "Agregar Tipo Documento"</strong> — solo aparecen los que faltan en ese punto — y presione <strong>Agregar</strong>.</li>
+                                        <li>Si el punto ya tiene algunos tipos pero faltan varios, el botón <strong>"Agregar todos los faltantes"</strong> (junto a Agregar) los agrega todos de una vez, con el mismo resultado que agregarlos uno por uno.</li>
                                         <li>Puede <strong>editar</strong> el nombre (ícono lápiz) y el <strong>número inicial</strong> de cada uno, y luego <strong>Guardar</strong>.</li>
                                         <li>Puede <strong>eliminar</strong> un tipo (ícono papelera) mientras no tenga documentos emitidos en ese punto; si ya los tiene, el sistema lo bloquea.</li>
                                         <li>Dos tipos que ante el SRI son el mismo comprobante (mismo codDoc, p. ej. Facturas de venta / Facturas de reembolso) nunca se crean juntos en el mismo punto: numerarían el mismo documento dos veces.</li>
@@ -1180,6 +1181,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         </select>
                                         <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 text-nowrap" id="btn-agregar-sec" onclick="agregarSecuencialSeleccionado()">
                                             <i class="bi bi-plus-lg me-1"></i>Agregar
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 text-nowrap" id="btn-agregar-todos-sec" onclick="agregarTodosSecuencialesFaltantes()" title="Agrega de una vez todos los tipos que todavía faltan en este punto (respeta duplicados y conflictos de codDoc)">
+                                            <i class="bi bi-collection-fill me-1"></i>Agregar todos los faltantes
                                         </button>
                                     </div>
                                     <button type="submit" id="btn-guardar-sec" class="btn btn-primary btn-sm px-4 rounded-pill shadow-sm fw-bold">
@@ -2087,6 +2091,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     function _setBtnSecuencialesEstado(tieneRegistros) {
         const btn = document.getElementById('btn-guardar-sec');
         const btnAgregar = document.getElementById('btn-agregar-sec');
+        const btnAgregarTodos = document.getElementById('btn-agregar-todos-sec');
         if (!btn) return;
         if (tieneRegistros) {
             btn.type = 'submit';
@@ -2094,6 +2099,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             btn.innerHTML = '<i class="bi bi-save me-1"></i>GUARDAR SECUENCIALES';
             btn.onclick = null;
             if (btnAgregar) btnAgregar.style.display = '';
+            if (btnAgregarTodos) btnAgregarTodos.style.display = '';
             const selAdd = document.getElementById('sec-add-tipo');
             if (selAdd) selAdd.style.display = '';
         } else {
@@ -2102,6 +2108,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>CREAR TODOS LOS TIPOS DE SECUENCIALES';
             btn.onclick = crearSecuencialesIniciales;
             if (btnAgregar) btnAgregar.style.display = 'none';
+            if (btnAgregarTodos) btnAgregarTodos.style.display = 'none';
             const selAdd = document.getElementById('sec-add-tipo');
             if (selAdd) selAdd.style.display = 'none';
         }
@@ -2346,6 +2353,33 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             return;
         }
         _agregarCampoSecuencial(name);
+    }
+
+    // Agrega de una vez todos los tipos que todavía faltan en este punto (los
+    // mismos que ofrece el selector "Agregar Tipo Documento", sin el "Otro…").
+    // Se re-lee el selector en cada vuelta porque agregar un tipo puede sacar
+    // a otro de la lista (conflicto de codDoc, ver refrescarSelectorTipos) —
+    // el resultado es el mismo que agregarlos uno por uno a mano.
+    function agregarTodosSecuencialesFaltantes() {
+        const sel = document.getElementById('sec-add-tipo');
+        if (!sel) return;
+
+        const leerFaltantes = () => Array.from(sel.options).map(o => o.value).filter(v => v && v !== '__otro__');
+
+        let faltantes = leerFaltantes();
+        if (!faltantes.length) {
+            swalInfo('No quedan tipos de documento disponibles para agregar en este punto.', 'Sin pendientes');
+            return;
+        }
+
+        let agregados = 0;
+        while (faltantes.length) {
+            _agregarCampoSecuencial(faltantes[0]);
+            agregados++;
+            faltantes = leerFaltantes();
+        }
+
+        swalToastOk(`Se agregaron ${agregados} tipo(s) de documento. Revise los números iniciales y presione Guardar.`);
     }
 
     /* ---------------------------------------------------------
