@@ -5467,7 +5467,22 @@ $totalPages = $totalPagesOriginal;
                     }
                     if (!lastRow) return;
                     const sel = lastRow.querySelector('select[name="f_pago_id[]"]');
-                    if (sel) sel.value = p.forma_pago;
+                    if (sel) {
+                        const yaExiste = Array.from(sel.options).some(o => o.value === String(p.forma_pago));
+                        if (!yaExiste && p.forma_pago) {
+                            // Forma de pago histórica que ya no está activa en el catálogo:
+                            // se agrega la opción SOLO para este documento, para poder mostrar
+                            // y seleccionar la que realmente se usó al emitirlo. getPagos() ya
+                            // trae el nombre real vía JOIN sin filtrar por status, así que no
+                            // hace falta adivinarlo. No afecta a documentos nuevos (el <select>
+                            // sigue ofreciendo solo formas de pago activas).
+                            const optHist = document.createElement('option');
+                            optHist.value = p.forma_pago;
+                            optHist.textContent = (p.nombre_forma_pago || p.forma_pago) + ' (inactiva)';
+                            sel.appendChild(optHist);
+                        }
+                        sel.value = p.forma_pago;
+                    }
                     const val = lastRow.querySelector('input[name="f_pago_valor[]"]');
                     if (val) val.value = parseFloat(p.total || 0).toFixed(2);
                 });

@@ -648,9 +648,21 @@ class FacturaVentaService
 
                     if ($det['inventariable'] && $afectaInv && $det['tipo_produccion'] !== '02' && empty($det['es_libre'])) {
                         if (!$obliLotes && empty($det['lote'])) {
-                            $det['lote']      = 'sin_lote';
-                            $det['caducidad'] = date('Y-m-d');
-                            $det['nup']       = null;
+                            $det['lote'] = 'sin_lote';
+                            // Caducidad, igual que el NUP: solo se pone la fecha centinela
+                            // (hoy) si el detalle NO trae una real. La caducidad tiene su
+                            // propia obligatoriedad (obligatorio_caducidad), independiente
+                            // de obligatorio_lotes — sobrescribirla siempre borraba una
+                            // fecha real elegida por el usuario cuando la empresa no exige
+                            // lotes pero sí exige caducidad.
+                            if (empty($det['caducidad'])) {
+                                $det['caducidad'] = date('Y-m-d');
+                            }
+                            // El NUP NO se toca aquí: es un dato independiente del lote (no
+                            // forma parte de la clave de agregación de stock de abajo) y tiene
+                            // su propia obligatoriedad (obligatorio_nup). Ponerlo en null a la
+                            // fuerza borraba un NUP realmente escrito por el usuario cuando la
+                            // empresa no exige lotes pero sí exige NUP.
                         }
                         
                         // Agregar cantidad para validaciÃ³n posterior
@@ -897,9 +909,21 @@ class FacturaVentaService
 
                     if ($det['inventariable'] && $afectaInv && $det['tipo_produccion'] !== '02' && empty($det['es_libre'])) {
                         if (!$obliLotes && empty($det['lote'])) {
-                            $det['lote']      = 'sin_lote';
-                            $det['caducidad'] = date('Y-m-d');
-                            $det['nup']       = null;
+                            $det['lote'] = 'sin_lote';
+                            // Caducidad, igual que el NUP: solo se pone la fecha centinela
+                            // (hoy) si el detalle NO trae una real. La caducidad tiene su
+                            // propia obligatoriedad (obligatorio_caducidad), independiente
+                            // de obligatorio_lotes — sobrescribirla siempre borraba una
+                            // fecha real elegida por el usuario cuando la empresa no exige
+                            // lotes pero sí exige caducidad.
+                            if (empty($det['caducidad'])) {
+                                $det['caducidad'] = date('Y-m-d');
+                            }
+                            // El NUP NO se toca aquí: es un dato independiente del lote (no
+                            // forma parte de la clave de agregación de stock de abajo) y tiene
+                            // su propia obligatoriedad (obligatorio_nup). Ponerlo en null a la
+                            // fuerza borraba un NUP realmente escrito por el usuario cuando la
+                            // empresa no exige lotes pero sí exige NUP.
                         }
                         
                         // Agregar cantidad para validaciÃ³n posterior
