@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa
-version: 1.7
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales
+version: 1.9
 orden: 5
 estado: activo
 ---
@@ -148,6 +148,43 @@ Vigencia, hay una tarjeta con dos bloques:
   un botón de descarga. Este bloque es solo de consulta: subir o eliminar
   estos archivos sigue siendo una acción exclusiva de Empresas del sistema.
 
+## Secuenciales por punto de emisión
+
+En la pestaña **Secuenciales** se configura, por cada **punto de emisión**, el
+número inicial de cada tipo de comprobante (factura, nota de crédito, ingreso,
+egreso, pedido, etc.). El sistema detecta huecos desde ese número y nunca
+asigna uno menor al configurado.
+
+- **Crear todos los tipos**: al entrar a un punto sin secuenciales, el botón
+  **"CREAR TODOS LOS TIPOS DE SECUENCIALES"** crea de una vez todos los tipos
+  de documento que soporta el sistema, sin duplicar los que ya existan en ese
+  punto. Dos tipos que ante el SRI son el **mismo comprobante** (mismo codDoc
+  — p. ej. *Facturas de venta* y *Facturas de reembolso*) nunca se crean
+  juntos en el mismo punto: compartirlo duplicaría el número de documento
+  ante el SRI, así que solo se crea el primero de cada grupo.
+- **Agregar un tipo puntual**: el selector **"Agregar Tipo Documento"** solo
+  ofrece los tipos que todavía faltan en ese punto (y respeta la misma regla
+  de no mezclar tipos del mismo codDoc). Sirve para volver a agregar un tipo
+  que se eliminó, o para un tipo personalizado ("Otro").
+- **Eliminar un tipo**: el ícono de papelera junto a cada tipo lo elimina
+  (baja lógica). El sistema **bloquea la eliminación** si ese tipo ya tiene
+  documentos emitidos en ese punto — hay que dejarlo como está, no se puede
+  perder el control de una numeración ya usada.
+- El nombre de cada tipo se edita con el ícono de lápiz, y debe coincidir
+  **exacto** (mayúsculas y tildes incluidas) con el nombre que espera el
+  módulo correspondiente; si no coincide, ese módulo no toma la numeración
+  configurada aquí.
+- **Puntos inactivos**: la lista de puntos de la izquierda muestra **todos**
+  los puntos de emisión, activos e inactivos (badge **Inactivo**) — por
+  ejemplo, el punto dedicado a **Facturas de Reembolso** que se crea
+  automáticamente (inactivo) al dar de alta la empresa. Un punto inactivo se
+  puede configurar aquí igual que cualquier otro, incluso con **otros tipos
+  de documento** además del que le dio origen, pero no podrá **emitir**
+  documentos hasta activarlo en la pestaña **Puntos de Emisión**. Para usar
+  "Facturas de reembolso" en un punto distinto al dedicado, basta con
+  agregarlo desde el selector "Agregar Tipo Documento" en cualquier punto que
+  no tenga ya "Facturas de venta" (mismo codDoc, no pueden compartir punto).
+
 ## Operadoras de transporte comercial (placa en la factura)
 
 La marca **"Operadora de transporte comercial (excepto taxis)"** la define el
@@ -158,6 +195,20 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.9** — Corregido: la pestaña Secuenciales ocultaba los puntos de emisión
+  **inactivos** (incluido el punto dedicado a Facturas de Reembolso, que
+  nace inactivo al crear la empresa), así que no se podían ver ni
+  configurar. Ahora se listan todos, marcados con el badge **Inactivo**, y se
+  pueden configurar con cualquier tipo de documento — no solo el que les dio
+  origen — antes de activarlos.
+
+- **1.8** — Pestaña Secuenciales: el botón que crea los secuenciales de un
+  punto nuevo ahora crea **todos los tipos de documento soportados** (antes
+  solo 10 "estándar"), sin duplicar los que ya existan ni mezclar tipos que
+  comparten codDoc SRI. Se agrega el ícono de papelera para **eliminar** un
+  tipo de secuencial ya configurado, bloqueado cuando ese tipo ya tiene
+  documentos emitidos en ese punto.
 
 - **1.7** — Las aprobaciones dejan de configurarse aquí: se retira la pestaña
   **Pagos al Banco** y el bloque de aprobación de la pestaña **Inventario**.

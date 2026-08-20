@@ -758,30 +758,34 @@ class EmpresaRepository extends BaseModel
         return !empty($res);
     }
 
+    /**
+     * Crea, para el punto de emisión, TODOS los tipos de documento soportados por
+     * el motor de numeración (SecuencialRepository::DOCUMENT_MAP) que aún no
+     * existan en ese punto. No duplica: omite los que ya están configurados y,
+     * dentro del mismo tipo de comprobante SRI (mismo codDoc, ver FAMILIAS_CODDOC
+     * — p. ej. "Facturas de venta" / "Facturas de reembolso"), crea solo el
+     * primero y omite el resto, igual que exige saveSecuenciales() al agregar un
+     * tipo manualmente: compartir punto con el mismo codDoc duplicaría el número
+     * de documento ante el SRI.
+     */
     public function crearSecuencialesIniciales(int $idPunto, int $idEmpresa): bool
     {
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
-        $tiposIniciales = [
-            'Facturas de venta',
-            'Nota de crédito',
-            'Nota de débito',
-            'Retenciones de compras',
-            'Guía de remisión',
-            'Liquidación de compras o servicios',
-            'Ingresos',
-            'Egresos',
-            'Pedidos',
-            'Órdenes de compra',
-        ];
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $tipos = $secRepo->getTiposDocumentoSoportados();
 
         $this->db->beginTransaction();
         try {
-            foreach ($tiposIniciales as $tipo) {
+            foreach ($tipos as $tipo) {
                 $t = $this->escape($tipo);
                 $existe = $this->query(
                     "SELECT id FROM empresa_secuencial WHERE id_punto_emision = {$idPunto} AND id_empresa = {$idEmpresa} AND tipo_documento = '{$t}' AND eliminado = false"
                 );
                 if (!empty($existe)) continue;
+
+                // getConflictoCodDoc lee empresa_secuencial dentro de esta misma
+                // transacción, así que también ve lo ya insertado en este mismo lote.
+                if ($secRepo->getConflictoCodDoc($idPunto, $tipo, $idEmpresa) !== null) continue;
 
                 $this->execute(
                     "INSERT INTO empresa_secuencial (id_punto_emision, id_empresa, tipo_documento, secuencial_inicial, created_by, updated_by)
@@ -794,6 +798,32 @@ class EmpresaRepository extends BaseModel
             if ($this->db->inTransaction()) $this->db->rollBack();
             throw $e;
         }
+    }
+
+    /** Un secuencial configurado por su id, validando que pertenezca a la empresa. */
+    public function getSecuencialById(int $id, int $idEmpresa): ?array
+    {
+        $id = (int) $id;
+        $idEmp = (int) $idEmpresa;
+        $res = $this->query(
+            "SELECT id, id_punto_emision, tipo_documento, secuencial_inicial
+               FROM empresa_secuencial
+              WHERE id = {$id} AND id_empresa = {$idEmp} AND eliminado = false"
+        );
+        return $res[0] ?? null;
+    }
+
+    /** Eliminación lógica de un tipo de secuencial configurado en un punto de emisión. */
+    public function deleteSecuencial(int $id, int $idEmpresa): bool
+    {
+        $id = (int) $id;
+        $idEmp = (int) $idEmpresa;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        $sql = "UPDATE empresa_secuencial
+                   SET eliminado = true, deleted_at = NOW(), deleted_by = {$user},
+                       updated_at = NOW(), updated_by = {$user}
+                 WHERE id = {$id} AND id_empresa = {$idEmp} AND eliminado = false";
+        return $this->execute($sql);
     }
 
     public function getUsuariosAsignados(int $idEmpresa): array

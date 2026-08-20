@@ -1090,9 +1090,14 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 <!-- Pestaña: Secuenciales -->
                 <div class="tab-pane fade" id="secuenciales" role="tabpanel">
                     <?php
-                    // En Secuenciales solo se muestran los puntos de emisión ACTIVOS
-                    // (los inactivos no se usan para emitir/numerar documentos).
-                    $puntosSec = array_values(array_filter($puntos, static fn($pp) => strtolower((string)($pp['estado'] ?? 'activo')) === 'activo'));
+                    // Se muestran TODOS los puntos de emisión, activos e inactivos: un punto
+                    // inactivo (p. ej. el dedicado a "Facturas de reembolso" que se crea
+                    // inactivo al dar de alta la empresa, ver EmpresaInicializadorService)
+                    // debe poder preconfigurarse aquí — con cualquier tipo de documento, no
+                    // solo el que le dio origen — antes de activarlo en la pestaña
+                    // "Puntos de Emisión". Mientras esté inactivo, no se puede emitir desde
+                    // él (se marca con el badge "Inactivo"), pero sí configurar.
+                    $puntosSec = $puntos;
                     ?>
                     <!-- Tarjeta informativa: cómo nombrar y crear secuenciales -->
                     <div class="card border-0 mb-3" style="background:#eff6ff;">
@@ -1126,9 +1131,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 <div class="small text-muted mt-3" style="font-size:0.76rem;">
                                     <strong>Cómo crearlos desde aquí:</strong>
                                     <ul class="mb-0 mt-1 ps-3">
-                                        <li>Al entrar a un punto sin secuenciales, use el botón que crea los <strong>tipos estándar</strong> automáticamente.</li>
-                                        <li>Para agregar otros (Recibos, Proformas, Consignaciones, etc.), elija el tipo en el <strong>selector "Agregar Tipo Documento"</strong> — solo aparecen los que faltan en ese punto.</li>
+                                        <li>Al entrar a un punto sin secuenciales, use el botón que crea <strong>todos los tipos disponibles</strong> automáticamente, sin duplicar los que ya existan en ese punto.</li>
+                                        <li>Para agregar un tipo puntual (por ejemplo si eliminó uno y lo necesita de nuevo, o uno personalizado), elija el tipo en el <strong>selector "Agregar Tipo Documento"</strong> — solo aparecen los que faltan en ese punto.</li>
                                         <li>Puede <strong>editar</strong> el nombre (ícono lápiz) y el <strong>número inicial</strong> de cada uno, y luego <strong>Guardar</strong>.</li>
+                                        <li>Puede <strong>eliminar</strong> un tipo (ícono papelera) mientras no tenga documentos emitidos en ese punto; si ya los tiene, el sistema lo bloquea.</li>
+                                        <li>Dos tipos que ante el SRI son el mismo comprobante (mismo codDoc, p. ej. Facturas de venta / Facturas de reembolso) nunca se crean juntos en el mismo punto: numerarían el mismo documento dos veces.</li>
+                                        <li>Un punto marcado <strong>Inactivo</strong> (p. ej. el que se crea automáticamente para Facturas de Reembolso) se puede configurar aquí igual que cualquier otro — incluso con otros tipos de documento, no solo el que le dio origen — pero no podrá emitir documentos hasta activarlo en la pestaña <strong>Puntos de Emisión</strong>.</li>
                                     </ul>
                                 </div>
                             </div>
@@ -1139,13 +1147,17 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                             <label class="form-label small fw-bold mb-3 text-primary">Punto de Emisión</label>
                             <div class="list-group list-group-flush small rounded-3 border" id="secuenciales-puntos-list">
                                 <?php if (empty($puntosSec)): ?>
-                                    <div class="list-group-item text-muted small py-3"><i class="bi bi-info-circle me-1"></i>No hay puntos de emisión activos.</div>
-                                <?php else: foreach ($puntosSec as $idx => $p): ?>
+                                    <div class="list-group-item text-muted small py-3"><i class="bi bi-info-circle me-1"></i>No hay puntos de emisión.</div>
+                                <?php else: foreach ($puntosSec as $idx => $p): $ptoInactivo = strtolower((string)($p['estado'] ?? 'activo')) !== 'activo'; ?>
                                     <a href="#" class="list-group-item list-group-item-action py-3 <?= ($idx === 0) ? 'active' : '' ?>"
                                         onclick="cargarSecuenciales(this, <?= (int)($p['id'] ?? 0) ?>)">
                                         <div class="d-flex justify-content-between align-items-center w-100">
                                             <span class="fw-medium"><?= $p['codigo_punto'] ?> - <?= $p['nombre'] ?></span>
-                                            <i class="bi bi-chevron-right small opacity-50"></i>
+                                            <?php if ($ptoInactivo): ?>
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size: 0.62rem;" title="Este punto está inactivo: se puede configurar aquí, pero no se pueden emitir documentos desde él hasta activarlo en la pestaña Puntos de Emisión.">Inactivo</span>
+                                            <?php else: ?>
+                                                <i class="bi bi-chevron-right small opacity-50"></i>
+                                            <?php endif; ?>
                                         </div>
                                     </a>
                                 <?php endforeach; endif; ?>
@@ -2087,7 +2099,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         } else {
             btn.type = 'button';
             btn.className = 'btn btn-success btn-sm px-4 rounded-pill shadow-sm fw-bold';
-            btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>CREAR INICIALES DE SECUENCIALES';
+            btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>CREAR TODOS LOS TIPOS DE SECUENCIALES';
             btn.onclick = crearSecuencialesIniciales;
             if (btnAgregar) btnAgregar.style.display = 'none';
             const selAdd = document.getElementById('sec-add-tipo');
@@ -2129,6 +2141,36 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         }
     }
 
+    async function eliminarSecuencial(id, btn) {
+        if (!await swalConfirm('Esta acción no se puede deshacer. Si este tipo ya tiene documentos emitidos en este punto de emisión, no se podrá eliminar.', { titulo: '¿Eliminar este tipo de secuencial?', confirmText: 'Sí, eliminar' })) return;
+
+        btn.disabled = true;
+        try {
+            const response = await fetch('<?= $base ?>/modulos/empresa/deleteSecuencial', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `id=${id}`
+            });
+            const res = await response.json();
+            if (res.ok) {
+                swalToastOk('Tipo de secuencial eliminado');
+                const fila = btn.closest('.col-md-6');
+                if (fila) fila.remove();
+                refrescarSelectorTipos();
+                if (!document.querySelector('#secuenciales-fields [name$="[valor]"]')) {
+                    document.getElementById('secuenciales-fields').innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear todos los tipos disponibles.</div>';
+                    _setBtnSecuencialesEstado(false);
+                }
+            } else {
+                swalError(res.error || 'No se pudo eliminar');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            swalError('Error de conexión');
+            btn.disabled = false;
+        }
+    }
+
     async function cargarSecuenciales(el, id) {
         document.querySelectorAll('#secuenciales-puntos-list a').forEach(a => a.classList.remove('active'));
         el.classList.add('active');
@@ -2146,7 +2188,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             if (json.ok) {
                 const data = json.data;
                 if (!data || data.length === 0) {
-                    container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear los tipos estándar.</div>';
+                    container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear todos los tipos disponibles.</div>';
                     _setBtnSecuencialesEstado(false);
                     refrescarSelectorTipos();
                     return;
@@ -2178,6 +2220,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-light border-0 shadow-sm text-muted small">#</span>
                             <input type="number" name="secuenciales[${secId}][valor]" class="form-control border-0 shadow-sm" value="${valor}" min="1">
+                            <button type="button" class="btn btn-outline-danger border-0 bg-white" title="Eliminar este tipo de secuencial" onclick="eliminarSecuencial(${secId}, this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         </div>
                     `;
                     container.appendChild(div);

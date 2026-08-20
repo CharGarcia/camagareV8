@@ -728,6 +728,28 @@ class EmpresaService
         return $this->repository->getSecuencialesByPunto($idPunto, $idEmpresa);
     }
 
+    /**
+     * Elimina (lógicamente) un tipo de secuencial de un punto de emisión.
+     * Bloquea si ya hay documentos emitidos con ese tipo en ese punto: borrarlo
+     * dejaría sin control la numeración de comprobantes ya generados.
+     */
+    public function deleteSecuencial(int $id, int $idEmpresa): bool
+    {
+        $row = $this->repository->getSecuencialById($id, $idEmpresa);
+        if (!$row) {
+            throw new \Exception('El tipo de secuencial no existe o no pertenece a esta empresa.');
+        }
+
+        $maxUsado = $this->secuencialRepository->getMaxSecuencialUsado((int) $row['id_punto_emision'], (string) $row['tipo_documento']);
+        if ($maxUsado > 0) {
+            throw new \Exception(
+                'No se puede eliminar "' . $row['tipo_documento'] . '": ya hay documentos emitidos con este tipo en este punto de emisión (numeración actual: ' . $maxUsado . ').'
+            );
+        }
+
+        return $this->repository->deleteSecuencial($id, $idEmpresa);
+    }
+
     public function saveIce(int $idEmpresa, array $data): bool
     {
         $data['id_empresa'] = $idEmpresa;

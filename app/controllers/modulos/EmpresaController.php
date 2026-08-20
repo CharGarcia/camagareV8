@@ -287,6 +287,23 @@ class EmpresaController extends BaseModuloController
         exit;
     }
 
+    public function deleteSecuencial(): void
+    {
+        header('Content-Type: application/json');
+        $this->requireEliminar();
+        $id = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+
+        try {
+            $res = $this->service->deleteSecuencial($id, $idEmpresa);
+            echo json_encode(['ok' => $res]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getSecuenciales(): void
     {
         header('Content-Type: application/json');
