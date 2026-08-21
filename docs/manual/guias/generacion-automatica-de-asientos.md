@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano
-version: 1.2
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -98,6 +98,10 @@ Si quiere ver el resultado, revise **Asientos Contables** o **Mayores**.
   El resto del asiento de la factura (costo de ventas, descuentos) no se toca: no es
   cartera y no debe recibir parte del cobro. Igual para los pagos con la cuenta por
   pagar de la compra.
+- **Las cuentas se buscan de lo específico a lo general**: primero la regla del cliente o
+  proveedor del documento; si no tiene, la regla General. Si no hay General pero todas las
+  reglas de ese concepto apuntan a la misma cuenta, se usa esa. Solo cuando hay varias
+  cuentas posibles y nada que desempate, el documento queda pendiente.
 - **Si falta la cuenta, no se inventa ninguna**: los conceptos de Ingresos y
   Egresos que toman su cuenta del propio módulo (Facturas de venta, Recibos de
   venta, Facturas de compra, Liquidaciones) usan la cuenta configurada en la
@@ -150,6 +154,10 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.3** — Los cobros y pagos resuelven su cuenta recorriendo la cascada completa
+  (cliente/proveedor → General → cuenta única), no solo la regla General. Antes, una
+  empresa con las cuentas configuradas por proveedor o por categoría veía sus documentos
+  reportados como pendientes pese a tenerlas todas puestas.
 - **1.2** — El asiento de un cobro o un pago cancela solo la cuenta de cartera del
   documento. Antes repartía el monto entre todas las cuentas del asiento de ese
   documento, así que una parte del cobro terminaba acreditando el costo de ventas y

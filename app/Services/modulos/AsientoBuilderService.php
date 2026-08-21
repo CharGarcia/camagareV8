@@ -3766,6 +3766,7 @@ class AsientoBuilderService
         $db = \App\core\Database::getConnection();
 
         $sqlCab = "SELECT i.id,
+                          i.id_cliente,
                           o.id_cuenta_contable AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
                           o.comportamiento     AS concepto_comportamiento
@@ -3795,7 +3796,10 @@ class AsientoBuilderService
         // facturas que cobraban, así que la cartera no resolvió y el fallback legado se activó.
         $conceptoIdCuenta = (int) ($ingreso['concepto_id_cuenta'] ?? 0);
         $oficialIngreso = $this->programadoRepo->getCuentaOficialPorComportamiento(
-            $idEmpresa, (string) ($ingreso['concepto_comportamiento'] ?? '')
+            $idEmpresa,
+            (string) ($ingreso['concepto_comportamiento'] ?? ''),
+            (int) ($ingreso['id_cliente'] ?? 0) ?: null,
+            'cliente'
         );
         if ($oficialIngreso !== null) {
             $conceptoIdCuenta = $oficialIngreso['id_cuenta'];
@@ -3855,6 +3859,7 @@ class AsientoBuilderService
         $db = \App\core\Database::getConnection();
 
         $sqlCab = "SELECT e.id,
+                          e.id_proveedor,
                           o.id_cuenta_contable AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
                           o.comportamiento     AS concepto_comportamiento
@@ -3884,7 +3889,10 @@ class AsientoBuilderService
         // facturas que cobraban, así que la cartera no resolvió y el fallback legado se activó.
         $conceptoIdCuenta = (int) ($egreso['concepto_id_cuenta'] ?? 0);
         $oficialEgreso = $this->programadoRepo->getCuentaOficialPorComportamiento(
-            $idEmpresa, (string) ($egreso['concepto_comportamiento'] ?? '')
+            $idEmpresa,
+            (string) ($egreso['concepto_comportamiento'] ?? ''),
+            (int) ($egreso['id_proveedor'] ?? 0) ?: null,
+            'proveedor'
         );
         if ($oficialEgreso !== null) {
             $conceptoIdCuenta = $oficialEgreso['id_cuenta'];

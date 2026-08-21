@@ -366,20 +366,44 @@ class AsientoProgramadoRepository extends BaseRepository
 
     /**
      * Resuelve la cuenta "oficial" (Configuración Contable) de un comportamiento de concepto de
-     * Ingresos/Egresos. Devuelve null si ese comportamiento no tiene equivalente (sigue usando su
-     * propia cuenta libre) o si tiene cuenta oficial pero repartida en varias cuentas sin una sola
-     * resoluble (ROL — ver COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL); devuelve id_cuenta=0 si SÍ
-     * tiene una única cuenta oficial pero aún no está configurada en Configuración Contable.
+     * Ingresos/Egresos, respetando la cascada por especificidad acordada para todo el sistema:
+     *   1. Entidad del documento (cliente del ingreso / proveedor del egreso) — "la entidad manda".
+     *   2. Regla General del slot.
+     *   3. Cuenta única: si todas las reglas del slot coinciden en una sola cuenta, se usa.
+     * Antes solo se consultaba el nivel General, así que una empresa con sus cuentas configuradas
+     * por proveedor o por categoría resolvía id_cuenta=0 pese a tenerlas todas puestas.
+     *
+     * Devuelve null si ese comportamiento no tiene equivalente (sigue usando su propia cuenta
+     * libre) o si tiene cuenta oficial pero repartida en varias cuentas sin una sola resoluble
+     * (ROL — ver COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL); devuelve id_cuenta=0 si SÍ tiene
+     * cuenta oficial pero la cascada no la resuelve (nada configurado, o varias cuentas posibles
+     * sin General que desempate: ahí no se adivina y el documento queda pendiente).
      */
-    public function getCuentaOficialPorComportamiento(int $idEmpresa, string $comportamiento): ?array
-    {
+    public function getCuentaOficialPorComportamiento(
+        int $idEmpresa,
+        string $comportamiento,
+        ?int $idEntidad = null,
+        ?string $tipoEntidad = null
+    ): ?array {
         $map = self::COMPORTAMIENTO_CUENTA_OFICIAL[strtoupper($comportamiento)] ?? null;
         if ($map === null) {
             return null;
         }
         [$tipoAsiento, $codigo] = $map;
+
+        // 1. La ENTIDAD manda (cascada acordada, Opción 2): si el cliente del ingreso o el
+        //    proveedor del egreso tiene su propia regla para este concepto, esa gana sobre General.
+        if ($idEntidad !== null && $idEntidad > 0
+            && in_array($tipoEntidad, ['cliente', 'proveedor'], true)) {
+            $porEntidad = $this->getCuentaSlotPorEntidad($idEmpresa, $codigo, $idEntidad, $tipoEntidad);
+            if ($porEntidad !== null) {
+                return $porEntidad;
+            }
+        }
+
+        // 2. General.
         foreach ($this->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento) as $r) {
-            if (($r['codigo'] ?? '') === $codigo) {
+            if (($r['codigo'] ?? '') === $codigo && (int) ($r['id_cuenta'] ?? 0) > 0) {
                 return [
                     'id_cuenta'     => (int) ($r['id_cuenta'] ?? 0),
                     'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
@@ -387,7 +411,78 @@ class AsientoProgramadoRepository extends BaseRepository
                 ];
             }
         }
+
+        // 3. Sin General: si TODA la cascada de ese slot apunta a una sola cuenta, no hay
+        //    ambigüedad y se usa. Un cobro/pago no tiene producto ni categoría, así que esos
+        //    niveles no son evaluables desde aquí; pero si todos coinciden en la misma cuenta,
+        //    exigir además la regla General sería pedir que se configure algo ya deducible.
+        //    Con dos o más cuentas distintas NO se adivina: se devuelve 0 y el documento queda
+        //    pendiente.
+        $unica = $this->getCuentaUnicaDelSlot($idEmpresa, $codigo);
+        if ($unica !== null) {
+            return $unica;
+        }
+
         return ['id_cuenta' => 0, 'cuenta_codigo' => '', 'cuenta_nombre' => ''];
+    }
+
+    /**
+     * Cuenta que la entidad (cliente/proveedor) tiene configurada para un slot concreto, o null si
+     * no tiene regla propia para ese concepto.
+     */
+    private function getCuentaSlotPorEntidad(int $idEmpresa, string $codigoSlot, int $idEntidad, string $tipoEntidad): ?array
+    {
+        $sql = "SELECT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                  FROM {$this->table} ap
+                  JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                  JOIN plan_cuentas pc  ON pc.id = ap.id_cuenta
+                 WHERE ap.id_empresa      = :emp
+                   AND at.codigo          = :cod
+                   AND ap.tipo_referencia = :tipo
+                   AND ap.id_referencia   = :ref
+                   AND ap.eliminado       = false
+                   AND ap.id_cuenta IS NOT NULL
+                 LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':emp' => $idEmpresa, ':cod' => $codigoSlot, ':tipo' => $tipoEntidad, ':ref' => $idEntidad]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'id_cuenta'     => (int) $row['id_cuenta'],
+            'cuenta_codigo' => $row['cuenta_codigo'] ?? '',
+            'cuenta_nombre' => $row['cuenta_nombre'] ?? '',
+        ];
+    }
+
+    /**
+     * Devuelve la cuenta del slot solo si TODAS sus reglas (cualquier nivel de la cascada)
+     * apuntan a la misma; null si hay varias distintas o ninguna.
+     */
+    private function getCuentaUnicaDelSlot(int $idEmpresa, string $codigoSlot): ?array
+    {
+        $sql = "SELECT DISTINCT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                  FROM {$this->table} ap
+                  JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                  JOIN plan_cuentas pc  ON pc.id = ap.id_cuenta
+                 WHERE ap.id_empresa = :emp
+                   AND at.codigo     = :cod
+                   AND ap.eliminado  = false
+                   AND ap.id_cuenta IS NOT NULL";
+        $st = $this->db->prepare($sql);
+        $st->execute([':emp' => $idEmpresa, ':cod' => $codigoSlot]);
+        $filas = $st->fetchAll(PDO::FETCH_ASSOC);
+        if (count($filas) !== 1) {
+            return null;
+        }
+
+        return [
+            'id_cuenta'     => (int) $filas[0]['id_cuenta'],
+            'cuenta_codigo' => $filas[0]['cuenta_codigo'] ?? '',
+            'cuenta_nombre' => $filas[0]['cuenta_nombre'] ?? '',
+        ];
     }
 
     /**
