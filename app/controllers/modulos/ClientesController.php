@@ -413,6 +413,32 @@ class ClientesController extends BaseModuloController
         exit;
     }
 
+    /** Cliente completo por id, en JSON. Lo usan pantallas fuera de este módulo
+     *  (p. ej. Factura de Venta) que necesitan el registro entero antes de editar
+     *  un solo campo, porque update() reemplaza todas las columnas a la vez. */
+    public function getAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) {
+            echo json_encode(['ok' => false, 'error' => 'ID requerido.']);
+            exit;
+        }
+
+        $cliente = (new ClienteRepository())->findById($id, $idEmpresa);
+        if (!$cliente) {
+            echo json_encode(['ok' => false, 'error' => 'Cliente no encontrado.']);
+            exit;
+        }
+
+        echo json_encode(['ok' => true, 'data' => $cliente]);
+        exit;
+    }
+
     // ─── CRUD ────────────────────────────────────────────────────────────────
 
     public function store(): void

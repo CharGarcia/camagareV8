@@ -619,8 +619,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <i class="bi bi-geo-alt"></i><span id="m-lbl-cliente-direccion"></span>
                                                         </div>
                                                         <div class="d-flex align-items-center gap-1 border-start ps-2">
+                                                            <i class="bi bi-telephone"></i><span id="m-lbl-cliente-telefono"></span>
+                                                        </div>
+                                                        <div class="d-flex align-items-center gap-1 border-start ps-2">
                                                             <i class="bi bi-envelope"></i><span id="m-lbl-cliente-correo"></span>
                                                         </div>
+                                                        <?php if (!empty($permClientes['actualizar'])): ?>
+                                                        <button type="button" id="m-btn-editar-cliente" class="btn btn-link btn-sm p-0 ms-auto d-none" style="font-size:0.72rem; text-decoration:none;" onclick="editarDatosCliente()" title="Editar datos del cliente">
+                                                            <i class="bi bi-pencil-square me-1"></i>Editar
+                                                        </button>
+                                                        <?php endif; ?>
                                                     </div>
                                                 </div>
 
@@ -2449,6 +2457,11 @@ $totalPages = $totalPagesOriginal;
         if (btnDuplicar) btnDuplicar.disabled = false;
         // Recibo: disponible en cualquier factura guardada salvo anulada.
         if (btnRecibo) btnRecibo.disabled = st.includes('anulad');
+
+        // Editar datos del cliente desde la factura: solo mientras no esté
+        // autorizada (el XML ya autorizado no cambia si se edita el cliente).
+        const btnEditarClienteEstado = document.getElementById('m-btn-editar-cliente');
+        if (btnEditarClienteEstado) btnEditarClienteEstado.classList.toggle('d-none', esAutorizado);
         if (btnPdf) btnPdf.disabled = false;
         if (btnCorreo) btnCorreo.disabled = !esAutorizado;
         if (btnWhatsapp) btnWhatsapp.disabled = !esAutorizado;
@@ -3667,12 +3680,119 @@ $totalPages = $totalPagesOriginal;
         }, 300));
     }
 
+    /** Solo bloquea si hay una factura realmente cargada (id>0) y autorizada; una
+     *  factura nueva sin guardar nunca cuenta como autorizada aunque queden
+     *  restos de FV_ESTADO_ACTIVO de la última factura que se vio. */
+    function fvFacturaEstaAutorizada() {
+        return (parseInt(FV_ID_ACTIVO) || 0) > 0
+            && !!window.FV_ESTADO_ACTIVO
+            && window.FV_ESTADO_ACTIVO.includes('autorizad');
+    }
+
+    /**
+     * Edita teléfono, dirección y correo del cliente que está en la factura
+     * ACTUAL (la identificación NO se edita aquí a propósito). Actualiza el
+     * registro real del cliente (no son campos propios de la factura) — por
+     * eso solo aparece con permiso de actualizar en Clientes, y solo mientras
+     * la factura no esté autorizada (ver toggle en actualizarBotonesEstado).
+     * update() del cliente reemplaza todas sus columnas a la vez, así que
+     * primero hay que traer el registro completo.
+     */
+    async function editarDatosCliente() {
+        if (fvFacturaEstaAutorizada()) return;
+
+        const idCliente = document.getElementById('m-id-cliente')?.value;
+        if (!idCliente) return;
+
+        try {
+            const resp = await fetch(`${B_URL}/modulos/clientes/getAjax?id=${idCliente}`);
+            const json = await resp.json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudo cargar el cliente.' });
+                return;
+            }
+            const cliente = json.data;
+
+            const inputSm = 'width:100%;height:28px;font-size:0.75rem;padding:2px 8px;border:1px solid #ced4da;border-radius:.25rem;';
+            const { value: valores } = await Swal.fire({
+                title: 'Editar datos del cliente',
+                html: `
+                    <div class="small text-muted mb-2 text-start" style="font-size:0.7rem;">Se actualiza el registro del cliente en el sistema, no solo esta factura.</div>
+                    <div class="text-start mb-2">
+                        <label class="small fw-bold mb-1 d-block" style="font-size:0.75rem;">Teléfono</label>
+                        <input type="text" id="sw-cliente-telefono" style="${inputSm}" value="${(cliente.telefono || '').replace(/"/g, '&quot;')}">
+                    </div>
+                    <div class="text-start mb-2">
+                        <label class="small fw-bold mb-1 d-block" style="font-size:0.75rem;">Dirección</label>
+                        <input type="text" id="sw-cliente-direccion" style="${inputSm}" value="${(cliente.direccion || '').replace(/"/g, '&quot;')}">
+                    </div>
+                    <div class="text-start">
+                        <label class="small fw-bold mb-1 d-block" style="font-size:0.75rem;">Correo</label>
+                        <input type="text" id="sw-cliente-correo" style="${inputSm}" value="${(cliente.email || '').replace(/"/g, '&quot;')}">
+                    </div>
+                `,
+                target: document.getElementById('modalNuevaFactura'),
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const email = document.getElementById('sw-cliente-correo').value.trim();
+                    if (!email) {
+                        Swal.showValidationMessage('Ingresa un correo.');
+                        return false;
+                    }
+                    return {
+                        telefono: document.getElementById('sw-cliente-telefono').value.trim(),
+                        direccion: document.getElementById('sw-cliente-direccion').value.trim(),
+                        email
+                    };
+                }
+            });
+
+            if (!valores) return;
+
+            cliente.telefono = valores.telefono || null;
+            cliente.direccion = valores.direccion || null;
+            cliente.email = valores.email;
+
+            const fd = new FormData();
+            fd.append('id', idCliente);
+            Object.keys(cliente).forEach(k => {
+                if (cliente[k] !== null && cliente[k] !== undefined) fd.append(k, cliente[k]);
+            });
+
+            const respUpd = await fetch(`${B_URL}/modulos/clientes/update`, { method: 'POST', body: fd });
+            const jsonUpd = await respUpd.json();
+            if (!jsonUpd.ok) {
+                Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: jsonUpd.error || 'Error desconocido.' });
+                return;
+            }
+
+            const telLbl = document.getElementById('m-lbl-cliente-telefono');
+            if (telLbl) telLbl.textContent = valores.telefono || 'Sin teléfono registrado';
+            const dirLbl = document.getElementById('m-lbl-cliente-direccion');
+            if (dirLbl) dirLbl.textContent = valores.direccion || 'No especificada';
+            const mailLbl = document.getElementById('m-lbl-cliente-correo');
+            if (mailLbl) mailLbl.textContent = valores.email;
+
+            const elCorreoSri = document.getElementById('sri-correo-cliente');
+            if (elCorreoSri) elCorreoSri.value = valores.email;
+            actualizarInfoCorreoCliente(valores.email || '');
+
+            Swal.fire({ icon: 'success', title: 'Datos del cliente actualizados', timer: 1500, showConfirmButton: false });
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo actualizar los datos del cliente.' });
+        }
+    }
+
     function seleccionarCliente(c) {
         const idInput = document.getElementById('m-id-cliente');
         const searchInput = document.getElementById('m-search-cliente');
         const infoBar = document.getElementById('m-info-cliente');
         const rucLbl = document.getElementById('m-lbl-cliente-ruc');
         const dirLbl = document.getElementById('m-lbl-cliente-direccion');
+        const telLbl = document.getElementById('m-lbl-cliente-telefono');
         const mailLbl = document.getElementById('m-lbl-cliente-correo');
 
         if (idInput) idInput.value = c.id || '';
@@ -3686,8 +3806,11 @@ $totalPages = $totalPagesOriginal;
 
         if (rucLbl) rucLbl.textContent = c.identificacion || '';
         if (dirLbl) dirLbl.textContent = c.direccion || 'No especificada';
+        if (telLbl) telLbl.textContent = c.telefono || 'Sin teléfono registrado';
         if (mailLbl) mailLbl.textContent = c.email || 'Sin correo registrado';
         if (infoBar) infoBar.classList.remove('d-none');
+        const btnEditarCliente = document.getElementById('m-btn-editar-cliente');
+        if (btnEditarCliente) btnEditarCliente.classList.toggle('d-none', fvFacturaEstaAutorizada());
 
         // Insertar o actualizar fila de correo en info adicional
         actualizarInfoCorreoCliente(c.email || '');
@@ -5123,8 +5246,10 @@ $totalPages = $totalPagesOriginal;
             if (nomTipoIdInput) nomTipoIdInput.value = cab.cliente_nombre_tipo_id || '';
             if (rucLbl) rucLbl.textContent = cab.cliente_ruc || '';
             const dirLbl = document.getElementById('m-lbl-cliente-direccion');
+            const telLbl = document.getElementById('m-lbl-cliente-telefono');
             const mailLbl = document.getElementById('m-lbl-cliente-correo');
             if (dirLbl) dirLbl.textContent = cab.cliente_direccion || 'No especificada';
+            if (telLbl) telLbl.textContent = cab.cliente_telefono || 'Sin teléfono registrado';
             if (mailLbl) mailLbl.textContent = cab.cliente_email || 'Sin correo registrado';
             if (infoBarCliente) infoBarCliente.classList.remove('d-none');
 
