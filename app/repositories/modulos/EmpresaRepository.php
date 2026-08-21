@@ -326,10 +326,27 @@ class EmpresaRepository extends BaseModel
         return $res[0] ?? null;
     }
 
+    /**
+     * El primero de la lista (índice 0) es el que usa EmpresaService::getData()
+     * como "establecimiento principal" para toda la pestaña Establecimientos y
+     * los valores por defecto de otras pestañas (Secuenciales, IVA, etc.).
+     * Ordenar por id (no por código) para que ese "principal" sea siempre el
+     * establecimiento con el que se creó la empresa — Empresa::crear() lo
+     * inserta antes que cualquier otro, así que siempre tiene el id más bajo
+     * de esa empresa — igual que ya hacen getPrimerEstablecimientoId() (este
+     * mismo archivo) y EmpresaInicializadorService::
+     * obtenerOCrearEstablecimientoPrincipal(). Ordenar por código en cambio
+     * es puramente alfabético: si por error de datos llega a existir un
+     * establecimiento adicional con un código menor (p. ej. un "001" que se
+     * agregó después por error), un ORDER BY codigo lo mostraría a él en vez
+     * del que la empresa realmente usa.
+     */
     public function getEstablecimientos(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;
-        $sql = "SELECT * FROM empresa_establecimiento WHERE id_empresa = {$id} AND eliminado = false ORDER BY codigo ASC";
+        $sql = "SELECT * FROM empresa_establecimiento
+                 WHERE id_empresa = {$id} AND eliminado = false
+                 ORDER BY id ASC";
         return $this->query($sql);
     }
 
