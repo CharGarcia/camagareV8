@@ -98,6 +98,34 @@ class ReportePedidosRepository
         return [$where, $params];
     }
 
+    /**
+     * Autocompletado del campo "Producto": busca por nombre o código, igual que el
+     * filtro producto_texto (ver buildWhereYParams). Devuelve nombre y código para
+     * mostrar ambos en la lista de sugerencias.
+     */
+    public function buscarItems(int $idEmpresa, string $q, int $limit = 15): array
+    {
+        $sql = "SELECT DISTINCT pr.nombre AS nombre, TRIM(COALESCE(pr.codigo, '')) AS codigo
+                FROM pedidos_detalle pd
+                JOIN pedidos_cabecera p ON p.id = pd.id_pedido
+                JOIN productos pr ON pr.id = pd.id_producto
+                WHERE p.id_empresa = :ie AND p.eliminado = false AND pd.eliminado = false
+                  AND (pr.nombre ILIKE :q OR pr.codigo ILIKE :q)
+                ORDER BY nombre
+                LIMIT {$limit}";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // valor = lo que queda escrito en el buscador al elegir: el código cuando existe
+        // (más preciso para re-filtrar, ya que el nombre puede repetirse entre productos
+        // distintos), o el nombre si el producto no tiene código.
+        return array_map(fn($r) => [
+            'valor' => $r['codigo'] !== '' ? $r['codigo'] : $r['nombre'],
+            'label' => $r['nombre'],
+            'sub'   => $r['codigo'],
+        ], $rows);
+    }
+
     /** Cantidad total pedida (suma del detalle, líneas no eliminadas) por pedido, como subconsulta. */
     private function cteCantidad(): string
     {

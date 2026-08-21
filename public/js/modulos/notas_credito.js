@@ -189,6 +189,14 @@
 
     function NC_resetearYMostrar(borrador = null) {
         try {
+            // Estado interno: una NC nueva arranca siempre como borrador sin id.
+            // Sin esto quedaba el estado de la NC anterior (p. ej. 'autorizado'
+            // después de enviarla al SRI) y el modal se abría bloqueado.
+            NC_idActual         = null;
+            NC_estadoActual     = 'borrador';
+            window.NC_ID_ACTIVO = null;
+
+            NC_limpiarDropdownsProducto();
             if (formNC) formNC.reset();
             const idInput = document.getElementById('nc_id');
             if (idInput) idInput.value = '';
@@ -209,8 +217,19 @@
             const infoCli = document.getElementById('nc_info_cliente');
             if (infoCli) infoCli.classList.add('d-none');
             NC_limpiarInfoAdicional();
+            // Auditoría y badge de estado del documento anterior.
+            resetInfoAuditoria();
+            // Cerrar dropdowns predictivos que hubieran quedado abiertos.
+            ['nc_cliente_dropdown', 'nc_factura_dropdown'].forEach(id => {
+                const dd = document.getElementById(id);
+                if (dd) { dd.innerHTML = ''; dd.classList.add('d-none'); }
+            });
             // NC nueva: campos editables.
             NC_setModoLectura(false);
+            // Barra de acciones y pie: sin documento guardado no hay SRI/PDF/XML/
+            // correo/anular/eliminar, y Guardar vuelve a estar activo (quedaba
+            // deshabilitado si la NC anterior se había autorizado).
+            toggleBotonesAccion(false, 'borrador');
             // En una NC nueva, el documento a modificar arranca deshabilitado
             // hasta que se seleccione un cliente.
             NC_setFacturaHabilitada(false);
@@ -224,10 +243,27 @@
             setEl('nc-sri-numero-documento',        'value', '');
             setEl('nc-sri-identificacion-cliente',  'value', '');
             setEl('nc-sri-correo-cliente',          'value', '');
+            setEl('nc-sri-ambiente',                'value', '');
+            setEl('nc-sri-tipo-emision',            'value', '');
+            const badgeSri = document.getElementById('nc-sri-badge-estado');
+            if (badgeSri) {
+                badgeSri.className   = 'badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2';
+                badgeSri.textContent = 'Sin enviar';
+            }
             window.NC_FECHA_EMISION = null;
             window.NC_CLIENTE_RUC   = '';
             const tbodySri = document.getElementById('nc-sri-tbody-historial');
             if (tbodySri) tbodySri.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">Sin historial de envíos.</td></tr>';
+
+            // Asiento contable: el de la NC anterior no aplica a la nueva.
+            if (typeof window.NC_limpiarAsientoTab === 'function') window.NC_limpiarAsientoTab();
+
+            // Volver a la primera pestaña: tras un rechazo del SRI el modal
+            // quedaba abierto en la pestaña SRI.
+            const tabPrincipal = document.getElementById('tab-nc-principal-btn');
+            if (tabPrincipal && typeof bootstrap !== 'undefined') {
+                try { bootstrap.Tab.getOrCreateInstance(tabPrincipal).show(); } catch (e) {}
+            }
 
             modalNC.show();
 
@@ -1430,6 +1466,10 @@
     window.NC_registrarAutoGuardado = () => {
         const modal = document.getElementById('modalNC');
         if (!modal) return;
+        // Se llama en cada apertura de "Nueva NC": sin este guard se acumulaba
+        // un par de listeners por apertura sobre el mismo modal.
+        if (modal.dataset.ncAutoguardado === '1') return;
+        modal.dataset.ncAutoguardado = '1';
         const auto = debounce(NC_autoGuardar, 1000);
         modal.addEventListener('input', (e) => {
             const idActual = document.getElementById('nc_id').value;
@@ -1896,6 +1936,12 @@
         }
         return _ncAsientoTab;
     }
+
+    // Lo usa NC_resetearYMostrar para no arrastrar el asiento de la NC anterior.
+    // Solo limpia si la pestaña ya se había inicializado (si no, no hay nada pintado).
+    window.NC_limpiarAsientoTab = function () {
+        if (_ncAsientoTab) _ncAsientoTab.limpiar();
+    };
 
     document.addEventListener('DOMContentLoaded', function () {
         const btnTab = document.getElementById('tab-nc-contable-btn');

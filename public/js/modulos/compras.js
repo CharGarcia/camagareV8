@@ -683,8 +683,27 @@ function CMG_resetModal() {
     
     // Limpiar tablas secundarias
     const tbodyRet = document.getElementById('mc-tbody-retenciones');
-    if (tbodyRet) tbodyRet.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-file-earmark-text d-block fs-3 mb-2"></i>No hay retenciones registradas</td></tr>';
-    
+    if (tbodyRet) tbodyRet.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Primero debe guardar la compra para emitir una retención.</td></tr>';
+    // Sin compra guardada no se puede emitir retención: el botón queda
+    // habilitado de la compra anterior si no se deshabilita aquí.
+    const btnNuevaRet = document.getElementById('btnNuevaRetencionCompra');
+    if (btnNuevaRet) {
+        btnNuevaRet.disabled = true;
+        btnNuevaRet.title = 'Guarde la compra antes de emitir una retención.';
+    }
+
+    // Cerrar el dropdown predictivo de proveedor si quedó abierto.
+    const listaProv = document.getElementById('mcListaProveedores');
+    if (listaProv) { listaProv.innerHTML = ''; listaProv.classList.add('d-none'); }
+
+    // Asiento contable: el de la compra anterior no aplica a la nueva y la
+    // pestaña solo se refresca si el usuario vuelve a entrar en ella.
+    if (_mcAsientoTab) _mcAsientoTab.limpiar();
+
+    // Aviso y botones de aprobación (pendiente / rechazada) de la compra
+    // anterior: con un objeto vacío la función los oculta todos.
+    if (typeof mcAplicarEstadoAprobacion === 'function') mcAplicarEstadoAprobacion({});
+
     const tbodyInvProc = document.getElementById('mc-tbody-inventario-procesado');
     if (tbodyInvProc) tbodyInvProc.innerHTML = '';
     

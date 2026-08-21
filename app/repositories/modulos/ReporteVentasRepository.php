@@ -521,18 +521,27 @@ class ReporteVentasRepository extends BaseRepository
     public function buscarItems(int $idEmpresa, string $q, string $tipoDocumento = 'FACTURA', int $limit = 15): array
     {
         $f = $this->fuente(['tipo_documento' => $tipoDocumento]);
-        $sql = "SELECT DISTINCT TRIM(d.descripcion) AS valor
+        // Busca por nombre (descripción) o por código de línea, igual que el filtro
+        // producto_texto del reporte (ver buildWhereYParams: descripcion OR codigo_principal).
+        $sql = "SELECT DISTINCT TRIM(d.descripcion) AS descripcion, TRIM(COALESCE(d.codigo_principal, '')) AS codigo
                 FROM {$f['det']} d
                 JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
                 WHERE v.id_empresa = :ie AND v.eliminado = false
                   AND d.descripcion IS NOT NULL AND TRIM(d.descripcion) <> ''
-                  AND d.descripcion ILIKE :q
-                ORDER BY valor
+                  AND (d.descripcion ILIKE :q OR d.codigo_principal ILIKE :q)
+                ORDER BY descripcion
                 LIMIT {$limit}";
         $st = $this->db->prepare($sql);
         $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
-        $rows = $st->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        return array_map(fn($v) => ['valor' => $v, 'label' => $v], $rows);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // valor = lo que queda escrito en el buscador al elegir: el código cuando existe
+        // (más preciso para re-filtrar, ya que el nombre puede repetirse entre productos
+        // distintos), o el nombre si la línea no tiene código.
+        return array_map(fn($r) => [
+            'valor' => $r['codigo'] !== '' ? $r['codigo'] : $r['descripcion'],
+            'label' => $r['descripcion'],
+            'sub'   => $r['codigo'],
+        ], $rows);
     }
 
     /**

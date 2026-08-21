@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes
-version: 1.2
+version: 1.3
 orden: 50
 estado: activo
 ---
@@ -109,11 +109,27 @@ Revise en este orden:
 ## Errores frecuentes
 
 - **Faltan movimientos del mes**: hay asientos pendientes; acéptelos al abrir.
+- **"Revise la configuración contable" pero ya está todo configurado**: el aviso
+  de conceptos sin cuenta ya no incluye los que toman su cuenta del propio módulo
+  (Facturas de compra, Liquidaciones, Facturas de venta, Recibos de venta y
+  Nómina): esos no se configuran en Configuración Contable y antes se avisaban
+  igual. Si el aviso persiste, el concepto o la forma de cobro/pago que nombra sí
+  está sin cuenta.
+- **Un ingreso o egreso que nunca termina de generar su asiento**: abra "Ver
+  detalle" del aviso. Si dice que no queda ningún cheque vigente o que no hay
+  formas de cobro/pago, no falta configurar nada: ese documento no tiene valor que
+  contabilizar. Los documentos **anulados** no se toman en cuenta.
 - **La utilidad no coincide con lo esperado**: compare con el mayor de las
   cuentas de ingreso y gasto para ver qué documento falta o sobra.
 
 ## Historial de cambios
 
+- **1.3** — El control de asientos pendientes deja de avisar cuentas faltantes que
+  no lo son: reconoce la cuenta configurada en Configuración Contable (no solo la
+  del módulo de Opciones/Formas) y omite los conceptos cuya cuenta la define su
+  propio módulo. Los avisos nombran ahora el concepto o la forma concreta, y los
+  documentos sin formas de cobro/pago vigentes (p. ej. un egreso con todos sus
+  cheques anulados) explican ese motivo en vez del genérico de configuración.
 - **1.2** — El modal "Consolidado por RUC" agrega el Total General Consolidado:
   un solo Estado de Situación Financiera / Resultados por RUC, sin duplicar
   conceptos ya mapeados en Balances Consolidados (incluye el modo "cuenta

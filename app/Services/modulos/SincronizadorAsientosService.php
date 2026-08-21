@@ -145,6 +145,42 @@ class SincronizadorAsientosService
     }
 
     /**
+     * Trabajo (SQL de detección + service que genera) de UN módulo, identificado por su 'clave'.
+     *
+     * Lo usa ContabilidadAutoService para la generación automática y silenciosa que se dispara al
+     * abrir un módulo: en vez de recorrer los 15 módulos como sincronizar(), procesa solo el que
+     * el usuario está mirando. Comparte esta misma definición a propósito — el SQL que decide "a
+     * este documento le falta el asiento" debe ser uno solo, o el aviso de la pantalla de Asientos
+     * y lo que genera el automatismo dejarían de coincidir.
+     *
+     * $prepararEsquema viene en false a propósito. prepararEsquema() lanza nueve
+     * ALTER TABLE ... ADD COLUMN IF NOT EXISTS sobre las tablas más transitadas del sistema
+     * (ventas_cabecera, compras_cabecera, ingresos_cabecera…), y aunque no tengan nada que hacer
+     * cada uno toma brevemente un lock exclusivo sobre la tabla. Eso es tolerable en la
+     * sincronización manual, que alguien lanza de vez en cuando; repetirlo cada vez que un usuario
+     * abre un módulo sería una fuente permanente de contención. Si a esta base todavía le falta la
+     * columna, el SQL de detección falla y el llamador omite ese módulo sin romper nada — es la
+     * migración pendiente lo que hay que aplicar, no el lock lo que hay que pagar.
+     *
+     * @return array|null null si esa clave no existe (mapa mal configurado).
+     */
+    public function getTrabajoPorClave(int $idEmpresa, string $clave, bool $prepararEsquema = false): ?array
+    {
+        $db = Database::getConnection();
+        if ($prepararEsquema) {
+            $this->prepararEsquema($db);
+        }
+        $excMig = $this->construirExclusionMigracion($db);
+
+        foreach ($this->construirTrabajos($idEmpresa, $excMig) as $t) {
+            if (($t['clave'] ?? null) === $clave) {
+                return $t;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Asegura que la columna id_asiento_contable exista en todas las tablas operativas
      * antes de realizar cualquier consulta SELECT sobre ellas.
      */
@@ -251,6 +287,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'facturas_venta',
             'nombre' => 'Facturas de Venta',
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'ventas_cabecera',
@@ -298,6 +335,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'recibos_venta',
             'nombre' => 'Recibos de Venta',
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'recibos_venta_cabecera',
@@ -316,6 +354,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'liquidaciones_compra',
             'nombre' => 'Liquidaciones de Compra',
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'liquidaciones_cabecera',
@@ -325,11 +364,29 @@ class SincronizadorAsientosService
 
         // 3. Compras (no tiene columna estado)
         $trabajos[] = [
-            'sql'    => "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('compras', 'compras_cabecera.id'),
+            // Estados que NO se contabilizan, y por qué este SQL tiene que conocerlos:
+            //   'anulado'              — el módulo permite dejar la compra en ese estado (el
+            //                            selector de la vista ofrece borrador/registrado/anulado)
+            //                            y hasta ahora este SQL no lo miraba: se le generaba el
+            //                            asiento igual.
+            //   'pendiente_aprobacion' — mientras espera el checkpoint de aprobación la compra
+            //   'rechazada'              existe como documento recibido pero no produce efectos.
+            //                            ComprasService::procesarAsientoContablePorSincronizacion
+            //                            ya los descarta, pero lo hace RETORNANDO EN SILENCIO: si
+            //                            el SQL los sigue trayendo, la verificación posterior los
+            //                            da por "documento que quedó sin asiento" y los anota como
+            //                            fallo — un falso positivo que además los dejaría marcados
+            //                            y sin reintentar cuando se aprueben. Filtrarlos aquí es lo
+            //                            que mantiene alineadas la detección y la generación.
+            // Se compara normalizado porque los documentos migrados guardan el estado en
+            // mayúsculas. COALESCE a '' para no perder las compras con estado NULL, que son
+            // registros válidos anteriores a la columna.
+            'sql'    => "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) NOT IN ('ANULADO', 'PENDIENTE_APROBACION', 'RECHAZADA')" . $excMig('compras', 'compras_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\ComprasService();
             },
+            'clave'  => 'compras',
             'nombre' => 'Facturas de Compra',
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'compras_cabecera',
@@ -371,6 +428,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'notas_credito',
             'nombre' => 'Notas de Crédito',
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'notas_credito_cabecera',
@@ -389,6 +447,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'retenciones_venta',
             'nombre' => 'Retenciones en Ventas',
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'retencion_venta_cabecera',
@@ -408,6 +467,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'retenciones_compra',
             'nombre' => 'Retenciones en Compras',
             'dondeConfigurar' => 'Asientos Programados',
             'tablaVerif' => 'retencion_compra_cabecera',
@@ -417,7 +477,7 @@ class SincronizadorAsientosService
 
         // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro
         $trabajos[] = [
-            'sql'    => "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('ingresos', 'ingresos_cabecera.id'),
+            'sql'    => "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADO'" . $excMig('ingresos', 'ingresos_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\IngresoService(
@@ -426,6 +486,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'ingresos',
             'nombre' => 'Ingresos',
             'dondeConfigurar' => 'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
             'tablaVerif' => 'ingresos_cabecera',
@@ -440,7 +501,7 @@ class SincronizadorAsientosService
         //    AsientoBuilderService::generarAsientoEgreso(). Ya no se duplica el gasto
         //    porque el rol ya no acredita Bancos directamente, solo el pasivo.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('egresos', 'egresos_cabecera.id'),
+            'sql'    => "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADO'" . $excMig('egresos', 'egresos_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\EgresoService(
@@ -449,6 +510,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'egresos',
             'nombre' => 'Egresos',
             'dondeConfigurar' => 'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
             'tablaVerif' => 'egresos_cabecera',
@@ -459,7 +521,10 @@ class SincronizadorAsientosService
         // 7b. Consignaciones en Ventas (reclasificación de inventario a costo).
         //     Se generan las que tengan las cuentas configuradas; el resto se avisa abajo.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM consignaciones_ventas WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'Anulada'" . $excMig('consignaciones', 'consignaciones_ventas.id'),
+            // Comparación normalizada (antes era `estado <> 'Anulada'`, sensible a mayúsculas):
+            // una consignación guardada como 'ANULADA' o 'anulada' —caso típico de los
+            // documentos migrados— se colaba y se le generaba el asiento.
+            'sql'    => "SELECT id FROM consignaciones_ventas WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADA'" . $excMig('consignaciones', 'consignaciones_ventas.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\ConsignacionVentaService(
@@ -468,6 +533,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'consignaciones',
             'nombre' => 'Consignaciones en Ventas',
             'dondeConfigurar' => 'Configuración Contable (Consignaciones en Ventas)',
             'tablaVerif' => 'consignaciones_ventas',
@@ -487,6 +553,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'retornos_cv',
             'nombre' => 'Retornos de Consignaciones',
             'dondeConfigurar' => 'Configuración Contable (Retornos de Consignaciones)',
             'tablaVerif' => 'retornos_cv',
@@ -506,6 +573,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'cambios_producto_cv',
             'nombre' => 'Cambios de Productos',
             'dondeConfigurar' => 'Configuración Contable (Cambios de productos)',
             'tablaVerif' => 'cambios_producto_cv',
@@ -525,6 +593,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'facturacion_cv',
             'nombre' => 'Facturación de Consignaciones',
             'dondeConfigurar' => 'Configuración Contable (Consignaciones en Ventas)',
             'tablaVerif' => 'consignaciones_facturas',
@@ -551,6 +620,7 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
+            'clave'  => 'roles_pago',
             'nombre' => 'Roles de Pago',
             'dondeConfigurar' => 'Asientos Programados (tipo «Nómina»)',
             'tablaVerif' => 'rol_cabecera',
@@ -567,6 +637,7 @@ class SincronizadorAsientosService
             'factory' => function() {
                 return new \App\Services\modulos\ImportacionesService();
             },
+            'clave'  => 'importaciones',
             'nombre' => 'Importaciones',
             'dondeConfigurar' => 'Configuración Contable (tipo de asiento «Importaciones»)',
             'tablaVerif' => 'importaciones_cabecera',
@@ -583,15 +654,50 @@ class SincronizadorAsientosService
      */
     private function verificarConfiguracionCuentas(\PDO $db, int $idEmpresa): void
     {
-        // Conceptos (opciones de Ingreso/Egreso) activos sin cuenta contable
+        $programadoRepo = new \App\repositories\modulos\AsientoProgramadoRepository();
+
+        // Conceptos (opciones de Ingreso/Egreso) activos realmente sin cuenta contable.
+        // Dos precisiones, ambas necesarias para no dar un aviso falso:
+        //  1. La cuenta vive en DOS sitios y el resto del sistema la lee con
+        //     COALESCE(asientos_programados.id_cuenta, o.id_cuenta_contable) — ver
+        //     AsientoProgramadoRepository::getReglasOpcionesIngresoEgreso() y
+        //     AsientoBuilderService::lineasFormas(). Mirar solo la columna del módulo daba por
+        //     "sin configurar" toda regla creada por siembra del plan modelo o por la importación
+        //     de configuración contable, que solo escribe en asientos_programados.
+        //  2. Los conceptos con cuenta OFICIAL por comportamiento (COMPRA, LIQUIDACION,
+        //     FACTURA_VENTA, RECIBO_VENTA, ROL) nunca tienen cuenta propia A PROPÓSITO: la toman
+        //     de la configuración de su módulo (Adquisiciones/Ventas/Recibos/Nómina) vía
+        //     getCuentaOficialPorComportamiento(). Configuración Contable ni siquiera los muestra
+        //     y rechaza asignarles una cuenta aparte, así que avisarlos mandaba al usuario a una
+        //     pantalla donde no aparecen — "ya está todo configurado" y el aviso seguía saliendo.
         try {
-            $st = $db->prepare("SELECT COUNT(*) FROM empresa_opciones_ingreso_egreso
-                                WHERE id_empresa = ? AND eliminado = false
-                                  AND UPPER(estado) = 'ACTIVO' AND id_cuenta_contable IS NULL");
+            $st = $db->prepare(
+                "SELECT o.nombre, o.comportamiento
+                   FROM empresa_opciones_ingreso_egreso o
+                   LEFT JOIN asientos_programados ap
+                          ON ap.id_referencia   = o.id
+                         AND ap.tipo_referencia IN ('opcion_ingreso', 'opcion_egreso')
+                         AND ap.id_empresa      = o.id_empresa
+                         AND ap.eliminado       = false
+                  WHERE o.id_empresa = ? AND o.eliminado = false
+                    AND UPPER(o.estado) = 'ACTIVO'
+                    AND COALESCE(ap.id_cuenta, o.id_cuenta_contable) IS NULL
+                  ORDER BY o.nombre"
+            );
             $st->execute([$idEmpresa]);
-            $n = (int) $st->fetchColumn();
-            if ($n > 0) {
-                $this->warnings[] = "Hay {$n} concepto(s) de Ingresos/Egresos sin cuenta contable asignada. Configúrelos en Configuración Contable (tipo de asiento «Ingresos y Egresos»).";
+            $pendientes = [];
+            foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $opcion) {
+                if ($programadoRepo->tieneCuentaOficialPorComportamiento((string) ($opcion['comportamiento'] ?? ''))) {
+                    continue; // su cuenta se configura en el módulo, no aquí
+                }
+                $pendientes[] = (string) $opcion['nombre'];
+            }
+            if (!empty($pendientes)) {
+                $n = count($pendientes);
+                $this->warnings[] = "Hay {$n} concepto(s) de Ingresos/Egresos sin cuenta contable asignada ("
+                    . implode(', ', array_slice($pendientes, 0, 5))
+                    . ($n > 5 ? ' y ' . ($n - 5) . ' más' : '')
+                    . '). Configúrelos en Configuración Contable (tipo de asiento «Ingresos y Egresos»).';
             }
         } catch (\Throwable $e) {
             // Tabla inexistente (migración pendiente): omitir sin romper.
@@ -639,15 +745,30 @@ class SincronizadorAsientosService
             // Catálogo o columnas aún sin migrar: omitir sin romper la sincronización.
         }
 
-        // Formas de Cobro/Pago activas sin cuenta contable
+        // Formas de Cobro/Pago activas sin cuenta contable. Misma precisión que arriba: la cuenta
+        // puede vivir solo en asientos_programados (tipo_referencia forma_cobro/forma_pago), que es
+        // como la lee AsientoBuilderService::lineasFormas() — COALESCE(ap.id_cuenta, f.id_cuenta_contable).
         try {
-            $st = $db->prepare("SELECT COUNT(*) FROM empresa_formas_pago
-                                WHERE id_empresa = ? AND eliminado = false
-                                  AND activo = true AND id_cuenta_contable IS NULL");
+            $st = $db->prepare(
+                "SELECT f.nombre
+                   FROM empresa_formas_pago f
+                   LEFT JOIN asientos_programados ap
+                          ON ap.id_referencia   = f.id
+                         AND ap.tipo_referencia IN ('forma_cobro', 'forma_pago')
+                         AND ap.id_empresa      = f.id_empresa
+                         AND ap.eliminado       = false
+                  WHERE f.id_empresa = ? AND f.eliminado = false AND f.activo = true
+                    AND COALESCE(ap.id_cuenta, f.id_cuenta_contable) IS NULL
+                  ORDER BY f.nombre"
+            );
             $st->execute([$idEmpresa]);
-            $n = (int) $st->fetchColumn();
-            if ($n > 0) {
-                $this->warnings[] = "Hay {$n} forma(s) de Cobro/Pago sin cuenta contable asignada. Configúrelas en Configuración Contable (tipo de asiento «Cobros y Pagos»).";
+            $formas = array_map('strval', $st->fetchAll(\PDO::FETCH_COLUMN));
+            if (!empty($formas)) {
+                $n = count($formas);
+                $this->warnings[] = "Hay {$n} forma(s) de Cobro/Pago sin cuenta contable asignada ("
+                    . implode(', ', array_slice($formas, 0, 5))
+                    . ($n > 5 ? ' y ' . ($n - 5) . ' más' : '')
+                    . '). Configúrelas en Configuración Contable (tipo de asiento «Cobros y Pagos»).';
             }
         } catch (\Throwable $e) {
             // Tabla inexistente (migración pendiente): omitir sin romper.
@@ -852,16 +973,96 @@ class SincronizadorAsientosService
         }
 
         if (!empty($sinAsiento)) {
-            $n = count($sinAsiento);
-            $totalConProblema += $n;
-            $docs = $this->listarDocumentos($sinAsiento, $numeros);
-            $this->detalle[] = "{$nombreModulo} — {$n} documento(s) sin asiento (documento(s): {$docs})";
-            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} documento(s) siguen sin asiento — docs: {$docs} — ids: " . implode(',', $sinAsiento));
+            $totalConProblema += count($sinAsiento);
+            // Agrupar por MOTIVO real cuando se puede diagnosticar. Un ingreso/egreso sin formas
+            // de cobro/pago vigentes (caso típico: un egreso cuyos cheques se anularon todos, que
+            // AsientoBuilderService::lineasFormas() ya no cuenta) devuelve un asiento vacío SIN
+            // lanzar excepción: antes caía en el mensaje genérico y el usuario lo perseguía en
+            // Configuración Contable, donde no había nada que corregir.
+            $motivos   = $this->motivosSinAsiento($db, $tablaVerif, $sinAsiento);
+            $porMotivo = [];
+            foreach ($sinAsiento as $id) {
+                $porMotivo[$motivos[$id] ?? ''][] = $id;
+            }
+            foreach ($porMotivo as $motivo => $idsMotivo) {
+                $n    = count($idsMotivo);
+                $docs = $this->listarDocumentos($idsMotivo, $numeros);
+                $texto = $motivo !== ''
+                    ? "{$nombreModulo} — {$n} documento(s) sin asiento: {$motivo} (documento(s): {$docs})"
+                    : "{$nombreModulo} — {$n} documento(s) sin asiento (documento(s): {$docs})";
+                $this->detalle[] = $texto;
+                error_log("[SincronizadorAsientos] {$texto} — ids: " . implode(',', $idsMotivo));
+            }
         }
 
         if ($totalConProblema > 0) {
             $this->resumenPorModulo[$nombreModulo] = ($this->resumenPorModulo[$nombreModulo] ?? 0) + $totalConProblema;
         }
+    }
+
+    /**
+     * Explica, cuando se puede, POR QUÉ un ingreso/egreso quedó sin asiento aunque la
+     * configuración contable esté completa: el builder devuelve un asiento vacío —sin lanzar
+     * excepción— si el documento no tiene formas de cobro/pago vigentes con monto. El caso real
+     * es el egreso al que se le anularon todos los cheques: el documento sigue "registrado" (no
+     * anulado), pero ya no queda pago que contabilizar, así que reportarlo como un problema de
+     * cuentas mandaba al usuario a corregir algo que estaba bien.
+     *
+     * @return array<int, string> id de documento => motivo. Los ids que no se pueden diagnosticar
+     *                            no aparecen (el llamador cae al mensaje genérico).
+     */
+    private function motivosSinAsiento(\PDO $db, ?string $tablaVerif, array $ids): array
+    {
+        $mapa = [
+            'ingresos_cabecera' => ['tabla' => 'ingresos_pagos', 'col' => 'id_ingreso', 'flujo' => 'cobro',  'doc' => 'El ingreso'],
+            'egresos_cabecera'  => ['tabla' => 'egresos_pagos',  'col' => 'id_egreso',  'flujo' => 'pago',   'doc' => 'El egreso'],
+        ];
+        if ($tablaVerif === null || !isset($mapa[$tablaVerif]) || empty($ids)) {
+            return [];
+        }
+        $cfg = $mapa[$tablaVerif];
+
+        // Solo egresos_pagos tiene eliminado / estado_cheque (ver AsientoBuilderService::lineasFormas).
+        $esEgreso   = $tablaVerif === 'egresos_cabecera';
+        $filtroElim = $esEgreso ? " AND p.eliminado = FALSE" : '';
+        $condVigente = $esEgreso ? "COALESCE(p.estado_cheque, 'vigente') <> 'anulado'" : 'TRUE';
+        $in = implode(',', array_map('intval', $ids));
+
+        try {
+            $sql = "SELECT p.{$cfg['col']} AS id_doc,
+                           COUNT(*) AS total,
+                           COALESCE(SUM(CASE WHEN {$condVigente} AND p.monto > 0 THEN p.monto ELSE 0 END), 0) AS monto_vigente,
+                           SUM(CASE WHEN NOT ({$condVigente}) THEN 1 ELSE 0 END) AS anulados
+                      FROM {$cfg['tabla']} p
+                     WHERE p.{$cfg['col']} IN ({$in}){$filtroElim}
+                     GROUP BY p.{$cfg['col']}";
+            $filas = $db->query($sql)->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return []; // Tabla/columna inexistente (migración pendiente): sin diagnóstico.
+        }
+
+        $porDoc = [];
+        foreach ($filas as $f) {
+            $porDoc[(int) $f['id_doc']] = $f;
+        }
+
+        $motivos = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            $f  = $porDoc[$id] ?? null;
+            if ($f === null || (int) $f['total'] === 0) {
+                $motivos[$id] = "{$cfg['doc']} no tiene formas de {$cfg['flujo']} registradas: no hay nada que contabilizar.";
+                continue;
+            }
+            if (round((float) $f['monto_vigente'], 2) > 0) {
+                continue; // sí hay monto vigente: el motivo es otro (cuentas, cascada, etc.)
+            }
+            $motivos[$id] = ((int) $f['anulados'] > 0)
+                ? "{$cfg['doc']} no tiene ningún cheque vigente (todos anulados): no queda pago que contabilizar."
+                : "Las formas de {$cfg['flujo']} de este documento suman 0.00: no hay valor que contabilizar.";
+        }
+
+        return $motivos;
     }
 
     /**

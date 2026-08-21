@@ -202,6 +202,19 @@ class ReportePedidosController extends BaseModuloController
         exit;
     }
 
+    /** Autocompletado del campo "Producto" (busca por nombre o código). */
+    public function buscarItemsAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+
+        echo json_encode(['ok' => true, 'data' => $this->repository->buscarItems($idEmpresa, $q)]);
+        exit;
+    }
+
     private function encabezadosPorAgrupacion(string $agruparPor): array
     {
         return match ($agruparPor) {

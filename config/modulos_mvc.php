@@ -494,6 +494,15 @@ return [
         'id_submodulo' => 0, // Ajustar con el ID real tras registrar el submódulo en submodulos_menu
         'legacy_rutas' => [],
     ],
+    // Conciliación de Tarjetas: cruza el estado de cuenta de la procesadora
+    // (Payphone, Nuvei, datáfono) contra los cobros con tarjeta ya registrados.
+    // No confundir con el módulo anterior: aquí los ingresos YA existen y lo que
+    // se determina es cuáles se depositaron de verdad, con qué comisión y cuáles
+    // siguen pendientes.
+    'modulos/conciliacion-tarjetas' => [
+        'id_submodulo' => 0, // Ajustar con el ID real tras registrar el submódulo en submodulos_menu
+        'legacy_rutas' => [],
+    ],
     'modulos/empresa' => [
         'legacy_rutas' => ['modulos/empresa.php'],
     ],

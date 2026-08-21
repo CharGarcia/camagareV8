@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden
-version: 1.8
+version: 1.9
 orden: 20
 estado: activo
 ---
@@ -213,6 +213,11 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **1.9** — El modal ya no arrastra datos de la compra abierta anteriormente:
+  al registrar una compra nueva (o al abrir otra) se limpian el **asiento
+  contable**, el aviso y los botones de **aprobación** (pendiente / rechazada)
+  y el botón de **emitir retención**, que quedaba habilitado sin compra
+  guardada. Antes había que recargar la pantalla.
 - **1.8** — Nueva **aprobación de compras**: si se activa en el módulo
   Aprobaciones, la compra registrada a mano queda pendiente y no se puede pagar,
   ni procesar su inventario, ni se genera su asiento hasta autorizarla. Se añade

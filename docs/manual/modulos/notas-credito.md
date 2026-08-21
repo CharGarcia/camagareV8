@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri
-version: 1.2
+version: 1.5
 orden: 30
 estado: activo
 ---
@@ -104,6 +104,12 @@ momento (no solo la página visible).
 
 ## Historial de cambios
 
+- **1.5** — Corregido el botón **Nueva Nota de Crédito**: después de enviar una
+  nota al SRI, al crear la siguiente el modal conservaba datos de la anterior
+  (estado *Autorizado*, botón **Guardar** deshabilitado, botones de Anular y
+  del SRI activos, historial y asiento contable de la nota previa, y la
+  pestaña **SRI** abierta si el envío había sido rechazado). Ya no hace falta
+  recargar la pantalla: el modal arranca limpio y en borrador.
 - **1.4** — Corregida la recuperación del borrador local: al elegir "Cargar
   borrador" el modal se abría vacío (el aviso además mostraba el cliente como
   "desconocido"). Ahora repone todos los campos y las líneas del detalle.

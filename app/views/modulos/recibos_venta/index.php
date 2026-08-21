@@ -4804,7 +4804,13 @@ $totalPages = $totalPagesOriginal;
             fvCargarGuiasRemision(numCompleto);
 
             // â”€â”€ Actualizar estado de botones segÃºn el estado del recibo â”€â”€
-            fvActualizarEstadoBotones(data.estado);
+            // OJO: usar cab.estado (el real, recién llegado del servidor), NO
+            // data.estado — data a veces es un mock incompleto sin 'estado'
+            // (p. ej. al refrescar tras cerrar el modal de NC/GR:
+            // fvRefrescarDatosModal solo pasa {id}), lo que hacía caer en el
+            // estado por defecto 'nuevo' y reactivaba el botón de SRI y el
+            // modo edición en un recibo que en realidad ya estaba autorizado.
+            fvActualizarEstadoBotones(cab.estado);
 
         } catch (err) {
             console.error('Error cargando recibo:', err);

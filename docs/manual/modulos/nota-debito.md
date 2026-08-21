@@ -6,7 +6,7 @@ ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri
-version: 1.1
+version: 1.2
 orden: 31
 estado: activo
 ---
@@ -75,6 +75,12 @@ momento (no solo la página visible).
 
 ## Historial de cambios
 
+- **1.2** — Corregido el botón **Nueva Nota de Débito**: después de enviar una
+  nota al SRI, al crear la siguiente el modal conservaba datos de la anterior
+  (estado en la pestaña **SRI**, ambiente y tipo de emisión, y el contenido de
+  las pestañas **Asiento contable** y **Factura relacionada**), y quedaba
+  abierto en la pestaña **SRI** si el envío había sido rechazado. Ya no hace
+  falta recargar la pantalla: el modal arranca limpio y en borrador.
 - **1.1** — Botón **Excel** en la barra de acciones del modal, para exportar
   motivos, totales y forma de pago de una nota de débito puntual.
 - **1.0** — Versión inicial (emisión de notas de débito de venta).

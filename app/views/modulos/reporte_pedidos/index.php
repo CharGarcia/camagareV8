@@ -112,15 +112,16 @@
                         <div id="rp-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
 
-                    <div style="flex:1 1 180px;">
+                    <div class="position-relative" style="flex:1 1 180px;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                             <input type="text" name="producto_texto" id="rp-producto-texto" class="form-control border-start-0 px-1 shadow-none"
-                                   placeholder="Ej: pelota, servicio..." autocomplete="off" onchange="window.RP_generarReporte()">
+                                   placeholder="Ej: pelota, servicio, código..." autocomplete="off" onchange="window.RP_generarReporte()">
                             <button type="button" class="btn btn-outline-secondary" title="Limpiar"
                                     onclick="document.getElementById('rp-producto-texto').value=''; window.RP_generarReporte();"><i class="bi bi-x-lg"></i></button>
                         </div>
+                        <div id="rp-dropdown-items" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
 
                     <div style="flex:1 1 180px;">

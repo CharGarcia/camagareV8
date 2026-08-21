@@ -5668,7 +5668,14 @@ $totalPages = $totalPagesOriginal;
             fvCargarGuiasRemision(numCompleto);
 
             // â”€â”€ Actualizar estado de botones segÃºn el estado de la factura â”€â”€
-            fvActualizarEstadoBotones(data.estado);
+            // OJO: usar cab.estado (el real, recién llegado del servidor), NO
+            // data.estado — data es el objeto con el que se llamó a esta función
+            // y a veces es un mock incompleto sin 'estado' (p. ej. al refrescar
+            // tras cerrar el modal de NC/ND/GR: fvRefrescarDatosModal solo pasa
+            // {id}), lo que hacía caer en el estado por defecto 'nuevo' y
+            // reactivaba el botón de SRI y el modo edición en una factura que
+            // en realidad ya estaba autorizada.
+            fvActualizarEstadoBotones(cab.estado);
 
         } catch (err) {
             console.error('Error cargando factura:', err);

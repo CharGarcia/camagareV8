@@ -19,6 +19,7 @@
         </div>
     </main>
     <?php require MVC_APP . '/views/partials/scripts.php'; ?>
+    <?php require MVC_APP . '/views/partials/contabilidad_auto.php'; ?>
     <?php require MVC_APP . '/views/partials/soporte_widget.php'; ?>
 </body>
 </html>

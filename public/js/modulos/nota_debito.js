@@ -153,6 +153,12 @@
 
     function ND_resetearYMostrar(borrador = null) {
         try {
+            // Estado interno: una ND nueva arranca siempre como borrador sin id.
+            // Sin esto quedaba el estado de la ND anterior (p. ej. 'autorizado'
+            // después de enviarla al SRI) y el modal se abría bloqueado.
+            ND_estadoActual     = 'borrador';
+            window.ND_ID_ACTIVO = null;
+
             if (formND) formND.reset();
             setEl('nd_id', 'value', '');
 
@@ -188,6 +194,11 @@
             const infoCli = document.getElementById('nd_info_cliente');
             if (infoCli) infoCli.classList.add('d-none');
             ND_limpiarInfoAdicional();
+            // Cerrar dropdowns predictivos que hubieran quedado abiertos.
+            ['nd_cliente_dropdown', 'nd_factura_dropdown'].forEach(id => {
+                const dd = document.getElementById(id);
+                if (dd) { dd.innerHTML = ''; dd.classList.add('d-none'); }
+            });
             ND_setModoLectura(false);
             ND_setFacturaHabilitada(false);
 
@@ -199,12 +210,32 @@
             setEl('nd-sri-numero-documento',        'value', '');
             setEl('nd-sri-identificacion-cliente',  'value', '');
             setEl('nd-sri-correo-cliente',          'value', '');
+            setEl('nd-sri-ambiente',                'value', '');
+            setEl('nd-sri-tipo-emision',            'value', '');
+            const badgeSri = document.getElementById('nd-sri-badge-estado');
+            if (badgeSri) {
+                badgeSri.className   = 'badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2';
+                badgeSri.textContent = 'Sin enviar';
+            }
             window.ND_FECHA_EMISION = null;
             window.ND_CLIENTE_RUC   = '';
             const tbodySri = document.getElementById('nd-sri-tbody-historial');
             if (tbodySri) tbodySri.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">Sin historial de envíos.</td></tr>';
 
+            // Pestañas que se llenan bajo demanda: el contenido de la ND anterior
+            // no aplica a la nueva y no se refresca solo si el usuario no vuelve
+            // a entrar en ellas.
+            if (typeof window.ND_limpiarAsientoTab === 'function') window.ND_limpiarAsientoTab();
+            if (typeof window.ND_limpiarFacturaRelacionada === 'function') window.ND_limpiarFacturaRelacionada();
+
             toggleBotonesAccion(false, 'borrador');
+
+            // Volver a la primera pestaña: tras un rechazo del SRI el modal
+            // quedaba abierto en la pestaña SRI.
+            const tabPrincipal = document.getElementById('tab-nd-principal-btn');
+            if (tabPrincipal && typeof bootstrap !== 'undefined') {
+                try { bootstrap.Tab.getOrCreateInstance(tabPrincipal).show(); } catch (e) {}
+            }
 
             modalND.show();
 
@@ -1161,6 +1192,10 @@
     window.ND_registrarAutoGuardado = () => {
         const modal = document.getElementById('modalND');
         if (!modal) return;
+        // Se llama en cada apertura de "Nueva ND": sin este guard se acumulaba
+        // un par de listeners por apertura sobre el mismo modal.
+        if (modal.dataset.ndAutoguardado === '1') return;
+        modal.dataset.ndAutoguardado = '1';
         const auto = debounce(ND_autoGuardar, 1000);
         modal.addEventListener('input', () => {
             const idActual = document.getElementById('nd_id').value;
@@ -1565,6 +1600,12 @@
         return _ndAsientoTab;
     }
 
+    // Lo usa ND_resetearYMostrar para no arrastrar el asiento de la ND anterior.
+    // Solo limpia si la pestaña ya se había inicializado (si no, no hay nada pintado).
+    window.ND_limpiarAsientoTab = function () {
+        if (_ndAsientoTab) _ndAsientoTab.limpiar();
+    };
+
     document.addEventListener('DOMContentLoaded', function () {
         const btnTab = document.getElementById('tab-nd-contable-btn');
         if (btnTab) {
@@ -1647,6 +1688,13 @@
             loading.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar la factura relacionada.';
         }
     }
+
+    // Lo usa ND_resetearYMostrar: al abrir una ND nueva la pestaña no se vuelve
+    // a mostrar (se fuerza la principal), así que sin esto quedaría pintada la
+    // factura de la ND anterior. Con id 0 repone el placeholder.
+    window.ND_limpiarFacturaRelacionada = function () {
+        ndCargarFacturaRelacionada(0);
+    };
 
     document.addEventListener('DOMContentLoaded', function () {
         const btnTab = document.getElementById('tab-nd-factura-btn');

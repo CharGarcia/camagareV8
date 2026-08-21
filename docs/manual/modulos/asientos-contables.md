@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen
-version: 1.1
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -47,6 +47,20 @@ Además:
   el sistema los vuelve a generar desde el documento.
 - **De diario**: los escribe el contador. Son los únicos que se mantienen tal
   cual se escribieron.
+
+## Cada módulo genera lo suyo al abrirlo
+
+Además de la sincronización que se lanza desde esta pantalla, **cada módulo
+contabiliza sus propios documentos cuando se lo abre**: entrar a Facturas de
+Venta genera los asientos que les falten a las facturas, entrar a Compras los de
+las compras, y así con los demás. Ocurre en segundo plano, sin avisos y sin
+intervención de nadie. Ver
+[Generación automática de asientos contables](guias/generacion-automatica-de-asientos).
+
+Eso no reemplaza al aviso de esta pantalla, que sigue siendo el lugar donde se
+ve **qué quedó sin contabilizar y por qué**: la generación automática es
+silenciosa a propósito, y lo que no puede resolver (una cuenta sin configurar, un
+período cerrado) se sigue reportando aquí.
 
 ## Aviso antes de generar asientos en masa
 
@@ -102,6 +116,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.3** — Cada módulo genera en segundo plano los asientos que le faltan al abrirlo, sin mostrar mensajes.
 - **1.2** — Al sincronizar asientos, el resumen previo avisa también de las
   cuentas configuradas con una naturaleza que no corresponde al concepto, antes
   de generar los asientos.
