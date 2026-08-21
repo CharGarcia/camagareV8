@@ -617,9 +617,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                         <!-- ASIENTO -->
                         <div class="tab-pane fade p-3" id="eg-tab-contable" role="tabpanel">
-                            <div class="alert alert-info py-2 small mb-3">
-                                <i class="bi bi-calculator me-1"></i> El asiento será visible aquí una vez se guarde el egreso de caja.
-                            </div>
                             <div class="table-responsive border rounded" style="max-height: 380px;">
                                 <table class="table table-sm small mb-0 table-hover">
                                     <thead class="table-light">

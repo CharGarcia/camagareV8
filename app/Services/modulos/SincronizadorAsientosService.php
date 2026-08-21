@@ -226,6 +226,47 @@ class SincronizadorAsientosService
     }
 
     /**
+     * Exclusión de los documentos DERIVADOS de una consignación migrada (retornos y facturaciones
+     * de consignación).
+     *
+     * Existe porque `construirExclusionMigracion()` no alcanza para ellos: migracion_mysql_map solo
+     * registra la entidad 'consignaciones' — nunca 'retornos_cv' ni 'consignaciones_facturas' —, así
+     * que el documento derivado no aparece como migrado aunque su consignación madre sí lo esté.
+     *
+     * Y no es solo una cuestión de ruido: el retorno y el reingreso por facturación son el asiento
+     * INVERSO de la consignación (Debe Inventario / Haber Mercadería en Consignación). Si la madre
+     * está excluida por migrada y nunca hizo su asiento, generar el inverso acreditaría una cuenta de
+     * activo que jamás se debitó, dejándola con saldo acreedor. Regla: si la consignación de origen
+     * no se contabiliza, sus derivados tampoco.
+     *
+     * @return callable(string,string,string):string (tablaDetalle, columnaDocumento, expresiónId)
+     */
+    private function construirExclusionConsignacionMigrada(\PDO $db): callable
+    {
+        $tieneMapMig = false;
+        try {
+            $tieneMapMig = (bool) $db->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn();
+        } catch (\Throwable $e) {
+            $tieneMapMig = false;
+        }
+
+        // Los tres argumentos son literales del código (no entrada de usuario) → seguros de interpolar.
+        return function (string $tablaDetalle, string $colDoc, string $idExpr) use ($tieneMapMig): string {
+            if (!$tieneMapMig) { return ''; }
+            return " AND NOT EXISTS (
+                        SELECT 1
+                          FROM {$tablaDetalle} dmig
+                          JOIN migracion_mysql_map mmc
+                            ON mmc.entidad     = 'consignaciones'
+                           AND mmc.id_destino  = dmig.id_consignacion
+                           AND mmc.vinculado IS NOT TRUE
+                         WHERE dmig.{$colDoc} = {$idExpr}
+                           AND dmig.eliminado = false
+                     ) ";
+        };
+    }
+
+    /**
      * Construye la lista de "trabajos" de sincronización: cada entrada describe la consulta que
      * detecta los documentos pendientes de un módulo y cómo generar su asiento. La usan tanto
      * sincronizar() (para generar) como contarPendientes() (para solo contar), garantizando que
@@ -236,6 +277,11 @@ class SincronizadorAsientosService
     private function construirTrabajos(int $idEmpresa, callable $excMig): array
     {
         $trabajos = [];
+
+        // Exclusión de los derivados de una consignación migrada (ver el método por qué el
+        // $excMig normal no basta para ellos). Se arma aquí y no se recibe por parámetro para no
+        // cambiar la firma en los cinco llamadores; la conexión es la misma instancia compartida.
+        $excMigConsig = $this->construirExclusionConsignacionMigrada(Database::getConnection());
 
         // 1. Facturas de Venta
         //    Se (re)generan tres grupos:
@@ -544,7 +590,12 @@ class SincronizadorAsientosService
         // 7c. Retornos de Consignaciones en Ventas (devolución del cliente: entrada de inventario).
         //     Solo los 'Emitida' tienen impacto contable (Borrador/Anulada no se contabilizan).
         $trabajos[] = [
-            'sql'    => "SELECT id FROM retornos_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'" . $excMig('retornos_cv', 'retornos_cv.id'),
+            // El $excMig por 'retornos_cv' se mantiene por si algún día el migrador registra esa
+            // entidad, pero hoy no excluye nada: quien de verdad filtra los retornos migrados es
+            // $excMigConsig, que mira la consignación de origen.
+            'sql'    => "SELECT id FROM retornos_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'"
+                        . $excMig('retornos_cv', 'retornos_cv.id')
+                        . $excMigConsig('retornos_cv_detalles', 'id_retorno', 'retornos_cv.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\RetornoCvService(
@@ -584,7 +635,10 @@ class SincronizadorAsientosService
         // 7d. Facturación de Consignaciones (asiento INVERSO del reingreso de inventario).
         //     Solo las ya 'facturada' lo tienen; el enlace es id_asiento_reingreso (no id_asiento_contable).
         $trabajos[] = [
-            'sql'    => "SELECT id FROM consignaciones_facturas WHERE id_empresa = ? AND eliminado = false AND id_asiento_reingreso IS NULL AND estado = 'facturada'",
+            // Igual que en Retornos: el reingreso es el asiento inverso de la consignación, así que
+            // si la consignación de origen está excluida por migrada, su facturación también.
+            'sql'    => "SELECT id FROM consignaciones_facturas WHERE id_empresa = ? AND eliminado = false AND id_asiento_reingreso IS NULL AND estado = 'facturada'"
+                        . $excMigConsig('consignaciones_facturas_detalles', 'id_consignacion_factura', 'consignaciones_facturas.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\ConsignacionFacturaService(

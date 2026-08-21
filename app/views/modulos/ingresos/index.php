@@ -597,9 +597,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                         <!-- PESTAÑA 2: ASIENTO CONTABLE -->
                         <div class="tab-pane fade p-3" id="m-tab-contable" role="tabpanel">
-                            <div class="alert alert-info py-2 small mb-3">
-                                <i class="bi bi-info-circle me-1"></i> Aquí se generará automáticamente el asiento contable del ingreso una vez guardado.
-                            </div>
                             <div class="table-responsive border rounded" style="max-height: 380px;">
                                 <table class="table table-sm small mb-0 table-hover align-middle">
                                     <thead class="table-light">

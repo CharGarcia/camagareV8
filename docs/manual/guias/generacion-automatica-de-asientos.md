@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano
-version: 1.0
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -88,6 +88,22 @@ Si quiere ver el resultado, revise **Asientos Contables** o **Mayores**.
   disparó la generación.
 - **Un documento anulado no se contabiliza nunca**, en ningún módulo. Tampoco los
   borradores: solo se contabiliza el documento vigente ya emitido o autorizado.
+- **Los documentos traídos de la migración no se contabilizan**, porque su
+  contabilidad viene del sistema anterior. Esto alcanza también a lo que nace de
+  ellos: el retorno o la facturación de una consignación migrada tampoco generan
+  asiento, porque son el asiento inverso de una consignación que nunca lo hizo —
+  generarlo dejaría la cuenta de mercadería en consignación descuadrada.
+- **Un cobro o un pago solo cancela la cartera**: cuando el ingreso cobra una factura,
+  el sistema cancela exactamente la misma cuenta por cobrar que esa factura registró.
+  El resto del asiento de la factura (costo de ventas, descuentos) no se toca: no es
+  cartera y no debe recibir parte del cobro. Igual para los pagos con la cuenta por
+  pagar de la compra.
+- **Si falta la cuenta, no se inventa ninguna**: los conceptos de Ingresos y
+  Egresos que toman su cuenta del propio módulo (Facturas de venta, Recibos de
+  venta, Facturas de compra, Liquidaciones) usan la cuenta configurada en la
+  sección de ese módulo. Si esa cuenta no está configurada a nivel **General**,
+  el documento simplemente no se contabiliza y queda reportado como pendiente:
+  el sistema no recurre a ninguna cuenta de respaldo.
 - **Los períodos contables cerrados se respetan**: un documento con fecha dentro
   de un período cerrado no se contabiliza.
 - **Nada de esto reemplaza la revisión.** El sistema genera el asiento según las
@@ -124,11 +140,25 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 - **«No se generó nada y la empresa sí lleva contabilidad»**: revise que el
   módulo tenga sus cuentas configuradas. Sin ninguna cuenta asignada, el sistema
   entiende que esa empresa no contabiliza ese módulo.
+- **«El asiento del cobro salió con la misma cuenta del banco en los dos lados»**:
+  pasa cuando el cobro se contabiliza antes que la factura que cancela: sin el
+  asiento de la factura, el sistema no sabe qué cuenta por cobrar cancelar.
+  Configure la cuenta por cobrar a nivel General y vuelva a generar el asiento
+  del cobro; tomará la cuenta correcta de la factura ya contabilizada.
 - **«El documento es de un mes ya cerrado»**: no se contabilizará mientras el
   período siga cerrado. Reabra el período si corresponde.
 
 ## Historial de cambios
 
+- **1.2** — El asiento de un cobro o un pago cancela solo la cuenta de cartera del
+  documento. Antes repartía el monto entre todas las cuentas del asiento de ese
+  documento, así que una parte del cobro terminaba acreditando el costo de ventas y
+  dejaba cartera sin cancelar.
+- **1.1** — Cuando el concepto toma su cuenta del propio módulo y esa cuenta no
+  está configurada a nivel General, el documento deja de contabilizarse con una
+  cuenta de respaldo heredada y pasa a reportarse como pendiente. Evita asientos
+  que cuadraban pero no decían nada (la misma cuenta de banco en el Debe y en el
+  Haber de un cobro contabilizado antes que su factura).
 - **1.0** — Versión inicial: generación automática y silenciosa por módulo, con
   tope de 50 documentos por pasada y reintento de los fallidos al cambiar la
   configuración contable.

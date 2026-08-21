@@ -71,6 +71,26 @@ class AsientoBuilderService
         'RECIBO'  => 'Cuentas por Cobrar (Recibo de Venta)',
     ];
 
+    /**
+     * tipo_documento => código (asientos_tipo) del slot de cartera con el que ese documento
+     * resolvió su Cuenta por Cobrar/Pagar. Sirve para quedarse SOLO con esas cuentas al leer el
+     * asiento del documento: el Debe de una venta no es únicamente la cartera —lleva también
+     * Costo de Ventas (5.x) y Descuento en ventas (4.x, deudor)— y prorratear el cobro sobre
+     * todas esas líneas acreditaba cuentas de resultado dejando cartera sin cancelar.
+     */
+    private const SLOT_CARTERA_VENTAS = [
+        'FACTURA' => 'PORCOBRARFACTURAVENTA',
+        'RECIBO'  => 'PORCOBRARRECIBOVENTA',
+    ];
+
+    private const SLOT_CARTERA_COMPRAS = [
+        'COMPRA'      => 'PORPAGARFACTURACOMPRA',
+        'LIQUIDACION' => 'PORPAGARFACTURACOMPRA',
+    ];
+
+    /** Caché de cuentasDelSlot() por "empresa:codigo": se consulta una vez por lote, no por documento. */
+    private array $cacheCuentasSlot = [];
+
     private AsientoProgramadoRepository $programadoRepo;
     private CosteoVentaSeguimientoRepository $costeoRepo;
 
@@ -3761,14 +3781,23 @@ class AsientoBuilderService
 
         // Si el concepto está atado a un módulo con contabilización propia (FACTURA_VENTA,
         // RECIBO_VENTA), la cuenta "oficial" de Configuración Contable manda sobre la que tenga
-        // guardada aparte el concepto (ese campo quedó de respaldo/legado — ver
-        // egresos-compras-cxp-contrapartida-faltante). Anticipos (ANTICIPO_CLIENTE) no tienen
-        // equivalente y siguen usando su propia cuenta.
+        // guardada aparte el concepto
+        // (ese campo quedó de respaldo/legado — ver egresos-compras-cxp-contrapartida-faltante).
+        // Anticipos (ANTICIPO_CLIENTE) no tienen equivalente y siguen usando su propia cuenta.
+        //
+        // Manda SIEMPRE que el comportamiento tenga cuenta oficial, incluso si esa cuenta aún no
+        // está configurada (id_cuenta = 0): en ese caso la contrapartida se queda sin cuenta, el
+        // asiento no se genera y el documento se reporta como pendiente. Antes se caía a la cuenta
+        // legada del concepto, y bastaba con que esa columna tuviera un valor viejo —normalmente la
+        // cuenta del banco, que la pantalla ya no deja editar— para producir un asiento espejado
+        // (mismo banco en el Debe y en el Haber) que cuadraba y por tanto se guardaba sin avisar.
+        // Caso real: GOLIFE (empresa 24), 14 asientos de ingreso contabilizados ANTES que las
+        // facturas que cobraban, así que la cartera no resolvió y el fallback legado se activó.
         $conceptoIdCuenta = (int) ($ingreso['concepto_id_cuenta'] ?? 0);
         $oficialIngreso = $this->programadoRepo->getCuentaOficialPorComportamiento(
             $idEmpresa, (string) ($ingreso['concepto_comportamiento'] ?? '')
         );
-        if ($oficialIngreso !== null && $oficialIngreso['id_cuenta'] > 0) {
+        if ($oficialIngreso !== null) {
             $conceptoIdCuenta = $oficialIngreso['id_cuenta'];
         }
 
@@ -3841,14 +3870,23 @@ class AsientoBuilderService
 
         // Si el concepto está atado a un módulo con contabilización propia (COMPRA,
         // LIQUIDACION), la cuenta "oficial" de Configuración Contable manda sobre la que tenga
-        // guardada aparte el concepto (ese campo quedó de respaldo/legado — ver
-        // egresos-compras-cxp-contrapartida-faltante). Anticipos/préstamos no tienen
-        // equivalente y siguen usando su propia cuenta.
+        // guardada aparte el concepto
+        // (ese campo quedó de respaldo/legado — ver egresos-compras-cxp-contrapartida-faltante).
+        // Anticipos/préstamos no tienen equivalente y siguen usando su propia cuenta.
+        //
+        // Manda SIEMPRE que el comportamiento tenga cuenta oficial, incluso si esa cuenta aún no
+        // está configurada (id_cuenta = 0): en ese caso la contrapartida se queda sin cuenta, el
+        // asiento no se genera y el documento se reporta como pendiente. Antes se caía a la cuenta
+        // legada del concepto, y bastaba con que esa columna tuviera un valor viejo —normalmente la
+        // cuenta del banco, que la pantalla ya no deja editar— para producir un asiento espejado
+        // (mismo banco en el Debe y en el Haber) que cuadraba y por tanto se guardaba sin avisar.
+        // Caso real: GOLIFE (empresa 24), 14 asientos de ingreso contabilizados ANTES que las
+        // facturas que cobraban, así que la cartera no resolvió y el fallback legado se activó.
         $conceptoIdCuenta = (int) ($egreso['concepto_id_cuenta'] ?? 0);
         $oficialEgreso = $this->programadoRepo->getCuentaOficialPorComportamiento(
             $idEmpresa, (string) ($egreso['concepto_comportamiento'] ?? '')
         );
-        if ($oficialEgreso !== null && $oficialEgreso['id_cuenta'] > 0) {
+        if ($oficialEgreso !== null) {
             $conceptoIdCuenta = $oficialEgreso['id_cuenta'];
         }
 
@@ -4150,6 +4188,71 @@ class AsientoBuilderService
      *
      * @return array{0: array, 1: float} [líneas del Debe (fusionadas por cuenta), total resuelto]
      */
+    /**
+     * Filtra las líneas del asiento de un documento dejando solo las de su cuenta de cartera
+     * (Cuenta por Cobrar / por Pagar), identificadas por las cuentas configuradas para ese slot
+     * en CUALQUIER nivel de la cascada (General, Cliente, Producto, Categoría, Marca, Tipo de
+     * producción). Las demás líneas del mismo lado —Costo de Ventas, Descuento en ventas— no son
+     * cartera y no deben recibir parte del cobro/pago.
+     *
+     * Devuelve las líneas originales sin tocar si el slot no está configurado o si ninguna línea
+     * coincide: en ese caso preferimos el comportamiento anterior (prorratear sobre todo el lado)
+     * antes que dejar el documento sin contrapartida y el asiento descuadrado.
+     */
+    private function soloLineasDeCartera(\PDO $db, int $idEmpresa, array $lineas, string $codigoSlot): array
+    {
+        if ($codigoSlot === '' || empty($lineas)) {
+            return $lineas;
+        }
+        $cuentas = $this->cuentasDelSlot($db, $idEmpresa, $codigoSlot);
+        if (empty($cuentas)) {
+            return $lineas;
+        }
+        $filtradas = array_values(array_filter(
+            $lineas,
+            static fn(array $l): bool => isset($cuentas[(int) $l['id_cuenta_contable']])
+        ));
+
+        return empty($filtradas) ? $lineas : $filtradas;
+    }
+
+    /**
+     * Cuentas configuradas para un slot de cartera (código de asientos_tipo) en TODOS los niveles
+     * de la cascada de esa empresa. No se filtra por tipo_referencia a propósito: el asiento del
+     * documento pudo resolver su cartera por Cliente, Producto, Categoría, Marca o General, y aquí
+     * hace falta el conjunto completo de cuentas posibles.
+     *
+     * @return array<int,bool> id_cuenta => true (mapa para lookup directo)
+     */
+    private function cuentasDelSlot(\PDO $db, int $idEmpresa, string $codigoSlot): array
+    {
+        $clave = $idEmpresa . ':' . $codigoSlot;
+        if (isset($this->cacheCuentasSlot[$clave])) {
+            return $this->cacheCuentasSlot[$clave];
+        }
+
+        try {
+            $st = $db->prepare(
+                "SELECT DISTINCT ap.id_cuenta
+                   FROM asientos_programados ap
+                   JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                  WHERE ap.id_empresa = :emp
+                    AND at.codigo = :cod
+                    AND ap.eliminado = false
+                    AND ap.id_cuenta IS NOT NULL"
+            );
+            $st->execute([':emp' => $idEmpresa, ':cod' => $codigoSlot]);
+            $cuentas = [];
+            foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $idCuenta) {
+                $cuentas[(int) $idCuenta] = true;
+            }
+        } catch (\Throwable $e) {
+            $cuentas = []; // sin catálogo: el llamador conserva el comportamiento anterior
+        }
+
+        return $this->cacheCuentasSlot[$clave] = $cuentas;
+    }
+
     private function contrapartidaCarteraCompras(\PDO $db, int $idEmpresa, int $idEgreso): array
     {
         $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_pagado) AS total_pagado
@@ -4184,6 +4287,12 @@ class AsientoBuilderService
             $stHaber = $db->prepare($sqlHaber);
             $stHaber->execute([':mod' => $moduloOrigen, ':id_doc' => $idDoc, ':emp' => $idEmpresa]);
             $haberLineas = $stHaber->fetchAll(\PDO::FETCH_ASSOC);
+
+            // Espejo del filtro de ventas: solo las cuentas por pagar del documento, no todo el
+            // Haber (que puede llevar descuento en compras u otras cuentas de resultado).
+            $haberLineas = $this->soloLineasDeCartera(
+                $db, $idEmpresa, $haberLineas, self::SLOT_CARTERA_COMPRAS[$tipoDoc] ?? ''
+            );
 
             $totalHaberDoc = round((float) array_sum(array_column($haberLineas, 'monto')), 2);
             if (empty($haberLineas) || $totalHaberDoc <= 0) {
@@ -4261,6 +4370,15 @@ class AsientoBuilderService
             $stDebe = $db->prepare($sqlDebe);
             $stDebe->execute([':mod' => $moduloOrigen, ':id_doc' => $idDoc, ':emp' => $idEmpresa]);
             $debeLineas = $stDebe->fetchAll(\PDO::FETCH_ASSOC);
+
+            // Quedarse SOLO con las cuentas de cartera del documento. Sin esto se prorrateaba
+            // sobre todo el Debe —que incluye Costo de Ventas y Descuento en ventas— y el cobro
+            // acreditaba cuentas de resultado dejando la cartera sin cancelar del todo.
+            // Si ninguna línea coincide (empresa sin el slot configurado, asiento antiguo), se
+            // mantiene el comportamiento anterior en vez de dejar el documento sin contrapartida.
+            $debeLineas = $this->soloLineasDeCartera(
+                $db, $idEmpresa, $debeLineas, self::SLOT_CARTERA_VENTAS[$tipoDoc] ?? ''
+            );
 
             $totalDebeDoc = round((float) array_sum(array_column($debeLineas, 'monto')), 2);
             if (empty($debeLineas) || $totalDebeDoc <= 0) {
