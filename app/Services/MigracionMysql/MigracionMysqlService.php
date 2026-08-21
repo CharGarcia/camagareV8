@@ -3544,6 +3544,31 @@ class MigracionMysqlService
                 $insPago->execute([$idCompra, $fp, (float) $f['total_pago'], (is_numeric($f['plazo_pago']) ? (int) $f['plazo_pago'] : 0), $ut]);
             }
         };
+        // Info adicional de la compra: viejo detalle_adicional_compra (enlaza por codigo_documento,
+        // igual que el cuerpo y las formas de pago) → nuevo compras_adicional. RENDIMIENTO: la tabla
+        // vieja no tiene índice útil por documento y está en otro servidor, así que se precarga TODO
+        // el RUC en UNA consulta y se agrupa por codigo_documento. Idempotente (delete+insert):
+        // re-correr la migración completa la info adicional sin duplicarla.
+        $insAdic = $pg->prepare("INSERT INTO compras_adicional (id_compra, nombre, valor) VALUES (?, ?, ?)");
+        $delAdic = $pg->prepare("DELETE FROM compras_adicional WHERE id_compra = ?");
+        $adicByDoc = null;
+        $precargarAdic = function () use (&$adicByDoc, $mysql, $base): void {
+            if ($adicByDoc !== null) { return; }
+            $adicByDoc = [];
+            $q = $mysql->query("SELECT codigo_documento, adicional_concepto, adicional_descripcion FROM detalle_adicional_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_detalle");
+            foreach ($q as $r) {
+                $adicByDoc[(string) $r['codigo_documento']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']];
+            }
+        };
+        $migrarAdic = function (int $idCompra, string $codigoDoc) use (&$adicByDoc, $precargarAdic, $insAdic, $delAdic): void {
+            $precargarAdic();
+            $delAdic->execute([$idCompra]); // idempotente (re-correr no duplica)
+            foreach ($adicByDoc[$codigoDoc] ?? [] as $a) {
+                $nom = trim((string) $a['n']);
+                if ($nom === '') { continue; }
+                $insAdic->execute([$idCompra, mb_substr($nom, 0, 300), mb_substr(trim((string) $a['d']), 0, 300)]);
+            }
+        };
 
         // Las liquidaciones de compra (id_comprobante = 3, código '03') NO se migran al
         // módulo de compras: tienen su propio módulo (migrarLiquidaciones → liquidaciones_cabecera).
@@ -3606,6 +3631,7 @@ class MigracionMysqlService
                         $insImp->execute([':d' => $idDet, ':cp' => $cod, ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
                     }
                     $migrarPagos($idExist, (string) $ec['codigo_documento']); // formas de pago SRI
+                    $migrarAdic($idExist, (string) $ec['codigo_documento']); // info adicional
                     $this->generarXmlCompraGuardada($idExist, $pg); // reconstruye detalle_xml (PDF/descarga XML)
                     $pg->commit();
                 } catch (Throwable $ex) {
@@ -3674,6 +3700,7 @@ class MigracionMysqlService
                 }
 
                 $migrarPagos($idCompra, (string) $ec['codigo_documento']); // formas de pago SRI
+                $migrarAdic($idCompra, (string) $ec['codigo_documento']); // info adicional
                 $this->generarXmlCompraGuardada($idCompra, $pg); // reconstruye detalle_xml (PDF/descarga XML)
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCompra, ':cn' => "$est-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();

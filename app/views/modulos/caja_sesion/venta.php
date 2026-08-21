@@ -921,9 +921,6 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
                 `<tr><td>${lbl}</td><td style="text-align:right;">$${fmt(val)}</td></tr>`).join('');
 
-            const pagoLineas = pagos.map(p =>
-                `<tr><td>${escapeHtml(p.nombre_forma_pago || p.forma_pago || 'Efectivo')}</td><td style="text-align:right;">$${fmt(p.total)}</td></tr>`).join('');
-
             const tituloDoc = tipoDocumento === 'FACTURA' ? 'FACTURA DE VENTA' : 'RECIBO DE VENTA';
 
             const html = `<!DOCTYPE html><html lang="es"><head>
@@ -932,7 +929,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 <style>
                     @page { size: 80mm auto; margin: 3mm; }
                     * { box-sizing: border-box; }
-                    body { font-family: 'Courier New', Courier, monospace; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
+                    body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
                     .center { text-align: center; }
                     .bold { font-weight: bold; }
                     .sep { border: none; border-top: 1px dashed #000; margin: 3px 0; }
@@ -973,7 +970,6 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Propina</td><td style="text-align:right;">$${fmt(cab.propina)}</td></tr>` : ''}
                     <tr><td>TOTAL</td><td style="text-align:right;">$${fmt(total)}</td></tr>
                 </table>
-                ${pagos.length ? `<hr class="sep"><div class="bold" style="font-size:9px;">FORMA DE PAGO</div><table class="totales">${pagoLineas}</table>` : ''}
                 ${cab.observaciones ? `<hr class="sep"><div style="font-size:8px;">${escapeHtml(cab.observaciones)}</div>` : ''}
                 <hr class="sep">
                 <div class="center" style="font-size:8px;">¡Gracias por su compra!</div>
@@ -1039,7 +1035,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <style>
                 @page { size: 80mm auto; margin: 3mm; }
                 * { box-sizing: border-box; }
-                body { font-family: 'Courier New', Courier, monospace; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
+                body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
                 .center { text-align: center; }
                 .bold { font-weight: bold; }
                 .sep { border: none; border-top: 1px dashed #000; margin: 3px 0; }
