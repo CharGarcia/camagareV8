@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo
-version: 1.1
+version: 1.2
 orden: 1
 estado: activo
 ---
@@ -38,11 +38,11 @@ ficha de la empresa, pestaña Establecimientos, el superadministrador puede:
   Sucursal, estado).
 - **Editar** cualquiera, incluido el matriz (código, tipo y estado).
 - **Solo un establecimiento puede estar Activo por empresa a la vez.** Al
-  marcar uno como Activo (desde aquí o desde el módulo Empresa,
-  autoservicio), el sistema pasa automáticamente a **Inactivo** cualquier
-  otro establecimiento de esa empresa que lo estuviera. Ese es, en todo
-  momento, el que aparece en el módulo **Empresa → pestaña Establecimientos**
-  para que el propio cliente lo edite.
+  marcar uno como Activo, el sistema pasa automáticamente a **Inactivo**
+  cualquier otro establecimiento de esa empresa que lo estuviera. Ese cambio
+  es exclusivo de este módulo: en **Empresa → pestaña Establecimientos**
+  (autoservicio) el cliente puede ver los datos de cada establecimiento, pero
+  el campo Estado ahí es de solo lectura.
 - **Eliminar** uno, siempre que:
   - **no sea el matriz** (código `001` o tipo `Matriz`) — el matriz nunca se
     elimina, solo se puede marcar inactivo;
@@ -81,10 +81,15 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.2** — Aclarado: activar/desactivar un establecimiento es exclusivo de
+  este módulo. El módulo Empresa (autoservicio) solo lo muestra de forma
+  informativa (campo Estado de solo lectura), no lo puede cambiar.
+
 - **1.1** — Nueva regla: **solo un establecimiento puede estar Activo por
-  empresa a la vez**. Activar uno desactiva automáticamente los demás, y ese
-  activo es siempre el que se muestra en el módulo Empresa (autoservicio),
-  pestaña Establecimientos.
+  empresa a la vez**. Activar uno desactiva automáticamente los demás — este
+  cambio es exclusivo de este módulo. El que está activo es siempre el que
+  se muestra en el módulo Empresa (autoservicio), pestaña Establecimientos,
+  donde el cliente puede consultarlo pero no cambiarlo.
 
 - **1.0** — Primera versión del artículo: documenta la gestión de
   establecimientos, incluida la opción de **eliminar** un establecimiento

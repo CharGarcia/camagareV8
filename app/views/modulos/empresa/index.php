@@ -966,7 +966,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 </select>
                             </div>
                             <div class="small text-muted mt-1" style="font-size: 0.72rem;">
-                                Esta empresa tiene <?= count($establecimientos) ?> establecimientos registrados, pero solo <strong>uno puede estar Activo</strong> a la vez. Elija cuál editar; para que otro pase a ser el activo, ábralo aquí y guarde con Estado = Activa — el que estaba activo se desactiva automáticamente.
+                                Esta empresa tiene <?= count($establecimientos) ?> establecimientos registrados, pero solo <strong>uno puede estar Activo</strong> a la vez. Este selector es solo informativo, para ver los datos de cada uno — cuál está Activo se administra desde <strong>Configuración → Empresas del sistema</strong>.
                             </div>
                         </div>
                     <?php endif; ?>
@@ -994,11 +994,13 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     </select>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Estado</label>
-                                    <select name="estado" class="form-select form-select-sm">
-                                        <option value="activo" <?= ($est['estado'] == 'activo') ? 'selected' : '' ?>>Activa</option>
-                                        <option value="inactivo" <?= ($est['estado'] == 'inactivo') ? 'selected' : '' ?>>Inactiva</option>
-                                    </select>
+                                    <label class="form-label small fw-bold d-block">Estado</label>
+                                    <?php $estActivo = strtolower((string) ($est['estado'] ?? '')) === 'activo'; ?>
+                                    <span class="badge <?= $estActivo ? 'bg-success' : 'bg-secondary' ?>" style="font-size: 0.75rem;">
+                                        <?= $estActivo ? 'Activa' : 'Inactiva' ?>
+                                    </span>
+                                    <span class="small text-muted ms-1" style="font-size: 0.68rem;">(se administra desde Empresas del sistema)</span>
+                                    <input type="hidden" name="estado" value="<?= $estActivo ? 'activo' : 'inactivo' ?>">
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">Dirección Completa</label>
