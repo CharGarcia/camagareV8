@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo
-version: 1.16
+version: 1.17
 orden: 5
 estado: activo
 ---
@@ -203,6 +203,15 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.17** — Corregido un bug de fondo que afectaba a **todo el sistema**, no
+  solo a este módulo: `App\models\Empresa::getEstablecimientos()` (usado por
+  ~100 controladores — Factura de Venta, Ingresos, Egresos, Pedidos, etc. —
+  para saber con qué establecimiento opera la empresa) ordenaba por código en
+  vez de priorizar el Activo. Si una empresa tenía un establecimiento viejo
+  con código más bajo pero inactivo, esos módulos seguían operando sobre él
+  en vez del activo real — por ejemplo, dejando vacío el selector de Serie en
+  Factura de Venta. Ver también [Facturas de Venta](factura-venta.md).
 
 - **1.16** — Se retira el selector de establecimientos agregado en 1.14/1.15
   (no hacía falta: este módulo solo opera sobre el establecimiento Activo).

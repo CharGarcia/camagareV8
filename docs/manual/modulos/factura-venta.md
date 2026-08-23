@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei
-version: 1.3
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision
+version: 1.4
 orden: 20
 estado: activo
 ---
@@ -89,6 +89,12 @@ y asiento contable) según la configuración de la empresa.
 - **Firma caducada**: renueve el certificado y vuelva a cargarlo en la empresa.
 - **Secuencial repetido**: revise el secuencial configurado para el
   establecimiento y punto de emisión.
+- **El selector de Serie aparece vacío** (no ofrece ningún punto de emisión):
+  la empresa tiene más de un establecimiento y el que está realmente
+  **Activo** no era el que se usaba para armar el combo (corregido; si
+  persiste, confirme en el módulo Empresa → Establecimientos cuál es el
+  Activo y que tenga un punto de emisión activo con "Facturas de venta"
+  configurada en Secuenciales).
 - **El cliente no recibe el correo**: verifique la dirección registrada en su ficha.
 
 ## Normativa SRI 2026: RUC del proveedor y placa de transporte
@@ -107,6 +113,11 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **1.4** — Corregido: si la empresa tenía más de un establecimiento y el
+  activo no era el que ordenaba primero por código, el selector de Serie
+  quedaba vacío (tomaba los puntos de emisión del establecimiento
+  equivocado, generalmente inactivo). Ahora siempre se arma con el
+  establecimiento realmente Activo.
 - **1.3** — Nuevo botón **Excel** en la barra de acciones, junto al de XML:
   descarga el detalle de la factura (líneas, totales y forma de pago) en una
   hoja de cálculo.

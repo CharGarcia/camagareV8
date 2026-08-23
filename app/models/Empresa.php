@@ -425,10 +425,26 @@ class Empresa extends BaseModel
         return in_array($s, ['1', 'true', 'si', 'sí', 'on', 't', 'yes'], true);
     }
 
+    /**
+     * Decenas de controladores (Factura de Venta, Ingresos, Egresos, Pedidos,
+     * etc.) usan $establecimientos[0] como "el establecimiento con el que
+     * opera esta empresa" — p. ej. para armar el combo de Serie/punto de
+     * emisión. Prioriza el que está `estado = 'activo'` (solo puede haber uno
+     * por empresa, ver EmpresaRepository::updateEstablecimiento()): un
+     * establecimiento inactivo que ordene antes por código (p. ej. un "001"
+     * viejo/huérfano) no debe ganarle al que la empresa realmente usa — eso
+     * dejaba el combo de Serie vacío (el establecimiento activo real, con sus
+     * puntos y secuenciales, quedaba ignorado). Si ninguno está activo, cae a
+     * codigo ASC como antes.
+     */
     public function getEstablecimientos(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;
-        return $this->query("SELECT * FROM empresa_establecimiento WHERE id_empresa = {$id} AND eliminado = false ORDER BY codigo ASC");
+        return $this->query(
+            "SELECT * FROM empresa_establecimiento
+              WHERE id_empresa = {$id} AND eliminado = false
+              ORDER BY CASE WHEN LOWER(estado) = 'activo' THEN 0 ELSE 1 END, codigo ASC"
+        );
     }
 
     /** Un establecimiento por su id (incluye id_empresa, para validar acceso antes de actuar sobre él). */
