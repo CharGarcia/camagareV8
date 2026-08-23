@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo
-version: 1.15
+version: 1.16
 orden: 5
 estado: activo
 ---
@@ -44,16 +44,13 @@ enlace para **descargar el logo actualmente guardado**.
 Si los comprobantes salen con una numeración que no esperaba, es aquí donde se
 corrige.
 
-Esta pestaña muestra, por defecto, el establecimiento marcado **Activo**
-(solo puede haber uno activo por empresa a la vez). Si por algún motivo la
-empresa tiene **más de un establecimiento registrado** (no debería ser lo
-normal — puede pasar por un error de migración u otra causa), aparece arriba
-un selector **"Establecimiento"** con todos los que tiene, indicando cuál
-está Activo y cuál Inactivo. Es **solo informativo**: permite ver y editar los
-datos (nombre, dirección, tipo, logo) de cualquiera de ellos, pero el campo
-**Estado** se muestra de solo lectura — cambiar cuál está Activo sigue siendo
-exclusivo del superadministrador, desde **Configuración → Empresas del
-sistema**.
+Esta pestaña siempre muestra el establecimiento marcado **Activo** (solo
+puede haber uno activo por empresa a la vez; si por algún error de datos
+hubiera más de uno registrado, se sigue mostrando el activo, y los demás
+quedan fuera del alcance de este módulo). Desde aquí el cliente edita
+**nombre**, **dirección** y **logo**; el **código**, el **tipo** (Matriz/
+Sucursal) y el **estado** (Activo/Inactivo) son de solo lectura — se
+administran exclusivamente desde **Configuración → Empresas del sistema**.
 
 ## Ambiente: pruebas o producción
 
@@ -206,6 +203,12 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.16** — Se retira el selector de establecimientos agregado en 1.14/1.15
+  (no hacía falta: este módulo solo opera sobre el establecimiento Activo).
+  Además de **Estado**, ahora **Código** y **Tipo** también son de solo
+  lectura aquí — los tres se administran exclusivamente desde Empresas del
+  sistema; el cliente solo edita nombre, dirección y logo.
 
 - **1.15** — Corregido: el selector de establecimientos agregado en 1.14 no
   debía permitir cambiar cuál está Activo desde este módulo. El campo Estado

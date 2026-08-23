@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo
-version: 1.2
+version: 1.3
 orden: 1
 estado: activo
 ---
@@ -41,8 +41,9 @@ ficha de la empresa, pestaña Establecimientos, el superadministrador puede:
   marcar uno como Activo, el sistema pasa automáticamente a **Inactivo**
   cualquier otro establecimiento de esa empresa que lo estuviera. Ese cambio
   es exclusivo de este módulo: en **Empresa → pestaña Establecimientos**
-  (autoservicio) el cliente puede ver los datos de cada establecimiento, pero
-  el campo Estado ahí es de solo lectura.
+  (autoservicio) el cliente solo ve y edita el establecimiento que está
+  Activo, y ahí el código, el tipo y el estado son de solo lectura — edita
+  nombre, dirección y logo.
 - **Eliminar** uno, siempre que:
   - **no sea el matriz** (código `001` o tipo `Matriz`) — el matriz nunca se
     elimina, solo se puede marcar inactivo;
@@ -80,6 +81,11 @@ las empresas que ese usuario tiene asignadas.
   numeración eliminándolo. Márquelo Inactivo en su lugar.
 
 ## Historial de cambios
+
+- **1.3** — Aclarado: el módulo Empresa (autoservicio) no ofrece un selector
+  entre varios establecimientos — solo ve y edita el que está Activo, con
+  código, tipo y estado de solo lectura ahí. Cualquier otro dato/gestión de
+  establecimientos queda exclusiva de este módulo.
 
 - **1.2** — Aclarado: activar/desactivar un establecimiento es exclusivo de
   este módulo. El módulo Empresa (autoservicio) solo lo muestra de forma

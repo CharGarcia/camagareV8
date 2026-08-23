@@ -912,18 +912,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 <!-- Pestaña: Establecimiento -->
                 <div class="tab-pane fade" id="establecimientos" role="tabpanel">
                     <?php
-                    // Por defecto se edita el establecimiento Activo (primero de la lista,
-                    // ver EmpresaRepository::getEstablecimientos()). Si la empresa tiene más
-                    // de uno (dato anómalo: solo debería haber uno, pero puede pasar por una
-                    // migración vieja u otro error), el selector "est-selector" de abajo
-                    // permite elegir cuál ver/editar sin perder acceso a los demás.
+                    // Siempre el establecimiento Activo (primero de la lista, ver
+                    // EmpresaRepository::getEstablecimientos()). Si la empresa tiene más de
+                    // uno (dato anómalo), este módulo solo muestra/edita el activo — cuál lo
+                    // está se administra desde Configuración → Empresas del sistema.
                     $est = !empty($establecimientos) ? $establecimientos[0] : null;
-                    $verEst = (int) ($_GET['ver_establecimiento'] ?? 0);
-                    if ($verEst > 0) {
-                        foreach ($establecimientos as $e) {
-                            if ((int) $e['id'] === $verEst) { $est = $e; break; }
-                        }
-                    }
                     ?>
 
                     <!-- Matriz del grupo RUC: distinto del "Tipo" (Matriz/Sucursal) del establecimiento SRI de
@@ -952,56 +945,25 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         <?php endif; ?>
                     </div>
 
-                    <?php if (count($establecimientos ?? []) > 1): ?>
-                        <div class="alert alert-warning py-2 px-3 mb-3">
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <label class="form-label small fw-bold mb-0" for="est-selector"><i class="bi bi-signpost-split me-1"></i>Establecimiento:</label>
-                                <select id="est-selector" class="form-select form-select-sm" style="max-width: 360px;" onchange="window.location.href = '<?= $base ?>/modulos/empresa?ver_establecimiento=' + this.value + '#establecimientos';">
-                                    <?php foreach ($establecimientos as $e): ?>
-                                        <option value="<?= (int) $e['id'] ?>" <?= ((int) $e['id'] === (int) ($est['id'] ?? 0)) ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars((string) ($e['codigo'] ?? '')) ?> - <?= htmlspecialchars((string) ($e['nombre'] ?? '')) ?>
-                                            (<?= strtolower((string) ($e['estado'] ?? '')) === 'activo' ? 'Activo' : 'Inactivo' ?>)
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="small text-muted mt-1" style="font-size: 0.72rem;">
-                                Esta empresa tiene <?= count($establecimientos) ?> establecimientos registrados, pero solo <strong>uno puede estar Activo</strong> a la vez. Este selector es solo informativo, para ver los datos de cada uno — cuál está Activo se administra desde <strong>Configuración → Empresas del sistema</strong>.
-                            </div>
-                        </div>
-                    <?php endif; ?>
-
                     <?php if ($est): ?>
                         <form id="form-establecimiento-directo" method="POST" enctype="multipart/form-data">
                             <input type="hidden" name="section" value="establecimiento">
-                            <input type="hidden" name="id" id="est-directo-id" value="<?= htmlspecialchars((string)($est['id'] ?? '')) ?>">
+                            <input type="hidden" name="id" value="<?= htmlspecialchars((string)($est['id'] ?? '')) ?>">
                             <div class="form-msg mb-3"></div>
 
                             <div class="row g-3">
                                 <div class="col-md-3">
                                     <label class="form-label small fw-bold">Código</label>
-                                    <input type="text" name="codigo" id="est-directo-codigo" class="form-control form-control-sm fw-bold" value="<?= htmlspecialchars((string)($est['codigo'] ?? '')) ?>" maxlength="3" pattern="[0-9]{1,3}" title="3 dígitos (000 a 999)" required>
+                                    <input type="text" name="codigo" class="form-control form-control-sm fw-bold bg-light" value="<?= htmlspecialchars((string)($est['codigo'] ?? '')) ?>" readonly title="El código del establecimiento se administra desde Configuración → Empresas del sistema.">
                                 </div>
                                 <div class="col-md-9">
                                     <label class="form-label small fw-bold">Nombre Establecimiento</label>
-                                    <input type="text" name="nombre" id="est-directo-nombre" class="form-control form-control-sm" required value="<?= htmlspecialchars((string)($est['nombre'] ?? '')) ?>">
+                                    <input type="text" name="nombre" class="form-control form-control-sm" required value="<?= htmlspecialchars((string)($est['nombre'] ?? '')) ?>">
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Tipo</label>
-                                    <select name="tipo" class="form-select form-select-sm">
-                                        <option value="Matriz" <?= ($est['tipo'] == 'Matriz') ? 'selected' : '' ?>>Casa Matriz</option>
-                                        <option value="Sucursal" <?= ($est['tipo'] == 'Sucursal') ? 'selected' : '' ?>>Sucursal</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold d-block">Estado</label>
-                                    <?php $estActivo = strtolower((string) ($est['estado'] ?? '')) === 'activo'; ?>
-                                    <span class="badge <?= $estActivo ? 'bg-success' : 'bg-secondary' ?>" style="font-size: 0.75rem;">
-                                        <?= $estActivo ? 'Activa' : 'Inactiva' ?>
-                                    </span>
-                                    <span class="small text-muted ms-1" style="font-size: 0.68rem;">(se administra desde Empresas del sistema)</span>
-                                    <input type="hidden" name="estado" value="<?= $estActivo ? 'activo' : 'inactivo' ?>">
-                                </div>
+                                <!-- Tipo y Estado se administran desde Configuración → Empresas del
+                                     sistema, no desde aquí; se reenvían sin cambios para no alterarlos. -->
+                                <input type="hidden" name="tipo" value="<?= htmlspecialchars((string) ($est['tipo'] ?? 'Matriz')) ?>">
+                                <input type="hidden" name="estado" value="<?= strtolower((string) ($est['estado'] ?? '')) === 'activo' ? 'activo' : 'inactivo' ?>">
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">Dirección Completa</label>
                                     <textarea name="direccion" id="est-direccion-input" class="form-control form-control-sm" rows="2" required><?= htmlspecialchars((string)($est['direccion'] ?? '')) ?></textarea>
@@ -2706,17 +2668,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         });
     }
 
-    // Restaura la pestaña Establecimientos si se volvió aquí tras cambiar cuál
-    // establecimiento editar (selector "est-selector", que recarga con
-    // #establecimientos en la URL).
-    document.addEventListener('DOMContentLoaded', function() {
-        if (window.location.hash === '#establecimientos') {
-            var trigger = document.getElementById('establecimientos-tab');
-            if (trigger && window.bootstrap) {
-                new bootstrap.Tab(trigger).show();
-            }
-        }
-    });
 </script>
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
