@@ -431,6 +431,14 @@ class Empresa extends BaseModel
         return $this->query("SELECT * FROM empresa_establecimiento WHERE id_empresa = {$id} AND eliminado = false ORDER BY codigo ASC");
     }
 
+    /** Un establecimiento por su id (incluye id_empresa, para validar acceso antes de actuar sobre él). */
+    public function getEstablecimientoById(int $id): ?array
+    {
+        $id = (int) $id;
+        $res = $this->query("SELECT * FROM empresa_establecimiento WHERE id = {$id} AND eliminado = false");
+        return $res[0] ?? null;
+    }
+
     public function getBodegas(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;
@@ -479,6 +487,9 @@ class Empresa extends BaseModel
     {
         $id = (int) $id;
 
+        $cur = $this->query("SELECT id_empresa FROM empresa_establecimiento WHERE id = {$id}");
+        $idEmp = (int) ($cur[0]['id_empresa'] ?? 0);
+
         // El establecimiento matriz también es editable (código, tipo y estado).
         // Se valida formato del código y que no se repita dentro de la misma empresa.
         if (isset($data['codigo'])) {
@@ -488,8 +499,6 @@ class Empresa extends BaseModel
             }
             $data['codigo'] = $cod;
 
-            $cur = $this->query("SELECT id_empresa FROM empresa_establecimiento WHERE id = {$id}");
-            $idEmp = (int) ($cur[0]['id_empresa'] ?? 0);
             if ($idEmp > 0 && $this->existeCodigoEstablecimiento($idEmp, $cod, $id)) {
                 throw new \InvalidArgumentException("Ya existe otro establecimiento con el código {$cod} en esta empresa.");
             }
@@ -504,7 +513,90 @@ class Empresa extends BaseModel
         }
         if (empty($sets)) return true;
         $sql = 'UPDATE empresa_establecimiento SET ' . implode(', ', $sets) . ', updated_at = NOW() WHERE id = ' . $id;
-        return $this->execute($sql);
+        $ok = $this->execute($sql);
+
+        // Un solo establecimiento activo por empresa: en la práctica cada empresa
+        // opera con uno solo a la vez (nunca dos sucursales activas al mismo
+        // tiempo), así que activar este desactiva automáticamente los demás. Es
+        // justamente el que se muestra en el módulo Empresa (autoservicio),
+        // pestaña Establecimientos — ver EmpresaRepository::getEstablecimientos().
+        if ($ok && $idEmp > 0 && isset($data['estado']) && strtolower(trim((string) $data['estado'])) === 'activo') {
+            $this->execute(
+                "UPDATE empresa_establecimiento SET estado = 'inactivo', updated_at = NOW()
+                 WHERE id_empresa = {$idEmp} AND id != {$id} AND eliminado = false"
+            );
+        }
+
+        return $ok;
+    }
+
+    /**
+     * Elimina (lógicamente) un establecimiento de la empresa. Bloquea si:
+     * - es el matriz (código 001 o tipo Matriz) — nunca se elimina;
+     * - es el único establecimiento activo de la empresa — siempre debe quedar
+     *   al menos uno disponible;
+     * - alguno de sus puntos de emisión ya tiene documentos emitidos.
+     * Si pasa las validaciones, también da de baja sus puntos de emisión y los
+     * secuenciales configurados en ellos, para no dejar huérfanos (mismo
+     * criterio que EmpresaRepository::deletePuntoEmision(), ver docs/manual).
+     */
+    public function deleteEstablecimiento(int $id, int $idEmpresa): bool
+    {
+        $id = (int) $id;
+        $idEmp = (int) $idEmpresa;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $actual = $this->query("SELECT codigo, tipo FROM empresa_establecimiento WHERE id = {$id} AND id_empresa = {$idEmp} AND eliminado = false");
+        if (empty($actual)) {
+            throw new \InvalidArgumentException('El establecimiento no existe o no pertenece a esta empresa.');
+        }
+        $est = $actual[0];
+        if (trim((string) $est['codigo']) === '001' || strtolower((string) $est['tipo']) === 'matriz') {
+            throw new \InvalidArgumentException('El establecimiento matriz no puede ser eliminado.');
+        }
+
+        $totalActivos = $this->query("SELECT COUNT(*) AS n FROM empresa_establecimiento WHERE id_empresa = {$idEmp} AND eliminado = false");
+        if ((int) ($totalActivos[0]['n'] ?? 0) <= 1) {
+            throw new \InvalidArgumentException('No se puede eliminar: la empresa debe tener siempre al menos un establecimiento disponible.');
+        }
+
+        $puntos = $this->query("SELECT id, codigo_punto FROM empresa_punto_emision WHERE id_establecimiento = {$id} AND eliminado = false");
+        $secRepo = new \App\repositories\modulos\EmpresaRepository();
+        $usos = [];
+        foreach ($puntos as $p) {
+            foreach ($secRepo->puntoEmisionEnUso((int) $p['id'], $idEmp) as $u) {
+                $usos[] = 'punto ' . $p['codigo_punto'] . ': ' . $u;
+            }
+        }
+        if (!empty($usos)) {
+            throw new \InvalidArgumentException(
+                'No se puede eliminar este establecimiento: ya tiene documentos emitidos (' . implode(', ', $usos) . ').'
+            );
+        }
+
+        $this->db->beginTransaction();
+        try {
+            foreach ($puntos as $p) {
+                $idPunto = (int) $p['id'];
+                $this->execute(
+                    "UPDATE empresa_secuencial SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                     WHERE id_punto_emision = {$idPunto} AND eliminado = false"
+                );
+                $this->execute(
+                    "UPDATE empresa_punto_emision SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                     WHERE id = {$idPunto}"
+                );
+            }
+            $ok = $this->execute(
+                "UPDATE empresa_establecimiento SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                 WHERE id = {$id} AND id_empresa = {$idEmp}"
+            );
+            $this->db->commit();
+            return $ok;
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
     }
 
     public function eliminar(int $id, int $idUsuario): bool

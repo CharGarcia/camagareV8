@@ -497,7 +497,13 @@ class EmpresaInicializadorService
         return (int) $stmt->fetchColumn();
     }
 
-    /** Primer código de punto de emisión (a partir de "002") no usado todavía en el establecimiento. */
+    /**
+     * Primer código de punto de emisión libre en el establecimiento. Empieza en
+     * "001": no asume que ese código ya está tomado por el punto principal —
+     * lo verifica contra $usados igual que cualquier otro, para no saltarse un
+     * código realmente disponible (p. ej. si este método se llama antes de que
+     * exista el punto principal, o en un establecimiento que nunca lo tuvo).
+     */
     private function siguienteCodigoPuntoLibre(int $idEmpresa, int $idEstablecimiento): string
     {
         $res = $this->db->prepare(
@@ -507,7 +513,7 @@ class EmpresaInicializadorService
         $res->execute([':id_empresa' => $idEmpresa, ':id_est' => $idEstablecimiento]);
         $usados = array_map('strval', $res->fetchAll(\PDO::FETCH_COLUMN));
 
-        for ($n = 2; $n <= 999; $n++) {
+        for ($n = 1; $n <= 999; $n++) {
             $codigo = str_pad((string) $n, 3, '0', STR_PAD_LEFT);
             if (!in_array($codigo, $usados, true)) {
                 return $codigo;

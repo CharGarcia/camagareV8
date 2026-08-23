@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo
-version: 1.12
+version: 1.14
 orden: 5
 estado: activo
 ---
@@ -43,6 +43,19 @@ enlace para **descargar el logo actualmente guardado**.
 
 Si los comprobantes salen con una numeración que no esperaba, es aquí donde se
 corrige.
+
+Esta pestaña muestra, por defecto, el establecimiento marcado **Activo**
+(solo puede haber uno activo por empresa a la vez). Si por algún motivo la
+empresa tiene **más de un establecimiento registrado** (no debería ser lo
+normal — puede pasar por un error de migración u otra causa), aparece arriba
+un selector **"Establecimiento"** con todos los que tiene, indicando cuál
+está Activo y cuál Inactivo. Desde ahí se puede:
+
+- **Ver/editar cualquiera** de ellos, sin perder acceso a los demás.
+- **Cambiar cuál es el activo**: se abre el que se quiere activar (con el
+  selector) y se guarda con **Estado = Activa** — el que estaba activo antes
+  se pasa a Inactivo automáticamente, sin necesidad de pedírselo al
+  superadministrador.
 
 ## Ambiente: pruebas o producción
 
@@ -195,6 +208,16 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.14** — Cuando una empresa tiene más de un establecimiento registrado
+  (dato anómalo, p. ej. de una migración vieja), la pestaña Establecimientos
+  muestra un selector para ver/editar cualquiera de ellos y cambiar cuál está
+  Activo, sin depender del superadministrador.
+
+- **1.13** — La pestaña Establecimientos ahora siempre muestra el
+  establecimiento marcado **Activo** de la empresa (antes mostraba el más
+  antiguo, sin importar su estado). Solo puede haber un establecimiento
+  activo por empresa a la vez.
 
 - **1.12** — Corregido: al eliminar un punto de emisión, ahora también se dan
   de baja los tipos de secuencial que tenía configurados (antes quedaban

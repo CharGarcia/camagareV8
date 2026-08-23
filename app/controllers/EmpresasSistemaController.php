@@ -929,7 +929,10 @@ class EmpresasSistemaController extends Controller
             $html .= '<td>' . htmlspecialchars($e['nombre'] ?? '') . '</td>';
             $html .= '<td><span class="badge bg-info bg-opacity-10 text-info border border-info">' . $tipoTxt . '</span></td>';
             $html .= '<td>' . $estadoTxt . '</td>';
-            $html .= '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-edit-est" data-est=\'' . $json . '\' title="Editar"><i class="bi bi-pencil"></i></button></td>';
+            $html .= '<td class="text-end">';
+            $html .= '<button type="button" class="btn btn-sm btn-outline-primary btn-edit-est" data-est=\'' . $json . '\' title="Editar"><i class="bi bi-pencil"></i></button> ';
+            $html .= '<button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-est" data-id="' . (int) $e['id'] . '" title="Eliminar"><i class="bi bi-trash"></i></button>';
+            $html .= '</td>';
             $html .= '</tr>';
         }
 
@@ -953,6 +956,45 @@ class EmpresasSistemaController extends Controller
         try {
             $res = $this->model->actualizarEstablecimiento($id, $_POST);
             $this->json(['ok' => $res, 'msg' => $res ? 'Establecimiento actualizado.' : 'No se realizaron cambios.']);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Eliminar un establecimiento de una empresa. Bloqueado si es el matriz, si es
+     * el único establecimiento activo de la empresa, o si alguno de sus puntos de
+     * emisión ya tiene documentos emitidos (ver Empresa::deleteEstablecimiento()).
+     * Alternativa cuando no se puede eliminar: marcarlo "inactivo" con
+     * updateEstablecimiento (campo estado) en vez de borrarlo.
+     */
+    public function deleteEstablecimiento(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['ok' => false, 'error' => 'Método no permitido.']);
+            return;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $this->json(['ok' => false, 'error' => 'ID de establecimiento inválido.']);
+            return;
+        }
+
+        $est = $this->model->getEstablecimientoById($id);
+        if ($est === null) {
+            $this->json(['ok' => false, 'error' => 'Establecimiento no encontrado.']);
+            return;
+        }
+
+        $this->verificarAccesoEmpresa((int) $est['id_empresa']);
+
+        try {
+            $res = $this->model->deleteEstablecimiento($id, (int) $est['id_empresa']);
+            $this->json(['ok' => $res, 'msg' => $res ? 'Establecimiento eliminado.' : 'No se pudo eliminar.']);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }

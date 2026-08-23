@@ -321,8 +321,30 @@ class MigrarMysqlController extends Controller
             }
             $idUsuario  = (int) ($_SESSION['id_usuario'] ?? 0);
             $crearAdmin = in_array((string) ($_POST['crear_admin'] ?? '0'), ['1', 'true', 'on'], true);
+
+            // Por cada establecimiento de un RUC base con más de uno, el usuario
+            // decide en la vista si migra separado (cliente propio), se fusiona en
+            // otro, o no se migra — viaja como JSON:
+            // {"<ruc completo>": {"modo": "separado"|"no_migrar"|"fusion", "fusiona_en": "<ruc completo>"}}
+            // Establecimientos de una base con uno solo no mandan nada acá:
+            // migrarEmpresas() los trata como 'separado' por defecto.
+            $seleccionPorRuc = [];
+            $rawSeleccion = (string) ($_POST['establecimientos'] ?? '');
+            if ($rawSeleccion !== '') {
+                $decoded = json_decode($rawSeleccion, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $ruc => $sel) {
+                        if (!is_array($sel)) { continue; }
+                        $seleccionPorRuc[(string) $ruc] = [
+                            'modo'       => (string) ($sel['modo'] ?? 'separado'),
+                            'fusiona_en' => isset($sel['fusiona_en']) ? trim((string) $sel['fusiona_en']) : null,
+                        ];
+                    }
+                }
+            }
+
             if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
-            $data = $this->service->migrarEmpresas($bases, $idUsuario, $crearAdmin);
+            $data = $this->service->migrarEmpresas($bases, $idUsuario, $crearAdmin, $seleccionPorRuc);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

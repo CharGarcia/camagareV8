@@ -969,12 +969,71 @@ $base = BASE_URL;
                 '<td><span class="fw-semibold">' + esc(e.nombre) + '</span>' +
                 (e.razon && e.razon !== e.nombre ? '<br><span class="text-muted small">' + esc(e.razon) + '</span>' : '') + '</td>' +
                 '<td class="small">' + esc(e.base) + '</td>' +
-                '<td class="text-center small">' + esc(e.ests) + (e.n_est > 1 ? ' <span class="badge bg-secondary">' + e.n_est + '</span>' : '') + '</td>' +
+                '<td class="text-center small">' + esc(e.ests) + (e.n_est > 1 ? ' <span class="badge bg-warning text-dark">' + e.n_est + '</span>' : '') + '</td>' +
                 '<td class="small">' + correo + '</td>';
             tb.appendChild(tr);
+
+            // Más de un establecimiento para este RUC base en el sistema viejo: cada
+            // uno es, para esta plataforma, un cliente distinto — por defecto cada
+            // uno migra como su propia empresa. Acá se puede cambiar ese destino:
+            // migrarlo separado, fusionarlo dentro de otro establecimiento de la
+            // misma base (sus datos no generan empresa propia), o no migrarlo.
+            if (e.n_est > 1 && Array.isArray(e.establecimientos)) {
+                const trPick = document.createElement('tr');
+                trPick.className = 'table-warning';
+                let filas = '';
+                e.establecimientos.forEach((est, j) => {
+                    const nombreEst = est.nombre_comercial || est.nombre || ('Establecimiento ' + est.codigo);
+                    let opciones = '<option value="separado" selected>Cliente separado (empresa propia)</option>';
+                    e.establecimientos.forEach((otro, k) => {
+                        if (k === j) return;
+                        const nombreOtro = otro.nombre_comercial || otro.nombre || ('Establecimiento ' + otro.codigo);
+                        opciones += '<option value="fusion:' + esc(otro.ruc) + '">Fusionar con ' + esc(otro.codigo) + ' — ' + esc(nombreOtro) + '</option>';
+                    });
+                    opciones += '<option value="no_migrar">No migrar</option>';
+                    filas +=
+                        '<div class="d-flex align-items-center gap-2 mb-1 flex-wrap">' +
+                        '<span style="min-width:220px;"><code>' + esc(est.codigo) + '</code> ' + esc(nombreEst) +
+                        (est.direccion ? ' <span class="text-muted small">— ' + esc(est.direccion) + '</span>' : '') + '</span>' +
+                        '<select class="form-select form-select-sm est-modo" data-i="' + i + '" data-j="' + j + '" style="max-width:280px;">' + opciones + '</select>' +
+                        '</div>';
+                });
+                trPick.innerHTML =
+                    '<td></td><td colspan="4" class="py-2">' +
+                    '<div class="small text-warning-emphasis mb-2"><i class="bi bi-exclamation-triangle me-1"></i>Este RUC tiene ' + e.n_est + ' establecimientos en el sistema anterior. Para nosotros cada establecimiento es un cliente distinto: por defecto cada uno migra como su propia empresa. Cambie a "Fusionar con…" solo si en realidad son el mismo negocio, o a "No migrar" si no corresponde migrarlo.</div>' +
+                    filas +
+                    '</td>';
+                tb.appendChild(trPick);
+            }
         });
         $('empContador').textContent = visibles + ' de ' + empData.length + ' empresas por migrar';
         empSync();
+    }
+
+    /**
+     * Selección de modo (separado / fusión / no migrar) de cada establecimiento
+     * de la fila de empresa i, leída de los <select class="est-modo">. Devuelve
+     * {"<ruc>": {"modo": "...", "fusiona_en": "<ruc>"|null}} — vacío si esa
+     * empresa tiene un solo establecimiento (nada que elegir).
+     */
+    function empSeleccionEstablecimientos(i) {
+        const e = empData[i];
+        const out = {};
+        if (!e || e.n_est <= 1 || !Array.isArray(e.establecimientos)) return out;
+        document.querySelectorAll('.est-modo[data-i="' + i + '"]').forEach(sel => {
+            const j = +sel.dataset.j;
+            const est = e.establecimientos[j];
+            if (!est) return;
+            const val = sel.value;
+            if (val === 'separado') {
+                out[est.ruc] = { modo: 'separado' };
+            } else if (val === 'no_migrar') {
+                out[est.ruc] = { modo: 'no_migrar' };
+            } else if (val.indexOf('fusion:') === 0) {
+                out[est.ruc] = { modo: 'fusion', fusiona_en: val.substring(7) };
+            }
+        });
+        return out;
     }
 
     function empSync() {
@@ -1012,12 +1071,21 @@ $base = BASE_URL;
     $('empTbody').addEventListener('change', (e) => { if (e.target.classList.contains('emp-chk')) empSync(); });
 
     $('btnMigrarEmpresas').addEventListener('click', async () => {
-        const bases = Array.from(document.querySelectorAll('.emp-chk:checked')).map(c => empData[+c.dataset.i].base);
-        if (!bases.length) return;
+        const idxSeleccionados = Array.from(document.querySelectorAll('.emp-chk:checked')).map(c => +c.dataset.i);
+        if (!idxSeleccionados.length) return;
+        const bases = idxSeleccionados.map(i => empData[i].base);
+
+        // Modo elegido (separado/fusión/no migrar) para cada establecimiento de
+        // las empresas con más de uno encontrado en el sistema viejo (ver empRender()).
+        let establecimientos = {};
+        idxSeleccionados.forEach(i => {
+            establecimientos = Object.assign(establecimientos, empSeleccionEstablecimientos(i));
+        });
+
         const crearAdmin = $('empCrearAdmin').checked;
-        if (!confirm('¿Registrar ' + bases.length + ' empresa(s) en el sistema nuevo?' +
+        if (!confirm('¿Registrar en el sistema nuevo los negocios seleccionados?' +
             (crearAdmin ? '\n\nSe creará un usuario administrador (nivel 2) por empresa con el correo del contribuyente.' : '\n\nNo se creará ningún usuario administrador.') +
-            '\n\nNo se enviará ningún correo ahora; la invitación y los documentos legales se enviarán cuando edites y guardes cada empresa.')) return;
+            '\n\nCada establecimiento se migra como su propia empresa, salvo los que haya marcado "Fusionar con…" o "No migrar". No se enviará ningún correo ahora; la invitación y los documentos legales se enviarán cuando edites y guardes cada empresa.')) return;
         const btn = $('btnMigrarEmpresas');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando…';
         $('empResultado').innerHTML = '';
@@ -1025,15 +1093,24 @@ $base = BASE_URL;
             const body = new FormData();
             bases.forEach(b => body.append('bases[]', b));
             body.append('crear_admin', crearAdmin ? '1' : '0');
+            body.append('establecimientos', JSON.stringify(establecimientos));
             const res = await fetch(base + '/config/migrarMysql?action=migrar-empresas', { method: 'POST', body }).then(r => r.json());
             if (!res.ok) { $('empResultado').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
             const d = res.data;
             let html = '<div class="alert alert-success py-2 mb-2"><b>' + fmt(d.migradas) + '</b> migrada(s)' +
                 (d.omitidas ? ' · <b>' + fmt(d.omitidas) + '</b> omitida(s)' : '') + '.</div>';
             const errores = (d.detalle || []).filter(x => !x.ok);
+            // Migradas con éxito, pero que tenían más de un establecimiento en el
+            // sistema viejo y se descartaron los no elegidos (msg lo trae informativo).
+            const avisos = (d.detalle || []).filter(x => x.ok && x.msg && x.msg !== 'Migrada.');
             if (errores.length) {
-                html += '<div class="small"><b>Detalle:</b><ul class="mb-0">';
+                html += '<div class="small"><b>Errores:</b><ul class="mb-0">';
                 errores.forEach(x => { html += '<li>' + esc(x.base) + (x.nombre ? ' — ' + esc(x.nombre) : '') + ': ' + esc(x.msg) + '</li>'; });
+                html += '</ul></div>';
+            }
+            if (avisos.length) {
+                html += '<div class="small mt-2"><b>Avisos:</b><ul class="mb-0">';
+                avisos.forEach(x => { html += '<li>' + esc(x.base) + (x.nombre ? ' — ' + esc(x.nombre) : '') + ': ' + esc(x.msg) + '</li>'; });
                 html += '</ul></div>';
             }
             $('empResultado').innerHTML = html;

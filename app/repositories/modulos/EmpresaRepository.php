@@ -330,23 +330,23 @@ class EmpresaRepository extends BaseModel
      * El primero de la lista (índice 0) es el que usa EmpresaService::getData()
      * como "establecimiento principal" para toda la pestaña Establecimientos y
      * los valores por defecto de otras pestañas (Secuenciales, IVA, etc.).
-     * Ordenar por id (no por código) para que ese "principal" sea siempre el
-     * establecimiento con el que se creó la empresa — Empresa::crear() lo
-     * inserta antes que cualquier otro, así que siempre tiene el id más bajo
-     * de esa empresa — igual que ya hacen getPrimerEstablecimientoId() (este
-     * mismo archivo) y EmpresaInicializadorService::
-     * obtenerOCrearEstablecimientoPrincipal(). Ordenar por código en cambio
-     * es puramente alfabético: si por error de datos llega a existir un
-     * establecimiento adicional con un código menor (p. ej. un "001" que se
-     * agregó después por error), un ORDER BY codigo lo mostraría a él en vez
-     * del que la empresa realmente usa.
+     * Prioriza el que está `estado = 'activo'`: solo puede haber uno activo por
+     * empresa a la vez (updateEstablecimiento() de este mismo archivo y
+     * Empresa::actualizarEstablecimiento() desactivan automáticamente los demás
+     * al activar uno), así que ese es, por definición, el que la empresa
+     * realmente usa hoy. Si por algún motivo ninguno está activo, cae a id ASC
+     * — el establecimiento con el que se creó la empresa siempre tiene el id
+     * más bajo (ver getPrimerEstablecimientoId() y EmpresaInicializadorService::
+     * obtenerOCrearEstablecimientoPrincipal()). Ordenar por código en cambio es
+     * puramente alfabético: un establecimiento adicional con código menor (p.
+     * ej. un "001" agregado por error) no debería ganarle al real solo por eso.
      */
     public function getEstablecimientos(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;
         $sql = "SELECT * FROM empresa_establecimiento
                  WHERE id_empresa = {$id} AND eliminado = false
-                 ORDER BY id ASC";
+                 ORDER BY CASE WHEN LOWER(estado) = 'activo' THEN 0 ELSE 1 END, id ASC";
         return $this->query($sql);
     }
 
@@ -456,11 +456,22 @@ class EmpresaRepository extends BaseModel
 
         $logoSql = ($logo !== null) ? ", logo_ruta = '{$logo}'" : "";
 
-        $sql = "UPDATE empresa_establecimiento SET 
+        $sql = "UPDATE empresa_establecimiento SET
                 nombre = '{$nom}', codigo = '{$cod}', direccion = '{$dir}', tipo = '{$tipo}',
                 estado = '{$est}', leyenda_pdf_titulo = '{$leyendaTitulo}', leyenda_pdf_mensaje = '{$leyendaMensaje}' {$logoSql}, updated_at = NOW(), updated_by = {$user}
                 WHERE id = {$id} AND id_empresa = {$idEmpresa}";
-        return $this->execute($sql);
+        $ok = $this->execute($sql);
+
+        // Un solo establecimiento activo por empresa (ver Empresa::actualizarEstablecimiento()
+        // en app/models/Empresa.php, misma regla replicada aquí para el módulo autoservicio).
+        if ($ok && strtolower((string) ($data['estado'] ?? 'activo')) === 'activo') {
+            $this->execute(
+                "UPDATE empresa_establecimiento SET estado = 'inactivo', updated_at = NOW()
+                 WHERE id_empresa = {$idEmpresa} AND id != {$id} AND eliminado = false"
+            );
+        }
+
+        return $ok;
     }
 
     public function deleteEstablecimiento(int $idEst, int $idEmpresa): bool

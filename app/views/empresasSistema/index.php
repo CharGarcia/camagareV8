@@ -991,10 +991,32 @@ function estadoPagoBadge($estado) {
                             document.getElementById('edit-est-direccion-sistema').value = est.direccion || '';
                             document.getElementById('edit-est-tipo-sistema').value = est.tipo || 'Sucursal';
                             document.getElementById('edit-est-estado-sistema').value = est.estado || 'activo';
-                            
+
                             var mEl = document.getElementById('modalEditarEstSistema');
                             var modalEdit = bootstrap.Modal.getInstance(mEl) || new bootstrap.Modal(mEl);
                             modalEdit.show();
+                        });
+                    });
+                    tbody.querySelectorAll('.btn-eliminar-est').forEach(function(b) {
+                        b.addEventListener('click', function() {
+                            if (confirm('¿Eliminar este establecimiento? Solo se puede si no es el matriz, si queda al menos otro establecimiento disponible, y si no tiene documentos emitidos.')) {
+                                var id = this.dataset.id;
+                                var formData = new FormData();
+                                formData.append('action', 'deleteEstablecimiento');
+                                formData.append('id', id);
+                                fetch(base + '/config/empresas-sistema', {
+                                    method: 'POST',
+                                    body: formData,
+                                    credentials: 'same-origin',
+                                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                                })
+                                .then(function(r) { return r.json(); })
+                                .then(function(res) {
+                                    if (res.ok) cargarEstablecimientos();
+                                    else alert(res.error || res.msg || 'Error');
+                                })
+                                .catch(function() { alert('Error al eliminar'); });
+                            }
                         });
                     });
                 } else {

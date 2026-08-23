@@ -588,6 +588,7 @@ class ConfigController extends Controller
             'usuariosEmpresa' => 'usuariosEmpresaJson',
             'establecimientosEmpresa' => 'establecimientosEmpresaJson',
             'updateEstablecimiento' => 'updateEstablecimiento',
+            'deleteEstablecimiento' => 'deleteEstablecimiento',
             'documentosEmpresa' => 'documentosEmpresaJson',
             'usuariosDisponiblesEmpresa' => 'usuariosDisponiblesEmpresaJson',
             'uploadDocumento' => 'uploadDocumento',
