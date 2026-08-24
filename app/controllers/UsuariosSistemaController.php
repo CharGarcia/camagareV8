@@ -80,7 +80,6 @@ class UsuariosSistemaController extends Controller
             'msg' => $msg,
             'limiteUsuarios' => $limiteUsuarios,
             'empresasParaCrear' => $empresasParaCrear,
-            'idEmpresaActual' => $idEmpresaActual,
         ]);
     }
 

@@ -147,7 +147,7 @@ class ControlBancarioService
         $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
         $saldoInicialCuenta = $this->repository->getSaldoInicial($idEmpresa, $idFormaPago);
 
-        $resumen = $this->repository->getResumenPeriodo($idEmpresa, (int) $forma['id_cuenta_contable'], $fechaInicio, $fechaFin);
+        $resumen = $this->repository->getResumenPeriodo($idEmpresa, (int) $forma['id_cuenta_contable'], $fechaInicio, $fechaFin, $idFormaPago);
 
         $saldoInicial = $saldoInicialCuenta + $resumen['delta_antes'];
         $saldoFinal = $saldoInicial + $resumen['creditos'] - $resumen['debitos'];
@@ -205,12 +205,35 @@ class ControlBancarioService
         if ($fechaAsiento === null) {
             return;
         }
-        $conciliacion = $this->repository->getConciliacionVigentePorFecha($idFormaPago, $fechaAsiento);
+        $this->verificarNoConciliadoPorFecha($idFormaPago, $fechaAsiento);
+    }
+
+    /**
+     * Mismo bloqueo, pero partiendo de la fecha del movimiento — el camino de las cuentas sin
+     * contabilidad, donde la fecha viene del cobro/pago y no de un asiento.
+     */
+    private function verificarNoConciliadoPorFecha(int $idFormaPago, string $fecha): void
+    {
+        $conciliacion = $this->repository->getConciliacionVigentePorFecha($idFormaPago, $fecha);
         if ($conciliacion) {
             $desde = date('d-m-Y', strtotime($conciliacion['fecha_inicio']));
             $hasta = date('d-m-Y', strtotime($conciliacion['fecha_fin']));
             throw new \Exception("Este movimiento pertenece a un período ya conciliado ({$desde} al {$hasta}). Debes reabrir esa conciliación para poder editarlo.");
         }
+    }
+
+    /**
+     * Normaliza el anclaje al cobro/pago que envía la vista para las cuentas sin contabilidad.
+     * Devuelve [null, 0] si el payload no trae un origen válido.
+     */
+    private function resolverOrigen(array $data): array
+    {
+        $tipo = strtolower(trim((string) ($data['origen_tipo'] ?? '')));
+        $id = (int) ($data['origen_id'] ?? 0);
+        if (!in_array($tipo, ['ingreso', 'egreso'], true) || $id <= 0) {
+            return [null, 0];
+        }
+        return [$tipo, $id];
     }
 
     /**
@@ -354,6 +377,8 @@ class ControlBancarioService
             'movimientos' => $movimientos,
             'creditos' => $creditos,
             'debitos' => $debitos,
+            // Cuenta sin cuenta contable: el detalle sale de los cobros/pagos, no del mayor.
+            'sin_contabilidad' => $idCuenta <= 0,
             'cheques_no_cobrados' => $this->repository->getChequesEmitidosNoCobrados($idEmpresa, $idFormaPago, $idCuenta, $fechaInicio, $fechaFin),
             'cheques_cobrados' => $this->repository->getChequesEmitidosCobradosEnPeriodo($idEmpresa, $idFormaPago, $idCuenta, $fechaInicio, $fechaFin),
         ];
@@ -377,7 +402,7 @@ class ControlBancarioService
             $idEmpresa = (int) $p['id_empresa'];
             $idCuenta = (int) $p['id_cuenta_contable'];
             $saldoCuenta = $this->repository->getSaldoInicial($idEmpresa, (int) $p['id']);
-            $r = $this->repository->getResumenPeriodo($idEmpresa, $idCuenta, $fechaInicio, $fechaFin);
+            $r = $this->repository->getResumenPeriodo($idEmpresa, $idCuenta, $fechaInicio, $fechaFin, (int) $p['id']);
             $saldoInicial += $saldoCuenta + $r['delta_antes'];
             $creditos += $r['creditos'];
             $debitos += $r['debitos'];
@@ -409,7 +434,7 @@ class ControlBancarioService
             $saldoCuenta = $this->repository->getSaldoInicial($idEmpresa, $idForma);
 
             if ($fechaInicio) {
-                $r = $this->repository->getResumenPeriodo($idEmpresa, $idCuenta, $fechaInicio, $fechaFin);
+                $r = $this->repository->getResumenPeriodo($idEmpresa, $idCuenta, $fechaInicio, $fechaFin, $idForma);
                 $saldoInicioRango += $saldoCuenta + $r['delta_antes'];
             } else {
                 $saldoInicioRango += $saldoCuenta;
@@ -427,9 +452,11 @@ class ControlBancarioService
             }
         }
 
+        // Cuando la cuenta no tiene contabilidad, id_asiento/id_asiento_detalle vienen NULL y el
+        // desempate lo da la fila de pago (origen_id).
         usort($todas, static function ($a, $b) {
-            return [$a['fecha_asiento'], (int) $a['id_asiento'], (int) $a['id_asiento_detalle']]
-                <=> [$b['fecha_asiento'], (int) $b['id_asiento'], (int) $b['id_asiento_detalle']];
+            return [$a['fecha_asiento'], (int) $a['id_asiento'], (int) $a['id_asiento_detalle'], (int) ($a['origen_id'] ?? 0)]
+                <=> [$b['fecha_asiento'], (int) $b['id_asiento'], (int) $b['id_asiento_detalle'], (int) ($b['origen_id'] ?? 0)];
         });
         $acum = $saldoInicioRango;
         foreach ($todas as &$row) {
@@ -607,6 +634,8 @@ class ControlBancarioService
             'movimientos' => $movimientos,
             'creditos' => array_values(array_filter($movimientos, fn ($r) => (float) $r['debe'] > 0)),
             'debitos' => array_values(array_filter($movimientos, fn ($r) => (float) $r['haber'] > 0)),
+            // Solo si NINGUNA cuenta del grupo lleva contabilidad.
+            'sin_contabilidad' => !array_filter($pares, static fn ($p) => !empty($p['id_cuenta_contable'])),
             'cheques_no_cobrados' => $chequesNoCobrados,
             'cheques_cobrados' => $chequesCobrados,
         ];
@@ -623,22 +652,39 @@ class ControlBancarioService
         $this->rules->validarClasificacion($data);
 
         $idFormaPago = (int) $data['id_forma_pago'];
-        $idAsientoDetalle = (int) $data['id_asiento_detalle'];
+        $idAsientoDetalle = (int) ($data['id_asiento_detalle'] ?? 0);
         $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
 
-        if (!$this->repository->validarAsientoDetalle($idAsientoDetalle, $idEmpresa, (int) $forma['id_cuenta_contable'])) {
-            throw new \Exception('El movimiento indicado no pertenece a esta cuenta bancaria.');
+        // Cuenta sin contabilidad: la anotación se ancla al cobro/pago, no a una línea de asiento.
+        [$origenTipo, $origenId] = $this->resolverOrigen($data);
+        $porOrigen = ($idAsientoDetalle <= 0);
+
+        if ($porOrigen) {
+            if ($origenTipo === null) {
+                throw new \Exception('No se pudo identificar el movimiento a clasificar.');
+            }
+            $fecha = $this->repository->getFechaMovimientoTesoreria($origenTipo, $origenId, $idEmpresa, $idFormaPago);
+            if ($fecha === null) {
+                throw new \Exception('El movimiento indicado no pertenece a esta cuenta bancaria.');
+            }
+            $this->verificarNoConciliadoPorFecha($idFormaPago, $fecha);
+            $antes = $this->repository->getClasificacionPorOrigen($origenTipo, $origenId, $idEmpresa);
+        } else {
+            if (!$this->repository->validarAsientoDetalle($idAsientoDetalle, $idEmpresa, (int) $forma['id_cuenta_contable'])) {
+                throw new \Exception('El movimiento indicado no pertenece a esta cuenta bancaria.');
+            }
+
+            $this->verificarNoConciliado($idFormaPago, (int) $forma['id_cuenta_contable'], $idAsientoDetalle, $idEmpresa);
+            $antes = $this->repository->getClasificacionPorAsientoDetalle($idAsientoDetalle, $idEmpresa);
         }
-
-        $this->verificarNoConciliado($idFormaPago, (int) $forma['id_cuenta_contable'], $idAsientoDetalle, $idEmpresa);
-
-        $antes = $this->repository->getClasificacionPorAsientoDetalle($idAsientoDetalle, $idEmpresa);
 
         $this->repository->beginTransaction();
         try {
             $id = $this->repository->upsertClasificacion([
                 'id_empresa' => $idEmpresa,
-                'id_asiento_detalle' => $idAsientoDetalle,
+                'id_asiento_detalle' => $porOrigen ? null : $idAsientoDetalle,
+                'origen_tipo' => $porOrigen ? $origenTipo : null,
+                'origen_id' => $porOrigen ? $origenId : null,
                 'id_forma_pago' => $idFormaPago,
                 'tipo_transaccion' => $data['tipo_transaccion'],
                 'cheque_direccion' => $data['cheque_direccion'],
@@ -654,7 +700,9 @@ class ControlBancarioService
             throw $e;
         }
 
-        $despues = $this->repository->getClasificacionPorAsientoDetalle($idAsientoDetalle, $idEmpresa);
+        $despues = $porOrigen
+            ? $this->repository->getClasificacionPorOrigen($origenTipo, $origenId, $idEmpresa)
+            : $this->repository->getClasificacionPorAsientoDetalle($idAsientoDetalle, $idEmpresa);
         $this->logService->registrar(
             $idUsuario,
             $idEmpresa,
@@ -668,19 +716,37 @@ class ControlBancarioService
         return $despues ?? [];
     }
 
-    public function quitarClasificacion(int $idEmpresa, int $idUsuario, int $idAsientoDetalle): void
+    public function quitarClasificacion(int $idEmpresa, int $idUsuario, int $idAsientoDetalle, array $data = []): void
     {
-        $antes = $this->repository->getClasificacionPorAsientoDetalle($idAsientoDetalle, $idEmpresa);
+        [$origenTipo, $origenId] = $this->resolverOrigen($data);
+        $porOrigen = ($idAsientoDetalle <= 0);
+
+        $antes = $porOrigen && $origenTipo !== null
+            ? $this->repository->getClasificacionPorOrigen($origenTipo, $origenId, $idEmpresa)
+            : $this->repository->getClasificacionPorAsientoDetalle($idAsientoDetalle, $idEmpresa);
         if (!$antes) {
             throw new \Exception('Este movimiento no tiene una clasificación manual que quitar.');
         }
 
-        $forma = $this->getFormaBancariaOFallar((int) $antes['id_forma_pago'], $idEmpresa);
-        $this->verificarNoConciliado((int) $antes['id_forma_pago'], (int) $forma['id_cuenta_contable'], $idAsientoDetalle, $idEmpresa);
+        $idFormaPago = (int) $antes['id_forma_pago'];
+        $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
+
+        if ($porOrigen) {
+            $fecha = $this->repository->getFechaMovimientoTesoreria($origenTipo, $origenId, $idEmpresa, $idFormaPago);
+            if ($fecha !== null) {
+                $this->verificarNoConciliadoPorFecha($idFormaPago, $fecha);
+            }
+        } else {
+            $this->verificarNoConciliado($idFormaPago, (int) $forma['id_cuenta_contable'], $idAsientoDetalle, $idEmpresa);
+        }
 
         $this->repository->beginTransaction();
         try {
-            $this->repository->quitarClasificacion($idAsientoDetalle, $idEmpresa, $idUsuario);
+            if ($porOrigen) {
+                $this->repository->quitarClasificacionPorOrigen($origenTipo, $origenId, $idEmpresa, $idUsuario);
+            } else {
+                $this->repository->quitarClasificacion($idAsientoDetalle, $idEmpresa, $idUsuario);
+            }
             $this->repository->commit();
         } catch (\Throwable $e) {
             $this->repository->rollBack();
@@ -757,12 +823,17 @@ class ControlBancarioService
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
-        // ── Hoja 2: Mayor Contable ───────────────────────────────────────────
+        // ── Hoja 2: Mayor Contable (o Movimientos, si la cuenta no lleva contabilidad) ──
         $sheetMayor = $spreadsheet->createSheet();
-        $sheetMayor->setTitle('Mayor Contable');
         $cuentaCodigo = $forma['cuenta_codigo'] ?? '';
         $cuentaCtbNombre = $forma['cuenta_nombre'] ?? '';
-        $rowM = $this->xlsTitulo($sheetMayor, 1, "{$empresaNombre} — MAYOR CONTABLE", "Cuenta: {$cuentaCodigo} - {$cuentaCtbNombre}  |  Período: {$periodo}");
+        $sinContabilidad = !empty($reporte['sin_contabilidad']);
+        $sheetMayor->setTitle($sinContabilidad ? 'Movimientos' : 'Mayor Contable');
+        $tituloHoja = $sinContabilidad ? 'MOVIMIENTOS DE LA CUENTA' : 'MAYOR CONTABLE';
+        $subtituloHoja = $sinContabilidad
+            ? "{$cuentaNombre}  |  Período: {$periodo}"
+            : "Cuenta: {$cuentaCodigo} - {$cuentaCtbNombre}  |  Período: {$periodo}";
+        $rowM = $this->xlsTitulo($sheetMayor, 1, "{$empresaNombre} — {$tituloHoja}", $subtituloHoja);
         $rowM++;
         $headersMayor = ['Fecha', 'Fecha Banco', 'Comprobante', 'Tipo', 'Documento Ref.', 'Tercero', 'Glosa', 'Debe', 'Haber', 'Saldo'];
         $sheetMayor->fromArray($headersMayor, null, "A{$rowM}");

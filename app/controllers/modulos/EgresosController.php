@@ -179,17 +179,13 @@ class EgresosController extends BaseModuloController
         } else {
             foreach ($rows as $r) {
                 $fecha  = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                
-                $tipoLabels = [
-                    'COMPRA' => 'Registro de Compra',
-                    'LIQUIDACION' => 'Liquidación',
-                    'ROL' => 'Rol de Pago',
-                    'QUINCENA' => 'Quincena',
-                    'PRESTAMO' => 'Préstamo',
-                    'OTRO' => 'Otro Concepto'
-                ];
-                $tipoLabel = $tipoLabels[$r['tipo_egreso']] ?? $r['tipo_egreso'];
-                
+
+                $tipoLabel = \App\Helpers\TipoDocumentoHelper::egresoLabel(
+                    $r['tipos_detalle'] ?? null,
+                    $r['tipo_egreso'] ?? null,
+                    $r['concepto_nombre'] ?? null
+                );
+
                 $estado = $r['estado'] ?? 'registrado';
                 $estCls = match ($estado) {
                     'anulado' => 'bg-danger bg-opacity-10 text-danger border-danger',

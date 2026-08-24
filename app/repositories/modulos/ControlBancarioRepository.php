@@ -63,7 +63,7 @@ class ControlBancarioRepository extends BaseRepository
     /** Igual que getFormasBancarias(): la cuenta contable puede venir NULL. */
     public function getFormaBancaria(int $idFormaPago, int $idEmpresa): ?array
     {
-        $sql = "SELECT fp.id, fp.nombre, fp.id_cuenta_contable, fp.id_banco, fp.numero_cuenta
+        $sql = "SELECT fp.id, fp.nombre, fp.tipo, fp.id_cuenta_contable, fp.id_banco, fp.numero_cuenta
                 FROM empresa_formas_pago fp
                 WHERE fp.id = :id AND fp.id_empresa = :id_empresa AND fp.eliminado = FALSE
                   AND fp.id_banco IS NOT NULL";
@@ -116,8 +116,18 @@ class ControlBancarioRepository extends BaseRepository
      *   - debitos: suma de "haber" (salidas: cheques/transferencias emitidas) dentro del rango.
      * El saldo inicial del período = saldoInicialCuenta + delta_antes; el saldo final = ese saldo + créditos - débitos.
      */
-    public function getResumenPeriodo(int $idEmpresa, int $idCuentaContable, string $fechaInicio, string $fechaFin): array
-    {
+    public function getResumenPeriodo(
+        int $idEmpresa,
+        int $idCuentaContable,
+        string $fechaInicio,
+        string $fechaFin,
+        ?int $idFormaPago = null
+    ): array {
+        // Sin cuenta contable no hay mayor: el resumen se calcula sobre los cobros/pagos.
+        if ($idCuentaContable <= 0) {
+            return $this->getResumenPeriodoTesoreria($idEmpresa, (int) $idFormaPago, $fechaInicio, $fechaFin);
+        }
+
         $sql = "SELECT
                     COALESCE(SUM(CASE WHEN ac.fecha_asiento < :f_ini THEN ad.debe - ad.haber ELSE 0 END), 0) AS delta_antes,
                     COALESCE(SUM(CASE WHEN ac.fecha_asiento BETWEEN :f_ini AND :f_fin THEN ad.debe ELSE 0 END), 0) AS creditos,
@@ -142,6 +152,165 @@ class ControlBancarioRepository extends BaseRepository
             'delta_antes' => (float) $row['delta_antes'],
             'creditos' => (float) $row['creditos'],
             'debitos' => (float) $row['debitos'],
+        ];
+    }
+
+    /** Igual que getResumenPeriodo(), pero sobre los cobros/pagos de la cuenta (sin contabilidad). */
+    private function getResumenPeriodoTesoreria(int $idEmpresa, int $idFormaPago, string $fechaInicio, string $fechaFin): array
+    {
+        if ($idFormaPago <= 0) {
+            return ['delta_antes' => 0.0, 'creditos' => 0.0, 'debitos' => 0.0];
+        }
+
+        $sql = "SELECT
+                    COALESCE(SUM(CASE WHEN b.fecha_asiento < :f_ini THEN b.debe - b.haber ELSE 0 END), 0) AS delta_antes,
+                    COALESCE(SUM(CASE WHEN b.fecha_asiento BETWEEN :f_ini2 AND :f_fin THEN b.debe ELSE 0 END), 0) AS creditos,
+                    COALESCE(SUM(CASE WHEN b.fecha_asiento BETWEEN :f_ini3 AND :f_fin2 THEN b.haber ELSE 0 END), 0) AS debitos
+                FROM ({$this->baseTesoreria()}) b";
+        $st = $this->db->prepare($sql);
+        $st->execute($this->paramsTesoreria($idEmpresa, $idFormaPago) + [
+            ':f_ini' => $fechaInicio, ':f_ini2' => $fechaInicio, ':f_ini3' => $fechaInicio,
+            ':f_fin' => $fechaFin, ':f_fin2' => $fechaFin,
+        ]);
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: ['delta_antes' => 0, 'creditos' => 0, 'debitos' => 0];
+        return [
+            'delta_antes' => (float) $row['delta_antes'],
+            'creditos' => (float) $row['creditos'],
+            'debitos' => (float) $row['debitos'],
+        ];
+    }
+
+    // ── Fuente TESORERÍA (cuentas sin cuenta contable) ──────────────────────
+    //
+    // Hay empresas que no llevan contabilidad pero sí controlan su cuenta bancaria: su
+    // forma de pago bancaria no tiene id_cuenta_contable, así que no existe ningún
+    // asiento del cual sacar el mayor. En ese caso el movimiento bancario se arma
+    // directamente desde los COBROS y PAGOS registrados con esa forma de pago
+    // (ingresos_pagos = entra plata / egresos_pagos = sale plata), que es exactamente
+    // lo que pasó por el banco.
+    //
+    // Las columnas son las MISMAS que devuelve la fuente contable (getMovimientos),
+    // más origen_tipo/origen_id, para que controller, exportaciones y conciliación
+    // funcionen igual sin importar de dónde salieron los datos. id_asiento_detalle e
+    // id_asiento vienen NULL: no hay asiento detrás, y la clasificación manual se
+    // ancla al par (origen_tipo, origen_id) — ver migración
+    // 20260824_control_bancario_sin_contabilidad.sql.
+    //
+    // Una fila por cada línea de pago (no por documento): un mismo ingreso/egreso puede
+    // pagarse con dos cheques distintos a la misma cuenta, y cada uno es un movimiento
+    // bancario propio.
+
+    /**
+     * Movimientos de tesorería de una forma de pago, sin saldo acumulado ni filtros.
+     * Placeholders: :id_empresa_i, :id_forma_i, :amb_i (rama ingresos) y
+     * :id_empresa_e, :id_forma_e, :amb_e (rama egresos).
+     */
+    private function baseTesoreria(): string
+    {
+        return "
+            SELECT
+                NULL::INTEGER AS id_asiento_detalle,
+                NULL::INTEGER AS id_asiento,
+                'ingreso'::VARCHAR AS origen_tipo,
+                ip.id AS origen_id,
+                ic.fecha_emision AS fecha_asiento,
+                ic.numero_ingreso AS numero_comprobante,
+                COALESCE(NULLIF(ic.observaciones, ''), cnc.nombre, 'Cobro') AS concepto,
+                COALESCE(NULLIF(ip.observaciones, ''), NULLIF(ic.observaciones, ''), cnc.nombre) AS referencia_detalle,
+                NULLIF(ip.referencia, '') AS documento_referencia,
+                ip.monto AS debe,
+                0::NUMERIC AS haber,
+                CASE WHEN ic.id_cliente IS NOT NULL THEN 'cliente' ELSE NULL END AS tipo_entidad,
+                ic.id_cliente AS id_entidad,
+                COALESCE(cli.nombre, NULLIF(ic.recibo_de, '')) AS nombre_entidad,
+                COALESCE(cli.nombre, NULLIF(ic.recibo_de, '')) AS beneficiario_cheque,
+                COALESCE(cbm.tipo_transaccion,
+                         UPPER(NULLIF(ip.tipo_operacion_bancaria, '')),
+                         CASE fp.tipo
+                             WHEN 'CHEQUE' THEN 'CHEQUE'
+                             WHEN 'BANCO' THEN 'DEPOSITO'
+                             ELSE 'OTRO'
+                         END) AS tipo_transaccion,
+                COALESCE(cbm.cheque_direccion, 'RECIBIDO') AS cheque_direccion,
+                COALESCE(cbm.numero_cheque, NULLIF(ip.numero_cheque, '')) AS numero_cheque,
+                COALESCE(cbm.fecha_cheque, ip.fecha_cobro) AS fecha_cheque,
+                COALESCE(cbm.fecha_banco, ic.fecha_emision) AS fecha_banco,
+                cbm.fecha_banco AS fecha_banco_manual,
+                cbm.id AS id_clasificacion,
+                cbm.observacion AS observacion
+            FROM ingresos_pagos ip
+            INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+            INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro
+            LEFT JOIN empresa_ingreso_conceptos cnc ON cnc.id = ic.id_ingreso_concepto
+            LEFT JOIN clientes cli ON cli.id = ic.id_cliente
+            LEFT JOIN control_bancario_movimientos cbm
+                   ON cbm.origen_tipo = 'ingreso' AND cbm.origen_id = ip.id AND cbm.eliminado = FALSE
+            WHERE ic.id_empresa = :id_empresa_i
+              AND ip.id_forma_cobro = :id_forma_i
+              AND ic.eliminado = FALSE
+              AND COALESCE(ic.estado, 'registrado') <> 'anulado'
+              AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_i)
+
+            UNION ALL
+
+            SELECT
+                NULL::INTEGER AS id_asiento_detalle,
+                NULL::INTEGER AS id_asiento,
+                'egreso'::VARCHAR AS origen_tipo,
+                ep.id AS origen_id,
+                ec.fecha_emision AS fecha_asiento,
+                ec.numero_egreso AS numero_comprobante,
+                COALESCE(NULLIF(ec.observaciones, ''), cne.nombre, 'Pago') AS concepto,
+                COALESCE(NULLIF(ec.observaciones, ''), cne.nombre) AS referencia_detalle,
+                NULLIF(ep.referencia, '') AS documento_referencia,
+                0::NUMERIC AS debe,
+                ep.monto AS haber,
+                CASE
+                    WHEN ec.id_proveedor IS NOT NULL THEN 'proveedor'
+                    WHEN ec.id_empleado IS NOT NULL THEN 'empleado'
+                    ELSE NULL
+                END AS tipo_entidad,
+                COALESCE(ec.id_proveedor, ec.id_empleado) AS id_entidad,
+                COALESCE(prov.razon_social, empl.nombres_apellidos, NULLIF(ec.beneficiario_nombre, '')) AS nombre_entidad,
+                COALESCE(NULLIF(ep.beneficiario_cheque, ''), prov.razon_social, empl.nombres_apellidos,
+                         NULLIF(ec.beneficiario_nombre, '')) AS beneficiario_cheque,
+                COALESCE(cbm.tipo_transaccion,
+                         UPPER(NULLIF(ep.tipo_operacion_bancaria, '')),
+                         CASE fp.tipo
+                             WHEN 'CHEQUE' THEN 'CHEQUE'
+                             WHEN 'BANCO' THEN 'TRANSFERENCIA'
+                             ELSE 'OTRO'
+                         END) AS tipo_transaccion,
+                COALESCE(cbm.cheque_direccion, 'EMITIDO') AS cheque_direccion,
+                COALESCE(cbm.numero_cheque, NULLIF(ep.numero_cheque, '')) AS numero_cheque,
+                COALESCE(cbm.fecha_cheque, ep.fecha_cobro) AS fecha_cheque,
+                COALESCE(cbm.fecha_banco, ec.fecha_emision) AS fecha_banco,
+                cbm.fecha_banco AS fecha_banco_manual,
+                cbm.id AS id_clasificacion,
+                cbm.observacion AS observacion
+            FROM egresos_pagos ep
+            INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+            INNER JOIN empresa_formas_pago fp ON fp.id = ep.id_forma_pago
+            LEFT JOIN egresos_conceptos cne ON cne.id = ec.id_egreso_concepto
+            LEFT JOIN proveedores prov ON prov.id = ec.id_proveedor
+            LEFT JOIN empleados empl ON empl.id = ec.id_empleado
+            LEFT JOIN control_bancario_movimientos cbm
+                   ON cbm.origen_tipo = 'egreso' AND cbm.origen_id = ep.id AND cbm.eliminado = FALSE
+            WHERE ec.id_empresa = :id_empresa_e
+              AND ep.id_forma_pago = :id_forma_e
+              AND ec.eliminado = FALSE
+              AND COALESCE(ep.eliminado, FALSE) = FALSE
+              AND COALESCE(ec.estado, 'registrado') <> 'anulado'
+              AND COALESCE(ep.estado_cheque, 'vigente') <> 'anulado'
+              AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_e)";
+    }
+
+    /** Parámetros que espera baseTesoreria(). */
+    private function paramsTesoreria(int $idEmpresa, int $idFormaPago): array
+    {
+        return [
+            ':id_empresa_i' => $idEmpresa, ':id_forma_i' => $idFormaPago, ':amb_i' => $idEmpresa,
+            ':id_empresa_e' => $idEmpresa, ':id_forma_e' => $idFormaPago, ':amb_e' => $idEmpresa,
         ];
     }
 
@@ -287,10 +456,27 @@ class ControlBancarioRepository extends BaseRepository
         }
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
 
+        // Cuenta sin cuenta contable (empresa que no lleva contabilidad): el mayor no
+        // existe, así que el movimiento se arma desde los cobros/pagos de esa cuenta.
+        if ($idCuentaContable <= 0) {
+            $cte = "WITH base AS (
+                        SELECT b.*,
+                               (:saldo_inicial + SUM(b.debe - b.haber) OVER (
+                                   ORDER BY b.fecha_asiento, b.origen_tipo, b.origen_id
+                                   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                               )) AS saldo_acumulado
+                        FROM ({$this->baseTesoreria()}) b
+                    )";
+            $params = $this->paramsTesoreria($idEmpresa, $idFormaPago) + [':saldo_inicial' => $saldoInicial];
+            return $this->paginarBase($cte, $params, $filtros, $page, $perPage, $ordenCol, $dir);
+        }
+
         $cte = "WITH base AS (
                     SELECT
                         ad.id AS id_asiento_detalle,
                         ac.id AS id_asiento,
+                        NULL::VARCHAR AS origen_tipo,
+                        NULL::INTEGER AS origen_id,
                         ac.fecha_asiento,
                         ac.numero_comprobante,
                         ac.concepto,
@@ -322,13 +508,31 @@ class ControlBancarioRepository extends BaseRepository
                       AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                 )";
 
-        $whereSql = "WHERE 1=1";
         $params = [
             ':id_empresa' => $idEmpresa,
             ':id_forma_pago' => $idFormaPago,
             ':id_cuenta_contable' => $idCuentaContable,
             ':saldo_inicial' => $saldoInicial,
         ];
+
+        return $this->paginarBase($cte, $params, $filtros, $page, $perPage, $ordenCol, $dir);
+    }
+
+    /**
+     * Filtros, búsqueda y paginación sobre el CTE `base` — idéntico para la fuente contable
+     * (mayor de la cuenta) y para la de tesorería (cobros/pagos de la cuenta sin contabilidad):
+     * ambas exponen las mismas columnas, así que el filtrado no depende del origen.
+     */
+    private function paginarBase(
+        string $cte,
+        array $params,
+        array $filtros,
+        int $page,
+        int $perPage,
+        string $ordenCol,
+        string $dir
+    ): array {
+        $whereSql = "WHERE 1=1";
 
         if (!empty($filtros['fecha_inicio'])) {
             $whereSql .= " AND fecha_asiento >= :f_ini";
@@ -404,7 +608,10 @@ class ControlBancarioRepository extends BaseRepository
 
         // Rows
         $offset = ($page - 1) * $perPage;
-        $sqlRows = "{$cte} SELECT * FROM base {$whereSql} ORDER BY {$ordenCol} {$dir}, id_asiento_detalle {$dir} LIMIT :limit OFFSET :offset";
+        // Desempate estable: la línea del asiento (fuente contable) o la fila de pago (tesorería).
+        $sqlRows = "{$cte} SELECT * FROM base {$whereSql}
+                    ORDER BY {$ordenCol} {$dir}, COALESCE(id_asiento_detalle, origen_id) {$dir}
+                    LIMIT :limit OFFSET :offset";
         $stRows = $this->db->prepare($sqlRows);
         foreach ($params as $key => $val) {
             $stRows->bindValue($key, $val);
@@ -487,6 +694,65 @@ class ControlBancarioRepository extends BaseRepository
 
         $st = $this->db->prepare($sqlFull);
         $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        // El bloque anterior solo alcanza cuentas con cuenta contable (el mayor). Las cuentas
+        // sin contabilidad aportan sus cheques desde los cobros/pagos.
+        foreach ($this->getFormasSinCuentaContable($idEmpresa, $idFormaPago) as $idForma) {
+            foreach ($this->getChequesPosfechadosTesoreria($idEmpresa, $idForma, $direccion) as $r) {
+                $rows[] = $r;
+            }
+        }
+        usort($rows, static fn ($a, $b) => ($a['fecha_cheque'] ?? '') <=> ($b['fecha_cheque'] ?? ''));
+
+        return $rows;
+    }
+
+    /** Ids de las cuentas bancarias de la empresa que no tienen cuenta contable asignada. */
+    private function getFormasSinCuentaContable(int $idEmpresa, ?int $idFormaPago): array
+    {
+        $sql = "SELECT fp.id FROM empresa_formas_pago fp
+                WHERE fp.id_empresa = :id_empresa AND fp.eliminado = FALSE AND fp.activo = TRUE
+                  AND fp.id_banco IS NOT NULL AND fp.id_cuenta_contable IS NULL";
+        $params = [':id_empresa' => $idEmpresa];
+        if (!empty($idFormaPago)) {
+            $sql .= " AND fp.id = :id_forma_pago";
+            $params[':id_forma_pago'] = $idFormaPago;
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN) ?: []);
+    }
+
+    /** Cheques posfechados de una cuenta sin contabilidad (fuente: cobros/pagos). */
+    private function getChequesPosfechadosTesoreria(int $idEmpresa, int $idFormaPago, string $direccion): array
+    {
+        $direccion = strtoupper($direccion);
+        $dirBanco = in_array($direccion, ['EMITIDO', 'EMITIDO_EMPLEADO'], true) ? 'EMITIDO'
+                  : ($direccion === 'RECIBIDO' ? 'RECIBIDO' : '');
+
+        $where = "WHERE x.tipo_transaccion = 'CHEQUE' AND x.fecha_cheque > CURRENT_DATE";
+        $params = $this->paramsTesoreria($idEmpresa, $idFormaPago) + [':id_forma_fp' => $idFormaPago];
+        if ($dirBanco !== '') {
+            $where .= " AND x.cheque_direccion = :direccion";
+            $params[':direccion'] = $dirBanco;
+        }
+        if ($direccion === 'EMITIDO_EMPLEADO') {
+            $where .= " AND x.tipo_entidad = 'empleado'";
+        } elseif ($direccion === 'EMITIDO') {
+            $where .= " AND (x.tipo_entidad IS DISTINCT FROM 'empleado')";
+        }
+
+        $sql = "SELECT x.*,
+                       (x.tipo_entidad = 'empleado') AS es_empleado,
+                       fp.id AS id_forma_pago,
+                       fp.nombre AS forma_pago_nombre
+                FROM ({$this->baseTesoreria()}) x
+                INNER JOIN empresa_formas_pago fp ON fp.id = :id_forma_fp
+                {$where}
+                ORDER BY x.fecha_cheque ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
@@ -526,6 +792,19 @@ class ControlBancarioRepository extends BaseRepository
      */
     public function getChequesEmitidosNoCobrados(int $idEmpresa, int $idFormaPago, int $idCuentaContable, string $fechaInicio, string $fechaFin): array
     {
+        if ($idCuentaContable <= 0) {
+            $sql = "SELECT * FROM ({$this->baseTesoreria()}) x
+                    WHERE x.tipo_transaccion = 'CHEQUE' AND x.cheque_direccion = 'EMITIDO'
+                      AND x.fecha_asiento BETWEEN :f_ini AND :f_fin
+                      AND (x.fecha_banco_manual IS NULL OR x.fecha_banco_manual > :f_fin2)
+                    ORDER BY x.fecha_asiento ASC";
+            $st = $this->db->prepare($sql);
+            $st->execute($this->paramsTesoreria($idEmpresa, $idFormaPago) + [
+                ':f_ini' => $fechaInicio, ':f_fin' => $fechaFin, ':f_fin2' => $fechaFin,
+            ]);
+            return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+
         $sql = "SELECT * FROM ({$this->baseChequesEmitidos()}) x
                 WHERE x.tipo_transaccion = 'CHEQUE' AND x.cheque_direccion = 'EMITIDO'
                   AND x.fecha_asiento BETWEEN :f_ini AND :f_fin
@@ -545,6 +824,18 @@ class ControlBancarioRepository extends BaseRepository
      */
     public function getChequesEmitidosCobradosEnPeriodo(int $idEmpresa, int $idFormaPago, int $idCuentaContable, string $fechaInicio, string $fechaFin): array
     {
+        if ($idCuentaContable <= 0) {
+            $sql = "SELECT * FROM ({$this->baseTesoreria()}) x
+                    WHERE x.tipo_transaccion = 'CHEQUE' AND x.cheque_direccion = 'EMITIDO'
+                      AND x.fecha_banco_manual BETWEEN :f_ini AND :f_fin
+                    ORDER BY x.fecha_banco_manual ASC";
+            $st = $this->db->prepare($sql);
+            $st->execute($this->paramsTesoreria($idEmpresa, $idFormaPago) + [
+                ':f_ini' => $fechaInicio, ':f_fin' => $fechaFin,
+            ]);
+            return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+
         $sql = "SELECT * FROM ({$this->baseChequesEmitidos()}) x
                 WHERE x.tipo_transaccion = 'CHEQUE' AND x.cheque_direccion = 'EMITIDO'
                   AND x.fecha_banco_manual BETWEEN :f_ini AND :f_fin
@@ -565,6 +856,58 @@ class ControlBancarioRepository extends BaseRepository
         $st->execute([':id' => $idAsientoDetalle, ':id_empresa' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /** Clasificación manual anclada a un cobro/pago (cuentas sin contabilidad). */
+    public function getClasificacionPorOrigen(string $origenTipo, int $origenId, int $idEmpresa): ?array
+    {
+        $sql = "SELECT * FROM control_bancario_movimientos
+                WHERE origen_tipo = :origen_tipo AND origen_id = :origen_id
+                  AND id_empresa = :id_empresa AND eliminado = FALSE";
+        $st = $this->db->prepare($sql);
+        $st->execute([':origen_tipo' => $origenTipo, ':origen_id' => $origenId, ':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Verifica que el cobro/pago exista, sea de la empresa y se haya hecho con esa cuenta
+     * bancaria; devuelve su fecha (para el control de período conciliado) o null si no aplica.
+     */
+    public function getFechaMovimientoTesoreria(string $origenTipo, int $origenId, int $idEmpresa, int $idFormaPago): ?string
+    {
+        if ($origenTipo === 'ingreso') {
+            $sql = "SELECT ic.fecha_emision
+                    FROM ingresos_pagos ip
+                    INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                    WHERE ip.id = :id AND ic.id_empresa = :id_empresa
+                      AND ip.id_forma_cobro = :id_forma_pago AND ic.eliminado = FALSE";
+        } else {
+            $sql = "SELECT ec.fecha_emision
+                    FROM egresos_pagos ep
+                    INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                    WHERE ep.id = :id AND ec.id_empresa = :id_empresa
+                      AND ep.id_forma_pago = :id_forma_pago AND ec.eliminado = FALSE
+                      AND COALESCE(ep.eliminado, FALSE) = FALSE";
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $origenId, ':id_empresa' => $idEmpresa, ':id_forma_pago' => $idFormaPago]);
+        $val = $st->fetchColumn();
+        return $val !== false ? (string) $val : null;
+    }
+
+    public function quitarClasificacionPorOrigen(string $origenTipo, int $origenId, int $idEmpresa, int $idUsuario): bool
+    {
+        $sql = "UPDATE control_bancario_movimientos SET
+                    eliminado = TRUE, deleted_at = CURRENT_TIMESTAMP, deleted_by = :usuario
+                WHERE origen_tipo = :origen_tipo AND origen_id = :origen_id
+                  AND id_empresa = :id_empresa AND eliminado = FALSE";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':origen_tipo' => $origenTipo, ':origen_id' => $origenId,
+            ':id_empresa' => $idEmpresa, ':usuario' => $idUsuario,
+        ]);
+        return $st->rowCount() > 0;
     }
 
     /** Verifica que la línea de asiento pertenezca a la empresa y a la cuenta contable de la forma indicada. */
@@ -592,18 +935,28 @@ class ControlBancarioRepository extends BaseRepository
         return $val !== false ? (string) $val : null;
     }
 
+    /**
+     * Crea/actualiza la anotación del movimiento. El anclaje es id_asiento_detalle (cuenta con
+     * contabilidad) o el par origen_tipo+origen_id del cobro/pago (cuenta sin contabilidad);
+     * cada uno tiene su propio índice único, así que el ON CONFLICT cambia según el caso.
+     */
     public function upsertClasificacion(array $data): int
     {
+        $porOrigen = empty($data['id_asiento_detalle']);
+        $conflicto = $porOrigen
+            ? '(origen_tipo, origen_id) WHERE origen_tipo IS NOT NULL'
+            : '(id_asiento_detalle)';
+
         $sql = "INSERT INTO control_bancario_movimientos (
-                    id_empresa, id_asiento_detalle, id_forma_pago, tipo_transaccion,
+                    id_empresa, id_asiento_detalle, origen_tipo, origen_id, id_forma_pago, tipo_transaccion,
                     cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, observacion,
                     created_by, updated_by
                 ) VALUES (
-                    :id_empresa, :id_asiento_detalle, :id_forma_pago, :tipo_transaccion,
+                    :id_empresa, :id_asiento_detalle, :origen_tipo, :origen_id, :id_forma_pago, :tipo_transaccion,
                     :cheque_direccion, :numero_cheque, :fecha_cheque, :fecha_banco, :observacion,
                     :usuario, :usuario
                 )
-                ON CONFLICT (id_asiento_detalle) DO UPDATE SET
+                ON CONFLICT {$conflicto} DO UPDATE SET
                     tipo_transaccion = EXCLUDED.tipo_transaccion,
                     cheque_direccion = EXCLUDED.cheque_direccion,
                     numero_cheque = EXCLUDED.numero_cheque,
@@ -619,7 +972,9 @@ class ControlBancarioRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_empresa' => $data['id_empresa'],
-            ':id_asiento_detalle' => $data['id_asiento_detalle'],
+            ':id_asiento_detalle' => !empty($data['id_asiento_detalle']) ? (int) $data['id_asiento_detalle'] : null,
+            ':origen_tipo' => $data['origen_tipo'] ?? null,
+            ':origen_id' => !empty($data['origen_id']) ? (int) $data['origen_id'] : null,
             ':id_forma_pago' => $data['id_forma_pago'],
             ':tipo_transaccion' => $data['tipo_transaccion'],
             ':cheque_direccion' => $data['cheque_direccion'] ?? null,
@@ -658,15 +1013,48 @@ class ControlBancarioRepository extends BaseRepository
         return $saldoInicial + (float) $st->fetchColumn();
     }
 
+    /**
+     * Años con movimiento para el selector del módulo: los de la contabilidad y, además, los
+     * de los cobros/pagos hechos con cuentas bancarias SIN cuenta contable — si no, una empresa
+     * que no lleva contabilidad se quedaba solo con el año en curso y no podía mirar hacia atrás.
+     */
     public function getAniosDisponibles(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT extract(year from fecha_asiento) as anio
-                FROM asientos_contables_cabecera
-                WHERE id_empresa = :id_empresa AND eliminado = false
-                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+        $sql = "SELECT DISTINCT anio FROM (
+                    SELECT extract(year from ac.fecha_asiento) AS anio
+                    FROM asientos_contables_cabecera ac
+                    WHERE ac.id_empresa = :id_empresa AND ac.eliminado = false
+                      AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb1)
+
+                    UNION
+
+                    SELECT extract(year from ic.fecha_emision) AS anio
+                    FROM ingresos_pagos ip
+                    INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                    INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro
+                    WHERE ic.id_empresa = :id_empresa_i AND ic.eliminado = FALSE
+                      AND fp.id_banco IS NOT NULL AND fp.id_cuenta_contable IS NULL
+                      AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb2)
+
+                    UNION
+
+                    SELECT extract(year from ec.fecha_emision) AS anio
+                    FROM egresos_pagos ep
+                    INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                    INNER JOIN empresa_formas_pago fp ON fp.id = ep.id_forma_pago
+                    WHERE ec.id_empresa = :id_empresa_e AND ec.eliminado = FALSE
+                      AND COALESCE(ep.eliminado, FALSE) = FALSE
+                      AND fp.id_banco IS NOT NULL AND fp.id_cuenta_contable IS NULL
+                      AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb3)
+                ) a
+                WHERE anio IS NOT NULL
                 ORDER BY anio DESC";
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
+        $st->execute([
+            ':id_empresa' => $idEmpresa, ':amb1' => $idEmpresa,
+            ':id_empresa_i' => $idEmpresa, ':amb2' => $idEmpresa,
+            ':id_empresa_e' => $idEmpresa, ':amb3' => $idEmpresa,
+        ]);
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN) ?: []);
     }
 

@@ -2708,6 +2708,24 @@ class MigracionMysqlService
         foreach ($mysql->query("SELECT codigo_documento, id_proveedor FROM encabezado_compra WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $r) {
             $compProvByCod[(string) $r['codigo_documento']] = (int) $r['id_proveedor'];
         }
+        // Concepto/tipo del egreso viejo: ingresos_egresos.codigo_contable → opciones_ingresos_egresos.id
+        // (descripción como "Sueldos", "Anticípo sueldos", "décimo tercero", "fondos de reserva"...).
+        // Sirve para reconocer los egresos de NÓMINA y marcarlos como tipo ROL + sujeto EMPLEADO.
+        $opcionById = [];
+        foreach ($mysql->query("SELECT id, descripcion FROM opciones_ingresos_egresos WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $o) {
+            $opcionById[(int) $o['id']] = (string) $o['descripcion'];
+        }
+        // Empleados ya migrados de esta empresa, indexados por nombre normalizado (tokens ordenados,
+        // sin acentos) para enlazar id_empleado en los egresos de nómina por el nombre del "Pagado a".
+        // Se descartan claves ambiguas (dos empleados con el mismo conjunto de nombres) para no enlazar mal.
+        $empByTokens = []; $empAmbig = [];
+        foreach ($pg->query("SELECT id, nombres_apellidos FROM empleados WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado IS NOT TRUE") as $e) {
+            $k = self::tokensNombre((string) $e['nombres_apellidos']);
+            if ($k === '' || strpos($k, ' ') === false) { continue; } // requiere >= 2 tokens
+            if (isset($empByTokens[$k]) && $empByTokens[$k] !== (int) $e['id']) { $empAmbig[$k] = true; continue; }
+            $empByTokens[$k] = (int) $e['id'];
+        }
+        foreach (array_keys($empAmbig) as $k) { unset($empByTokens[$k]); }
         // Forma de pago BANCARIA por id_cuenta (ver ingresos): enlaza a la cuenta bancaria migrada.
         $mapCuenta = $this->mapaDe($pg, $idEmpresa, 'cuentas_bancarias');
         $mapFormaP = $this->mapaDe($pg, $idEmpresa, 'formas_pago');
@@ -2717,15 +2735,15 @@ class MigracionMysqlService
         $mapProv     = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
         $mapEgreso   = $this->mapaDe($pg, $idEmpresa, 'egresos'); // para reconciliar al re-correr
-        $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, tipo_egreso = ?, id_egreso_concepto = ?, id_proveedor = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, tipo_egreso = ?, tipo_sujeto = ?, id_egreso_concepto = ?, id_proveedor = ?, id_empleado = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
         $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
 
-        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, id_egreso_concepto, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'PROVEEDOR', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, id_empleado, id_egreso_concepto, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?)");
 
-        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
+        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro, codigo_contable
                   FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -2753,11 +2771,6 @@ class MigracionMysqlService
                         if ($idProv) { break; }
                     }
                 }
-                // Fallback: proveedor directo del egreso viejo (id_cli_pro apunta a proveedores en EGRESO)
-                // cuando el egreso no viene de una compra (otros conceptos).
-                if (!$idProv && (int) $ie['id_cli_pro'] > 0) {
-                    $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ie['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg) ?: null;
-                }
                 // "Pagado a" de texto libre: siempre presente en el viejo (nombre_ing_egr). Se muestra en el
                 // listado vía COALESCE(proveedor, empleado, beneficiario_nombre, 'N/A') cuando no hay proveedor.
                 $benef = self::nz($ie['nombre_ing_egr']);
@@ -2771,12 +2784,44 @@ class MigracionMysqlService
                     $cdv = (string) $d['codigo_documento_cv'];
                     if ($cdv !== '' && $cdv !== '0') { $esConcepto = false; break; }
                 }
+                $tipoSujeto = 'PROVEEDOR';
+                $idEmpleado = null;
                 if ($esConcepto) {
-                    $tipoEgreso = 'GENERAL';
-                    $idConcepto = $this->getOrCreateConceptoMigracion($idEmpresa, $idUsuario, 'egreso', $pg);
+                    // ¿Es NÓMINA? Se reconoce por el concepto viejo (codigo_contable → opciones_ingresos_egresos)
+                    // y, si el egreso no tiene concepto (los más antiguos), por el texto libre del egreso/detalle.
+                    $concepto = $opcionById[(int) $ie['codigo_contable']] ?? '';
+                    if ($concepto !== '') {
+                        $esNomina = self::esTextoNomina($concepto);
+                    } else {
+                        $txt = (string) $ie['nombre_ing_egr'] . ' ' . self::nz($ie['detalle_adicional']);
+                        foreach ($dets as $d) { $txt .= ' ' . (string) $d['detalle_ing_egr']; }
+                        $esNomina = self::esTextoNomina($txt);
+                    }
+                    if ($esNomina) {
+                        // Egreso de nómina: tipo ROL + sujeto EMPLEADO. Se intenta enlazar el empleado
+                        // migrado por el nombre del "Pagado a" (match exacto de tokens); si no hay match
+                        // confiable, id_empleado queda NULL y el nombre se conserva en beneficiario_nombre.
+                        $tipoEgreso = 'ROL';
+                        $tipoSujeto = 'EMPLEADO';
+                        $idConcepto = null;
+                        $kEmp = self::tokensNombre($benef);
+                        $idEmpleado = ($kEmp !== '' && strpos($kEmp, ' ') !== false && isset($empByTokens[$kEmp])) ? $empByTokens[$kEmp] : null;
+                    } else {
+                        $tipoEgreso = 'GENERAL';
+                        $idConcepto = $this->getOrCreateConceptoMigracion($idEmpresa, $idUsuario, 'egreso', $pg);
+                    }
+                    // NO enganchar proveedor por id_cli_pro en egresos de concepto (nómina / pagos a
+                    // personas): en el viejo ese id NO es fiable (a veces cae en un proveedor AJENO con
+                    // el mismo id → "otros nombres"). El "Pagado a" correcto es el texto libre
+                    // nombre_ing_egr (beneficiario_nombre), que ya se muestra cuando id_proveedor es NULL.
                 } else {
                     $tipoEgreso = 'COMPRA';
                     $idConcepto = null;
+                    // Fallback SOLO para egresos de compra cuyo proveedor no se resolvió desde la compra
+                    // referenciada: usar id_cli_pro del egreso viejo (aquí sí apunta al proveedor).
+                    if (!$idProv && (int) $ie['id_cli_pro'] > 0) {
+                        $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ie['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg) ?: null;
+                    }
                 }
 
                 $fe  = substr((string) $ie['fecha_ing_egr'], 0, 10);
@@ -2786,12 +2831,12 @@ class MigracionMysqlService
                 $estado = (stripos((string) $ie['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
                 if ($idEgrExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
                     $idEgr = (int) $idEgrExist;
-                    $updCab->execute([$fe, $tipoEgreso, $idConcepto, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario, $idEgr]);
+                    $updCab->execute([$fe, $tipoEgreso, $tipoSujeto, $idConcepto, $idProv, $idEmpleado, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario, $idEgr]);
                     $delDet->execute([$idEgr]);
                     $delPag->execute([$idEgr]);
                     $res['ya_migrados']++;
                 } else {
-                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $tipoEgreso, $idProv, $idConcepto, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $tipoEgreso, $tipoSujeto, $idProv, $idEmpleado, $idConcepto, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario]);
                     $idEgr = (int) $insCab->fetchColumn();
                     $res['migrados']++;
                 }
@@ -4776,6 +4821,42 @@ class MigracionMysqlService
     {
         $s = trim((string) $v);
         return (strlen(preg_replace('/\D/', '', $s)) >= 10) ? $s : null;
+    }
+
+    /** Normaliza un nombre: mayúsculas, sin acentos, espacios colapsados. */
+    private static function normalizarNombre(string $s): string
+    {
+        $s = strtr($s, ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N','á'=>'A','é'=>'E','í'=>'I','ó'=>'O','ú'=>'U','ü'=>'U','ñ'=>'N']);
+        return strtoupper(trim(preg_replace('/\s+/', ' ', $s)));
+    }
+
+    /**
+     * Clave de nombre por conjunto de tokens ORDENADOS (normalizados), para casar nombres con el orden
+     * de apellidos/nombres invertido ("GUSTAVO IDROVO MERA" ↔ "IDROVO MERA GUSTAVO"). Descarta tokens
+     * de 1 letra (iniciales) para no casar por una inicial suelta.
+     */
+    private static function tokensNombre(string $s): string
+    {
+        $s = self::normalizarNombre($s);
+        if ($s === '') { return ''; }
+        $tk = array_values(array_filter(explode(' ', $s), static fn($w) => strlen($w) >= 2));
+        sort($tk);
+        return implode(' ', $tk);
+    }
+
+    /**
+     * ¿El texto (concepto del egreso o descripción libre) corresponde a NÓMINA (pago a empleados)?
+     * Cubre sueldos, quincenas, roles de pago, décimos y fondos de reserva. NO incluye IESS ni SRI
+     * (esos pagos NO van al empleado, sino a la institución) ni anticipos a proveedores.
+     */
+    private static function esTextoNomina(string $s): bool
+    {
+        $t = self::normalizarNombre($s);
+        if ($t === '') { return false; }
+        foreach (['SUELDO', 'QUINCENA', 'NOMINA', 'ROL DE PAGO', 'ROL PAGO', 'ROLES DE PAGO', 'DECIMO', 'FONDO DE RESERVA', 'FONDOS DE RESERVA', 'ANTICIPO SUELDO', 'REMUNERAC', 'SALARIO'] as $kw) {
+            if (strpos($t, $kw) !== false) { return true; }
+        }
+        return false;
     }
 
     /**

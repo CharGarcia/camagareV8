@@ -74,9 +74,25 @@
         window.CB_fetchSearch(1);
     };
 
+    // Cuenta sin cuenta contable: no hay mayor del cual sacar el detalle, así que el movimiento
+    // se arma desde los cobros y pagos hechos con esa cuenta. Se avisa para que quede claro de
+    // dónde salen las cifras (empresas que no llevan contabilidad).
+    function actualizarAvisoFuente() {
+        const aviso = document.getElementById('cb-aviso-fuente');
+        if (!aviso) return;
+        const sinContabilidad = (window.CB_CUENTAS_SIN_CONTABILIDAD || []).includes(state.forma);
+        aviso.innerHTML = sinContabilidad
+            ? `<div class="alert alert-info py-2 px-3 mb-0 small d-flex align-items-center gap-2">
+                   <i class="bi bi-info-circle"></i>
+                   <span>Esta cuenta no tiene cuenta contable asignada: el detalle se arma con los <strong>cobros y pagos</strong> registrados con ella.</span>
+               </div>`
+            : '';
+    }
+
     window.CB_cambiarCuenta = function (idForma) {
         state.forma = parseInt(idForma, 10) || 0;
         actualizarSwitchConsolidado();
+        actualizarAvisoFuente();
         if (!state.forma) {
             document.getElementById('cb-tbody').innerHTML = '<tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>';
             return;
@@ -346,8 +362,12 @@
         const tr = btn.closest('tr');
         const row = JSON.parse(tr.dataset.row);
 
-        document.getElementById('cbm-id-asiento-detalle').value = row.id_asiento_detalle;
-        document.getElementById('cbm-id-asiento').value = row.id_asiento;
+        document.getElementById('cbm-id-asiento-detalle').value = row.id_asiento_detalle || '';
+        document.getElementById('cbm-id-asiento').value = row.id_asiento || '';
+        // Cuentas sin cuenta contable (empresa que no lleva contabilidad): no hay línea de
+        // asiento, la anotación se ancla al cobro/pago de origen.
+        document.getElementById('cbm-origen-tipo').value = row.origen_tipo || '';
+        document.getElementById('cbm-origen-id').value = row.origen_id || '';
         // row.id_empresa/id_forma_pago solo vienen en la vista consolidada (getMovimientosGrupo);
         // si no vienen, se usa la empresa activa / cuenta seleccionada de siempre.
         document.getElementById('cbm-id-empresa').value = row.id_empresa || 0;
@@ -384,7 +404,9 @@
 
     window.CB_guardarClasificacion = async function () {
         const payload = {
-            id_asiento_detalle: parseInt(document.getElementById('cbm-id-asiento-detalle').value, 10),
+            id_asiento_detalle: parseInt(document.getElementById('cbm-id-asiento-detalle').value, 10) || 0,
+            origen_tipo: document.getElementById('cbm-origen-tipo').value || null,
+            origen_id: parseInt(document.getElementById('cbm-origen-id').value, 10) || 0,
             id_empresa: parseInt(document.getElementById('cbm-id-empresa').value, 10) || 0,
             id_forma_pago: parseInt(document.getElementById('cbm-id-forma-pago').value, 10) || state.forma,
             tipo_transaccion: document.getElementById('cbm-tipo').value,
@@ -416,7 +438,9 @@
     };
 
     window.CB_quitarClasificacion = async function () {
-        const idAsientoDetalle = parseInt(document.getElementById('cbm-id-asiento-detalle').value, 10);
+        const idAsientoDetalle = parseInt(document.getElementById('cbm-id-asiento-detalle').value, 10) || 0;
+        const origenTipo = document.getElementById('cbm-origen-tipo').value || null;
+        const origenId = parseInt(document.getElementById('cbm-origen-id').value, 10) || 0;
         const idEmpresaRow = parseInt(document.getElementById('cbm-id-empresa').value, 10) || 0;
         const result = await Swal.fire({
             icon: 'warning', title: '¿Quitar clasificación?',
@@ -429,7 +453,12 @@
             const resp = await fetch(`${CB_URL_BASE}/quitarClasificacionAjax`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ id_asiento_detalle: idAsientoDetalle, id_empresa: idEmpresaRow }),
+                body: JSON.stringify({
+                    id_asiento_detalle: idAsientoDetalle,
+                    origen_tipo: origenTipo,
+                    origen_id: origenId,
+                    id_empresa: idEmpresaRow,
+                }),
             });
             const json = await resp.json();
             if (!json.ok) {
@@ -485,6 +514,7 @@
         state.forma = parseInt(formaSelect.value, 10) || 0;
         state.consolidado = !!window.CB_CONSOLIDADO_INICIAL;
         actualizarSwitchConsolidado();
+        actualizarAvisoFuente();
         document.getElementById('cb-consolidado').checked = state.consolidado;
 
         if (window.CMG_initSort) {

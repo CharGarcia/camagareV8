@@ -230,15 +230,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
-                            $tipoLabels = [
-                                'COMPRA' => 'Registro de Compra',
-                                'LIQUIDACION' => 'Liquidación',
-                                'ROL' => 'Rol de Pago',
-                                'QUINCENA' => 'Quincena',
-                                'PRESTAMO' => 'Préstamo',
-                                'OTRO' => 'Otro Concepto'
-                            ];
-                            $tipoLabel = $tipoLabels[$r['tipo_egreso']] ?? $r['tipo_egreso'];
+                            $tipoLabel = \App\Helpers\TipoDocumentoHelper::egresoLabel(
+                                $r['tipos_detalle'] ?? null,
+                                $r['tipo_egreso'] ?? null,
+                                $r['concepto_nombre'] ?? null
+                            );
                             $estado  = $r['estado'] ?? 'registrado';
                             $estadoClass = match ($estado) {
                                 'anulado' => 'bg-danger bg-opacity-10 text-danger border-danger',

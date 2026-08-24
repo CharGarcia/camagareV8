@@ -11,7 +11,11 @@ class ControlBancarioRules
 
     public function validarClasificacion(array $data): void
     {
-        if (empty($data['id_asiento_detalle'])) {
+        // El movimiento se identifica por la línea del asiento (cuenta con contabilidad) o por el
+        // cobro/pago de origen (cuenta sin cuenta contable); debe venir uno de los dos.
+        $tieneOrigen = in_array(strtolower((string) ($data['origen_tipo'] ?? '')), ['ingreso', 'egreso'], true)
+            && !empty($data['origen_id']);
+        if (empty($data['id_asiento_detalle']) && !$tieneOrigen) {
             throw new \Exception('Falta indicar el movimiento a clasificar.');
         }
 

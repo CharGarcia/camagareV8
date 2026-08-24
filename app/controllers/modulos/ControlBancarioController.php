@@ -183,10 +183,17 @@ class ControlBancarioController extends BaseModuloController
                     $badgeEst = '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-1" title="' . $tituloEst . '">' . htmlspecialchars((string) $r['establecimiento']) . '</span>';
                 }
 
+                // Sin cuenta contable no hay asiento que abrir: el comprobante es el propio
+                // documento de cobro/pago, así que se muestra como texto.
+                $numeroComprobante = htmlspecialchars((string) ($r['numero_comprobante'] ?: 'S/N'));
+                $celdaComprobante = !empty($r['id_asiento'])
+                    ? '<a href="#" onclick="event.stopPropagation(); event.preventDefault(); ASIENTO_abrirModal(' . (int) $r['id_asiento'] . ');" class="text-decoration-none fw-bold" title="Ver asiento contable">' . $numeroComprobante . '</a>'
+                    : '<span class="fw-bold" title="' . ((($r['origen_tipo'] ?? '') === 'egreso') ? 'Egreso' : 'Ingreso') . '">' . $numeroComprobante . '</span>';
+
                 echo '<tr class="cb-row" role="button" tabindex="0" data-row="' . $rowData . '" onclick="CB_abrirModalClasificacion(this)">
                         <td class="ps-3" data-col="fecha_asiento">' . $fecha . '</td>
                         <td data-col="fecha_banco">' . $fechaBanco . '</td>
-                        <td data-col="comprobante"><a href="#" onclick="event.stopPropagation(); event.preventDefault(); ASIENTO_abrirModal(' . (int) $r['id_asiento'] . ');" class="text-decoration-none fw-bold" title="Ver asiento contable">' . htmlspecialchars((string) ($r['numero_comprobante'] ?: 'S/N')) . '</a></td>
+                        <td data-col="comprobante">' . $celdaComprobante . '</td>
                         <td data-col="tipo"><span class="badge bg-light text-dark border">' . htmlspecialchars($tipoLabel) . '</span></td>
                         <td data-col="cheque">' . ($esCheque ? htmlspecialchars((string) ($r['numero_cheque'] ?? '')) : '') . $badgeDireccion . '</td>
                         <td data-col="fecha_cheque">' . $fechaCheque . '</td>
@@ -312,7 +319,7 @@ class ControlBancarioController extends BaseModuloController
 
         try {
             $idEmpresa = $this->resolverEmpresaObjetivo($idEmpresaActiva, $idUsuario, $data);
-            $this->service->quitarClasificacion($idEmpresa, $idUsuario, $idAsientoDetalle);
+            $this->service->quitarClasificacion($idEmpresa, $idUsuario, $idAsientoDetalle, $data);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura
-version: 1.5
+etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago
+version: 1.6
 orden: 20
 estado: activo
 ---
@@ -80,6 +80,22 @@ pendiente, el botón correspondiente no aparece — no tendría nada que buscar.
 Los demás conceptos (los que no dependen de buscar un documento, como
 **Anticipo Proveedor**, o cualquiera del desplegable "Otro concepto…": SRI,
 IESS, etc.) **siempre se muestran**, sin importar si hay pendientes o no.
+
+### La columna "Tipo" del listado muestra el tipo real, no el botón usado
+
+La columna **Tipo** del listado no repite el nombre del botón de concepto que
+se usó para armar el egreso (eso solo decide qué buscador se abre) — muestra
+el tipo **real** de lo que efectivamente se pagó, calculado a partir de los
+documentos del detalle: **Compra**, **Liquidación**, **Rol de Pago**,
+**Décimo Cuarto**, **Décimo Tercero**, **Préstamo Quirografario/Hipotecario/
+Empresa**, **Anticipo Empleado**. El botón **Nómina**, por ejemplo, busca
+indistintamente rol, décimos, préstamos y anticipos de empleado — pero cada
+egreso que resulte de eso muestra en el listado cuál de esos fue realmente.
+
+Si el egreso combina más de un tipo (ver "Combinar varios conceptos" arriba),
+la columna los junta con `+` (p. ej. "Compra + Otros Conceptos"). Si es un
+concepto sin documento (Anticipo Proveedor, SRI, IESS…), muestra directamente
+el nombre del concepto elegido.
 
 ## Reglas que aplica el sistema
 
@@ -190,6 +206,10 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.6** — La columna "Tipo" del listado muestra el tipo real del documento
+  (Rol de Pago, Décimo Cuarto, Décimo Tercero, Préstamo...) en vez de repetir
+  siempre el nombre del botón de concepto usado (p. ej. todo lo pagado desde
+  "Nómina" salía como "Rol de Pago" aunque fuera un décimo o un préstamo).
 - **1.5** — Los botones de concepto ligados a documento (Compra, Liquidación,
   Nómina) solo se muestran si hay algún pendiente de ese tipo en la empresa.
   Se quitó el botón "Agregar documentos" (redundante con los botones de

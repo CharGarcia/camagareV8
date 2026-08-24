@@ -233,8 +233,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
-                            $tipoLabels = ['FACTURA_VENTA' => 'Facturas de Venta', 'FACTURA_REEMBOLSO' => 'Factura de Reembolso', 'RECIBO_VENTA' => 'Recibo de Venta', 'OTRO' => 'Otro Ingreso'];
-                            $tipoLabel = $tipoLabels[$r['tipo_ingreso']] ?? $r['tipo_ingreso'];
+                            $tipoLabel = \App\Helpers\TipoDocumentoHelper::ingresoLabel(
+                                $r['tipos_detalle'] ?? null,
+                                $r['tipo_ingreso'] ?? null,
+                                $r['concepto_nombre'] ?? null
+                            );
                             $estado  = $r['estado'] ?? 'registrado';
                             $estadoClass = match ($estado) {
                                 'anulado'  => 'bg-danger bg-opacity-10 text-danger border-danger',

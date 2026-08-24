@@ -97,7 +97,13 @@ class EgresoRepository extends BaseRepository
                        COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'N/A') AS sujeto_nombre,
                        COALESCE(p.identificacion, emp.identificacion, '') AS sujeto_ruc,
                        u.nombre AS usuario_nombre,
-                       ec.nombre AS concepto_nombre
+                       ec.nombre AS concepto_nombre,
+                       (SELECT STRING_AGG(t, ',') FROM (
+                           SELECT DISTINCT ed.tipo_documento AS t
+                           FROM egresos_detalle ed
+                           WHERE ed.id_egreso = e.id AND ed.eliminado = FALSE
+                           ORDER BY t
+                       ) sub) AS tipos_detalle
                 FROM egresos_cabecera e
                 LEFT JOIN proveedores p ON e.id_proveedor = p.id
                 LEFT JOIN empleados emp ON e.id_empleado = emp.id

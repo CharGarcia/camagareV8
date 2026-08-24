@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura
-version: 1.3
+etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -70,6 +70,16 @@ recibo o reembolso pendiente, el botón correspondiente no aparece.
 Los demás conceptos (los que no dependen de buscar un documento, como
 **Anticipo Cliente**, o cualquiera del desplegable "Otro concepto…")
 **siempre se muestran**, sin importar si hay pendientes o no.
+
+### La columna "Tipo" del listado muestra el tipo real, no el botón usado
+
+La columna **Tipo** del listado muestra el tipo **real** de lo que
+efectivamente se cobró (Factura de Venta, Recibo de Venta, Factura de
+Reembolso), calculado a partir de los documentos del detalle — no el botón de
+concepto que se usó para armarlo. Si el ingreso combina más de un tipo (ver
+"Combinar varios conceptos" arriba), la columna los junta con `+`. Si es un
+concepto sin documento (Anticipo Cliente, Préstamos…), muestra directamente el
+nombre del concepto elegido.
 
 ## Campos obligatorios
 
@@ -143,6 +153,10 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **1.4** — La columna "Tipo" del listado muestra el tipo real del documento
+  (Factura de Venta, Recibo de Venta, Factura de Reembolso) en vez de repetir
+  siempre el `tipo_ingreso` de cabecera, que podía no coincidir con lo
+  realmente cobrado.
 - **1.3** — Los botones de concepto ligados a documento (Factura de venta,
   Recibo de venta, Factura de reembolso) solo se muestran si hay algún
   pendiente de ese tipo en la empresa. Se quitó el botón "Agregar documentos"

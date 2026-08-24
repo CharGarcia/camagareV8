@@ -162,15 +162,13 @@ class IngresosController extends BaseModuloController
             foreach ($rows as $r) {
                 $rowData = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 $fecha   = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                
-                $tipoLabels = [
-                    'FACTURA_VENTA'     => 'Facturas de Venta',
-                    'FACTURA_REEMBOLSO' => 'Factura de Reembolso',
-                    'RECIBO_VENTA'      => 'Recibo de Venta',
-                    'OTRO'              => 'Otro Ingreso'
-                ];
-                $tipoLabel = $tipoLabels[$r['tipo_ingreso']] ?? $r['tipo_ingreso'];
-                
+
+                $tipoLabel = \App\Helpers\TipoDocumentoHelper::ingresoLabel(
+                    $r['tipos_detalle'] ?? null,
+                    $r['tipo_ingreso'] ?? null,
+                    $r['concepto_nombre'] ?? null
+                );
+
                 $estado  = $r['estado'] ?? 'registrado';
                 $estadoClass = match ($estado) {
                     'anulado'    => 'bg-danger bg-opacity-10 text-danger border-danger',

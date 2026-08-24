@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.6
+version: 1.7
 orden: 60
 estado: activo
 ---
@@ -72,13 +72,38 @@ datos de una cuenta contable distinta.
 ## Selector de cuenta bancaria
 
 El selector lista toda forma de pago con **banco asignado** (activa, no
-eliminada), aunque todavía no tenga **cuenta contable** configurada — antes
-esas cuentas desaparecían del selector sin explicación. Si le falta la cuenta
-contable, aparece marcada con "⚠ sin cuenta contable" y, al seleccionarla,
-muestra saldo 0 y sin movimientos (no puede mostrar un mayor que no existe).
-En cuanto se le asigna la cuenta contable (desde
-[Formas de cobro y pago](formas-cobros-pagos.md)), sus movimientos aparecen
-solos, sin ninguna acción adicional.
+eliminada), tenga o no **cuenta contable** configurada. Si le falta, aparece
+marcada como "— sin cuenta contable", y el módulo funciona igual: ver la
+sección siguiente.
+
+## Cuentas sin cuenta contable (empresas que no llevan contabilidad)
+
+Hay empresas que no llevan contabilidad pero sí controlan su cuenta bancaria.
+En ellas la cuenta no tiene cuenta contable asignada, así que **no existe un
+mayor** del cual sacar el detalle. En ese caso el módulo arma el movimiento
+directamente desde los **cobros y pagos** registrados con esa cuenta:
+
+- Cada línea de pago de un **ingreso** es una entrada de dinero; cada línea de
+  pago de un **egreso**, una salida.
+- Se excluyen los documentos eliminados o anulados y los cheques anulados.
+- El saldo del período, los créditos y débitos, el saldo acumulado línea a
+  línea, el buscador, los filtros, la exportación a PDF/Excel y la
+  conciliación del período funcionan igual que con contabilidad.
+- La **clasificación manual** (tipo, Nº de cheque, fechas, observación)
+  también funciona: la anotación se guarda contra el cobro/pago en vez de
+  contra una línea de asiento.
+- Los **cheques posfechados** y los cheques emitidos en circulación de estas
+  cuentas también aparecen en sus pestañas.
+
+Al seleccionar una de estas cuentas el módulo lo avisa arriba del listado, para
+que quede claro de dónde salen las cifras. Dos diferencias con una cuenta que
+sí lleva contabilidad: el número de comprobante es el del ingreso/egreso y no
+abre el asiento (no hay), y la segunda hoja del Excel de conciliación se llama
+"Movimientos" en vez de "Mayor Contable".
+
+Si más adelante se le asigna la cuenta contable (desde
+[Formas de cobro y pago](formas-cobros-pagos.md)), el módulo pasa a mostrar el
+mayor contable, sin ninguna acción adicional.
 
 ## Errores frecuentes
 
@@ -103,6 +128,11 @@ solos, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.7** — Las cuentas bancarias **sin cuenta contable** ya no se ven vacías:
+  el módulo arma su detalle, saldos, cheques, exportaciones y conciliación
+  desde los cobros y pagos hechos con esa cuenta, y también permite
+  clasificarlos. Pensado para empresas que no llevan contabilidad pero sí
+  controlan su banco.
 - **1.6** — La cuenta contable ya no es obligatoria para que una cuenta
   bancaria aparezca en el selector; sin ella se ve con un aviso y saldo/
   movimientos en 0 hasta que se le asigne una.

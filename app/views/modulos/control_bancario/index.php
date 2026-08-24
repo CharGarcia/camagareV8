@@ -60,6 +60,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     </div>
 
     <div id="cb-badge-conciliacion" class="mb-2"></div>
+    <!-- Aviso de origen de los datos cuando la cuenta no tiene cuenta contable (ver JS). -->
+    <div id="cb-aviso-fuente" class="mb-2"></div>
 
     <!-- ── Selector de cuenta + filtros de fecha ── -->
     <div class="card border-0 shadow-sm rounded-3 mb-3">
@@ -71,7 +73,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <option value="">— Seleccione —</option>
                         <?php foreach ($formas as $f): ?>
                             <option value="<?= (int) $f['id'] ?>" <?= (int) $f['id'] === $idFormaPago ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($f['nombre'] . ($f['nombre_banco'] ? ' — ' . $f['nombre_banco'] : '') . ($f['numero_cuenta'] ? ' (' . $f['numero_cuenta'] . ')' : '')) ?><?= empty($f['id_cuenta_contable']) ? ' ⚠ sin cuenta contable' : '' ?>
+                                <?= htmlspecialchars($f['nombre'] . ($f['nombre_banco'] ? ' — ' . $f['nombre_banco'] : '') . ($f['numero_cuenta'] ? ' (' . $f['numero_cuenta'] . ')' : '')) ?><?= empty($f['id_cuenta_contable']) ? ' — sin cuenta contable' : '' ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -256,6 +258,9 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
             <div class="modal-body p-3">
                 <input type="hidden" id="cbm-id-asiento-detalle">
                 <input type="hidden" id="cbm-id-asiento">
+                <!-- Anclaje alternativo al cobro/pago, para cuentas sin cuenta contable (sin asiento). -->
+                <input type="hidden" id="cbm-origen-tipo">
+                <input type="hidden" id="cbm-origen-id">
                 <input type="hidden" id="cbm-id-empresa">
                 <input type="hidden" id="cbm-id-forma-pago">
                 <div class="p-2 border rounded-3 bg-light mb-3">
@@ -445,6 +450,12 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     // SÍ tienen con qué consolidar; controla cuándo se muestra el switch "Consolidar por RUC".
     window.CB_GRUPOS_CUENTAS = <?= json_encode(array_map('count', $gruposDeCuentas ?? []), JSON_UNESCAPED_UNICODE) ?>;
     window.CB_CONSOLIDADO_INICIAL = <?= $consolidado ? 'true' : 'false' ?>;
+    // Cuentas sin cuenta contable: su detalle se arma desde los cobros y pagos registrados con
+    // esa cuenta (empresas que no llevan contabilidad), no desde el mayor.
+    window.CB_CUENTAS_SIN_CONTABILIDAD = <?= json_encode(array_values(array_map(
+        static fn ($f) => (int) $f['id'],
+        array_filter($formas, static fn ($f) => empty($f['id_cuenta_contable']))
+    ))) ?>;
 </script>
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>

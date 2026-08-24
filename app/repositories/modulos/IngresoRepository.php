@@ -82,7 +82,13 @@ class IngresoRepository extends BaseRepository
                        c.identificacion AS cliente_ruc,
                        rc.nombre AS recibo_cliente_nombre,
                        u.nombre AS usuario_nombre,
-                       eic.nombre AS concepto_nombre
+                       eic.nombre AS concepto_nombre,
+                       (SELECT STRING_AGG(t, ',') FROM (
+                           SELECT DISTINCT idt.tipo_documento AS t
+                           FROM ingresos_detalle idt
+                           WHERE idt.id_ingreso = i.id
+                           ORDER BY t
+                       ) sub) AS tipos_detalle
                 FROM ingresos_cabecera i
                 LEFT JOIN clientes c  ON i.id_cliente        = c.id
                 LEFT JOIN clientes rc ON i.id_recibo_cliente  = rc.id

@@ -22,7 +22,6 @@ $msg = $msg ?? null;
 $limiteUsuarios = $limiteUsuarios ?? null;
 $urlRecuperar = rtrim(BASE_URL, '/') . '/auth/enviar-correo-recuperar';
 $empresasParaCrear = $empresasParaCrear ?? [];
-$idEmpresaActual = $idEmpresaActual ?? 0;
 
 $urlBaseUsuarios = rtrim($base, '/') . '/config/usuarios-sistema';
 $rowsHtml = $rowsHtml ?? '';
@@ -203,10 +202,13 @@ $rowsHtml = $rowsHtml ?? '';
                                     <?php
                                     $idEmp = (int)($e['id_empresa'] ?? 0);
                                     $nombreEmp = $e['nombre_comercial'] ?? '';
-                                    $checked = $idEmp === $idEmpresaActual ? 'checked' : '';
                                     ?>
                                     <div class="form-check crear-empresa-item" data-nombre="<?= htmlspecialchars(mb_strtolower($nombreEmp)) ?>">
-                                        <input class="form-check-input" type="checkbox" name="empresas[]" value="<?= $idEmp ?>" id="crear-emp-<?= $idEmp ?>" <?= $checked ?>>
+                                        <!-- Sin premarcar ninguna: debe elegirse a propósito. Premarcar la
+                                             empresa activa en la sesión de quien crea el usuario llevaba a
+                                             asignarle esa empresa por descuido, sin relación con el usuario
+                                             que realmente se está dando de alta. -->
+                                        <input class="form-check-input" type="checkbox" name="empresas[]" value="<?= $idEmp ?>" id="crear-emp-<?= $idEmp ?>">
                                         <label class="form-check-label small" for="crear-emp-<?= $idEmp ?>">
                                             <?= htmlspecialchars($nombreEmp) ?>
                                             <span class="text-muted">(<?= htmlspecialchars($e['ruc'] ?? '') ?>)</span>
