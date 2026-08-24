@@ -2779,23 +2779,34 @@ class MigracionMysqlService
                 // Los de concepto se guardan como egreso tipo GENERAL + concepto genérico, con detalle de
                 // texto libre (tipo_documento='MANUAL'), para que la vista NO pinte un documento clickeable
                 // con id nulo. Los que sí referencian compra quedan como COMPRA (como antes).
+                // Una línea es de COMPRA solo si su codigo_documento_cv es una compra REAL (existe en
+                // encabezado_compra de la empresa). Los pagos de ROL DE PAGO / QUINCENA traen un cv como
+                // "ROL_PAGOS523" / "QUINCENA125" que NO es una compra: si se toma como tal, el egreso se
+                // clasifica mal (COMPRA) y se engancha un proveedor equivocado por id_cli_pro.
                 $esConcepto = true;
                 foreach ($dets as $d) {
                     $cdv = (string) $d['codigo_documento_cv'];
-                    if ($cdv !== '' && $cdv !== '0') { $esConcepto = false; break; }
+                    if ($cdv !== '' && $cdv !== '0' && isset($compProvByCod[$cdv])) { $esConcepto = false; break; }
                 }
                 $tipoSujeto = 'PROVEEDOR';
                 $idEmpleado = null;
                 if ($esConcepto) {
-                    // ¿Es NÓMINA? Se reconoce por el concepto viejo (codigo_contable → opciones_ingresos_egresos)
-                    // y, si el egreso no tiene concepto (los más antiguos), por el texto libre del egreso/detalle.
-                    $concepto = $opcionById[(int) $ie['codigo_contable']] ?? '';
-                    if ($concepto !== '') {
-                        $esNomina = self::esTextoNomina($concepto);
-                    } else {
-                        $txt = (string) $ie['nombre_ing_egr'] . ' ' . self::nz($ie['detalle_adicional']);
-                        foreach ($dets as $d) { $txt .= ' ' . (string) $d['detalle_ing_egr']; }
-                        $esNomina = self::esTextoNomina($txt);
+                    // ¿Es NÓMINA? Señal más fuerte: alguna línea referencia un ROL DE PAGO / QUINCENA
+                    // (cv "ROL_PAGOS###" / "QUINCENA###"). Si no, por el concepto viejo (codigo_contable →
+                    // opciones_ingresos_egresos) y, en su defecto (los más antiguos), por el texto libre.
+                    $esNomina = false;
+                    foreach ($dets as $d) {
+                        if (preg_match('/^(ROL[_ ]?PAGO|QUINCENA|NOMINA)/i', trim((string) $d['codigo_documento_cv']))) { $esNomina = true; break; }
+                    }
+                    if (!$esNomina) {
+                        $concepto = $opcionById[(int) $ie['codigo_contable']] ?? '';
+                        if ($concepto !== '') {
+                            $esNomina = self::esTextoNomina($concepto);
+                        } else {
+                            $txt = (string) $ie['nombre_ing_egr'] . ' ' . self::nz($ie['detalle_adicional']);
+                            foreach ($dets as $d) { $txt .= ' ' . (string) $d['detalle_ing_egr']; }
+                            $esNomina = self::esTextoNomina($txt);
+                        }
                     }
                     if ($esNomina) {
                         // Egreso de nómina: tipo ROL + sujeto EMPLEADO. Se intenta enlazar el empleado
@@ -2843,11 +2854,11 @@ class MigracionMysqlService
 
                 foreach ($dets as $d) {
                     $cdv = (string) $d['codigo_documento_cv'];
-                    if ($cdv !== '' && $cdv !== '0') { // línea de documento: compra
+                    if ($cdv !== '' && $cdv !== '0' && isset($compProvByCod[$cdv])) { // línea de documento: compra REAL
                         $tdoc   = 'COMPRA';
                         $idRef  = $compraPorCod[$cdv] ?? null;
                         $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
-                    } else { // línea de concepto: texto libre, sin documento clickeable
+                    } else { // línea de concepto / rol de pago: texto libre, sin documento clickeable
                         $tdoc   = 'MANUAL';
                         $idRef  = null;
                         $numDoc = null;

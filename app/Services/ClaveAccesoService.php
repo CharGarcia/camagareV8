@@ -54,24 +54,48 @@ class ClaveAccesoService
         ?string $codigoNumerico = null
     ): string {
         $fecha = self::formatearFecha($fechaEmision);
-        $est   = str_pad($establecimiento, 3, '0', STR_PAD_LEFT);
-        $pto   = str_pad($puntoEmision,    3, '0', STR_PAD_LEFT);
-        $sec   = str_pad($secuencial,      9, '0', STR_PAD_LEFT);
+        $est   = self::ajustarSegmento($establecimiento, 3, 'establecimiento');
+        $pto   = self::ajustarSegmento($puntoEmision,    3, 'punto de emisión');
+        $sec   = self::ajustarSegmento($secuencial,      9, 'secuencial');
+        $rucAj = self::ajustarSegmento($ruc,            13, 'RUC del emisor');
+        $tComp = self::ajustarSegmento($tipoComprobante, 2, 'tipo de comprobante');
+        $tAmb  = self::ajustarSegmento($tipoAmbiente,    1, 'tipo de ambiente');
+        $tEmi  = self::ajustarSegmento($tipoEmision,     1, 'tipo de emisión');
         $cod   = $codigoNumerico !== null
             ? str_pad(substr($codigoNumerico, 0, 8), 8, '0', STR_PAD_LEFT)
             : self::codigoNumericoAleatorio();
 
         $base = $fecha
-            . $tipoComprobante
-            . $ruc
-            . $tipoAmbiente
+            . $tComp
+            . $rucAj
+            . $tAmb
             . $est
             . $pto
             . $sec
             . $cod
-            . $tipoEmision;
+            . $tEmi;
 
         return $base . self::modulo11($base);
+    }
+
+    /**
+     * Ajusta un segmento de la clave de acceso a su longitud exacta: solo
+     * dígitos, rellenado a la izquierda con ceros. Si tiene MÁS dígitos de
+     * los que le corresponden (p. ej. el secuencial con algo mal pegado, como
+     * "001-002-000000298" en vez de solo "000000298"), se rechaza con un
+     * mensaje claro — sin este chequeo, str_pad() no recorta lo que sobra y
+     * la clave termina más larga que los 49 dígitos que acepta la columna
+     * clave_acceso, y Postgres la rechaza con un error críptico de truncado.
+     */
+    private static function ajustarSegmento(string $valor, int $longitud, string $etiqueta): string
+    {
+        $soloDigitos = preg_replace('/\D/', '', $valor) ?? '';
+        if (strlen($soloDigitos) > $longitud) {
+            throw new \InvalidArgumentException(
+                "El {$etiqueta} '{$valor}' tiene más de {$longitud} dígitos: no se puede generar la clave de acceso del SRI."
+            );
+        }
+        return str_pad($soloDigitos, $longitud, '0', STR_PAD_LEFT);
     }
 
     /**
