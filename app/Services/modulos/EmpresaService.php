@@ -243,6 +243,19 @@ class EmpresaService
             }
         }
 
+        // tipo_emision: único valor SRI soportado hoy es '1' (Normal). El <select>
+        // del formulario solo ofrece esa opción, pero sin validar aquí, cualquier
+        // otro valor que llegara se guardaba tal cual — y como la columna
+        // ventas_cabecera.tipo_emision es VARCHAR(5), algo más largo que eso
+        // (p. ej. el texto "Normal" en vez del código "1") revienta al emitir
+        // cualquier factura con un error críptico de Postgres, no al guardar
+        // esta configuración.
+        if (array_key_exists('tipo_emision', $data) && (string) $data['tipo_emision'] !== '1') {
+            throw new \InvalidArgumentException(
+                "El campo «Tipo Emisión» solo admite el valor '1' (Normal) según el SRI."
+            );
+        }
+
         $fields = [
             'resolucion_contribuyente', 'id_tipo_regimen', 'tipo_ambiente',
             'agente_retencion', 'tipo_emision'

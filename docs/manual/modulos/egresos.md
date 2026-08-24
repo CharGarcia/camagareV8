@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago
-version: 1.6
+version: 1.7
 orden: 20
 estado: activo
 ---
@@ -129,6 +129,29 @@ a PDF (descarga) como directo a la impresora (abre el diálogo de impresión del
 navegador). Cada impresión queda registrada (control anti-reimpresión): si un
 cheque ya se imprimió, el sistema avisa y pide confirmar antes de reimprimirlo.
 
+### Cómo saber si un cheque ya se cobró
+
+La fecha que se captura en el egreso es la **fecha girada en el cheque** (la
+posfechada); no significa que el banco ya lo haya pagado. El cheque cuenta como
+**cobrado** cuando en [Control bancario](control-bancario.md) se le registró la
+**Fecha Banco**, es decir, la fecha real en que el banco lo hizo efectivo.
+
+Dónde verlo:
+
+- **En el egreso**: la fila del pago siempre dice en qué estado está el cheque.
+  - **✔ Cobrado el DD-MM-AAAA** (verde): el banco ya lo hizo efectivo en esa
+    fecha. A partir de ahí desaparecen los botones de editar fecha, cambiar el
+    nombre del beneficiario y anular el cheque.
+  - **⏳ No cobrado** (ámbar): sigue en circulación, todavía se puede corregir
+    o anular.
+- **En Control bancario**: la columna **Fecha Banco** del movimiento, y en el
+  reporte de Conciliación las secciones *Cheques emitidos en circulación (no
+  cobrados)* y *Cheques cobrados por el banco en el período*.
+
+Esto funciona igual en empresas que **no llevan contabilidad**: la marca de
+cobrado se reconoce tanto si la conciliación quedó anclada al asiento como si
+quedó anclada directamente al pago (cuentas sin cuenta contable).
+
 ### Anular un cheque
 
 Si un cheque se dañó al imprimir, se emitió con datos equivocados o por
@@ -206,6 +229,11 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.7** — La fila del pago con cheque ahora indica siempre su estado:
+  "Cobrado el DD-MM-AAAA" (con la fecha real del banco) o "No cobrado". Además,
+  ese estado ya se reconoce en empresas sin contabilidad: antes nunca aparecía
+  en cuentas bancarias sin cuenta contable, así que el sistema seguía dejando
+  editarle la fecha o anular un cheque que el banco ya había pagado.
 - **1.6** — La columna "Tipo" del listado muestra el tipo real del documento
   (Rol de Pago, Décimo Cuarto, Décimo Tercero, Préstamo...) en vez de repetir
   siempre el nombre del botón de concepto usado (p. ej. todo lo pagado desde

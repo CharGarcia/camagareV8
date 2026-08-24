@@ -176,7 +176,8 @@ class EgresoRepository extends BaseRepository
                        ep.tipo_operacion_bancaria, ep.numero_cheque, ep.fecha_cobro, ep.beneficiario_cheque,
                        ep.estado_cheque, ep.motivo_anulacion_cheque, ep.anulado_cheque_at,
                        efc.nombre AS forma_pago_nombre, efc.tipo AS forma_pago_tipo,
-                       " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado
+                       " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado,
+                       " . $this->sqlChequeFechaBanco('ep', 'efc') . " AS cheque_fecha_banco
                 FROM egresos_pagos ep
                 INNER JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
                 WHERE ep.id_egreso = ? AND ep.eliminado = FALSE
@@ -186,13 +187,20 @@ class EgresoRepository extends BaseRepository
 
     /**
      * Subconsulta EXISTS: TRUE si el cheque del pago ya fue conciliado en Control
-     * Bancario (tiene fecha_banco), es decir "reportado como cobrado". Se enlaza el
-     * pago con la línea bancaria del asiento del egreso (misma cuenta contable) y
-     * su clasificación en control_bancario_movimientos.
+     * Bancario (tiene fecha_banco), es decir "reportado como cobrado".
+     *
+     * Dos anclajes posibles, según cómo Control Bancario haya podido anotar ese
+     * movimiento (ver 20260824_control_bancario_sin_contabilidad.sql):
+     *  1. Cuenta CON contabilidad: la anotación cuelga de la línea bancaria del
+     *     asiento del egreso (misma cuenta contable).
+     *  2. Cuenta SIN cuenta contable (empresa que no lleva contabilidad): no hay
+     *     asiento, la anotación cuelga del propio pago (origen_tipo/origen_id).
+     * Sin la segunda rama, un cheque ya cobrado de esas empresas se seguía viendo
+     * como "en circulación" y el sistema dejaba editarle la fecha o anularlo.
      */
     private function sqlChequeConciliado(string $ep, string $fp): string
     {
-        return "EXISTS (
+        return "(EXISTS (
                     SELECT 1
                     FROM asientos_contables_cabecera acc
                     JOIN asientos_contables_detalle acd ON acd.id_asiento = acc.id AND acd.eliminado = FALSE
@@ -201,7 +209,38 @@ class EgresoRepository extends BaseRepository
                       AND acc.id_referencia_origen = {$ep}.id_egreso
                       AND acd.id_cuenta_contable = {$fp}.id_cuenta_contable
                       AND cbm.fecha_banco IS NOT NULL
-                )";
+                ) OR EXISTS (
+                    SELECT 1
+                    FROM control_bancario_movimientos cbm2
+                    WHERE cbm2.origen_tipo = 'egreso'
+                      AND cbm2.origen_id = {$ep}.id
+                      AND cbm2.eliminado = FALSE
+                      AND cbm2.fecha_banco IS NOT NULL
+                ))";
+    }
+
+    /**
+     * Fecha en que el banco hizo efectivo el cheque (la Fecha Banco de Control Bancario),
+     * por cualquiera de los dos anclajes de sqlChequeConciliado(). NULL si aún no se cobró.
+     * Solo para mostrarla junto al estado del cheque en la fila del pago.
+     */
+    private function sqlChequeFechaBanco(string $ep, string $fp): string
+    {
+        return "(SELECT MIN(m.fecha_banco)
+                 FROM control_bancario_movimientos m
+                 WHERE m.eliminado = FALSE
+                   AND m.fecha_banco IS NOT NULL
+                   AND (
+                         (m.origen_tipo = 'egreso' AND m.origen_id = {$ep}.id)
+                         OR m.id_asiento_detalle IN (
+                                SELECT acd2.id
+                                FROM asientos_contables_cabecera acc2
+                                JOIN asientos_contables_detalle acd2 ON acd2.id_asiento = acc2.id AND acd2.eliminado = FALSE
+                                WHERE acc2.modulo_origen = 'egreso'
+                                  AND acc2.id_referencia_origen = {$ep}.id_egreso
+                                  AND acd2.id_cuenta_contable = {$fp}.id_cuenta_contable
+                            )
+                       ))";
     }
 
     /** Un pago-cheque con su estado de conciliación, para validar la edición de fecha. */

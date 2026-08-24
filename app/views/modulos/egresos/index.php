@@ -1292,6 +1292,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             .catch(() => { input.placeholder = 'Manual Nº'; });
     }
 
+    // 'YYYY-MM-DD' -> 'DD-MM-YYYY' (formato de fecha del sistema).
+    function fmtFechaCorta(v) {
+        if (!v) return '';
+        const s = String(v).substring(0, 10).split('-');
+        return s.length === 3 ? `${s[2]}-${s[1]}-${s[0]}` : String(v);
+    }
+
     function renderPagosEgreso() {
         const tb = document.getElementById('eg-tbody-pagos');
         tb.innerHTML = '';
@@ -1326,8 +1333,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         infoNombre = ` <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" title="Nombre a imprimir en el cheque"><i class="bi bi-person"></i> ${p.beneficiario_cheque}</span>`;
                     }
                     if (p.conciliado) {
-                        badgeCobrado = ` <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" title="Cheque conciliado en Control Bancario"><i class="bi bi-lock-fill"></i> cobrado</span>`;
+                        // Fecha real en que el banco lo hizo efectivo (Fecha Banco de Control Bancario).
+                        const fechaCobro = p.fecha_banco ? ' el ' + fmtFechaCorta(p.fecha_banco) : '';
+                        badgeCobrado = ` <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Cobrado: el banco lo hizo efectivo (conciliado en Control Bancario)"><i class="bi bi-check-circle-fill"></i> Cobrado${fechaCobro}</span>`;
                     } else if (!esEgresoAnulado) {
+                        badgeCobrado = ` <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25" title="Aún no se registra la Fecha Banco en Control Bancario: el cheque sigue en circulación"><i class="bi bi-hourglass-split"></i> No cobrado</span>`;
+                    }
+                    if (!p.conciliado && !esEgresoAnulado) {
                         btnEditFecha  = `<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-calendar-event"></i></button>`;
                         btnEditNombre = `<button type="button" class="btn btn-link btn-sm text-secondary p-0 ms-1 align-baseline" title="Nombre a imprimir en el cheque" onclick="editarNombreCheque(${p.id_pago}, ${i})"><i class="bi bi-person-gear"></i></button>`;
                         btnAnular     = `<button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 align-baseline" title="Anular este cheque" onclick="anularChequeEgreso(${p.id_pago}, ${i})"><i class="bi bi-ban"></i></button>`;
@@ -2021,7 +2033,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 numero_cheque: p.numero_cheque,
                 fecha_cobro: p.fecha_cobro,
                 beneficiario_cheque: p.beneficiario_cheque,
-                conciliado: (p.cheque_conciliado === true || p.cheque_conciliado === 't' || p.cheque_conciliado === 1 || p.cheque_conciliado === '1')
+                conciliado: (p.cheque_conciliado === true || p.cheque_conciliado === 't' || p.cheque_conciliado === 1 || p.cheque_conciliado === '1'),
+                // Fecha Banco de Control Bancario: cuándo se hizo efectivo el cheque.
+                fecha_banco: p.cheque_fecha_banco || null
             }));
 
             pagosAnuladosEgreso = _pagosAnulados.map(p=>({
