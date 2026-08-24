@@ -55,7 +55,7 @@ if (!$listar && $idEmpresa === null && $p12Path === null) {
 if ($listar) {
     $db = \App\core\Database::getConnection();
     $filas = $db->query(
-        "SELECT e.id, e.razon_social, e.ruc, f.id AS id_firma, f.archivo_ruta,
+        "SELECT e.id, e.nombre, e.ruc, f.id AS id_firma, f.archivo_ruta,
                 f.password_firma, f.fecha_expiracion
            FROM empresas e
            JOIN empresa_firma f
@@ -93,7 +93,7 @@ if ($listar) {
             "%-5s %-13s %-34s %-42s %s\n",
             $f['id'],
             substr((string)$f['ruc'], 0, 13),
-            substr((string)$f['razon_social'], 0, 34),
+            substr((string)$f['nombre'], 0, 34),
             substr(preg_replace('/^CN=([^,]+).*$/', '$1', $emisor) ?? $emisor, 0, 42),
             $serie
         );
