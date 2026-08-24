@@ -89,12 +89,18 @@ if ($listar) {
         } catch (\Throwable $e) {
             $emisor = 'ERROR: ' . $e->getMessage();
         }
+        // El CN no siempre es el primer atributo del DN (en UANATACA va después
+        // de 2.5.4.97), así que se busca en cualquier posición.
+        $nombreCa = $emisor;
+        if (preg_match('/(?:^|,)CN=((?:[^,\\\\]|\\\\.)*)/', $emisor, $mCn)) {
+            $nombreCa = str_replace(['\\,', '\\+', '\\\\'], [',', '+', '\\'], $mCn[1]);
+        }
         printf(
             "%-5s %-13s %-34s %-42s %s\n",
             $f['id'],
             substr((string)$f['ruc'], 0, 13),
             substr((string)$f['nombre'], 0, 34),
-            substr(preg_replace('/^CN=([^,]+).*$/', '$1', $emisor) ?? $emisor, 0, 42),
+            substr($nombreCa, 0, 42),
             $serie
         );
     }
