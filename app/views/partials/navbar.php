@@ -233,7 +233,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                         $nombreEmp = !empty($emp['nombre_comercial']) ? $emp['nombre_comercial'] : ($emp['nombre'] ?? $emp['ruc'] ?? '');
                         $textoEmp = ($emp['establecimiento'] ?? '001') . ' - ' . $nombreEmp;
                     ?>
-                        <div class="cmg-empresas-dropdown-item" role="option" data-id="<?= (int)($emp['id_empresa'] ?? 0) ?>" data-text="<?= htmlspecialchars($textoEmp) ?>" data-ruc="<?= htmlspecialchars($emp['ruc'] ?? '') ?>">
+                        <div class="cmg-empresas-dropdown-item" role="option" data-id="<?= (int)($emp['id_empresa'] ?? 0) ?>" data-text="<?= htmlspecialchars($textoEmp) ?>" data-ruc="<?= htmlspecialchars($emp['ruc'] ?? '') ?>" data-razon="<?= htmlspecialchars($emp['nombre'] ?? '') ?>">
                             <?= htmlspecialchars($textoEmp) ?>
                         </div>
                     <?php endforeach; ?>

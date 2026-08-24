@@ -71,6 +71,10 @@ class EmpresaController extends Controller
                     'id_empresa' => (int)$emp['id_empresa'],
                     'texto' => $texto,
                     'ruc' => $emp['ruc'] ?? '',
+                    // Razón social: se busca por ella aparte del nombre comercial que se
+                    // muestra, porque cuando ambos existen el comercial tapa a la razón
+                    // social en 'texto' y el usuario podría estar buscando por esa.
+                    'razon' => $emp['nombre'] ?? '',
                 ];
             }
 

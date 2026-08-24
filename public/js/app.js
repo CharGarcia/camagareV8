@@ -74,6 +74,7 @@ window.CMG_fechaLocal = function(d) {
                             div.setAttribute('data-id', emp.id_empresa);
                             div.setAttribute('data-text', emp.texto);
                             div.setAttribute('data-ruc', emp.ruc || '');
+                            div.setAttribute('data-razon', emp.razon || '');
                             div.textContent = emp.texto;
                             dropdown.appendChild(div);
                         });
@@ -150,11 +151,14 @@ window.CMG_fechaLocal = function(d) {
                 var item = items[i];
                 var text = (item.getAttribute('data-text') || '').toLowerCase();
                 var ruc = (item.getAttribute('data-ruc') || '').toLowerCase();
+                var razon = (item.getAttribute('data-razon') || '').toLowerCase();
 
                 // Sin filtro: mostrar todas las empresas. Con filtro: todas las que
-                // coincidan en texto o RUC. El alto lo limita el CSS (max-height +
-                // overflow-y), que activa la barra de scroll cuando hay muchas.
-                var isMatch = (q === '') || (text.indexOf(q) !== -1 || ruc.indexOf(q) !== -1);
+                // coincidan en texto (nombre comercial mostrado), RUC, o razón social
+                // (aunque el nombre comercial la tape en el texto visible). El alto lo
+                // limita el CSS (max-height + overflow-y), que activa la barra de
+                // scroll cuando hay muchas.
+                var isMatch = (q === '') || (text.indexOf(q) !== -1 || ruc.indexOf(q) !== -1 || razon.indexOf(q) !== -1);
 
                 if (isMatch) {
                     item.style.setProperty('display', 'block', 'important');
