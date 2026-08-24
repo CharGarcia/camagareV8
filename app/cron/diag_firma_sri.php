@@ -1,0 +1,231 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Diagnóstico de la firma electrónica de una empresa (uso por consola).
+ *
+ * Toma la firma ACTIVA de la empresa tal como la usa el envío al SRI, firma un
+ * comprobante de prueba y verifica que todo lo que exige el validador XAdES del
+ * SRI esté correcto: los tres digests, la firma RSA y —sobre todo— los datos del
+ * certificado (emisor, número de serie y huella), que son los que producen el
+ * mensaje "La información sobre el certificado de firma no se ajusta a XAdES".
+ *
+ * No modifica nada: no toca la base de datos ni envía nada al SRI.
+ *
+ * Uso:
+ *   php app/cron/diag_firma_sri.php <id_empresa>
+ *   php app/cron/diag_firma_sri.php --p12=/ruta/firma.p12 --pass=clave
+ */
+
+require_once dirname(__DIR__, 2) . '/bootstrap.php';
+
+use App\Services\Sri\FirmadorXmlService;
+use App\Services\Sri\X509DerReader;
+
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
+$linea = str_repeat('=', 92) . "\n";
+
+// ── Argumentos ────────────────────────────────────────────────────────────────
+$idEmpresa = null;
+$p12Path   = null;
+$p12Pass   = null;
+
+foreach (array_slice($argv, 1) as $arg) {
+    if (preg_match('/^--p12=(.+)$/', $arg, $m))       { $p12Path = $m[1]; }
+    elseif (preg_match('/^--pass=(.*)$/', $arg, $m))  { $p12Pass = $m[1]; }
+    elseif (ctype_digit($arg))                        { $idEmpresa = (int)$arg; }
+}
+
+if ($idEmpresa === null && $p12Path === null) {
+    fwrite(STDERR, "Uso: php app/cron/diag_firma_sri.php <id_empresa>\n");
+    fwrite(STDERR, "     php app/cron/diag_firma_sri.php --p12=/ruta/firma.p12 --pass=clave\n");
+    exit(1);
+}
+
+// ── 0. ¿Está disponible el lector DER? ────────────────────────────────────────
+echo $linea . "ENTORNO\n" . $linea;
+$hayLector = class_exists(X509DerReader::class);
+echo 'X509DerReader        : ' . ($hayLector ? 'disponible' : 'NO SE ENCUENTRA  <<< la firma usará el respaldo y el SRI la rechazará') . "\n";
+if ($hayLector) {
+    $rc = new ReflectionClass(X509DerReader::class);
+    echo 'Archivo              : ' . $rc->getFileName() . "\n";
+}
+echo 'PHP                  : ' . PHP_VERSION . "\n";
+echo 'OpenSSL (PHP)        : ' . (defined('OPENSSL_VERSION_TEXT') ? OPENSSL_VERSION_TEXT : '?') . "\n";
+echo 'gmp / bcmath         : ' . (extension_loaded('gmp') ? 'gmp' : (extension_loaded('bcmath') ? 'bcmath' : 'NINGUNA  <<< el serial puede salir mal')) . "\n";
+
+// ── 1. Localizar la firma ─────────────────────────────────────────────────────
+if ($p12Path === null) {
+    $db = \App\core\Database::getConnection();
+    $st = $db->prepare(
+        "SELECT id, archivo_nombre, archivo_ruta, password_firma, fecha_expiracion
+           FROM empresa_firma
+          WHERE id_empresa = ? AND es_activo = TRUE AND eliminado = FALSE
+          ORDER BY fecha_expiracion DESC NULLS LAST, created_at DESC
+          LIMIT 1"
+    );
+    $st->execute([$idEmpresa]);
+    $row = $st->fetch(\PDO::FETCH_ASSOC);
+
+    if (!$row) {
+        fwrite(STDERR, "\nLa empresa {$idEmpresa} no tiene una firma activa.\n");
+        exit(1);
+    }
+    $p12Path = $row['archivo_ruta'];
+    $p12Pass = $row['password_firma'];
+
+    echo "\n" . $linea . "FIRMA ACTIVA DE LA EMPRESA {$idEmpresa}\n" . $linea;
+    echo 'Registro empresa_firma: ' . $row['id'] . "\n";
+    echo 'Nombre                : ' . $row['archivo_nombre'] . "\n";
+    echo 'Ruta                  : ' . $p12Path . "\n";
+    echo 'Existe el archivo     : ' . (is_file($p12Path) ? 'si' : 'NO  <<<') . "\n";
+    echo 'Clave guardada        : ' . ($p12Pass === null || $p12Pass === '' ? 'VACIA  <<<' : 'presente (' . strlen($p12Pass) . ' caracteres)') . "\n";
+}
+
+if (!is_file($p12Path)) {
+    fwrite(STDERR, "\nNo existe el archivo de firma: {$p12Path}\n");
+    exit(1);
+}
+
+// ── 2. Abrir el .p12 con el mismo cargador del sistema ────────────────────────
+$firmador = new FirmadorXmlService();
+$ref      = new ReflectionClass($firmador);
+$invocar  = static function (string $metodo, ...$args) use ($ref, $firmador) {
+    $m = $ref->getMethod($metodo);
+    $m->setAccessible(true);
+    return $m->invoke($firmador, ...$args);
+};
+
+try {
+    $certs = $invocar('cargarP12', $p12Path, (string)$p12Pass);
+} catch (\Throwable $e) {
+    fwrite(STDERR, "\nNo se pudo abrir el .p12: " . $e->getMessage() . "\n");
+    exit(1);
+}
+
+$certificado = $certs['cert'];
+$info        = openssl_x509_parse($certificado);
+openssl_x509_export($certificado, $pem);
+$der = base64_decode(preg_replace('/-----[^-]+-----|\s/', '', $pem) ?? '', true);
+
+echo "\n" . $linea . "CERTIFICADO\n" . $linea;
+echo 'Vigencia   : ' . date('d-m-Y H:i:s', $info['validFrom_time_t']) . '  ->  ' . date('d-m-Y H:i:s', $info['validTo_time_t']) . "\n";
+echo 'Caducado   : ' . ($info['validTo_time_t'] < time() ? 'SI  <<<' : 'no') . "\n";
+echo 'Huella SHA1: ' . base64_encode(sha1($der, true)) . "\n";
+
+$problemas = [];
+
+if ($hayLector) {
+    $lector = new X509DerReader($der);
+    echo 'Emisor     : ' . $lector->issuerRfc2253() . "\n";
+    echo 'Serie      : ' . $lector->serialDecimal() . "\n";
+}
+
+// ── 3. Firmar un comprobante de prueba y verificarlo ──────────────────────────
+echo "\n" . $linea . "FIRMA DE UN COMPROBANTE DE PRUEBA\n" . $linea;
+
+$xmlPrueba = '<?xml version="1.0" encoding="UTF-8"?>'
+    . '<factura id="comprobante" version="1.0.0"><infoTributaria>'
+    . '<ambiente>1</ambiente><tipoEmision>1</tipoEmision><razonSocial>PRUEBA</razonSocial>'
+    . '<ruc>9999999999001</ruc>'
+    . '<claveAcceso>0000000000000000000000000000000000000000000000000</claveAcceso>'
+    . '<codDoc>01</codDoc><estab>001</estab><ptoEmi>001</ptoEmi><secuencial>000000001</secuencial>'
+    . '<dirMatriz>QUITO</dirMatriz></infoTributaria></factura>';
+
+try {
+    $firmado = $firmador->firmar($xmlPrueba, $p12Path, (string)$p12Pass);
+
+    $destino = MVC_ROOT . '/storage/debug_firma';
+    if (!is_dir($destino)) { @mkdir($destino, 0755, true); }
+    $archivo = $destino . '/diag_' . date('Ymd_His') . '.xml';
+    file_put_contents($archivo, $firmado);
+    echo "XML firmado guardado en: {$archivo}\n";
+
+    $dom = new DOMDocument();
+    $dom->loadXML($firmado);
+    $xp = new DOMXPath($dom);
+    $xp->registerNamespace('ds', 'http://www.w3.org/2000/09/xmldsig#');
+    $xp->registerNamespace('etsi', 'http://uri.etsi.org/01903/v1.3.2#');
+
+    $signedProps = $xp->query('//etsi:SignedProperties')->item(0);
+    $keyInfo     = $xp->query('//ds:KeyInfo')->item(0);
+    $signedInfo  = $xp->query('//ds:SignedInfo')->item(0);
+
+    $declarados = [];
+    foreach ($xp->query('//ds:SignedInfo/ds:Reference') as $r) {
+        $dv = $r->getElementsByTagNameNS('http://www.w3.org/2000/09/xmldsig#', 'DigestValue')->item(0);
+        $declarados[$r->getAttribute('URI')] = trim($dv->textContent);
+    }
+
+    $calcSp = base64_encode(sha1($signedProps->C14N(false, false), true));
+    $calcKi = base64_encode(sha1($keyInfo->C14N(false, false), true));
+
+    // Digest del comprobante: se quita la firma y se canonicaliza el resto.
+    $sinFirma = new DOMDocument();
+    $sinFirma->loadXML($firmado);
+    $sig = $sinFirma->getElementsByTagNameNS('http://www.w3.org/2000/09/xmldsig#', 'Signature')->item(0);
+    $sig->parentNode->removeChild($sig);
+    $calcDoc = base64_encode(sha1($sinFirma->documentElement->C14N(false, false), true));
+
+    $okSp  = ($declarados['#' . $signedProps->getAttribute('Id')] ?? '') === $calcSp;
+    $okKi  = ($declarados['#' . $keyInfo->getAttribute('Id')] ?? '') === $calcKi;
+    $okDoc = ($declarados['#comprobante'] ?? '') === $calcDoc;
+
+    $firmaBin = base64_decode(preg_replace('/\s/', '', $xp->query('//ds:SignatureValue')->item(0)->textContent) ?? '');
+    $okRsa    = openssl_verify($signedInfo->C14N(false, false), $firmaBin, openssl_pkey_get_public($certificado), OPENSSL_ALGO_SHA1) === 1;
+
+    echo 'Digest SignedProperties : ' . ($okSp  ? 'ok' : 'DESCUADRA') . "\n";
+    echo 'Digest KeyInfo          : ' . ($okKi  ? 'ok' : 'DESCUADRA') . "\n";
+    echo 'Digest comprobante      : ' . ($okDoc ? 'ok' : 'DESCUADRA') . "\n";
+    echo 'Firma RSA-SHA1          : ' . ($okRsa ? 'ok' : 'INVALIDA')  . "\n";
+
+    if (!$okSp)  { $problemas[] = 'El digest de etsi:SignedProperties descuadra.'; }
+    if (!$okKi)  { $problemas[] = 'El digest de ds:KeyInfo descuadra.'; }
+    if (!$okDoc) { $problemas[] = 'El digest del comprobante descuadra.'; }
+    if (!$okRsa) { $problemas[] = 'La firma RSA-SHA1 no valida contra la clave pública del certificado.'; }
+
+    // Lo que el SRI compara contra el certificado real.
+    $emisorXml = trim($xp->query('//etsi:IssuerSerial/ds:X509IssuerName')->item(0)->textContent);
+    $serieXml  = trim($xp->query('//etsi:IssuerSerial/ds:X509SerialNumber')->item(0)->textContent);
+    $huellaXml = trim($xp->query('//etsi:CertDigest/ds:DigestValue')->item(0)->textContent);
+
+    echo "\nDatos del certificado escritos en la firma:\n";
+    echo "  X509IssuerName   : {$emisorXml}\n";
+    echo "  X509SerialNumber : {$serieXml}\n";
+    echo "  CertDigest       : {$huellaXml}\n";
+
+    if ($hayLector) {
+        $emisorReal = $lector->issuerRfc2253();
+        $serieReal  = $lector->serialDecimal();
+        $huellaReal = base64_encode(sha1($der, true));
+
+        echo "\nComparación con el certificado real:\n";
+        echo '  IssuerName   : ' . ($emisorXml === $emisorReal ? 'ok' : "MAL\n     esperado: {$emisorReal}") . "\n";
+        echo '  SerialNumber : ' . ($serieXml  === $serieReal  ? 'ok' : "MAL -> esperado: {$serieReal}") . "\n";
+        echo '  CertDigest   : ' . ($huellaXml === $huellaReal ? 'ok' : 'MAL') . "\n";
+
+        if ($emisorXml !== $emisorReal) { $problemas[] = 'ds:X509IssuerName no coincide con el emisor real.'; }
+        if ($serieXml  !== $serieReal)  { $problemas[] = 'ds:X509SerialNumber no coincide con el serial real.'; }
+        if ($huellaXml !== $huellaReal) { $problemas[] = 'etsi:CertDigest no coincide con la huella del certificado.'; }
+    }
+} catch (\Throwable $e) {
+    echo 'ERROR al firmar: ' . $e->getMessage() . "\n";
+    $problemas[] = 'La firma lanzó una excepción: ' . $e->getMessage();
+}
+
+if ($info['validTo_time_t'] < time()) { $problemas[] = 'El certificado está caducado.'; }
+if (!$hayLector) { $problemas[] = 'No se encuentra X509DerReader: revise que el archivo esté desplegado.'; }
+
+echo "\n" . $linea . "RESUMEN\n" . $linea;
+if ($problemas) {
+    foreach ($problemas as $i => $p) { echo '  ' . ($i + 1) . ') ' . $p . "\n"; }
+    exit(1);
+}
+echo "  La firma es correcta: los tres digests, la firma RSA y los datos del\n";
+echo "  certificado coinciden. Si el SRI sigue rechazando, comparta el XML\n";
+echo "  guardado arriba para revisar el resto del XAdES.\n";

@@ -51,9 +51,17 @@ class FirmadorXmlService
             $lector     = new X509DerReader($certDer);
             $issuerName = $lector->issuerRfc2253();
             $serialDec  = $lector->serialDecimal();
-        } catch (\Throwable $e) {
+        } catch (\RuntimeException $e) {
             // Respaldo: aproximación desde openssl_x509_parse(). Solo se usa si el
             // certificado tuviera una estructura DER que no podemos recorrer.
+            // Se captura únicamente RuntimeException (lo que lanza X509DerReader):
+            // un \Error por clase ausente debe propagarse, porque el respaldo
+            // produce firmas que el SRI rechaza y fallar en silencio aquí deja el
+            // problema invisible.
+            error_log(
+                '[FirmadorXmlService] No se pudo leer el DER del certificado, se usa '
+                . 'el respaldo aproximado (el SRI puede rechazar la firma): ' . $e->getMessage()
+            );
             $certInfo   = openssl_x509_parse($certificate);
             $issuerName = $this->formatIssuerDn($certInfo['issuer'] ?? []);
             $serialDec  = $this->serialHexToDec($certInfo['serialNumberHex'] ?? '0');
