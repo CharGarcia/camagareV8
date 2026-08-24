@@ -375,6 +375,10 @@
 
     function getModal() { if (!modal) modal = new bootstrap.Modal(document.getElementById('modalFacturacionCv')); return modal; }
     function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+    // Redondeo a centavos igual que el backend (ConsignacionFacturaService::normalizarDetalles):
+    // se redondea POR LÍNEA antes de sumar, no solo al final, para que el total de este modal
+    // coincida centavo a centavo con lo que se guarda y con la Factura de Venta generada.
+    function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
     function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
     function $(id) { return document.getElementById(id); }
     function fmt(v, d) { return num(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
@@ -831,16 +835,21 @@
     function fmtPct(p) { p = num(p); return (p % 1 === 0 ? p.toFixed(0) : p.toFixed(2)) + '%'; }
 
     function recalc() {
-        let bruto = 0, desc = 0;
+        let bruto = 0, desc = 0, netTotal = 0;
         const grupos = {}; // pct -> { pct, base(net), iva }
         document.querySelectorAll('#faccv_lineas_body tr[data-idcd]').forEach(tr => {
             const cant = num(tr.dataset.cant), precio = num(tr.dataset.precio), d = num(tr.dataset.desc), pct = num(tr.dataset.porc);
-            const b = precio * cant; const net = Math.max(0, b - d);
-            bruto += b; desc += d;
+            // Mismo orden de redondeo que el servidor: bruto -> neto (bruto-desc) -> iva,
+            // cada uno a centavos, ANTES de acumular. Sumar primero y redondear al final
+            // (como se hacía antes) puede diferir en 1 centavo del total ya guardado.
+            const b = round2(precio * cant);
+            const net = round2(Math.max(0, b - d));
+            const iva = round2(net * pct / 100);
+            bruto += b; desc += d; netTotal += net;
             const key = pct.toFixed(2);
             if (!grupos[key]) grupos[key] = { pct, base: 0, iva: 0 };
             grupos[key].base += net;
-            grupos[key].iva += net * pct / 100;
+            grupos[key].iva += iva;
         });
         const lista = Object.values(grupos).sort((a, b) => a.pct - b.pct);
         let ivaTotal = 0; lista.forEach(g => ivaTotal += g.iva);
@@ -869,7 +878,7 @@
             }
         });
 
-        $('faccv_tot_total').textContent = (bruto - desc + ivaTotal).toFixed(2);
+        $('faccv_tot_total').textContent = (netTotal + ivaTotal).toFixed(2);
         $('faccv_count_items').textContent = added.size;
     }
 
