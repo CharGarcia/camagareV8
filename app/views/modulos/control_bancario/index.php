@@ -270,7 +270,18 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <div class="col-12" id="cbm-info-establecimiento-wrap" style="display:none;"><span class="text-muted">Establecimiento:</span> <span id="cbm-info-establecimiento" class="fw-bold text-info"></span></div>
                         <div class="col-12"><span class="text-muted">Glosa:</span> <span id="cbm-info-glosa"></span></div>
                         <div class="col-12"><span class="text-muted">Monto:</span> <span id="cbm-info-monto" class="fw-bold"></span></div>
+                        <!-- Estado de cobro del cheque (solo para movimientos tipo Cheque). -->
+                        <div class="col-12 mt-1" id="cbm-info-estado-wrap" style="display:none;">
+                            <span class="text-muted">Estado:</span> <span id="cbm-info-estado"></span>
+                        </div>
                     </div>
+                </div>
+                <!-- Cómo marcarlo como cobrado (solo visible en cheques aún en circulación). -->
+                <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="cbm-ayuda-cobro">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Para marcar este cheque como <strong>cobrado</strong>, registre abajo la
+                    <strong>Fecha Banco</strong> (el día en que el banco lo hizo efectivo) y guarde.
+                    El egreso mostrará el cheque como cobrado y ya no permitirá cambiarle la fecha ni anularlo.
                 </div>
                 <div class="row g-2">
                     <div class="col-6">
@@ -287,6 +298,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     <div class="col-6">
                         <label class="form-label small fw-bold mb-1">Fecha Banco (conciliación)</label>
                         <input type="date" id="cbm-fecha-banco" class="form-control form-control-sm shadow-none">
+                        <div class="form-text">Día en que el banco lo hizo efectivo. En un cheque, llenarla lo marca como <strong>cobrado</strong>.</div>
                     </div>
                     <div class="col-12 d-none row g-2" id="cbm-div-cheque">
                         <div class="col-6">

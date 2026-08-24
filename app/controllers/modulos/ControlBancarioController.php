@@ -190,9 +190,21 @@ class ControlBancarioController extends BaseModuloController
                     ? '<a href="#" onclick="event.stopPropagation(); event.preventDefault(); ASIENTO_abrirModal(' . (int) $r['id_asiento'] . ');" class="text-decoration-none fw-bold" title="Ver asiento contable">' . $numeroComprobante . '</a>'
                     : '<span class="fw-bold" title="' . ((($r['origen_tipo'] ?? '') === 'egreso') ? 'Egreso' : 'Ingreso') . '">' . $numeroComprobante . '</span>';
 
+                // Para un cheque, la columna Fecha Banco es su estado de cobro: la fecha real
+                // que registró el usuario al conciliar (fecha_banco_manual) o, si no la hay,
+                // el aviso de que sigue en circulación y cómo marcarlo.
+                $fechaBancoManual = $r['fecha_banco_manual'] ?? null;
+                if ($esCheque) {
+                    $celdaFechaBanco = !empty($fechaBancoManual)
+                        ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Cobrado: el banco lo hizo efectivo en esta fecha"><i class="bi bi-check-circle-fill"></i> ' . date('d-m-Y', strtotime((string) $fechaBancoManual)) . '</span>'
+                        : '<span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25" title="No cobrado: el cheque sigue en circulación. Haga clic en la fila y registre la Fecha Banco para marcarlo como cobrado."><i class="bi bi-hourglass-split"></i> No cobrado</span>';
+                } else {
+                    $celdaFechaBanco = $fechaBanco;
+                }
+
                 echo '<tr class="cb-row" role="button" tabindex="0" data-row="' . $rowData . '" onclick="CB_abrirModalClasificacion(this)">
                         <td class="ps-3" data-col="fecha_asiento">' . $fecha . '</td>
-                        <td data-col="fecha_banco">' . $fechaBanco . '</td>
+                        <td data-col="fecha_banco">' . $celdaFechaBanco . '</td>
                         <td data-col="comprobante">' . $celdaComprobante . '</td>
                         <td data-col="tipo"><span class="badge bg-light text-dark border">' . htmlspecialchars($tipoLabel) . '</span></td>
                         <td data-col="cheque">' . ($esCheque ? htmlspecialchars((string) ($r['numero_cheque'] ?? '')) : '') . $badgeDireccion . '</td>

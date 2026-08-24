@@ -358,6 +358,41 @@
         div.classList.toggle('d-flex', tipo === 'CHEQUE');
     };
 
+    // Fecha Banco ya registrada del movimiento abierto en el modal (null = no cobrado).
+    let chequeFechaBancoActual = null;
+
+    function actualizarEstadoCheque(tipo, fechaBancoManual) {
+        chequeFechaBancoActual = fechaBancoManual || null;
+        const wrap = document.getElementById('cbm-info-estado-wrap');
+        const estado = document.getElementById('cbm-info-estado');
+        const ayuda = document.getElementById('cbm-ayuda-cobro');
+        if (!wrap || !estado || !ayuda) return;
+
+        if (tipo !== 'CHEQUE') {
+            wrap.style.display = 'none';
+            ayuda.classList.add('d-none');
+            return;
+        }
+        wrap.style.display = '';
+        if (fechaBancoManual) {
+            estado.innerHTML = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                <i class="bi bi-check-circle-fill"></i> Cobrado el ${fmtDateDisplay(fechaBancoManual)}</span>`;
+            ayuda.classList.add('d-none');
+        } else {
+            estado.innerHTML = `<span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25">
+                <i class="bi bi-hourglass-split"></i> No cobrado (en circulación)</span>`;
+            ayuda.classList.remove('d-none');
+        }
+    }
+
+    // Al cambiar el tipo en el modal, el bloque de estado/ayuda debe seguir al tipo elegido.
+    window.CB_toggleCampoCheque = (function (original) {
+        return function (tipo) {
+            original(tipo);
+            actualizarEstadoCheque(tipo, chequeFechaBancoActual);
+        };
+    })(window.CB_toggleCampoCheque);
+
     window.CB_abrirModalClasificacion = function (btn) {
         const tr = btn.closest('tr');
         const row = JSON.parse(tr.dataset.row);
@@ -387,6 +422,7 @@
 
         const tipo = row.tipo_transaccion || 'OTRO';
         document.getElementById('cbm-tipo').value = tipo;
+        chequeFechaBancoActual = row.fecha_banco_manual || null;
         window.CB_toggleCampoCheque(tipo);
         // Dirección automática (no editable): ingreso/debe = recibido, egreso/haber = emitido.
         const selDir = document.getElementById('cbm-direccion');
@@ -394,8 +430,15 @@
         selDir.disabled = true;
         document.getElementById('cbm-numero-cheque').value = row.numero_cheque || '';
         document.getElementById('cbm-fecha-cheque').value = fmtDateInput(row.fecha_cheque);
-        document.getElementById('cbm-fecha-banco').value = fmtDateInput(row.fecha_banco);
+        // Solo la Fecha Banco REALMENTE registrada (fecha_banco_manual). La columna fecha_banco
+        // del listado cae a la fecha del movimiento cuando no se ha conciliado: precargarla aquí
+        // dejaba el campo lleno sin que nadie lo hubiera conciliado y, al guardar cualquier otro
+        // cambio, marcaba el cheque como cobrado sin querer.
+        document.getElementById('cbm-fecha-banco').value = fmtDateInput(row.fecha_banco_manual);
         document.getElementById('cbm-observacion').value = row.observacion || '';
+
+        // Estado de cobro del cheque + cómo marcarlo.
+        actualizarEstadoCheque(tipo, row.fecha_banco_manual);
 
         document.getElementById('cbm-btn-quitar').classList.toggle('d-none', !row.id_clasificacion);
 

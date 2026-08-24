@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.7
+version: 1.8
 orden: 60
 estado: activo
 ---
@@ -34,6 +34,32 @@ Si el movimiento es un **cheque**, hacen falta dos datos más:
 
 Sin esos dos datos el sistema no deja clasificarlo, porque son los que permiten
 cruzarlo con el pago o el cobro correspondiente.
+
+## Marcar un cheque como cobrado
+
+Un cheque se considera **cobrado** cuando se le registra la **Fecha Banco**: el
+día en que el banco lo hizo efectivo. Es un dato distinto de la fecha girada en
+el cheque (la posfechada), que se captura en el egreso.
+
+En el listado, la columna **Fecha Banco** muestra el estado de cada cheque:
+
+- **✔ DD-MM-AAAA** (verde): cobrado en esa fecha.
+- **⏳ No cobrado** (ámbar): sigue en circulación.
+
+Para marcarlo:
+
+1. Haga clic en la fila del cheque; se abre *Clasificar Movimiento*.
+2. El modal muestra el estado y, si aún no se cobró, explica qué hacer.
+3. Llene **Fecha Banco (conciliación)** con la fecha real del banco y guarde.
+
+Ese dato viaja al egreso: el cheque pasa a verse como "Cobrado" y el sistema ya
+no permite cambiarle la fecha ni anularlo (ver [Egresos](egresos.md)). El campo
+queda **vacío mientras nadie lo haya conciliado**, para que llenarlo sea siempre
+una decisión explícita.
+
+Si el período ya fue marcado como conciliado, primero hay que reabrirlo desde el
+historial de conciliaciones; mientras esté cerrado, sus movimientos no se
+editan.
 
 ## Para qué sirve conciliar
 
@@ -128,6 +154,10 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.8** — La columna Fecha Banco muestra si el cheque está cobrado o sigue en
+  circulación, y el modal explica cómo marcarlo. Corregido: el campo "Fecha
+  Banco" ya no viene precargado con la fecha del movimiento, así que guardar
+  otro cambio no marca por accidente el cheque como cobrado.
 - **1.7** — Las cuentas bancarias **sin cuenta contable** ya no se ven vacías:
   el módulo arma su detalle, saldos, cheques, exportaciones y conciliación
   desde los cobros y pagos hechos con esa cuenta, y también permite
