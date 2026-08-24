@@ -361,6 +361,23 @@
     // Fecha Banco ya registrada del movimiento abierto en el modal (null = no cobrado).
     let chequeFechaBancoActual = null;
 
+    /**
+     * Los datos del movimiento (tipo, cheque, observación) pertenecen al ingreso/egreso que lo
+     * originó; se corrigen en ese documento, no aquí. Cuando hay documento detrás, el modal
+     * queda de solo lectura salvo la Fecha Banco, que es lo propio de la conciliación.
+     */
+    function aplicarSoloLecturaDeDocumento(tieneDocumento) {
+        const bloquear = ['cbm-tipo', 'cbm-numero-cheque', 'cbm-fecha-cheque', 'cbm-observacion'];
+        bloquear.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = !!tieneDocumento;
+            el.classList.toggle('bg-light', !!tieneDocumento);
+        });
+        const aviso = document.getElementById('cbm-aviso-documento');
+        if (aviso) aviso.classList.toggle('d-none', !tieneDocumento);
+    }
+
     function actualizarEstadoCheque(tipo, fechaBancoManual) {
         chequeFechaBancoActual = fechaBancoManual || null;
         const wrap = document.getElementById('cbm-info-estado-wrap');
@@ -439,6 +456,10 @@
 
         // Estado de cobro del cheque + cómo marcarlo.
         actualizarEstadoCheque(tipo, row.fecha_banco_manual);
+
+        // Movimiento enlazado a un cobro/pago: sus datos son del documento. Aquí solo se
+        // registra la Fecha Banco (el backend ignora igual cualquier otro cambio).
+        aplicarSoloLecturaDeDocumento(row.tiene_documento === true || row.tiene_documento === 't' || row.tiene_documento === '1' || row.tiene_documento === 1);
 
         document.getElementById('cbm-btn-quitar').classList.toggle('d-none', !row.id_clasificacion);
 

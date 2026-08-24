@@ -276,6 +276,13 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         </div>
                     </div>
                 </div>
+                <!-- Movimiento que viene de un ingreso/egreso: sus datos se corrigen allá. -->
+                <div class="alert alert-secondary py-2 px-3 small mb-3 d-none" id="cbm-aviso-documento">
+                    <i class="bi bi-lock-fill me-1"></i>
+                    Los datos de este movimiento (tipo, cheque y glosa) vienen del
+                    <strong>ingreso/egreso</strong> que lo originó y se corrigen ahí.
+                    Aquí solo se registra la <strong>Fecha Banco</strong>.
+                </div>
                 <!-- Cómo marcarlo como cobrado (solo visible en cheques aún en circulación). -->
                 <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="cbm-ayuda-cobro">
                     <i class="bi bi-info-circle me-1"></i>

@@ -237,7 +237,8 @@ class ControlBancarioRepository extends BaseRepository
                 COALESCE(cbm.fecha_banco, ic.fecha_emision) AS fecha_banco,
                 cbm.fecha_banco AS fecha_banco_manual,
                 cbm.id AS id_clasificacion,
-                cbm.observacion AS observacion
+                cbm.observacion AS observacion,
+                TRUE AS tiene_documento
             FROM ingresos_pagos ip
             INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
             INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro
@@ -287,7 +288,8 @@ class ControlBancarioRepository extends BaseRepository
                 COALESCE(cbm.fecha_banco, ec.fecha_emision) AS fecha_banco,
                 cbm.fecha_banco AS fecha_banco_manual,
                 cbm.id AS id_clasificacion,
-                cbm.observacion AS observacion
+                cbm.observacion AS observacion,
+                TRUE AS tiene_documento
             FROM egresos_pagos ep
             INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
             INNER JOIN empresa_formas_pago fp ON fp.id = ep.id_forma_pago
@@ -381,7 +383,10 @@ class ControlBancarioRepository extends BaseRepository
             COALESCE(cbm.fecha_banco, ac.fecha_asiento) AS fecha_banco,
             cbm.fecha_banco AS fecha_banco_manual,
             cbm.id AS id_clasificacion,
-            cbm.observacion AS observacion";
+            cbm.observacion AS observacion,
+            -- El movimiento está enlazado a un cobro/pago real: sus datos (tipo, cheque) los
+            -- manda ese documento, no este módulo. Aquí solo se concilia (Fecha Banco).
+            (ip.id IS NOT NULL OR ep.id IS NOT NULL) AS tiene_documento";
     }
 
     private function joinsDerivado(string $aliasForma = ':id_forma_pago'): string
@@ -533,6 +538,18 @@ class ControlBancarioRepository extends BaseRepository
         string $dir
     ): array {
         $whereSql = "WHERE 1=1";
+
+        // Un solo movimiento por su anclaje (lo usa el Service al clasificar, para releer del
+        // origen los datos que el usuario no puede cambiar desde aquí).
+        if (!empty($filtros['id_asiento_detalle'])) {
+            $whereSql .= " AND id_asiento_detalle = :f_id_detalle";
+            $params[':f_id_detalle'] = (int) $filtros['id_asiento_detalle'];
+        }
+        if (!empty($filtros['origen_id'])) {
+            $whereSql .= " AND origen_tipo = :f_origen_tipo AND origen_id = :f_origen_id";
+            $params[':f_origen_tipo'] = (string) $filtros['origen_tipo'];
+            $params[':f_origen_id'] = (int) $filtros['origen_id'];
+        }
 
         if (!empty($filtros['fecha_inicio'])) {
             $whereSql .= " AND fecha_asiento >= :f_ini";

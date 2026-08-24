@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.8
+version: 1.9
 orden: 60
 estado: activo
 ---
@@ -24,6 +24,19 @@ Cada movimiento del banco necesita:
 | Movimiento a clasificar | Obligatorio |
 | Cuenta bancaria | Obligatoria |
 | Tipo de transacción | Debe ser uno de los válidos |
+
+### Qué se puede editar aquí y qué no
+
+Si el movimiento **viene de un ingreso o un egreso**, sus datos son de ese
+documento: el tipo de transacción, el número y la fecha del cheque y la glosa se
+muestran **bloqueados**, y el modal lo advierte. Para corregir cualquiera de
+ellos hay que ir al ingreso/egreso; cambiarlos solo en la conciliación dejaría
+los dos módulos diciendo cosas distintas del mismo pago. Lo único que se
+registra desde aquí es la **Fecha Banco**.
+
+Los movimientos que **no** tienen un cobro/pago detrás (asientos manuales o del
+diario general) siguen siendo totalmente editables: ahí este módulo es el único
+lugar donde se pueden anotar esos datos.
 
 ## Cheques
 
@@ -154,6 +167,11 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.9** — En los movimientos que vienen de un ingreso/egreso, el modal ya no
+  permite cambiar el tipo, los datos del cheque ni la glosa (se corrigen en el
+  documento): aquí solo se registra la Fecha Banco. Los asientos manuales
+  siguen siendo editables. Además, ahora se puede conciliar un movimiento
+  registrado como "Débito".
 - **1.8** — La columna Fecha Banco muestra si el cheque está cobrado o sigue en
   circulación, y el modal explica cómo marcarlo. Corregido: el campo "Fecha
   Banco" ya no viene precargado con la fecha del movimiento, así que guardar

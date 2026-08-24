@@ -223,6 +223,67 @@ class ControlBancarioService
     }
 
     /**
+     * Movimiento tal como lo muestra el listado (con su clasificación ya aplicada), buscado por
+     * su anclaje: la línea del asiento o el cobro/pago. null si no se encuentra.
+     */
+    private function getMovimientoPorAnclaje(int $idEmpresa, int $idFormaPago, array $data): ?array
+    {
+        $forma = $this->repository->getFormaBancaria($idFormaPago, $idEmpresa);
+        if (!$forma) {
+            return null;
+        }
+        [$origenTipo, $origenId] = $this->resolverOrigen($data);
+        $idAsientoDetalle = (int) ($data['id_asiento_detalle'] ?? 0);
+
+        $filtros = $idAsientoDetalle > 0
+            ? ['id_asiento_detalle' => $idAsientoDetalle]
+            : ['origen_tipo' => $origenTipo, 'origen_id' => $origenId];
+        if ($idAsientoDetalle <= 0 && $origenTipo === null) {
+            return null;
+        }
+
+        $res = $this->repository->getMovimientos(
+            $idEmpresa,
+            $idFormaPago,
+            (int) $forma['id_cuenta_contable'],
+            0.0,
+            $filtros,
+            1,
+            1,
+            'fecha_asiento',
+            'ASC'
+        );
+        return $res['rows'][0] ?? null;
+    }
+
+    /**
+     * Cuando el movimiento está enlazado a un ingreso/egreso, deja en $data los valores reales
+     * del documento (tipo, dirección y datos del cheque) y conserva la observación ya guardada:
+     * desde Control Bancario solo se registra la Fecha Banco. Si no hay documento detrás
+     * (asiento manual), $data queda como vino y todo sigue siendo editable.
+     */
+    private function fijarDatosDeDocumento(int $idEmpresa, array $data): array
+    {
+        $idFormaPago = (int) ($data['id_forma_pago'] ?? 0);
+        if ($idFormaPago <= 0) {
+            return $data;
+        }
+
+        $mov = $this->getMovimientoPorAnclaje($idEmpresa, $idFormaPago, $data);
+        if (!$mov || !in_array($mov['tiene_documento'], [true, 't', '1', 1], true)) {
+            return $data;
+        }
+
+        $data['tipo_transaccion'] = $mov['tipo_transaccion'];
+        $data['cheque_direccion'] = $mov['cheque_direccion'];
+        $data['numero_cheque'] = $mov['numero_cheque'];
+        $data['fecha_cheque'] = $mov['fecha_cheque'];
+        $data['observacion'] = $mov['observacion'];
+
+        return $data;
+    }
+
+    /**
      * Normaliza el anclaje al cobro/pago que envía la vista para las cuentas sin contabilidad.
      * Devuelve [null, 0] si el payload no trae un origen válido.
      */
@@ -647,6 +708,11 @@ class ControlBancarioService
      */
     public function guardarClasificacion(int $idEmpresa, int $idUsuario, array $data): array
     {
+        // Si el movimiento viene de un cobro/pago real, sus datos (tipo, cheque, glosa) los
+        // manda ese documento: aquí solo se concilia. Se releen del origen y se ignora lo que
+        // haya mandado el cliente, para que el bloqueo no dependa solo de la interfaz.
+        $data = $this->fijarDatosDeDocumento($idEmpresa, $data);
+
         $data['tipo_transaccion'] = strtoupper((string) ($data['tipo_transaccion'] ?? ''));
         $data['cheque_direccion'] = !empty($data['cheque_direccion']) ? strtoupper((string) $data['cheque_direccion']) : null;
         $this->rules->validarClasificacion($data);

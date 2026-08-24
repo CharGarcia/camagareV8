@@ -35,14 +35,29 @@ class FirmadorXmlService
         $certificate = $certs['cert'];
 
         // ── 2. Datos del certificado ───────────────────────────────────────────
-        $certInfo   = openssl_x509_parse($certificate);
-        $issuerName = $this->formatIssuerDn($certInfo['issuer'] ?? []);
-        $serialDec  = $this->serialHexToDec($certInfo['serialNumberHex'] ?? '0');
-
         openssl_x509_export($certificate, $certPem);
         $certDer    = $this->pemToDer($certPem);
         $certBase64 = base64_encode($certDer);
         $certDigest = base64_encode(sha1($certDer, true));
+
+        // El emisor y el serial se leen del DER, no de openssl_x509_parse(): es la
+        // única forma de reproducir X500Principal.getName(RFC2253) de Java, que es
+        // como el SRI deriva el IssuerName para compararlo con ds:X509IssuerName.
+        // Reconstruirlo desde el array de PHP pierde el OID real y el tipo ASN.1
+        // del valor, y basta un byte de diferencia para que el SRI responda
+        // "La información sobre el certificado de firma no se ajusta a XAdES".
+        // Ver X509DerReader para el detalle de los dos casos que fallaban.
+        try {
+            $lector     = new X509DerReader($certDer);
+            $issuerName = $lector->issuerRfc2253();
+            $serialDec  = $lector->serialDecimal();
+        } catch (\Throwable $e) {
+            // Respaldo: aproximación desde openssl_x509_parse(). Solo se usa si el
+            // certificado tuviera una estructura DER que no podemos recorrer.
+            $certInfo   = openssl_x509_parse($certificate);
+            $issuerName = $this->formatIssuerDn($certInfo['issuer'] ?? []);
+            $serialDec  = $this->serialHexToDec($certInfo['serialNumberHex'] ?? '0');
+        }
 
         // ── 3. Módulo RSA del certificado (para ds:KeyValue) ──────────────────
         $pubKey     = openssl_pkey_get_public($certificate);
@@ -262,16 +277,17 @@ class FirmadorXmlService
     }
 
     /**
-     * Formatea el DN del emisor replicando exactamente
-     * java.security.cert.X500Principal.getName(RFC2253), que es el formato con
-     * que el validador del SRI deriva el IssuerName del certificado para
-     * compararlo con ds:X509IssuerName.
+     * RESPALDO — no es el camino normal. El IssuerName se calcula con
+     * {@see X509DerReader::issuerRfc2253()} sobre el DER del certificado; este
+     * método solo actúa si esa lectura falla.
      *
-     * Diferencia clave con OpenSSL/PHP: Java SOLO reconoce los keywords
-     * CN, L, ST, O, OU, C, STREET, DC, UID. Cualquier otro atributo (p. ej.
-     * organizationIdentifier / OID 2.5.4.97 presente en certificados UANATACA,
-     * Camerfirma, etc.) se emite como "oid=#<hexDER>" en lugar del nombre largo.
-     * Si no se replica esto, certificados UANATACA producen FIRMA INVÁLIDA.
+     * Aproxima java.security.cert.X500Principal.getName(RFC2253) a partir del
+     * array de openssl_x509_parse(). Java SOLO reconoce los keywords CN, L, ST,
+     * O, OU, C, STREET, DC, UID; cualquier otro atributo se emite como
+     * "oid=#<hexDER>". La aproximación tiene dos límites conocidos que el lector
+     * DER no tiene: PHP entrega "UNDEF" en lugar del OID cuando no lo reconoce, y
+     * aquí se asume UTF8String para el valor aunque el certificado lo codifique
+     * como PrintableString.
      *
      * PHP devuelve los componentes en orden DER; array_reverse da el orden
      * RFC2253 (del más específico al más general).

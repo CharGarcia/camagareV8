@@ -6,7 +6,10 @@ namespace App\Rules\modulos;
 
 class ControlBancarioRules
 {
-    private const TIPOS_VALIDOS = ['DEPOSITO', 'CHEQUE', 'TRANSFERENCIA', 'NOTA_DEBITO', 'NOTA_CREDITO', 'OTRO'];
+    // 'DEBITO' no se elige en este módulo, pero es uno de los tipos que el usuario puede
+    // registrar en un egreso (Operación Bancaria); al conciliar un movimiento así, el tipo
+    // llega tal cual desde el documento y debe poder guardarse.
+    private const TIPOS_VALIDOS = ['DEPOSITO', 'CHEQUE', 'TRANSFERENCIA', 'DEBITO', 'NOTA_DEBITO', 'NOTA_CREDITO', 'OTRO'];
     private const DIRECCIONES_VALIDAS = ['EMITIDO', 'RECIBIDO'];
 
     public function validarClasificacion(array $data): void
