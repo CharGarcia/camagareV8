@@ -377,22 +377,18 @@ class FirmadorXmlService
         return bin2hex($der);
     }
 
-    /** Convierte un número de serie hexadecimal a decimal (usa GMP si está disponible). */
+    /**
+     * Convierte un número de serie hexadecimal a decimal.
+     *
+     * Delega en X509DerReader, que hace la aritmética sobre cadenas sin gmp ni
+     * bcmath. Antes había aquí un fallback a hexdec() que devolvía un float para
+     * los seriales largos (los de 12 bytes en adelante), y ese float llegaba a
+     * ds:X509SerialNumber como "9.9834935390145E+26": firma rechazada por el SRI
+     * en cualquier servidor sin esas extensiones.
+     */
     private function serialHexToDec(string $hex): string
     {
-        $hex = ltrim($hex, '0') ?: '0';
-        if (extension_loaded('gmp')) {
-            return gmp_strval(gmp_init($hex, 16), 10);
-        }
-        if (extension_loaded('bcmath')) {
-            $dec = '0';
-            foreach (str_split($hex) as $ch) {
-                $dec = bcadd(bcmul($dec, '16'), (string)hexdec($ch));
-            }
-            return $dec;
-        }
-        // Fallback para números que caben en un entero de 64 bits
-        return (string)hexdec($hex);
+        return X509DerReader::hexADecimal($hex);
     }
 
     /** Extrae los bytes DER del PEM (quita cabeceras y decodifica base64). */

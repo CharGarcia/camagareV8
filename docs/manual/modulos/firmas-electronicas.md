@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, certificado, p12, token, caducada, firmar comprobantes, sri, firma invalida, xades, no se ajusta a xades, certificado de firma, anf, uanataca, security data, banco central
-version: 1.1
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -69,6 +69,11 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **1.2** — Se corrigió el número de serie del certificado en la firma. Los
+  certificados con número de serie largo (ANF, entre otros) se firmaban con un
+  valor mal calculado y el SRI los rechazaba; los de serie corta (Lazzate,
+  Security Data) no se veían afectados, por eso el fallo parecía depender de la
+  empresa.
 - **1.1** — Se corrigió el rechazo "FIRMA INVALIDA / la información sobre el
   certificado de firma no se ajusta a XAdES" con certificados de ANF Ecuador
   (y de cualquier entidad cuyo emisor incluya atributos poco comunes). El

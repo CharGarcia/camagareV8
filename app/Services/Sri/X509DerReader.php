@@ -271,30 +271,51 @@ class X509DerReader
 
     // ── Aritmética de enteros grandes ─────────────────────────────────────────
 
-    private function hexADecimal(string $hex): string
+    /**
+     * Convierte un hexadecimal de longitud arbitraria a decimal.
+     *
+     * La aritmética es decimal sobre cadenas, a propósito: NO se usan gmp ni
+     * bcmath. Los números de serie de los certificados llegan a 20 bytes, muy por
+     * encima de PHP_INT_MAX, y en un servidor sin esas extensiones `hexdec()`
+     * devuelve un float que al pasarlo a cadena queda como "9.9834935390145E+26".
+     * Ese valor acaba en ds:X509SerialNumber y el SRI responde "La información
+     * sobre el certificado de firma no se ajusta a XAdES". El servidor de
+     * producción no tiene ninguna de las dos extensiones, así que depender de
+     * ellas no es una opción.
+     */
+    public static function hexADecimal(string $hex): string
     {
         $hex = ltrim($hex, '0') ?: '0';
-        if (extension_loaded('gmp')) {
-            return gmp_strval(gmp_init($hex, 16), 10);
+        $dec = '0';
+        foreach (str_split($hex) as $ch) {
+            $dec = self::multiplicarYSumar($dec, 16, (int)hexdec($ch));
         }
-        if (extension_loaded('bcmath')) {
-            $dec = '0';
-            foreach (str_split($hex) as $ch) {
-                $dec = bcadd(bcmul($dec, '16'), (string)hexdec($ch));
-            }
-            return $dec;
-        }
-        return (string)hexdec($hex);
+        return $dec;
     }
 
     private function sumarUno(string $decimal): string
     {
-        if (extension_loaded('gmp')) {
-            return gmp_strval(gmp_add(gmp_init($decimal, 10), 1));
+        return self::multiplicarYSumar($decimal, 1, 1);
+    }
+
+    /**
+     * Calcula ($decimal * $multiplicador) + $sumando con aritmética de cadenas.
+     * El producto parcial por dígito nunca pasa de 9*16+15, así que cabe holgado
+     * en un entero de PHP y el resultado es exacto para cualquier longitud.
+     */
+    private static function multiplicarYSumar(string $decimal, int $multiplicador, int $sumando): string
+    {
+        $resultado = '';
+        $acarreo   = $sumando;
+        for ($i = strlen($decimal) - 1; $i >= 0; $i--) {
+            $producto  = ((int)$decimal[$i]) * $multiplicador + $acarreo;
+            $resultado = ((string)($producto % 10)) . $resultado;
+            $acarreo   = intdiv($producto, 10);
         }
-        if (extension_loaded('bcmath')) {
-            return bcadd($decimal, '1');
+        while ($acarreo > 0) {
+            $resultado = ((string)($acarreo % 10)) . $resultado;
+            $acarreo   = intdiv($acarreo, 10);
         }
-        return (string)((int)$decimal + 1);
+        return ltrim($resultado, '0') ?: '0';
     }
 }

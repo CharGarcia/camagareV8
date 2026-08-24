@@ -14,6 +14,7 @@ declare(strict_types=1);
  * No modifica nada: no toca la base de datos ni envía nada al SRI.
  *
  * Uso:
+ *   php app/cron/diag_firma_sri.php --listar        (todas las empresas con firma activa)
  *   php app/cron/diag_firma_sri.php <id_empresa>
  *   php app/cron/diag_firma_sri.php --p12=/ruta/firma.p12 --pass=clave
  */
@@ -34,17 +35,71 @@ $linea = str_repeat('=', 92) . "\n";
 $idEmpresa = null;
 $p12Path   = null;
 $p12Pass   = null;
+$listar    = false;
 
 foreach (array_slice($argv, 1) as $arg) {
-    if (preg_match('/^--p12=(.+)$/', $arg, $m))       { $p12Path = $m[1]; }
+    if ($arg === '--listar')                          { $listar = true; }
+    elseif (preg_match('/^--p12=(.+)$/', $arg, $m))   { $p12Path = $m[1]; }
     elseif (preg_match('/^--pass=(.*)$/', $arg, $m))  { $p12Pass = $m[1]; }
     elseif (ctype_digit($arg))                        { $idEmpresa = (int)$arg; }
 }
 
-if ($idEmpresa === null && $p12Path === null) {
-    fwrite(STDERR, "Uso: php app/cron/diag_firma_sri.php <id_empresa>\n");
+if (!$listar && $idEmpresa === null && $p12Path === null) {
+    fwrite(STDERR, "Uso: php app/cron/diag_firma_sri.php --listar\n");
+    fwrite(STDERR, "     php app/cron/diag_firma_sri.php <id_empresa>\n");
     fwrite(STDERR, "     php app/cron/diag_firma_sri.php --p12=/ruta/firma.p12 --pass=clave\n");
     exit(1);
+}
+
+// ── Modo listado: qué firma usa cada empresa ─────────────────────────────────
+if ($listar) {
+    $db = \App\core\Database::getConnection();
+    $filas = $db->query(
+        "SELECT e.id, e.razon_social, e.ruc, f.id AS id_firma, f.archivo_ruta,
+                f.password_firma, f.fecha_expiracion
+           FROM empresas e
+           JOIN empresa_firma f
+             ON f.id_empresa = e.id AND f.es_activo = TRUE AND f.eliminado = FALSE
+          WHERE e.eliminado = FALSE
+          ORDER BY e.id"
+    )->fetchAll(\PDO::FETCH_ASSOC);
+
+    echo $linea . 'EMPRESAS CON FIRMA ACTIVA (' . count($filas) . ")\n" . $linea;
+    printf("%-5s %-13s %-34s %-42s %s\n", 'ID', 'RUC', 'EMPRESA', 'EMISOR DEL CERTIFICADO', 'SERIE');
+    echo str_repeat('-', 130) . "\n";
+
+    $firmadorTmp = new FirmadorXmlService();
+    $refTmp      = new ReflectionClass($firmadorTmp);
+    $cargar      = $refTmp->getMethod('cargarP12');
+    $cargar->setAccessible(true);
+
+    foreach ($filas as $f) {
+        $emisor = '?';
+        $serie  = '?';
+        try {
+            $c   = $cargar->invoke($firmadorTmp, $f['archivo_ruta'], (string)$f['password_firma']);
+            $p   = '';
+            openssl_x509_export($c['cert'], $p);
+            $d   = base64_decode(preg_replace('/-----[^-]+-----|\s/', '', $p) ?? '', true);
+            $lec = new X509DerReader($d);
+            $emisor = $lec->issuerRfc2253();
+            $serie  = $lec->serialDecimal();
+            // Un serial en notación científica delata la conversión rota.
+            if (!ctype_digit(ltrim($serie, '-'))) { $serie .= '  <<< SERIAL INVALIDO'; }
+        } catch (\Throwable $e) {
+            $emisor = 'ERROR: ' . $e->getMessage();
+        }
+        printf(
+            "%-5s %-13s %-34s %-42s %s\n",
+            $f['id'],
+            substr((string)$f['ruc'], 0, 13),
+            substr((string)$f['razon_social'], 0, 34),
+            substr(preg_replace('/^CN=([^,]+).*$/', '$1', $emisor) ?? $emisor, 0, 42),
+            $serie
+        );
+    }
+    echo "\nPara revisar una empresa a fondo: php app/cron/diag_firma_sri.php <id>\n";
+    exit(0);
 }
 
 // ── 0. ¿Está disponible el lector DER? ────────────────────────────────────────
@@ -122,8 +177,42 @@ $problemas = [];
 
 if ($hayLector) {
     $lector = new X509DerReader($der);
+    echo 'Sujeto     : ' . $lector->subjectRfc2253() . "\n";
     echo 'Emisor     : ' . $lector->issuerRfc2253() . "\n";
-    echo 'Serie      : ' . $lector->serialDecimal() . "\n";
+
+    $serie = $lector->serialDecimal();
+    echo 'Serie      : ' . $serie . "\n";
+
+    // Comprobación independiente: el serial debe ser una cadena de dígitos. Si
+    // sale en notación científica ("9.98E+26") la conversión hex->decimal está
+    // rota y el SRI rechazará la firma. Se valida además contra el hexadecimal
+    // que reporta OpenSSL, por una vía distinta a la del propio lector.
+    if (!ctype_digit(ltrim($serie, '-'))) {
+        echo "             <<< SERIAL INVALIDO: no es un numero entero.\n";
+        $problemas[] = 'El número de serie sale en notación científica; el SRI rechazará la firma.';
+    }
+    $hexOpenssl = strtolower(ltrim((string)($info['serialNumberHex'] ?? ''), '0'));
+    if ($hexOpenssl !== '') {
+        $reconstruido = '';
+        $n = $serie;
+        // Divide entre 16 con aritmética de cadenas para volver al hexadecimal.
+        while ($n !== '0' && $n !== '' && ctype_digit($n)) {
+            $resto = 0;
+            $cociente = '';
+            for ($i = 0; $i < strlen($n); $i++) {
+                $actual   = $resto * 10 + (int)$n[$i];
+                $cociente .= (string)intdiv($actual, 16);
+                $resto     = $actual % 16;
+            }
+            $reconstruido = dechex($resto) . $reconstruido;
+            $n = ltrim($cociente, '0') ?: '0';
+        }
+        $reconstruido = ltrim($reconstruido, '0') ?: '0';
+        if ($reconstruido !== $hexOpenssl) {
+            echo "             <<< el serial no corresponde al hexadecimal del certificado ({$hexOpenssl})\n";
+            $problemas[] = "El número de serie no corresponde al del certificado (hex {$hexOpenssl}).";
+        }
+    }
 }
 
 // ── 3. Firmar un comprobante de prueba y verificarlo ──────────────────────────
