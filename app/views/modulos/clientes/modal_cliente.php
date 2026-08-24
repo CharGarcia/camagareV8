@@ -10,6 +10,23 @@ $nivelAct = (int)($_SESSION['nivel'] ?? 1);
 
 // 1. Forzar vistaConfig de clientes para ocultar pestañas correctamente
 $vistaConfigCli = \App\Helpers\PreferenciasHelper::getPreferenciasVista('clientes');
+
+// Compatibilidad: hasta la v1.1 las pestañas ocultas se guardaban con el id del
+// BOTÓN (tab-cobros-btn) en vez del id del PANEL (pane-cobros), que es lo que
+// realmente oculta el CSS. Se traducen al vuelo para que nadie pierda lo que ya
+// tenía oculto; en cuanto toque un interruptor se reescribe con la clave nueva.
+$mapPestanasLegacyCli = [
+    'tab-comercial-btn' => 'pane-comercial',
+    'tab-cobros-btn'    => 'pane-cobros',
+    'tab-ubicacion-btn' => 'pane-ubicacion',
+];
+if (!empty($vistaConfigCli['__pestanas_ocultas__']) && is_array($vistaConfigCli['__pestanas_ocultas__'])) {
+    $vistaConfigCli['__pestanas_ocultas__'] = array_values(array_unique(array_map(
+        fn($tab) => $mapPestanasLegacyCli[$tab] ?? $tab,
+        $vistaConfigCli['__pestanas_ocultas__']
+    )));
+}
+
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigCli, 'estiloVistaPestanasCli');
 
 // 2. Forzar permisos de clientes
@@ -64,27 +81,44 @@ if (!defined('LEAFLET_LOADED')) {
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsCliente" role="tablist">
+                            <?php
+                            // data-bs-target además de href: el CSS que oculta pestañas
+                            // selecciona por `.nav-link[data-bs-target="#pane-x"]`, así que
+                            // sin este atributo se ocultaría el panel pero no su botón.
+                            ?>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" href="#pane-general" role="tab"><i class="bi bi-card-text me-1"></i>General</a>
+                                <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" data-bs-target="#pane-general" href="#pane-general" role="tab"><i class="bi bi-card-text me-1"></i>General</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link py-2 small" id="tab-comercial-btn" data-bs-toggle="tab" href="#pane-comercial" role="tab"><i class="bi bi-bar-chart-fill me-1"></i>Comercial</a>
+                                <a class="nav-link py-2 small" id="tab-comercial-btn" data-bs-toggle="tab" data-bs-target="#pane-comercial" href="#pane-comercial" role="tab"><i class="bi bi-bar-chart-fill me-1"></i>Comercial</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link py-2 small" id="tab-cobros-btn" data-bs-toggle="tab" href="#pane-cobros" role="tab"><i class="bi bi-cash-coin me-1"></i>Cobros</a>
+                                <a class="nav-link py-2 small" id="tab-cobros-btn" data-bs-toggle="tab" data-bs-target="#pane-cobros" href="#pane-cobros" role="tab"><i class="bi bi-cash-coin me-1"></i>Cobros</a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link py-2 small" id="tab-ubicacion-btn" data-bs-toggle="tab" href="#pane-ubicacion" role="tab"><i class="bi bi-geo-alt-fill me-1"></i>Ubicación</a>
+                                <a class="nav-link py-2 small" id="tab-visitas-btn" data-bs-toggle="tab" data-bs-target="#pane-visitas" href="#pane-visitas" role="tab"><i class="bi bi-calendar-week me-1"></i>Visitas</a>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link py-2 small" id="tab-ubicacion-btn" data-bs-toggle="tab" data-bs-target="#pane-ubicacion" href="#pane-ubicacion" role="tab"><i class="bi bi-geo-alt-fill me-1"></i>Ubicación</a>
                             </li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
+                            // Las claves son el id del PANEL, no el del botón: es lo que
+                            // oculta el CSS (ver renderEstilosPestanasOcultas).
                             $pestanasConfigCli = [
-                                'tab-comercial-btn'  => 'Comercial',
-                                'tab-cobros-btn'     => 'Cobros',
-                                'tab-ubicacion-btn'  => 'Ubicación',
+                                'pane-comercial' => 'Comercial',
+                                'pane-cobros'    => 'Cobros',
+                                'pane-visitas'   => 'Visitas',
+                                'pane-ubicacion' => 'Ubicación',
                             ];
-                            echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigCli, $vistaConfigCli ?? [], 'clientes');
+                            echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(
+                                $pestanasConfigCli,
+                                $vistaConfigCli ?? [],
+                                'clientes',
+                                '__pestanas_ocultas__',
+                                'estiloVistaPestanasCli'
+                            );
                             ?>
                         </div>
                     </div>
@@ -297,6 +331,119 @@ if (!defined('LEAFLET_LOADED')) {
                                         </div>
                                     </div>
                                 <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <!-- Pestaña: VISITAS (ruta del vendedor) -->
+                        <div class="tab-pane fade" id="pane-visitas" role="tabpanel">
+
+                            <div class="alert alert-primary bg-primary bg-opacity-10 py-2 px-3 small border-primary border-opacity-25 d-flex align-items-start mb-3">
+                                <i class="bi bi-info-circle-fill text-primary me-2 mt-1 fs-6"></i>
+                                <div style="color: #052c65;">
+                                    <strong>Ruta de visita:</strong> indique qué días el vendedor debe visitar a este cliente y con qué frecuencia.
+                                    Si la visita no es todas las semanas, marque también en qué semanas del mes corresponde.
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <!-- Días de la semana -->
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold d-block mb-1">
+                                        <i class="bi bi-calendar3 me-1"></i>Días de visita
+                                    </label>
+                                    <div class="d-flex flex-wrap gap-1" id="cliente_dias_visita_grupo">
+                                        <?php foreach (\App\Helpers\DiasVisita::DIAS as $numDia => $nombreDia): ?>
+                                            <input type="checkbox" class="btn-check" name="dias_visita[]"
+                                                   value="<?= $numDia ?>" id="cliente_dia_visita_<?= $numDia ?>" autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-primary px-3" for="cliente_dia_visita_<?= $numDia ?>"
+                                                   title="<?= htmlspecialchars($nombreDia) ?>" style="min-width:52px;font-size:.78rem;">
+                                                <?= htmlspecialchars(\App\Helpers\DiasVisita::DIAS_CORTO[$numDia]) ?>
+                                            </label>
+                                        <?php endforeach; ?>
+                                        <button type="button" class="btn btn-sm btn-link text-muted text-decoration-none px-2"
+                                                id="cliente_btn_limpiar_dias" title="Quitar todos los días" style="font-size:.75rem;">
+                                            <i class="bi bi-x-circle me-1"></i>Limpiar
+                                        </button>
+                                    </div>
+                                    <div class="form-text text-muted" style="font-size: 10px;">
+                                        Sin días marcados, el cliente no forma parte de ninguna ruta de visita.
+                                    </div>
+                                </div>
+
+                                <!-- Frecuencia -->
+                                <div class="col-md-6">
+                                    <label for="cliente_frecuencia_visita" class="form-label small fw-bold d-flex align-items-center">
+                                        Frecuencia
+                                        <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_frecuencia_visita', 'frecuencia_visita') ?>
+                                    </label>
+                                    <select class="form-select form-select-sm" name="frecuencia_visita" id="cliente_frecuencia_visita">
+                                        <option value="">- Sin definir -</option>
+                                        <?php foreach (\App\Helpers\DiasVisita::FRECUENCIAS as $codFrec => $etiqFrec): ?>
+                                            <option value="<?= $codFrec ?>"><?= htmlspecialchars($etiqFrec) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <!-- Orden dentro de la ruta -->
+                                <div class="col-md-6">
+                                    <label for="cliente_orden_visita" class="form-label small fw-bold">Orden en la ruta</label>
+                                    <input type="number" class="form-control form-control-sm" name="orden_visita"
+                                           id="cliente_orden_visita" min="0" step="1" placeholder="Sin orden">
+                                    <div class="form-text text-muted" style="font-size: 10px;">
+                                        Secuencia del recorrido del día: el número menor se visita primero.
+                                    </div>
+                                </div>
+
+                                <!-- Semanas del mes (solo quincenal / mensual) -->
+                                <div class="col-12 d-none" id="cliente_wrapper_semanas">
+                                    <label class="form-label small fw-bold d-block mb-1">
+                                        <i class="bi bi-calendar-month me-1"></i>Semanas del mes
+                                    </label>
+                                    <div class="d-flex flex-wrap gap-1" id="cliente_semanas_visita_grupo">
+                                        <?php foreach (\App\Helpers\DiasVisita::SEMANAS as $numSem => $etiqSem): ?>
+                                            <input type="checkbox" class="btn-check" name="semanas_visita[]"
+                                                   value="<?= $numSem ?>" id="cliente_semana_visita_<?= $numSem ?>" autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-secondary px-3" for="cliente_semana_visita_<?= $numSem ?>"
+                                                   title="<?= htmlspecialchars($etiqSem) ?>" style="min-width:52px;font-size:.78rem;">
+                                                S<?= $numSem ?>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <div class="form-text text-muted" style="font-size: 10px;">
+                                        Ejemplo: quincenal en semanas 1 y 3 = se visita la primera y la tercera semana de cada mes.
+                                    </div>
+                                </div>
+
+                                <!-- Ventana horaria -->
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1"><i class="bi bi-clock me-1"></i>Horario en que atienden</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light">Desde</span>
+                                        <input type="time" class="form-control" name="hora_visita_desde" id="cliente_hora_visita_desde">
+                                        <span class="input-group-text bg-light">Hasta</span>
+                                        <input type="time" class="form-control" name="hora_visita_hasta" id="cliente_hora_visita_hasta">
+                                    </div>
+                                    <div class="form-text text-muted" style="font-size: 10px;">Opcional. Deje vacío si atienden en cualquier horario.</div>
+                                </div>
+
+                                <!-- Nota para el vendedor -->
+                                <div class="col-md-6">
+                                    <label for="cliente_observacion_visita" class="form-label small fw-bold"><i class="bi bi-chat-left-text me-1"></i>Nota para el vendedor</label>
+                                    <input type="text" class="form-control form-control-sm" name="observacion_visita"
+                                           id="cliente_observacion_visita" maxlength="255"
+                                           placeholder="Ej.: preguntar por el administrador, no atienden al mediodía">
+                                </div>
+
+                                <!-- Resumen de la pauta -->
+                                <div class="col-12">
+                                    <div class="p-2 bg-white border rounded shadow-sm d-flex align-items-center">
+                                        <i class="bi bi-signpost-split text-primary me-2"></i>
+                                        <div class="small">
+                                            <span class="text-muted">Pauta de visita:</span>
+                                            <span class="fw-bold text-dark ms-1" id="cliente_resumen_visita">Sin ruta de visita definida</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

@@ -114,7 +114,7 @@ class ClientesController extends BaseModuloController
         // Renderizar Filas
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No se encontraron clientes.</td></tr>';
+            echo '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No se encontraron clientes.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 // Formatear fechas para el modal
@@ -139,6 +139,7 @@ class ClientesController extends BaseModuloController
                         <td data-col="nombre_provincia">' . htmlspecialchars($r['nombre_provincia'] ?? '—') . '</td>
                         <td data-col="nombre_ciudad">' . htmlspecialchars($r['nombre_ciudad'] ?? '—') . '</td>
                         <td data-col="nombre_vendedor">' . htmlspecialchars($r['nombre_vendedor'] ?? '—') . '</td>
+                        <td data-col="dias_visita" class="text-nowrap">' . \App\Helpers\DiasVisita::renderCelda($r['dias_visita'] ?? null, $r['frecuencia_visita'] ?? null, $r['semanas_visita'] ?? null, $r['hora_visita_desde'] ?? null, $r['hora_visita_hasta'] ?? null) . '</td>
                         <td class="text-center pe-3" data-col="status">' . $statusBadge . '</td>
                       </tr>';
             }
@@ -799,11 +800,12 @@ class ClientesController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 15%">Identificación</th>
-                            <th style="width: 35%">Razón Social / Nombre</th>
-                            <th style="width: 25%">Correo</th>
-                            <th style="width: 15%">Teléfono</th>
-                            <th style="width: 10%">Estado</th>
+                            <th style="width: 13%">Identificación</th>
+                            <th style="width: 28%">Razón Social / Nombre</th>
+                            <th style="width: 22%">Correo</th>
+                            <th style="width: 12%">Teléfono</th>
+                            <th style="width: 17%">Visita</th>
+                            <th style="width: 8%">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -813,6 +815,16 @@ class ClientesController extends BaseModuloController
                                 <td><?= htmlspecialchars((string)($r['nombre'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['email'] ?? '-')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['telefono'] ?? '-')) ?></td>
+                                <td><?php
+                                    $resumenVisita = \App\Helpers\DiasVisita::resumen(
+                                        $r['dias_visita'] ?? null,
+                                        $r['frecuencia_visita'] ?? null,
+                                        $r['semanas_visita'] ?? null,
+                                        $r['hora_visita_desde'] ?? null,
+                                        $r['hora_visita_hasta'] ?? null
+                                    );
+                                    echo htmlspecialchars($resumenVisita !== '' ? $resumenVisita : '-');
+                                ?></td>
                                 <td><?= ((int)($r['status'] ?? 1) === 1 ? 'Activo' : 'Inactivo') ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -866,6 +878,12 @@ class ClientesController extends BaseModuloController
                 'Provincia',
                 'Ciudad',
                 'Vendedor',
+                'Días de visita',
+                'Frecuencia de visita',
+                'Semanas de visita',
+                'Orden de visita',
+                'Horario de visita',
+                'Observación de visita',
                 'Fecha de creación',
                 'Fecha de actualización',
                 'Estado'
@@ -886,6 +904,12 @@ class ClientesController extends BaseModuloController
                     (string)($r['nombre_provincia'] ?? $r['provincia'] ?? ''),
                     (string)($r['nombre_ciudad'] ?? $r['ciudad'] ?? ''),
                     (string)($r['nombre_vendedor'] ?? '-'),
+                    \App\Helpers\DiasVisita::formatearDias($r['dias_visita'] ?? null, ''),
+                    \App\Helpers\DiasVisita::formatearFrecuencia($r['frecuencia_visita'] ?? null, ''),
+                    \App\Helpers\DiasVisita::formatearSemanas($r['semanas_visita'] ?? null, ''),
+                    isset($r['orden_visita']) && $r['orden_visita'] !== null ? (string)$r['orden_visita'] : '',
+                    \App\Helpers\DiasVisita::formatearVentana($r['hora_visita_desde'] ?? null, $r['hora_visita_hasta'] ?? null, ''),
+                    (string)($r['observacion_visita'] ?? ''),
                     $fechaC,
                     $fechaU,
                     ((int)($r['status'] ?? 1) === 1 ? 'Activo' : 'Inactivo')
@@ -928,6 +952,46 @@ class ClientesController extends BaseModuloController
             'monto_maximo_auto_cobro' => isset($_POST['monto_maximo_auto_cobro']) && $_POST['monto_maximo_auto_cobro'] !== '' ? (float)$_POST['monto_maximo_auto_cobro'] : null,
             'latitud'          => isset($_POST['latitud']) && $_POST['latitud'] !== '' ? (float)$_POST['latitud'] : null,
             'longitud'         => isset($_POST['longitud']) && $_POST['longitud'] !== '' ? (float)$_POST['longitud'] : null,
+        ] + $this->recogerDatosVisita();
+    }
+
+    /**
+     * Pauta de visita del vendedor (pestaña "Visitas" del modal).
+     *
+     * Normaliza aquí lo que depende de otro campo para que el resto de las capas
+     * reciban datos ya coherentes:
+     *  - Sin días de visita no hay ruta: se limpia todo lo demás.
+     *  - Con frecuencia SEMANAL las semanas del mes no aplican (se visita todas).
+     */
+    private function recogerDatosVisita(): array
+    {
+        $dias = \App\Helpers\DiasVisita::normalizarDias($_POST['dias_visita'] ?? null);
+
+        if ($dias === null) {
+            return [
+                'dias_visita'        => null,
+                'frecuencia_visita'  => null,
+                'semanas_visita'     => null,
+                'orden_visita'       => null,
+                'hora_visita_desde'  => null,
+                'hora_visita_hasta'  => null,
+                'observacion_visita' => trim($_POST['observacion_visita'] ?? '') !== '' ? trim($_POST['observacion_visita']) : null,
+            ];
+        }
+
+        $frecuencia = strtoupper(trim($_POST['frecuencia_visita'] ?? ''));
+        $semanas    = $frecuencia === 'SEMANAL'
+            ? null
+            : \App\Helpers\DiasVisita::normalizarSemanas($_POST['semanas_visita'] ?? null);
+
+        return [
+            'dias_visita'        => $dias,
+            'frecuencia_visita'  => $frecuencia !== '' ? $frecuencia : null,
+            'semanas_visita'     => $semanas,
+            'orden_visita'       => isset($_POST['orden_visita']) && $_POST['orden_visita'] !== '' ? max(0, (int)$_POST['orden_visita']) : null,
+            'hora_visita_desde'  => trim($_POST['hora_visita_desde'] ?? '') !== '' ? trim($_POST['hora_visita_desde']) : null,
+            'hora_visita_hasta'  => trim($_POST['hora_visita_hasta'] ?? '') !== '' ? trim($_POST['hora_visita_hasta']) : null,
+            'observacion_visita' => trim($_POST['observacion_visita'] ?? '') !== '' ? trim($_POST['observacion_visita']) : null,
         ];
     }
 }

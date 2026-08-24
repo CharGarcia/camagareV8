@@ -50,6 +50,27 @@ class LiquidacionCompraRules
 
         // Validar tipo de identificación del proveedor (Cédula 05 o Pasaporte 06)
         $this->validarTipoIdentificacionProveedor((int)$data['id_proveedor'], (int)$data['id_empresa']);
+
+        $this->validarFichaTecnicaSri($data);
+    }
+
+    /**
+     * Formato exigido por la Ficha Técnica del SRI (longitudes y decimales).
+     *
+     * El generador de XML no comprueba nada: escribe lo que recibe. Sin esto, un
+     * texto demasiado largo o un precio con ocho decimales pasa sin ruido y el
+     * comprobante se rechaza al enviarlo, ya creado y numerado.
+     */
+    private function validarFichaTecnicaSri(array $data): void
+    {
+        $errores = array_merge(
+            \App\Helpers\SriFichaTecnica::erroresDetalles($data['detalles'] ?? []),
+            \App\Helpers\SriFichaTecnica::erroresInfoAdicional($data['info_adicional'] ?? [])
+        );
+
+        if ($errores) {
+            throw new \Exception(implode(' ', $errores));
+        }
     }
 
     private function validarTipoIdentificacionProveedor(int $idProveedor, int $idEmpresa): void

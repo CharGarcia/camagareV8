@@ -77,6 +77,15 @@ class RetencionCompraRules
             }
         }
 
+        // Longitudes de la Ficha Técnica del SRI. Las líneas de una retención no
+        // llevan texto libre (son códigos y bases), así que lo único que puede
+        // exceder es la información adicional, que el generador de XML escribe
+        // tal cual sin comprobar nada.
+        $errores = array_merge(
+            $errores,
+            \App\Helpers\SriFichaTecnica::erroresInfoAdicional($data['info_adicional'] ?? [])
+        );
+
         if (!empty($errores)) {
             throw new Exception(implode(' ', $errores));
         }

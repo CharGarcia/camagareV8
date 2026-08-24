@@ -9,10 +9,18 @@ use PDO;
 class ClienteRepository extends BaseRepository
 {
     public const COLUMNAS_ORDEN = [
-        'identificacion', 'nombre_tipo_id', 'nombre', 'email', 'telefono', 'direccion', 
-        'plazo', 'nombre_provincia', 'nombre_ciudad', 'nombre_vendedor', 
-        'id_cuenta_cobrar', 'id_cuenta_ingreso', 'status'
+        'identificacion', 'nombre_tipo_id', 'nombre', 'email', 'telefono', 'direccion',
+        'plazo', 'nombre_provincia', 'nombre_ciudad', 'nombre_vendedor',
+        'id_cuenta_cobrar', 'id_cuenta_ingreso', 'status',
+        'frecuencia_visita', 'orden_visita'
     ];
+
+    /**
+     * Columnas de la ficha guardadas como arrays de Postgres (smallint[]).
+     * PDO no convierte arrays de PHP, así que entran serializadas con
+     * arrayAPostgres() y salen decodificadas con hidratarVisita().
+     */
+    private const COLUMNAS_ARRAY = ['dias_visita', 'semanas_visita'];
 
     public function __construct()
     {
@@ -28,6 +36,124 @@ class ClienteRepository extends BaseRepository
             // (database/migrations/20260725_clientes_monto_minimo_auto_cobro.sql)
             $this->db->exec("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS monto_minimo_auto_cobro NUMERIC(14,2) NULL");
         } catch (\Throwable $e) {}
+    }
+
+    // ─── Días / frecuencia de visita (smallint[]) ───────────────────────────
+
+    /**
+     * Serializa un array de PHP al literal de array de Postgres ("{1,3,5}").
+     * PDO/pgsql no tiene binding nativo de arrays: si se pasa el array de PHP
+     * directo lanza "Array to string conversion" y guarda basura.
+     */
+    private function arrayAPostgres(?array $valores): ?string
+    {
+        if (empty($valores)) {
+            return null;
+        }
+        $enteros = [];
+        foreach ($valores as $v) {
+            if (is_scalar($v) && ctype_digit(trim((string) $v))) {
+                $enteros[] = (int) $v;
+            }
+        }
+        return $enteros ? '{' . implode(',', $enteros) . '}' : null;
+    }
+
+    /** Decodifica el literal de array de Postgres ("{1,3,5}") a int[]. */
+    private function postgresAArray($valor): ?array
+    {
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+        if (is_array($valor)) {
+            return array_values(array_map('intval', $valor));
+        }
+        $limpio = trim((string) $valor, '{}');
+        if ($limpio === '') {
+            return null;
+        }
+        $items = array_filter(array_map('trim', explode(',', $limpio)), fn($v) => $v !== '');
+        return $items ? array_values(array_map('intval', $items)) : null;
+    }
+
+    /**
+     * Deja las columnas de tipo array como arrays de PHP en la fila leída, para
+     * que la vista y el JSON del modal reciban [1,3,5] y no la cadena "{1,3,5}".
+     */
+    private function hidratarVisita(?array $row): ?array
+    {
+        if ($row === null) {
+            return null;
+        }
+        foreach (self::COLUMNAS_ARRAY as $col) {
+            if (array_key_exists($col, $row)) {
+                $row[$col] = $this->postgresAArray($row[$col]);
+            }
+        }
+        return $row;
+    }
+
+    /** @param array<int,array> $rows */
+    private function hidratarVisitaLote(array $rows): array
+    {
+        return array_map(fn(array $r) => $this->hidratarVisita($r), $rows);
+    }
+
+    /**
+     * Filtros del buscador propios de la ruta de visita. Van aparte de
+     * FiltrosBusqueda::aplicarFiltros() porque ese helper resuelve columnas
+     * escalares (=, IN, ILIKE) y estas dos son arrays: la comparación correcta
+     * es de pertenencia (`= ANY(...)`), no de igualdad.
+     *
+     * Soporta: dia_visita:martes | dia_visita:3 | dia_visita:lun,mie | -dia_visita:sabado
+     *          semana_visita:1 | semana_visita:1,3
+     */
+    private function aplicarFiltrosVisita(string &$where, array &$params, array &$filtros): void
+    {
+        $mapa = [
+            'dia_visita'    => ['col' => 'c.dias_visita',    'parser' => 'dia'],
+            'dia'           => ['col' => 'c.dias_visita',    'parser' => 'dia'],
+            'semana_visita' => ['col' => 'c.semanas_visita', 'parser' => 'semana'],
+            'semana'        => ['col' => 'c.semanas_visita', 'parser' => 'semana'],
+        ];
+
+        foreach ($mapa as $clave => $cfg) {
+            if (!isset($filtros[$clave])) {
+                continue;
+            }
+            $filtro = $filtros[$clave];
+            // Se consume aquí para que aplicarFiltros() no lo vuelva a procesar.
+            unset($filtros[$clave]);
+
+            $valores = is_array($filtro['valor']) ? $filtro['valor'] : [$filtro['valor']];
+            $numeros = [];
+            foreach ($valores as $v) {
+                $n = $cfg['parser'] === 'dia'
+                    ? \App\Helpers\DiasVisita::parsearDia((string) $v)
+                    : (ctype_digit(trim((string) $v)) && (int) $v >= 1 && (int) $v <= 5 ? (int) $v : null);
+                if ($n !== null) {
+                    $numeros[$n] = $n;
+                }
+            }
+
+            if (!$numeros) {
+                continue; // Valor no reconocido: se ignora en silencio, como el resto del helper.
+            }
+
+            $ors = [];
+            foreach (array_values($numeros) as $i => $n) {
+                $ph = ":vis_{$clave}_{$i}";
+                $ors[] = "{$ph}::smallint = ANY({$cfg['col']})";
+                $params[$ph] = $n;
+            }
+
+            $cond = '(' . implode(' OR ', $ors) . ')';
+            // Negado: además de no tener ese día, un cliente sin ruta definida
+            // (columna NULL) también cumple "no lo visito el sábado".
+            $where .= !empty($filtro['neg'])
+                ? " AND (NOT {$cond} OR {$cfg['col']} IS NULL)"
+                : " AND {$cond}";
+        }
     }
 
     /**
@@ -72,6 +198,22 @@ class ClienteRepository extends BaseRepository
                 : ($mapEstado[strtolower(trim((string)$val))] ?? $val);
         }
 
+        // La frecuencia se guarda en mayúsculas ('SEMANAL'); el usuario escribe
+        // 'semanal'. La columna es exacta, así que hay que normalizar antes.
+        foreach (['frecuencia', 'frecuencia_visita'] as $claveFrec) {
+            if (!isset($parsed['filtros'][$claveFrec])) {
+                continue;
+            }
+            $val = $parsed['filtros'][$claveFrec]['valor'];
+            $parsed['filtros'][$claveFrec]['valor'] = is_array($val)
+                ? array_map(fn($v) => strtoupper(trim((string)$v)), $val)
+                : strtoupper(trim((string)$val));
+        }
+
+        // Arrays (días/semanas de visita): se resuelven aparte y se quitan de
+        // $parsed['filtros'] para que aplicarFiltros() no los trate como escalares.
+        $this->aplicarFiltrosVisita($where, $params, $parsed['filtros']);
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'nombre'         => 'c.nombre',
@@ -87,8 +229,14 @@ class ClienteRepository extends BaseRepository
                 'provincia'      => 'p.nombre',
                 'vendedor'       => 'v.nombre',
             ],
-            'exacto'   => [ 'estado' => 'c.status', 'status' => 'c.status', 'tipo' => 'c.tipo_id' ],
-            'numerico' => [ 'plazo'  => 'c.plazo' ],
+            'exacto'   => [
+                'estado'            => 'c.status',
+                'status'            => 'c.status',
+                'tipo'              => 'c.tipo_id',
+                'frecuencia'        => 'c.frecuencia_visita',
+                'frecuencia_visita' => 'c.frecuencia_visita',
+            ],
+            'numerico' => [ 'plazo' => 'c.plazo', 'orden_visita' => 'c.orden_visita' ],
         ]);
 
         // Selección de cliente para OPERACIONES: excluir inactivos (status = 0).
@@ -133,7 +281,7 @@ class ClienteRepository extends BaseRepository
                     $limitOffset";
             $st = $this->db->prepare($sql);
             $st->execute($params);
-            $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+            $rows = $this->hidratarVisitaLote($st->fetchAll(PDO::FETCH_ASSOC));
         }
 
         return ['rows' => $rows, 'total' => $total];
@@ -158,7 +306,18 @@ class ClienteRepository extends BaseRepository
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+        return $row ? $this->hidratarVisita($row) : null;
+    }
+
+    /**
+     * Ficha cruda por id (BaseRepository) con los arrays de visita ya
+     * decodificados. Es el método que alimentan store()/update()/get() del
+     * controlador, así que el JSON que recibe el modal trae dias_visita como
+     * [1,3,5] y no como la cadena "{1,3,5}".
+     */
+    public function findById(int $id, int $idEmpresa): ?array
+    {
+        return $this->hidratarVisita(parent::findById($id, $idEmpresa));
     }
 
     /**
@@ -197,7 +356,7 @@ class ClienteRepository extends BaseRepository
         $sql = "SELECT * FROM {$this->table} WHERE identificacion = :ident AND id_empresa = :empresa LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([':ident' => $identificacion, ':empresa' => $idEmpresa]);
-        $row = $st->fetch(PDO::FETCH_ASSOC);
+        $row = $this->hidratarVisita($st->fetch(PDO::FETCH_ASSOC) ?: null);
         return $row ?: null;
     }
 
@@ -248,6 +407,8 @@ class ClienteRepository extends BaseRepository
                     id_forma_pago_sri, id_forma_cobro_predeterminada, tipo_operacion_bancaria_predeterminada,
                     monto_minimo_auto_cobro, monto_maximo_auto_cobro, id_ingreso_concepto_predeterminado,
                     latitud, longitud, geocodificado_en,
+                    dias_visita, frecuencia_visita, semanas_visita, orden_visita,
+                    hora_visita_desde, hora_visita_hasta, observacion_visita,
                     created_by, created_at, eliminado
                 ) VALUES (
                     :id_empresa, :id_usuario, :nombre, :tipo_id, :identificacion, :telefono, :email,
@@ -255,6 +416,8 @@ class ClienteRepository extends BaseRepository
                     :id_forma_pago_sri, :id_forma_cobro_predeterminada, :tipo_operacion_bancaria_predeterminada,
                     :monto_minimo_auto_cobro, :monto_maximo_auto_cobro, :id_ingreso_concepto_predeterminado,
                     :latitud::numeric, :longitud::numeric, :geocodificado_en::timestamp,
+                    :dias_visita::smallint[], :frecuencia_visita, :semanas_visita::smallint[], :orden_visita,
+                    :hora_visita_desde::time, :hora_visita_hasta::time, :observacion_visita,
                     :id_u, CURRENT_TIMESTAMP, false
                 )";
         $st = $this->db->prepare($sql);
@@ -281,6 +444,13 @@ class ClienteRepository extends BaseRepository
             ':latitud'          => $data['latitud'] ?? null,
             ':longitud'         => $data['longitud'] ?? null,
             ':geocodificado_en' => (isset($data['latitud']) && $data['latitud'] !== null) ? date('Y-m-d H:i:s') : null,
+            ':dias_visita'       => $this->arrayAPostgres($data['dias_visita'] ?? null),
+            ':frecuencia_visita' => $data['frecuencia_visita'] ?? null,
+            ':semanas_visita'    => $this->arrayAPostgres($data['semanas_visita'] ?? null),
+            ':orden_visita'      => $data['orden_visita'] ?? null,
+            ':hora_visita_desde' => $data['hora_visita_desde'] ?? null,
+            ':hora_visita_hasta' => $data['hora_visita_hasta'] ?? null,
+            ':observacion_visita' => $data['observacion_visita'] ?? null,
             ':id_u'             => $data['id_usuario']
         ]);
         return (int) $this->db->lastInsertId('clientes_id_seq');
@@ -318,6 +488,13 @@ class ClienteRepository extends BaseRepository
                 id_ingreso_concepto_predeterminado = :id_ingreso_concepto_predeterminado,
                 latitud = :latitud::numeric,
                 longitud = :longitud::numeric,
+                dias_visita = :dias_visita::smallint[],
+                frecuencia_visita = :frecuencia_visita,
+                semanas_visita = :semanas_visita::smallint[],
+                orden_visita = :orden_visita,
+                hora_visita_desde = :hora_visita_desde::time,
+                hora_visita_hasta = :hora_visita_hasta::time,
+                observacion_visita = :observacion_visita,
                 {$campoCodificado}
                 updated_by = :id_u,
                 updated_at = CURRENT_TIMESTAMP
@@ -344,6 +521,13 @@ class ClienteRepository extends BaseRepository
             ':id_ingreso_concepto_predeterminado' => $data['id_ingreso_concepto_predeterminado'] ?? null,
             ':latitud'          => $data['latitud'] ?? null,
             ':longitud'         => $data['longitud'] ?? null,
+            ':dias_visita'       => $this->arrayAPostgres($data['dias_visita'] ?? null),
+            ':frecuencia_visita' => $data['frecuencia_visita'] ?? null,
+            ':semanas_visita'    => $this->arrayAPostgres($data['semanas_visita'] ?? null),
+            ':orden_visita'      => $data['orden_visita'] ?? null,
+            ':hora_visita_desde' => $data['hora_visita_desde'] ?? null,
+            ':hora_visita_hasta' => $data['hora_visita_hasta'] ?? null,
+            ':observacion_visita' => $data['observacion_visita'] ?? null,
             ':id_u'             => $data['id_usuario'],
             ':id'               => $id,
             ':id_empresa'       => $idEmpresa,

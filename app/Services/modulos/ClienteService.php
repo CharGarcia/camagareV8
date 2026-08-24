@@ -255,6 +255,17 @@ class ClienteService
                 'id_ingreso_concepto_predeterminado'       => null,
                 'latitud'                                  => null,
                 'longitud'                                 => null,
+                // La pauta de visita describe al cliente (qué días abre, en qué
+                // horario atienden), no al catálogo de la empresa: se copia.
+                'dias_visita'        => $datosOrigen['dias_visita'] ?? null,
+                'frecuencia_visita'  => $datosOrigen['frecuencia_visita'] ?? null,
+                'semanas_visita'     => $datosOrigen['semanas_visita'] ?? null,
+                'hora_visita_desde'  => $datosOrigen['hora_visita_desde'] ?? null,
+                'hora_visita_hasta'  => $datosOrigen['hora_visita_hasta'] ?? null,
+                'observacion_visita' => $datosOrigen['observacion_visita'] ?? null,
+                // El orden sí es relativo a la ruta de un vendedor concreto y el
+                // vendedor no se copia (queda null), así que arrancaría desfasado.
+                'orden_visita'       => null,
             ];
 
             $this->rules->validar($nuevo);

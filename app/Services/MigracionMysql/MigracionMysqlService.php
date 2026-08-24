@@ -3353,8 +3353,8 @@ class MigracionMysqlService
                         'id_venta' => $idVenta,
                         'id_producto' => $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $l['id_producto'], (string) $l['codigo_producto'], (string) $l['nombre_producto'], trim((string) $l['tarifa_iva']), $idEmpresa, $idUsuario, $pg),
                         'id_bodega' => ((int) $l['id_bodega'] > 0) ? ($mapBodega[(string) $l['id_bodega']] ?? null) : null,
-                        'codigo_principal' => (string) $l['codigo_producto'],
-                        'descripcion' => (string) $l['nombre_producto'],
+                        'codigo_principal' => mb_substr((string) $l['codigo_producto'], 0, 25),
+                        'descripcion' => mb_substr((string) $l['nombre_producto'], 0, 300),
                         'cantidad' => (float) $l['cantidad_factura'],
                         'precio_unitario' => (float) $l['valor_unitario_factura'],
                         'descuento' => (float) $l['descuento'],
@@ -4569,15 +4569,17 @@ class MigracionMysqlService
             return $mapProd[(string) $oldId];
         }
         $codigo = trim($codigo) !== '' ? trim($codigo) : ('MIG-' . $oldId);
+        $codigo = mb_substr($codigo, 0, 100); // productos.codigo es varchar(100)
         if (isset($prodPorCod[$codigo])) {
             return $prodPorCod[$codigo];
         }
         $iva = $this->ivaIdPorCodigo($pg, $ivaCode); // id de tarifa_iva por CÓDIGO SRI (no el código)
+        $nombreProd = mb_substr(($nombre !== '' ? $nombre : $codigo), 0, 255); // productos.nombre es varchar(255)
         $usaSp = $pg->inTransaction();
         if ($usaSp) { $pg->exec('SAVEPOINT sp_prod'); }
         try {
             $ins = $pg->prepare("INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, status, inventariable, id_usuario, created_by) VALUES (?, ?, ?, '', '', 0, '01', ?, 1, false, ?, ?) RETURNING id");
-            $ins->execute([$idEmpresa, $codigo, ($nombre !== '' ? $nombre : $codigo), $iva, $idUsuario, $idUsuario]);
+            $ins->execute([$idEmpresa, $codigo, $nombreProd, $iva, $idUsuario, $idUsuario]);
             $id = (int) $ins->fetchColumn();
             if ($usaSp) { $pg->exec('RELEASE SAVEPOINT sp_prod'); }
         } catch (Throwable $e) {

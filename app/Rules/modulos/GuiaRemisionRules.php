@@ -72,6 +72,14 @@ class GuiaRemisionRules
                 throw new \InvalidArgumentException("Fila {$num}: la cantidad debe ser mayor a cero.");
             }
         }
+
+        // Longitudes y decimales de la Ficha Técnica del SRI. La información
+        // adicional ya la revisa validarAdicionales(), que además impone un
+        // límite propio más estricto al nombre del campo.
+        $errores = \App\Helpers\SriFichaTecnica::erroresDetalles($detalles);
+        if ($errores) {
+            throw new \InvalidArgumentException(implode(' ', $errores));
+        }
     }
 
     public function validarAdicionales(array $adicionales): void

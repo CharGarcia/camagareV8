@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito
-version: 1.1
+etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -46,9 +46,61 @@ El buscador acepta texto libre y también filtros con la forma `clave:valor`:
 - `clave:"valor con espacios"` para valores que llevan espacios.
 - `-clave:valor` excluye los que coincidan.
 
+Para la ruta de visita hay filtros propios:
+
+- `dia_visita:martes` — los clientes que se visitan ese día. Acepta el nombre
+  (`miércoles`, con o sin tilde), la abreviatura (`mie`, `X`) o el número
+  (`1` = lunes … `7` = domingo).
+- `dia_visita:lun,mie` — cualquiera de esos días.
+- `-dia_visita:sabado` — los que **no** se visitan ese día (incluye a los que no
+  tienen ruta definida).
+- `frecuencia:quincenal` — por frecuencia de visita.
+- `semana_visita:1` — los que se visitan en esa semana del mes.
+
+Combínelos: `vendedor:"Juan Pérez" dia_visita:martes` da la ruta de ese vendedor
+para los martes.
+
 El listado permite además ordenar por cualquier columna, mostrar u ocultar
 columnas, ajustar su ancho y exportar a PDF y Excel. Esas preferencias se
 guardan por usuario.
+
+## Días de visita del vendedor (pestaña Visitas)
+
+La pestaña **Visitas** define cuándo el vendedor debe pasar por el cliente. Es
+opcional: un cliente sin días marcados simplemente no forma parte de ninguna ruta.
+
+| Campo | Obligatorio | Qué significa |
+|-------|-------------|---------------|
+| Días de visita | No | Los días de la semana en que se visita al cliente. Puede marcar varios |
+| Frecuencia | Sí, si marcó días | *Semanal* (todas las semanas), *Quincenal* o *Mensual* |
+| Semanas del mes | Sí, si la frecuencia no es semanal | En qué semanas del mes aplica la visita (S1 a S5) |
+| Orden en la ruta | No | Secuencia del recorrido del día: el número menor se visita primero |
+| Horario en que atienden | No | Franja de atención del cliente, por ejemplo de 08:00 a 11:00 |
+| Nota para el vendedor | No | Indicación práctica: por quién preguntar, cómo llegar, restricciones |
+
+### Cómo se combinan
+
+Los días dicen *qué día* y la frecuencia dice *cada cuánto*. Marcar **martes** con
+frecuencia **quincenal** y semanas **1 y 3** significa: se visita el martes de la
+primera semana y el martes de la tercera semana de cada mes.
+
+Con frecuencia **semanal** el bloque de semanas del mes ni siquiera aparece: se
+visita todas las semanas, así que elegirlas no aportaría nada. Al pie de la
+pestaña se muestra siempre el resumen de la pauta tal como quedará guardada
+(por ejemplo: *Quincenal · Mar · S1, S3 · 08:00-11:00*).
+
+### Cómo se ve en el listado
+
+El listado trae la columna **Días de visita**, con la semana completa como una
+matriz de siete letras (L M X J V S D): resaltadas las de visita, en gris el
+resto, para poder recorrer la columna de un vistazo. Si la frecuencia no es
+semanal, se añade una etiqueta que lo indica. Al pasar el cursor sobre la celda
+se ve la pauta completa. Como toda columna, puede ocultarla o ajustar su ancho
+desde el engranaje del listado; también sale en el PDF y en el Excel.
+
+> El **orden en la ruta** no se copia al replicar un cliente hacia otra empresa,
+> porque depende del vendedor asignado en cada una. Los días, la frecuencia, el
+> horario y la nota sí se copian: describen al cliente, no a la empresa.
 
 ## Cobro automático (pestaña Cobros)
 
@@ -133,9 +185,19 @@ usuario y la fecha.
   en la que está facturando.
 - **No puedo editarlo**: le falta el permiso de modificar, o el cliente lo creó
   otro usuario y usted no tiene acceso total.
+- **«Indique la frecuencia de visita»**: marcó días de visita pero no eligió cada
+  cuánto se repiten. Elija semanal, quincenal o mensual, o quite los días con el
+  botón *Limpiar* si este cliente no lleva ruta.
+- **«Con frecuencia quincenal debe indicar al menos una semana del mes»**: falta
+  marcar en qué semanas aplica. Solo la frecuencia semanal se guarda sin semanas.
 
 ## Historial de cambios
 
+- **1.2** — Pestaña *Visitas*: días de visita del vendedor, frecuencia (semanal,
+  quincenal, mensual), semanas del mes, orden dentro de la ruta, horario de
+  atención y nota para el vendedor. Columna *Días de visita* en el listado, en el
+  PDF y en el Excel, y filtros de búsqueda `dia_visita:`, `frecuencia:` y
+  `semana_visita:`.
 - **1.1** — Cobro automático al autorizar la factura de venta; rango de monto
   (mínimo y máximo); cobro con cheque y fecha diferida por días de crédito;
   botón *Generar cobros pendientes*; la ficha ya no se cierra al guardar, se

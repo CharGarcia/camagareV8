@@ -64,5 +64,37 @@ class NotaDebitoRules
                 throw new Exception("La suma de los pagos ($sumaPagos) no coincide con el valor total de la nota de débito ($valorTotal).");
             }
         }
+
+        $this->validarFichaTecnicaSri($data);
+    }
+
+    /**
+     * Formato exigido por la Ficha Técnica del SRI (longitudes).
+     *
+     * El generador de XML no comprueba nada: escribe lo que recibe. Sin esto, un
+     * texto demasiado largo pasa sin ruido y el comprobante se rechaza al
+     * enviarlo, ya creado y numerado.
+     *
+     * La nota de débito no lleva `detalles` sino `motivos`, cuya razón viaja al
+     * XML como <razon> y comparte el límite de 300 caracteres.
+     */
+    private function validarFichaTecnicaSri(array $data): void
+    {
+        $errores = \App\Helpers\SriFichaTecnica::erroresInfoAdicional($data['info_adicional'] ?? []);
+
+        foreach (array_values($data['motivos'] ?? []) as $i => $motivo) {
+            $error = \App\Helpers\SriFichaTecnica::excedeLongitud(
+                'Motivo #' . ($i + 1) . ': la razón',
+                (string) ($motivo['razon'] ?? ''),
+                \App\Helpers\SriFichaTecnica::MAX_DESCRIPCION_DETALLE
+            );
+            if ($error !== null) {
+                $errores[] = $error;
+            }
+        }
+
+        if ($errores) {
+            throw new Exception(implode(' ', $errores));
+        }
     }
 }

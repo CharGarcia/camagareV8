@@ -167,8 +167,18 @@ class PreferenciasHelper
 
     /**
      * Renderiza un dropdown para configurar la visibilidad de las pestañas del modal.
+     *
+     * Las claves de $pestanas deben ser el id del PANEL (`pane-x`, el `tab-pane`),
+     * no el del botón: es lo que espera el CSS de renderEstilosPestanasOcultas(),
+     * que oculta `#pane-x` y `.nav-link[data-bs-target="#pane-x"]`. Por eso el
+     * nav-link tiene que declarar `data-bs-target`, no solo `href`.
+     *
+     * $idStyle debe coincidir con el que se le pasó a renderEstilosPestanasOcultas():
+     * los modales compartidos (cliente, producto, proveedor…) usan un id propio
+     * para no pisar el <style> de la página que los incluye, y el JS necesita
+     * saber cuál es para aplicar el cambio en vivo sobre el correcto.
      */
-    public static function renderDropdownPestanas(array $pestanas, array $vistaConfig, string $modulo, string $key = '__pestanas_ocultas__'): string
+    public static function renderDropdownPestanas(array $pestanas, array $vistaConfig, string $modulo, string $key = '__pestanas_ocultas__', string $idStyle = 'estiloVistaPestanas'): string
     {
         $ocultas = $vistaConfig[$key] ?? [];
 
@@ -177,7 +187,7 @@ class PreferenciasHelper
             <button class="btn btn-link btn-sm text-muted p-0 border-0 shadow-none" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Configurar Pestañas">
                 <i class="bi bi-gear-fill"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow p-2" style="min-width: 200px; max-height: 350px; overflow-y: auto;" data-modulo="' . htmlspecialchars(str_replace('-', '_', basename($modulo)), ENT_QUOTES) . '">
+            <ul class="dropdown-menu dropdown-menu-end shadow p-2" style="min-width: 200px; max-height: 350px; overflow-y: auto;" data-modulo="' . htmlspecialchars(str_replace('-', '_', basename($modulo)), ENT_QUOTES) . '" data-style-id="' . htmlspecialchars($idStyle, ENT_QUOTES) . '">
                 <li><h6 class="dropdown-header px-1"><i class="bi bi-layers me-1"></i> Pestañas Visibles</h6></li>';
 
         foreach ($pestanas as $tabId => $tabLabel) {

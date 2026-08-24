@@ -289,6 +289,14 @@ return [
         'legacy_rutas' => ['modulos/carga_suscripciones'],
     ],
 
+    // Carga masiva de facturas de venta por Excel (se crean en borrador).
+    // Actualizar id_submodulo con el id real del submódulo al registrarlo en
+    // submodulos_menu.
+    'modulos/carga-facturas' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => ['modulos/carga_facturas'],
+    ],
+
     // ─── APROBACIONES (config) ────────────────────────────────────────────────
     // Configuración: qué checkpoints exigen aprobación y quién aprueba, por
     // empresa (la bandeja de solicitudes se retiró; solo queda la config).

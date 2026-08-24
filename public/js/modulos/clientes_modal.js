@@ -798,10 +798,112 @@
         }
     };
 
+    // ─── Pestaña Visitas (ruta del vendedor) ─────────────────────────────────
+    // Días en ISO-8601 (1=Lunes .. 7=Domingo), igual que en PHP y en Postgres.
+    const DIAS_VISITA_CORTO = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' };
+    const FRECUENCIAS_VISITA = { SEMANAL: 'Semanal', QUINCENAL: 'Quincenal', MENSUAL: 'Mensual' };
+
+    /** Números marcados en un grupo de checkboxes de la pestaña Visitas. */
+    function cliLeerGrupoVisita(nombre) {
+        return Array.from(document.querySelectorAll(`#formCliente input[name="${nombre}[]"]:checked`))
+            .map(chk => parseInt(chk.value, 10))
+            .filter(n => !isNaN(n))
+            .sort((a, b) => a - b);
+    }
+
+    /** Marca en el grupo los números recibidos (array, o "{1,3}" por si llega crudo). */
+    function cliMarcarGrupoVisita(nombre, valores) {
+        let lista = valores;
+        if (typeof lista === 'string') {
+            lista = lista.replace(/[{}]/g, '').split(',');
+        }
+        const marcados = Array.isArray(lista)
+            ? lista.map(v => parseInt(v, 10)).filter(n => !isNaN(n))
+            : [];
+
+        document.querySelectorAll(`#formCliente input[name="${nombre}[]"]`).forEach(chk => {
+            chk.checked = marcados.includes(parseInt(chk.value, 10));
+        });
+    }
+
+    /**
+     * Sincroniza la pestaña: muestra/oculta las semanas del mes (solo aplican a
+     * quincenal y mensual) y redibuja el resumen de la pauta.
+     */
+    function cliSincronizarVisitas() {
+        const selFrec = document.getElementById('cliente_frecuencia_visita');
+        const wrapSemanas = document.getElementById('cliente_wrapper_semanas');
+        const frecuencia = (selFrec?.value || '').toUpperCase();
+        const dias = cliLeerGrupoVisita('dias_visita');
+
+        // Semanal = todas las semanas, así que la elección de semanas no aplica.
+        const mostrarSemanas = dias.length > 0 && frecuencia !== '' && frecuencia !== 'SEMANAL';
+        if (wrapSemanas) {
+            wrapSemanas.classList.toggle('d-none', !mostrarSemanas);
+            if (!mostrarSemanas) cliMarcarGrupoVisita('semanas_visita', []);
+        }
+
+        const resumenEl = document.getElementById('cliente_resumen_visita');
+        if (!resumenEl) return;
+
+        if (dias.length === 0) {
+            resumenEl.textContent = 'Sin ruta de visita definida';
+            resumenEl.classList.add('text-muted');
+            resumenEl.classList.remove('text-dark');
+            return;
+        }
+
+        const partes = [];
+        if (FRECUENCIAS_VISITA[frecuencia]) partes.push(FRECUENCIAS_VISITA[frecuencia]);
+        partes.push(dias.map(d => DIAS_VISITA_CORTO[d]).join(', '));
+
+        if (mostrarSemanas) {
+            const semanas = cliLeerGrupoVisita('semanas_visita');
+            if (semanas.length) partes.push(semanas.map(s => 'S' + s).join(', '));
+        }
+
+        const desde = document.getElementById('cliente_hora_visita_desde')?.value || '';
+        const hasta = document.getElementById('cliente_hora_visita_hasta')?.value || '';
+        if (desde && hasta) partes.push(`${desde}-${hasta}`);
+        else if (desde) partes.push(`desde ${desde}`);
+        else if (hasta) partes.push(`hasta ${hasta}`);
+
+        resumenEl.textContent = partes.join(' · ');
+        resumenEl.classList.remove('text-muted');
+        resumenEl.classList.add('text-dark');
+    }
+
+    /** Vuelca la pauta de visita de la ficha en los controles de la pestaña. */
+    function cliPoblarVisitas(data) {
+        cliMarcarGrupoVisita('dias_visita', data.dias_visita);
+
+        const selFrec = document.getElementById('cliente_frecuencia_visita');
+        if (selFrec) selFrec.value = (data.frecuencia_visita || '').toUpperCase();
+
+        // Después de fijar la frecuencia: sincronizar muestra el bloque de
+        // semanas, y solo entonces tiene sentido marcarlas.
+        cliSincronizarVisitas();
+        cliMarcarGrupoVisita('semanas_visita', data.semanas_visita);
+
+        const setV = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+        setV('cliente_orden_visita', data.orden_visita);
+        // Postgres devuelve TIME como "08:00:00" y el input type=time espera "08:00".
+        setV('cliente_hora_visita_desde', (data.hora_visita_desde || '').substring(0, 5));
+        setV('cliente_hora_visita_hasta', (data.hora_visita_hasta || '').substring(0, 5));
+        setV('cliente_observacion_visita', data.observacion_visita);
+
+        cliSincronizarVisitas();
+    }
+
     // ─── Reset formulario ────────────────────────────────────────────────────
     function resetFormulario() {
         const form = document.getElementById('formCliente');
         if (form) form.reset();
+
+        // form.reset() devuelve los checkboxes a su estado del HTML (todos sin
+        // marcar), pero no reevalúa la visibilidad del bloque de semanas ni el
+        // resumen: hay que forzarlo.
+        cliSincronizarVisitas();
 
         // Reset mapa
         const inputLat = document.getElementById('cliente_latitud');
@@ -886,6 +988,10 @@
 
         window.aplicarReglasIdentificacion();
 
+        // El favorito de frecuencia pudo dejar el select con valor: reevaluar
+        // el bloque de semanas y el resumen de la pauta.
+        cliSincronizarVisitas();
+
         // Cliente nuevo: sin id todavía, así que no aplica el cobro retroactivo
         document.getElementById('cliente_div_cheque')?.classList.add('d-none');
         document.getElementById('cliente_div_cobros_pendientes')?.classList.add('d-none');
@@ -936,6 +1042,8 @@
             setV('cliente_id_ingreso_concepto', data.id_ingreso_concepto_predeterminado);
             setV('cliente_id_ingreso_concepto_hidden', data.id_ingreso_concepto_predeterminado);
         }
+
+        cliPoblarVisitas(data);
 
         const selFc = document.getElementById('cliente_id_forma_cobro_predeterminada');
         if (selFc) {
@@ -1340,6 +1448,25 @@
 
         const inpPlazo = document.getElementById('cliente_plazo');
         if (inpPlazo) inpPlazo.addEventListener('input', cliActualizarReglaFechaCheque);
+
+        // Pestaña Visitas: cualquier cambio recalcula visibilidad de semanas y resumen
+        ['cliente_dias_visita_grupo', 'cliente_semanas_visita_grupo'].forEach(idGrupo => {
+            document.getElementById(idGrupo)?.addEventListener('change', cliSincronizarVisitas);
+        });
+        ['cliente_frecuencia_visita', 'cliente_hora_visita_desde', 'cliente_hora_visita_hasta'].forEach(idCampo => {
+            document.getElementById(idCampo)?.addEventListener('change', cliSincronizarVisitas);
+        });
+
+        const btnLimpiarDias = document.getElementById('cliente_btn_limpiar_dias');
+        if (btnLimpiarDias) {
+            btnLimpiarDias.addEventListener('click', () => {
+                cliMarcarGrupoVisita('dias_visita', []);
+                cliMarcarGrupoVisita('semanas_visita', []);
+                const selFrec = document.getElementById('cliente_frecuencia_visita');
+                if (selFrec) selFrec.value = '';
+                cliSincronizarVisitas();
+            });
+        }
 
         const replicarToggle = document.getElementById('cliente_replicar_toggle');
         if (replicarToggle) {

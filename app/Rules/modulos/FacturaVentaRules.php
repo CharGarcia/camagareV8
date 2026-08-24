@@ -15,6 +15,31 @@ class FacturaVentaRules
         $this->validarCabecera($data);
         $this->validarPagos($data);
         $this->validarReglasEstablecimiento($data, $estConfig);
+        $this->validarFichaTecnicaSri($data);
+    }
+
+    /**
+     * Formato exigido por la Ficha Técnica del SRI (longitudes y decimales).
+     *
+     * Se valida aquí porque el generador de XML no comprueba nada: escribe lo que
+     * recibe. Sin esto, un texto demasiado largo o un precio con ocho decimales
+     * pasa sin ruido y el comprobante se rechaza al enviarlo, con la factura ya
+     * creada y su secuencial consumido.
+     *
+     * Se reservan 2 campos de infoAdicional porque FacturaVentaService añade el
+     * correo del cliente y el RUC del proveedor (Res. NAC-DGERCGC26-00000027)
+     * después de esta validación.
+     */
+    private function validarFichaTecnicaSri(array $data): void
+    {
+        $errores = array_merge(
+            \App\Helpers\SriFichaTecnica::erroresDetalles($data['detalles'] ?? []),
+            \App\Helpers\SriFichaTecnica::erroresInfoAdicional($data['info_adicional'] ?? [], 2)
+        );
+
+        if ($errores) {
+            throw new \Exception(implode(' ', $errores));
+        }
     }
 
     private function validarCabecera(array $data): void

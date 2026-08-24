@@ -103,6 +103,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'nombre_provincia' => 'Provincia',
                     'nombre_ciudad' => 'Ciudad',
                     'nombre_vendedor' => 'Vendedor',
+                    'dias_visita' => 'Días de visita',
                     'status' => 'Estado'
                 ];
                 ?>
@@ -142,12 +143,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" role="button" data-sort="nombre_provincia" data-col="nombre_provincia">Provincia <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="nombre_ciudad" data-col="nombre_ciudad">Ciudad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="nombre_vendedor" data-col="nombre_vendedor">Vendedor <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="frecuencia_visita" data-col="dias_visita">Días de visita <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="status" data-col="status">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyClientes">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="11" class="text-center py-5 text-muted">No se encontraron clientes.</td></tr>
+                        <tr><td colspan="12" class="text-center py-5 text-muted">No se encontraron clientes.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <tr class="cliente-row" role="button" data-cliente='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="abrirModalClienteEditar(this)">
@@ -161,6 +163,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="nombre_provincia"><?= htmlspecialchars($r['nombre_provincia'] ?? '-') ?></td>
                                 <td data-col="nombre_ciudad"><?= htmlspecialchars($r['nombre_ciudad'] ?? '-') ?></td>
                                 <td data-col="nombre_vendedor"><?= htmlspecialchars($r['nombre_vendedor'] ?? '-') ?></td>
+                                <td data-col="dias_visita" class="text-nowrap"><?= \App\Helpers\DiasVisita::renderCelda($r['dias_visita'] ?? null, $r['frecuencia_visita'] ?? null, $r['semanas_visita'] ?? null, $r['hora_visita_desde'] ?? null, $r['hora_visita_hasta'] ?? null) ?></td>
                                 <td class="text-center pe-3" data-col="status">
                                     <span class="badge bg-<?= ($r['status'] ?? 1) == 1 ? 'success' : 'secondary' ?> bg-opacity-10 text-<?= ($r['status'] ?? 1) == 1 ? 'success' : 'secondary' ?> border border-<?= ($r['status'] ?? 1) == 1 ? 'success' : 'secondary' ?> border-opacity-25"><?= ($r['status'] ?? 1) == 1 ? 'Activo' : 'Inactivo' ?></span>
                                 </td>

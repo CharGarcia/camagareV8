@@ -159,12 +159,18 @@ function initConfiguracionVistas() {
     document.querySelectorAll('.dropdown-vista-pestanas').forEach(div => {
         const menu = div.querySelector('.dropdown-menu');
         const modulo = menu.dataset.modulo;
+        // Los modales compartidos (cliente, producto, proveedor…) escriben su CSS
+        // en un <style> propio para no pisar el de la página que los incluye.
+        // Sin esto se aplicaba siempre sobre 'estiloVistaPestanas', que en esas
+        // páginas es el de OTRO módulo: al ocultar una pestaña del modal se
+        // borraban las reglas del listado de fondo.
+        const styleId = menu.dataset.styleId || 'estiloVistaPestanas';
         menu.addEventListener('click', e => e.stopPropagation());
-        
+
         div.querySelectorAll('.toggle-pestana-vista').forEach(chk => {
             chk.addEventListener('change', () => {
                 const ocultas = Array.from(div.querySelectorAll('.toggle-pestana-vista:not(:checked)')).map(c => c.value);
-                const style = document.getElementById('estiloVistaPestanas');
+                const style = document.getElementById(styleId);
                 if (style) {
                     style.innerHTML = ocultas.map(oc => `.nav-link[data-bs-target="#${oc}"], #${oc} { display: none !important; }`).join('\n');
                 }
