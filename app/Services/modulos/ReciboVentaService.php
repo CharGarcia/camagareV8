@@ -224,6 +224,18 @@ class ReciboVentaService
 
                 if (!empty($d['impuestos'])) {
                     foreach ($d['impuestos'] as $imp) {
+                        foreach (['codigo_impuesto', 'codigo_porcentaje'] as $campoImp) {
+                            $valorImp = (string) ($imp[$campoImp] ?? '');
+                            if (mb_strlen($valorImp) > 5) {
+                                // recibos_venta_detalle_impuestos.codigo_impuesto/codigo_porcentaje
+                                // son VARCHAR(5). El código ICE de un producto permite hasta 20 —
+                                // sin este chequeo, revienta con un error críptico de truncado.
+                                throw new \Exception(
+                                    "El código de impuesto '{$valorImp}' no es válido (máximo 5 caracteres). "
+                                    . "Si es un código ICE, revisa el código ICE configurado en el producto."
+                                );
+                            }
+                        }
                         $imp['id_recibo_detalle'] = $idDetalle;
                         $this->repository->insertImpuesto($imp);
                     }

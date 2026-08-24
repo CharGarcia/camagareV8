@@ -522,6 +522,26 @@ class FacturaVentaService
         }
     }
 
+    /**
+     * ventas_detalle_impuestos.codigo_impuesto y codigo_porcentaje son
+     * VARCHAR(5). El código ICE de un producto (productos.codigo_ice) permite
+     * hasta 20 caracteres — si un producto tiene un código ICE de más de 5,
+     * la línea con ICE > 0 revienta al guardar con un error críptico de
+     * truncado en Postgres. Se valida antes, señalando cuál código era.
+     */
+    private function validarCodigoImpuesto(array $imp): void
+    {
+        foreach (['codigo_impuesto', 'codigo_porcentaje'] as $campo) {
+            $valor = (string) ($imp[$campo] ?? '');
+            if (mb_strlen($valor) > 5) {
+                throw new \Exception(
+                    "El código de impuesto '{$valor}' no es válido (máximo 5 caracteres). "
+                    . "Si es un código ICE, revisa el código ICE configurado en el producto."
+                );
+            }
+        }
+    }
+
     public function actualizarVendedor(int $id, ?int $idVendedor, int $idEmpresa, int $idUsuario): void
     {
         $cabecera = $this->repository->getPorId($id);
@@ -771,6 +791,7 @@ class FacturaVentaService
 
                     if (!empty($d['impuestos'])) {
                         foreach ($d['impuestos'] as $imp) {
+                            $this->validarCodigoImpuesto($imp);
                             $imp['id_venta_detalle'] = $idDetalle;
                             $this->repository->insertImpuesto($imp);
                         }
@@ -1030,6 +1051,7 @@ class FacturaVentaService
 
                     if (!empty($d['impuestos'])) {
                         foreach ($d['impuestos'] as $imp) {
+                            $this->validarCodigoImpuesto($imp);
                             $imp['id_venta_detalle'] = $idDetalle;
                             $this->repository->insertImpuesto($imp);
                         }
