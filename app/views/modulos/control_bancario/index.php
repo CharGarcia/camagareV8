@@ -263,25 +263,31 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <input type="hidden" id="cbm-origen-id">
                 <input type="hidden" id="cbm-id-empresa">
                 <input type="hidden" id="cbm-id-forma-pago">
+                <!-- ── Encabezado: TODO lo que no se edita aquí ──────────────────────────
+                     Los datos del movimiento y, cuando viene de un ingreso/egreso, también su
+                     tipo, cheque y glosa: se corrigen en ese documento, no en la conciliación.
+                     Abajo solo queda lo que este módulo sí decide. -->
                 <div class="p-2 border rounded-3 bg-light mb-3">
                     <div class="row g-1 small">
                         <div class="col-6"><span class="text-muted">Fecha asiento:</span> <span id="cbm-info-fecha" class="fw-bold"></span></div>
                         <div class="col-6"><span class="text-muted">Comprobante:</span> <span id="cbm-info-comprobante" class="fw-bold"></span></div>
                         <div class="col-12" id="cbm-info-establecimiento-wrap" style="display:none;"><span class="text-muted">Establecimiento:</span> <span id="cbm-info-establecimiento" class="fw-bold text-info"></span></div>
                         <div class="col-12"><span class="text-muted">Glosa:</span> <span id="cbm-info-glosa"></span></div>
-                        <div class="col-12"><span class="text-muted">Monto:</span> <span id="cbm-info-monto" class="fw-bold"></span></div>
+                        <div class="col-6"><span class="text-muted">Monto:</span> <span id="cbm-info-monto" class="fw-bold"></span></div>
+                        <!-- Solo cuando el movimiento viene de un documento (ver JS). -->
+                        <div class="col-6 cbm-info-doc" style="display:none;"><span class="text-muted">Tipo:</span> <span id="cbm-info-tipo" class="fw-bold"></span></div>
+                        <div class="col-6 cbm-info-doc" id="cbm-info-cheque-wrap" style="display:none;"><span class="text-muted">Nº Cheque:</span> <span id="cbm-info-numero-cheque" class="fw-bold"></span> <span id="cbm-info-direccion" class="text-muted"></span></div>
+                        <div class="col-6 cbm-info-doc" id="cbm-info-fecha-cheque-wrap" style="display:none;"><span class="text-muted">Fecha del cheque:</span> <span id="cbm-info-fecha-cheque" class="fw-bold"></span></div>
+                        <div class="col-12 cbm-info-doc" id="cbm-info-observacion-wrap" style="display:none;"><span class="text-muted">Observación:</span> <span id="cbm-info-observacion"></span></div>
                         <!-- Estado de cobro del cheque (solo para movimientos tipo Cheque). -->
                         <div class="col-12 mt-1" id="cbm-info-estado-wrap" style="display:none;">
                             <span class="text-muted">Estado:</span> <span id="cbm-info-estado"></span>
                         </div>
                     </div>
-                </div>
-                <!-- Movimiento que viene de un ingreso/egreso: sus datos se corrigen allá. -->
-                <div class="alert alert-secondary py-2 px-3 small mb-3 d-none" id="cbm-aviso-documento">
-                    <i class="bi bi-lock-fill me-1"></i>
-                    Los datos de este movimiento (tipo, cheque y glosa) vienen del
-                    <strong>ingreso/egreso</strong> que lo originó y se corrigen ahí.
-                    Aquí solo se registra la <strong>Fecha Banco</strong>.
+                    <div class="border-top mt-2 pt-1 text-muted d-none" style="font-size:.72rem;" id="cbm-aviso-documento">
+                        <i class="bi bi-lock-fill me-1"></i>
+                        Datos del <strong>ingreso/egreso</strong> que originó el movimiento: se corrigen en ese documento.
+                    </div>
                 </div>
                 <!-- Cómo marcarlo como cobrado (solo visible en cheques aún en circulación). -->
                 <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="cbm-ayuda-cobro">
@@ -290,8 +296,17 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     <strong>Fecha Banco</strong> (el día en que el banco lo hizo efectivo) y guarde.
                     El egreso mostrará el cheque como cobrado y ya no permitirá cambiarle la fecha ni anularlo.
                 </div>
+
+                <!-- ── Editable ────────────────────────────────────────────────────────── -->
                 <div class="row g-2">
                     <div class="col-6">
+                        <label class="form-label small fw-bold mb-1">Fecha Banco (conciliación)</label>
+                        <input type="date" id="cbm-fecha-banco" class="form-control form-control-sm shadow-none">
+                        <div class="form-text">Día en que el banco lo hizo efectivo. En un cheque, llenarla lo marca como <strong>cobrado</strong>.</div>
+                    </div>
+                    <!-- Solo para movimientos SIN documento detrás (asientos manuales): ahí este
+                         módulo es el único lugar donde se pueden anotar estos datos. -->
+                    <div class="col-6 cbm-editable">
                         <label class="form-label small fw-bold mb-1">Tipo de Transacción <span class="text-danger">*</span></label>
                         <select id="cbm-tipo" class="form-select form-select-sm shadow-none" onchange="window.CB_toggleCampoCheque(this.value)">
                             <option value="DEPOSITO">Depósito</option>
@@ -302,12 +317,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                             <option value="OTRO" selected>Otro</option>
                         </select>
                     </div>
-                    <div class="col-6">
-                        <label class="form-label small fw-bold mb-1">Fecha Banco (conciliación)</label>
-                        <input type="date" id="cbm-fecha-banco" class="form-control form-control-sm shadow-none">
-                        <div class="form-text">Día en que el banco lo hizo efectivo. En un cheque, llenarla lo marca como <strong>cobrado</strong>.</div>
-                    </div>
-                    <div class="col-12 d-none row g-2" id="cbm-div-cheque">
+                    <div class="col-12 cbm-editable d-none row g-2" id="cbm-div-cheque">
                         <div class="col-6">
                             <label class="form-label small fw-bold mb-1">Dirección del Cheque</label>
                             <select id="cbm-direccion" class="form-select form-select-sm shadow-none bg-light" disabled>
@@ -326,7 +336,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                             <div class="form-text">Si es futura, aparecerá como "Posfechado".</div>
                         </div>
                     </div>
-                    <div class="col-12">
+                    <div class="col-12 cbm-editable">
                         <label class="form-label small fw-bold mb-1">Observación</label>
                         <input type="text" id="cbm-observacion" class="form-control form-control-sm shadow-none" maxlength="255">
                     </div>

@@ -28,11 +28,14 @@ Cada movimiento del banco necesita:
 ### Qué se puede editar aquí y qué no
 
 Si el movimiento **viene de un ingreso o un egreso**, sus datos son de ese
-documento: el tipo de transacción, el número y la fecha del cheque y la glosa se
-muestran **bloqueados**, y el modal lo advierte. Para corregir cualquiera de
-ellos hay que ir al ingreso/egreso; cambiarlos solo en la conciliación dejaría
-los dos módulos diciendo cosas distintas del mismo pago. Lo único que se
-registra desde aquí es la **Fecha Banco**.
+documento: el tipo de transacción, el número y la fecha del cheque y la
+observación se muestran **como ficha en el encabezado del modal**, junto con la
+fecha, el comprobante, la glosa y el monto. Abajo queda un solo campo: la
+**Fecha Banco**, que es lo que decide este módulo.
+
+Para corregir cualquiera de esos datos hay que ir al ingreso/egreso; cambiarlos
+solo en la conciliación dejaría los dos módulos diciendo cosas distintas del
+mismo pago.
 
 Los movimientos que **no** tienen un cobro/pago detrás (asientos manuales o del
 diario general) siguen siendo totalmente editables: ahí este módulo es el único
@@ -167,11 +170,12 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
-- **1.9** — En los movimientos que vienen de un ingreso/egreso, el modal ya no
-  permite cambiar el tipo, los datos del cheque ni la glosa (se corrigen en el
-  documento): aquí solo se registra la Fecha Banco. Los asientos manuales
-  siguen siendo editables. Además, ahora se puede conciliar un movimiento
-  registrado como "Débito".
+- **1.9** — Modal reorganizado: en los movimientos que vienen de un
+  ingreso/egreso, el tipo, los datos del cheque y la observación pasan a la
+  ficha del encabezado (solo lectura, se corrigen en el documento) y abajo
+  queda únicamente la Fecha Banco. Los asientos manuales siguen editándose
+  como antes. Además, ahora se puede conciliar un movimiento registrado como
+  "Débito".
 - **1.8** — La columna Fecha Banco muestra si el cheque está cobrado o sigue en
   circulación, y el modal explica cómo marcarlo. Corregido: el campo "Fecha
   Banco" ya no viene precargado con la fecha del movimiento, así que guardar

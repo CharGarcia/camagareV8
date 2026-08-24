@@ -361,21 +361,54 @@
     // Fecha Banco ya registrada del movimiento abierto en el modal (null = no cobrado).
     let chequeFechaBancoActual = null;
 
+    const TIPO_LABELS = {
+        DEPOSITO: 'Depósito', CHEQUE: 'Cheque', TRANSFERENCIA: 'Transferencia', DEBITO: 'Débito',
+        NOTA_DEBITO: 'Nota Débito', NOTA_CREDITO: 'Nota Crédito', TARJETA: 'Tarjeta',
+        PAYPHONE: 'Payphone', OTRO: 'Otro',
+    };
+
     /**
      * Los datos del movimiento (tipo, cheque, observación) pertenecen al ingreso/egreso que lo
-     * originó; se corrigen en ese documento, no aquí. Cuando hay documento detrás, el modal
-     * queda de solo lectura salvo la Fecha Banco, que es lo propio de la conciliación.
+     * originó; se corrigen en ese documento, no aquí. Cuando hay documento detrás, se muestran
+     * como texto en la tarjeta del encabezado y abajo queda solo la Fecha Banco, que es lo
+     * propio de la conciliación. Sin documento (asientos manuales) se editan abajo como siempre,
+     * y no se repiten arriba.
      */
-    function aplicarSoloLecturaDeDocumento(tieneDocumento) {
-        const bloquear = ['cbm-tipo', 'cbm-numero-cheque', 'cbm-fecha-cheque', 'cbm-observacion'];
-        bloquear.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.disabled = !!tieneDocumento;
-            el.classList.toggle('bg-light', !!tieneDocumento);
+    function aplicarSoloLecturaDeDocumento(tieneDocumento, row) {
+        document.querySelectorAll('.cbm-editable').forEach(el => {
+            el.classList.toggle('d-none', !!tieneDocumento);
+        });
+        // El bloque del cheque se muestra con d-flex, que en Bootstrap gana sobre d-none:
+        // hay que quitárselo al ocultarlo, o quedaría visible pese al d-none.
+        if (tieneDocumento) {
+            document.getElementById('cbm-div-cheque').classList.remove('d-flex');
+        }
+        document.querySelectorAll('.cbm-info-doc').forEach(el => {
+            el.style.display = tieneDocumento ? '' : 'none';
         });
         const aviso = document.getElementById('cbm-aviso-documento');
         if (aviso) aviso.classList.toggle('d-none', !tieneDocumento);
+        if (!tieneDocumento) {
+            // El bloque del cheque vuelve a depender del tipo elegido.
+            window.CB_toggleCampoCheque(document.getElementById('cbm-tipo').value);
+            return;
+        }
+
+        const tipo = row.tipo_transaccion || 'OTRO';
+        const esCheque = (tipo === 'CHEQUE');
+        document.getElementById('cbm-info-tipo').textContent = TIPO_LABELS[tipo] || tipo;
+        document.getElementById('cbm-info-numero-cheque').textContent = row.numero_cheque || '—';
+        document.getElementById('cbm-info-direccion').textContent = row.cheque_direccion
+            ? '(' + row.cheque_direccion.charAt(0) + row.cheque_direccion.slice(1).toLowerCase() + ')'
+            : '';
+        document.getElementById('cbm-info-fecha-cheque').textContent = fmtDateDisplay(row.fecha_cheque);
+        document.getElementById('cbm-info-observacion').textContent = row.observacion || '—';
+
+        // Los datos del cheque solo tienen sentido si el movimiento es un cheque.
+        document.getElementById('cbm-info-cheque-wrap').style.display = esCheque ? '' : 'none';
+        document.getElementById('cbm-info-fecha-cheque-wrap').style.display = esCheque ? '' : 'none';
+        // La observación, solo si hay algo escrito.
+        document.getElementById('cbm-info-observacion-wrap').style.display = row.observacion ? '' : 'none';
     }
 
     function actualizarEstadoCheque(tipo, fechaBancoManual) {
@@ -457,9 +490,10 @@
         // Estado de cobro del cheque + cómo marcarlo.
         actualizarEstadoCheque(tipo, row.fecha_banco_manual);
 
-        // Movimiento enlazado a un cobro/pago: sus datos son del documento. Aquí solo se
-        // registra la Fecha Banco (el backend ignora igual cualquier otro cambio).
-        aplicarSoloLecturaDeDocumento(row.tiene_documento === true || row.tiene_documento === 't' || row.tiene_documento === '1' || row.tiene_documento === 1);
+        // Movimiento enlazado a un cobro/pago: sus datos son del documento y van al encabezado.
+        // Aquí solo se registra la Fecha Banco (el backend ignora igual cualquier otro cambio).
+        const tieneDoc = (row.tiene_documento === true || row.tiene_documento === 't' || row.tiene_documento === '1' || row.tiene_documento === 1);
+        aplicarSoloLecturaDeDocumento(tieneDoc, row);
 
         document.getElementById('cbm-btn-quitar').classList.toggle('d-none', !row.id_clasificacion);
 
