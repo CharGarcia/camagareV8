@@ -27,6 +27,18 @@ class EgresoRules
             throw new Exception("El tipo de sujeto (Proveedor, Empleado) es obligatorio.");
         }
 
+        // Igual que FacturaVentaRules: validar el punto de emisión y el secuencial en
+        // crudo, no el numero_egreso ya compuesto (EgresosController::guardarAjax lo arma
+        // con '001' por defecto y el secuencial en ceros, así que nunca queda "vacío" aunque
+        // no haya serie configurada — sin este chequeo se cuelan egresos con secuencial 0).
+        if (empty($data['id_punto_emision'])) {
+            throw new Exception("Debe seleccionar una serie (punto de emisión) con el secuencial de Egresos configurado. Configúrelo en Empresa → Secuenciales.");
+        }
+
+        if (empty($data['secuencial']) || (int) $data['secuencial'] <= 0) {
+            throw new Exception("El secuencial es obligatorio y debe ser mayor a cero. Verifique que el punto de emisión tenga configurado el secuencial de Egresos (Empresa → Secuenciales).");
+        }
+
         if (empty($data['numero_egreso'])) {
             throw new Exception("El número de egreso no ha sido generado.");
         }

@@ -504,6 +504,24 @@ class FacturaVentaService
         }
     }
 
+    /**
+     * ventas_pagos.forma_pago es VARCHAR(5) (código SRI, p. ej. "20"). Si llega
+     * algo más largo (select sin seleccionar bien, o un valor "histórico"
+     * inyectado por el frontend para mostrar una forma de pago desactivada al
+     * reabrir un documento), Postgres lo rechaza con un error críptico de
+     * truncado. Se valida antes, con un mensaje que dice qué valor era.
+     */
+    private function validarFormaPago(array $p): void
+    {
+        $codigo = (string) ($p['forma_pago'] ?? '');
+        if (mb_strlen($codigo) > 5) {
+            throw new \Exception(
+                "La forma de pago '{$codigo}' no es un código SRI válido (máximo 5 caracteres). "
+                . "Vuelve a seleccionarla desde la lista en la pestaña Formas de pago."
+            );
+        }
+    }
+
     public function actualizarVendedor(int $id, ?int $idVendedor, int $idEmpresa, int $idUsuario): void
     {
         $cabecera = $this->repository->getPorId($id);
@@ -767,6 +785,7 @@ class FacturaVentaService
             $this->repository->deletePagos($id);
             if (!empty($data['pagos']) && is_array($data['pagos'])) {
                 foreach ($data['pagos'] as $p) {
+                    $this->validarFormaPago($p);
                     $p['id_venta'] = $id;
                     $this->repository->insertPago($p);
                 }
@@ -1023,6 +1042,7 @@ class FacturaVentaService
 
             if (!empty($data['pagos']) && is_array($data['pagos'])) {
                 foreach ($data['pagos'] as $p) {
+                    $this->validarFormaPago($p);
                     $p['id_venta'] = $idVenta;
                     $this->repository->insertPago($p);
                 }

@@ -12,8 +12,16 @@ class IngresoRules
             throw new \Exception('La fecha de emisión es obligatoria.');
         }
 
-        if (empty($data['secuencial'])) {
-            throw new \Exception('El secuencial es obligatorio.');
+        // Igual que FacturaVentaRules: validar el punto de emisión además del secuencial
+        // (IngresosController::guardarAjax compone numero_ingreso con '001' por defecto,
+        // así que solo el chequeo de secuencial en crudo evita que se cuele un valor sin
+        // serie configurada).
+        if (empty($data['id_punto_emision'])) {
+            throw new \Exception('Debe seleccionar una serie (punto de emisión) con el secuencial de Ingresos configurado. Configúrelo en Empresa → Secuenciales.');
+        }
+
+        if (empty($data['secuencial']) || (int) $data['secuencial'] <= 0) {
+            throw new \Exception('El secuencial es obligatorio y debe ser mayor a cero. Verifique que el punto de emisión tenga configurado el secuencial de Ingresos (Empresa → Secuenciales).');
         }
 
         if (empty($data['tipo_ingreso'])) {

@@ -234,6 +234,17 @@ class ReciboVentaService
 
         if (!empty($data['pagos']) && is_array($data['pagos'])) {
             foreach ($data['pagos'] as $p) {
+                $codigoFp = (string) ($p['forma_pago'] ?? '');
+                if (mb_strlen($codigoFp) > 5) {
+                    // recibos_venta_pagos.forma_pago es VARCHAR(5) (código SRI). Un valor
+                    // más largo (select mal seleccionado, o el valor "histórico" que el
+                    // frontend inyecta para mostrar una forma de pago desactivada al
+                    // reabrir) revienta con un error críptico de truncado en Postgres.
+                    throw new \Exception(
+                        "La forma de pago '{$codigoFp}' no es un código SRI válido (máximo 5 caracteres). "
+                        . "Vuelve a seleccionarla desde la lista en la pestaña Formas de pago."
+                    );
+                }
                 $p['id_recibo'] = $idRecibo;
                 $this->repository->insertPago($p);
             }
