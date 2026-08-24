@@ -235,6 +235,8 @@ class UsuariosSistemaController extends Controller
             $this->json(['ok' => false, 'msg' => 'Solo el super administrador puede asignar nivel de administrador.']);
         }
 
+        $this->requireGestionable($id);
+
         // El checkbox "Puede usar app móvil" solo se renderiza en el modal cuando
         // quien edita es nivel 3, así que un POST de un admin nivel < 3 nunca lo trae
         // — null le indica al modelo que no toque esa columna (preserva el valor actual).
@@ -273,6 +275,8 @@ class UsuariosSistemaController extends Controller
             $this->json(['ok' => false, 'msg' => 'No puede eliminarse a sí mismo.']);
         }
 
+        $this->requireGestionable($id);
+
         try {
             if ($this->model->eliminar($id, $idActual)) {
                 $this->json(['ok' => true, 'msg' => 'Usuario eliminado correctamente.']);
@@ -299,6 +303,8 @@ class UsuariosSistemaController extends Controller
         if ($id <= 0) {
             $this->json(['ok' => false, 'msg' => 'ID inválido.']);
         }
+
+        $this->requireGestionable($id);
 
         $row = $this->model->getDatosInvitacion($id);
 
@@ -339,6 +345,24 @@ class UsuariosSistemaController extends Controller
             }
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'msg' => 'Error: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Un administrador (nivel 2) solo puede actuar sobre los usuarios que ve en
+     * su listado: los que comparten empresa con él, los que gestiona en
+     * `usuario_asignado` y él mismo. El superadministrador no tiene restricción.
+     * Corta la petición con JSON de error si el id no le corresponde.
+     */
+    private function requireGestionable(int $idUsuario): void
+    {
+        $nivel = (int) ($_SESSION['nivel'] ?? 0);
+        if ($nivel >= 3) {
+            return;
+        }
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        if (!$this->model->esGestionablePorAdmin($idUsuario, $idActual)) {
+            $this->json(['ok' => false, 'msg' => 'No tiene permiso para gestionar ese usuario.']);
         }
     }
 

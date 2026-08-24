@@ -347,17 +347,45 @@ class Usuario extends BaseModel
     }
 
     /**
-     * True si ese usuario está bajo la gestión del administrador indicado
-     * (tabla usuario_asignado). El superadministrador no pasa por aquí: gestiona
-     * a todos.
+     * Fragmento SQL (sobre el alias `u` de `usuarios`) con el criterio de
+     * visibilidad de un administrador nivel 2: los usuarios que comparten al
+     * menos una empresa con las que él tiene asignadas, los que gestiona
+     * directamente en `usuario_asignado` y él mismo.
+     *
+     * Punto único de verdad del criterio: lo usan el listado
+     * (getTodosParaListado) y las acciones sobre un usuario concreto
+     * (esGestionablePorAdmin), para que "lo que veo" y "lo que puedo tocar"
+     * nunca se desalineen.
+     */
+    private static function whereVisiblesParaAdmin(int $idAdmin): string
+    {
+        $idA = (int) $idAdmin;
+        return "u.id = {$idA}
+                OR EXISTS (
+                    SELECT 1 FROM empresa_asignada ea_adm
+                    INNER JOIN empresa_asignada ea_otro ON ea_otro.id_empresa = ea_adm.id_empresa
+                    WHERE ea_adm.id_usuario = {$idA} AND ea_otro.id_usuario = u.id
+                )
+                OR EXISTS (
+                    SELECT 1 FROM usuario_asignado ua
+                    WHERE ua.id_usuario = u.id AND ua.id_adm = {$idA}
+                )";
+    }
+
+    /**
+     * True si ese usuario está bajo la gestión del administrador indicado:
+     * comparte empresa con él, lo tiene en `usuario_asignado` o es él mismo.
+     * El superadministrador no pasa por aquí: gestiona a todos.
      */
     public function esGestionablePorAdmin(int $idUsuario, int $idAdmin): bool
     {
         $idU = (int) $idUsuario;
         $idA = (int) $idAdmin;
         if ($idU <= 0 || $idA <= 0) return false;
-        $r = $this->query("SELECT 1 AS x FROM usuario_asignado
-            WHERE id_usuario = {$idU} AND id_adm = {$idA} LIMIT 1");
+        $r = $this->query("SELECT 1 AS x FROM usuarios u
+            WHERE u.id = {$idU} AND u.eliminado = false AND u.nivel < 3
+              AND (" . self::whereVisiblesParaAdmin($idA) . ")
+            LIMIT 1");
         return !empty($r);
     }
     /**
@@ -589,7 +617,12 @@ class Usuario extends BaseModel
 
     /**
      * Lista usuarios para el módulo de usuarios del sistema.
-     * SuperAdmin: todos. Admin: solo los que tiene en usuario_asignado.
+     * SuperAdmin (nivel 3): todos los usuarios del sistema.
+     * Admin (nivel 2): los usuarios que comparten al menos una empresa con las
+     * que él tiene asignadas — mismo criterio que /config/permisos-modulos
+     * (EmpresaAsignada::getUsuariosAsignables) —, más los que gestiona
+     * directamente en usuario_asignado (p. ej. invitados que aún no tienen
+     * empresa) y él mismo. Un admin nunca ve superadministradores.
      */
     public function getTodosParaListado(int $idActual, int $nivel, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'nombre', string $ordenDir = 'ASC'): array
     {
@@ -602,12 +635,11 @@ class Usuario extends BaseModel
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
         $col = $ordenCol === 'nombre' ? 'u.nombre' : 'u.' . $ordenCol;
 
+        $from = 'usuarios u';
         if ($nivel >= 3) {
-            $from = 'usuarios u';
             $where = "WHERE u.eliminado = false";
         } else {
-            $from = 'usuario_asignado ua INNER JOIN usuarios u ON u.id = ua.id_usuario';
-            $where = "WHERE u.eliminado = false AND ua.id_adm = {$idActual}";
+            $where = "WHERE u.eliminado = false AND u.nivel < 3 AND (" . self::whereVisiblesParaAdmin($idActual) . ")";
         }
 
         if ($buscar !== '') {
