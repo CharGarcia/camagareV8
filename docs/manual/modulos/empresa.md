@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo
-version: 1.19
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados
+version: 1.20
 orden: 5
 estado: activo
 ---
@@ -51,6 +51,25 @@ quedan fuera del alcance de este módulo). Desde aquí el cliente edita
 **nombre**, **dirección** y **logo**; el **código**, el **tipo** (Matriz/
 Sucursal) y el **estado** (Activo/Inactivo) son de solo lectura — se
 administran exclusivamente desde **Configuración → Empresas del sistema**.
+
+### Eliminar un punto de emisión con documentos
+
+Por regla general, un punto de emisión que **ya tiene documentos emitidos**
+(en cualquier módulo: facturas, ingresos, egresos, notas de crédito, guías de
+remisión, liquidaciones de compra, retenciones en compras, órdenes de compra o
+pedidos, en cualquier ambiente) **no se puede eliminar** — se perdería el
+control de esa numeración. Sí se puede seguir editando el **nombre** y el
+**estado** (activar/inhabilitar); el **código** queda bloqueado.
+
+**Excepción**: si queda **al menos otro punto de emisión con el mismo
+número** en algún otro establecimiento de la misma empresa, sí se permite
+eliminarlo aunque tenga documentos. El modal muestra una advertencia roja
+explicando el riesgo: si ese establecimiento y número específicos se vuelven
+a usar más adelante (por ejemplo, se crea un punto nuevo con el mismo código
+en el mismo establecimiento), el secuencial podría chocar con la numeración
+de los documentos que ese punto ya tuvo. Es una decisión explícita de quien
+elimina, no una limpieza automática — el sistema no reasigna ni fusiona esos
+documentos a ningún otro punto, solo deja de listar el punto eliminado.
 
 ## Ambiente: pruebas o producción
 
@@ -184,7 +203,11 @@ asigna uno menor al configurado.
   tipo de secuencial configurado (por ejemplo, tras eliminarlos todos), en su
   lugar aparece el botón **"Eliminar este punto de emisión"** — mismo
   resultado y misma validación que eliminarlo desde la pestaña **Puntos de
-  Emisión** (bloqueado si ya tiene documentos emitidos).
+  Emisión**: si ya tiene documentos emitidos, solo se puede eliminar cuando
+  queda **al menos otro punto con el mismo número** en otro establecimiento
+  de la empresa (el modal muestra una advertencia roja en ese caso); si no
+  queda ninguno, sigue bloqueado por completo. Ver más abajo, "Eliminar un
+  punto de emisión con documentos".
 - **Tipos con un único punto por empresa**: "Facturas de reembolso" solo
   puede estar configurada en **un** punto de emisión de toda la empresa (el
   resto del sistema asume que existe uno solo). Si ya está en otro punto, no
@@ -208,6 +231,13 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.20** — Nueva excepción a la regla de "no se puede eliminar un punto de
+  emisión con documentos": ahora sí se permite, siempre que quede al menos
+  otro punto con el mismo número en otro establecimiento de la empresa (con
+  advertencia explícita del riesgo de numeración si ese establecimiento y
+  número se reutilizan más adelante). Ver "Eliminar un punto de emisión con
+  documentos".
 
 - **1.19** — Pestaña Secuenciales: cuando el punto seleccionado se queda sin
   ningún tipo de secuencial configurado, aparece el botón **"Eliminar este

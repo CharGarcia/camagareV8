@@ -22,9 +22,11 @@ $base = BASE_URL;
     <div class="card-body">
         <p class="text-muted small mb-3">
             Crea en el sistema nuevo las empresas <b>activas</b> del sistema anterior que <b>aún no existen</b> aquí.
-            Se registra <b>una empresa por contribuyente</b> (RUC base) con todos sus establecimientos y en ambiente
-            <b>producción</b>. <b>No se envía ningún correo</b>: los documentos legales se enviarán cuando edites y
-            <b>guardes</b> la empresa por primera vez. El <b>usuario administrador</b> solo se crea si marcas la casilla.
+            Se registra <b>una empresa por contribuyente</b>, siempre con <b>RUC = base (10 dígitos) + 001</b> y
+            <b>establecimiento matriz 001</b>, en ambiente <b>producción</b>. Los demás establecimientos (002, 003…)
+            se crean como <b>sucursales</b> al migrar sus documentos con el <b>filtro de establecimiento</b>.
+            <b>No se envía ningún correo</b>: los documentos legales se enviarán cuando edites y <b>guardes</b> la
+            empresa por primera vez. El <b>usuario administrador</b> solo se crea si marcas la casilla.
         </p>
         <div id="empresasMigrarBox" style="display:none;">
             <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">

@@ -5443,17 +5443,20 @@ class MigracionMysqlService
 
                 $det = ['base' => $base, 'ok' => false, 'nombre' => '', 'establecimientos' => 0, 'usuario' => '', 'msg' => ''];
                 try {
-                    // Idempotencia por ESTABLECIMIENTO (RUC completo), no por toda la
-                    // base: así un establecimiento nuevo de una base ya parcialmente
-                    // migrada se puede seguir migrando sin bloquearse.
+                    // La empresa nueva SIEMPRE se crea con el RUC del contribuyente = base(10) + '001'
+                    // y establecimiento matriz '001' (estándar del sistema nuevo), sin importar de qué
+                    // establecimiento del viejo provenga la data. Los demás establecimientos se crean
+                    // como sucursales al migrar sus documentos (con el filtro de establecimiento).
+                    $ruc001 = substr((string) $matriz['ruc'], 0, 10) . '001';
+
+                    // Idempotencia: si ya existe la empresa (RUC base+001) en el nuevo, se omite.
                     $chk = $pg->prepare("SELECT 1 FROM empresas WHERE ruc = :r AND eliminado = false LIMIT 1");
-                    $chk->execute([':r' => (string) $matriz['ruc']]);
+                    $chk->execute([':r' => $ruc001]);
                     if ($chk->fetchColumn() !== false) {
                         $res['omitidas']++; $det['msg'] = 'Ya existe en el sistema nuevo.';
                         $res['detalle'][] = $det; continue;
                     }
 
-                    $estMatriz = substr((string) $matriz['ruc'], -3);
                     $det['nombre'] = trim((string) ($matriz['nombre_comercial'] ?: $matriz['nombre']));
 
                     // 1) Crear la empresa. Empresa::crear() ya inserta su único
@@ -5461,8 +5464,8 @@ class MigracionMysqlService
                     $idEmpresa = $modelEmpresa->crear([
                         'nombre'           => (string) $matriz['nombre'],
                         'nombre_comercial' => (string) $matriz['nombre_comercial'],
-                        'ruc'              => (string) $matriz['ruc'],
-                        'establecimiento'  => $estMatriz,
+                        'ruc'              => $ruc001,
+                        'establecimiento'  => '001',
                         'direccion'        => (string) $matriz['direccion'],
                         'telefono'         => (string) $matriz['telefono'],
                         'tipo'             => (string) ($matriz['tipo'] ?: '1'),

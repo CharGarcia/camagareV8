@@ -186,8 +186,8 @@ class ComprasRepository extends BaseRepository
     {
         $sql = "SELECT DISTINCT establecimiento_prov AS establecimiento, punto_emision_prov AS punto_emision
                 FROM compras_cabecera
-                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
-                ORDER BY establecimiento, punto_emision";
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento_prov IS NOT NULL AND establecimiento_prov != ''
+                ORDER BY establecimiento_prov, punto_emision_prov";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll();

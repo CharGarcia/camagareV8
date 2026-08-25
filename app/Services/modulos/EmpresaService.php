@@ -102,10 +102,18 @@ class EmpresaService
         }
 
         // Puntos de emisión, marcando cuáles ya tienen documentos (para la UI:
-        // bloquear código y ocultar "Eliminar" en esos).
+        // bloquear código en esos) y cuáles se pueden eliminar (sin documentos,
+        // o con documentos pero con otro punto del mismo número disponible en
+        // otro establecimiento — ver EmpresaService::deletePunto()).
         $puntos = $this->repository->getPuntosEmision($idEmpresa);
         foreach ($puntos as &$pto) {
-            $pto['en_uso'] = !empty($this->repository->puntoEmisionEnUso((int) $pto['id'], $idEmpresa));
+            $enUso = !empty($this->repository->puntoEmisionEnUso((int) $pto['id'], $idEmpresa));
+            $pto['en_uso'] = $enUso;
+            $pto['puede_eliminar'] = !$enUso || $this->repository->existeOtroPuntoConCodigo(
+                $idEmpresa,
+                (string) ($pto['codigo_punto'] ?? ''),
+                (int) $pto['id']
+            );
         }
         unset($pto);
 
@@ -694,13 +702,21 @@ class EmpresaService
 
     public function deletePunto(int $idPunto, int $idEmpresa): bool
     {
-        // No permitir eliminar un punto de emisión que ya tiene documentos asociados
+        // Un punto con documentos solo se puede eliminar si queda al menos otro
+        // punto con el MISMO número en otro establecimiento de la empresa (decisión
+        // explícita del usuario: acepta que, si ese establecimiento+punto específico
+        // se reutiliza más adelante, el secuencial podría chocar con los documentos
+        // que ya tenía). Si no queda ningún otro con ese número, se sigue bloqueando.
         $usos = $this->repository->puntoEmisionEnUso($idPunto, $idEmpresa);
         if (!empty($usos)) {
-            throw new \Exception(
-                'No se puede eliminar este punto de emisión porque ya está siendo utilizado en: ' .
-                implode(', ', $usos) . '.'
-            );
+            $punto = $this->repository->getPuntoEmision($idPunto, $idEmpresa);
+            $codigo = (string) ($punto['codigo_punto'] ?? '');
+            if ($codigo === '' || !$this->repository->existeOtroPuntoConCodigo($idEmpresa, $codigo, $idPunto)) {
+                throw new \Exception(
+                    'No se puede eliminar este punto de emisión porque ya está siendo utilizado en: ' .
+                    implode(', ', $usos) . '. Además, no queda ningún otro punto con el mismo número en esta empresa.'
+                );
+            }
         }
         return $this->repository->deletePuntoEmision($idPunto, $idEmpresa);
     }

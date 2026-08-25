@@ -660,6 +660,23 @@ class EmpresaRepository extends BaseModel
         return $this->lastInsertId('empresa_punto_emision_id_seq');
     }
 
+    /**
+     * ¿Existe otro punto de emisión (no eliminado) con el mismo código en esta
+     * empresa, sin contar $excluirId? Usado para permitir eliminar un punto que
+     * ya tiene documentos SOLO cuando ese número de punto sigue existiendo en
+     * algún otro establecimiento de la empresa — ver EmpresaService::deletePunto().
+     */
+    public function existeOtroPuntoConCodigo(int $idEmpresa, string $codigoPunto, int $excluirId): bool
+    {
+        $ide = (int) $idEmpresa;
+        $id = (int) $excluirId;
+        $cod = $this->escape(trim($codigoPunto));
+        if ($cod === '') return false;
+        $sql = "SELECT 1 FROM empresa_punto_emision
+                 WHERE id_empresa = {$ide} AND TRIM(codigo_punto) = '{$cod}' AND eliminado = false AND id != {$id}";
+        return !empty($this->query($sql));
+    }
+
     /** Datos actuales de un punto de emisión (para validar qué cambió). */
     public function getPuntoEmision(int $idPunto, int $idEmpresa): ?array
     {
