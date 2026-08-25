@@ -30,7 +30,7 @@ de emisión y el secuencial.
 
 ### Logo del establecimiento
 
-En la pestaña **Establecimientos** se sube el logo que aparece en los documentos
+En la pestaña **Establecimiento** se sube el logo que aparece en los documentos
 impresos (factura, nota de crédito, retención, liquidación de compra, guía de
 remisión y recibo de venta). El logo ocupa un recuadro de **81 mm × 25.4 mm**
 (relación de aspecto aproximada **3.2 : 1**, panorámico): la imagen se ajusta
@@ -105,7 +105,7 @@ y débito, retenciones, guías de remisión y liquidaciones de compra).
   colores, alineación, listas, enlaces e imágenes).
 
 El logo que aparece en la cabecera del correo es el del **establecimiento** que
-emitió el documento (pestaña Establecimientos). Si el establecimiento no tiene
+emitió el documento (pestaña Establecimiento). Si el establecimiento no tiene
 logo, la cabecera muestra el nombre de la empresa en texto.
 
 El remitente que ve el destinatario es el nombre comercial de la empresa (o su

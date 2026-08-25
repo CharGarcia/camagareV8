@@ -48,7 +48,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="establecimientos-tab" data-bs-toggle="tab" data-bs-target="#establecimientos" type="button" role="tab">
-                        Establecimientos <?= $warnEst ? $warnIcon : '' ?>
+                        Establecimiento <?= $warnEst ? $warnIcon : '' ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">

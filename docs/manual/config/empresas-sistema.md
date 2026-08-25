@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo
-version: 1.3
+version: 1.4
 orden: 1
 estado: activo
 ---
@@ -40,7 +40,7 @@ ficha de la empresa, pestaña Establecimientos, el superadministrador puede:
 - **Solo un establecimiento puede estar Activo por empresa a la vez.** Al
   marcar uno como Activo, el sistema pasa automáticamente a **Inactivo**
   cualquier otro establecimiento de esa empresa que lo estuviera. Ese cambio
-  es exclusivo de este módulo: en **Empresa → pestaña Establecimientos**
+  es exclusivo de este módulo: en **Empresa → pestaña Establecimiento**
   (autoservicio) el cliente solo ve y edita el establecimiento que está
   Activo, y ahí el código, el tipo y el estado son de solo lectura — edita
   nombre, dirección y logo.
@@ -82,6 +82,12 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.4** — El módulo Empresa (autoservicio) renombró su pestaña
+  "Establecimientos" a "Establecimiento" (singular), ya que solo opera sobre
+  el que está Activo. Se actualizaron las referencias a esa pestaña en este
+  artículo. La pestaña propia de este módulo (Empresas del Sistema) no
+  cambia de nombre.
+
 - **1.3** — Aclarado: el módulo Empresa (autoservicio) no ofrece un selector
   entre varios establecimientos — solo ve y edita el que está Activo, con
   código, tipo y estado de solo lectura ahí. Cualquier otro dato/gestión de
@@ -94,7 +100,7 @@ las empresas que ese usuario tiene asignadas.
 - **1.1** — Nueva regla: **solo un establecimiento puede estar Activo por
   empresa a la vez**. Activar uno desactiva automáticamente los demás — este
   cambio es exclusivo de este módulo. El que está activo es siempre el que
-  se muestra en el módulo Empresa (autoservicio), pestaña Establecimientos,
+  se muestra en el módulo Empresa (autoservicio), pestaña Establecimiento,
   donde el cliente puede consultarlo pero no cambiarlo.
 
 - **1.0** — Primera versión del artículo: documenta la gestión de

@@ -3096,8 +3096,8 @@ class MigracionMysqlService
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $insCab = $pg->prepare(
-            "INSERT INTO guias_remision_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_transportista, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, placa, fecha_inicio_transporte, fecha_fin_transporte, direccion_partida, direccion_destino, motivo_traslado, num_doc_sustento, tipo_ambiente, estado, created_by)
-             VALUES (:e, :est, :pto, :cli, :tra, :u, :fe, :estc, :ptoc, :sec, :clave, :placa, :fini, :ffin, :dpart, :ddest, :mot, :nds, :amb, :estado, :cb) RETURNING id"
+            "INSERT INTO guias_remision_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_transportista, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, placa, fecha_inicio_transporte, fecha_fin_transporte, direccion_partida, direccion_destino, motivo_traslado, num_doc_sustento, tipo_ambiente, estado, estado_correo, created_by)
+             VALUES (:e, :est, :pto, :cli, :tra, :u, :fe, :estc, :ptoc, :sec, :clave, :placa, :fini, :ffin, :dpart, :ddest, :mot, :nds, :amb, :estado, :ecorreo, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO guias_remision_detalle (id_guia_remision, id_producto, codigo_principal, descripcion, cantidad)
@@ -3145,7 +3145,8 @@ class MigracionMysqlService
                     ':placa' => (string) ($ec['placa'] ?? ''), ':fini' => $fini, ':ffin' => $ffin,
                     ':dpart' => (string) ($ec['origen'] ?? ''), ':ddest' => (string) ($ec['destino'] ?? ''),
                     ':mot' => (string) ($ec['motivo'] ?: 'Venta'), ':nds' => self::nz($ec['factura_aplica']),
-                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']), ':cb' => $idUsuario,
+                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':estado' => ($estadoG = $this->estadoFacturaSri((string) $ec['estado_sri'])),
+                    ':ecorreo' => $this->estadoCorreoSri($estadoG), ':cb' => $idUsuario,
                 ]);
                 $idGr = (int) $insCab->fetchColumn();
 
@@ -3185,8 +3186,8 @@ class MigracionMysqlService
         $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
         $insCab = $pg->prepare(
-            "INSERT INTO liquidaciones_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_proveedor, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, total_sin_impuestos, total_descuento, importe_total, moneda, estado, id_sustento_tributario, tipo_ambiente, created_by)
-             VALUES (:e, :est, :pto, :prov, :u, :fe, :estc, :ptoc, :sec, :clave, :aut, :tsi, :tdes, :tot, 'DOLAR', :estado, :sust, :amb, :cb) RETURNING id"
+            "INSERT INTO liquidaciones_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_proveedor, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, total_sin_impuestos, total_descuento, importe_total, moneda, estado, estado_correo, id_sustento_tributario, tipo_ambiente, created_by)
+             VALUES (:e, :est, :pto, :prov, :u, :fe, :estc, :ptoc, :sec, :clave, :aut, :tsi, :tdes, :tot, 'DOLAR', :estado, :ecorreo, :sust, :amb, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO liquidaciones_detalle (id_cabecera, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -3251,7 +3252,7 @@ class MigracionMysqlService
         // Reconciliación por mapa (reemplaza yaMigradoDoc): al re-correr completa sustento/estado/
         // ambiente + info adicional + formas de pago de las liquidaciones ya migradas.
         $mapLiq = $this->mapaDe($pg, $idEmpresa, 'liquidaciones');
-        $updCab = $pg->prepare("UPDATE liquidaciones_cabecera SET id_proveedor = ?, fecha_emision = ?, estado = ?, id_sustento_tributario = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCab = $pg->prepare("UPDATE liquidaciones_cabecera SET id_proveedor = ?, fecha_emision = ?, estado = ?, estado_correo = ?, id_sustento_tributario = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_liq, ruc_empresa, fecha_liquidacion, serie_liquidacion, secuencial_liquidacion, id_proveedor, estado_sri, total_liquidacion, ambiente, aut_sri
                   FROM encabezado_liquidacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_liquidacion', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_liq";
@@ -3282,7 +3283,7 @@ class MigracionMysqlService
                 $pg->beginTransaction();
                 if ($idLiqExist) { // re-correr: reconciliar cabecera + info adicional + pagos
                     $idLiq = (int) $idLiqExist;
-                    $updCab->execute([$idProv, $fe, $estado, $sust, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idLiq]);
+                    $updCab->execute([$idProv, $fe, $estado, $this->estadoCorreoSri($estado), $sust, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idLiq]);
                     $res['ya_migrados']++;
                 } else {
                     $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
@@ -3296,7 +3297,7 @@ class MigracionMysqlService
                         ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':prov' => $idProv, ':u' => $idUsuario,
                         ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
                         ':clave' => self::claveAcceso($ec['aut_sri']), ':aut' => self::numAutorizacion($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
-                        ':tot' => (float) $ec['total_liquidacion'], ':estado' => $estado, ':sust' => $sust,
+                        ':tot' => (float) $ec['total_liquidacion'], ':estado' => $estado, ':ecorreo' => $this->estadoCorreoSri($estado), ':sust' => $sust,
                         ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                     ]);
                     $idLiq = (int) $insCab->fetchColumn();
@@ -3463,7 +3464,7 @@ class MigracionMysqlService
             }
             return $plazoCli[$idCliente];
         };
-        $updCabV = $pg->prepare("UPDATE ventas_cabecera SET estado = ?, dias_credito = ?, id_vendedor = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCabV = $pg->prepare("UPDATE ventas_cabecera SET estado = ?, estado_correo = ?, dias_credito = ?, id_vendedor = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $qCliDe  = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = ?");
 
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
@@ -3486,7 +3487,7 @@ class MigracionMysqlService
                     $qCliDe->execute([$idExist]);
                     $dias = $diasDe((int) $qCliDe->fetchColumn());
                     $estadoRec = $this->estadoFacturaSri((string) $ef['estado_sri']);
-                    $updCabV->execute([$estadoRec, $dias, $vendedorDe($old), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
+                    $updCabV->execute([$estadoRec, $this->estadoCorreoSri($estadoRec), $dias, $vendedorDe($old), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
                     $migrarHijos($idExist, $ef, $dias);
                     $reaplicarLotes($idExist, $ef); // completa el lote en facturas ya migradas
                     $pg->commit();
@@ -3534,7 +3535,7 @@ class MigracionMysqlService
                     'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $secuencial,
                     'total_sin_impuestos' => round($totalSinImp, 2), 'total_descuento' => round($totalDesc, 2),
                     'importe_total' => (float) $ef['total_factura'], 'propina' => (float) $ef['propina'],
-                    'moneda' => 'DOLAR', 'estado' => $estado,
+                    'moneda' => 'DOLAR', 'estado' => $estado, 'estado_correo' => $this->estadoCorreoSri($estado),
                     'observaciones' => self::nz($ef['observaciones_factura']),
                     'clave_acceso' => self::claveAcceso($ef['aut_sri']),
                     'dias_credito' => $diasDe($idCliente),
@@ -4009,8 +4010,8 @@ class MigracionMysqlService
         foreach ($qMapNc->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapNc[(string) $r['id_origen']] = (int) $r['id_destino']; }
 
         $insCab = $pg->prepare(
-            "INSERT INTO notas_credito_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, cod_doc_modificado, num_doc_modificado, fecha_emision_docs_sustento, motivo, total_sin_impuestos, total_descuento, importe_total, estado, clave_acceso, tipo_ambiente, created_by)
-             VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, '01', :ndm, :fds, :mot, :tsi, :tdes, :tot, :estado, :clave, :amb, :cb) RETURNING id"
+            "INSERT INTO notas_credito_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, cod_doc_modificado, num_doc_modificado, fecha_emision_docs_sustento, motivo, total_sin_impuestos, total_descuento, importe_total, estado, estado_correo, clave_acceso, tipo_ambiente, created_by)
+             VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, '01', :ndm, :fds, :mot, :tsi, :tdes, :tot, :estado, :ecorreo, :clave, :amb, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO notas_credito_detalle (id_nota_credito, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -4021,7 +4022,7 @@ class MigracionMysqlService
              VALUES (:d, '2', :cp, :tar, :base, :val)"
         );
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad_nc, valor_unitario_nc, subtotal_nc, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_nc WHERE ruc_empresa = :r AND serie_nc = :s AND secuencial_nc = :sec");
-        $updEstadoNc = $pg->prepare("UPDATE notas_credito_cabecera SET estado = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updEstadoNc = $pg->prepare("UPDATE notas_credito_cabecera SET estado = ?, estado_correo = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_nc, ruc_empresa, fecha_nc, serie_nc, secuencial_nc, factura_modificada, id_cliente, estado_sri, total_nc, ambiente, aut_sri, motivo, fecha_factura
                   FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
@@ -4037,7 +4038,8 @@ class MigracionMysqlService
                 try {
                     $pg->beginTransaction();
                     $migrarAdicNc($mapNc[(string) $old], $ec);
-                    $updEstadoNc->execute([$this->estadoFacturaSri((string) $ec['estado_sri']), $idUsuario, $mapNc[(string) $old]]);
+                    $estadoNcRec = $this->estadoFacturaSri((string) $ec['estado_sri']);
+                    $updEstadoNc->execute([$estadoNcRec, $this->estadoCorreoSri($estadoNcRec), $idUsuario, $mapNc[(string) $old]]);
                     $pg->commit();
                     $res['ya_migrados']++;
                 } catch (Throwable $ex) {
@@ -4075,7 +4077,8 @@ class MigracionMysqlService
                     ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':cli' => $idCliente, ':u' => $idUsuario,
                     ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':ndm' => (string) $ec['factura_modificada'],
                     ':fds' => $fds, ':mot' => (string) ($ec['motivo'] ?: 'Migración'), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
-                    ':tot' => (float) $ec['total_nc'], ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']),
+                    ':tot' => (float) $ec['total_nc'], ':estado' => ($estadoNc = $this->estadoFacturaSri((string) $ec['estado_sri'])),
+                    ':ecorreo' => $this->estadoCorreoSri($estadoNc),
                     ':clave' => self::claveAcceso($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':cb' => $idUsuario,
                 ]);
                 $idNc = (int) $insCab->fetchColumn();
@@ -4123,8 +4126,8 @@ class MigracionMysqlService
         $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
         $insCab = $pg->prepare(
-            "INSERT INTO retencion_compra_cabecera (id_empresa, id_proveedor, id_usuario, id_establecimiento, id_punto_emision, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, tipo_ambiente, tipo_doc_sustento, num_doc_sustento, fecha_emision_doc_sustento, total_retenido, periodo_fiscal, estado, created_by)
-             VALUES (:e, :prov, :u, :est, :pto, :fe, :estc, :ptoc, :sec, :clave, :aut, :amb, :tds, :nds, :fds, :tot, :per, :estado, :cb) RETURNING id"
+            "INSERT INTO retencion_compra_cabecera (id_empresa, id_proveedor, id_usuario, id_establecimiento, id_punto_emision, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, tipo_ambiente, tipo_doc_sustento, num_doc_sustento, fecha_emision_doc_sustento, total_retenido, periodo_fiscal, estado, estado_correo, created_by)
+             VALUES (:e, :prov, :u, :est, :pto, :fe, :estc, :ptoc, :sec, :clave, :aut, :amb, :tds, :nds, :fds, :tot, :per, :estado, :ecorreo, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO retencion_compra_detalle (id_empresa, id_retencion, codigo_impuesto, codigo_retencion, concepto, base_imponible, porcentaje_retener, valor_retenido)
@@ -4133,7 +4136,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT codigo_impuesto, impuesto, id_retencion, base_imponible, porcentaje_retencion, valor_retenido, nombre_retencion, ejercicio_fiscal FROM cuerpo_retencion WHERE ruc_empresa = :r AND serie_retencion = :s AND secuencial_retencion = :sec");
         // Reconciliación al re-correr: completa periodo_fiscal/estado y reconstruye el detalle de las ya migradas.
         $mapRetC = $this->mapaDe($pg, $idEmpresa, 'retenciones_compra');
-        $updCab  = $pg->prepare("UPDATE retencion_compra_cabecera SET id_proveedor = ?, fecha_emision = ?, periodo_fiscal = ?, estado = ?, total_retenido = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCab  = $pg->prepare("UPDATE retencion_compra_cabecera SET id_proveedor = ?, fecha_emision = ?, periodo_fiscal = ?, estado = ?, estado_correo = ?, total_retenido = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet  = $pg->prepare("DELETE FROM retencion_compra_detalle WHERE id_retencion = ?");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_proveedor, serie_retencion, secuencial_retencion, total_retencion, aut_sri, fecha_emision, fecha_documento, tipo_comprobante, numero_comprobante, ambiente, estado_sri
@@ -4175,7 +4178,7 @@ class MigracionMysqlService
 
                 if ($idRetExist) { // re-correr: reconciliar cabecera + reconstruir detalle
                     $idRet = (int) $idRetExist;
-                    $updCab->execute([$idProv, $fe, $per, $estado, (float) $ec['total_retencion'], $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idRet]);
+                    $updCab->execute([$idProv, $fe, $per, $estado, $this->estadoCorreoSri($estado), (float) $ec['total_retencion'], $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idRet]);
                     $delDet->execute([$idRet]);
                     $res['ya_migrados']++;
                 } else {
@@ -4186,7 +4189,7 @@ class MigracionMysqlService
                         ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::claveAcceso($ec['aut_sri']),
                         ':aut' => self::numAutorizacion($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1',
                         ':tds' => (string) ($ec['tipo_comprobante'] ?: '01'), ':nds' => self::nz($ec['numero_comprobante']),
-                        ':fds' => $fds, ':tot' => (float) $ec['total_retencion'], ':per' => $per, ':estado' => $estado, ':cb' => $idUsuario,
+                        ':fds' => $fds, ':tot' => (float) $ec['total_retencion'], ':per' => $per, ':estado' => $estado, ':ecorreo' => $this->estadoCorreoSri($estado), ':cb' => $idUsuario,
                     ]);
                     $idRet = (int) $insCab->fetchColumn();
                     $res['migrados']++;
@@ -4921,6 +4924,13 @@ class MigracionMysqlService
         if ($e === 'AUTORIZADO') return 'autorizado';
         if ($e === '' || $e === 'NO APLICA') return 'autorizado'; // histórico / documento físico
         return 'borrador'; // PENDIENTE, NO AUTORIZADO, DEVUELTA, ERROR, ENVIANDO, PROCESANDOSE…
+    }
+
+    /** Estado del correo del documento migrado: 'enviado' si el documento quedó AUTORIZADO
+     *  (autorizado/autorizada), 'pendiente' en cualquier otro caso (borrador/anulado). */
+    private function estadoCorreoSri(string $estadoDoc): string
+    {
+        return in_array($estadoDoc, ['autorizado', 'autorizada'], true) ? 'enviado' : 'pendiente';
     }
 
     /** Igual que estadoFacturaSri pero con el vocabulario FEMENINO de retención de compra
