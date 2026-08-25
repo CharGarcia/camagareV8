@@ -379,6 +379,29 @@ class Empresa extends BaseModel
             $data['establecimiento'] = ($estActual !== '') ? $estActual : $this->obtenerEstablecimientoDisponible($ruc, $id);
         }
 
+        // Este mismo código también vive, por separado, en
+        // empresa_establecimiento.codigo (fila Activa) — ver pestaña
+        // Establecimiento tanto aquí como en el módulo Empresa (autoservicio).
+        // Si cambia desde esta pestaña General, hay que resincronizar esa fila
+        // para no dejar las dos pestañas mostrando códigos distintos (mismo
+        // desfase que actualizarEstablecimiento() ya corrige en el sentido
+        // inverso). Se valida ANTES del UPDATE para no dejar guardado un
+        // establecimiento a medias si el código choca con otro ya existente.
+        $idEstActivo = null;
+        if (array_key_exists('establecimiento', $data) && $data['establecimiento'] !== '' && $data['establecimiento'] !== $estActual) {
+            $activo = $this->query(
+                "SELECT id FROM empresa_establecimiento
+                  WHERE id_empresa = {$id} AND eliminado = false AND LOWER(estado) = 'activo'
+                  ORDER BY id ASC LIMIT 1"
+            );
+            if (!empty($activo)) {
+                $idEstActivo = (int) $activo[0]['id'];
+                if ($this->existeCodigoEstablecimiento($id, $data['establecimiento'], $idEstActivo)) {
+                    throw new \InvalidArgumentException("Ya existe otro establecimiento con el código {$data['establecimiento']} en esta empresa.");
+                }
+            }
+        }
+
         // Si se marca como administradora por defecto, desmarcar a las demás.
         if (array_key_exists('es_administradora_suscripciones', $data) && $this->esValorVerdadero($data['es_administradora_suscripciones'])) {
             $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true AND id != {$id}");
@@ -412,7 +435,16 @@ class Empresa extends BaseModel
         }
         if (empty($sets)) return true;
         $sql = 'UPDATE empresas SET ' . implode(', ', $sets) . ' WHERE id = ' . $id;
-        return $this->execute($sql);
+        $ok = $this->execute($sql);
+
+        if ($ok && $idEstActivo !== null) {
+            $this->execute(
+                "UPDATE empresa_establecimiento SET codigo = '" . $this->escape($data['establecimiento']) . "', updated_at = NOW()
+                  WHERE id = {$idEstActivo}"
+            );
+        }
+
+        return $ok;
     }
 
     /**
@@ -541,6 +573,25 @@ class Empresa extends BaseModel
                 "UPDATE empresa_establecimiento SET estado = 'inactivo', updated_at = NOW()
                  WHERE id_empresa = {$idEmp} AND id != {$id} AND eliminado = false"
             );
+        }
+
+        // La tabla `empresas` guarda su propio campo `establecimiento` (código de
+        // 3 dígitos usado en XML, clave de acceso, PDF y navbar) separado de
+        // `empresa_establecimiento.codigo`. Debe reflejar siempre el código del
+        // establecimiento Activo, así que se resincroniza tras cualquier cambio
+        // (edición de código, o activar/desactivar) para no dejarlo desfasado.
+        if ($ok && $idEmp > 0) {
+            $activo = $this->query(
+                "SELECT codigo FROM empresa_establecimiento
+                  WHERE id_empresa = {$idEmp} AND eliminado = false AND LOWER(estado) = 'activo'
+                  ORDER BY id ASC LIMIT 1"
+            );
+            if (!empty($activo)) {
+                $this->execute(
+                    "UPDATE empresas SET establecimiento = '" . $this->escape($activo[0]['codigo']) . "', updated_at = NOW()
+                      WHERE id = {$idEmp}"
+                );
+            }
         }
 
         return $ok;

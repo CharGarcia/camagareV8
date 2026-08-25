@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo
-version: 1.4
+version: 1.6
 orden: 1
 estado: activo
 ---
@@ -32,7 +32,7 @@ asignados, reenviar documentos legales, etc.
 
 Cada empresa puede tener uno o varios **establecimientos** (locales físicos)
 registrados, aunque en la práctica solo opera con **uno a la vez**. Desde la
-ficha de la empresa, pestaña Establecimientos, el superadministrador puede:
+ficha de la empresa, pestaña Establecimiento, el superadministrador puede:
 
 - **Crear** uno nuevo (código de 3 dígitos, nombre, dirección, tipo Matriz o
   Sucursal, estado).
@@ -79,8 +79,35 @@ las empresas que ese usuario tiene asignadas.
 - **"Ya tiene documentos emitidos"**: el establecimiento (o alguno de sus
   puntos de emisión) ya numeró comprobantes reales; no se puede perder esa
   numeración eliminándolo. Márquelo Inactivo en su lugar.
+- **Cambié el código del establecimiento y no se actualizó en el módulo
+  Empresa (autoservicio), pestaña Información General**: corregido desde la
+  versión 1.5 — antes, ese campo (`empresas.establecimiento`, usado también
+  en XML, clave de acceso, PDF y el navbar) no se resincronizaba al editar
+  `empresa_establecimiento.codigo`. Si el problema persiste, es un dato
+  desactualizado de antes del fix; edite el establecimiento una vez más
+  (aunque sea el mismo valor) para forzar la resincronización.
 
 ## Historial de cambios
+
+- **1.6** — La pestaña **Establecimientos** de la ficha de empresa (en este
+  módulo) pasa a llamarse **Establecimiento** (singular), igual que en el
+  módulo Empresa (autoservicio). Corregido además el sentido inverso del fix
+  1.5: editar el campo **Establecimiento** desde la pestaña **General** de la
+  misma ficha (columna `empresas.establecimiento`) ahora también actualiza el
+  código del establecimiento Activo en la pestaña Establecimiento — antes solo
+  se sincronizaba al revés. Si el nuevo código choca con el de otro
+  establecimiento de la misma empresa, el guardado se rechaza con el mismo
+  mensaje de error que ya usa la pestaña Establecimiento. La UI del modal
+  también se refresca en vivo (sin recargar la página) al guardar desde
+  cualquiera de las dos pestañas.
+
+- **1.5** — Corregido: al editar el **código** de un establecimiento (o al
+  activarlo) desde este módulo, el cambio no se reflejaba en la pestaña
+  Información General del módulo Empresa (autoservicio), porque esa pestaña
+  lee el campo `establecimiento` de la propia tabla `empresas` — separado de
+  `empresa_establecimiento.codigo` — y no se resincronizaba. Ahora, cada vez
+  que se guarda un establecimiento, el sistema actualiza `empresas.establecimiento`
+  con el código del que quede Activo.
 
 - **1.4** — El módulo Empresa (autoservicio) renombró su pestaña
   "Establecimientos" a "Establecimiento" (singular), ya que solo opera sobre

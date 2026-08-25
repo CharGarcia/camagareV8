@@ -275,7 +275,7 @@ function estadoPagoBadge($estado) {
                         <button class="nav-link active" id="tab-empresas-general" data-bs-toggle="tab" data-bs-target="#pane-empresas-general" type="button" role="tab">General</button>
                     </li>
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="tab-empresas-establecimientos" data-bs-toggle="tab" data-bs-target="#pane-empresas-establecimientos" type="button" role="tab">Establecimientos</button>
+                        <button class="nav-link" id="tab-empresas-establecimientos" data-bs-toggle="tab" data-bs-target="#pane-empresas-establecimientos" type="button" role="tab">Establecimiento</button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="tab-empresas-usuarios" data-bs-toggle="tab" data-bs-target="#pane-empresas-usuarios" type="button" role="tab">Usuarios asignados</button>
@@ -619,6 +619,7 @@ function estadoPagoBadge($estado) {
     var modal = document.getElementById('modalDetalleEmpresa');
     var tbody = document.getElementById('tbody-usuarios-empresa');
     var idEmpresa = 0;
+    var elEmpresaActual = null;
 
     function cargarProvincias(selectId, callback) {
         var sel = document.getElementById(selectId);
@@ -662,6 +663,7 @@ function estadoPagoBadge($estado) {
 
     function abrirModalEmpresa(el) {
         idEmpresa = parseInt(el.dataset.id, 10);
+        elEmpresaActual = el;
         document.getElementById('modal-empresa-id').value = idEmpresa;
         document.getElementById('edit-empresa-id').value = idEmpresa;
         document.getElementById('edit-empresa-id-cobro').value = idEmpresa;
@@ -1048,6 +1050,28 @@ function estadoPagoBadge($estado) {
                 if (res.ok) {
                     bootstrap.Modal.getInstance(document.getElementById('modalEditarEstSistema')).hide();
                     cargarEstablecimientos();
+                    // Si el establecimiento editado quedó Activo, su código es el
+                    // mismo que empresas.establecimiento (pestaña General) — se
+                    // refleja aquí sin esperar a reabrir el modal.
+                    var estadoEditado = (document.getElementById('edit-est-estado-sistema').value || '').toLowerCase();
+                    var codigoEditado = document.getElementById('edit-est-codigo-sistema').value || '';
+                    var campoGeneral = document.getElementById('edit-establecimiento');
+                    if (estadoEditado === 'activo' && campoGeneral) {
+                        campoGeneral.value = codigoEditado;
+                        // También la fila de la tabla externa (dataset + celda visible
+                        // "Est."), para que si se cierra y reabre este mismo modal sin
+                        // recargar la página no vuelva a precargar el código viejo.
+                        if (elEmpresaActual) {
+                            elEmpresaActual.dataset.establecimiento = codigoEditado;
+                            var celdaEst = elEmpresaActual.cells ? elEmpresaActual.cells[3] : null;
+                            if (celdaEst) {
+                                celdaEst.textContent = '';
+                                var codeEl = document.createElement('code');
+                                codeEl.textContent = codigoEditado;
+                                celdaEst.appendChild(codeEl);
+                            }
+                        }
+                    }
                     if (window.Swal) Swal.fire('Éxito', res.msg, 'success');
                     else alert(res.msg);
                 } else {

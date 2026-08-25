@@ -471,6 +471,23 @@ class EmpresaRepository extends BaseModel
             );
         }
 
+        // Mantener sincronizado empresas.establecimiento con el código del
+        // establecimiento Activo (ver Empresa::actualizarEstablecimiento(), misma
+        // regla replicada aquí para el módulo autoservicio).
+        if ($ok) {
+            $activo = $this->query(
+                "SELECT codigo FROM empresa_establecimiento
+                  WHERE id_empresa = {$idEmpresa} AND eliminado = false AND LOWER(estado) = 'activo'
+                  ORDER BY id ASC LIMIT 1"
+            );
+            if (!empty($activo)) {
+                $this->execute(
+                    "UPDATE empresas SET establecimiento = '" . $this->escape($activo[0]['codigo']) . "', updated_at = NOW()
+                      WHERE id = {$idEmpresa}"
+                );
+            }
+        }
+
         return $ok;
     }
 
