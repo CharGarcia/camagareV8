@@ -579,6 +579,16 @@ class ConfigController extends Controller
         (new UsuariosSistemaController())->searchAjax();
     }
 
+    public function usuariosSistemaIntentosEstado(): void
+    {
+        (new UsuariosSistemaController())->intentosEstado();
+    }
+
+    public function usuariosSistemaReiniciarIntentos(): void
+    {
+        (new UsuariosSistemaController())->reiniciarIntentos();
+    }
+
     public function empresasSistema(): void
     {
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';

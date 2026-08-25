@@ -225,6 +225,9 @@ class UsuariosSistemaController extends Controller
         $mail = trim($_POST['mail'] ?? '');
         $nivel = (int) ($_POST['nivel'] ?? 1);
         $estado = !empty($_POST['estado']);
+        // La identificación la editan tanto el administrador como el superadmin;
+        // si el campo no viene en el POST, null le dice al modelo que no la toque.
+        $cedula = array_key_exists('cedula', $_POST) ? trim((string) $_POST['cedula']) : null;
 
         if ($id <= 0) {
             $this->json(['ok' => false, 'msg' => 'ID inválido.']);
@@ -243,7 +246,7 @@ class UsuariosSistemaController extends Controller
         $puedeAppMovil = $nivelActual >= 3 ? !empty($_POST['puede_app_movil']) : null;
 
         try {
-            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0, $puedeAppMovil)) {
+            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0, $puedeAppMovil, $cedula)) {
                 $this->json(['ok' => true, 'msg' => 'Usuario actualizado correctamente.']);
             } else {
                 $this->json(['ok' => false, 'msg' => 'No se realizaron cambios o hubo un error al actualizar.']);
@@ -345,6 +348,94 @@ class UsuariosSistemaController extends Controller
             }
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'msg' => 'Error: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * AJAX: estado del freno de fuerza bruta para un usuario (cuántos intentos
+     * fallidos lleva y si está bloqueado ahora mismo). Solo nivel 3: el bloqueo
+     * se calcula sobre `login_intentos`, que es una tabla global de seguridad.
+     */
+    public function intentosEstado(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel3Json();
+
+        $id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+        if ($id <= 0) {
+            $this->json(['ok' => false, 'msg' => 'ID inválido.']);
+        }
+
+        $usuario = $this->model->getIdentificacionPorId($id);
+        if (!$usuario) {
+            $this->json(['ok' => false, 'msg' => 'Usuario no encontrado.']);
+        }
+
+        $cedula = trim((string) ($usuario['cedula'] ?? ''));
+        $estado = (new \App\Services\LoginRateLimitService())->estado($cedula);
+
+        $this->json(['ok' => true, 'estado' => $estado]);
+    }
+
+    /**
+     * AJAX: reinicia los intentos fallidos de un usuario que quedó bloqueado.
+     * No borra nada: los intentos se marcan como anulados (siguen en la
+     * auditoría de accesos) y dejan de contar para el bloqueo.
+     */
+    public function reiniciarIntentos(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel3Json();
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['ok' => false, 'msg' => 'Método no permitido.']);
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $this->json(['ok' => false, 'msg' => 'ID inválido.']);
+        }
+
+        $usuario = $this->model->getIdentificacionPorId($id);
+        if (!$usuario) {
+            $this->json(['ok' => false, 'msg' => 'Usuario no encontrado.']);
+        }
+
+        $cedula = trim((string) ($usuario['cedula'] ?? ''));
+        $servicio = new \App\Services\LoginRateLimitService();
+
+        try {
+            $antes = $servicio->estado($cedula);
+            $anulados = $servicio->reiniciar($cedula, (int) ($_SESSION['id_usuario'] ?? 0));
+            $despues = $servicio->estado($cedula);
+        } catch (\RuntimeException $e) {
+            $this->json(['ok' => false, 'msg' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'msg' => 'Error: ' . $e->getMessage()]);
+        }
+
+        (new \App\Services\LogSistemaService())->registrar(
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            null,                       // login_intentos es una tabla global
+            'REINICIAR_INTENTOS_LOGIN',
+            'login_intentos',
+            $id,
+            ['identificador' => $cedula, 'fallos' => $antes['fallos'], 'bloqueado' => $antes['bloqueado']],
+            ['identificador' => $cedula, 'intentos_anulados' => $anulados, 'fallos' => $despues['fallos']]
+        );
+
+        $msg = $anulados > 0
+            ? 'Intentos reiniciados: ' . $anulados . ($anulados === 1 ? ' intento fallido dejó' : ' intentos fallidos dejaron') . ' de contar. El usuario ya puede iniciar sesión.'
+            : 'El usuario no tenía intentos fallidos pendientes.';
+
+        $this->json(['ok' => true, 'msg' => $msg, 'anulados' => $anulados, 'estado' => $despues]);
+    }
+
+    /** Corta la petición AJAX con JSON si quien llama no es superadministrador. */
+    private function requireNivel3Json(): void
+    {
+        if ((int) ($_SESSION['nivel'] ?? 0) < 3) {
+            $this->json(['ok' => false, 'msg' => 'Solo el super administrador puede gestionar los intentos de acceso.']);
         }
     }
 

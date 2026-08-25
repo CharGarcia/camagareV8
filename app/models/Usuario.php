@@ -285,6 +285,25 @@ class Usuario extends BaseModel
         return !empty($r);
     }
 
+    /**
+     * ¿Esa identificación ya la usa otro usuario del sistema?
+     *
+     * A diferencia de existePorCedula(), aquí NO se filtra por estado = 1: la
+     * cédula es la credencial de ingreso, así que un usuario inactivo también
+     * la mantiene ocupada (si se reactiva, dos cuentas responderían al mismo
+     * login). Se usa al editar la identificación desde la ficha del usuario.
+     */
+    public function existeCedulaEnUso(string $cedula, ?int $excluirId = null): bool
+    {
+        $c = $this->escape(trim($cedula));
+        $sql = "SELECT 1 FROM usuarios WHERE cedula = '{$c}' AND eliminado = false";
+        if ($excluirId !== null && $excluirId > 0) {
+            $sql .= " AND id != " . (int) $excluirId;
+        }
+        $r = $this->query($sql);
+        return !empty($r);
+    }
+
     public function crear(array $data): int
     {
         $nombre = $this->escape(trim($data['nombre'] ?? ''));
@@ -343,6 +362,20 @@ class Usuario extends BaseModel
         if ($id <= 0) return null;
         $r = $this->query("SELECT id, nombre, mail, nivel FROM usuarios
             WHERE id = {$id} AND estado = 1 AND eliminado = false LIMIT 1");
+        return $r[0] ?? null;
+    }
+
+    /**
+     * Cédula y nombre de un usuario para gestionarlo desde la ficha, sin exigir
+     * que esté activo: el bloqueo por intentos fallidos hay que poder revisarlo
+     * y reiniciarlo también en un usuario inactivo.
+     */
+    public function getIdentificacionPorId(int $id): ?array
+    {
+        $id = (int) $id;
+        if ($id <= 0) return null;
+        $r = $this->query("SELECT id, nombre, cedula FROM usuarios
+            WHERE id = {$id} AND eliminado = false LIMIT 1");
         return $r[0] ?? null;
     }
 
@@ -504,11 +537,13 @@ class Usuario extends BaseModel
     }
 
     /**
-     * Actualiza correo, nivel y estado de un usuario.
-     * Valida que el correo no esté registrado por otro usuario.
+     * Actualiza correo, nivel, estado y (opcionalmente) identificación de un usuario.
+     * Valida que ni el correo ni la cédula estén registrados por otro usuario.
      * Impide desactivar o degradar al último super administrador activo.
+     *
+     * @param ?string $cedula null deja la identificación intacta.
      */
-    public function actualizar(int $id, string $mail, int $nivel, int $estado, ?bool $puedeAppMovil = null): bool
+    public function actualizar(int $id, string $mail, int $nivel, int $estado, ?bool $puedeAppMovil = null, ?string $cedula = null): bool
     {
         $id = (int) $id;
         $mail = trim($mail);
@@ -522,10 +557,37 @@ class Usuario extends BaseModel
             throw new \InvalidArgumentException('El correo no es válido.');
         }
 
+        $actual = $this->query("SELECT nivel, estado, cedula FROM usuarios WHERE id = {$id}");
+
+        // Identificación: es la credencial de ingreso, así que se valida contra
+        // todos los usuarios no eliminados (activos e inactivos). Solo se valida
+        // cuando REALMENTE cambia: un usuario pendiente de registro lleva su
+        // correo como cédula provisional, y guardar otro campo de su ficha no
+        // debe tropezar con las reglas de formato de una identificación.
+        $cedulaSet = '';
+        if ($cedula !== null && trim($cedula) === trim((string) ($actual[0]['cedula'] ?? ''))) {
+            $cedula = null;
+        }
+        if ($cedula !== null) {
+            $cedula = trim($cedula);
+            if ($cedula === '') {
+                throw new \InvalidArgumentException('La identificación no puede quedar vacía.');
+            }
+            if (mb_strlen($cedula) > 15) {
+                throw new \InvalidArgumentException('La identificación no puede superar los 15 caracteres.');
+            }
+            if (!preg_match('/^[A-Za-z0-9-]+$/', $cedula)) {
+                throw new \InvalidArgumentException('La identificación solo admite letras, números y guiones.');
+            }
+            if ($this->existeCedulaEnUso($cedula, $id)) {
+                throw new \InvalidArgumentException('Ya existe un usuario con esa identificación.');
+            }
+            $cedulaSet = ", cedula = '" . $this->escape($cedula) . "'";
+        }
+
         $nivel = max(1, min(3, $nivel));
         $estado = $estado ? 1 : 0;
 
-        $actual = $this->query("SELECT nivel, estado FROM usuarios WHERE id = {$id}");
         if (!empty($actual)) {
             $esSuperAdmin = (int) ($actual[0]['nivel'] ?? 0) === 3;
             $estaActivo = (int) ($actual[0]['estado'] ?? 0) === 1;
@@ -543,7 +605,7 @@ class Usuario extends BaseModel
         }
 
         $movilSet = $puedeAppMovil === null ? '' : (', puede_app_movil = ' . ($puedeAppMovil ? 'true' : 'false'));
-        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado}{$movilSet} WHERE id = {$id}";
+        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado}{$movilSet}{$cedulaSet} WHERE id = {$id}";
         return $this->execute($sql);
     }
 

@@ -1755,7 +1755,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 }
             });
 
-            const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/cargarPedidoDetalleAjax?id=${id}`);
+            // Si se está editando una consignación existente, se manda su id para que el servidor
+            // no reste dos veces lo que ya está en esta misma consignación (ver comentario en el
+            // controlador): el frontend ya lo descuenta vía mainGridQtyMap, con lo que se ve en pantalla.
+            const idConsActual = document.getElementById('cons_id')?.value || '';
+            const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/cargarPedidoDetalleAjax?id=${id}&id_consignacion=${idConsActual}`);
             const data = await res.json();
             Swal.close();
 

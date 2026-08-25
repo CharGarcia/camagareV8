@@ -33,7 +33,12 @@ COMMENT ON COLUMN login_intentos.identificador IS 'Cédula tecleada en el intent
 COMMENT ON COLUMN login_intentos.ip IS 'REMOTE_ADDR de la petición. No se usa X-Forwarded-For porque es falsificable.';
 
 -- ── Desbloqueo manual (por si un usuario legítimo queda fuera) ───────────────
--- Sustituya la cédula y ejecute:
+-- Lo normal es hacerlo desde la pantalla: config/usuarios-sistema → ficha del
+-- usuario → "Intentos de acceso" → Reiniciar intentos (solo nivel 3). Eso marca
+-- los intentos como anulados sin perder la evidencia (ver la migración
+-- 20260825_login_intentos_anulado.sql).
+--
+-- Como último recurso desde la BD, sustituya la cédula y ejecute:
 --   DELETE FROM login_intentos WHERE identificador = '0102030405' AND exitoso = FALSE;
 --
 -- Ver quién está bloqueado ahora mismo:

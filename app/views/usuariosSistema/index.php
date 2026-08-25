@@ -264,8 +264,11 @@ $rowsHtml = $rowsHtml ?? '';
                                     <p class="mb-0" id="info-nombre"></p>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label text-muted small">Cédula</label>
-                                    <p class="mb-0"><code id="info-cedula"></code></p>
+                                    <label for="edit-cedula" class="form-label">Identificación</label>
+                                    <input type="text" id="edit-cedula" name="cedula" class="form-control form-control-sm" maxlength="15" autocomplete="off" placeholder="Cédula, RUC o pasaporte">
+                                    <!-- La identificación es la credencial de ingreso: cambiarla cambia
+                                         con qué número entra el usuario al sistema. -->
+                                    <div class="form-text small" id="ayuda-cedula">Con este número inicia sesión el usuario.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="edit-mail" class="form-label">Correo</label>
@@ -306,6 +309,23 @@ $rowsHtml = $rowsHtml ?? '';
                                 </button>
                                 <div id="msg-resend-invitation" class="form-text mt-2"></div>
                             </div>
+                            <?php if ($nivel >= 3): ?>
+                            <!-- Intentos de acceso: tras varios fallos seguidos el sistema bloquea
+                                 temporalmente el ingreso. Aquí el superadministrador ve el conteo
+                                 y puede ponerlo a cero sin esperar a que expire el bloqueo. -->
+                            <div id="section-intentos-acceso" class="mt-4 p-3 border rounded">
+                                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                    <div>
+                                        <h6 class="mb-1"><i class="bi bi-shield-lock"></i> Intentos de acceso</h6>
+                                        <div id="intentos-estado" class="small text-muted">Consultando...</div>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" id="btn-reiniciar-intentos" disabled>
+                                        <i class="bi bi-arrow-counterclockwise"></i> Reiniciar intentos
+                                    </button>
+                                </div>
+                                <div id="msg-intentos" class="form-text mt-2"></div>
+                            </div>
+                            <?php endif; ?>
                         </form>
                     </div>
                     <div class="tab-pane fade" id="pane-empresas" role="tabpanel">
@@ -434,7 +454,12 @@ $rowsHtml = $rowsHtml ?? '';
             document.getElementById('edit-usuario-id').value = idUsuario;
             document.getElementById('modal-usuario-nombre').textContent = el.dataset.nombre || '';
             document.getElementById('info-nombre').textContent = el.dataset.nombre || '';
-            document.getElementById('info-cedula').textContent = el.dataset.cedula || '';
+            document.getElementById('edit-cedula').value = el.dataset.cedula || '';
+            // En un usuario que aún no completa su registro la cédula es provisional
+            // (se guardó su correo): él mismo la fijará al registrarse.
+            document.getElementById('ayuda-cedula').textContent = el.dataset.registrado === '0'
+                ? 'Provisional: el usuario definirá su identificación al completar el registro.'
+                : 'Con este número inicia sesión el usuario.';
             mailOriginal = el.dataset.mail || '';
             document.getElementById('edit-mail').value = mailOriginal;
             document.getElementById('edit-nivel').value = el.dataset.nivel || '1';
@@ -469,12 +494,117 @@ $rowsHtml = $rowsHtml ?? '';
             document.getElementById('msg-restablecer').textContent = '';
             document.getElementById('msg-restablecer').className = 'form-text mt-2';
             actualizarCorreoRestablecer();
+            cargarIntentosAcceso();
             bootstrap.Tab.getInstance(document.getElementById('tab-general')) || new bootstrap.Tab(document.getElementById('tab-general'));
             document.getElementById('tab-general').click();
             cargarEmpresas();
             limpiarBuscadorEmpresaUsuario();
             cargarEmpresasParaResponsables();
             new bootstrap.Modal(modal).show();
+        }
+
+        // ── Intentos de acceso (solo superadministrador) ──────────────────────
+        // El bloqueo por fuerza bruta vive en login_intentos, no en el usuario:
+        // se consulta por su cédula cada vez que se abre la ficha.
+        function fechaLegible(valor) {
+            if (!valor) return '';
+            var m = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+            if (!m) return valor;
+            return m[3] + '-' + m[2] + '-' + m[1] + ' ' + m[4] + ':' + m[5] + ':' + m[6];
+        }
+
+        function pintarEstadoIntentos(estado) {
+            var cont = document.getElementById('intentos-estado');
+            var btn = document.getElementById('btn-reiniciar-intentos');
+            if (!cont || !btn) return;
+
+            if (!estado || !estado.disponible) {
+                cont.innerHTML = '<span class="text-muted">No se pudo consultar el registro de intentos.</span>';
+                btn.disabled = true;
+                return;
+            }
+
+            var html = '';
+            if (estado.bloqueado) {
+                html += '<span class="badge bg-danger"><i class="bi bi-lock-fill"></i> Bloqueado</span> ';
+                html += '<span class="text-danger">Se desbloquea solo en ' + estado.minutos + ' minuto' + (estado.minutos === 1 ? '' : 's') + '.</span><br>';
+            } else if (estado.fallos > 0) {
+                html += '<span class="badge bg-warning text-dark">' + estado.fallos + ' de ' + estado.max + ' intentos fallidos</span><br>';
+            } else {
+                html += '<span class="badge bg-success bg-opacity-10 text-success border border-success">Sin intentos fallidos</span><br>';
+            }
+            if (!estado.activo) {
+                html += '<span class="text-muted">El bloqueo por intentos está desactivado en la configuración.</span><br>';
+            }
+            if (estado.ultimo_fallo) {
+                html += 'Último fallo: ' + fechaLegible(estado.ultimo_fallo) + '. ';
+            }
+            if (estado.ultimo_exito) {
+                html += 'Último acceso correcto: ' + fechaLegible(estado.ultimo_exito) + '.';
+            }
+            cont.innerHTML = html;
+            btn.disabled = (estado.fallos === 0);
+        }
+
+        function cargarIntentosAcceso() {
+            var cont = document.getElementById('intentos-estado');
+            if (!cont) return;   // el bloque solo se renderiza para nivel 3
+            cont.textContent = 'Consultando...';
+            document.getElementById('msg-intentos').textContent = '';
+            document.getElementById('btn-reiniciar-intentos').disabled = true;
+
+            var fd = new FormData();
+            fd.append('id', idUsuario);
+            fetch(base + '/config/usuariosSistemaIntentosEstado', {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.ok) {
+                    pintarEstadoIntentos(res.estado);
+                } else {
+                    cont.innerHTML = '<span class="text-danger">' + (res.msg || 'No se pudo consultar.') + '</span>';
+                }
+            })
+            .catch(function() {
+                cont.innerHTML = '<span class="text-danger">Error de conexión al consultar los intentos.</span>';
+            });
+        }
+
+        var btnReiniciarIntentos = document.getElementById('btn-reiniciar-intentos');
+        if (btnReiniciarIntentos) {
+            btnReiniciarIntentos.addEventListener('click', function() {
+                var btn = this;
+                var msg = document.getElementById('msg-intentos');
+                btn.disabled = true;
+                msg.className = 'form-text mt-2';
+                msg.textContent = 'Reiniciando...';
+
+                var fd = new FormData();
+                fd.append('id', idUsuario);
+                fetch(base + '/config/usuariosSistemaReiniciarIntentos', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    msg.className = 'form-text mt-2 ' + (res.ok ? 'text-success' : 'text-danger');
+                    msg.textContent = res.msg || (res.ok ? 'Intentos reiniciados.' : 'No se pudo reiniciar.');
+                    if (res.ok) {
+                        pintarEstadoIntentos(res.estado);
+                    } else {
+                        btn.disabled = false;
+                    }
+                })
+                .catch(function() {
+                    msg.className = 'form-text mt-2 text-danger';
+                    msg.textContent = 'Error de conexión al reiniciar los intentos.';
+                    btn.disabled = false;
+                });
+            });
         }
 
         // Filtro de empresas en el modal de crear usuario (cuando hay varias)

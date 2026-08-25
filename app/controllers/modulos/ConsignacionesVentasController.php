@@ -1094,9 +1094,14 @@ class ConsignacionesVentasController extends BaseModuloController
         try {
             $id = (int) ($_GET['id'] ?? 0);
             $idEmpresa = (int) $_SESSION['id_empresa'];
+            // Si se está EDITANDO una consignación existente, sus propias líneas ya cargadas en
+            // la grilla no deben restarse dos veces: el frontend ya las descuenta del pendiente
+            // vía mainGridQtyMap (lo que se ve en pantalla), así que aquí se excluyen del cálculo
+            // de "ya consignado" para no contarlas también del lado del servidor.
+            $idConsignacionActual = (int) ($_GET['id_consignacion'] ?? 0);
 
             $db = \App\Core\Database::getConnection();
-            
+
             $sql = "SELECT p.*, (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido,
                            c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.id_vendedor, c.direccion as cliente_direccion
                     FROM pedidos_cabecera p
@@ -1121,10 +1126,17 @@ class ConsignacionesVentasController extends BaseModuloController
 
             $repoProd = new \App\repositories\modulos\ProductoRepository();
             foreach ($detalles as &$d) {
-                // Calculate quantity already consigned in non-deleted consignments
-                $sqlCons = "SELECT COALESCE(SUM(cantidad), 0) FROM consignaciones_ventas_detalles WHERE id_pedido_detalle = :id_pd AND (eliminado = false OR eliminado IS NULL)";
+                // Calculate quantity already consigned in non-deleted consignments (excluyendo
+                // la propia consignación en edición: ver comentario arriba).
+                $sqlCons = "SELECT COALESCE(SUM(cantidad), 0) FROM consignaciones_ventas_detalles
+                             WHERE id_pedido_detalle = :id_pd AND (eliminado = false OR eliminado IS NULL)"
+                         . ($idConsignacionActual > 0 ? " AND id_consignacion <> :id_cons_actual" : "");
                 $stmtCons = $db->prepare($sqlCons);
-                $stmtCons->execute([':id_pd' => $d['id']]);
+                $paramsCons = [':id_pd' => $d['id']];
+                if ($idConsignacionActual > 0) {
+                    $paramsCons[':id_cons_actual'] = $idConsignacionActual;
+                }
+                $stmtCons->execute($paramsCons);
                 $consignado = (float) $stmtCons->fetchColumn();
 
                 $d['cantidad_consignada'] = $consignado;

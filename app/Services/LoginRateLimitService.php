@@ -107,6 +107,68 @@ class LoginRateLimitService
         $this->purgarDeVezEnCuando();
     }
 
+    /**
+     * Estado del freno para un identificador, para mostrarlo en la ficha del
+     * usuario (config/usuarios-sistema).
+     *
+     * @return array{activo:bool,disponible:bool,fallos:int,max:int,bloqueado:bool,
+     *               minutos:int,ultimo_fallo:?string,ultimo_exito:?string}
+     */
+    public function estado(string $identificador): array
+    {
+        $base = [
+            'activo'       => $this->cfg['activo'],
+            'disponible'   => false,
+            'fallos'       => 0,
+            'max'          => $this->cfg['max_intentos_usuario'],
+            'bloqueado'    => false,
+            'minutos'      => 0,
+            'ultimo_fallo' => null,
+            'ultimo_exito' => null,
+        ];
+
+        if ($this->repo === null || $identificador === '') {
+            return $base;
+        }
+
+        try {
+            $fallos      = $this->repo->contarFallosIdentificador($identificador, $this->cfg['ventana_minutos']);
+            $ultimoFallo = $this->repo->ultimoFalloIdentificador($identificador);
+            $minutos     = $fallos >= $this->cfg['max_intentos_usuario']
+                ? $this->minutosRestantes($ultimoFallo, $this->cfg['bloqueo_minutos'])
+                : 0;
+
+            return array_merge($base, [
+                'disponible'   => true,
+                'fallos'       => $fallos,
+                'bloqueado'    => $this->cfg['activo'] && $minutos > 0,
+                'minutos'      => $minutos,
+                'ultimo_fallo' => $ultimoFallo,
+                'ultimo_exito' => $this->repo->ultimoExitoIdentificador($identificador),
+            ]);
+        } catch (\Throwable $e) {
+            return $base;   // la tabla no existe todavía o la BD falló
+        }
+    }
+
+    /**
+     * Reinicia el contador de intentos fallidos de un identificador (acción
+     * manual del superadministrador desde la ficha del usuario).
+     *
+     * @return int Cuántos intentos dejaron de contar.
+     * @throws \RuntimeException Si el reinicio no está disponible (falta la migración).
+     */
+    public function reiniciar(string $identificador, int $idUsuarioQueReinicia): int
+    {
+        if ($this->repo === null) {
+            throw new \RuntimeException('No hay conexión con el registro de intentos de acceso.');
+        }
+        if ($identificador === '') {
+            throw new \RuntimeException('El usuario no tiene cédula registrada: no hay intentos que reiniciar.');
+        }
+        return $this->repo->anularFallosIdentificador($identificador, $idUsuarioQueReinicia);
+    }
+
     /** Mensaje para el usuario. No revela si la cédula existe o no. */
     public function mensajeBloqueo(array $bloqueo): string
     {

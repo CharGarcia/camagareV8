@@ -157,7 +157,7 @@ class LoginIntentoRepository
     {
         $sql = "SELECT COUNT(*) FROM login_intentos
                  WHERE identificador = :identificador
-                   AND exitoso = FALSE
+                   AND exitoso = FALSE" . $this->condVigentes() . "
                    AND created_at > GREATEST(
                          NOW() - (:ventana || ' minutes')::interval,
                          COALESCE((SELECT MAX(created_at) FROM login_intentos
@@ -178,7 +178,7 @@ class LoginIntentoRepository
     {
         $sql = "SELECT COUNT(*) FROM login_intentos
                  WHERE ip = :ip
-                   AND exitoso = FALSE
+                   AND exitoso = FALSE" . $this->condVigentes() . "
                    AND created_at > NOW() - (:ventana || ' minutes')::interval";
         $st = $this->db->prepare($sql);
         $st->execute([':ip' => $ip, ':ventana' => (string) $ventanaMinutos]);
@@ -190,7 +190,7 @@ class LoginIntentoRepository
     {
         $st = $this->db->prepare(
             "SELECT MAX(created_at) FROM login_intentos
-              WHERE identificador = :identificador AND exitoso = FALSE"
+              WHERE identificador = :identificador AND exitoso = FALSE" . $this->condVigentes()
         );
         $st->execute([':identificador' => $identificador]);
         $v = $st->fetchColumn();
@@ -201,11 +201,87 @@ class LoginIntentoRepository
     public function ultimoFalloIp(string $ip): ?string
     {
         $st = $this->db->prepare(
-            "SELECT MAX(created_at) FROM login_intentos WHERE ip = :ip AND exitoso = FALSE"
+            "SELECT MAX(created_at) FROM login_intentos WHERE ip = :ip AND exitoso = FALSE" . $this->condVigentes()
         );
         $st->execute([':ip' => $ip]);
         $v = $st->fetchColumn();
         return $v ? (string) $v : null;
+    }
+
+    /**
+     * Fecha del último acceso correcto del identificador (informativo para la
+     * ficha del usuario; el conteo de fallos ya arranca desde este momento).
+     */
+    public function ultimoExitoIdentificador(string $identificador): ?string
+    {
+        $st = $this->db->prepare(
+            "SELECT MAX(created_at) FROM login_intentos
+              WHERE identificador = :identificador AND exitoso = TRUE"
+        );
+        $st->execute([':identificador' => $identificador]);
+        $v = $st->fetchColumn();
+        return $v ? (string) $v : null;
+    }
+
+    /**
+     * Reinicia el contador de un identificador: marca sus intentos fallidos
+     * vigentes como anulados, dejando constancia de quién lo hizo y cuándo.
+     *
+     * No se borra nada a propósito: la misma tabla alimenta la auditoría de
+     * accesos, así que el intento sigue visible; solo deja de sumar al bloqueo.
+     *
+     * @return int Cuántos intentos dejaron de contar.
+     * @throws \RuntimeException Si falta la migración que agregó la columna.
+     */
+    public function anularFallosIdentificador(string $identificador, int $idUsuario): int
+    {
+        if (!$this->tieneColumnaAnulado()) {
+            throw new \RuntimeException(
+                'Falta aplicar la migración database/migrations/20260825_login_intentos_anulado.sql '
+                . 'para poder reiniciar los intentos de acceso.'
+            );
+        }
+
+        $st = $this->db->prepare(
+            "UPDATE login_intentos
+                SET anulado = TRUE, anulado_at = NOW(), anulado_por = :id_usuario
+              WHERE identificador = :identificador
+                AND exitoso = FALSE
+                AND anulado = FALSE"
+        );
+        $st->execute([
+            ':identificador' => $identificador,
+            ':id_usuario'    => $idUsuario > 0 ? $idUsuario : null,
+        ]);
+        return $st->rowCount();
+    }
+
+    /**
+     * Fragmento que descarta los intentos anulados por un reinicio manual.
+     * Devuelve cadena vacía mientras la columna no exista, para que el freno
+     * siga funcionando en instalaciones sin la migración aplicada.
+     */
+    private function condVigentes(): string
+    {
+        return $this->tieneColumnaAnulado() ? ' AND anulado = FALSE' : '';
+    }
+
+    /** ¿La instalación ya tiene la columna `anulado`? (se resuelve una sola vez). */
+    private function tieneColumnaAnulado(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            try {
+                $st = $this->db->query(
+                    "SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'login_intentos' AND column_name = 'anulado' LIMIT 1"
+                );
+                $existe = (bool) $st->fetchColumn();
+            } catch (\Throwable $e) {
+                $existe = false;
+            }
+        }
+        return $existe;
     }
 
     /** Purga de registros antiguos (se invoca de forma esporádica desde el service). */
