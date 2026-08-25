@@ -1091,7 +1091,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     // solo el que le dio origen — antes de activarlo en la pestaña
                     // "Puntos de Emisión". Mientras esté inactivo, no se puede emitir desde
                     // él (se marca con el badge "Inactivo"), pero sí configurar.
+                    // Activos primero: son los que se usan para emitir documentos, así que
+                    // conviene tenerlos a mano sin desplazarse. usort() es estable desde
+                    // PHP 8, así que dentro de cada grupo se conserva el orden que ya trae
+                    // getPuntosEmision() (por establecimiento y código de punto).
                     $puntosSec = $puntos;
+                    usort($puntosSec, static function ($a, $b) {
+                        $aActivo = strtolower((string) ($a['estado'] ?? 'activo')) === 'activo' ? 0 : 1;
+                        $bActivo = strtolower((string) ($b['estado'] ?? 'activo')) === 'activo' ? 0 : 1;
+                        return $aActivo <=> $bActivo;
+                    });
                     ?>
                     <!-- Tarjeta informativa: cómo nombrar y crear secuenciales -->
                     <div class="card border-0 mb-3" style="background:#eff6ff;">
@@ -1149,9 +1158,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         <div class="d-flex justify-content-between align-items-center w-100">
                                             <span class="fw-medium"><?= $p['codigo_punto'] ?> - <?= $p['nombre'] ?></span>
                                             <?php if ($ptoInactivo): ?>
-                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size: 0.62rem;" title="Este punto está inactivo: se puede configurar aquí, pero no se pueden emitir documentos desde él hasta activarlo en la pestaña Puntos de Emisión.">Inactivo</span>
+                                                <span class="badge bg-danger ms-2" style="font-size: 0.62rem;" title="Este punto está inactivo: se puede configurar aquí, pero no se pueden emitir documentos desde él hasta activarlo en la pestaña Puntos de Emisión.">Inactivo</span>
                                             <?php else: ?>
-                                                <i class="bi bi-chevron-right small opacity-50"></i>
+                                                <span class="badge bg-success ms-2" style="font-size: 0.62rem;">Activo</span>
                                             <?php endif; ?>
                                         </div>
                                     </a>
@@ -2082,6 +2091,49 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
 
+    // HTML del estado "sin secuenciales" del punto seleccionado, con la opción
+    // de eliminar el punto mismo (solo tiene sentido ofrecerla acá: sin ningún
+    // tipo configurado, ya no puede tener documentos emitidos bajo ningún tipo).
+    function _secPlaceholderVacio() {
+        return '<div class="col-12 text-center py-4 text-muted small">' +
+            '<i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Agréguelos con el selector de abajo.' +
+            '<div class="mt-3">' +
+            '<button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarPuntoDesdeSecuenciales()">' +
+            '<i class="bi bi-trash me-1"></i>Eliminar este punto de emisión' +
+            '</button>' +
+            '</div>' +
+            '</div>';
+    }
+
+    // Elimina el punto de emisión seleccionado en la pestaña Secuenciales. El
+    // backend (deletePunto, mismo endpoint que usa la pestaña Puntos de
+    // Emisión) vuelve a validar que no tenga documentos emitidos antes de
+    // borrar — este botón solo se ofrece cuando no tiene secuenciales, pero la
+    // validación real y definitiva es esa.
+    async function eliminarPuntoDesdeSecuenciales() {
+        const idPunto = document.getElementById('sec-punto-id').value;
+        if (!idPunto) return;
+
+        if (!await swalConfirm('Esta acción no se puede deshacer.', { titulo: '¿Eliminar este punto de emisión?', confirmText: 'Sí, eliminar' })) return;
+
+        try {
+            const response = await fetch('<?= $base ?>/modulos/empresa/deletePunto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `id=${idPunto}`
+            });
+            const res = await response.json();
+            if (res.ok) {
+                swalToastOk('Punto de emisión eliminado');
+                setTimeout(() => location.reload(), 900);
+            } else {
+                swalError(res.error || 'No se pudo eliminar');
+            }
+        } catch (err) {
+            swalError('Error de conexión');
+        }
+    }
+
     async function eliminarSecuencial(id, btn) {
         if (!await swalConfirm('Esta acción no se puede deshacer. Si este tipo ya tiene documentos emitidos en este punto de emisión, no se podrá eliminar.', { titulo: '¿Eliminar este tipo de secuencial?', confirmText: 'Sí, eliminar' })) return;
 
@@ -2099,7 +2151,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 if (fila) fila.remove();
                 refrescarSelectorTipos();
                 if (!document.querySelector('#secuenciales-fields [name$="[valor]"]')) {
-                    document.getElementById('secuenciales-fields').innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Agréguelos con el selector de abajo.</div>';
+                    document.getElementById('secuenciales-fields').innerHTML = _secPlaceholderVacio();
                 }
             } else {
                 swalError(res.error || 'No se pudo eliminar');
@@ -2129,7 +2181,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 secTiposBloqueadosOtroPunto = json.tipos_bloqueados || [];
                 const data = json.data;
                 if (!data || data.length === 0) {
-                    container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Agréguelos con el selector de abajo.</div>';
+                    container.innerHTML = _secPlaceholderVacio();
                     refrescarSelectorTipos();
                     return;
                 }
@@ -2224,12 +2276,19 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         sel.innerHTML = html;
     }
 
+    // Contador propio para las claves de filas nuevas: Date.now() por sí solo se
+    // repite entre llamadas hechas en el mismo milisegundo (pasa siempre con
+    // "Agregar todos los faltantes", que agrega varias en un bucle síncrono) —
+    // dos filas con la MISMA clave "new_<timestamp>" hacen que el navegador solo
+    // envíe la última al guardar, perdiendo las demás en silencio.
+    let _secNewKeySeq = 0;
+
     function _agregarCampoSecuencial(name) {
         const container = document.getElementById('secuenciales-fields');
         const placeholder = container.querySelector('.text-muted');
         if (placeholder && placeholder.closest('.col-12')) container.innerHTML = '';
 
-        const newKey = 'new_' + Date.now();
+        const newKey = 'new_' + Date.now() + '_' + (++_secNewKeySeq);
         const safeName = _secEscape(name);
         const div = document.createElement('div');
         div.className = 'col-md-6 col-lg-4';

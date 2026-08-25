@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo
-version: 1.17
+version: 1.19
 orden: 5
 estado: activo
 ---
@@ -180,6 +180,11 @@ asigna uno menor al configurado.
   **exacto** (mayúsculas y tildes incluidas) con el nombre que espera el
   módulo correspondiente; si no coincide, ese módulo no toma la numeración
   configurada aquí.
+- **Eliminar el punto de emisión**: cuando un punto se queda **sin ningún**
+  tipo de secuencial configurado (por ejemplo, tras eliminarlos todos), en su
+  lugar aparece el botón **"Eliminar este punto de emisión"** — mismo
+  resultado y misma validación que eliminarlo desde la pestaña **Puntos de
+  Emisión** (bloqueado si ya tiene documentos emitidos).
 - **Tipos con un único punto por empresa**: "Facturas de reembolso" solo
   puede estar configurada en **un** punto de emisión de toda la empresa (el
   resto del sistema asume que existe uno solo). Si ya está en otro punto, no
@@ -203,6 +208,19 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.19** — Pestaña Secuenciales: cuando el punto seleccionado se queda sin
+  ningún tipo de secuencial configurado, aparece el botón **"Eliminar este
+  punto de emisión"** — reutiliza la misma validación de la pestaña Puntos de
+  Emisión (bloqueado si ya tiene documentos emitidos).
+
+- **1.18** — Pestaña Secuenciales: corregido **"Agregar todos los
+  faltantes"** — al crear varias filas nuevas en el mismo instante, podían
+  quedar con la misma clave interna y el navegador solo enviaba la última de
+  cada grupo repetido al guardar, perdiendo las demás en silencio. También:
+  la lista de puntos de emisión ahora muestra primero los **Activos**, y cada
+  uno lleva un badge — **verde** (Activo) o **rojo** (Inactivo) — en vez de
+  mostrar el badge solo cuando estaba inactivo.
 
 - **1.17** — Corregido un bug de fondo que afectaba a **todo el sistema**, no
   solo a este módulo: `App\models\Empresa::getEstablecimientos()` (usado por

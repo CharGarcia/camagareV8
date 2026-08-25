@@ -31,6 +31,9 @@ class MigracionMysqlService
         // La tabla vieja de empleados filtra por id_empresa (id viejo), NO por ruc_empresa; se resuelve
         // vía empresas (LEFT(ruc,10)). Marcado con 'ruc_via_empresa' para el conteo/análisis.
         'empleados'         => ['label' => 'Empleados',                        'tabla' => 'empleados',                  'fecha' => null,             'tipo' => 'catalogo', 'ruc_via_empresa' => true],
+        // Novedades de nómina del viejo → tabla `novedades` nueva. Filtra por id_empresa (id viejo) vía
+        // empresas, igual que empleados. DEBE ir DESPUÉS de Empleados (enlaza al empleado ya migrado).
+        'novedades'         => ['label' => 'Novedades de nómina',              'tabla' => 'novedades',                  'fecha' => 'fecha_novedad',  'tipo' => 'catalogo', 'ruc_via_empresa' => true],
         // Formas de cobro/pago (opciones: efectivo, caja chica…) y cuentas bancarias → empresa_formas_pago.
         // DEBEN ir antes de ingresos/egresos: sus pagos enlazan a estas formas.
         'formas_pago'       => ['label' => 'Formas de cobro/pago (efectivo, caja…)', 'tabla' => 'opciones_cobros_pagos', 'fecha' => null,             'tipo' => 'catalogo'],
@@ -148,6 +151,8 @@ class MigracionMysqlService
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
             case 'empleados':
                 return $this->migrarEmpleados($idEmpresa, $ruc, $idUsuario);
+            case 'novedades':
+                return $this->migrarNovedades($idEmpresa, $ruc, $idUsuario);
             case 'cuentas_bancarias':
                 return $this->migrarCuentasBancarias($idEmpresa, $ruc, $idUsuario);
             case 'formas_pago':
@@ -255,7 +260,7 @@ class MigracionMysqlService
     /** Tabla destino (sistema nuevo) por entidad. Se usa para avisar de registros ya existentes. */
     private const DESTINO_TABLA = [
         'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos',
-        'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados',
+        'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados', 'novedades' => 'novedades',
         'cuentas_bancarias' => 'empresa_formas_pago', 'formas_pago' => 'empresa_formas_pago',
         'facturas' => 'ventas_cabecera', 'notas_credito' => 'notas_credito_cabecera',
         'retenciones_venta' => 'retencion_venta_cabecera', 'retenciones_compra' => 'retencion_compra_cabecera',
@@ -342,7 +347,7 @@ class MigracionMysqlService
     }
 
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
-    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'cuentas_bancarias', 'formas_pago'];
+    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago'];
 
     /**
      * Cuántos registros ELIMINARÍA por entidad (para la confirmación previa). Solo cuenta lo que la
@@ -1032,21 +1037,117 @@ class MigracionMysqlService
         $newByCod = [];
         foreach ($pg->query("SELECT id, codigo_banco FROM bancos_ecuador") as $b) { $newByCod[(string) $b['codigo_banco']] = (int) $b['id']; }
 
-        $done = $this->idsMigrados($pg, $idEmpresa, 'empleados');
+        $done  = $this->idsMigrados($pg, $idEmpresa, 'empleados');
+        $mapEmp = $this->mapaDe($pg, $idEmpresa, 'empleados'); // old→new, para enriquecer los ya migrados en re-corrida
         // Dedup por identificación dentro de la empresa (prefiere el vivo con id más bajo).
         $buscar = $pg->prepare("SELECT id FROM empleados WHERE id_empresa = :e AND identificacion = :ident ORDER BY eliminado, id LIMIT 1");
         $ins = $pg->prepare(
             "INSERT INTO empleados (id_empresa, tipo_id, identificacion, nombres_apellidos, direccion, email, telefono,
-                                    sexo, fecha_nacimiento, estado, id_banco_ecuador, tipo_cuenta, numero_cuenta, created_by)
-             VALUES (:e, :tid, :ident, :nom, :dir, :cor, :tel, :sexo, :fnac, :est, :banco, :tcta, :ncta, :cb) RETURNING id"
+                                    sexo, fecha_nacimiento, estado, id_banco_ecuador, tipo_cuenta, numero_cuenta,
+                                    sueldo_base, valor_quincena, decimo_tercero, decimo_cuarto, fondos_reserva, aporta_iess,
+                                    aporte_personal, aporte_patronal, cargo, codigo_sectorial_iess, departamento, region, created_by)
+             VALUES (:e, :tid, :ident, :nom, :dir, :cor, :tel, :sexo, :fnac, :est, :banco, :tcta, :ncta,
+                     :sb, :vq, :d13, :d14, :fr, :iess, :ape, :app, :cargo, :ciess, :dep, :reg, :cb) RETURNING id"
         );
         $insMap = $this->stmtMap($pg, 'empleados');
+        // Completa la ficha de nómina desde `empleados` ya migrados (re-corrida) sin duplicar.
+        $updFicha = $pg->prepare(
+            "UPDATE empleados SET sueldo_base = ?, valor_quincena = ?, decimo_tercero = ?, decimo_cuarto = ?,
+                    fondos_reserva = ?, aporta_iess = ?, aporte_personal = ?, aporte_patronal = ?, cargo = ?,
+                    codigo_sectorial_iess = ?, departamento = ?, region = ?, updated_at = now(), updated_by = ? WHERE id = ?"
+        );
+
+        // Datos de nómina del viejo (tabla `sueldos`, solo status=1 = ficha vigente). Único por empleado.
+        $sueldoByEmp = [];
+        foreach ($mysql->query("SELECT id_empleado, sueldo, quincena, decimo_tercero_mensual, decimo_cuarto_mensual, fondo_reserva, aporta_al_iess, ap_personal, ap_patronal, cargo_empresa, cargo_iess, departamento, region, fecha_ingreso FROM sueldos WHERE status = 1 AND id_empresa IN ($inList)") as $s) {
+            $sueldoByEmp[(int) $s['id_empleado']] = $s;
+        }
+        // Nombre de departamento (FK viejo → texto para empleados.departamento).
+        $depNombre = [];
+        foreach ($mysql->query("SELECT id, nombre FROM departamentos WHERE id_empresa IN ($inList)") as $d) { $depNombre[(int) $d['id']] = (string) $d['nombre']; }
+        // fecha_ingreso → un periodo en `empleado_periodos` (sin fecha_salida). Idempotente por (empleado, fecha).
+        $periodoExiste = $pg->prepare("SELECT 1 FROM empleado_periodos WHERE id_empleado = ? AND fecha_ingreso = ? AND eliminado = false LIMIT 1");
+        $insPeriodo    = $pg->prepare("INSERT INTO empleado_periodos (id_empleado, id_empresa, fecha_ingreso, created_by) VALUES (?, ?, ?, ?)");
+
+        // Convierte una fila de `sueldos` a los valores de la ficha nueva (o nulos si no hay fila).
+        $fichaDeSueldo = function (?array $s) use ($depNombre): array {
+            if ($s === null) {
+                return ['sb'=>null,'vq'=>null,'d13'=>null,'d14'=>null,'fr'=>null,'iess'=>null,'ape'=>null,'app'=>null,'cargo'=>null,'ciess'=>null,'dep'=>null,'reg'=>null,'fing'=>null];
+            }
+            $modoDecimo = static fn($v) => ((int) $v === 1) ? 'mensualiza' : 'acumula'; // *_mensual: 1=mensualiza, 0=acumula
+            $fr  = ['1' => 'rol', '2' => 'planilla', '4' => 'no_se_paga'][(string) (int) $s['fondo_reserva']] ?? 'no_se_paga'; // 3 (raro) → no_se_paga
+            $reg = ((int) $s['region'] === 1) ? 'costa' : 'sierra'; // 1=costa, 2 y 3=sierra
+            $cargo = trim((string) $s['cargo_empresa']);
+            $ciess = trim((string) $s['cargo_iess']);
+            return [
+                'sb'   => (float) $s['sueldo'],
+                'vq'   => (float) $s['quincena'],
+                'd13'  => $modoDecimo($s['decimo_tercero_mensual']),
+                'd14'  => $modoDecimo($s['decimo_cuarto_mensual']),
+                'fr'   => $fr,
+                'iess' => ((int) $s['aporta_al_iess'] === 1),
+                'ape'  => (float) $s['ap_personal'],
+                'app'  => (float) $s['ap_patronal'],
+                'cargo'=> $cargo !== '' ? mb_substr($cargo, 0, 255) : null,
+                'ciess'=> $ciess !== '' ? mb_substr($ciess, 0, 50) : null,
+                'dep'  => isset($depNombre[(int) $s['departamento']]) ? mb_substr($depNombre[(int) $s['departamento']], 0, 255) : null,
+                'reg'  => $reg,
+                'fing' => self::fechaCorta($s['fecha_ingreso']),
+            ];
+        };
+
+        // Rubros fijos del viejo (`detalle_sueldos`, enlaza por id_sueldo → sueldos.id → id_empleado; solo status=1)
+        // → `empleado_rubros_fijos`. tipo 1=ingreso, 2=egreso; aporta_al_iess viene como texto 'true'/'false'.
+        $rubrosByEmp = [];
+        foreach ($mysql->query("SELECT s.id_empleado, ds.tipo, ds.valor, ds.detalle, ds.aporta_al_iess
+                                  FROM detalle_sueldos ds JOIN sueldos s ON s.id = ds.id_sueldo
+                                 WHERE s.status = 1 AND s.id_empresa IN ($inList)") as $d) {
+            $rubrosByEmp[(int) $d['id_empleado']][] = $d;
+        }
+        $rubroExiste = $pg->prepare("SELECT 1 FROM empleado_rubros_fijos WHERE id_empleado = ? AND id_empresa = ? AND tipo = ? AND nombre = ? AND ROUND(COALESCE(valor,0),2) = ? AND eliminado = false LIMIT 1");
+        $insRubro    = $pg->prepare("INSERT INTO empleado_rubros_fijos (id_empleado, id_empresa, tipo, nombre, valor, aporta_iess, frecuencia, created_by) VALUES (?, ?, ?, ?, ?, ?, 'mensual', ?)");
+        // Inserta los rubros fijos de un empleado (idempotente: no duplica por tipo+nombre+valor; respeta manuales).
+        $aplicarRubros = function (int $idDest, int $oldEmp) use (&$rubrosByEmp, $idEmpresa, $idUsuario, $rubroExiste, $insRubro): void {
+            foreach ($rubrosByEmp[$oldEmp] ?? [] as $d) {
+                $tipo   = ((int) $d['tipo'] === 1) ? 'ingreso' : 'egreso';
+                $nombre = trim((string) $d['detalle']);
+                if ($nombre === '') { $nombre = ($tipo === 'ingreso') ? 'Ingreso' : 'Egreso'; }
+                $nombre = mb_substr($nombre, 0, 100);
+                $valor  = round((float) $d['valor'], 2);
+                $ai     = (strtolower(trim((string) $d['aporta_al_iess'])) === 'true') ? 't' : 'f';
+                $rubroExiste->execute([$idDest, $idEmpresa, $tipo, $nombre, $valor]);
+                if ($rubroExiste->fetchColumn() === false) {
+                    $insRubro->execute([$idDest, $idEmpresa, $tipo, $nombre, $valor, $ai, $idUsuario]);
+                }
+            }
+        };
 
         $stmt = $mysql->query("SELECT id, tipo_id, documento, nombres_apellidos, direccion, email, telefono, sexo, fecha_nacimiento, status, id_banco, tipo_cta, numero_cta FROM empleados WHERE id_empresa IN ($inList)");
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $r['id'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if (isset($done[(string) $old])) {
+                $res['ya_migrados']++;
+                // Ya migrado: en re-corrida completar la ficha de nómina + periodo desde `sueldos`.
+                $sYa = $sueldoByEmp[$old] ?? null;
+                $idYa = (int) ($mapEmp[(string) $old] ?? 0);
+                if ($idYa > 0 && ($sYa !== null || !empty($rubrosByEmp[$old]))) {
+                    try {
+                        $pg->beginTransaction();
+                        if ($sYa !== null) {
+                            $fYa = $fichaDeSueldo($sYa);
+                            $updFicha->execute([$fYa['sb'], $fYa['vq'], $fYa['d13'], $fYa['d14'], $fYa['fr'], $fYa['iess'] ? 't' : 'f', $fYa['ape'], $fYa['app'], $fYa['cargo'], $fYa['ciess'], $fYa['dep'], $fYa['reg'], $idUsuario, $idYa]);
+                            if ($fYa['fing'] !== null && $fYa['fing'] >= '1900-01-01') {
+                                $periodoExiste->execute([$idYa, $fYa['fing']]);
+                                if ($periodoExiste->fetchColumn() === false) { $insPeriodo->execute([$idYa, $idEmpresa, $fYa['fing'], $idUsuario]); }
+                            }
+                        }
+                        $aplicarRubros($idYa, $old); // rubros fijos desde detalle_sueldos
+                        $pg->commit();
+                    } catch (Throwable $ex) { if ($pg->inTransaction()) { $pg->rollBack(); } }
+                }
+                continue;
+            }
             $ident = trim((string) $r['documento']);
             if ($ident === '') { $res['omitidos']++; continue; }
             $nombre = trim((string) $r['nombres_apellidos']) ?: $ident;
@@ -1059,6 +1160,8 @@ class MigracionMysqlService
             $oldB   = (int) $r['id_banco'];
             $banco  = ($oldB > 0 && isset($oldCod[$oldB], $newByCod[$oldCod[$oldB]])) ? $newByCod[$oldCod[$oldB]] : null;
 
+            $s = $sueldoByEmp[$old] ?? null; // ficha de nómina (o null si el empleado no está en `sueldos`)
+            $f = $fichaDeSueldo($s);
             try {
                 $pg->beginTransaction();
                 $buscar->execute([':e' => $idEmpresa, ':ident' => $ident]);
@@ -1066,17 +1169,109 @@ class MigracionMysqlService
                 if ($ex !== false) {
                     $idDest = (int) $ex; $vin = true; $res['vinculados']++;
                     if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; }
+                    // Empleado ya existente: completar la ficha de nómina desde `sueldos` (si la hay).
+                    if ($s !== null) {
+                        $updFicha->execute([$f['sb'], $f['vq'], $f['d13'], $f['d14'], $f['fr'], $f['iess'] ? 't' : 'f', $f['ape'], $f['app'], $f['cargo'], $f['ciess'], $f['dep'], $f['reg'], $idUsuario, $idDest]);
+                    }
                 } else {
                     $ins->execute([
                         ':e' => $idEmpresa, ':tid' => $tipoId, ':ident' => $ident, ':nom' => $nombre,
                         ':dir' => self::nz($r['direccion']), ':cor' => self::nz($r['email']), ':tel' => self::nz($r['telefono']),
                         ':sexo' => $sexo, ':fnac' => self::fechaCorta($r['fecha_nacimiento']), ':est' => $estado,
-                        ':banco' => $banco, ':tcta' => $tcta, ':ncta' => self::nz($r['numero_cta']), ':cb' => $idUsuario,
+                        ':banco' => $banco, ':tcta' => $tcta, ':ncta' => self::nz($r['numero_cta']),
+                        ':sb' => $f['sb'], ':vq' => $f['vq'], ':d13' => $f['d13'], ':d14' => $f['d14'], ':fr' => $f['fr'],
+                        ':iess' => ($s !== null ? ($f['iess'] ? 't' : 'f') : null), ':ape' => $f['ape'], ':app' => $f['app'],
+                        ':cargo' => $f['cargo'], ':ciess' => $f['ciess'], ':dep' => $f['dep'], ':reg' => $f['reg'], ':cb' => $idUsuario,
                     ]);
                     $idDest = (int) $ins->fetchColumn(); $vin = false; $res['migrados']++;
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($ident, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                // fecha_ingreso → periodo laboral (idempotente: no duplica si ya existe ese ingreso).
+                if ($f['fing'] !== null && $f['fing'] >= '1900-01-01') {
+                    $periodoExiste->execute([$idDest, $f['fing']]);
+                    if ($periodoExiste->fetchColumn() === false) {
+                        $insPeriodo->execute([$idDest, $idEmpresa, $f['fing'], $idUsuario]);
+                    }
+                }
+                $aplicarRubros($idDest, $old); // rubros fijos desde detalle_sueldos
                 $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Novedades de nómina del viejo (`novedades`, solo status=1) → tabla `novedades` del nuevo.
+     * Requiere que Empleados ya esté migrado (enlaza por el empleado). El `id_novedad` viejo = codigo
+     * del catálogo `App\models\CatalogoNovedades` (1=Otros Ingresos … 14=Aviso de salida); el
+     * `motivo_salida` (V/T/R/B/S/D/I/F/A) = motivos del mismo catálogo. aplica_en: R→rol, Q→quincena.
+     */
+    private function migrarNovedades(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'novedades', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'empleado no migrado o tipo desconocido', 'errores' => 0];
+
+        // id de empresa viejos que comparten el RUC base (todos los establecimientos).
+        $empIds = [];
+        $qe = $mysql->prepare("SELECT id FROM empresas WHERE LEFT(ruc, 10) = :b");
+        $qe->execute([':b' => $base]);
+        foreach ($qe->fetchAll(PDO::FETCH_COLUMN) as $eid) { $empIds[] = (int) $eid; }
+        if (empty($empIds)) { return $res; }
+        $inList = implode(',', array_map('intval', $empIds));
+
+        $mapEmp = $this->mapaDe($pg, $idEmpresa, 'empleados'); // id empleado viejo → nuevo
+        $done   = $this->idsMigrados($pg, $idEmpresa, 'novedades');
+        $insMap = $this->stmtMap($pg, 'novedades');
+        $insNov = $pg->prepare(
+            "INSERT INTO novedades (id_empresa, id_empleado, tipo_codigo, tipo_nombre, fecha, periodo_mes, periodo_anio, valor, motivo_codigo, motivo_nombre, observacion, aplica_en, estado, created_by)
+             VALUES (:e, :emp, :tc, :tn, :fe, :pm, :pa, :val, :mc, :mn, :obs, :ap, 'activo', :cb) RETURNING id"
+        );
+
+        $stmt = $mysql->query("SELECT id, id_empleado, id_novedad, fecha_novedad, mes_ano, valor, detalle, motivo_salida, aplica_en FROM novedades WHERE status = 1 AND id_empresa IN ($inList) ORDER BY id");
+        while ($n = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $n['id'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $idEmp = (int) ($mapEmp[(string) $n['id_empleado']] ?? 0);
+            if ($idEmp <= 0) { $res['omitidos']++; continue; } // empleado no migrado
+
+            $tipoCod = (string) (int) $n['id_novedad'];
+            $tipoNom = \App\models\CatalogoNovedades::nombreTipo($tipoCod);
+            if ($tipoNom === null) { $res['omitidos']++; continue; } // tipo fuera del catálogo
+
+            $mes = 0; $anio = 0;
+            if (preg_match('/^(\d{1,2})-(\d{4})$/', trim((string) $n['mes_ano']), $mm)) { $mes = (int) $mm[1]; $anio = (int) $mm[2]; }
+            $fecha = self::fechaCorta($n['fecha_novedad']);
+            if (($mes < 1 || $mes > 12 || $anio < 1900) && $fecha !== null) { $mes = (int) substr($fecha, 5, 2); $anio = (int) substr($fecha, 0, 4); }
+            if ($fecha === null && $anio >= 1900 && $mes >= 1) { $fecha = sprintf('%04d-%02d-01', $anio, $mes); }
+            if ($fecha === null || $mes < 1 || $mes > 12 || $anio < 1900) { $res['omitidos']++; continue; }
+
+            $aplica = (strtoupper(trim((string) $n['aplica_en'])) === 'Q') ? 'quincena' : 'rol';
+            $mot    = trim((string) $n['motivo_salida']);
+            $motCod = \App\models\CatalogoNovedades::esMotivoValido($mot) ? $mot : null;
+            $motNom = $motCod !== null ? \App\models\CatalogoNovedades::nombreMotivo($motCod) : null;
+            $det    = trim((string) $n['detalle']);
+            $obs    = ($det === '') ? null : mb_substr($det, 0, 2000);
+            $valor  = round((float) $n['valor'], 2);
+
+            try {
+                $pg->beginTransaction();
+                $insNov->execute([
+                    ':e' => $idEmpresa, ':emp' => $idEmp, ':tc' => $tipoCod, ':tn' => $tipoNom, ':fe' => $fecha,
+                    ':pm' => $mes, ':pa' => $anio, ':val' => $valor, ':mc' => $motCod, ':mn' => $motNom,
+                    ':obs' => $obs, ':ap' => $aplica, ':cb' => $idUsuario,
+                ]);
+                $idNv = (int) $insNov->fetchColumn();
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idNv, ':cn' => "$tipoCod-$mes/$anio", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;
@@ -3268,7 +3463,7 @@ class MigracionMysqlService
             }
             return $plazoCli[$idCliente];
         };
-        $updCabV = $pg->prepare("UPDATE ventas_cabecera SET dias_credito = ?, id_vendedor = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCabV = $pg->prepare("UPDATE ventas_cabecera SET estado = ?, dias_credito = ?, id_vendedor = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $qCliDe  = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = ?");
 
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
@@ -3290,7 +3485,8 @@ class MigracionMysqlService
                     $pg->beginTransaction();
                     $qCliDe->execute([$idExist]);
                     $dias = $diasDe((int) $qCliDe->fetchColumn());
-                    $updCabV->execute([$dias, $vendedorDe($old), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
+                    $estadoRec = $this->estadoFacturaSri((string) $ef['estado_sri']);
+                    $updCabV->execute([$estadoRec, $dias, $vendedorDe($old), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
                     $migrarHijos($idExist, $ef, $dias);
                     $reaplicarLotes($idExist, $ef); // completa el lote en facturas ya migradas
                     $pg->commit();
@@ -3825,6 +4021,7 @@ class MigracionMysqlService
              VALUES (:d, '2', :cp, :tar, :base, :val)"
         );
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad_nc, valor_unitario_nc, subtotal_nc, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_nc WHERE ruc_empresa = :r AND serie_nc = :s AND secuencial_nc = :sec");
+        $updEstadoNc = $pg->prepare("UPDATE notas_credito_cabecera SET estado = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_nc, ruc_empresa, fecha_nc, serie_nc, secuencial_nc, factura_modificada, id_cliente, estado_sri, total_nc, ambiente, aut_sri, motivo, fecha_factura
                   FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
@@ -3840,6 +4037,7 @@ class MigracionMysqlService
                 try {
                     $pg->beginTransaction();
                     $migrarAdicNc($mapNc[(string) $old], $ec);
+                    $updEstadoNc->execute([$this->estadoFacturaSri((string) $ec['estado_sri']), $idUsuario, $mapNc[(string) $old]]);
                     $pg->commit();
                     $res['ya_migrados']++;
                 } catch (Throwable $ex) {
@@ -3964,8 +4162,9 @@ class MigracionMysqlService
             if ($fds === '' || strpos($fds, '0000') === 0) { $fds = $fe; }
             // Periodo fiscal MM/YYYY desde la fecha (fallback al ejercicio_fiscal del cuerpo).
             $per = ($fe !== '' && strpos($fe, '0000') !== 0) ? (substr($fe, 5, 2) . '/' . substr($fe, 0, 4)) : '';
-            // Estado: los migrados ya fueron emitidos → 'autorizada' (o 'anulada' si el viejo lo marca).
-            $estado = (stripos((string) $ec['estado_sri'], 'anul') !== false) ? 'anulada' : 'autorizada';
+            // Estado desde el estado_sri del viejo: AUTORIZADO→autorizada, ANULAD*→anulada,
+            // PENDIENTE (y demás no autorizados)→borrador.
+            $estado = $this->estadoRetencionSri((string) $ec['estado_sri']);
 
             try {
                 $pg->beginTransaction();
@@ -4709,12 +4908,30 @@ class MigracionMysqlService
         return $st->rowCount();
     }
 
+    /**
+     * Mapea el estado_sri del sistema viejo al estado del nuevo (documentos con vocabulario
+     * masculino: facturas, NC, liquidaciones, guías).
+     *   AUTORIZADO → autorizado · ANULAD* → anulado · PENDIENTE (y demás no autorizados) → borrador.
+     * NO APLICA y vacío se asumen emitidos (documento físico / histórico sin autorización electrónica).
+     */
     private function estadoFacturaSri(string $e): string
     {
         $e = strtoupper(trim($e));
         if (strpos($e, 'ANULAD') !== false) return 'anulado';
         if ($e === 'AUTORIZADO') return 'autorizado';
-        return 'autorizado'; // histórico: se asume emitido
+        if ($e === '' || $e === 'NO APLICA') return 'autorizado'; // histórico / documento físico
+        return 'borrador'; // PENDIENTE, NO AUTORIZADO, DEVUELTA, ERROR, ENVIANDO, PROCESANDOSE…
+    }
+
+    /** Igual que estadoFacturaSri pero con el vocabulario FEMENINO de retención de compra
+     *  (CHECK: borrador/pendiente/autorizada/no_autorizada/anulada). */
+    private function estadoRetencionSri(string $e): string
+    {
+        $e = strtoupper(trim($e));
+        if (strpos($e, 'ANULAD') !== false) return 'anulada';
+        if ($e === 'AUTORIZADO') return 'autorizada';
+        if ($e === '' || $e === 'NO APLICA') return 'autorizada';
+        return 'borrador';
     }
 
     /** Transportista (get-or-create) por (id_empresa, identificacion). */
