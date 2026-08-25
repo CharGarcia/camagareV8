@@ -86,6 +86,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { key: 'ciudad',      label: 'Ciudad',             icon: 'bi-geo-alt',        type: 'text' },
                             { key: 'provincia',   label: 'Provincia',          icon: 'bi-map',            type: 'text' },
                             { key: 'tipo_empresa', label: 'Tipo empresa',      icon: 'bi-briefcase',      type: 'text' },
+                            { key: 'banco',       label: 'Banco',              icon: 'bi-bank',           type: 'text' },
                             { key: 'plazo',       label: 'Plazo (días)',       icon: 'bi-calendar-range', type: 'number_range' },
                             { key: 'tipo',        label: 'Tipo identificación', icon: 'bi-credit-card',   type: 'select', options: [
                                 { v: '04', l: 'RUC' },
@@ -146,6 +147,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a href="<?= $urlBaseProv ?>/mapa" class="btn btn-outline-secondary" title="Mapa de proveedores">
                     <i class="bi bi-map"></i> Mapa
                 </a>
+                <?php if ($perm['crear']): ?>
+                    <button type="button" class="btn btn-outline-primary d-none" id="btnCopiarProveedoresEmpresa" title="Copiar todos los proveedores a otra empresa" onclick="abrirModalCopiarProveedoresEmpresa()">
+                        <i class="bi bi-arrow-left-right"></i> Copiar a otra empresa
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -193,7 +199,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyProveedores">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron proveedores.</td>
+                            <td colspan="14" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron proveedores.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -231,6 +237,33 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.BASE_URL = '<?= $base ?>';
 </script>
 <?php include __DIR__ . '/modal_proveedor.php'; ?>
+
+<!-- Modal: Copiar todos los proveedores a otra empresa -->
+<div class="modal fade" id="modalCopiarProveedoresEmpresa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold"><i class="bi bi-arrow-left-right text-primary me-2"></i>Copiar proveedores a otra empresa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-primary bg-primary bg-opacity-10 py-2 px-3 small border-primary border-opacity-25 mb-3">
+                    <i class="bi bi-info-circle-fill me-1"></i>
+                    Copia todos los proveedores de esta empresa hacia la empresa que elija. Si un proveedor ya existe allí (misma identificación), no se duplica ni se sobrescribe.
+                </div>
+                <label for="copiarProveedoresEmpresaSelect" class="form-label small fw-bold">Empresa destino</label>
+                <select class="form-select form-select-sm" id="copiarProveedoresEmpresaSelect"></select>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-3" id="btnConfirmarCopiarProveedores" onclick="confirmarCopiarProveedoresEmpresa()">
+                    <i class="bi bi-arrow-left-right me-1"></i> Copiar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="<?= $base ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
 
 <script>

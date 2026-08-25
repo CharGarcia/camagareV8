@@ -65,11 +65,75 @@ class ProveedorRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
+        // JOINs de catálogos que participan del WHERE: se usan igual en el COUNT y en
+        // el SELECT de filas para que ambos filtren exactamente lo mismo.
+        $joinsFiltro = "LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = p.tipo_id_proveedor
+                    LEFT JOIN bancos_ecuador b ON b.id = p.id_banco
+                    LEFT JOIN provincia prov ON prov.codigo = p.provincia
+                    LEFT JOIN ciudad ciu ON ciu.codigo = p.ciudad AND ciu.cod_prov = p.provincia
+                    LEFT JOIN tipo_empresa te ON te.id = p.tipo_empresa";
+
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $whereSql .= " AND (p.razon_social ILIKE :b OR p.identificacion ILIKE :b OR p.email ILIKE :b OR p.telefono ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre sobre TODAS las columnas visibles del listado, incluidas las
+            // que vienen de catálogos por JOIN: por palabras, en cualquier orden y sin
+            // distinguir mayúsculas ni tildes.
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'p.identificacion',
+                'icv.nombre',
+                'p.razon_social',
+                'p.nombre_comercial',
+                'p.email',
+                'p.telefono',
+                'p.direccion',
+                'p.plazo::text',
+                'b.nombre_banco',
+                'te.nombre',
+                'prov.nombre',
+                'ciu.nombre',
+            ], $parsed['texto_libre'], $params, 'prov_b');
+
+            // Estado y Rela. SRI son booleanos que en la tabla se ven como texto. Se
+            // aceptan sus etiquetas, pero solo si el usuario escribió exactamente esa
+            // palabra: con un ILIKE parcial, escribir "no" devolvería medio listado.
+            $etiqueta = strtr(mb_strtolower(trim($parsed['texto_libre']), 'UTF-8'), [
+                'í' => 'i'
+            ]);
+            $extra = match ($etiqueta) {
+                'activo'   => 'p.status = true',
+                'inactivo' => 'p.status = false',
+                'si'       => 'p.relacionado = true',
+                'no'       => 'p.relacionado = false',
+                default    => null,
+            };
+
+            if ($cond !== '') {
+                $whereSql .= ' AND (' . $cond . ($extra !== null ? ' OR ' . $extra : '') . ')';
+            } elseif ($extra !== null) {
+                $whereSql .= ' AND ' . $extra;
+            }
         }
+
+        // Filtros booleanos con sintaxis clave:valor (estado:activo, relacionado:no).
+        // Se resuelven aquí porque el helper compara contra un placeholder de texto y
+        // la columna real es booleana (además, p.estado no existe: es p.status).
+        foreach (['estado' => 'p.status', 'relacionado' => 'p.relacionado'] as $claveBool => $colBool) {
+            if (!isset($parsed['filtros'][$claveBool])) {
+                continue;
+            }
+            $valBool = $parsed['filtros'][$claveBool]['valor'];
+            $valBool = is_array($valBool) ? (string)($valBool[0] ?? '') : (string)$valBool;
+            $valBool = strtr(mb_strtolower(trim($valBool), 'UTF-8'), ['í' => 'i']);
+
+            $literal = in_array($valBool, ['activo', 'si', '1', 'true', 't'], true) ? 'true'
+                     : (in_array($valBool, ['inactivo', 'no', '0', 'false', 'f'], true) ? 'false' : null);
+            if ($literal === null) {
+                continue;
+            }
+            $whereSql .= " AND {$colBool} " . ($parsed['filtros'][$claveBool]['neg'] ? '!=' : '=') . " {$literal}";
+            unset($parsed['filtros'][$claveBool]);
+        }
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
             'texto' => [
                 'nombre'         => 'p.razon_social',
@@ -85,21 +149,17 @@ class ProveedorRepository extends BaseRepository
                 'ciudad'         => 'ciu.nombre',
                 'provincia'      => 'prov.nombre',
                 'tipo_empresa'   => 'te.nombre',
+                'banco'          => 'b.nombre_banco',
+                'tipo_id'        => 'icv.nombre',
             ],
             'exacto'   => [
-                'estado'      => 'p.estado',
                 'tipo'        => 'p.tipo_id_proveedor',
-                'relacionado' => 'p.relacionado',
             ],
             'numerico' => [ 'plazo' => 'p.plazo' ],
         ]);
 
-        $countJoins = "LEFT JOIN provincia prov ON prov.codigo = p.provincia
-                       LEFT JOIN ciudad ciu ON ciu.codigo = p.ciudad AND ciu.cod_prov = p.provincia
-                       LEFT JOIN tipo_empresa te ON te.id = p.tipo_empresa";
-
         // 1. Contar total
-        $sqlCount = "SELECT COUNT(*) FROM {$this->table} p {$countJoins} {$whereSql}";
+        $sqlCount = "SELECT COUNT(*) FROM {$this->table} p {$joinsFiltro} {$whereSql}";
         $stCount  = $this->db->prepare($sqlCount);
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
@@ -124,11 +184,7 @@ class ProveedorRepository extends BaseRepository
                            rs_iva.codigo_ret || ' - ' || rs_iva.concepto_ret || ' (' || rs_iva.porcentaje_ret || '%)' AS nombre_retencion_iva,
                            st.codigo || ' - ' || st.nombre AS nombre_sustento_tributario
                     FROM {$this->table} p
-                    LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = p.tipo_id_proveedor
-                    LEFT JOIN bancos_ecuador b ON b.id = p.id_banco
-                    LEFT JOIN provincia prov ON prov.codigo = p.provincia
-                    LEFT JOIN ciudad ciu ON ciu.codigo = p.ciudad AND ciu.cod_prov = p.provincia
-                    LEFT JOIN tipo_empresa te ON te.id = p.tipo_empresa
+                    {$joinsFiltro}
                     LEFT JOIN retenciones_sri rs_renta ON rs_renta.id = p.id_retencion_renta
                     LEFT JOIN retenciones_sri rs_iva ON rs_iva.id = p.id_retencion_iva
                     LEFT JOIN sustento_tributario st ON st.id = p.id_sustento_tributario
@@ -173,6 +229,37 @@ class ProveedorRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * Busca un proveedor por identificación dentro de una empresa, INCLUIDOS los
+     * eliminados: la replicación entre empresas necesita distinguir "no existe"
+     * de "existe pero está eliminado" para reactivarlo en vez de duplicarlo.
+     */
+    public function findByIdentificacion(int $idEmpresa, string $identificacion): ?array
+    {
+        $sql = "SELECT * FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND identificacion = :identificacion
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':identificacion' => $identificacion]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Reactiva un proveedor eliminado SIN tocar sus datos. Lo usa la replicación
+     * entre empresas: si ya existía en la empresa destino pero estaba eliminado, se
+     * reactiva tal cual estaba en vez de sobrescribirlo con los datos del origen.
+     */
+    public function reactivarSoloEliminado(int $id, int $idUsuario): void
+    {
+        $sql = "UPDATE {$this->table} SET
+                    eliminado = false,
+                    updated_at = CURRENT_TIMESTAMP, updated_by = :uid
+                WHERE id = :id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':uid' => $idUsuario, ':id' => $id]);
     }
 
     /**

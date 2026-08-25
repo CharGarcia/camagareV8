@@ -25,6 +25,35 @@ class CargaFacturasRepository extends BaseRepository
         parent::__construct('ventas_cabecera');
     }
 
+    /**
+     * Añade un `AND campo IN (...)` con parámetros nombrados, o cadena vacía si
+     * la lista viene vacía (se traen todos).
+     *
+     * @param array $valores  Se limpian y deduplican.
+     * @param array $params   Se le agregan los placeholders (por referencia).
+     * @param string $prefijo Prefijo del placeholder, único por consulta.
+     */
+    private function filtroEnLista(string $campo, array $valores, array &$params, string $prefijo): string
+    {
+        $valores = array_values(array_unique(array_filter(
+            array_map(static fn($v) => trim((string) $v), $valores),
+            static fn($v) => $v !== ''
+        )));
+
+        if (!$valores) {
+            return '';
+        }
+
+        $placeholders = [];
+        foreach ($valores as $i => $valor) {
+            $ph = ':' . $prefijo . $i;
+            $placeholders[] = $ph;
+            $params[$ph] = $valor;
+        }
+
+        return ' AND ' . $campo . ' IN (' . implode(', ', $placeholders) . ')';
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Mapas de catálogo para la validación
     // ─────────────────────────────────────────────────────────────────────────
@@ -34,16 +63,23 @@ class CargaFacturasRepository extends BaseRepository
      * Incluye el tipo de identificación para poder avisar si el Excel trae un
      * número que ya existe registrado con otro tipo.
      */
-    public function getMapaClientes(int $idEmpresa): array
+    public function getMapaClientes(int $idEmpresa, array $identificaciones = []): array
     {
+        // Acotar a las identificaciones que realmente aparecen en el archivo: una
+        // empresa con decenas de miles de clientes no puede traerlos todos por red
+        // para validar tres facturas. Sin lista, se traen todos (compatibilidad).
         $sql = "SELECT c.id, c.nombre, c.tipo_id, c.identificacion, c.email,
                        c.id_forma_pago_sri, c.plazo,
                        COALESCE(icv.nombre, '') AS nombre_tipo_id
                 FROM clientes c
                 LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = c.tipo_id
                 WHERE c.id_empresa = :id_empresa AND c.eliminado = false";
+
+        $params = [':id_empresa' => $idEmpresa];
+        $sql   .= $this->filtroEnLista('c.identificacion', $identificaciones, $params, 'ident');
+
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
+        $st->execute($params);
 
         $mapa = [];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -80,12 +116,16 @@ class CargaFacturasRepository extends BaseRepository
      *
      * @return array<string,true>
      */
-    public function getIdentificacionesEliminadas(int $idEmpresa): array
+    public function getIdentificacionesEliminadas(int $idEmpresa, array $identificaciones = []): array
     {
         $sql = "SELECT identificacion FROM clientes
                 WHERE id_empresa = :id_empresa AND eliminado = true";
+
+        $params = [':id_empresa' => $idEmpresa];
+        $sql   .= $this->filtroEnLista('identificacion', $identificaciones, $params, 'del');
+
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
+        $st->execute($params);
 
         $set = [];
         foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $ident) {
@@ -101,15 +141,24 @@ class CargaFacturasRepository extends BaseRepository
      * Productos y servicios de la empresa, indexados por código en minúsculas
      * (el código es case-insensitive, igual que el índice único).
      */
-    public function getMapaProductos(int $idEmpresa): array
+    public function getMapaProductos(int $idEmpresa, array $codigos = []): array
     {
+        // Igual que con los clientes: solo los códigos que trae el archivo. El
+        // cruce es case-insensitive, como el índice único del código.
         $sql = "SELECT p.id, p.codigo, p.nombre, p.tipo_produccion, p.inventariable,
                        p.precio_base, p.status, p.tarifa_iva, ti.codigo AS codigo_iva
                 FROM productos p
                 LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                 WHERE p.id_empresa = :id_empresa AND p.eliminado = false";
+
+        $params = [':id_empresa' => $idEmpresa];
+        $sql   .= $this->filtroEnLista('LOWER(TRIM(p.codigo))', array_map(
+            static fn($c) => mb_strtolower(trim((string) $c)),
+            $codigos
+        ), $params, 'cod');
+
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
+        $st->execute($params);
 
         $mapa = [];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {

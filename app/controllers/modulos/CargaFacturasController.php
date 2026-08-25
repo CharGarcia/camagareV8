@@ -71,6 +71,11 @@ class CargaFacturasController extends BaseModuloController
             exit;
         }
 
+        // Armar el libro consulta varios catálogos: se suelta la sesión para no
+        // dejar al usuario sin poder navegar mientras se descarga.
+        $this->liberarSesion();
+        @set_time_limit(300);
+
         $servicio = new CargaFacturasPlantillaService($this->repository);
         $libro    = $servicio->generar($idEmpresa);
         $nombre   = $servicio->nombreArchivo($idEmpresa);
@@ -103,6 +108,20 @@ class CargaFacturasController extends BaseModuloController
 
             $rutaTemporal = $this->recibirArchivo($idEmpresa);
 
+            // El token se reserva ANTES de validar para poder soltar el lock de
+            // sesión de inmediato. Si la validación acaba rechazando el archivo,
+            // el token queda apuntando a un archivo borrado y es inofensivo:
+            // aplicarAjax revalida siempre desde cero.
+            $token = bin2hex(random_bytes(16));
+            $_SESSION[self::SESSION_KEY][$token] = [
+                'ruta'       => $rutaTemporal,
+                'id_empresa' => $idEmpresa,
+                'creado'     => time(),
+            ];
+
+            $this->liberarSesion();
+            @set_time_limit(600);
+
             $servicio = new CargaFacturasValidacionService($this->repository, new CargaFacturasRules());
             $informe  = $servicio->validar($rutaTemporal, $idEmpresa);
 
@@ -115,13 +134,6 @@ class CargaFacturasController extends BaseModuloController
                 ]);
                 exit;
             }
-
-            $token = bin2hex(random_bytes(16));
-            $_SESSION[self::SESSION_KEY][$token] = [
-                'ruta'       => $rutaTemporal,
-                'id_empresa' => $idEmpresa,
-                'creado'     => time(),
-            ];
 
             echo json_encode([
                 'ok'      => true,
@@ -159,6 +171,19 @@ class CargaFacturasController extends BaseModuloController
                 throw new \RuntimeException('El archivo temporal ya no está disponible. Vuelva a subirlo.');
             }
 
+            // El token se consume AQUÍ, con la sesión todavía abierta, y no al
+            // final: así un segundo clic en "Crear facturas" se rechaza en el acto
+            // en lugar de quedarse esperando a que termine el primero. Un archivo
+            // ya aplicado no se puede reaplicar aunque parte de las facturas haya
+            // fallado, porque repetirlo duplicaría las que sí se crearon.
+            unset($_SESSION[self::SESSION_KEY][$token]);
+
+            // Crear N facturas puede tardar minutos. Sin soltar el lock de sesión,
+            // TODAS las demás peticiones del usuario se encolan detrás de esta y
+            // el sistema entero parece congelado.
+            $this->liberarSesion();
+            @set_time_limit(1800);
+
             // Se revalida siempre: el informe no viaja por el navegador, así que
             // el cliente no puede alterar lo que se va a escribir. Además, entre
             // validar y aplicar pudo cambiar el stock o el catálogo.
@@ -166,16 +191,14 @@ class CargaFacturasController extends BaseModuloController
             $informe    = $validacion->validar($pendiente['ruta'], $idEmpresa);
 
             if ($informe['errores_globales']) {
+                @unlink($pendiente['ruta']);
                 throw new \RuntimeException(implode(' ', $informe['errores_globales']));
             }
 
             $aplicacion = new CargaFacturasAplicacionService($this->repository, new LogSistemaService());
             $resultado  = $aplicacion->aplicar($informe, $idEmpresa, $idUsuario);
 
-            // Un archivo ya aplicado no se puede volver a aplicar: se descarta
-            // aunque parte de las facturas haya fallado (repetirlo duplicaría las
-            // que sí se crearon).
-            $this->descartarPendiente($token);
+            @unlink($pendiente['ruta']);
 
             echo json_encode(['ok' => true, 'resultado' => $resultado]);
         } catch (\Throwable $e) {
@@ -197,6 +220,24 @@ class CargaFacturasController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Suelta el bloqueo del archivo de sesión.
+     *
+     * PHP mantiene la sesión bloqueada durante toda la petición, así que mientras
+     * una carga larga se ejecuta el resto de peticiones del MISMO usuario quedan
+     * en cola: el navegador no responde y parece que se colgó el sistema entero.
+     * Mismo patrón que usan MigrarMysqlController y AsientosContablesController.
+     *
+     * Después de llamarla, escribir en $_SESSION ya no persiste: hay que dejar
+     * hecho cualquier cambio de sesión ANTES.
+     */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+    }
 
     /**
      * Valida y guarda el archivo subido en storage/.

@@ -125,7 +125,7 @@ class ProveedoresController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron proveedores.</td></tr>';
+            echo '<tr><td colspan="14" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron proveedores.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 if (!empty($r['created_at'])) $r['created_at'] = date('d-m-Y H:i:s', strtotime($r['created_at']));
@@ -534,12 +534,15 @@ class ProveedoresController extends BaseModuloController
             // sin cerrarlo. Si por algo no se pudiera leer, se responde con los
             // datos del formulario para no romper a quien consuma la respuesta.
             $guardado = (new ProveedorRepository())->getDetalleCompleto($id, $data['id_empresa']);
+            $datosGuardados = $guardado ?: $data;
+            $replicado = $this->replicarSiCorresponde($datosGuardados);
 
             echo json_encode([
                 'ok'   => true,
                 'msg'  => 'Proveedor creado correctamente.',
                 'id'   => $id,
-                'data' => $guardado ?: $data,
+                'data' => $datosGuardados,
+                'replicado' => $replicado,
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -566,13 +569,84 @@ class ProveedoresController extends BaseModuloController
 
             $data['id'] = $id;
             $guardado = (new ProveedorRepository())->getDetalleCompleto($id, $idEmpresa);
+            $datosGuardados = $guardado ?: $data;
+            $replicado = $this->replicarSiCorresponde($datosGuardados);
 
             echo json_encode([
                 'ok'   => true,
                 'msg'  => 'Proveedor actualizado correctamente.',
                 'id'   => $id,
-                'data' => $guardado ?: $data,
+                'data' => $datosGuardados,
+                'replicado' => $replicado,
             ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ─── REPLICACIÓN ENTRE EMPRESAS ────────────────────────────────────────────
+    // empresasCandidatasReplicacion() / filtrarEmpresasDestinoPermitidas() viven
+    // en BaseModuloController (compartidas con Clientes y Productos).
+
+    public function empresasDestinoAjax(): void
+    {
+        $this->requireCrear();
+        $this->empresasDestinoAjaxResponse();
+    }
+
+    /** Replica el proveedor recién guardado hacia las empresas destino marcadas en el formulario (si las hay). */
+    private function replicarSiCorresponde(array $datosOrigen): ?array
+    {
+        $idsSolicitadas = $_POST['ids_empresa_destino'] ?? [];
+        if (!is_array($idsSolicitadas) || empty($idsSolicitadas)) {
+            return null;
+        }
+
+        $filtro = $this->filtrarEmpresasDestinoPermitidas($idsSolicitadas);
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $resultado = $filtro['resultado'];
+        if (!empty($filtro['permitidas'])) {
+            $resultado += $this->service->replicarEnEmpresas($datosOrigen, $filtro['permitidas'], $idUsuario);
+        }
+        return $resultado;
+    }
+
+    /**
+     * Botón masivo: copia TODOS los proveedores de la empresa activa hacia una
+     * empresa destino elegida por el usuario. No duplica (mismo criterio que la
+     * replicación individual): solo crea los que faltan o reactiva los eliminados.
+     */
+    public function replicarTodosAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+            exit;
+        }
+
+        $idEmpresaDestino = (int) ($_POST['id_empresa_destino'] ?? 0);
+        $idEmpresaOrigen  = (int) $_SESSION['id_empresa'];
+        $idUsuario        = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($idEmpresaDestino <= 0) {
+                throw new \Exception('Seleccione la empresa destino.');
+            }
+            $filtro = $this->filtrarEmpresasDestinoPermitidas([$idEmpresaDestino]);
+            if (empty($filtro['permitidas'])) {
+                throw new \Exception('No tiene permiso para crear proveedores en la empresa destino, o no la tiene asignada.');
+            }
+
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? $idUsuario : null;
+
+            $contadores = $this->service->replicarTodosAEmpresa($idEmpresaOrigen, $idEmpresaDestino, $idUsuario, $idUsuarioFiltro);
+            echo json_encode(['ok' => true] + $contadores);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

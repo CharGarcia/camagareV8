@@ -143,7 +143,7 @@ class CargaFacturasValidacionService
             return $informe;
         }
 
-        $this->precargarCatalogos($idEmpresa);
+        $this->precargarCatalogos($idEmpresa, $libro);
 
         // 5. Hoja Facturas (cabeceras).
         $facturas = $this->procesarHojaFacturas($libro, $informe, $idEmpresa);
@@ -357,11 +357,23 @@ class CargaFacturasValidacionService
         return $errores;
     }
 
-    private function precargarCatalogos(int $idEmpresa): void
+    /**
+     * Trae de la base solo lo que el archivo necesita.
+     *
+     * Clientes y productos se acotan a las identificaciones y códigos que
+     * aparecen realmente en el libro: una empresa con decenas de miles de
+     * registros no puede traerlos todos por red para validar unas pocas
+     * facturas. El resto de catálogos (tarifas, formas de pago, puntos, bodegas,
+     * vendedores) son pequeños por naturaleza y se traen enteros.
+     */
+    private function precargarCatalogos(int $idEmpresa, Spreadsheet $libro): void
     {
-        $this->mapaClientes   = $this->repository->getMapaClientes($idEmpresa);
-        $this->identsBorradas = $this->repository->getIdentificacionesEliminadas($idEmpresa);
-        $this->mapaProductos  = $this->repository->getMapaProductos($idEmpresa);
+        $identificaciones = $this->valoresDeColumna($libro, CargaFacturasEsquema::HOJA_FACTURAS, 2, true);
+        $codigosProducto  = $this->valoresDeColumna($libro, CargaFacturasEsquema::HOJA_DETALLES, 1, false);
+
+        $this->mapaClientes   = $this->repository->getMapaClientes($idEmpresa, $identificaciones);
+        $this->identsBorradas = $this->repository->getIdentificacionesEliminadas($idEmpresa, $identificaciones);
+        $this->mapaProductos  = $this->repository->getMapaProductos($idEmpresa, $codigosProducto);
         $this->mapaIva        = $this->repository->getMapaTarifasIva();
         $this->mapaFormasPago      = $this->repository->getMapaFormasPago();
         $this->mapaFormasPagoPorId = $this->repository->getMapaFormasPagoPorId();
@@ -1151,6 +1163,31 @@ class CargaFacturasValidacionService
             'errores' => $errores,
             'avisos'  => $avisos,
         ];
+    }
+
+    /**
+     * Valores distintos de una columna de una hoja (índice 0 = primera columna).
+     * Se usa para saber qué clientes y productos hay que traer de la base.
+     *
+     * @param bool $quitarEspacios Para identificaciones, que se normalizan sin
+     *                             espacios. Los códigos de producto NO: pueden
+     *                             llevar espacios internos legítimos y hay que
+     *                             buscarlos tal como el validador los leerá.
+     * @return string[]
+     */
+    private function valoresDeColumna(Spreadsheet $libro, string $nombreHoja, int $indice, bool $quitarEspacios): array
+    {
+        $valores = [];
+        foreach ($this->leerFilas($libro, $nombreHoja) as $celdas) {
+            $v = $this->texto($celdas[$indice] ?? '');
+            if ($quitarEspacios) {
+                $v = preg_replace('/\s+/', '', $v) ?? '';
+            }
+            if ($v !== '') {
+                $valores[$v] = true;
+            }
+        }
+        return array_keys($valores);
     }
 
     private function leerFilas(Spreadsheet $libro, string $nombreHoja): array

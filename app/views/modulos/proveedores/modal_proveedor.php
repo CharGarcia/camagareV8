@@ -444,6 +444,22 @@ if (!defined('LEAFLET_LOADED')) {
                         </div>
 
                     </div>
+
+                    <!-- Replicar en otras empresas del usuario (solo si tiene 2+ empresas) -->
+                    <div class="d-none border-top px-3 py-2 bg-light" id="prov_replicar_wrap">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="prov_replicar_toggle">
+                            <label class="form-check-label small fw-bold" for="prov_replicar_toggle">
+                                <i class="bi bi-building-fill-check me-1"></i>Aplicar también en otras empresas
+                            </label>
+                        </div>
+                        <div class="d-none mt-2" id="prov_replicar_lista_wrap">
+                            <div class="small text-muted mb-1">
+                                Busque y agregue las empresas donde aplicar este proveedor. Si ya existe allí (misma identificación), no se duplica ni se sobrescribe.
+                            </div>
+                            <select class="form-select form-select-sm" id="prov_replicar_select" name="ids_empresa_destino[]" multiple></select>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="modal-footer justify-content-between bg-light border-top p-2">

@@ -11,8 +11,21 @@
 -- aplicada, no por factura).
 --
 -- Es opcional: aplicarlo cuando log_sistema empiece a ser grande.
+--
+-- IMPORTANTE: se crea CONCURRENTLY. Un CREATE INDEX normal bloquea las
+-- ESCRITURAS de log_sistema mientras se construye, y esa tabla recibe una
+-- inserción por cada acción del sistema: en una tabla grande dejaría a todos los
+-- usuarios esperando. CONCURRENTLY tarda más pero no bloquea a nadie.
+--
+-- Por eso este archivo NO puede ejecutarse dentro de una transacción (PostgreSQL
+-- lo prohíbe con CONCURRENTLY). Con psql directo funciona; si algo lo envuelve
+-- en BEGIN/COMMIT, fallará con "cannot run inside a transaction block".
+--
+-- Si la creación se interrumpe, PostgreSQL deja un índice marcado como INVALID.
+-- Se limpia con:  DROP INDEX IF EXISTS idx_log_sistema_carga_facturas;
+-- y se vuelve a lanzar.
 -- ---------------------------------------------------------------------------
 
-CREATE INDEX IF NOT EXISTS idx_log_sistema_carga_facturas
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_log_sistema_carga_facturas
     ON log_sistema (id_empresa, (datos_nuevos ->> 'hash_archivo'))
     WHERE accion = 'CARGA_MASIVA_FACTURAS';

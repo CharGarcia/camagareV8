@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar
-version: 1.1
+etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -124,11 +124,57 @@ Estos valores son **propuestas**, no imposiciones: al registrar la compra o la
 retención se pueden cambiar. Configurarlos bien evita el error más común, que es
 retener con el porcentaje equivocado por descuido.
 
+## Buscar en el listado
+
+El buscador revisa **todas las columnas del listado**: identificación, tipo de
+identificación, razón social, nombre comercial, correo, teléfono, dirección,
+plazo, banco, tipo de empresa, provincia y ciudad. Busca por **palabras sueltas**
+en cualquier orden y **sin distinguir tildes ni mayúsculas**: escribir
+`comercial andina` encuentra *COMERCIAL SANTA ANDINA S.A.* aunque las palabras no
+estén juntas.
+
+Escribir exactamente `activo`, `inactivo`, `si` o `no` también filtra por las
+columnas *Estado* y *Rela. SRI*.
+
+Además acepta filtros por campo con la sintaxis `clave:valor` (o el desplegable
+del buscador): `nombre`, `comercial`, `ruc`, `email`, `telefono`, `direccion`,
+`ciudad`, `provincia`, `tipo_empresa`, `banco`, `tipo_id`, `plazo`, `tipo`,
+`estado` y `relacionado`. Ejemplos: `ciudad:quito`, `plazo:30..60`,
+`estado:inactivo`, `-relacionado:si`.
+
+## Copiar proveedores a otra empresa
+
+Si trabaja con varias empresas, no hace falta volver a teclear la misma ficha en
+cada una.
+
+- **Un proveedor**: dentro de su ficha, marque *Aplicar también en otras
+  empresas*, elija las empresas y guarde. Al terminar se muestra en qué empresas
+  quedó creado, reactivado u omitido.
+- **Todos de golpe**: en el listado, el botón **Copiar a otra empresa** copia
+  todos los proveedores de la empresa activa hacia la que elija.
+
+Reglas en ambos casos:
+
+- Si el proveedor **ya existe** en la empresa destino (misma identificación), **no
+  se duplica ni se sobrescribe**: se respeta lo que ya haya allí.
+- Si existía pero estaba **eliminado**, se **reactiva** tal como estaba.
+- Solo aparecen las empresas que usted tiene asignadas y en las que tiene permiso
+  de **crear** proveedores.
+- Los datos que dependen de cada empresa —forma de pago y concepto de egreso
+  predeterminados, rango de monto para el pago automático y la ubicación
+  geográfica— **no se copian**: se configuran en la empresa destino. Los
+  catálogos generales (banco, cuenta, tipo de empresa, retenciones y sustento
+  tributario) sí se copian.
+
 ## Permisos
 
 Con **acceso total** se ven los proveedores de toda la empresa. Sin ese permiso,
 cada usuario ve solo los que creó él — revíselo si alguien reporta proveedores
 que "desaparecieron".
+
+Copiar proveedores a otra empresa exige permiso de **crear** en el módulo, tanto
+en la empresa de origen como en la de destino. En el copiado masivo, un usuario
+sin *acceso total* copia únicamente los proveedores que él creó.
 
 ## Eliminar
 
@@ -155,6 +201,10 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **1.2** — El buscador del listado cubre todas las columnas (incluidas banco,
+  tipo de identificación, tipo de empresa, provincia y ciudad), por palabras y sin
+  tildes; nuevos filtros `banco:` y `tipo_id:`, y `estado:`/`relacionado:` ya
+  funcionan. Copiar un proveedor —o todos— a otra empresa, igual que en Clientes.
 - **1.1** — Rango de monto (mínimo y máximo) para el pago automático; pago con
   cheque con número consecutivo y fecha de cobro por días de crédito; botón
   *Generar pagos pendientes*; resumen comercial de solo lectura; la ficha ya no

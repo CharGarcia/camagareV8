@@ -208,6 +208,161 @@ class ProveedorService
         }
     }
 
+    // ─── REPLICACIÓN ENTRE EMPRESAS ──────────────────────────────────────────
+    // Mismo criterio que Clientes (ver ClienteService): nunca se sobrescribe un
+    // proveedor que ya esté activo en la empresa destino.
+
+    /**
+     * Replica un proveedor (ya guardado en su empresa de origen) hacia varias
+     * empresas destino del mismo usuario. Por cada empresa: crea, reactiva o deja
+     * intacto (ver replicarProveedorEnEmpresa()).
+     *
+     * @param array $datosOrigen Ficha ya persistida del proveedor origen.
+     * @param int[] $idsEmpresaDestino Empresas ya validadas (asignadas al usuario + permiso de crear).
+     * @return array<int,array{estado:string,id?:int,mensaje?:string}> resultado por id_empresa
+     */
+    public function replicarEnEmpresas(array $datosOrigen, array $idsEmpresaDestino, int $idUsuario): array
+    {
+        $resultado = [];
+        foreach ($idsEmpresaDestino as $idEmpresaDestino) {
+            $idEmpresaDestino = (int) $idEmpresaDestino;
+            try {
+                $resultado[$idEmpresaDestino] = $this->replicarProveedorEnEmpresa($datosOrigen, $idEmpresaDestino, $idUsuario);
+            } catch (Exception $e) {
+                $resultado[$idEmpresaDestino] = ['estado' => 'error', 'mensaje' => $e->getMessage()];
+            }
+        }
+        return $resultado;
+    }
+
+    /**
+     * Replica TODOS los proveedores (no eliminados) de una empresa origen hacia una
+     * empresa destino. Es el botón masivo "Copiar a otra empresa" del listado.
+     *
+     * @return array{creados:int,reactivados:int,omitidos:int,errores:int,total:int}
+     */
+    public function replicarTodosAEmpresa(int $idEmpresaOrigen, int $idEmpresaDestino, int $idUsuario, ?int $idUsuarioFiltro = null): array
+    {
+        $proveedores = $this->repository->getListado($idEmpresaOrigen, '', 1, 0, 'razon_social', 'ASC', $idUsuarioFiltro)['rows'];
+
+        $contadores = ['creados' => 0, 'reactivados' => 0, 'omitidos' => 0, 'errores' => 0, 'total' => count($proveedores)];
+        foreach ($proveedores as $proveedor) {
+            try {
+                $r = $this->replicarProveedorEnEmpresa($proveedor, $idEmpresaDestino, $idUsuario);
+                $contadores[match ($r['estado']) {
+                    'creado'     => 'creados',
+                    'reactivado' => 'reactivados',
+                    default      => 'omitidos',
+                }]++;
+            } catch (Exception $e) {
+                $contadores['errores']++;
+            }
+        }
+        return $contadores;
+    }
+
+    /**
+     * Núcleo de la replicación: crea, reactiva (sin tocar datos) o deja intacto un
+     * proveedor en la empresa destino, según exista o no por identificación. Nunca
+     * sobrescribe uno que ya esté activo ahí, para no pisar ediciones hechas en esa
+     * empresa.
+     *
+     * No copia los catálogos que son por-empresa (forma de pago y concepto de egreso
+     * predeterminados): esos IDs pertenecen a la empresa origen y no significan nada
+     * en la destino, así que quedan sin asignar para configurarse allí. Los catálogos
+     * globales (banco, tipo de empresa, retenciones SRI, sustento tributario) sí se
+     * copian tal cual.
+     *
+     * @return array{estado:string,id:int}  estado: creado | reactivado | omitido
+     */
+    public function replicarProveedorEnEmpresa(array $datosOrigen, int $idEmpresaDestino, int $idUsuario): array
+    {
+        $tipoId = trim((string) ($datosOrigen['tipo_id_proveedor'] ?? ''));
+        $identificacion = trim((string) ($datosOrigen['identificacion'] ?? ''));
+        if ($tipoId === '' || $identificacion === '') {
+            throw new Exception('El proveedor no tiene identificación válida para replicar.');
+        }
+
+        $existente = $this->repository->findByIdentificacion($idEmpresaDestino, $identificacion);
+
+        if ($existente && empty($existente['eliminado'])) {
+            return ['estado' => 'omitido', 'id' => (int) $existente['id']];
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            if ($existente) {
+                $id = (int) $existente['id'];
+                $this->repository->reactivarSoloEliminado($id, $idUsuario);
+                $this->logService->registrar(
+                    $idUsuario,
+                    $idEmpresaDestino,
+                    'reactivar_replicado',
+                    'proveedores',
+                    $id,
+                    $existente,
+                    ['eliminado' => false, 'origen_empresa' => $datosOrigen['id_empresa'] ?? null]
+                );
+                $this->repository->commit();
+                return ['estado' => 'reactivado', 'id' => $id];
+            }
+
+            $nuevo = [
+                'id_empresa'         => $idEmpresaDestino,
+                'id_usuario'         => $idUsuario,
+                'created_by'         => $idUsuario,
+                'razon_social'       => $datosOrigen['razon_social'] ?? '',
+                'nombre_comercial'   => $datosOrigen['nombre_comercial'] ?? null,
+                'tipo_id_proveedor'  => $tipoId,
+                'identificacion'     => $identificacion,
+                'email'              => $datosOrigen['email'] ?? null,
+                'direccion'          => $datosOrigen['direccion'] ?? null,
+                'provincia'          => $datosOrigen['provincia'] ?? null,
+                'ciudad'             => $datosOrigen['ciudad'] ?? null,
+                'telefono'           => $datosOrigen['telefono'] ?? null,
+                'tipo_empresa'       => $datosOrigen['tipo_empresa'] ?? null,
+                'plazo'              => (int) ($datosOrigen['plazo'] ?? 0),
+                'unidad_tiempo'      => $datosOrigen['unidad_tiempo'] ?? 'DIAS',
+                'relacionado'        => !empty($datosOrigen['relacionado']) && $datosOrigen['relacionado'] !== 'f',
+                // Catálogos globales: se copian tal cual.
+                'id_banco'           => $datosOrigen['id_banco'] ?? null,
+                'tipo_cta'           => $datosOrigen['tipo_cta'] ?? null,
+                'numero_cta'         => $datosOrigen['numero_cta'] ?? null,
+                'id_retencion_renta' => $datosOrigen['id_retencion_renta'] ?? null,
+                'id_retencion_iva'   => $datosOrigen['id_retencion_iva'] ?? null,
+                'id_sustento_tributario' => $datosOrigen['id_sustento_tributario'] ?? null,
+                'status'             => !isset($datosOrigen['status']) || (!empty($datosOrigen['status']) && $datosOrigen['status'] !== 'f'),
+                // Catálogos por-empresa: nunca se copian (ver docblock del método).
+                'id_forma_pago_predeterminada'           => null,
+                'tipo_operacion_bancaria_predeterminada' => null,
+                'monto_minimo_auto_pago'                 => null,
+                'monto_maximo_auto_pago'                 => null,
+                'id_egreso_concepto_predeterminado'      => null,
+                'latitud'            => null,
+                'longitud'           => null,
+                'eliminado'          => false,
+            ];
+
+            $this->rules->validar($nuevo);
+
+            $id = $this->repository->create($nuevo);
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresaDestino,
+                'crear_replicado',
+                'proveedores',
+                $id,
+                null,
+                $nuevo + ['origen_empresa' => $datosOrigen['id_empresa'] ?? null]
+            );
+            $this->repository->commit();
+            return ['estado' => 'creado', 'id' => $id];
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
     /**
      * Proxy para el repositorio para listados.
      */
