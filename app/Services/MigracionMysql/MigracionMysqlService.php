@@ -2730,7 +2730,7 @@ class MigracionMysqlService
             $detByDoc[(string) $r['cd']][] = $r;
         }
         $formaByDoc = [];
-        foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.cheque, f.detalle_pago
+        foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.fecha_entrega, f.estado_pago, f.cheque, f.detalle_pago
                                   FROM formas_pagos_ing_egr f
                                   JOIN ingresos_egresos ie ON ie.codigo_documento = f.codigo_documento
                                  WHERE f.tipo_documento = 'INGRESO' AND ie.tipo_ing_egr = 'INGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
@@ -2748,10 +2748,15 @@ class MigracionMysqlService
         $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, tipo_ingreso = ?, id_ingreso_concepto = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
         $delPag      = $pg->prepare("DELETE FROM ingresos_pagos WHERE id_ingreso = ?");
+        // Conciliación bancaria: al re-migrar, borra los movimientos de banco (cheques cobrados) de los pagos viejos.
+        $delCbm      = $pg->prepare("DELETE FROM control_bancario_movimientos WHERE origen_tipo = 'ingreso' AND origen_id IN (SELECT id FROM ingresos_pagos WHERE id_ingreso = ?)");
 
         $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_ingreso_concepto, id_cliente, monto_total, observaciones, estado, recibo_de, id_recibo_cliente, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?)");
+        $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?) RETURNING id");
+        // Cheque COBRADO en el viejo (estado_pago='PAGADO') → fila en control_bancario_movimientos con
+        // fecha_banco = fecha_pago, para que afecte el saldo bancario (girado no afecta hasta cobrarse).
+        $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'RECIBIDO', ?, ?, ?, 'ingreso', ?, false, now(), now(), ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
                   FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
@@ -2813,6 +2818,7 @@ class MigracionMysqlService
                     $idIng = (int) $idIngExist;
                     $updCab->execute([$fe, $tipoIngreso, $idConcepto, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario, $idIng]);
                     $delDet->execute([$idIng]);
+                    $delCbm->execute([$idIng]); // antes de delPag: borra los movimientos de banco de los pagos viejos
                     $delPag->execute([$idIng]);
                     $res['ya_migrados']++;
                 } else {
@@ -2837,7 +2843,16 @@ class MigracionMysqlService
 
                 foreach ($formaByDoc[$cod] ?? [] as $f) {
                     $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
-                    $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
+                    $numCheque = ((int) $f['cheque']) ?: null;
+                    $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), $numCheque, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
+                    $idPago = (int) $insPago->fetchColumn();
+                    // Cheque COBRADO (estado_pago='PAGADO') en cuenta bancaria → marca cobrado (afecta el saldo).
+                    if ($numCheque !== null && (int) $f['id_cuenta'] > 0 && strtoupper(trim((string) ($f['estado_pago'] ?? ''))) === 'PAGADO') {
+                        $fBanco = self::fechaCorta($f['fecha_pago']);
+                        if ($fBanco !== null) {
+                            $insCbm->execute([$idEmpresa, $idForma, (string) $numCheque, self::fechaCorta($f['fecha_entrega']) ?: $fBanco, $fBanco, $idPago, $idUsuario]);
+                        }
+                    }
                 }
 
                 if (!$idIngExist) {
@@ -2893,7 +2908,7 @@ class MigracionMysqlService
             $detByDoc[(string) $r['cd']][] = $r;
         }
         $formaByDoc = [];
-        foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.cheque, f.detalle_pago
+        foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.fecha_entrega, f.estado_pago, f.cheque, f.detalle_pago
                                   FROM formas_pagos_ing_egr f
                                   JOIN ingresos_egresos ie ON ie.codigo_documento = f.codigo_documento
                                  WHERE f.tipo_documento = 'EGRESO' AND ie.tipo_ing_egr = 'EGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
@@ -2933,10 +2948,14 @@ class MigracionMysqlService
         $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, tipo_egreso = ?, tipo_sujeto = ?, id_egreso_concepto = ?, id_proveedor = ?, id_empleado = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
         $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
+        $delCbm      = $pg->prepare("DELETE FROM control_bancario_movimientos WHERE origen_tipo = 'egreso' AND origen_id IN (SELECT id FROM egresos_pagos WHERE id_egreso = ?)");
 
         $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, id_empleado, id_egreso_concepto, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?)");
+        $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?) RETURNING id");
+        // Cheque COBRADO (estado_pago='PAGADO') → fila en control_bancario_movimientos (fecha_banco=fecha_pago)
+        // para que el cheque emitido afecte el saldo bancario (girado no afecta hasta cobrarse).
+        $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'EMITIDO', ?, ?, ?, 'egreso', ?, false, now(), now(), ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro, codigo_contable
                   FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
@@ -3039,6 +3058,7 @@ class MigracionMysqlService
                     $idEgr = (int) $idEgrExist;
                     $updCab->execute([$fe, $tipoEgreso, $tipoSujeto, $idConcepto, $idProv, $idEmpleado, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario, $idEgr]);
                     $delDet->execute([$idEgr]);
+                    $delCbm->execute([$idEgr]); // antes de delPag
                     $delPag->execute([$idEgr]);
                     $res['ya_migrados']++;
                 } else {
@@ -3063,7 +3083,16 @@ class MigracionMysqlService
 
                 foreach ($formaByDoc[$cod] ?? [] as $f) {
                     $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
-                    $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
+                    $numCheque = ((int) $f['cheque']) ?: null;
+                    $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), $numCheque, self::tipoOperacionBancaria($f['detalle_pago'] ?? null, (int) $f['id_cuenta'], $f['cheque'] ?? null)]);
+                    $idPago = (int) $insPago->fetchColumn();
+                    // Cheque emitido COBRADO (estado_pago='PAGADO') → marca cobrado (afecta el saldo bancario).
+                    if ($numCheque !== null && (int) $f['id_cuenta'] > 0 && strtoupper(trim((string) ($f['estado_pago'] ?? ''))) === 'PAGADO') {
+                        $fBanco = self::fechaCorta($f['fecha_pago']);
+                        if ($fBanco !== null) {
+                            $insCbm->execute([$idEmpresa, $idForma, (string) $numCheque, self::fechaCorta($f['fecha_entrega']) ?: $fBanco, $fBanco, $idPago, $idUsuario]);
+                        }
+                    }
                 }
 
                 if (!$idEgrExist) {
@@ -5121,6 +5150,10 @@ class MigracionMysqlService
     private static function tipoOperacionBancaria($detalle, int $idCuenta, $cheque): ?string
     {
         if ($idCuenta <= 0) { return null; }
+        // Si hay número de cheque, ES un cheque — tiene prioridad sobre la letra de detalle_pago.
+        // (Un cheque girado no afecta el saldo hasta cobrarse; marcarlo como TRANSFERENCIA por la
+        //  letra lo haría afectar de inmediato y descuadraría la conciliación bancaria.)
+        if ((int) $cheque > 0) { return 'CHEQUE'; }
         $d = strtoupper(trim((string) $detalle));
         if ($d !== '') {
             switch ($d[0]) {
@@ -5129,7 +5162,7 @@ class MigracionMysqlService
                 case 'C': return 'CHEQUE';
             }
         }
-        return ((int) $cheque > 0) ? 'CHEQUE' : 'TRANSFERENCIA';
+        return 'TRANSFERENCIA';
     }
 
     /** Infiere el tipo de identificación SRI a partir del número. */
