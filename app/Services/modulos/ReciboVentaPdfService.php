@@ -398,19 +398,23 @@ class ReciboVentaPdfService
             unset($c);
         }
 
-        // Encabezado (2 líneas)
-        $pdf->SetFont('helvetica', 'B', 6.5);
-        $pdf->SetFillColor(230, 230, 230);
-        $pdf->SetXY($mL, $y);
-        foreach ($cols as $col) {
-            // Se usa 7.6 de alto total y alineación vertical 'M' (Middle)
-            $pdf->MultiCell($col['w'], 7.6, $col['titulo'], 1, 'C', true, 0, '', '', true, 0, false, true, 7.6, 'M');
-        }
-        $pdf->Ln();
+        // Encabezado (2 líneas). Se encapsula porque hay que repetirlo al inicio
+        // de cada página cuando el detalle no cabe en una sola.
+        $hdrH = 7.6; // 2 líneas * 3.8
+        $dibujarCabeceraTabla = function (float $yEnc) use ($pdf, $cols, $mL, $hdrH): float {
+            $pdf->SetFont('helvetica', 'B', 6.5);
+            $pdf->SetFillColor(230, 230, 230);
+            $pdf->SetXY($mL, $yEnc);
+            foreach ($cols as $col) {
+                // Alto total 7.6 y alineación vertical 'M' (Middle)
+                $pdf->MultiCell($col['w'], $hdrH, $col['titulo'], 1, 'C', true, 0, '', '', true, 0, false, true, $hdrH, 'M');
+            }
+            $pdf->Ln();
+            return $yEnc + $hdrH;
+        };
 
-        // Calcular la altura del encabezado (2 líneas * 3.8 = 7.6)
-        $hdrH = 7.6;
-        $y += $hdrH;
+        $y = $dibujarCabeceraTabla($y);
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
         // Filas de detalle
         $pdf->SetFont('helvetica', '', 7);
@@ -447,6 +451,16 @@ class ReciboVentaPdfService
 
             $xCur = $mL;
             $yRow = $pdf->GetY();
+
+            // Salto de página CONTROLADO. Sin esto, al pasarse del alto útil cada
+            // SetXY() con una Y fuera de página dispara el salto automático de
+            // TCPDF, y como aquí se hace un SetXY por COLUMNA, un documento largo
+            // genera una página casi vacía por celda.
+            if ($yRow + $ch > $limiteY) {
+                $pdf->AddPage();
+                $yRow = $dibujarCabeceraTabla($pdf->GetY());
+                $pdf->SetFont('helvetica', '', 7);
+            }
 
             foreach ($cols as $col) {
                 $val = $vals[$col['key']];
