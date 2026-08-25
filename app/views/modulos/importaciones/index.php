@@ -115,6 +115,12 @@ $estadoLabelMap = [
                             { key: 'dai',             label: 'Referencia DAI',         icon: 'bi-file-earmark-text', type: 'text' },
                             { key: 'incoterm',        label: 'Incoterm',               icon: 'bi-truck',           type: 'text' },
                             { key: 'obs',             label: 'Observaciones',          icon: 'bi-chat-text',       type: 'text' },
+                            { key: 'serie',           label: 'Serie',                  icon: 'bi-upc-scan',        type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial',      label: 'Secuencial',             icon: 'bi-123',             type: 'text' },
                             { key: 'fecha',           label: 'Fecha nacionalización',  icon: 'bi-calendar-event',  type: 'date_range' },
                             { key: 'embarque',        label: 'Fecha embarque',         icon: 'bi-calendar-plus',   type: 'date_range' },
                             { key: 'llegada',         label: 'Fecha llegada',          icon: 'bi-calendar-check',  type: 'date_range' },

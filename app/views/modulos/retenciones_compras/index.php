@@ -110,7 +110,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         fields: [
                             { key: 'proveedor',    label: 'Proveedor',      icon: 'bi-building',        type: 'text' },
                             { key: 'ruc',          label: 'RUC',            icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',       label: 'Secuencial',     icon: 'bi-hash',            type: 'text' },
+                            { key: 'numero',       label: 'Secuencial (contiene)', icon: 'bi-hash',     type: 'text' },
+                            { key: 'serie',        label: 'Serie',          icon: 'bi-upc-scan',        type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial',   label: 'Secuencial',     icon: 'bi-123',             type: 'text' },
                             { key: 'doc_sustento', label: 'Doc. sustento',  icon: 'bi-receipt',         type: 'text' },
                             { key: 'clave_acceso', label: 'Clave de acceso', icon: 'bi-key',            type: 'text' },
                             { key: 'periodo',      label: 'Período',        icon: 'bi-calendar3',       type: 'text' },

@@ -63,9 +63,20 @@ class OrdenCompraRepository extends BaseRepository
                 'nro'            => 'oc.numero_orden',
                 'obs'            => 'oc.observaciones',
             ],
-            'exacto'   => [ 'estado' => 'oc.estado' ],
+            'exacto'   => [
+                'estado' => 'oc.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), igual patrón
+                // que FacturaVentaRepository::getListado().
+                'serie'  => "CONCAT(oc.establecimiento,'-',oc.punto_emision)",
+            ],
             'fecha'    => [ 'fecha' => 'oc.fecha_orden', 'fecha_orden' => 'oc.fecha_orden' ],
-            'numerico' => [ 'monto' => 'oc.total', 'total' => 'oc.total' ],
+            'numerico' => [
+                'monto' => 'oc.total',
+                'total' => 'oc.total',
+                // Comparación numérica exacta: "298" encuentra "000000298" sin ceros
+                // a la izquierda, pero nunca hace substring (ver FacturaVentaRepository).
+                'secuencial' => 'oc.secuencial::numeric',
+            ],
         ]);
 
         $sqlCount = "SELECT COUNT(*) FROM ordenes_compra oc

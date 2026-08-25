@@ -11,6 +11,7 @@
 /** @var string $ordenCol */
 /** @var string $ordenDir */
 /** @var array $vistaConfig */
+/** @var array $puntos */
 
 $base = BASE_URL;
 $urlBaseRet = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
@@ -65,7 +66,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         containerId: 'fbBuscadorRET',
                         hiddenInputId: 'b',
                         fields: [
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-hash',   type: 'text' },
+                            { key: 'serie',      label: 'Serie',      icon: 'bi-upc-scan', type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',     type: 'text' },
                             { key: 'cliente',    label: 'Cliente',    icon: 'bi-person', type: 'text' },
                             { key: 'motivo',     label: 'Motivo',     icon: 'bi-chat',   type: 'text' },
                             { key: 'estado',     label: 'Estado',     icon: 'bi-flag',   type: 'select', options: [

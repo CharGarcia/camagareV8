@@ -51,9 +51,19 @@ class LiquidacionCompraRepository extends BaseRepository
                 'numero'         => "CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)",
                 'nro'            => "CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)",
             ],
-            'exacto'   => [ 'estado' => 'l.estado' ],
+            'exacto'   => [
+                'estado' => 'l.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001") del punto de
+                // emisión propio de la empresa que registra la liquidación (no del
+                // proveedor), tal como se muestra en el selector "Serie" del modal.
+                'serie'  => "CONCAT(l.establecimiento,'-',l.punto_emision)",
+            ],
             'fecha'    => [ 'fecha' => 'l.fecha_emision', 'fecha_emision' => 'l.fecha_emision' ],
-            'numerico' => [ 'monto' => 'l.importe_total', 'total' => 'l.importe_total' ],
+            'numerico' => [
+                'monto'      => 'l.importe_total',
+                'total'      => 'l.importe_total',
+                'secuencial' => 'l.secuencial::numeric',
+            ],
         ]);
 
         if ($idUsuario !== null) {

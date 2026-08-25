@@ -111,11 +111,40 @@ class MigracionMysqlService
     }
 
     /**
+     * Filtro por establecimiento (opcional). Cuando están fijados:
+     *  - estabOrigen (3 díg.): solo se traen los documentos del viejo cuyo ruc_empresa termina en ese
+     *    establecimiento (ver clausulaEstabOrigen).
+     *  - estabDestino (3 díg.): TODO cae en ese establecimiento del sistema nuevo (getEstablecimientoId
+     *    lo respeta), sin cambiar la serie del documento.
+     */
+    private ?string $estabOrigen = null;
+    private ?string $estabDestino = null;
+
+    /** Normaliza un código de establecimiento a 3 dígitos, o null si viene vacío. */
+    private static function normEstab($v): ?string
+    {
+        $d = preg_replace('/\D/', '', (string) $v);
+        return $d === '' ? null : str_pad($d, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Cláusula SQL para filtrar el ORIGEN por establecimiento: `AND {col} = 'baseEstab'` (ruc de 13
+     * dígitos). Devuelve '' si no hay filtro de establecimiento. $col suele ser 'ruc_empresa' o un alias.
+     */
+    private function clausulaEstabOrigen(string $col, string $base, PDO $mysql): string
+    {
+        if ($this->estabOrigen === null) { return ''; }
+        return " AND $col = " . $mysql->quote($base . $this->estabOrigen);
+    }
+
+    /**
      * Migra una entidad de la empresa (idempotente vía migracion_mysql_map).
      * @return array contadores del proceso
      */
-    public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null, $estabOrigen = null, $estabDestino = null): array
     {
+        $this->estabOrigen  = self::normEstab($estabOrigen);
+        $this->estabDestino = self::normEstab($estabDestino);
         $pg = Database::getConnection();
         // ANTES de cualquier reconciliación/salto por mapa: sana las entradas COLGADAS del mapa
         // (documentos que el mapa dice migrados pero cuya fila destino ya no existe, borrada por
@@ -1504,7 +1533,7 @@ class MigracionMysqlService
         );
 
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, fecha_entrega, hora_entrega_desde, hora_entrega_hasta
-                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
+                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -1619,7 +1648,7 @@ class MigracionMysqlService
         // numero_consignacion (ENTRADA) → id consignación nueva
         $mapCons = $this->mapaDe($pg, $idEmpresa, 'consignaciones');
         $mapEntrada = [];
-        foreach ($mysql->query("SELECT id_consignacion, numero_consignacion FROM encabezado_consignacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " AND operacion = 'ENTRADA'") as $e) {
+        foreach ($mysql->query("SELECT id_consignacion, numero_consignacion FROM encabezado_consignacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'") as $e) {
             $nid = $mapCons[(string) (int) $e['id_consignacion']] ?? null;
             if ($nid) { $mapEntrada[(string) (int) $e['numero_consignacion']] = $nid; }
         }
@@ -1659,7 +1688,7 @@ class MigracionMysqlService
         }
 
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, factura_venta
-                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND " . $opFilter . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
+                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND " . $opFilter . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -1814,7 +1843,7 @@ class MigracionMysqlService
         $insDet = $pg->prepare("INSERT INTO cambios_producto_cv_detalles (id_cambio, id_empresa, tipo_linea, id_producto, cantidad, id_bodega, lote) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_cambio, fecha_cambio, id_cliente, id_producto_anterior, id_nuevo_producto, cant_cambiada, lote_anterior, nuevo_lote, id_bodega_anterior, id_nueva_bodega, observaciones
-                  FROM cambio_productos_facturados WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_cambio', $desde, $hasta, $mysql) . " ORDER BY id_cambio";
+                  FROM cambio_productos_facturados WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_cambio', $desde, $hasta, $mysql) . " ORDER BY id_cambio";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -1885,7 +1914,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_proforma WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
 
         $sql = "SELECT id_encabezado_proforma, fecha_proforma, serie_proforma, secuencial_proforma, id_cliente, total_proforma, estado_proforma, codigo_unico
-                  FROM encabezado_proforma WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_proforma', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_proforma";
+                  FROM encabezado_proforma WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_proforma', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_proforma";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2201,7 +2230,7 @@ class MigracionMysqlService
 
         // Los asientos ELIMINADOS en el sistema viejo se marcan con estado='Anulado' → NO se migran.
         $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo
-                  FROM encabezado_diario WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
+                  FROM encabezado_diario WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2446,7 +2475,7 @@ class MigracionMysqlService
         $updCab = $pg->prepare("UPDATE pedidos_cabecera SET estado = :est, fecha_entrega = :fent, hora_inicial_entrega = :hi, hora_maxima_entrega = :hm, observaciones = :obs, observaciones_internas = :obsi, updated_at = now(), updated_by = :u WHERE id = :id");
 
         $sql = "SELECT id, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
-                  FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
+                  FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2584,7 +2613,7 @@ class MigracionMysqlService
             : "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id");
 
         $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote, fecha_vencimiento
-                  FROM inventarios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
+                  FROM inventarios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2759,7 +2788,7 @@ class MigracionMysqlService
         $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'RECIBIDO', ?, ?, ?, 'ingreso', ?, false, now(), now(), ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
-                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2958,7 +2987,7 @@ class MigracionMysqlService
         $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'EMITIDO', ?, ?, ?, 'egreso', ?, false, now(), now(), ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro, codigo_contable
-                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -3136,7 +3165,7 @@ class MigracionMysqlService
         $transStmt  = $mysql->prepare("SELECT ruc, nombre, tipo_id FROM clientes WHERE id = :id LIMIT 1");
 
         $sql = "SELECT id_encabezado_gr, ruc_empresa, fecha_gr, fecha_salida, fecha_llegada, serie_gr, secuencial_gr, factura_aplica, origen, destino, id_transportista, id_cliente, placa, estado_sri, ambiente, aut_sri, motivo
-                  FROM encabezado_gr WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_gr', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_gr";
+                  FROM encabezado_gr WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_gr', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_gr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -3284,7 +3313,7 @@ class MigracionMysqlService
         $updCab = $pg->prepare("UPDATE liquidaciones_cabecera SET id_proveedor = ?, fecha_emision = ?, estado = ?, estado_correo = ?, id_sustento_tributario = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_liq, ruc_empresa, fecha_liquidacion, serie_liquidacion, secuencial_liquidacion, id_proveedor, estado_sri, total_liquidacion, ambiente, aut_sri
-                  FROM encabezado_liquidacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_liquidacion', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_liq";
+                  FROM encabezado_liquidacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_liquidacion', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_liq";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -3497,7 +3526,7 @@ class MigracionMysqlService
         $qCliDe  = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = ?");
 
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
-                  FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_factura', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_factura";
+                  FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_factura', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_factura";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
         }
@@ -3787,7 +3816,10 @@ class MigracionMysqlService
         // proveedor (su serie va en *_prov); nuestra atribución de sucursal se inicia en la matriz y
         // se corrige luego con el módulo "Reasignar establecimiento". Los demás documentos migrados
         // ya fijan id_establecimiento; compras faltaba (quedaba NULL).
-        $idEstMatriz = (int) $pg->query("SELECT id FROM empresa_establecimiento WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY codigo ASC LIMIT 1")->fetchColumn() ?: null;
+        // Establecimiento propio de las compras: si se eligió un destino, va ahí; si no, la matriz.
+        $idEstMatriz = $this->estabDestino !== null
+            ? $this->getEstablecimientoId($idEmpresa, $this->estabDestino, $idUsuario)
+            : ((int) $pg->query("SELECT id FROM empresa_establecimiento WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY codigo ASC LIMIT 1")->fetchColumn() ?: null);
 
         $insCab = $pg->prepare(
             // estado = 'registrado' explícito: el DEFAULT de la columna es 'borrador',
@@ -3855,7 +3887,7 @@ class MigracionMysqlService
         // Las liquidaciones de compra (id_comprobante = 3, código '03') NO se migran al
         // módulo de compras: tienen su propio módulo (migrarLiquidaciones → liquidaciones_cabecera).
         $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina, id_sustento, `desde`, `hasta`, fecha_caducidad, tipo_comprobante, deducible_en, id_comprobante, factura_aplica_nc_nd
-                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND id_comprobante <> 3" . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
+                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND id_comprobante <> 3" . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
         }
@@ -4054,7 +4086,7 @@ class MigracionMysqlService
         $updEstadoNc = $pg->prepare("UPDATE notas_credito_cabecera SET estado = ?, estado_correo = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_nc, ruc_empresa, fecha_nc, serie_nc, secuencial_nc, factura_modificada, id_cliente, estado_sri, total_nc, ambiente, aut_sri, motivo, fecha_factura
-                  FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
+                  FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4169,7 +4201,7 @@ class MigracionMysqlService
         $delDet  = $pg->prepare("DELETE FROM retencion_compra_detalle WHERE id_retencion = ?");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_proveedor, serie_retencion, secuencial_retencion, total_retencion, aut_sri, fecha_emision, fecha_documento, tipo_comprobante, numero_comprobante, ambiente, estado_sri
-                  FROM encabezado_retencion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
+                  FROM encabezado_retencion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4274,7 +4306,7 @@ class MigracionMysqlService
         $delDet = $pg->prepare("DELETE FROM retencion_venta_detalle WHERE id_retencion = ?");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_cliente, serie_retencion, secuencial_retencion, aut_sri, fecha_emision, codigo_unico, numero_documento
-                  FROM encabezado_retencion_venta WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
+                  FROM encabezado_retencion_venta WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4436,7 +4468,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega FROM cuerpo_recibo WHERE id_encabezado_recibo = :id");
 
         $sql = "SELECT id_encabezado_recibo, fecha_recibo, serie_recibo, secuencial_recibo, id_cliente, total_recibo, propina
-                  FROM encabezado_recibo WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_recibo', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_recibo";
+                  FROM encabezado_recibo WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_recibo', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_recibo";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4547,7 +4579,7 @@ class MigracionMysqlService
         );
 
         $chk = $pg->prepare("SELECT id, estado FROM ventas_cabecera WHERE id_empresa = :e AND establecimiento = :est AND punto_emision = :pto AND secuencial = :sec AND eliminado = false LIMIT 1");
-        $st  = $mysql->query("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");
+        $st  = $mysql->query("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");
 
         while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
             $res['anuladas_en_viejo']++;
@@ -4991,25 +5023,44 @@ class MigracionMysqlService
     /** Establecimiento (get-or-create). Réplica de DocumentoAutomatedRegisterService. */
     private function getEstablecimientoId(int $idEmpresa, string $cod, int $idUsuario): int
     {
+        // Si se eligió un establecimiento de DESTINO para esta migración, TODO cae ahí (no en el
+        // establecimiento de la serie del documento). La serie del documento no se altera.
+        if ($this->estabDestino !== null) { $cod = $this->estabDestino; }
+        $cod = str_pad(preg_replace('/\D/', '', $cod) ?: '', 3, '0', STR_PAD_LEFT);
         $db = Database::getConnection();
-        $st = $db->prepare("SELECT id FROM empresa_establecimiento WHERE id_empresa = ? AND codigo = ? LIMIT 1");
+        // Match tolerante al formato del código (p. ej. '1' vs '001') y reutiliza aunque
+        // esté eliminado, para NO crear un establecimiento duplicado con el mismo número.
+        $st = $db->prepare("SELECT id, eliminado FROM empresa_establecimiento
+                             WHERE id_empresa = ? AND LPAD(REGEXP_REPLACE(codigo, '[^0-9]', '', 'g'), 3, '0') = ?
+                             ORDER BY eliminado ASC, id ASC LIMIT 1");
         $st->execute([$idEmpresa, $cod]);
-        $r = $st->fetchColumn();
-        if ($r !== false) return (int) $r;
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row !== false) {
+            if (!empty($row['eliminado'])) { $db->prepare("UPDATE empresa_establecimiento SET eliminado = false WHERE id = ?")->execute([(int) $row['id']]); }
+            return (int) $row['id'];
+        }
         $ins = $db->prepare("INSERT INTO empresa_establecimiento (id_empresa, nombre, codigo, direccion, tipo, logo_ruta, leyenda_pdf_titulo, leyenda_pdf_mensaje, created_by, updated_by) VALUES (?, ?, ?, '', 'otro', '', '', '', ?, ?) RETURNING id");
         $ins->execute([$idEmpresa, "Establecimiento $cod", $cod, $idUsuario, $idUsuario]);
         return (int) $ins->fetchColumn();
     }
 
-    /** Punto de emisión (get-or-create). */
+    /** Punto de emisión (get-or-create). No duplica si ya existe uno con el mismo número. */
     private function getPuntoEmisionId(int $idEmpresa, string $estab, string $pto, int $idUsuario): int
     {
+        $pto = str_pad(preg_replace('/\D/', '', $pto) ?: '', 3, '0', STR_PAD_LEFT);
         $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
         $db = Database::getConnection();
-        $st = $db->prepare("SELECT id FROM empresa_punto_emision WHERE id_establecimiento = ? AND codigo_punto = ? LIMIT 1");
+        // Match tolerante al formato ('1' vs '001') y reutiliza aunque esté eliminado:
+        // si ya hay un punto con el mismo número en el establecimiento, NO se crea otro.
+        $st = $db->prepare("SELECT id, eliminado FROM empresa_punto_emision
+                             WHERE id_establecimiento = ? AND LPAD(REGEXP_REPLACE(codigo_punto, '[^0-9]', '', 'g'), 3, '0') = ?
+                             ORDER BY eliminado ASC, id ASC LIMIT 1");
         $st->execute([$idEst, $pto]);
-        $r = $st->fetchColumn();
-        if ($r !== false) return (int) $r;
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row !== false) {
+            if (!empty($row['eliminado'])) { $db->prepare("UPDATE empresa_punto_emision SET eliminado = false WHERE id = ?")->execute([(int) $row['id']]); }
+            return (int) $row['id'];
+        }
         $ins = $db->prepare("INSERT INTO empresa_punto_emision (id_empresa, id_establecimiento, nombre, codigo_punto, logo_ruta, estado, created_by, updated_by) VALUES (?, ?, ?, ?, '', 'activo', ?, ?) RETURNING id");
         $ins->execute([$idEmpresa, $idEst, "Punto $pto", $pto, $idUsuario, $idUsuario]);
         return (int) $ins->fetchColumn();

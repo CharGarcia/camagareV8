@@ -109,6 +109,18 @@ class ConsignacionesVentasController extends BaseModuloController
         $responsableRepo = new \App\repositories\modulos\ResponsableTrasladoRepository();
         $responsables = $responsableRepo->listarPorEmpresa($idEmpresa);
 
+        // Serie unificada (establecimiento-punto): solo puntos con secuencial de
+        // "Consignaciones ventas" configurado (mismo criterio que getSecuencialAjax()).
+        $empresaRepo    = new \App\repositories\modulos\EmpresaRepository();
+        $repoSecuencial = new \App\repositories\SecuencialRepository();
+        $puntos = [];
+        foreach ($empresaRepo->getPuntosEmision($idEmpresa) as $p) {
+            $cfg = $repoSecuencial->getConfigSecuencial((int) $p['id'], 'Consignaciones ventas');
+            if (!empty($cfg['id'])) {
+                $puntos[] = $p;
+            }
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos.consignaciones_ventas.index', [
             'titulo'         => 'Consignaciones en Ventas',
             'perm'           => $perm,
@@ -116,6 +128,7 @@ class ConsignacionesVentasController extends BaseModuloController
             'bodegas'        => $bodegas,
             'vendedores'     => $vendedores,
             'responsables'   => $responsables,
+            'puntos'         => $puntos,
             'empresa'        => $empresaData,
             'rows'           => $rows,
             'total'          => $total,

@@ -147,6 +147,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { v: 'borrador', l: 'Borrador' },
                                 { v: 'anulado',  l: 'Anulado' },
                             ]},
+                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
                         ],
                         quickFilters: [
                             { id: 'qf_aprobado',   label: 'Aprobados',  mk: () => ({ key: 'estado', op: '=', value: 'aprobado', display: 'Aprobado' }) },

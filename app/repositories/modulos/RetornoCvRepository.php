@@ -39,17 +39,18 @@ class RetornoCvRepository extends BaseRepository
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
                 'cliente'    => 'c.nombre',
-                'secuencial' => 'r.secuencial',
                 'motivo'     => 'r.motivo',
             ],
             'exacto' => [
                 'estado'     => 'r.estado',
+                'serie'      => "CONCAT(r.establecimiento,'-',r.punto_emision)",
             ],
             'fecha'  => [
                 'fecha'      => 'r.fecha_retorno',
             ],
             'numerico' => [
                 'total'      => 'r.total',
+                'secuencial' => 'r.secuencial::numeric',
             ],
         ]);
 

@@ -71,6 +71,10 @@ class RetencionVentaRepository extends BaseRepository
             ],
             'exacto' => [
                 'origen' => 'r.origen',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del buscador (mismo patrón que
+                // FacturaVentaRepository::getListado()).
+                'serie'  => "CONCAT(r.establecimiento,'-',r.punto_emision)",
             ],
             'fecha' => [
                 'fecha'         => 'r.fecha_emision',
@@ -82,6 +86,11 @@ class RetencionVentaRepository extends BaseRepository
                 'isd'   => 'r.total_isd',
                 'total' => '(r.total_renta + r.total_iva + r.total_isd)',
                 'monto' => '(r.total_renta + r.total_iva + r.total_isd)',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'r.secuencial::numeric',
             ],
         ]);
 

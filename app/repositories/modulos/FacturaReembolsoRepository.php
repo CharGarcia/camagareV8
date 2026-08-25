@@ -53,6 +53,9 @@ class FacturaReembolsoRepository extends BaseRepository
                 'estado'        => 'fr.estado',
                 'estado_correo' => 'fr.estado_correo',
                 'correo'        => 'fr.estado_correo',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del buscador.
+                'serie'         => "CONCAT(fr.establecimiento,'-',fr.punto_emision)",
             ],
             'fecha' => [
                 'fecha'         => 'fr.fecha_emision',
@@ -63,6 +66,11 @@ class FacturaReembolsoRepository extends BaseRepository
                 'total'    => 'fr.importe_total',
                 'subtotal' => 'fr.total_sin_impuestos',
                 'reembolso' => 'fr.total_base_imponible_reembolso',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'fr.secuencial::numeric',
             ],
         ]);
 

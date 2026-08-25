@@ -71,9 +71,23 @@ class EgresoRepository extends BaseRepository
                 'concepto'  => 'e.observaciones',
                 'obs'       => 'e.observaciones',
             ],
-            'exacto'   => [ 'estado' => 'e.estado', 'tipo' => 'e.tipo_egreso' ],
+            'exacto'   => [
+                'estado' => 'e.estado',
+                'tipo'   => 'e.tipo_egreso',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del buscador.
+                'serie'  => "CONCAT(e.establecimiento,'-',e.punto_emision)",
+            ],
             'fecha'    => [ 'fecha' => 'e.fecha_emision', 'fecha_emision' => 'e.fecha_emision' ],
-            'numerico' => [ 'monto' => 'e.monto_total', 'total' => 'e.monto_total' ],
+            'numerico' => [
+                'monto' => 'e.monto_total',
+                'total' => 'e.monto_total',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'e.secuencial::numeric',
+            ],
         ]);
 
         $sqlCount = "SELECT COUNT(*) FROM egresos_cabecera e 

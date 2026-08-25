@@ -68,6 +68,9 @@ class NotaDebitoRepository extends BaseRepository
             ],
             'exacto' => [
                 'estado' => 'nd.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del modal de nota de débito.
+                'serie'  => "CONCAT(nd.establecimiento,'-',nd.punto_emision)",
             ],
             'fecha' => [
                 'fecha'         => 'nd.fecha_emision',
@@ -77,6 +80,11 @@ class NotaDebitoRepository extends BaseRepository
                 'monto'    => 'nd.importe_total',
                 'total'    => 'nd.importe_total',
                 'subtotal' => 'nd.total_sin_impuestos',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'nd.secuencial::numeric',
             ],
         ]);
 

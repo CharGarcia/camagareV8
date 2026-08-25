@@ -67,6 +67,9 @@ class NotaCreditoRepository extends BaseRepository
             ],
             'exacto' => [
                 'estado' => 'nc.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del modal de nota de crédito.
+                'serie'  => "CONCAT(nc.establecimiento,'-',nc.punto_emision)",
             ],
             'fecha' => [
                 'fecha'         => 'nc.fecha_emision',
@@ -76,6 +79,11 @@ class NotaCreditoRepository extends BaseRepository
                 'monto'    => 'nc.importe_total',
                 'total'    => 'nc.importe_total',
                 'subtotal' => 'nc.total_sin_impuestos',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'nc.secuencial::numeric',
             ],
         ]);
 

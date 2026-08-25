@@ -66,7 +66,12 @@ class RetencionCompraRepository extends BaseRepository
                 'clave_acceso'   => 'r.clave_acceso',
                 'usuario'        => 'u.nombre',
             ],
-            'exacto'   => [ 'estado' => 'r.estado' ],
+            'exacto'   => [
+                'estado' => 'r.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del filtro de retenciones de compra.
+                'serie'  => "CONCAT(r.establecimiento,'-',r.punto_emision)",
+            ],
             'fecha'    => [ 'fecha' => 'r.fecha_emision', 'fecha_emision' => 'r.fecha_emision' ],
             'numerico' => [
                 'monto' => '(r.total_renta + r.total_iva + r.total_isd)',
@@ -74,6 +79,11 @@ class RetencionCompraRepository extends BaseRepository
                 'renta' => 'r.total_renta',
                 'iva'   => 'r.total_iva',
                 'isd'   => 'r.total_isd',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'r.secuencial::numeric',
             ],
         ]);
 

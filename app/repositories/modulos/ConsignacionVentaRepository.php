@@ -41,8 +41,6 @@ class ConsignacionVentaRepository extends BaseRepository
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
             'texto' => [
-                'serie'          => 'cv.secuencial',
-                'secuencial'     => 'cv.secuencial',
                 'numero'         => 'cv.secuencial',
                 'cliente'        => 'c.nombre',
                 'ruc'            => 'c.identificacion',
@@ -56,6 +54,7 @@ class ConsignacionVentaRepository extends BaseRepository
             ],
             'exacto' => [
                 'estado' => 'cv.estado',
+                'serie'  => "CONCAT(cv.establecimiento,'-',cv.punto_emision)",
             ],
             'fecha' => [
                 'fecha'         => 'cv.fecha_emision',
@@ -64,9 +63,10 @@ class ConsignacionVentaRepository extends BaseRepository
                 'fecha_entrega' => 'cv.fecha_entrega',
             ],
             'numerico' => [
-                'total'    => 'cv.total',
-                'monto'    => 'cv.total',
-                'subtotal' => 'cv.subtotal',
+                'total'      => 'cv.total',
+                'monto'      => 'cv.total',
+                'subtotal'   => 'cv.subtotal',
+                'secuencial' => 'cv.secuencial::numeric',
             ],
         ]);
 

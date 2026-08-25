@@ -221,6 +221,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { key: 'cliente',   label: 'Cliente',       icon: 'bi-person',          type: 'text' },
                             { key: 'ruc',       label: 'RUC / Cédula',  icon: 'bi-card-text',       type: 'text' },
                             { key: 'numero',    label: 'Nº Factura',    icon: 'bi-hash',            type: 'text' },
+                            { key: 'serie',     label: 'Serie',         icon: 'bi-upc-scan',        type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial',   icon: 'bi-123',             type: 'text' },
                             { key: 'vendedor',  label: 'Vendedor',      icon: 'bi-person-badge',    type: 'text' },
                             { key: 'usuario',   label: 'Usuario',       icon: 'bi-person-circle',   type: 'text' },
                             { key: 'obs',       label: 'Observaciones', icon: 'bi-chat-left-text',  type: 'text' },
@@ -5933,21 +5939,30 @@ $totalPages = $totalPagesOriginal;
     window.anularFactura = async function() {
         if (!FV_ID_ACTIVO) return;
 
+        // Estas dos reglas son normativa SRI, no configuración del sistema — por
+        // eso solo el superadmin (nivel 3) puede saltárselas, y se le avisa
+        // explícitamente qué está omitiendo en la confirmación final. Para
+        // cualquier otro usuario siguen bloqueando por completo, igual que antes.
+        const infraccionesNormativa = [];
+
         // ── Regla 1: Consumidor Final ────────────────────────────────────────
         const esConsumidorFinal = FV_CLIENTE_RUC === '9999999999999'
             || document.getElementById('sri-identificacion-cliente')?.value?.trim() === '9999999999999';
 
         if (esConsumidorFinal) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'No se puede anular',
-                html: `Las facturas emitidas a <strong>Consumidor Final</strong> no se pueden anular<br>
-                       ni tampoco se les puede emitir una nota de crédito una vez transmitidas.<br>
-                       <small class="text-muted">(Normativa SRI)</small>`,
-                confirmButtonText: 'Entendido',
-                confirmButtonColor: '#dc3545'
-            });
-            return;
+            if (!ES_SUPERADMIN) {
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'No se puede anular',
+                    html: `Las facturas emitidas a <strong>Consumidor Final</strong> no se pueden anular<br>
+                           ni tampoco se les puede emitir una nota de crédito una vez transmitidas.<br>
+                           <small class="text-muted">(Normativa SRI)</small>`,
+                    confirmButtonText: 'Entendido',
+                    confirmButtonColor: '#dc3545'
+                });
+                return;
+            }
+            infraccionesNormativa.push('Está facturada a <strong>Consumidor Final</strong>: el SRI no permite anular ni emitir NC sobre este tipo de documento una vez transmitido.');
         }
 
         // ── Regla 2: Plazo del día 7 del mes siguiente ───────────────────────
@@ -5959,32 +5974,56 @@ $totalPages = $totalPagesOriginal;
 
             if (hoy > limiteAnulacion) {
                 const fmtLimite = limiteAnulacion.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Fuera de plazo',
-                    html: `El plazo para anular esta factura venció el <strong>${fmtLimite}</strong>.<br>
-                           <small class="text-muted">El SRI permite anular hasta el día 7 del mes siguiente a la emisión<br>
-                           (o el siguiente día hábil si cae en fin de semana).</small>`,
-                    confirmButtonText: 'Entendido',
-                    confirmButtonColor: '#dc3545'
-                });
-                return;
+                if (!ES_SUPERADMIN) {
+                    await Swal.fire({
+                        icon: 'error',
+                        title: 'Fuera de plazo',
+                        html: `El plazo para anular esta factura venció el <strong>${fmtLimite}</strong>.<br>
+                               <small class="text-muted">El SRI permite anular hasta el día 7 del mes siguiente a la emisión<br>
+                               (o el siguiente día hábil si cae en fin de semana).</small>`,
+                        confirmButtonText: 'Entendido',
+                        confirmButtonColor: '#dc3545'
+                    });
+                    return;
+                }
+                infraccionesNormativa.push(`El plazo del SRI para anular venció el <strong>${fmtLimite}</strong> (día 7 del mes siguiente a la emisión).`);
             }
         }
 
-        const result = await Swal.fire({
+        const avisoNormativa = infraccionesNormativa.length
+            ? `<div class="alert alert-danger text-start small mb-3">
+                   <strong><i class="bi bi-exclamation-triangle-fill me-1"></i>Como superadmin estás omitiendo estas restricciones de normativa SRI:</strong>
+                   <ul class="mb-0 mt-1">${infraccionesNormativa.map(t => `<li>${t}</li>`).join('')}</ul>
+               </div>`
+            : '';
+
+        const swalAnularOpts = {
             title: '¿Anular Factura?',
-            text: "Esta acción marcará la factura como ANULADA y reintegrará todo el stock al inventario. No se puede revertir.",
+            html: avisoNormativa + "Esta acción marcará la factura como ANULADA y reintegrará todo el stock al inventario. No se puede revertir.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#f59e0b',
             cancelButtonColor: '#6c757d',
             confirmButtonText: '<i class="bi bi-slash-circle me-2"></i>Sí, anular factura',
             cancelButtonText: 'Cancelar',
-            reverseButtons: true
-        });
+            reverseButtons: true,
+            target: document.getElementById('modalNuevaFactura')
+        };
+        // Al omitir una regla de normativa (solo superadmin), se exige dejar el
+        // motivo — queda escrito en Observaciones de la factura para que quede
+        // constancia de por qué se anuló fuera de lo que el sistema permite
+        // normalmente (p. ej. "Solicitado por el contribuyente").
+        if (infraccionesNormativa.length) {
+            swalAnularOpts.input = 'text';
+            swalAnularOpts.inputLabel = 'Motivo de la excepción (se guarda en Observaciones)';
+            swalAnularOpts.inputPlaceholder = 'Ej: Solicitado por el contribuyente';
+            swalAnularOpts.inputValidator = (v) => (!v || !v.trim()) ? 'Debes indicar el motivo de la excepción.' : undefined;
+        }
+
+        const result = await Swal.fire(swalAnularOpts);
 
         if (!result.isConfirmed) return;
+        const motivoExcepcionAnulacion = infraccionesNormativa.length ? (result.value || '').trim() : '';
 
         const btn = document.getElementById('btnAnularFacturaModal');
         const btnOriginalHtml = btn?.innerHTML;
@@ -6005,6 +6044,7 @@ $totalPages = $totalPagesOriginal;
         try {
             const fd = new FormData();
             fd.append('id', FV_ID_ACTIVO);
+            if (motivoExcepcionAnulacion) fd.append('observacion_excepcion', motivoExcepcionAnulacion);
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/anularAjax`, {
                 method: 'POST',
                 body: fd

@@ -778,6 +778,7 @@ class ConfigController extends Controller
             'probar'             => 'probarAjax',
             'migrar'             => 'migrarAjax',
             'progreso'           => 'progresoAjax',
+            'establecimientos'   => 'establecimientosAjax',
             'verificar-anuladas' => 'verificarAnuladasAjax',
             'config-preview'     => 'configPreviewAjax',
             'config-aplicar'     => 'configAplicarAjax',

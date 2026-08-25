@@ -70,6 +70,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { key: 'proveedor', label: 'Proveedor',    icon: 'bi-building',        type: 'text' },
                             { key: 'ruc',       label: 'RUC',          icon: 'bi-card-text',       type: 'text' },
                             { key: 'numero',    label: 'Nº orden',     icon: 'bi-hash',            type: 'text' },
+                            { key: 'serie',     label: 'Serie',        icon: 'bi-upc-scan',        type: 'select', options: [
+                                <?php foreach ($puntosEmision as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial',  icon: 'bi-123',             type: 'text' },
                             { key: 'fecha',     label: 'Fecha',        icon: 'bi-calendar-event',  type: 'date_range' },
                             { key: 'monto',     label: 'Monto total',  icon: 'bi-currency-dollar', type: 'number_range' },
                             { key: 'estado',    label: 'Estado',       icon: 'bi-flag',            type: 'select', options: [

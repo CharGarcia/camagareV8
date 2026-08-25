@@ -53,6 +53,21 @@ class RetencionesVentasController extends BaseModuloController
         $total      = $result['total'];
         $totalPages = (int) ceil($total / $perPage);
 
+        // Puntos de emisión de la empresa, para el select "Serie" del buscador
+        // (establecimiento-puntoEmision). A diferencia de Factura de Venta, la
+        // retención en ventas no numera con un secuencial propio del sistema
+        // (el número lo trae el comprobante ya emitido, manual o vía SRI), así
+        // que aquí no se filtra por ninguna config de secuencial: se listan
+        // todos los puntos de emisión activos de todos los establecimientos.
+        $empresaModel      = new Empresa();
+        $establecimientos  = $empresaModel->getEstablecimientos($idEmpresa);
+        $puntos            = [];
+        foreach ($establecimientos as $est) {
+            foreach ($empresaModel->getPuntosEmision((int) $est['id']) as $p) {
+                $puntos[] = $p;
+            }
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos/retenciones_ventas/index', [
             'titulo'      => 'Retenciones en Ventas',
             'perm'        => $perm,
@@ -69,6 +84,7 @@ class RetencionesVentasController extends BaseModuloController
             'vistaConfig' => $prefsVista,
             'base'        => BASE_URL,
             'rutaModulo'  => $this->getRutaModulo(),
+            'puntos'      => $puntos,
             'fullWidth'   => true,
         ]);
     }

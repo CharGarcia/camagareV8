@@ -89,10 +89,13 @@ class MigrarMysqlController extends Controller
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
             $desde = !empty($_POST['desde']) ? (string) $_POST['desde'] : null;
             $hasta = !empty($_POST['hasta']) ? (string) $_POST['hasta'] : null;
+            // Filtro opcional por establecimiento: traer solo el estab. de origen y ponerlo en el destino.
+            $estabOrigen  = !empty($_POST['estab_origen'])  ? (string) $_POST['estab_origen']  : null;
+            $estabDestino = !empty($_POST['estab_destino']) ? (string) $_POST['estab_destino'] : null;
             // Liberar el lock de la sesión: así el endpoint de progreso puede consultarse en
             // paralelo mientras esta migración (potencialmente larga) sigue corriendo.
             if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
-            $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario, 0, $desde, $hasta);
+            $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario, 0, $desde, $hasta, $estabOrigen, $estabDestino);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -116,6 +119,42 @@ class MigrarMysqlController extends Controller
             $st = $db->prepare("SELECT COUNT(*) FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
             $st->execute([$idEmpresa, $entidad]);
             echo json_encode(['ok' => true, 'hechos' => (int) $st->fetchColumn()], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    /**
+     * GET/POST: establecimientos de ORIGEN (del RUC en la base vieja) y de DESTINO
+     * (del empresa nueva seleccionada), para el filtro por establecimiento.
+     */
+    public function establecimientosAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa, $ruc] = $this->resolverEmpresa();
+            $base = substr(preg_replace('/\D/', '', (string) $ruc), 0, 10);
+            if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+
+            // Destino: establecimientos de la empresa nueva.
+            $pg = Database::getConnection();
+            $qd = $pg->prepare("SELECT codigo, nombre FROM empresa_establecimiento WHERE id_empresa = ? AND eliminado = false ORDER BY codigo");
+            $qd->execute([$idEmpresa]);
+            $destino = [];
+            foreach ($qd->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+                $destino[] = ['codigo' => str_pad((string) $r['codigo'], 3, '0', STR_PAD_LEFT), 'nombre' => (string) $r['nombre']];
+            }
+
+            // Origen: establecimientos del RUC en la base vieja.
+            $origen = [];
+            $my = \App\Services\MigracionMysql\LegacyMysqlConnection::get();
+            $qo = $my->query("SELECT DISTINCT RIGHT(ruc,3) est, nombre_comercial, nombre FROM empresas WHERE LEFT(ruc,10) = " . $my->quote($base) . " ORDER BY est");
+            foreach ($qo as $r) {
+                $origen[] = ['codigo' => str_pad((string) $r['est'], 3, '0', STR_PAD_LEFT), 'nombre' => trim((string) ($r['nombre_comercial'] ?: $r['nombre']))];
+            }
+
+            echo json_encode(['ok' => true, 'origen' => $origen, 'destino' => $destino], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }

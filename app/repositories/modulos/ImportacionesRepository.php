@@ -67,6 +67,9 @@ class ImportacionesRepository extends BaseRepository
             ],
             'exacto' => [
                 'estado' => 'i.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), igual patrón
+                // que FacturaVentaRepository::getListado().
+                'serie'  => "CONCAT(i.establecimiento,'-',i.punto_emision)",
             ],
             'fecha' => [
                 'fecha'              => 'i.fecha_nacionalizacion',
@@ -77,6 +80,9 @@ class ImportacionesRepository extends BaseRepository
             'numerico' => [
                 'total'  => 'i.costo_total_nacionalizado',
                 'fob'    => 'i.subtotal_fob',
+                // Comparación numérica exacta: "298" encuentra "000000298" sin ceros
+                // a la izquierda, pero nunca hace substring (ver FacturaVentaRepository).
+                'secuencial' => 'i.secuencial::numeric',
             ],
         ]);
 

@@ -52,9 +52,23 @@ class IngresoRepository extends BaseRepository
                 'concepto'       => 'i.observaciones',
                 'obs'            => 'i.observaciones',
             ],
-            'exacto'   => [ 'estado' => 'i.estado', 'tipo' => 'i.tipo_ingreso' ],
+            'exacto'   => [
+                'estado' => 'i.estado',
+                'tipo'   => 'i.tipo_ingreso',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del buscador.
+                'serie'  => "CONCAT(i.establecimiento,'-',i.punto_emision)",
+            ],
             'fecha'    => [ 'fecha' => 'i.fecha_emision', 'fecha_emision' => 'i.fecha_emision' ],
-            'numerico' => [ 'monto' => 'i.monto_total', 'total' => 'i.monto_total' ],
+            'numerico' => [
+                'monto' => 'i.monto_total',
+                'total' => 'i.monto_total',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'i.secuencial::numeric',
+            ],
         ]);
 
         if ($idUsuario !== null) {

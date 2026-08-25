@@ -11,6 +11,7 @@
 /** @var string $ordenCol */
 /** @var string $ordenDir */
 /** @var array $vistaConfig */
+/** @var array $puntos */
 
 $base    = BASE_URL;
 $urlBase = $base . '/' . $rutaModulo;
@@ -23,6 +24,7 @@ $perPage    = $perPage    ?? 20;
 $ordenCol   = $ordenCol   ?? 'fecha_emision';
 $ordenDir   = $ordenDir   ?? 'DESC';
 $buscar     = $buscar     ?? '';
+$puntos     = $puntos     ?? [];
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 ?>
@@ -68,7 +70,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         fields: [
                             { key: 'cliente',     label: 'Cliente',        icon: 'bi-person',          type: 'text' },
                             { key: 'ruc',         label: 'RUC / Cédula',   icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',      label: 'Secuencial',     icon: 'bi-hash',            type: 'text' },
+                            { key: 'numero',      label: 'Nº Retención',   icon: 'bi-hash',            type: 'text' },
+                            { key: 'serie',       label: 'Serie',          icon: 'bi-upc-scan',        type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial',  label: 'Secuencial',     icon: 'bi-123',             type: 'text' },
                             { key: 'periodo',     label: 'Período fiscal', icon: 'bi-calendar3',       type: 'text' },
                             { key: 'clave_acceso', label: 'Clave acceso', icon: 'bi-key',             type: 'text' },
                             { key: 'usuario',     label: 'Usuario',        icon: 'bi-person-circle',   type: 'text' },

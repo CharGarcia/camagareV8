@@ -2028,6 +2028,12 @@ class FacturaVentaController extends BaseModuloController
         $id        = (int) ($_POST['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
+        // Motivo de la excepción cuando un superadmin anula saltándose una regla
+        // de normativa SRI (Consumidor Final / plazo del día 7) — el frontend
+        // solo lo envía en ese caso; se guarda en Observaciones para que quede
+        // constancia de por qué se hizo. Sin verificación de permiso extra aquí
+        // a propósito: si alguien más lo manda, es solo una nota de texto.
+        $observacionExcepcion = trim((string) ($_POST['observacion_excepcion'] ?? ''));
 
         if (!$id) {
             echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
@@ -2035,7 +2041,7 @@ class FacturaVentaController extends BaseModuloController
         }
 
         try {
-            $this->service->anular($id, $idEmpresa, $idUsuario);
+            $this->service->anular($id, $idEmpresa, $idUsuario, true, $observacionExcepcion !== '' ? $observacionExcepcion : null);
             echo json_encode(['ok' => true, 'mensaje' => 'Factura anulada correctamente e inventario reintegrado.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

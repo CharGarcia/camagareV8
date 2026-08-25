@@ -159,6 +159,24 @@ $base = BASE_URL;
                     <div class="form-text">Escribe para filtrar. Se busca en la base anterior por el RUC del contribuyente (todos sus establecimientos).</div>
                 </div>
 
+                <!-- Filtro opcional por establecimiento: traer solo un establecimiento de origen y ponerlo en un destino -->
+                <div class="row g-2 mb-3" id="estabFiltroBox" style="display:none;">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small mb-1">Establecimiento de origen (viejo)</label>
+                        <select class="form-select form-select-sm" id="estabOrigen" name="estab_origen">
+                            <option value="">Todos los establecimientos</option>
+                        </select>
+                        <div class="form-text" style="font-size:.68rem;">Trae solo los documentos de ese establecimiento del sistema anterior.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small mb-1">Establecimiento de destino (nuevo)</label>
+                        <select class="form-select form-select-sm" id="estabDestino" name="estab_destino">
+                            <option value="">El del documento (por su serie)</option>
+                        </select>
+                        <div class="form-text" style="font-size:.68rem;">Dónde cae todo lo migrado (no cambia la serie del documento).</div>
+                    </div>
+                </div>
+
                 <label class="form-label fw-semibold small">¿Qué quieres extraer?</label>
                 <div class="mb-2">
                     <a href="#" class="small me-2" id="selTodos">Todos</a>
@@ -283,7 +301,24 @@ $base = BASE_URL;
         $('selEmpresa').value = it.dataset.id;
         buscar.value = it.dataset.nombre + ' (RUC ' + it.dataset.ruc + ' · Est. ' + it.dataset.est + ')';
         dd.style.display = 'none';
+        cargarEstablecimientos(it.dataset.id);
     }));
+
+    // Carga los establecimientos de origen (viejo) y destino (nuevo) para el filtro opcional.
+    async function cargarEstablecimientos(idEmpresa) {
+        const box = $('estabFiltroBox'), selO = $('estabOrigen'), selD = $('estabDestino');
+        selO.innerHTML = '<option value="">Todos los establecimientos</option>';
+        selD.innerHTML = '<option value="">El del documento (por su serie)</option>';
+        box.style.display = 'none';
+        if (!idEmpresa) return;
+        try {
+            const r = await fetch(base + '/config/migrarMysql?action=establecimientos&id_empresa=' + encodeURIComponent(idEmpresa)).then(x => x.json());
+            if (!r.ok) return;
+            (r.origen || []).forEach(e => { selO.insertAdjacentHTML('beforeend', '<option value="' + esc(e.codigo) + '">' + esc(e.codigo) + (e.nombre ? ' — ' + esc(e.nombre) : '') + '</option>'); });
+            (r.destino || []).forEach(e => { selD.insertAdjacentHTML('beforeend', '<option value="' + esc(e.codigo) + '">' + esc(e.codigo) + (e.nombre ? ' — ' + esc(e.nombre) : '') + '</option>'); });
+            box.style.display = '';
+        } catch (e) { /* silencioso: el filtro es opcional */ }
+    }
     document.addEventListener('click', (e) => {
         if (!dd.contains(e.target) && e.target !== buscar) dd.style.display = 'none';
     });
@@ -515,6 +550,10 @@ $base = BASE_URL;
                 body.append('entidad', ent);
                 if (desde) body.append('desde', desde);
                 if (hasta) body.append('hasta', hasta);
+                const eOrig = ($('estabOrigen') || {}).value || '';
+                const eDest = ($('estabDestino') || {}).value || '';
+                if (eOrig) body.append('estab_origen', eOrig);
+                if (eDest) body.append('estab_destino', eDest);
                 const res = await fetch(base + '/config/migrarMysql?action=migrar', { method: 'POST', body }).then(r => r.json());
                 if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); continue; }
                 const d = res.data;

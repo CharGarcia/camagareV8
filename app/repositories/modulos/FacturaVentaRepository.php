@@ -117,6 +117,9 @@ class FacturaVentaRepository extends BaseRepository
                 'establecimiento' => 'v.establecimiento',
                 'punto'          => 'v.punto_emision',
                 'punto_emision'  => 'v.punto_emision',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del modal de factura.
+                'serie'          => "CONCAT(v.establecimiento,'-',v.punto_emision)",
             ],
             'fecha' => [
                 'fecha'         => 'v.fecha_emision',
@@ -130,6 +133,11 @@ class FacturaVentaRepository extends BaseRepository
                 'ice'       => 'COALESCE(v.total_ice,0)',
                 'propina'   => 'COALESCE(v.propina,0)',
                 'iva'       => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'v.secuencial::numeric',
             ],
         ]);
 
@@ -323,6 +331,12 @@ class FacturaVentaRepository extends BaseRepository
     {
         $sql = "UPDATE ventas_cabecera SET estado = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
         $this->db->prepare($sql)->execute([$estado, $idUsuario, $id]);
+    }
+
+    public function actualizarObservaciones(int $id, string $observaciones, int $idUsuario): void
+    {
+        $sql = "UPDATE ventas_cabecera SET observaciones = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        $this->db->prepare($sql)->execute([$observaciones, $idUsuario, $id]);
     }
 
     public function actualizarVendedor(int $id, ?int $idVendedor, int $idUsuario): void

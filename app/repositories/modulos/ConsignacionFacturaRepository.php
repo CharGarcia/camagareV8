@@ -190,18 +190,19 @@ class ConsignacionFacturaRepository extends BaseRepository
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
-                'secuencial' => 'cf.secuencial',
                 'cliente'    => 'c.nombre',
                 'factura'    => 'cf.numero_factura',
             ],
             'exacto' => [
                 'estado' => 'cf.estado',
+                'serie'  => "CONCAT(cf.establecimiento,'-',cf.punto_emision)",
             ],
             'fecha'  => [
                 'fecha' => 'cf.fecha_emision',
             ],
             'numerico' => [
-                'total' => 'cf.total',
+                'total'      => 'cf.total',
+                'secuencial' => 'cf.secuencial::numeric',
             ],
         ]);
 

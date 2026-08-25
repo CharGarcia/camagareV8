@@ -129,6 +129,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { v: 'garantia',      l: 'Garantía' },
                                 { v: 'revision',      l: 'Revisión' },
                             ]},
+                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
                         ],
                         quickFilters: [
                             { id: 'qf_proceso',   label: 'En taller',      mk: () => ({ key: 'estado', op: '=', value: 'en_proceso', display: 'En proceso' }) },

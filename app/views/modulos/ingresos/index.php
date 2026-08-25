@@ -141,6 +141,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { key: 'cliente',   label: 'Cliente',     icon: 'bi-person',          type: 'text' },
                             { key: 'ruc',       label: 'RUC',         icon: 'bi-card-text',       type: 'text' },
                             { key: 'numero',    label: 'Nº ingreso',  icon: 'bi-hash',            type: 'text' },
+                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan',        type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',             type: 'text' },
                             { key: 'concepto',  label: 'Concepto',    icon: 'bi-chat-left-text',  type: 'text' },
                             { key: 'tipo',      label: 'Tipo ingreso',icon: 'bi-tag',             type: 'text' },
                             { key: 'fecha',     label: 'Fecha',       icon: 'bi-calendar-event',  type: 'date_range' },

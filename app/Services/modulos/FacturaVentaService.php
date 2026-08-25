@@ -1175,7 +1175,7 @@ class FacturaVentaService
         return $res;
     }
 
-    public function anular(int $id, int $idEmpresa, int $idUsuario, bool $verificarSri = true): void
+    public function anular(int $id, int $idEmpresa, int $idUsuario, bool $verificarSri = true, ?string $observacionExcepcion = null): void
     {
         $cabecera = $this->repository->getPorId($id);
         if (!$cabecera || (int)$cabecera['id_empresa'] !== $idEmpresa) {
@@ -1253,6 +1253,18 @@ class FacturaVentaService
             // 5. Anular la factura
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
 
+            // 5.1 Motivo de excepción (superadmin anulando fuera de una regla de
+            // normativa SRI, p. ej. plazo del día 7): se deja constancia en
+            // Observaciones, sin borrar lo que ya hubiera escrito el usuario.
+            if ($observacionExcepcion !== null && trim($observacionExcepcion) !== '') {
+                $observacionesPrevias = trim((string) ($cabecera['observaciones'] ?? ''));
+                $nota = '[Anulación - excepción superadmin] ' . trim($observacionExcepcion);
+                $nuevasObservaciones = $observacionesPrevias !== ''
+                    ? $observacionesPrevias . "\n" . $nota
+                    : $nota;
+                $this->repository->actualizarObservaciones($id, $nuevasObservaciones, $idUsuario);
+            }
+
             // 6. Revertir inventario. permitirNegativo=true: anular siempre devuelve el saldo
             // vendido al inventario, así que este revert nunca debe bloquearse por stock
             // negativo preexistente en otro movimiento del mismo producto/bodega.
@@ -1274,7 +1286,11 @@ class FacturaVentaService
                 'ventas_cabecera',
                 $id,
                 $cabecera,
-                ['id_venta' => $id, 'nuevo_estado' => 'anulado']
+                array_filter([
+                    'id_venta'    => $id,
+                    'nuevo_estado' => 'anulado',
+                    'observacion_excepcion' => $observacionExcepcion,
+                ], fn($v) => $v !== null)
             );
 
             if ($managedTransaction) $db->commit();

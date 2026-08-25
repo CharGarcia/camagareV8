@@ -56,6 +56,8 @@ class TallerOrdenRepository extends BaseRepository
                 'prioridad'    => 'o.prioridad',
                 'departamento' => 'd.nombre',
                 'aprobada'     => 'o.aprobado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), igual que factura.
+                'serie'        => "CONCAT(o.establecimiento,'-',o.punto_emision)",
             ],
             'fecha'  => [
                 'fecha'        => 'o.fecha_ingreso',
@@ -64,6 +66,8 @@ class TallerOrdenRepository extends BaseRepository
             'numerico' => [
                 'total'        => 'o.total',
                 'km'           => 'o.kilometraje',
+                // Comparación EXACTA sin ceros a la izquierda ("298" no matchea "000000913").
+                'secuencial'   => 'o.secuencial::numeric',
             ],
         ]);
 

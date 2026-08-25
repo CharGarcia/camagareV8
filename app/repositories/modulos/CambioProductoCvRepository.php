@@ -49,17 +49,18 @@ class CambioProductoCvRepository extends BaseRepository
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
                 'cliente'    => 'c.nombre',
-                'secuencial' => 'r.secuencial',
                 'motivo'     => 'r.motivo',
             ],
             'exacto' => [
                 'estado'     => 'r.estado',
+                'serie'      => "CONCAT(r.establecimiento,'-',r.punto_emision)",
             ],
             'fecha'  => [
                 'fecha'      => 'r.fecha_cambio',
             ],
             'numerico' => [
                 'diferencia' => 'r.diferencia',
+                'secuencial' => 'r.secuencial::numeric',
             ],
         ]);
 

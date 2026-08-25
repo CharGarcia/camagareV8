@@ -76,12 +76,20 @@ class ProformaRepository extends BaseRepository
             ],
             'exacto' => [
                 'estado'  => 'p.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del modal de proforma.
+                'serie'   => "CONCAT(p.establecimiento,'-',p.punto_emision)",
             ],
             'fecha'   => [
                 'fecha'   => 'p.fecha_emision',
             ],
             'numerico' => [
                 'total'   => 'p.importe_total',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'p.secuencial::numeric',
             ],
         ]);
 

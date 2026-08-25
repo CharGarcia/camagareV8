@@ -50,12 +50,16 @@ class ServicioExternoRepository extends BaseRepository
             ],
             'exacto' => [
                 'estado'  => 'o.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), igual que factura.
+                'serie'   => "CONCAT(o.establecimiento,'-',o.punto_emision)",
             ],
             'fecha'  => [
                 'fecha'   => 'o.fecha_servicio',
             ],
             'numerico' => [
-                'total'   => 'o.total',
+                'total'      => 'o.total',
+                // Comparación EXACTA sin ceros a la izquierda ("298" no matchea "000000913").
+                'secuencial' => 'o.secuencial::numeric',
             ],
         ]);
 

@@ -85,6 +85,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { v: 'facturado', l: 'Facturado' },
                                 { v: 'anulado',   l: 'Anulado' },
                             ]},
+                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
+                                <?php foreach ($puntos as $p): ?>
+                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
                         ],
                         onApply: () => { g_paginaActual = 1; cargarGrid(); },
                     }).init();

@@ -95,6 +95,9 @@ class ReciboVentaRepository extends BaseRepository
                 'punto'           => 'v.punto_emision',
                 'punto_emision'   => 'v.punto_emision',
                 'impuestos'       => 'v.con_impuestos',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del modal de recibo.
+                'serie'           => "CONCAT(v.establecimiento,'-',v.punto_emision)",
             ],
             'fecha' => [
                 'fecha'         => 'v.fecha_emision',
@@ -108,6 +111,11 @@ class ReciboVentaRepository extends BaseRepository
                 'ice'       => 'COALESCE(v.total_ice,0)',
                 'propina'   => 'COALESCE(v.propina,0)',
                 'iva'       => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'v.secuencial::numeric',
             ],
         ]);
 
