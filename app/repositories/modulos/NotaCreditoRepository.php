@@ -30,6 +30,23 @@ class NotaCreditoRepository extends BaseRepository
         } catch (\Throwable $e) {}
     }
 
+    /**
+     * Series (establecimiento-puntoEmision) que REALMENTE tienen al menos una
+     * nota de crédito guardada, para poblar el filtro "Serie" del buscador. A
+     * propósito NO usa los puntos de emisión configurados actualmente (esos
+     * solo sirven para elegir la serie de un documento NUEVO).
+     */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM notas_credito_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
     public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
     {
         $offset = ($page - 1) * $perPage;

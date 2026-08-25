@@ -78,6 +78,11 @@ class FacturaReembolsoController extends BaseModuloController
             }
         }
 
+        // Series con documentos REALES (para el filtro "Serie" del buscador); $puntos
+        // arriba es solo "qué serie puedo usar en un documento NUEVO" (ver comentario
+        // en el bucle anterior).
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $total = $result['total'];
         $this->viewWithLayout('layouts.main', 'modulos/factura_reembolso/index', [
             'titulo'            => 'Facturas de Reembolso',
@@ -98,6 +103,7 @@ class FacturaReembolsoController extends BaseModuloController
             'empresa'           => $empresaData,
             'establecimientos'  => $establecimientos,
             'puntos'            => $puntos,
+            'seriesFiltro'      => $seriesFiltro,
             'tarifasIva'        => $this->repository->getTarifasIva(),
             'formasPago'        => $this->repository->getFormasPago(),
             'tiposIdentificacion' => $this->repository->getTiposIdentificacionProveedor(),

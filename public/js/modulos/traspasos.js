@@ -36,7 +36,7 @@
     };
 
     window.TRP_fetchSearch = async function (p = 1) {
-        const b = document.getElementById('txtBuscarTRP')?.value || '';
+        const b = document.getElementById('buscarTraspaso')?.value || '';
         const tbody = document.getElementById('tbodyTraspasos');
         if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
         try {
@@ -80,10 +80,6 @@
         }
         window.TRP_fetchSearch(1);
     };
-
-    document.getElementById('txtBuscarTRP')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); window.TRP_buscar(1); }
-    });
 
     // ── Formulario / modal ───────────────────────────────────────────────────
 

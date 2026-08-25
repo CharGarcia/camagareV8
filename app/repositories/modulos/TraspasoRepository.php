@@ -21,6 +21,17 @@ class TraspasoRepository extends BaseRepository
         return $st;
     }
 
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM traspasos_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
     public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC'): array
     {
         $offset = ($page - 1) * $perPage;
@@ -30,8 +41,15 @@ class TraspasoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (t.numero_traspaso ILIKE :buscar OR fo.nombre ILIKE :buscar OR fd.nombre ILIKE :buscar OR t.observaciones ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['t.numero_traspaso', 'fo.nombre', 'fd.nombre', 't.observaciones'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
@@ -41,9 +59,17 @@ class TraspasoRepository extends BaseRepository
                 'nro'     => 't.numero_traspaso',
                 'obs'     => 't.observaciones',
             ],
-            'exacto'   => [ 'estado' => 't.estado' ],
+            'exacto'   => [
+                'estado' => 't.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del buscador.
+                'serie'  => "CONCAT(t.establecimiento,'-',t.punto_emision)",
+            ],
             'fecha'    => [ 'fecha' => 't.fecha_emision', 'fecha_emision' => 't.fecha_emision' ],
-            'numerico' => [ 'monto' => 't.monto' ],
+            'numerico' => [
+                'monto'      => 't.monto',
+                'secuencial' => 't.secuencial::numeric',
+            ],
         ]);
 
         $sqlCount = "SELECT COUNT(*) FROM traspasos_cabecera t

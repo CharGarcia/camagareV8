@@ -131,6 +131,26 @@ class RetencionVentaRepository extends BaseRepository
     }
 
     /**
+     * Series (establecimiento-punto_emision) con al menos un documento real
+     * registrado, para el filtro "Serie" del buscador. A diferencia de
+     * $puntos (armado en el controller: todos los puntos de emisión activos
+     * de la empresa, sin cruzar contra documentos reales), esto trae solo
+     * las series que efectivamente tienen retenciones registradas, de
+     * cualquier establecimiento (mismo patrón que
+     * FacturaVentaRepository::getSeriesDistintas()).
+     */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM retencion_venta_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Retenciones de venta del rango de fechas para exportación masiva (Descargas Masivas).
      * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
      * No filtra por estado: la tabla no tiene esa columna (ver origen 'manual'/'electronico').

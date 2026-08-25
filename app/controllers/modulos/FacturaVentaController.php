@@ -108,6 +108,11 @@ class FacturaVentaController extends BaseModuloController
         $bodegas = $bodegaRepo->getBodegasPermitidas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']);
 
         $total = $result['total'];
+        // Series REALMENTE usadas en facturas guardadas, para el filtro "Serie"
+        // del buscador — a diferencia de $puntos (solo sirve para elegir la
+        // serie de una factura NUEVA), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
         $permNC = $this->permisosModuloPorRuta('modulos/notas_credito');
         $permND = $this->permisosModuloPorRuta('modulos/nota_debito');
         $permGR = $this->permisosModuloPorRuta('modulos/guias_remision');
@@ -134,6 +139,7 @@ class FacturaVentaController extends BaseModuloController
             'permND'      => $permND,
             'puntosND'    => $puntosND,
             'permGR'      => $permGR,
+            'seriesFiltro' => $seriesFiltro,
             'permClientes'  => $permClientes,
             'permProductos' => $permProductos,
             'permRecibo'    => $permRecibo,

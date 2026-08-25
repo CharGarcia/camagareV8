@@ -44,6 +44,9 @@ class GuiasRemisionController extends BaseModuloController
         $result = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
         $total  = $result['total'];
 
+        // Series REALMENTE usadas en guías guardadas, para el filtro "Serie" del buscador.
+        $seriesFiltro = $this->repo->getSeriesDistintas($idEmpresa);
+
         $empresaModel     = new Empresa();
         $empresaData      = $empresaModel->getPorId($idEmpresa);
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
@@ -84,6 +87,7 @@ class GuiasRemisionController extends BaseModuloController
             'empresa'         => $empresaData,
             'establecimientos'=> $establecimientos,
             'puntos'          => $puntos,
+            'seriesFiltro'    => $seriesFiltro,
             'fullWidth'       => true,
         ]);
     }

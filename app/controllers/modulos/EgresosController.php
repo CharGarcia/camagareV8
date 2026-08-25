@@ -62,6 +62,11 @@ class EgresosController extends BaseModuloController
                 $puntos[] = $p;
             }
         }
+        // Series REALMENTE usadas en egresos guardados, para el filtro "Serie"
+        // del buscador — a diferencia de $puntos (solo sirve para elegir la
+        // serie de un egreso NUEVO), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
 
         // Usamos repositorio auxiliar para formas de pago si no es un método directo en EgresoRepository
         // O simplemente instanciamos el IngresoRepo que ya tiene el getFormasCobro genérico.
@@ -110,6 +115,7 @@ class EgresosController extends BaseModuloController
             'empresa'           => $empresaData,
             'establecimientos'  => $establecimientos,
             'puntos'            => $puntos,
+            'seriesFiltro'      => $seriesFiltro,
             'formasPago'        => $formasPago,
             'conceptos'         => $conceptos,
             'comportamientosConPendientes' => $comportamientosConPendientes,

@@ -86,6 +86,10 @@ class ComprasRepository extends BaseRepository
                 // El estado dejó de ser un literal fijo con la aprobación de
                 // compras: 'registrado', 'pendiente_aprobacion', 'rechazada'…
                 'estado'           => 'c.estado',
+                // Serie del PROVEEDOR (establecimiento_prov-punto_emision_prov): a
+                // diferencia de los documentos que emite esta empresa, en Compras
+                // la numeración es la del comprobante del proveedor.
+                'serie'            => "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov)",
             ],
             'fecha' => [
                 'fecha'          => 'c.fecha_emision',
@@ -96,6 +100,14 @@ class ComprasRepository extends BaseRepository
                 'monto'    => 'c.importe_total',
                 'total'    => 'c.importe_total',
                 'subtotal' => 'c.total_sin_impuestos',
+                // Comparación numérica exacta (no substring), igual que en los
+                // demás módulos: "298" encuentra "000000298" sin escribir ceros.
+                // A diferencia del secuencial propio (siempre numérico, generado
+                // por el sistema), secuencial_prov lo escribe el usuario a mano
+                // desde el comprobante del proveedor y a veces no es puro número
+                // — el CASE evita que un valor no numérico rompa la consulta con
+                // un error de cast; simplemente no calza con ningún filtro numérico.
+                'secuencial' => "(CASE WHEN c.secuencial_prov ~ '^[0-9]+$' THEN c.secuencial_prov::numeric END)",
             ],
         ]);
 
@@ -155,6 +167,7 @@ class ComprasRepository extends BaseRepository
                 $where
                 ORDER BY $ordenExpr $ordenDir";
 
+
         if ($perPage > 0) {
             $sql .= " LIMIT $perPage OFFSET $offset";
         }
@@ -162,6 +175,22 @@ class ComprasRepository extends BaseRepository
         $rows = $this->query($sql, $params)->fetchAll();
 
         return ['rows' => $rows, 'total' => (int) $total];
+    }
+
+    /**
+     * Series del PROVEEDOR (establecimiento_prov-puntoEmision_prov) que
+     * REALMENTE tienen al menos una compra guardada, para poblar el filtro
+     * "Serie" del buscador.
+     */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento_prov AS establecimiento, punto_emision_prov AS punto_emision
+                FROM compras_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
     }
 
     /**

@@ -21,6 +21,18 @@ class GuiaRemisionRepository extends BaseRepository
         return $st;
     }
 
+    /** Series REALMENTE usadas en guías de remisión guardadas (para el filtro "Serie" del buscador). */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM guias_remision_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,
@@ -34,17 +46,41 @@ class GuiaRemisionRepository extends BaseRepository
         $params = [':id_empresa' => $idEmpresa];
         $where = "WHERE g.id_empresa = :id_empresa AND g.eliminado = false AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
-        if ($buscar !== '') {
-            $where .= " AND (
-                CONCAT(g.establecimiento,'-',g.punto_emision,'-',g.secuencial) ILIKE :b
-                OR c.nombre ILIKE :b
-                OR c.identificacion ILIKE :b
-                OR t.nombre ILIKE :b
-                OR g.placa ILIKE :b
-                OR g.motivo_traslado ILIKE :b
-            )";
-            $params[':b'] = "%{$buscar}%";
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['c.nombre', 'c.identificacion', 't.nombre', 'g.placa', 'g.motivo_traslado'],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'cliente'       => 'c.nombre',
+                'transportista' => 't.nombre',
+                'placa'         => 'g.placa',
+                'motivo'        => 'g.motivo_traslado',
+            ],
+            'exacto' => [
+                'estado' => 'g.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del buscador.
+                'serie'  => "CONCAT(g.establecimiento,'-',g.punto_emision)",
+            ],
+            'fecha' => [
+                'fecha'                   => 'g.fecha_emision',
+                'fecha_emision'           => 'g.fecha_emision',
+                'fecha_inicio'            => 'g.fecha_inicio_transporte',
+                'fecha_inicio_transporte' => 'g.fecha_inicio_transporte',
+            ],
+            'numerico' => [
+                'secuencial' => 'g.secuencial::numeric',
+            ],
+        ]);
 
         if ($idUsuario !== null) {
             $where .= " AND g.id_usuario = :id_usuario";

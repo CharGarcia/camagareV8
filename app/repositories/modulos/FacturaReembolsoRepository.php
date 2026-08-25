@@ -118,6 +118,26 @@ class FacturaReembolsoRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Series (establecimiento-punto_emision) con al menos un documento real
+     * registrado, para el filtro "Serie" del buscador. A diferencia de
+     * $puntos (armado en el controller para "qué serie puedo usar en un
+     * documento NUEVO", solo con el punto configurado con secuencial), esto
+     * incluye series de cualquier establecimiento y aunque el punto ya no
+     * tenga secuencial configurado (mismo patrón que
+     * FacturaVentaRepository::getSeriesDistintas()).
+     */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM factura_reembolso_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getPorId(int $id): ?array
     {
         $sql = "SELECT fr.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,

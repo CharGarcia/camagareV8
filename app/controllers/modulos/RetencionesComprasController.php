@@ -72,6 +72,11 @@ class RetencionesComprasController extends BaseModuloController
             }
         }
 
+        // Series con documentos REALES (para el filtro "Serie" del buscador); $puntos
+        // arriba es solo "qué serie puedo usar en un documento NUEVO" (ver comentario
+        // en el bucle anterior).
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/retenciones_compras/index', [
             'titulo'           => 'Retenciones en Compras',
             'perm'             => $perm,
@@ -91,6 +96,7 @@ class RetencionesComprasController extends BaseModuloController
             'empresa'          => $empresaData,
             'establecimientos' => $establecimientos,
             'puntos'           => $puntos,
+            'seriesFiltro'     => $seriesFiltro,
             'sustentos'        => $this->repository->getSustentosTributarios(),
             'fullWidth'        => true,
         ]);

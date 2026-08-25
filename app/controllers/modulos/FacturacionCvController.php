@@ -123,6 +123,12 @@ class FacturacionCvController extends BaseModuloController
             }
         }
 
+        // Series REALMENTE usadas en documentos guardados, para el filtro "Serie"
+        // del buscador — a diferencia de $puntos (solo sirve para elegir la serie
+        // de un documento NUEVO), esto incluye series de cualquier establecimiento
+        // y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = (new ConsignacionFacturaRepository())->getSeriesDistintas($idEmpresa);
+
         // Formas de pago SRI (para la pestaña Forma de pago).
         $formasPago = [];
         try {
@@ -136,6 +142,7 @@ class FacturacionCvController extends BaseModuloController
             'empresa'     => $empresaData,
             'vendedores'  => $vendedores,
             'puntos'      => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'formasPago'  => $formasPago,
             'rows'        => $rows,
             'total'       => $total,

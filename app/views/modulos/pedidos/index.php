@@ -101,19 +101,48 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
         <div class="d-flex align-items-center gap-2">
-            <form method="POST" action="<?= $urlBasePedidos ?>" class="d-flex align-items-center m-0">
-                <input type="hidden" name="page" value="1">
-                <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-                <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-                <div class="input-group input-group-sm" style="width: 300px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b" id="buscar-pedido" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar pedido, cliente..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-                    <?php if ($buscar !== ''): ?>
-                        <a href="<?= $urlBasePedidos ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                    <?php endif; ?>
-                </div>
-                <button type="submit" class="d-none">Buscar</button>
-            </form>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <div id="fbBuscadorPED" style="width: 300px;"></div>
+            <input type="hidden" id="buscarPedido" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosBusqueda) return;
+                    new FiltrosBusqueda({
+                        containerId: 'fbBuscadorPED',
+                        hiddenInputId: 'buscarPedido',
+                        fields: [
+                            { key: 'cliente',        label: 'Cliente',        icon: 'bi-person',          type: 'text' },
+                            { key: 'responsable',    label: 'Resp. Entrega',  icon: 'bi-person-badge',    type: 'text' },
+                            { key: 'observaciones',  label: 'Observaciones',  icon: 'bi-chat-left-text',  type: 'text' },
+                            { key: 'fecha_pedido',   label: 'Fecha Emisión',  icon: 'bi-calendar-event',  type: 'date_range' },
+                            { key: 'fecha_entrega',  label: 'Fecha Entrega',  icon: 'bi-calendar-check',  type: 'date_range' },
+                            { key: 'estado',         label: 'Estado',         icon: 'bi-flag',            type: 'select', options: [
+                                { v: 'Pendiente', l: 'Pendiente' },
+                                { v: 'Facturado', l: 'Facturado' },
+                                { v: 'Procesado', l: 'Procesado' },
+                                { v: 'Anulado',   l: 'Anulado' },
+                            ]},
+                            { key: 'serie',          label: 'Serie',          icon: 'bi-upc-scan', type: 'select', options: [
+                                <?php foreach ($seriesFiltro as $s): ?>
+                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial',     label: 'Secuencial',     icon: 'bi-123',      type: 'text' },
+                        ],
+                        quickFilters: [
+                            { id: 'qf_pendiente', label: 'Pendientes', mk: () => ({ key: 'estado', op: '=', value: 'Pendiente', display: 'Pendiente' }) },
+                            { id: 'qf_facturado', label: 'Facturados', mk: () => ({ key: 'estado', op: '=', value: 'Facturado', display: 'Facturado' }) },
+                            { id: 'qf_anulado',   label: 'Anulados',   mk: () => ({ key: 'estado', op: '=', value: 'Anulado',   display: 'Anulado' }) },
+                            { id: 'qf_hoy',        label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha_pedido') },
+                            { id: 'qf_mes',        label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha_pedido') },
+                            { id: 'qf_mes_pasado', label: 'Mes pasado', mk: () => FiltrosBusqueda.helpers.mesPasado('fecha_pedido') },
+                            { id: 'qf_anio',       label: 'Este año',   mk: () => FiltrosBusqueda.helpers.esteAnio('fecha_pedido') },
+                        ],
+                        onApply: () => window.PED_fetchSearch && window.PED_fetchSearch(1),
+                    }).init();
+                });
+            </script>
 
             <div class="btn-group btn-group-sm">
                 <?php

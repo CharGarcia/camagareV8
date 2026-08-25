@@ -57,6 +57,11 @@ class ProformasController extends BaseModuloController
         $empresaData      = $empresaModel->getPorId($idEmpresa);
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = $this->cargarTodosPuntos($idEmpresa);
+        // Series REALMENTE usadas en proformas guardadas, para el filtro "Serie"
+        // del buscador — a diferencia de $puntos (solo sirve para elegir la
+        // serie de una proforma NUEVA), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
 
         $vendedorRepo = new \App\repositories\modulos\VendedorRepository();
         $vendedores   = $vendedorRepo->getListado($idEmpresa, '', 1, 1000, 'nombre', 'ASC')['rows'];
@@ -81,6 +86,7 @@ class ProformasController extends BaseModuloController
             'empresa'         => $empresaData,
             'establecimientos' => $establecimientos,
             'puntos'          => $puntos,
+            'seriesFiltro'    => $seriesFiltro,
             'vendedores'      => $vendedores,
             'tarifasIva'      => $tarifasIva,
             'fullWidth'       => true,

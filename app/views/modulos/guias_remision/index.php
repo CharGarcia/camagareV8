@@ -53,11 +53,50 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-            <form id="gr-form-buscar" class="input-group input-group-sm" style="width:300px" onsubmit="event.preventDefault(); GR_buscar();">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="gr-buscar" class="form-control border-start-0 ps-0 shadow-none border"
-                       placeholder="Buscar número, cliente, transportista..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-            </form>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <div id="fbBuscadorGR" style="width: 420px;"></div>
+            <input type="hidden" id="buscarGuia" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosBusqueda) return;
+                    new FiltrosBusqueda({
+                        containerId: 'fbBuscadorGR',
+                        hiddenInputId: 'buscarGuia',
+                        fields: [
+                            { key: 'cliente',       label: 'Destinatario',  icon: 'bi-person',          type: 'text' },
+                            { key: 'transportista', label: 'Transportista', icon: 'bi-person-badge',    type: 'text' },
+                            { key: 'placa',         label: 'Placa',         icon: 'bi-truck',           type: 'text' },
+                            { key: 'motivo',        label: 'Motivo',        icon: 'bi-chat-left-text',  type: 'text' },
+                            { key: 'fecha',         label: 'Fecha emisión', icon: 'bi-calendar-event',  type: 'date_range' },
+                            { key: 'fecha_inicio',  label: 'F. Inicio transporte', icon: 'bi-calendar-check', type: 'date_range' },
+                            { key: 'estado',        label: 'Estado',        icon: 'bi-flag',            type: 'select', options: [
+                                { v: 'borrador',      l: 'Borrador' },
+                                { v: 'autorizado',    l: 'Autorizado' },
+                                { v: 'no_autorizado', l: 'No autorizado' },
+                                { v: 'devuelta',      l: 'Devuelta' },
+                                { v: 'anulado',       l: 'Anulado' },
+                            ]},
+                            { key: 'serie',         label: 'Serie',         icon: 'bi-upc-scan', type: 'select', options: [
+                                <?php foreach ($seriesFiltro as $s): ?>
+                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial',    label: 'Secuencial',    icon: 'bi-123', type: 'text' },
+                        ],
+                        quickFilters: [
+                            { id: 'qf_borrador',   label: 'Borradores',  mk: () => ({ key: 'estado', op: '=', value: 'borrador',   display: 'Borrador' }) },
+                            { id: 'qf_autorizado', label: 'Autorizadas', mk: () => ({ key: 'estado', op: '=', value: 'autorizado', display: 'Autorizado' }) },
+                            { id: 'qf_anulado',    label: 'Anuladas',    mk: () => ({ key: 'estado', op: '=', value: 'anulado',    display: 'Anulado' }) },
+                            { id: 'qf_hoy',        label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
+                            { id: 'qf_mes',        label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
+                            { id: 'qf_mes_pasado', label: 'Mes pasado', mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
+                            { id: 'qf_anio',       label: 'Este año',   mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
+                        ],
+                        onApply: () => GR_buscar(),
+                    }).init();
+                });
+            </script>
             <div class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
@@ -215,7 +254,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function GR_cargar(p) {
         GR_page = p;
-        const q   = document.getElementById('gr-buscar').value;
+        const q   = document.getElementById('buscarGuia').value;
         const url = GR_urlBase + '/search-ajax?b=' + encodeURIComponent(q) + '&page=' + p + '&sort=' + GR_sort + '&dir=' + GR_dir;
         fetch(url)
             .then(r => r.json())
@@ -238,8 +277,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             if (dd && !dd.contains(e.target)) dd.style.display = 'none';
         });
     });
-
-    document.getElementById('gr-buscar').addEventListener('keydown', e => { if (e.key === 'Enter') GR_buscar(); });
 
     // Carga inicial
     document.addEventListener('DOMContentLoaded', () => {

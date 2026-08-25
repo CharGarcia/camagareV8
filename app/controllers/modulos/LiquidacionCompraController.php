@@ -62,6 +62,11 @@ class LiquidacionCompraController extends BaseModuloController
             }
         }
 
+        // Series con documentos REALES (para el filtro "Serie" del buscador); $puntos
+        // arriba es solo "qué serie puedo usar en un documento NUEVO" (ver comentario
+        // en el bucle anterior).
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $total = $result['total'];
         $this->viewWithLayout('layouts.main', 'modulos/liquidacion_compra/index', [
             'titulo'              => 'Liquidaciones de Compras y Servicios',
@@ -84,6 +89,7 @@ class LiquidacionCompraController extends BaseModuloController
             'tarifasIva'          => $this->repository->getTarifasIva(),
             'sustentos'           => $this->repository->getSustentosTributarios(),
             'puntos'              => $puntos,
+            'seriesFiltro'        => $seriesFiltro,
             'fullWidth'           => true,
             'sucursal_principal'  => !empty($establecimientos) ? $establecimientos[0] : null
         ]);

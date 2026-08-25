@@ -13,6 +13,18 @@ class ConsignacionVentaRepository extends BaseRepository
         parent::__construct('consignaciones_ventas');
     }
 
+    /** Series (establecimiento-punto_emision) usadas realmente en documentos existentes, para el filtro del listado. */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM consignaciones_ventas
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
     {
         $params = [':e' => $idEmpresa];

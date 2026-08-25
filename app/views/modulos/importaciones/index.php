@@ -116,8 +116,8 @@ $estadoLabelMap = [
                             { key: 'incoterm',        label: 'Incoterm',               icon: 'bi-truck',           type: 'text' },
                             { key: 'obs',             label: 'Observaciones',          icon: 'bi-chat-text',       type: 'text' },
                             { key: 'serie',           label: 'Serie',                  icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($puntos as $p): ?>
-                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php foreach ($seriesFiltro as $s): ?>
+                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
                                 <?php endforeach; ?>
                             ]},
                             { key: 'secuencial',      label: 'Secuencial',             icon: 'bi-123',             type: 'text' },

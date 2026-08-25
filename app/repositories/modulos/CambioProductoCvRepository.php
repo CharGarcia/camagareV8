@@ -22,6 +22,23 @@ class CambioProductoCvRepository extends BaseRepository
         parent::__construct('cambios_producto_cv');
     }
 
+    /**
+     * Series REALMENTE usadas en cambios de productos guardados, para el filtro
+     * "Serie" del buscador — a diferencia de $puntos (solo sirve para elegir la
+     * serie de un cambio NUEVO), esto incluye series de cualquier establecimiento
+     * y aunque el punto ya no tenga secuencial configurado.
+     */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM cambios_producto_cv
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
     // ─── LISTADO PAGINADO ─────────────────────────────────────────────────────
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array

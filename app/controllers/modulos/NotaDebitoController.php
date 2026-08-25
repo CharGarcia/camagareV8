@@ -80,6 +80,8 @@ class NotaDebitoController extends BaseModuloController
             }
         }
 
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $total = $result['total'];
         $this->viewWithLayout('layouts.main', 'modulos/nota_debito/index', [
             'titulo'      => 'Notas de Débito',
@@ -100,6 +102,7 @@ class NotaDebitoController extends BaseModuloController
             'empresa'     => $empresaData,
             'establecimientos' => $establecimientos,
             'puntos'      => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'fullWidth'   => true,
         ]);
     }

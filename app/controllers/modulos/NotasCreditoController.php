@@ -66,6 +66,8 @@ class NotasCreditoController extends BaseModuloController
             }
         }
 
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $bodegaRepo = new BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']);
 
@@ -89,6 +91,7 @@ class NotasCreditoController extends BaseModuloController
             'empresa'     => $empresaData,
             'establecimientos' => $establecimientos,
             'puntos'      => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'bodegas'     => $bodegas,
             'fullWidth'   => true,
         ]);

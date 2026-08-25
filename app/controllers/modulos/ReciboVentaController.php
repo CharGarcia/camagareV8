@@ -74,6 +74,8 @@ class ReciboVentaController extends BaseModuloController
             } catch (\Throwable $e) {}
         }
 
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $vendedorRepo = new \App\repositories\modulos\VendedorRepository();
         $vendedores = $vendedorRepo->getListado($idEmpresa, '', 1, 1000, 'nombre', 'ASC')['rows'];
 
@@ -105,6 +107,7 @@ class ReciboVentaController extends BaseModuloController
             'bodegas'     => $bodegas,
             'vendedores'  => $vendedores,
             'puntos'      => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'fullWidth'   => true,
         ]);
     }

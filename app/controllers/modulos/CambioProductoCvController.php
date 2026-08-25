@@ -82,12 +82,19 @@ class CambioProductoCvController extends BaseModuloController
             }
         }
 
+        // Series REALMENTE usadas en cambios de productos guardados, para el
+        // filtro "Serie" del buscador — a diferencia de $puntos (solo sirve para
+        // elegir la serie de un cambio NUEVO), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = (new CambioProductoCvRepository())->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos.cambio_producto_cv.index', [
             'titulo'       => 'Cambios de productos',
             'perm'         => $perm,
             'rutaModulo'   => self::RUTA_MODULO,
             'empresa'      => $empresaData,
             'puntos'       => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'rows'         => $rows,
             'total'        => $total,
             'page'         => $page,

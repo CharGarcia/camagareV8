@@ -82,6 +82,12 @@ class PedidosController extends BaseModuloController {
         $responsableRepo = new ResponsableTrasladoRepository();
         $responsables = $responsableRepo->listarPorEmpresa($idEmpresa);
 
+        // Series REALMENTE usadas en pedidos guardados, para el filtro "Serie"
+        // del buscador — a diferencia de $puntos (solo sirve para elegir la
+        // serie de un pedido NUEVO), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/pedidos/index', [
             'titulo' => 'Pedidos de Ventas',
             'perm' => $perm,
@@ -89,6 +95,7 @@ class PedidosController extends BaseModuloController {
             'puntos' => $puntos,
             'responsables' => $responsables,
             'empresa' => $empresaData,
+            'seriesFiltro' => $seriesFiltro,
             'tarifasIva' => $this->repository->getTarifasIva(),
             'unidades' => $this->repository->getUnidadesMedida($idEmpresa),
             'rows' => $rows,
@@ -463,22 +470,6 @@ class PedidosController extends BaseModuloController {
             'excel_url' => BASE_URL . '/' . $this->getRutaModulo() . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
         ]);
         exit;
-    }
-
-    public function listarAjax() {
-        $this->requireLeer();
-        try {
-            $buscar = $_POST['buscar'] ?? '';
-            $filtros = ['buscar' => $buscar];
-            $pedidos = $this->repository->listar($_SESSION['id_empresa'], $filtros);
-
-            $this->json([
-                'status' => true,
-                'data' => $pedidos
-            ]);
-        } catch (Exception $e) {
-            $this->json(['status' => false, 'message' => $e->getMessage()]);
-        }
     }
 
     public function obtenerPedidoAjax() {

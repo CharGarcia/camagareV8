@@ -89,10 +89,17 @@ class OrdenesCompraController extends BaseModuloController
             $puntosEmision[] = $p;
         }
 
+        // Series REALMENTE usadas en órdenes de compra guardadas, para el filtro
+        // "Serie" del buscador — a diferencia de $puntosEmision (solo sirve para
+        // elegir la serie de una orden NUEVA), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = (new OrdenCompraRepository())->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos.ordenes-compra.index', [
             'titulo'          => 'Órdenes de Compra',
             'perm'            => $perm,
             'rutaModulo'      => self::RUTA_MODULO,
+            'seriesFiltro'    => $seriesFiltro,
             'rows'            => $rows,
             'total'           => $total,
             'page'            => $page,

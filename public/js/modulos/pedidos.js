@@ -40,13 +40,14 @@ document.addEventListener('DOMContentLoaded', () => {
         inputHoraIniGlobal.addEventListener('input', pedActualizarMinHoraMaxima);
     }
 
-    // Buscador principal
-    const inputBuscar = document.getElementById('buscar-pedido');
-    if (inputBuscar) {
-        let timeout;
-        inputBuscar.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => PED_fetchSearch(1), 300);
+    // Buscador principal (widget FiltrosBusqueda): respaldo por si el valor del
+    // input oculto cambia sin pasar por onApply (mismo patrón que Egresos).
+    const inputBuscarPed = document.getElementById('buscarPedido');
+    if (inputBuscarPed) {
+        let timeoutBuscarPed;
+        inputBuscarPed.addEventListener('input', () => {
+            clearTimeout(timeoutBuscarPed);
+            timeoutBuscarPed = setTimeout(() => PED_fetchSearch(1), 300);
         });
     }
 
@@ -164,7 +165,7 @@ window.PED_fetchSearch = PED_fetchSearch;
 async function PED_fetchSearch(page = 1) {
     const tbody = document.getElementById('lista-pedidos');
     const infoPag = document.getElementById('info-paginacion');
-    const inputBuscar = document.getElementById('buscar-pedido');
+    const inputBuscar = document.getElementById('buscarPedido');
     const term = inputBuscar ? inputBuscar.value.trim() : '';
     
     if (!tbody) return;

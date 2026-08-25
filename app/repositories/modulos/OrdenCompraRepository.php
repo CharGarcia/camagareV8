@@ -19,6 +19,23 @@ class OrdenCompraRepository extends BaseRepository
         parent::__construct('ordenes_compra');
     }
 
+    /**
+     * Series REALMENTE usadas en órdenes de compra guardadas, para el filtro
+     * "Serie" del buscador — a diferencia de $puntosEmision (solo sirve para
+     * elegir la serie de una orden NUEVA), esto incluye series de cualquier
+     * establecimiento y aunque el punto ya no tenga secuencial configurado.
+     */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM ordenes_compra
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,

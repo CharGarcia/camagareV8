@@ -146,6 +146,11 @@ class ComprasController extends BaseModuloController
 
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
 
+        // Series del PROVEEDOR realmente usadas en compras guardadas, para el
+        // filtro "Serie" del buscador (no confundir con $puntos, que son los
+        // puntos de emisión propios de esta empresa, no del proveedor).
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/compras/index', [
             'titulo'             => 'Compras',
             'perm'               => $perm,
@@ -172,6 +177,7 @@ class ComprasController extends BaseModuloController
             'tarifasIva'         => $this->repository->getTarifasIva(),
             'sustentos'          => $this->repository->getSustentosTributarios(),
             'puntos'             => $puntos,
+            'seriesFiltro'       => $seriesFiltro,
             'establecimientos'   => $establecimientos,
             'sucursal_principal' => !empty($establecimientos) ? $establecimientos[0] : null,
             'tiposComprobante'   => (new \App\models\ComprobanteAutorizado())->getAll(),

@@ -76,9 +76,16 @@ class ImportacionesController extends BaseModuloController
             }
         }
 
+        // Series REALMENTE usadas en importaciones guardadas, para el filtro
+        // "Serie" del buscador — a diferencia de $puntos (solo sirve para elegir
+        // la serie de una importación NUEVA), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/importaciones/index', [
             'titulo'             => 'Importaciones',
             'perm'               => $perm,
+            'seriesFiltro'       => $seriesFiltro,
             'rows'               => $result['rows'],
             'total'              => $total,
             'page'               => $page,

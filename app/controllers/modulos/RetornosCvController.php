@@ -95,6 +95,12 @@ class RetornosCvController extends BaseModuloController
             }
         }
 
+        // Series REALMENTE usadas en retornos guardados, para el filtro "Serie"
+        // del buscador — a diferencia de $puntos (solo sirve para elegir la serie
+        // de un retorno NUEVO), esto incluye series de cualquier establecimiento y
+        // aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = (new RetornoCvRepository())->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos.retornos_cv.index', [
             'titulo'       => 'Retornos de Consignaciones en Ventas',
             'perm'         => $perm,
@@ -102,6 +108,7 @@ class RetornosCvController extends BaseModuloController
             'empresa'      => $empresaData,
             'responsables' => $responsables,
             'puntos'       => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'rows'         => $rows,
             'total'        => $total,
             'page'         => $page,

@@ -47,10 +47,11 @@ class PedidoRepository {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 ["(p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial)", 'c.nombre', 'rt.nombre', 'p.observaciones', 'p.observaciones_internas'],
-                $buscar,
+                $parsed['texto_libre'],
                 $params,
                 'b'
             );
@@ -58,6 +59,34 @@ class PedidoRepository {
                 $whereSql .= " AND {$condicion}";
             }
         }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto' => [
+                'cliente'       => 'c.nombre',
+                'responsable'   => 'rt.nombre',
+                'observaciones' => 'p.observaciones',
+                'obs'           => 'p.observaciones',
+                'obs_internas'  => 'p.observaciones_internas',
+            ],
+            'exacto' => [
+                'estado' => 'p.estado',
+                // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
+                // muestra en el selector "Serie" del buscador.
+                'serie'  => "CONCAT(p.establecimiento,'-',p.punto_emision)",
+            ],
+            'fecha' => [
+                'fecha'         => 'p.fecha_pedido',
+                'fecha_pedido'  => 'p.fecha_pedido',
+                'fecha_entrega' => 'p.fecha_entrega',
+            ],
+            'numerico' => [
+                // Comparación numérica: "298" encuentra "000000298" sin que el
+                // usuario tenga que escribir los ceros a la izquierda, y sigue
+                // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
+                // en '=', nunca hace substring).
+                'secuencial' => 'p.secuencial::numeric',
+            ],
+        ]);
 
         // 1. Contar total
         $sqlCount = "SELECT COUNT(*) 
@@ -104,27 +133,16 @@ class PedidoRepository {
         ];
     }
 
-    public function listar($id_empresa, $filtros = []) {
-        $sql = "SELECT p.*, c.nombre as cliente_nombre 
-                FROM pedidos_cabecera p
-                JOIN clientes c ON p.id_cliente = c.id
-                WHERE p.id_empresa = :id_empresa 
-                AND p.eliminado = false";
-
-        if (!empty($filtros['buscar'])) {
-            $sql .= " AND (p.numero_pedido LIKE :buscar OR c.nombre LIKE :buscar)";
-        }
-
-        $sql .= " ORDER BY p.fecha_pedido DESC";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->bindValue(':id_empresa', $id_empresa, PDO::PARAM_INT);
-        if (!empty($filtros['buscar'])) {
-            $stmt->bindValue(':buscar', '%' . $filtros['buscar'] . '%', PDO::PARAM_STR);
-        }
-        $stmt->execute();
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    /** Series REALMENTE usadas en pedidos guardados (para el filtro "Serie" del buscador). */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM pedidos_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function obtenerPorId($id, $id_empresa) {

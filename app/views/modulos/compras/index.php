@@ -135,6 +135,12 @@ $to         = $to         ?? 0;
                             { key: 'proveedor',      label: 'Proveedor',         icon: 'bi-building',        type: 'text' },
                             { key: 'ruc',            label: 'RUC',               icon: 'bi-card-text',       type: 'text' },
                             { key: 'numero',         label: 'Nº comprobante',    icon: 'bi-hash',            type: 'text' },
+                            { key: 'serie',          label: 'Serie',             icon: 'bi-upc-scan',        type: 'select', options: [
+                                <?php foreach ($seriesFiltro as $s): ?>
+                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial',     label: 'Secuencial',        icon: 'bi-123',             type: 'text' },
                             { key: 'autorizacion',   label: 'Nº autorización',   icon: 'bi-shield-check',    type: 'text' },
                             { key: 'usuario',        label: 'Usuario',           icon: 'bi-person-circle',   type: 'text' },
                             { key: 'observacion',    label: 'Observaciones',     icon: 'bi-chat-text',       type: 'text' },

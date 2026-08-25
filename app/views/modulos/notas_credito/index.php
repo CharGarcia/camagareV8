@@ -127,8 +127,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { key: 'ruc',           label: 'RUC / Cédula',    icon: 'bi-card-text',       type: 'text' },
                             { key: 'numero',        label: 'Número nota',     icon: 'bi-hash',            type: 'text' },
                             { key: 'serie',         label: 'Serie',           icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($puntos as $p): ?>
-                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php foreach ($seriesFiltro as $s): ?>
+                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
                                 <?php endforeach; ?>
                             ]},
                             { key: 'secuencial',    label: 'Secuencial',      icon: 'bi-123',             type: 'text' },
@@ -151,7 +151,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
                             { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
                             { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
                             { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
                         ],
                         onApply: () => window.NC_fetchSearch && window.NC_fetchSearch(1),

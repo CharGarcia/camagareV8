@@ -68,6 +68,11 @@ class RetencionesVentasController extends BaseModuloController
             }
         }
 
+        // Series con documentos REALES (para el filtro "Serie" del buscador); $puntos
+        // arriba trae todos los puntos de emisión activos de la empresa (comentario
+        // en el bucle anterior), sin cruzar contra documentos ya registrados.
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/retenciones_ventas/index', [
             'titulo'      => 'Retenciones en Ventas',
             'perm'        => $perm,
@@ -85,6 +90,7 @@ class RetencionesVentasController extends BaseModuloController
             'base'        => BASE_URL,
             'rutaModulo'  => $this->getRutaModulo(),
             'puntos'      => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'fullWidth'   => true,
         ]);
     }

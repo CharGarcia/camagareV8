@@ -14,6 +14,18 @@ class IngresoRepository extends BaseRepository
         parent::__construct('ingresos_cabecera');
     }
 
+    /** Series REALMENTE usadas en ingresos guardados (para el filtro "Serie" del buscador). */
+    public function getSeriesDistintas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT establecimiento, punto_emision
+                FROM ingresos_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                ORDER BY establecimiento, punto_emision";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
     public function query(string $sql, array $params = []): \PDOStatement
     {
         $st = $this->db->prepare($sql);

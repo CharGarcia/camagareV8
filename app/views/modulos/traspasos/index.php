@@ -15,6 +15,7 @@
 /** @var array $establecimientos */
 /** @var array $puntos */
 /** @var array $formasPago */
+/** @var array $seriesFiltro */
 /** @var array $vistaConfig */
 
 $base = BASE_URL;
@@ -64,12 +65,46 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-            <form id="frmBuscarTRP" class="d-flex align-items-center m-0" onsubmit="event.preventDefault(); window.TRP_buscar(1);">
-                <div class="input-group input-group-sm" style="width: 320px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" id="txtBuscarTRP" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar por número, forma u observación..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-                </div>
-            </form>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <div id="fbBuscadorTRP" style="width: 420px;"></div>
+            <input type="hidden" id="buscarTraspaso" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosBusqueda) return;
+                    new FiltrosBusqueda({
+                        containerId: 'fbBuscadorTRP',
+                        hiddenInputId: 'buscarTraspaso',
+                        fields: [
+                            { key: 'origen',     label: 'Origen',      icon: 'bi-box-arrow-up-right',  type: 'text' },
+                            { key: 'destino',    label: 'Destino',     icon: 'bi-box-arrow-in-down-left', type: 'text' },
+                            { key: 'numero',     label: 'Nº traspaso', icon: 'bi-hash',            type: 'text' },
+                            { key: 'obs',        label: 'Observación', icon: 'bi-chat-left-text',  type: 'text' },
+                            { key: 'fecha',      label: 'Fecha',       icon: 'bi-calendar-event',  type: 'date_range' },
+                            { key: 'monto',      label: 'Monto',       icon: 'bi-currency-dollar', type: 'number_range' },
+                            { key: 'estado',     label: 'Estado',      icon: 'bi-flag',            type: 'select', options: [
+                                { v: 'registrado', l: 'Registrado' },
+                                { v: 'anulado',     l: 'Anulado' },
+                            ]},
+                            { key: 'serie',      label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
+                                <?php foreach ($seriesFiltro as $s): ?>
+                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
+                                <?php endforeach; ?>
+                            ]},
+                            { key: 'secuencial', label: 'Secuencial',  icon: 'bi-123',      type: 'text' },
+                        ],
+                        quickFilters: [
+                            { id: 'qf_registrado', label: 'Registrados', mk: () => ({ key: 'estado', op: '=', value: 'registrado', display: 'Registrado' }) },
+                            { id: 'qf_anulado',    label: 'Anulados',    mk: () => ({ key: 'estado', op: '=', value: 'anulado',  display: 'Anulado' }) },
+                            { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
+                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
+                            { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
+                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
+                        ],
+                        onApply: () => window.TRP_fetchSearch && window.TRP_fetchSearch(1),
+                    }).init();
+                });
+            </script>
 
             <div class="btn-group btn-group-sm">
                 <?php

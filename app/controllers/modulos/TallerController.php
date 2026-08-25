@@ -1347,6 +1347,9 @@ class TallerController extends BaseModuloController
         return [
             'empresa'       => $this->getEmpresaConfig($idEmpresa),
             'puntos'        => $puntos,
+            // Series usadas realmente en órdenes existentes (para el filtro del listado,
+            // distinto de $puntos que es "en qué serie se puede emitir un documento nuevo").
+            'seriesFiltro'  => $this->repository->getSeriesDistintas($idEmpresa),
             'formasPago'    => $this->repository->getFormasPago(),
             'bodegas'       => $this->getBodegas($idEmpresa),
             'tarifasIva'    => $this->repository->getTarifasIva(),

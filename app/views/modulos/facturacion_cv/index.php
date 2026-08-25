@@ -59,8 +59,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         hiddenInputId: 'b',
                         fields: [
                             { key: 'serie',      label: 'Serie',      icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($puntos as $p): ?>
-                                { v: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>', l: '<?= $p['cod_establecimiento'] ?>-<?= $p['codigo_punto'] ?>' },
+                                <?php foreach ($seriesFiltro as $s): ?>
+                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
                                 <?php endforeach; ?>
                             ]},
                             { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },

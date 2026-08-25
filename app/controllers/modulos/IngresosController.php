@@ -79,6 +79,11 @@ class IngresosController extends BaseModuloController
                 $puntos[] = $p;
             }
         }
+        // Series REALMENTE usadas en ingresos guardados, para el filtro "Serie"
+        // del buscador — a diferencia de $puntos (solo sirve para elegir la
+        // serie de un ingreso NUEVO), esto incluye series de cualquier
+        // establecimiento y aunque el punto ya no tenga secuencial configurado.
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
 
         $formasCobro = $this->service->getFormasCobro($idEmpresa);
 
@@ -125,6 +130,7 @@ class IngresosController extends BaseModuloController
             'empresa'           => $empresaData,
             'establecimientos'  => $establecimientos,
             'puntos'            => $puntos,
+            'seriesFiltro'      => $seriesFiltro,
             'formasCobro'       => $formasCobro,
             'conceptos'         => $conceptos,
             'comportamientosConPendientes' => $comportamientosConPendientes,

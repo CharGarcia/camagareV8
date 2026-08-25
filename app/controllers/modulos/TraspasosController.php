@@ -83,6 +83,8 @@ class TraspasosController extends BaseModuloController
         unset($fp);
         $formasPago = array_values($formasPago);
 
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/traspasos/index', [
             'titulo'            => 'Traspasos de Fondos',
             'perm'              => $perm,
@@ -102,6 +104,7 @@ class TraspasosController extends BaseModuloController
             'establecimientos'  => $establecimientos,
             'puntos'            => $puntos,
             'formasPago'        => $formasPago,
+            'seriesFiltro'      => $seriesFiltro,
             'fullWidth'         => true,
         ]);
     }

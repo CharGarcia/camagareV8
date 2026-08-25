@@ -75,6 +75,9 @@ class CarWashController extends BaseModuloController
             }
             $puntos[] = $p;
         }
+        // Series usadas realmente en órdenes existentes (para el filtro del listado, distinto
+        // de $puntos que es "en qué serie se puede emitir un documento nuevo").
+        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
         $formasPago = $this->repository->getFormasPago();
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int) $_SESSION['id_usuario'], $idEmpresa, (int) ($_SESSION['nivel'] ?? 1));
@@ -87,6 +90,7 @@ class CarWashController extends BaseModuloController
             'rutaModulo'  => self::RUTA_MODULO,
             'empresa'     => $empresaData,
             'puntos'      => $puntos,
+            'seriesFiltro' => $seriesFiltro,
             'formasPago'  => $formasPago,
             'bodegas'     => $bodegas,
             'tarifasIva'  => $tarifasIva,
