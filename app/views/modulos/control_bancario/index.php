@@ -103,6 +103,15 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <option value="OTRO">Otro</option>
                     </select>
                 </div>
+                <div style="flex:1.3 1 0;min-width:0">
+                    <label class="form-label small fw-bold text-muted mb-1">Cheques</label>
+                    <select class="form-select form-select-sm shadow-none" id="cb-cheque" onchange="window.CB_fetchSearch(1)">
+                        <option value="" selected>Todos</option>
+                        <option value="NO_COBRADOS">No cobrados</option>
+                        <option value="COBRADOS">Cobrados</option>
+                        <option value="POSFECHADOS">Posfechados</option>
+                    </select>
+                </div>
                 <div style="flex:0.8 1 0;min-width:0">
                     <label class="form-label small fw-bold text-muted mb-1">Año</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-anio" onchange="window.CB_actualizarFechas()">

@@ -312,6 +312,7 @@
 
         const flujo = (document.getElementById('cb-flujo') || {}).value || 'TODOS';
         const tipo = (document.getElementById('cb-tipo') || {}).value || '';
+        const cheque = (document.getElementById('cb-cheque') || {}).value || '';
 
         const params = new URLSearchParams({
             forma: state.forma,
@@ -324,6 +325,7 @@
             fecha_fin: fechaFin,
             flujo: flujo,
             tipo: tipo,
+            cheque: cheque,
         });
 
         try {

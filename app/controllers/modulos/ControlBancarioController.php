@@ -40,6 +40,8 @@ class ControlBancarioController extends BaseModuloController
             'buscar' => trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? ''),
             'flujo' => strtoupper(trim($_GET['flujo'] ?? $_POST['flujo'] ?? 'TODOS')),
             'tipo' => strtoupper(trim($_GET['tipo'] ?? $_POST['tipo'] ?? '')),
+            // Estado del cheque: NO_COBRADOS | COBRADOS | POSFECHADOS (vacío = no filtra).
+            'cheque' => strtoupper(trim($_GET['cheque'] ?? $_POST['cheque'] ?? '')),
         ];
     }
 
@@ -232,15 +234,25 @@ class ControlBancarioController extends BaseModuloController
               <button type="button" class="btn btn-outline-secondary btn-sm" ' . $nextDisabled . ' onclick="window.CB_cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>';
         $paginationHtml = ob_get_clean();
 
+        // La exportación repite exactamente lo que se está viendo, incluidos los filtros de
+        // flujo, tipo y estado del cheque (antes solo viajaban las fechas y la búsqueda).
         $urlBase = BASE_URL . '/' . $this->getRutaModulo();
+        $qs = 'forma=' . $idFormaPago
+            . '&consolidado=' . ($consolidado ? 1 : 0)
+            . '&fecha_inicio=' . urlencode($filtros['fecha_inicio'])
+            . '&fecha_fin=' . urlencode($filtros['fecha_fin'])
+            . '&b=' . urlencode($filtros['buscar'])
+            . '&flujo=' . urlencode($filtros['flujo'])
+            . '&tipo=' . urlencode($filtros['tipo'])
+            . '&cheque=' . urlencode($filtros['cheque']);
         echo json_encode([
             'ok' => true,
             'rows' => $rowsHtml,
             'pagination' => $paginationHtml,
             'info' => "$from-$to/$total",
             'total' => $total,
-            'pdf_url' => $urlBase . '/exportarPdfAjax?forma=' . $idFormaPago . '&consolidado=' . ($consolidado ? 1 : 0) . '&fecha_inicio=' . urlencode($filtros['fecha_inicio']) . '&fecha_fin=' . urlencode($filtros['fecha_fin']) . '&b=' . urlencode($filtros['buscar']),
-            'excel_url' => $urlBase . '/exportarExcelAjax?forma=' . $idFormaPago . '&consolidado=' . ($consolidado ? 1 : 0) . '&fecha_inicio=' . urlencode($filtros['fecha_inicio']) . '&fecha_fin=' . urlencode($filtros['fecha_fin']) . '&b=' . urlencode($filtros['buscar']),
+            'pdf_url' => $urlBase . '/exportarPdfAjax?' . $qs,
+            'excel_url' => $urlBase . '/exportarExcelAjax?' . $qs,
         ]);
         exit;
     }

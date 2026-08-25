@@ -633,6 +633,20 @@ class ControlBancarioRepository extends BaseRepository
             $params[':tipo_tx'] = $tipo;
         }
 
+        // Estado del cheque. "No cobrados" son los que siguen en circulación (sin Fecha Banco),
+        // que además son los que no mueven el saldo; "posfechados", los girados con fecha futura.
+        switch (strtoupper((string) ($filtros['cheque'] ?? ''))) {
+            case 'NO_COBRADOS':
+                $whereSql .= " AND tipo_transaccion = 'CHEQUE' AND fecha_banco_manual IS NULL";
+                break;
+            case 'COBRADOS':
+                $whereSql .= " AND tipo_transaccion = 'CHEQUE' AND fecha_banco_manual IS NOT NULL";
+                break;
+            case 'POSFECHADOS':
+                $whereSql .= " AND tipo_transaccion = 'CHEQUE' AND fecha_cheque > CURRENT_DATE";
+                break;
+        }
+
         if (!empty($filtros['buscar'])) {
             $parsed = FiltrosBusqueda::parsear($filtros['buscar']);
             if ($parsed['texto_libre'] !== '') {

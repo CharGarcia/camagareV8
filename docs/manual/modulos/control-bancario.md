@@ -95,6 +95,21 @@ puede diferir del saldo contable de la cuenta mientras haya cheques girados sin
 cobrar. Esa diferencia es exactamente el listado *Cheques girados pendientes de
 cobro* del reporte de conciliación.
 
+### Filtro "Cheques"
+
+En la barra de filtros, el selector **Cheques** deja ver de una sola vez los que
+importan:
+
+| Opción | Qué muestra |
+|--------|-------------|
+| Todos | Sin filtrar (todos los movimientos, sean cheque o no) |
+| No cobrados | Cheques sin Fecha Banco: los que siguen en circulación y no descuentan |
+| Cobrados | Cheques que el banco ya hizo efectivos |
+| Posfechados | Cheques girados con fecha futura, se hayan cobrado o no |
+
+Se combina con los demás filtros (flujo, tipo, período y buscador), y lo que se
+exporta a PDF y Excel es exactamente lo que quedó en pantalla.
+
 Si el período ya fue marcado como conciliado, primero hay que reabrirlo desde el
 historial de conciliaciones; mientras esté cerrado, sus movimientos no se
 editan.
@@ -197,7 +212,9 @@ mayor contable, sin ninguna acción adicional.
   tenga Fecha Banco no afecta saldos; cuando la tiene, cuenta en el período de
   esa fecha y no en el de emisión. El saldo del módulo pasa a reflejar el
   extracto bancario y puede diferir del contable mientras haya cheques en
-  circulación.
+  circulación. Se agregó el filtro **Cheques** (no cobrados / cobrados /
+  posfechados) y las exportaciones a PDF y Excel ahora respetan también los
+  filtros de flujo, tipo y estado del cheque.
 - **1.9** — Modal reorganizado: en los movimientos que vienen de un
   ingreso/egreso, el tipo, los datos del cheque y la observación pasan a la
   ficha del encabezado (solo lectura, se corrigen en el documento) y abajo
