@@ -121,8 +121,11 @@ class CajaPosController extends BaseModuloController
 
         // Igual que Factura de Venta/Recibos de Venta: variantes (Color/Talla,
         // con recargo opcional de precio) por producto, para el selector del POS.
+        // Se traen EN LOTE: una consulta para los 24 resultados en vez de una por
+        // producto, que en un buscador que dispara con cada tecla se nota.
+        $variantesPorProducto = $repo->getVariantesPorProductos(array_column($rows, 'id'), $idEmpresa);
         foreach ($rows as &$p) {
-            $p['variantes'] = $repo->getVariantes((int) $p['id'], $idEmpresa);
+            $p['variantes'] = $variantesPorProducto[(int) $p['id']] ?? [];
         }
         unset($p);
 

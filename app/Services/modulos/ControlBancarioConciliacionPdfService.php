@@ -37,7 +37,7 @@ class ControlBancarioConciliacionPdfService
         $y = $this->dibujarResumen($reporte, 12);
         $y = $this->dibujarTabla('DETALLE DE CRÉDITOS (entradas)', $reporte['creditos'], 'debe', $y + 6, false);
         $y = $this->dibujarTabla('DETALLE DE DÉBITOS (salidas)', $reporte['debitos'], 'haber', $y + 6, false);
-        $y = $this->dibujarTabla('CHEQUES EMITIDOS EN CIRCULACIÓN (no cobrados por el banco)', $reporte['cheques_no_cobrados'], 'haber', $y + 6, false, true);
+        $y = $this->dibujarTabla('CHEQUES GIRADOS PENDIENTES DE COBRO (no descontados del saldo)', $reporte['cheques_no_cobrados'], 'haber', $y + 6, false, true);
         $y = $this->dibujarTabla('CHEQUES COBRADOS POR EL BANCO EN EL PERÍODO', $reporte['cheques_cobrados'], 'haber', $y + 6, true, true);
 
         $this->dibujarFirmas($y + 10);

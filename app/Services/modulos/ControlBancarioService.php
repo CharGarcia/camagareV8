@@ -513,15 +513,20 @@ class ControlBancarioService
             }
         }
 
+        // Se ordena por la fecha con la que cada movimiento pesa en el banco (fecha_efectiva:
+        // en un cheque, la Fecha Banco), igual que hace el repositorio para una sola cuenta.
         // Cuando la cuenta no tiene contabilidad, id_asiento/id_asiento_detalle vienen NULL y el
         // desempate lo da la fila de pago (origen_id).
         usort($todas, static function ($a, $b) {
-            return [$a['fecha_asiento'], (int) $a['id_asiento'], (int) $a['id_asiento_detalle'], (int) ($a['origen_id'] ?? 0)]
-                <=> [$b['fecha_asiento'], (int) $b['id_asiento'], (int) $b['id_asiento_detalle'], (int) ($b['origen_id'] ?? 0)];
+            return [$a['fecha_efectiva'] ?? $a['fecha_asiento'], (int) $a['id_asiento'], (int) $a['id_asiento_detalle'], (int) ($a['origen_id'] ?? 0)]
+                <=> [$b['fecha_efectiva'] ?? $b['fecha_asiento'], (int) $b['id_asiento'], (int) $b['id_asiento_detalle'], (int) ($b['origen_id'] ?? 0)];
         });
+        // Un cheque todavía no cobrado (afecta_saldo = 0) no mueve el saldo del banco.
         $acum = $saldoInicioRango;
         foreach ($todas as &$row) {
-            $acum += (float) $row['debe'] - (float) $row['haber'];
+            if ((int) ($row['afecta_saldo'] ?? 1) === 1) {
+                $acum += (float) $row['debe'] - (float) $row['haber'];
+            }
             $row['saldo_acumulado'] = $acum;
         }
         unset($row);
@@ -882,7 +887,7 @@ class ControlBancarioService
 
         $row = $this->xlsTablaMovimientos($sheet, $row, 'DETALLE DE CRÉDITOS (entradas)', $reporte['creditos'], 'debe');
         $row = $this->xlsTablaMovimientos($sheet, $row + 1, 'DETALLE DE DÉBITOS (salidas)', $reporte['debitos'], 'haber');
-        $row = $this->xlsTablaCheques($sheet, $row + 1, 'CHEQUES EMITIDOS EN CIRCULACIÓN (no cobrados por el banco)', $reporte['cheques_no_cobrados'], false);
+        $row = $this->xlsTablaCheques($sheet, $row + 1, 'CHEQUES GIRADOS PENDIENTES DE COBRO (no descontados del saldo)', $reporte['cheques_no_cobrados'], false);
         $row = $this->xlsTablaCheques($sheet, $row + 1, 'CHEQUES COBRADOS POR EL BANCO EN EL PERÍODO', $reporte['cheques_cobrados'], true);
 
         foreach (range('A', 'H') as $col) {

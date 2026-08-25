@@ -319,6 +319,15 @@ class PedidosController extends BaseModuloController {
             $consumo = $this->repository->getCantidadConsumidaPorDetalle(array_column($detalles, 'id'));
 
             $productoRepo = new \App\repositories\modulos\ProductoRepository();
+
+            // Precios y variantes EN LOTE: dos consultas para todo el pedido en
+            // vez de dos por línea. Se piden para todos los productos del pedido
+            // aunque alguna línea acabe descartándose: sale más barato que un
+            // viaje de red por ítem.
+            $idsProd    = array_filter(array_column($detalles, 'id_producto'));
+            $preciosMap = $productoRepo->getPreciosPorProductos($idsProd, $idEmpresa);
+            $variantMap = $productoRepo->getVariantesPorProductos($idsProd, $idEmpresa);
+
             $lineas = [];
             $advertencias = [];
             foreach ($detalles as $d) {
@@ -338,8 +347,8 @@ class PedidosController extends BaseModuloController {
                     $advertencias[] = 'El producto "' . ($d['producto_nombre'] ?? $idProducto) . '" ya no está disponible para facturar y se omitió.';
                     continue;
                 }
-                $producto['precios_lista'] = $productoRepo->getPrecios($idProducto, $idEmpresa);
-                $producto['variantes']     = $productoRepo->getVariantes($idProducto, $idEmpresa);
+                $producto['precios_lista'] = $preciosMap[$idProducto] ?? [];
+                $producto['variantes']     = $variantMap[$idProducto] ?? [];
                 if ($consumida > 0.0001) {
                     $advertencias[] = 'El producto "' . $producto['nombre'] . '" ya tiene ' . $consumida . ' registrado en otra consignación o factura; se prellenó solo el saldo (' . $cantidadDisponible . ').';
                 }

@@ -155,6 +155,35 @@ class FacturaReembolsoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Impuestos de VARIAS líneas en UNA sola consulta, agrupados por línea.
+     *
+     * Evita el N+1 de llamar a getImpuestosDetalle() dentro del bucle de
+     * detalles: con la base en un servidor remoto, un documento de 30 líneas
+     * pagaba 30 viajes de red solo para esto.
+     *
+     * @param int[] $idsDetalle
+     * @return array<int,array> id de la línea => sus impuestos
+     */
+    public function getImpuestosPorDetalles(array $idsDetalle): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map("intval", $idsDetalle))));
+        if (!$ids) {
+            return [];
+        }
+
+        $ph  = implode(",", array_fill(0, count($ids), "?"));
+        $sql = "SELECT * FROM factura_reembolso_detalle_impuestos WHERE id_factura_reembolso_detalle IN ($ph)";
+
+        $porDetalle = [];
+        $st = $this->db->prepare($sql);
+        $st->execute($ids);
+        foreach ($st->fetchAll() as $imp) {
+            $porDetalle[(int) $imp["id_factura_reembolso_detalle"]][] = $imp;
+        }
+        return $porDetalle;
+    }
+
     public function insertDetalle(array $data): int
     {
         $sql = "INSERT INTO factura_reembolso_detalle (

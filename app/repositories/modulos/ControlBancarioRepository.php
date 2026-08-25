@@ -128,24 +128,44 @@ class ControlBancarioRepository extends BaseRepository
             return $this->getResumenPeriodoTesoreria($idEmpresa, (int) $idFormaPago, $fechaInicio, $fechaFin);
         }
 
+        // La forma de pago no es opcional: identifica la cuenta bancaria en el enlace con los
+        // cobros/pagos, del que sale el tipo de cada movimiento (y con él la regla del cheque).
+        if (empty($idFormaPago)) {
+            throw new \InvalidArgumentException('Falta la cuenta bancaria para calcular el resumen del período.');
+        }
+
+        return $this->sumarPeriodo(
+            $this->baseContable(),
+            $this->paramsContable($idEmpresa, (int) $idFormaPago, $idCuentaContable),
+            $fechaInicio,
+            $fechaFin
+        );
+    }
+
+    /**
+     * Suma del período sobre una base cruda, con la misma regla de cheques del listado
+     * (ver conSaldoAcumulado): un cheque sin Fecha Banco no entra, y uno cobrado entra en
+     * el período de esa fecha.
+     *  - delta_antes: saldo arrastrado de todo lo anterior a fechaInicio.
+     *  - creditos / debitos: entradas y salidas dentro del rango.
+     */
+    private function sumarPeriodo(string $crudo, array $params, string $fechaInicio, string $fechaFin): array
+    {
+        $afecta = self::SQL_AFECTA_SALDO;
+        $fechaEfectiva = self::SQL_FECHA_EFECTIVA;
+
         $sql = "SELECT
-                    COALESCE(SUM(CASE WHEN ac.fecha_asiento < :f_ini THEN ad.debe - ad.haber ELSE 0 END), 0) AS delta_antes,
-                    COALESCE(SUM(CASE WHEN ac.fecha_asiento BETWEEN :f_ini AND :f_fin THEN ad.debe ELSE 0 END), 0) AS creditos,
-                    COALESCE(SUM(CASE WHEN ac.fecha_asiento BETWEEN :f_ini AND :f_fin THEN ad.haber ELSE 0 END), 0) AS debitos
-                FROM asientos_contables_detalle ad
-                INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
-                WHERE ac.id_empresa = :id_empresa
-                  AND ac.estado = 'contabilizado'
-                  AND ac.eliminado = FALSE
-                  AND ad.eliminado = FALSE
-                  AND ad.id_cuenta_contable = :id_cuenta
-                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                    COALESCE(SUM(CASE WHEN {$afecta} = 1 AND ({$fechaEfectiva}) < :f_ini
+                                      THEN c.debe - c.haber ELSE 0 END), 0) AS delta_antes,
+                    COALESCE(SUM(CASE WHEN {$afecta} = 1 AND ({$fechaEfectiva}) BETWEEN :f_ini2 AND :f_fin
+                                      THEN c.debe ELSE 0 END), 0) AS creditos,
+                    COALESCE(SUM(CASE WHEN {$afecta} = 1 AND ({$fechaEfectiva}) BETWEEN :f_ini3 AND :f_fin2
+                                      THEN c.haber ELSE 0 END), 0) AS debitos
+                FROM ({$crudo}) c";
         $st = $this->db->prepare($sql);
-        $st->execute([
-            ':id_empresa' => $idEmpresa,
-            ':id_cuenta' => $idCuentaContable,
-            ':f_ini' => $fechaInicio,
-            ':f_fin' => $fechaFin,
+        $st->execute($params + [
+            ':f_ini' => $fechaInicio, ':f_ini2' => $fechaInicio, ':f_ini3' => $fechaInicio,
+            ':f_fin' => $fechaFin, ':f_fin2' => $fechaFin,
         ]);
         $row = $st->fetch(PDO::FETCH_ASSOC) ?: ['delta_antes' => 0, 'creditos' => 0, 'debitos' => 0];
         return [
@@ -162,22 +182,12 @@ class ControlBancarioRepository extends BaseRepository
             return ['delta_antes' => 0.0, 'creditos' => 0.0, 'debitos' => 0.0];
         }
 
-        $sql = "SELECT
-                    COALESCE(SUM(CASE WHEN b.fecha_asiento < :f_ini THEN b.debe - b.haber ELSE 0 END), 0) AS delta_antes,
-                    COALESCE(SUM(CASE WHEN b.fecha_asiento BETWEEN :f_ini2 AND :f_fin THEN b.debe ELSE 0 END), 0) AS creditos,
-                    COALESCE(SUM(CASE WHEN b.fecha_asiento BETWEEN :f_ini3 AND :f_fin2 THEN b.haber ELSE 0 END), 0) AS debitos
-                FROM ({$this->baseTesoreria()}) b";
-        $st = $this->db->prepare($sql);
-        $st->execute($this->paramsTesoreria($idEmpresa, $idFormaPago) + [
-            ':f_ini' => $fechaInicio, ':f_ini2' => $fechaInicio, ':f_ini3' => $fechaInicio,
-            ':f_fin' => $fechaFin, ':f_fin2' => $fechaFin,
-        ]);
-        $row = $st->fetch(PDO::FETCH_ASSOC) ?: ['delta_antes' => 0, 'creditos' => 0, 'debitos' => 0];
-        return [
-            'delta_antes' => (float) $row['delta_antes'],
-            'creditos' => (float) $row['creditos'],
-            'debitos' => (float) $row['debitos'],
-        ];
+        return $this->sumarPeriodo(
+            $this->baseTesoreria(),
+            $this->paramsTesoreria($idEmpresa, $idFormaPago),
+            $fechaInicio,
+            $fechaFin
+        );
     }
 
     // ── Fuente TESORERÍA (cuentas sin cuenta contable) ──────────────────────
@@ -439,6 +449,49 @@ class ControlBancarioRepository extends BaseRepository
     }
 
     /**
+     * Un CHEQUE solo mueve el saldo del banco cuando se cobró, es decir cuando tiene
+     * Fecha Banco registrada (cbm.fecha_banco). Girar un cheque no saca la plata de la
+     * cuenta: el banco la descuenta el día que lo hacen efectivo, y lo mismo vale para
+     * un cheque recibido de un cliente (entra cuando se acredita, no cuando se recibe).
+     *
+     * De ahí salen dos expresiones que se usan en TODO el módulo, sobre las columnas ya
+     * derivadas (por eso se aplican en una capa exterior, no en el mismo SELECT):
+     *  - `afecta_saldo`: 0 para un cheque sin Fecha Banco, 1 para todo lo demás.
+     *  - `fecha_efectiva`: la fecha con la que el movimiento pesa en el banco — la Fecha
+     *    Banco del cheque; si aún no se cobró, la del documento (para que la fila siga
+     *    apareciendo en el listado y se pueda marcar como cobrada).
+     * Los demás movimientos (transferencias, depósitos, débitos) no cambian: pesan con
+     * la fecha del documento, como siempre.
+     */
+    private const SQL_AFECTA_SALDO =
+        "CASE WHEN c.tipo_transaccion = 'CHEQUE' AND c.fecha_banco_manual IS NULL THEN 0 ELSE 1 END";
+
+    private const SQL_FECHA_EFECTIVA =
+        "CASE WHEN c.tipo_transaccion = 'CHEQUE' THEN COALESCE(c.fecha_banco_manual, c.fecha_asiento)
+              ELSE c.fecha_asiento END";
+
+    /**
+     * Envuelve el SELECT crudo (contable o de tesorería) agregando la fecha efectiva, el
+     * indicador de si mueve el saldo, y el saldo acumulado — que se calcula en orden de
+     * fecha efectiva y salta los cheques todavía no cobrados.
+     */
+    private function conSaldoAcumulado(string $crudo): string
+    {
+        $afecta = self::SQL_AFECTA_SALDO;
+        $fechaEfectiva = self::SQL_FECHA_EFECTIVA;
+
+        return "SELECT c.*,
+                       {$afecta} AS afecta_saldo,
+                       {$fechaEfectiva} AS fecha_efectiva,
+                       (:saldo_inicial + SUM(CASE WHEN {$afecta} = 0 THEN 0 ELSE c.debe - c.haber END) OVER (
+                           ORDER BY ({$fechaEfectiva}), COALESCE(c.id_asiento, 0),
+                                    COALESCE(c.id_asiento_detalle, c.origen_id, 0)
+                           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                       )) AS saldo_acumulado
+                FROM ({$crudo}) c";
+    }
+
+    /**
      * Movimientos de una cuenta bancaria. El saldo acumulado (saldo_inicial + suma
      * cronológica de debe-haber) se calcula con una función de ventana sobre TODO el
      * histórico de la cuenta (sin importar filtros de tipo/fecha mostrados), para que
@@ -464,63 +517,63 @@ class ControlBancarioRepository extends BaseRepository
         // Cuenta sin cuenta contable (empresa que no lleva contabilidad): el mayor no
         // existe, así que el movimiento se arma desde los cobros/pagos de esa cuenta.
         if ($idCuentaContable <= 0) {
-            $cte = "WITH base AS (
-                        SELECT b.*,
-                               (:saldo_inicial + SUM(b.debe - b.haber) OVER (
-                                   ORDER BY b.fecha_asiento, b.origen_tipo, b.origen_id
-                                   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                               )) AS saldo_acumulado
-                        FROM ({$this->baseTesoreria()}) b
-                    )";
+            $cte = "WITH base AS ({$this->conSaldoAcumulado($this->baseTesoreria())})";
             $params = $this->paramsTesoreria($idEmpresa, $idFormaPago) + [':saldo_inicial' => $saldoInicial];
             return $this->paginarBase($cte, $params, $filtros, $page, $perPage, $ordenCol, $dir);
         }
 
-        $cte = "WITH base AS (
-                    SELECT
-                        ad.id AS id_asiento_detalle,
-                        ac.id AS id_asiento,
-                        NULL::VARCHAR AS origen_tipo,
-                        NULL::INTEGER AS origen_id,
-                        ac.fecha_asiento,
-                        ac.numero_comprobante,
-                        ac.concepto,
-                        ad.referencia_detalle,
-                        ad.documento_referencia,
-                        ad.debe,
-                        ad.haber,
-                        ad.tipo_entidad,
-                        ad.id_entidad,
-                        COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos) AS nombre_entidad,
-                        COALESCE(NULLIF(ep.beneficiario_cheque, ''), cli.nombre, prov.razon_social, emp.nombres_apellidos) AS beneficiario_cheque,
-                        {$this->selectDerivado()},
-                        (:saldo_inicial + SUM(ad.debe - ad.haber) OVER (
-                            ORDER BY ac.fecha_asiento, ac.id, ad.id
-                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                        )) AS saldo_acumulado
-                    FROM asientos_contables_detalle ad
-                    INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
-                    INNER JOIN empresa_formas_pago fp ON fp.id = :id_forma_pago
-                    LEFT JOIN clientes cli ON ad.tipo_entidad = 'cliente' AND ad.id_entidad = cli.id
-                    LEFT JOIN proveedores prov ON ad.tipo_entidad = 'proveedor' AND ad.id_entidad = prov.id
-                    LEFT JOIN empleados emp ON ad.tipo_entidad = 'empleado' AND ad.id_entidad = emp.id
-                    {$this->joinsDerivado()}
-                    WHERE ac.id_empresa = :id_empresa
-                      AND ac.estado = 'contabilizado'
-                      AND ac.eliminado = FALSE
-                      AND ad.eliminado = FALSE
-                      AND ad.id_cuenta_contable = :id_cuenta_contable
-                      AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                )";
+        $cte = "WITH base AS ({$this->conSaldoAcumulado($this->baseContable())})";
+        $params = $this->paramsContable($idEmpresa, $idFormaPago, $idCuentaContable) + [':saldo_inicial' => $saldoInicial];
 
-        $params = [
+        return $this->paginarBase($cte, $params, $filtros, $page, $perPage, $ordenCol, $dir);
+    }
+
+    /**
+     * Movimientos de la cuenta desde el mayor contable, sin saldo ni filtros.
+     * Placeholders: :id_empresa, :id_forma_pago, :id_cuenta_contable.
+     */
+    private function baseContable(): string
+    {
+        return "SELECT
+                    ad.id AS id_asiento_detalle,
+                    ac.id AS id_asiento,
+                    NULL::VARCHAR AS origen_tipo,
+                    NULL::INTEGER AS origen_id,
+                    ac.fecha_asiento,
+                    ac.numero_comprobante,
+                    ac.concepto,
+                    ad.referencia_detalle,
+                    ad.documento_referencia,
+                    ad.debe,
+                    ad.haber,
+                    ad.tipo_entidad,
+                    ad.id_entidad,
+                    COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos) AS nombre_entidad,
+                    COALESCE(NULLIF(ep.beneficiario_cheque, ''), cli.nombre, prov.razon_social, emp.nombres_apellidos) AS beneficiario_cheque,
+                    {$this->selectDerivado()}
+                FROM asientos_contables_detalle ad
+                INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                INNER JOIN empresa_formas_pago fp ON fp.id = :id_forma_pago
+                LEFT JOIN clientes cli ON ad.tipo_entidad = 'cliente' AND ad.id_entidad = cli.id
+                LEFT JOIN proveedores prov ON ad.tipo_entidad = 'proveedor' AND ad.id_entidad = prov.id
+                LEFT JOIN empleados emp ON ad.tipo_entidad = 'empleado' AND ad.id_entidad = emp.id
+                {$this->joinsDerivado()}
+                WHERE ac.id_empresa = :id_empresa
+                  AND ac.estado = 'contabilizado'
+                  AND ac.eliminado = FALSE
+                  AND ad.eliminado = FALSE
+                  AND ad.id_cuenta_contable = :id_cuenta_contable
+                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+    }
+
+    /** Parámetros que espera baseContable(). */
+    private function paramsContable(int $idEmpresa, int $idFormaPago, int $idCuentaContable): array
+    {
+        return [
             ':id_empresa' => $idEmpresa,
             ':id_forma_pago' => $idFormaPago,
             ':id_cuenta_contable' => $idCuentaContable,
-            ':saldo_inicial' => $saldoInicial,
         ];
-
-        return $this->paginarBase($cte, $params, $filtros, $page, $perPage, $ordenCol, $dir);
     }
 
     /**
@@ -551,12 +604,15 @@ class ControlBancarioRepository extends BaseRepository
             $params[':f_origen_id'] = (int) $filtros['origen_id'];
         }
 
+        // El período se mide por la fecha con la que el movimiento pesa en el banco: un cheque
+        // cobrado pertenece al mes en que el banco lo hizo efectivo, no al de su emisión. Así el
+        // listado y los saldos del período muestran siempre lo mismo.
         if (!empty($filtros['fecha_inicio'])) {
-            $whereSql .= " AND fecha_asiento >= :f_ini";
+            $whereSql .= " AND fecha_efectiva >= :f_ini";
             $params[':f_ini'] = $filtros['fecha_inicio'];
         }
         if (!empty($filtros['fecha_fin'])) {
-            $whereSql .= " AND fecha_asiento <= :f_fin";
+            $whereSql .= " AND fecha_efectiva <= :f_fin";
             $params[':f_fin'] = $filtros['fecha_fin'];
         }
 

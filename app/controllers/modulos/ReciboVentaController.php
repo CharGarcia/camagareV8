@@ -183,11 +183,21 @@ class ReciboVentaController extends BaseModuloController
 
         $detalles = $this->repository->getDetalles($id);
         $prodRepo = new \App\repositories\modulos\ProductoRepository();
+        // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+        // de una por línea. Con la base en un servidor remoto, un documento
+        // largo pagaba un viaje de red por cada ítem.
+        $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
+
+        // Precios y variantes, también en lote.
+        $idsProd    = array_filter(array_column($detalles, 'id_producto'));
+        $preciosMap = $prodRepo->getPreciosPorProductos($idsProd, $idEmpresa);
+        $variantMap = $prodRepo->getVariantesPorProductos($idsProd, $idEmpresa);
+
         foreach ($detalles as &$d) {
-            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+            $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
             if (!empty($d['id_producto'])) {
-                $d['precios_lista'] = $prodRepo->getPrecios((int)$d['id_producto'], $idEmpresa);
-                $d['variantes']     = $prodRepo->getVariantes((int)$d['id_producto'], $idEmpresa);
+                $d['precios_lista'] = $preciosMap[(int) $d['id_producto']] ?? [];
+                $d['variantes']     = $variantMap[(int) $d['id_producto']] ?? [];
             }
         }
         unset($d);
@@ -395,8 +405,12 @@ class ReciboVentaController extends BaseModuloController
             }
 
             $detalles = $this->repository->getDetalles($id);
+            // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+            // de una por línea. Con la base en un servidor remoto, un documento
+            // largo pagaba un viaje de red por cada ítem.
+            $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
             foreach ($detalles as &$d) {
-                $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+                $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
             }
             unset($d);
 
@@ -586,9 +600,15 @@ class ReciboVentaController extends BaseModuloController
         $buscar = trim($_GET['q'] ?? '');
         $repo = new \App\repositories\modulos\ProductoRepository();
         $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta', true);
-        $rows = array_map(function ($p) use ($repo, $idEmpresa) {
-            $p['precios_lista'] = $repo->getPrecios((int)$p['id'], $idEmpresa);
-            $p['variantes']     = $repo->getVariantes((int)$p['id'], $idEmpresa);
+        // Precios y variantes EN LOTE: dos consultas para los 15 resultados en vez
+        // de dos por producto. El buscador dispara con cada tecla.
+        $idsProd    = array_column($result['rows'], 'id');
+        $preciosMap = $repo->getPreciosPorProductos($idsProd, $idEmpresa);
+        $variantMap = $repo->getVariantesPorProductos($idsProd, $idEmpresa);
+
+        $rows = array_map(function ($p) use ($preciosMap, $variantMap) {
+            $p['precios_lista'] = $preciosMap[(int)$p['id']] ?? [];
+            $p['variantes']     = $variantMap[(int)$p['id']] ?? [];
             return $p;
         }, $result['rows']);
         echo json_encode(['ok' => true, 'data' => $rows]);

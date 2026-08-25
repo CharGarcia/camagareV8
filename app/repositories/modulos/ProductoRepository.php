@@ -474,12 +474,40 @@ class ProductoRepository extends BaseRepository
 
     public function getVariantes(int $idProducto, int $idEmpresa): array
     {
-        $sql = "SELECT * FROM productos_variantes 
+        $sql = "SELECT * FROM productos_variantes
                 WHERE id_producto = :id_p AND id_empresa = :id_e AND eliminado = false
                 ORDER BY nombre ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_p' => $idProducto, ':id_e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Variantes de VARIOS productos en una sola consulta. Ver el porqué en
+     * getPreciosPorProductos().
+     *
+     * @param int[] $idProductos
+     * @return array<int,array> id_producto => variantes
+     */
+    public function getVariantesPorProductos(array $idProductos, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idProductos))));
+        if (!$ids) {
+            return [];
+        }
+
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT * FROM productos_variantes
+                WHERE id_empresa = ? AND eliminado = false AND id_producto IN ($ph)
+                ORDER BY id_producto, nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute(array_merge([$idEmpresa], $ids));
+
+        $porProducto = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $fila) {
+            $porProducto[(int) $fila['id_producto']][] = $fila;
+        }
+        return $porProducto;
     }
 
     public function getInventarios(int $idProducto, int $idEmpresa): array
@@ -567,6 +595,39 @@ class ProductoRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_producto' => $idProducto, ':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Precios de VARIOS productos en una sola consulta.
+     *
+     * Para abrir un documento con muchas líneas: llamar a getPrecios() dentro
+     * del bucle multiplica los viajes a la base por el número de líneas.
+     *
+     * @param int[] $idProductos
+     * @return array<int,array> id_producto => precios
+     */
+    public function getPreciosPorProductos(array $idProductos, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idProductos))));
+        if (!$ids) {
+            return [];
+        }
+
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT id_producto, id, nombre_precio, precio, valido_desde, valido_hasta, estado
+                FROM productos_precios
+                WHERE id_empresa = ? AND eliminado = false AND id_producto IN ($ph)
+                ORDER BY id_producto, nombre_precio";
+        $st = $this->db->prepare($sql);
+        $st->execute(array_merge([$idEmpresa], $ids));
+
+        $porProducto = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $fila) {
+            $idProducto = (int) $fila['id_producto'];
+            unset($fila['id_producto']); // mismas claves que getPrecios()
+            $porProducto[$idProducto][] = $fila;
+        }
+        return $porProducto;
     }
 
 

@@ -295,8 +295,14 @@ class TallerEstacionController extends BaseModuloController
             $repoInv = new \App\repositories\modulos\InventarioRepository();
             $result  = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta', true);
 
-            $rows = array_map(function ($p) use ($repo, $repoInv, $idEmpresa, $idBodega, $idOrden) {
-                $p['precios_lista'] = $repo->getPrecios((int) $p['id'], $idEmpresa);
+            // Precios y variantes EN LOTE: dos consultas para los 15 resultados en
+            // vez de dos por producto. El buscador dispara con cada tecla, así que
+            // era donde más se acumulaban los viajes a la base.
+            $idsProd    = array_column($result['rows'], 'id');
+            $preciosMap = $repo->getPreciosPorProductos($idsProd, $idEmpresa);
+            $variantMap = $repo->getVariantesPorProductos($idsProd, $idEmpresa);
+            $rows = array_map(function ($p) use ($repo, $repoInv, $idEmpresa, $idBodega, $idOrden, $preciosMap, $variantMap) {
+                $p['precios_lista'] = $preciosMap[(int) $p['id']] ?? [];
 
                 $esInv = ($p['inventariable'] == true || $p['inventariable'] === 'true' || $p['inventariable'] == 1)
                          && (($p['tipo_produccion'] ?? '01') !== '02');

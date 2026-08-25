@@ -164,11 +164,22 @@ class ProformasController extends BaseModuloController
 
         $productoRepo = new \App\repositories\modulos\ProductoRepository();
         $detalles = $this->repository->getDetalles($id);
+        // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+        // de una por línea. Con la base en un servidor remoto, un documento
+        // largo pagaba un viaje de red por cada ítem.
+        $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
+
+        // Precios reales del producto (para el select de lista de precios al
+        // editar), también en lote.
+        $preciosMap = $productoRepo->getPreciosPorProductos(
+            array_filter(array_column($detalles, 'id_producto')),
+            $idEmpresa
+        );
+
         foreach ($detalles as &$d) {
-            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
-            // Precios reales del producto (para el select de lista de precios al editar)
+            $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
             $d['precios_lista'] = !empty($d['id_producto'])
-                ? $productoRepo->getPrecios((int) $d['id_producto'], $idEmpresa)
+                ? ($preciosMap[(int) $d['id_producto']] ?? [])
                 : [];
         }
         unset($d);
@@ -366,8 +377,12 @@ class ProformasController extends BaseModuloController
         $repo      = new \App\repositories\modulos\ProductoRepository();
         $result    = $repo->getListado($idEmpresa, $q, 1, 15, 'nombre', 'ASC', null, 'venta', true);
 
-        $rows = array_map(function ($p) use ($repo, $idEmpresa) {
-            $p['precios_lista'] = $repo->getPrecios((int)$p['id'], $idEmpresa);
+        // Precios EN LOTE: una consulta para los 15 resultados en vez de una por
+        // producto. El buscador dispara con cada tecla.
+        $preciosMap = $repo->getPreciosPorProductos(array_column($result['rows'], 'id'), $idEmpresa);
+
+        $rows = array_map(function ($p) use ($preciosMap) {
+            $p['precios_lista'] = $preciosMap[(int)$p['id']] ?? [];
             return $p;
         }, $result['rows']);
 
@@ -426,8 +441,12 @@ class ProformasController extends BaseModuloController
         }
 
         $detalles = $this->repository->getDetalles($id);
+        // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+        // de una por línea. Con la base en un servidor remoto, un documento
+        // largo pagaba un viaje de red por cada ítem.
+        $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
         foreach ($detalles as &$d) {
-            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+            $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
         }
         unset($d);
 
@@ -510,8 +529,12 @@ class ProformasController extends BaseModuloController
             }
 
             $detalles = $this->repository->getDetalles($id);
+            // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+            // de una por línea. Con la base en un servidor remoto, un documento
+            // largo pagaba un viaje de red por cada ítem.
+            $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
             foreach ($detalles as &$d) {
-                $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+                $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
             }
             unset($d);
 
@@ -1002,8 +1025,12 @@ class ProformasController extends BaseModuloController
         if (!$cabecera) return null;
 
         $detalles = $this->repository->getDetalles($id);
+        // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+        // de una por línea. Con la base en un servidor remoto, un documento
+        // largo pagaba un viaje de red por cada ítem.
+        $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
         foreach ($detalles as &$d) {
-            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+            $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
         }
         unset($d);
         $adicional = $this->repository->getInfoAdicional($id);

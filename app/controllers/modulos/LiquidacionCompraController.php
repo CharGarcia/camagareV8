@@ -175,8 +175,12 @@ class LiquidacionCompraController extends BaseModuloController
         }
 
         $detalles = $this->repository->getDetalles($id);
+        // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+        // de una por línea. Con la base en un servidor remoto, un documento
+        // largo pagaba un viaje de red por cada ítem.
+        $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
         foreach ($detalles as &$d) {
-            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+            $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
         }
         unset($d);
 
@@ -652,8 +656,12 @@ class LiquidacionCompraController extends BaseModuloController
         // Fallback: regenerar y persistir
         try {
             $detalles = $this->repository->getDetalles($id);
+            // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+            // de una por línea. Con la base en un servidor remoto, un documento
+            // largo pagaba un viaje de red por cada ítem.
+            $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
             foreach ($detalles as &$d) {
-                $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+                $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
             }
             unset($d);
 
@@ -1115,8 +1123,12 @@ class LiquidacionCompraController extends BaseModuloController
         }
 
         $detalles = $this->repository->getDetalles($id);
+        // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+        // de una por línea. Con la base en un servidor remoto, un documento
+        // largo pagaba un viaje de red por cada ítem.
+        $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
         foreach ($detalles as &$d) {
-            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+            $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
         }
         unset($d);
 

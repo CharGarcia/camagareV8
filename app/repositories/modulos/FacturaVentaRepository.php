@@ -387,6 +387,33 @@ class FacturaVentaRepository extends BaseRepository
         return $this->query($sql, [$idDetalle])->fetchAll();
     }
 
+    /**
+     * Impuestos de VARIAS líneas en UNA sola consulta, agrupados por línea.
+     *
+     * Evita el N+1 de llamar a getImpuestosDetalle() dentro del bucle de
+     * detalles: con la base en un servidor remoto, un documento de 30 líneas
+     * pagaba 30 viajes de red solo para esto.
+     *
+     * @param int[] $idsDetalle
+     * @return array<int,array> id de la línea => sus impuestos
+     */
+    public function getImpuestosPorDetalles(array $idsDetalle): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map("intval", $idsDetalle))));
+        if (!$ids) {
+            return [];
+        }
+
+        $ph  = implode(",", array_fill(0, count($ids), "?"));
+        $sql = "SELECT * FROM ventas_detalle_impuestos WHERE id_venta_detalle IN ($ph)";
+
+        $porDetalle = [];
+        foreach ($this->query($sql, $ids)->fetchAll() as $imp) {
+            $porDetalle[(int) $imp["id_venta_detalle"]][] = $imp;
+        }
+        return $porDetalle;
+    }
+
     public function getPagos(int $idVenta): array
     {
         $sql = "SELECT vp.*, COALESCE(fps.nombre, vp.forma_pago) AS nombre_forma_pago

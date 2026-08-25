@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.9
+version: 1.10
 orden: 60
 estado: activo
 ---
@@ -72,6 +72,28 @@ Ese dato viaja al egreso: el cheque pasa a verse como "Cobrado" y el sistema ya
 no permite cambiarle la fecha ni anularlo (ver [Egresos](egresos.md)). El campo
 queda **vacío mientras nadie lo haya conciliado**, para que llenarlo sea siempre
 una decisión explícita.
+
+### Un cheque solo descuenta cuando se cobra
+
+Girar un cheque no saca la plata de la cuenta: el banco la descuenta el día que
+lo hace efectivo. El módulo trabaja con ese criterio.
+
+- Un cheque **sin Fecha Banco no mueve el saldo**: aparece en el listado (para
+  poder marcarlo), pero no entra en los créditos/débitos del período ni cambia
+  el saldo acumulado, que se muestra atenuado en esa fila.
+- Al registrarle la Fecha Banco, el cheque **pasa a pesar en el período de esa
+  fecha**, no en el de su emisión. Un cheque girado en marzo y cobrado en mayo
+  se ve y descuenta en mayo.
+- Vale igual para los **cheques recibidos** de clientes: suman al saldo cuando
+  se acreditan, no cuando se reciben.
+
+Los demás movimientos (transferencias, depósitos, débitos) no cambian: cuentan
+con la fecha del documento, como siempre.
+
+Como consecuencia, el saldo de este módulo refleja el **extracto del banco**, y
+puede diferir del saldo contable de la cuenta mientras haya cheques girados sin
+cobrar. Esa diferencia es exactamente el listado *Cheques girados pendientes de
+cobro* del reporte de conciliación.
 
 Si el período ya fue marcado como conciliado, primero hay que reabrirlo desde el
 historial de conciliaciones; mientras esté cerrado, sus movimientos no se
@@ -170,6 +192,12 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.10** — Cambio de criterio en el saldo: un cheque solo se descuenta (o
+  suma, si es recibido) cuando está registrado como **cobrado**. Mientras no
+  tenga Fecha Banco no afecta saldos; cuando la tiene, cuenta en el período de
+  esa fecha y no en el de emisión. El saldo del módulo pasa a reflejar el
+  extracto bancario y puede diferir del contable mientras haya cheques en
+  circulación.
 - **1.9** — Modal reorganizado: en los movimientos que vienen de un
   ingreso/egreso, el tipo, los datos del cheque y la observación pasan a la
   ficha del encabezado (solo lectura, se corrigen en el documento) y abajo

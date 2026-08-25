@@ -993,9 +993,15 @@ class ConsignacionesVentasController extends BaseModuloController
 
         $repoInv = new \App\repositories\modulos\InventarioRepository();
 
-        $rows = array_map(function ($p) use ($repo, $repoInv, $idEmpresa, $idBodega, $idConsignacion) {
-            $p['precios_lista'] = $repo->getPrecios((int)$p['id'], $idEmpresa);
-            $p['variantes']     = $repo->getVariantes((int)$p['id'], $idEmpresa);
+        // Precios y variantes EN LOTE: dos consultas para los 15 resultados en vez
+        // de dos por producto. El buscador dispara con cada tecla.
+        $idsProd    = array_column($result['rows'], 'id');
+        $preciosMap = $repo->getPreciosPorProductos($idsProd, $idEmpresa);
+        $variantMap = $repo->getVariantesPorProductos($idsProd, $idEmpresa);
+
+        $rows = array_map(function ($p) use ($repo, $repoInv, $idEmpresa, $idBodega, $idConsignacion, $preciosMap, $variantMap) {
+            $p['precios_lista'] = $preciosMap[(int)$p['id']] ?? [];
+            $p['variantes']     = $variantMap[(int)$p['id']] ?? [];
             
             $stock = 0.0;
             if ($idBodega > 0 && ($p['inventariable'] == true || $p['inventariable'] == 'true' || $p['inventariable'] == 1)) {
@@ -1125,6 +1131,15 @@ class ConsignacionesVentasController extends BaseModuloController
             $detalles = $stmtD->fetchAll(\PDO::FETCH_ASSOC);
 
             $repoProd = new \App\repositories\modulos\ProductoRepository();
+
+            // Precios EN LOTE: una consulta para todas las líneas en vez de una
+            // por línea (con la base remota, un pedido largo pagaba un viaje de
+            // red por cada ítem).
+            $preciosMap = $repoProd->getPreciosPorProductos(
+                array_filter(array_column($detalles, 'id_producto')),
+                $idEmpresa
+            );
+
             foreach ($detalles as &$d) {
                 // Calculate quantity already consigned in non-deleted consignments (excluyendo
                 // la propia consignación en edición: ver comentario arriba).
@@ -1141,7 +1156,7 @@ class ConsignacionesVentasController extends BaseModuloController
 
                 $d['cantidad_consignada'] = $consignado;
                 $d['cantidad_pendiente']  = max(0.0, ((float)$d['cantidad']) - $consignado);
-                $d['precios_lista']       = $repoProd->getPrecios((int)$d['id_producto'], $idEmpresa);
+                $d['precios_lista']       = $preciosMap[(int)$d['id_producto']] ?? [];
             }
             unset($d);
 

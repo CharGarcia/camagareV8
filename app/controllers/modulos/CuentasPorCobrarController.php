@@ -874,8 +874,12 @@ $plantillasFiltradas = [];
         if ($nombrePlant === 'factura_por_cobrar') {
             $ventasRepo = new \App\repositories\modulos\FacturaVentaRepository();
             $detalles = $ventasRepo->getDetalles($idVenta);
+            // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
+            // de una por línea. Con la base en un servidor remoto, un documento
+            // largo pagaba un viaje de red por cada ítem.
+            $impuestosPorDetalle = $ventasRepo->getImpuestosPorDetalles(array_column($detalles, 'id'));
             foreach ($detalles as &$d) {
-                $d['impuestos'] = $ventasRepo->getImpuestosDetalle((int)$d['id']);
+                $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
             }
             unset($d);
             $pagos = $ventasRepo->getPagos($idVenta);

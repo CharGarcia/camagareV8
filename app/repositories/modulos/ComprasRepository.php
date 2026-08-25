@@ -420,6 +420,33 @@ class ComprasRepository extends BaseRepository
     }
 
     /**
+     * Impuestos de VARIAS líneas en UNA sola consulta, agrupados por línea.
+     *
+     * Evita el N+1 de llamar a getImpuestosDetalle() dentro del bucle de
+     * detalles: con la base en un servidor remoto, un documento de 30 líneas
+     * pagaba 30 viajes de red solo para esto.
+     *
+     * @param int[] $idsDetalle
+     * @return array<int,array> id de la línea => sus impuestos
+     */
+    public function getImpuestosPorDetalles(array $idsDetalle): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map("intval", $idsDetalle))));
+        if (!$ids) {
+            return [];
+        }
+
+        $ph  = implode(",", array_fill(0, count($ids), "?"));
+        $sql = "SELECT * FROM compras_detalle_impuestos WHERE id_compra_detalle IN ($ph)";
+
+        $porDetalle = [];
+        foreach ($this->query($sql, $ids)->fetchAll() as $imp) {
+            $porDetalle[(int) $imp["id_compra_detalle"]][] = $imp;
+        }
+        return $porDetalle;
+    }
+
+    /**
      * Una sola línea de compra por su id, con datos de cabecera necesarios para
      * precargar un alta de Activo Fijo (proveedor, fecha de emisión).
      */

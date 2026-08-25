@@ -181,6 +181,35 @@ class NotaCreditoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Impuestos de VARIAS líneas en UNA sola consulta, agrupados por línea.
+     *
+     * Evita el N+1 de llamar a getImpuestosDetalle() dentro del bucle de
+     * detalles: con la base en un servidor remoto, un documento de 30 líneas
+     * pagaba 30 viajes de red solo para esto.
+     *
+     * @param int[] $idsDetalle
+     * @return array<int,array> id de la línea => sus impuestos
+     */
+    public function getImpuestosPorDetalles(array $idsDetalle): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsDetalle))));
+        if (!$ids) {
+            return [];
+        }
+
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT * FROM notas_credito_detalle_impuestos WHERE id_nota_credito_detalle IN ($ph)";
+        $st  = $this->db->prepare($sql);
+        $st->execute($ids);
+
+        $porDetalle = [];
+        foreach ($st->fetchAll() as $imp) {
+            $porDetalle[(int) $imp['id_nota_credito_detalle']][] = $imp;
+        }
+        return $porDetalle;
+    }
+
     // ── Información adicional ──────────────────────────────────────────────────
 
     public function getInfoAdicional(int $idNC): array

@@ -190,6 +190,10 @@ class ControlBancarioController extends BaseModuloController
                     ? '<a href="#" onclick="event.stopPropagation(); event.preventDefault(); ASIENTO_abrirModal(' . (int) $r['id_asiento'] . ');" class="text-decoration-none fw-bold" title="Ver asiento contable">' . $numeroComprobante . '</a>'
                     : '<span class="fw-bold" title="' . ((($r['origen_tipo'] ?? '') === 'egreso') ? 'Egreso' : 'Ingreso') . '">' . $numeroComprobante . '</span>';
 
+                // Un cheque sin cobrar no mueve el saldo del banco (afecta_saldo = 0): su saldo
+                // acumulado repite el anterior, y se atenúa para que se note por qué.
+                $noAfectaSaldo = isset($r['afecta_saldo']) && (int) $r['afecta_saldo'] === 0;
+
                 // Para un cheque, la columna Fecha Banco es su estado de cobro: la fecha real
                 // que registró el usuario al conciliar (fecha_banco_manual) o, si no la hay,
                 // el aviso de que sigue en circulación y cómo marcarlo.
@@ -215,7 +219,7 @@ class ControlBancarioController extends BaseModuloController
                         <td data-col="glosa" class="text-truncate text-muted" style="max-width:220px">' . htmlspecialchars((string) $glosa) . '</td>
                         <td class="text-end" data-col="debe">' . ((float) $r['debe'] > 0 ? number_format((float) $r['debe'], 2) : '') . '</td>
                         <td class="text-end" data-col="haber">' . ((float) $r['haber'] > 0 ? number_format((float) $r['haber'], 2) : '') . '</td>
-                        <td class="text-end fw-bold pe-3" data-col="saldo">' . number_format((float) $r['saldo_acumulado'], 2) . '</td>
+                        <td class="text-end fw-bold pe-3' . ($noAfectaSaldo ? ' text-muted fw-normal' : '') . '" data-col="saldo"' . ($noAfectaSaldo ? ' title="El cheque todavía no se cobró: no mueve el saldo del banco"' : '') . '>' . number_format((float) $r['saldo_acumulado'], 2) . '</td>
                       </tr>';
             }
         }
