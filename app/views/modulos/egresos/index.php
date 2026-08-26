@@ -2322,7 +2322,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('tbodyEgresos').innerHTML = res.rows;
             document.getElementById('paginationContainer').innerHTML = res.pagination;
             document.getElementById('paginationInfo').innerText = res.info;
-            
+
+            // Actualizar enlaces de exportación para que bajen con el filtro/orden vigente
+            const btnPdf = document.getElementById('btnExportPdf');
+            const btnXls = document.getElementById('btnExportExcel');
+            if (btnPdf) btnPdf.href = `${EGR_URL}/export-pdf?b=${encodeURIComponent(b)}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            if (btnXls) btnXls.href = `${EGR_URL}/export-excel?b=${encodeURIComponent(b)}&sort=${window.currentSort}&dir=${window.currentDir}`;
+
             // Actualizar iconos visuales sort headers
             document.querySelectorAll('.sortable-header').forEach(th => {
                 const icon = th.querySelector('i');

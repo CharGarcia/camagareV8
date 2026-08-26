@@ -121,8 +121,11 @@ class IngresoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id
                 $where
-                ORDER BY $ordenExpr $ordenDir
-                LIMIT $perPage OFFSET $offset";
+                ORDER BY $ordenExpr $ordenDir";
+
+        if ($perPage > 0) {
+            $sql .= " LIMIT $perPage OFFSET $offset";
+        }
 
         $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
 

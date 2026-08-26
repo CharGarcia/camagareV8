@@ -123,6 +123,141 @@ class EgresosController extends BaseModuloController
         ]);
     }
 
+    private function getListadoParaExport(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_emision');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
+
+        return $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir);
+    }
+
+    /** Exporta a Excel el listado de Egresos (con los mismos filtros/orden del buscador). */
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->getListadoParaExport()['rows'];
+
+        $idEmpresa     = (int) $_SESSION['id_empresa'];
+        $empresaModel  = new Empresa();
+        $empresa       = $empresaModel->getPorId($idEmpresa);
+        $nombreEmpresa = $empresa['nombre'] ?? '';
+
+        $headers    = ['Nº Egreso', 'Fecha', 'Tipo', 'Beneficiario', 'Observaciones', 'Monto', 'Estado'];
+        $exportData = [];
+        foreach ($rows as $r) {
+            $tipoLabel = \App\Helpers\TipoDocumentoHelper::egresoLabel(
+                $r['tipos_detalle'] ?? null,
+                $r['tipo_egreso'] ?? null,
+                $r['concepto_nombre'] ?? null
+            );
+            $exportData[] = [
+                (string)($r['numero_egreso'] ?? ''),
+                !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                $tipoLabel,
+                (string)($r['sujeto_nombre'] ?? ''),
+                (string)($r['observaciones'] ?? ''),
+                (float)($r['monto_total'] ?? 0),
+                ucfirst((string)($r['estado'] ?? '')),
+            ];
+        }
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Egresos', $headers, $exportData, 'Listado de Egresos', $nombreEmpresa);
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    /** Exporta a PDF el listado de Egresos (con los mismos filtros/orden del buscador). */
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->getListadoParaExport()['rows'];
+
+        $idEmpresa     = (int) $_SESSION['id_empresa'];
+        $empresaModel  = new Empresa();
+        $empresa       = $empresaModel->getPorId($idEmpresa);
+        $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE EGRESOS';
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 7pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 3px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 3px; overflow: hidden; word-wrap: break-word; }
+                .text-end { text-align: right; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Listado de Egresos</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 12%">Nº Egreso</th>
+                            <th style="width: 8%">Fecha</th>
+                            <th style="width: 14%">Tipo</th>
+                            <th style="width: 20%">Beneficiario</th>
+                            <th style="width: 26%">Observaciones</th>
+                            <th style="width: 10%" class="text-end">Monto</th>
+                            <th style="width: 10%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <?php
+                            $tipoLabel = \App\Helpers\TipoDocumentoHelper::egresoLabel(
+                                $r['tipos_detalle'] ?? null,
+                                $r['tipo_egreso'] ?? null,
+                                $r['concepto_nombre'] ?? null
+                            );
+                            ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string)($r['numero_egreso'] ?? '')) ?></td>
+                                <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                                <td><?= htmlspecialchars($tipoLabel) ?></td>
+                                <td><?= htmlspecialchars((string)($r['sujeto_nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['observaciones'] ?? '')) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['monto_total'] ?? 0), 2) ?></td>
+                                <td><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Egresos_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
     /** Buscador predictivo de cuentas contables de movimiento para la grilla manual de egresos. */
     public function searchCuentasAjax(): void
     {

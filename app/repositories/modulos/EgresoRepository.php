@@ -136,8 +136,11 @@ class EgresoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON e.created_by = u.id
                 LEFT JOIN empresa_opciones_ingreso_egreso ec ON e.id_egreso_concepto = ec.id
                 $where
-                ORDER BY $ordenExpr $ordenDir
-                LIMIT $perPage OFFSET $offset";
+                ORDER BY $ordenExpr $ordenDir";
+
+        if ($perPage > 0) {
+            $sql .= " LIMIT $perPage OFFSET $offset";
+        }
 
         $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
 
