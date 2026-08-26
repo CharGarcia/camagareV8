@@ -318,11 +318,23 @@ class CargaFacturasController extends BaseModuloController
             static fn($f) => !empty($f['errores']) || !empty($f['avisos'])
         ));
 
-        // Un archivo con miles de errores no aporta nada extra en pantalla.
-        $recortadoFilas = count($filas) > 300;
-        if ($recortadoFilas) {
-            $filas = array_slice($filas, 0, 300);
-        }
+        // Los ERRORES van primero. Antes se recortaba la lista tal cual venía y,
+        // como los errores de la cabecera se añaden al final del informe, un
+        // archivo con muchos avisos (uno por producto nuevo) los empujaba fuera
+        // del corte: la factura salía "BLOQUEADA" sin que se viera el motivo.
+        usort($filas, static function ($a, $b) {
+            $ea = empty($a['errores']) ? 1 : 0;
+            $eb = empty($b['errores']) ? 1 : 0;
+            return $ea <=> $eb;
+        });
+
+        // Un archivo con miles de mensajes no aporta nada extra en pantalla, pero
+        // el recorte solo puede comerse avisos, nunca un error.
+        $conError       = array_values(array_filter($filas, static fn($f) => !empty($f['errores'])));
+        $soloAvisos     = array_values(array_filter($filas, static fn($f) => empty($f['errores'])));
+        $hueco          = max(0, 300 - count($conError));
+        $recortadoFilas = count($soloAvisos) > $hueco;
+        $filas          = array_merge($conError, array_slice($soloAvisos, 0, $hueco));
 
         $facturas = [];
         foreach ($informe['facturas'] ?? [] as $clave => $f) {
@@ -341,6 +353,9 @@ class CargaFacturasController extends BaseModuloController
                 'forma_pago'     => $f['forma_pago'],
                 'pago_origen'    => $f['forma_pago_origen'],
                 'bloqueada'      => !empty($f['errores']),
+                // El motivo viaja con la propia factura: con cientos de líneas,
+                // buscarlo en la pestaña de problemas es impracticable.
+                'errores'        => array_values($f['errores']),
             ];
         }
 

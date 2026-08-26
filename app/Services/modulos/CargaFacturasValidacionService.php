@@ -635,13 +635,38 @@ class CargaFacturasValidacionService
                     if (!$prod['status']) {
                         $avisos[] = 'El producto "' . $codProducto . '" está inactivo pero se facturará igual.';
                     }
+
+                    // El código ya está en el catálogo: se factura ESE artículo,
+                    // no se crea nada. Hay que decirlo, porque si la numeración
+                    // del archivo viene de otro sistema puede haber chocado con un
+                    // producto distinto que ya ocupaba ese código.
+                    $mismoNombre = $this->normalizarTexto($prod['nombre']) !== ''
+                        && mb_strtoupper($this->normalizarTexto($prod['nombre']))
+                           === mb_strtoupper($this->normalizarTexto($descripcion));
+
+                    if ($descripcion === '' || $mismoNombre) {
+                        $avisos[] = 'Fila ' . $nFila . ': el código "' . $codProducto . '" YA EXISTE en el '
+                            . 'catálogo como ' . $this->nombreTipo($tipoProduccion) . ' "' . $prod['nombre']
+                            . '". Se facturará ese; no se creará uno nuevo.';
+                    } else {
+                        // Nombres distintos: casi siempre es una colisión de
+                        // numeración, y facturaría el artículo equivocado (y le
+                        // descontaría stock si maneja inventario).
+                        $avisos[] = 'Fila ' . $nFila . ': ATENCIÓN, el código "' . $codProducto . '" YA EXISTE '
+                            . 'en el catálogo como ' . $this->nombreTipo($tipoProduccion) . ' "' . $prod['nombre']
+                            . '"' . ($inventariable ? ' (maneja INVENTARIO)' : '') . ', pero en el archivo dice "'
+                            . $descripcion . '". Se facturará el del catálogo'
+                            . ($inventariable ? ' y se le descontará stock' : '')
+                            . '. Compruebe que sea el mismo artículo; si no, cambie el código en el Excel.';
+                    }
+
                     if ($descripcion === '') {
                         $descripcion = $prod['nombre'];
                     }
                     // El catálogo manda: desde aquí no se modifican productos que
                     // ya existen. Pero si el archivo dice otra cosa, conviene verlo.
                     if ($tipoBruto !== '' && $tipoPedido !== $tipoProduccion) {
-                        $avisos[] = 'El código "' . $codProducto . '" ya existe en el catálogo como '
+                        $avisos[] = 'Fila ' . $nFila . ': el código "' . $codProducto . '" ya existe en el catálogo como '
                             . $this->nombreTipo($tipoProduccion) . '; se ignora el TIPO del archivo.';
                     }
                 } else {
@@ -651,7 +676,7 @@ class CargaFacturasValidacionService
                     $tipoProduccion = $tipoPedido;
                     $inventariable  = ($tipoPedido === CargaFacturasEsquema::TIPO_BIEN);
 
-                    $avisos[] = 'El código "' . $codProducto . '" no existe: se creará como '
+                    $avisos[] = 'Fila ' . $nFila . ': el código "' . $codProducto . '" no existe: se creará como '
                         . $this->nombreTipo($tipoPedido)
                         . ($inventariable ? ' con inventario y stock en cero.' : '.');
 

@@ -206,7 +206,20 @@
         const facturas = informe.facturas || [];
 
         $('cfFacturasBody').innerHTML = facturas.length
-            ? facturas.map((f) => `
+            ? facturas.map((f) => {
+                // El motivo del bloqueo va justo debajo de su factura: con cientos
+                // de líneas, ir a buscarlo a la pestaña de problemas no es viable.
+                const motivos = (f.errores || []).length
+                    ? `<tr class="table-danger">
+                           <td colspan="9" class="small pt-0" style="border-top:0;">
+                               <div class="ps-2 border-start border-3 border-danger">
+                                   ${(f.errores || []).map((m) => `<div class="text-danger">${esc(m)}</div>`).join('')}
+                               </div>
+                           </td>
+                       </tr>`
+                    : '';
+
+                return `
                 <tr class="${f.bloqueada ? 'table-danger' : ''}">
                     <td class="small fw-semibold">${esc(f.clave)}</td>
                     <td class="small text-muted">${esc(f.fila)}</td>
@@ -224,7 +237,8 @@
                             ${f.bloqueada ? 'BLOQUEADA' : 'SE CREARÁ'}
                         </span>
                     </td>
-                </tr>`).join('')
+                </tr>${motivos}`;
+            }).join('')
             : '<tr><td colspan="9" class="text-center text-muted small py-3">Sin facturas en el archivo.</td></tr>';
 
         $('cfRecortadoFacturas').classList.toggle('d-none', !informe.recortado_facturas);
