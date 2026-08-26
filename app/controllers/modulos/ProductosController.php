@@ -423,10 +423,35 @@ class ProductosController extends BaseModuloController
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $tipo = $_GET['tipo'] ?? '01'; // '01' o '02'
+        $prefijo = trim($_GET['prefijo'] ?? '');
 
         try {
-            $nextCodigo = $this->service->getSiguienteCodigo($idEmpresa, $tipo);
+            // Con prefijo: el usuario ya eligió la familia (CM, CB, ...) y solo
+            // se calcula su siguiente consecutivo. Sin prefijo: comportamiento
+            // automático de siempre (adivina el prefijo más usado para el tipo).
+            $nextCodigo = $prefijo !== ''
+                ? $this->service->getSiguienteCodigoPorPrefijo($idEmpresa, $tipo, $prefijo)
+                : $this->service->getSiguienteCodigo($idEmpresa, $tipo);
             echo json_encode(['ok' => true, 'codigo' => $nextCodigo]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Prefijos de código ya usados para un tipo de producción, para que el usuario elija de cuál familia sugerir el siguiente consecutivo. */
+    public function getPrefijosCodigoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $tipo = $_GET['tipo'] ?? '01';
+
+        try {
+            $prefijos = $this->service->getPrefijosCodigo($idEmpresa, $tipo);
+            echo json_encode(['ok' => true, 'data' => $prefijos]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

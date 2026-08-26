@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/usuarios-sistema
 tipo: modulo
 visibilidad: admin
-etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito
-version: 1.3
+etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito, desaparecio el boton de invitacion, se perdio la invitacion al guardar, no me deja reenviar la invitacion, boton de invitacion en gris
+version: 1.4
 orden: 3
 estado: activo
 ---
@@ -66,6 +66,15 @@ Se reutiliza el enlace de invitación que ya tenía; si por algún motivo lo
 perdió, se genera uno nuevo en ese momento. El enlace anterior deja de
 servir cuando el usuario completa el registro o cuando se le asigna una
 **clave provisional**.
+
+Cada vez que se abre la ficha, el sistema **consulta al servidor si esa
+persona ya se activó** en lugar de fiarse de lo que mostraba el listado.
+Así, el bloque **Invitación pendiente** aparece siempre que corresponda,
+aunque la ficha se abra después de haber guardado cambios en ella o de que
+el listado lleve un rato abierto. Guardar la ficha —corregir el correo, el
+nombre o escribir la identificación real de quien todavía no se registra—
+**no** lo hace desaparecer: solo desaparece cuando el usuario ya puede
+entrar al sistema.
 
 Antes de reenviar, revise que el **correo** de la ficha esté bien escrito:
 si la dirección está mal, el reenvío se va al mismo lugar equivocado.
@@ -205,10 +214,15 @@ cuando el usuario no tiene intentos fallidos pendientes.
   clave provisional es para otros usuarios; la propia se cambia desde el
   perfil, indicando la contraseña actual.
 - **Ya no aparece el botón de reenviar invitación**: el usuario dejó de
-  figurar como pendiente. Ocurre cuando completó el registro, cuando se le
-  asignó una clave provisional o cuando un administrador le fijó a mano la
-  identificación desde la ficha. Si todavía no tiene contraseña, use **Clave
-  provisional**.
+  figurar como pendiente porque ya puede entrar al sistema — completó el
+  registro, recuperó su contraseña o se le asignó una **clave provisional**.
+  Editar y guardar su ficha (correo, nombre o identificación) ya **no** lo
+  quita de pendiente. Si aun así lo ve ausente y le consta que la persona
+  nunca entró, ciérrela y vuelva a abrir la ficha: se consulta el estado
+  real en ese momento.
+- **El botón de reenviar aparece en gris**: el usuario no tiene un correo
+  cargado, así que no hay a dónde mandar la invitación. Escríbalo en la
+  pestaña **General**, use **Guardar cambios** y vuelva a abrir la ficha.
 - **El usuario dice que no puede entrar y su contraseña es correcta**:
   revise el bloque **Intentos de acceso** de su ficha. Si figura como
   bloqueado, use **Reiniciar intentos**.
@@ -218,6 +232,13 @@ cuando el usuario no tiene intentos fallidos pendientes.
 
 ## Historial de cambios
 
+- **1.4** — La ficha **verifica contra el servidor**, cada vez que se abre,
+  si el usuario ya se activó, en lugar de fiarse del dato con el que se pintó
+  el listado. Se corrigió que **guardar la ficha de un usuario invitado**
+  (cambiarle el correo o escribirle su identificación real) lo diera por
+  registrado y le quitara el bloque **Invitación pendiente** y la etiqueta
+  del listado. Si el usuario no tiene correo, el botón de reenvío aparece
+  inhabilitado con el motivo a la vista.
 - **1.3** — Se documenta el **reenvío de la invitación** (listado y ficha).
   El **nombre** pasa a ser editable desde la pestaña General. Se agregó el
   bloque **Clave provisional** en la pestaña **Contraseña** (antes

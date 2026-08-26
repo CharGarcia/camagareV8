@@ -1067,6 +1067,99 @@ class ProductoRepository extends BaseRepository
         return $codigo;
     }
 
+    /**
+     * Prefijos de código ya en uso para un tipo de producción, con el conteo de
+     * productos que los usan (para que el usuario elija de cuál familia quiere
+     * el siguiente consecutivo, en vez de que el sistema adivine "el ganador").
+     * Mismo criterio de extracción de prefijo que getSiguienteCodigo() (texto no
+     * numérico al inicio + hasta 9 dígitos finales).
+     *
+     * @return array<int,array{prefijo:string,cantidad:int,ejemplo:string}>
+     */
+    public function getPrefijosCodigo(int $idEmpresa, string $tipo): array
+    {
+        $sql = "SELECT codigo FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND tipo_produccion = :tipo
+                  AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':tipo' => $tipo]);
+
+        $grupos = [];
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $codigoExistente) {
+            $codigoExistente = (string) $codigoExistente;
+            if (!preg_match('/^(.*?)([0-9]{1,9})$/', $codigoExistente, $m) || $m[1] === '') {
+                continue; // código numérico puro: no tiene un prefijo que agrupar
+            }
+            $pref = $m[1];
+            if (!isset($grupos[$pref])) {
+                $grupos[$pref] = ['count' => 0, 'ejemplo' => $codigoExistente];
+            }
+            $grupos[$pref]['count']++;
+        }
+
+        uasort($grupos, fn(array $a, array $b): int => $b['count'] <=> $a['count']);
+
+        $resultado = [];
+        foreach ($grupos as $prefijo => $g) {
+            $resultado[] = ['prefijo' => $prefijo, 'cantidad' => $g['count'], 'ejemplo' => $g['ejemplo']];
+        }
+        return $resultado;
+    }
+
+    /**
+     * Siguiente código consecutivo para un prefijo específico, elegido por el
+     * usuario (p. ej. 'CM' -> 'CM002'). A diferencia de getSiguienteCodigo(),
+     * no adivina el prefijo "ganador": el usuario ya lo indicó.
+     */
+    public function getSiguienteCodigoPorPrefijo(int $idEmpresa, string $tipo, string $prefijo): string
+    {
+        $prefijo = trim($prefijo);
+        if ($prefijo === '') {
+            throw new \InvalidArgumentException('Prefijo vacío.');
+        }
+
+        $stTodos = $this->db->prepare(
+            "SELECT codigo FROM {$this->table}
+             WHERE id_empresa = :id_empresa AND tipo_produccion = :tipo
+               AND eliminado = false AND codigo ILIKE :prefijo_like"
+        );
+        $stTodos->execute([
+            ':id_empresa'    => $idEmpresa,
+            ':tipo'          => $tipo,
+            ':prefijo_like'  => str_replace(['%', '_'], ['\\%', '\\_'], $prefijo) . '%',
+        ]);
+
+        $max = -1;
+        $longitud = 3;
+        foreach ($stTodos->fetchAll(PDO::FETCH_COLUMN) as $codigoExistente) {
+            $codigoExistente = (string) $codigoExistente;
+            if (stripos($codigoExistente, $prefijo) !== 0) continue;
+            $resto = substr($codigoExistente, strlen($prefijo));
+            if (!preg_match('/^[0-9]{1,9}$/', $resto)) continue;
+            $valor = (int) $resto;
+            if ($valor > $max) {
+                $max = $valor;
+                $longitud = strlen($resto);
+            }
+        }
+
+        $stExiste = $this->db->prepare(
+            "SELECT 1 FROM {$this->table}
+             WHERE id_empresa = :id_empresa AND lower(codigo) = lower(:codigo)
+               AND eliminado = false
+             LIMIT 1"
+        );
+
+        $numero = max($max, 0);
+        do {
+            $numero++;
+            $codigo = $prefijo . str_pad((string) $numero, $longitud, '0', STR_PAD_LEFT);
+            $stExiste->execute([':id_empresa' => $idEmpresa, ':codigo' => $codigo]);
+        } while ($stExiste->fetchColumn() && $numero < 999999999);
+
+        return $codigo;
+    }
+
     public function searchSimple(int $idEmpresa, string $q, int $limit = 10, string $tipo = '', int $exclude = 0, bool $soloActivos = false): array
     {
         $db = \App\core\Database::getConnection();

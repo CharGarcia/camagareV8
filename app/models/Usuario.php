@@ -19,6 +19,31 @@ class Usuario extends BaseModel
     }
 
     /**
+     * Expresión SQL que responde "¿este usuario ya completó su registro?".
+     * Única en todo el módulo para que el badge del listado, el buscador, la ficha
+     * y el reenvío de invitación no puedan contradecirse entre sí.
+     *
+     * - `registrado` es la fuente de verdad: la marcan los tres caminos por los que
+     *   una cuenta queda utilizable (completar la invitación, recuperar la clave y
+     *   la clave provisional que fija un administrador).
+     * - El resto es un respaldo para filas antiguas en las que esa columna nunca se
+     *   escribió: si el usuario ya NO tiene token pendiente y su identificación ya
+     *   no es la provisional (el hash de su correo), se le da por registrado.
+     *   La condición del token es la que evita el falso positivo que se veía al
+     *   editar la ficha de un invitado — cambiarle el correo o escribirle su cédula
+     *   real rompía la coincidencia con el hash y el sistema lo daba por activado,
+     *   perdiéndose la opción de reenviarle la invitación.
+     *
+     * @param string $a alias de la tabla `usuarios` en la consulta ('' si no hay).
+     */
+    private static function sqlRegistrado(string $a = ''): string
+    {
+        $p = $a === '' ? '' : $a . '.';
+        return "({$p}registrado OR (COALESCE({$p}token,'') = ''"
+            . " AND COALESCE({$p}cedula,'') <> substr(md5(COALESCE({$p}mail,'')), 1, 15)))";
+    }
+
+    /**
      * Valida login por cédula y contraseña.
      * Soporta bcrypt y MD5 (legacy). Si la contraseña está en MD5 y es correcta,
      * la migra automáticamente a bcrypt (el usuario no nota ningún cambio).
@@ -559,7 +584,7 @@ class Usuario extends BaseModel
             throw new \InvalidArgumentException('El correo no es válido.');
         }
 
-        $actual = $this->query("SELECT nivel, estado, cedula FROM usuarios WHERE id = {$id}");
+        $actual = $this->query("SELECT nivel, estado, cedula, mail, registrado FROM usuarios WHERE id = {$id}");
 
         // Identificación: es la credencial de ingreso, así que se valida contra
         // todos los usuarios no eliminados (activos e inactivos). Solo se valida
@@ -573,6 +598,22 @@ class Usuario extends BaseModel
         if ($cedula !== null) {
             $cedula = $this->validarCedula($cedula, $id);
             $cedulaSet = ", cedula = '" . $this->escape($cedula) . "'";
+        }
+
+        // Correo de un usuario que AÚN no completa su registro: su cédula es la
+        // provisional derivada del correo (substr(md5(mail),1,15)), y de ahí sale la
+        // detección de "pendiente de registro". Si se cambia el correo sin recalcularla,
+        // la cédula deja de coincidir con el hash del correo nuevo y el usuario pasa a
+        // verse como registrado: desaparece el badge "Pendiente registro" y con él la
+        // opción de reenviarle la invitación. Por eso, si sigue sin registrarse y
+        // conserva la provisional, se regenera con el correo nuevo.
+        if ($cedulaSet === '' && $mail !== '' && !empty($actual)) {
+            $yaRegistrado = self::pgBool($actual[0]['registrado'] ?? false);
+            $cedulaAct = trim((string) ($actual[0]['cedula'] ?? ''));
+            $mailAct = (string) ($actual[0]['mail'] ?? '');
+            if (!$yaRegistrado && $cedulaAct === substr(md5($mailAct), 0, 15) && $mail !== $mailAct) {
+                $cedulaSet = ", cedula = '" . $this->escape(substr(md5($mail), 0, 15)) . "'";
+            }
         }
 
         // Nombre: no es credencial de ingreso (esa es la cédula), solo la etiqueta
@@ -714,7 +755,7 @@ class Usuario extends BaseModel
             // Nivel y Estado se buscan por su texto tal como se muestran en la tabla
             // (Nivel: Usuario/Administrador/Super Admin; Estado: Activo/Inactivo/Pendiente registro).
             $nivelTexto = "(CASE WHEN u.nivel >= 3 THEN 'Super Admin' WHEN u.nivel >= 2 THEN 'Administrador' ELSE 'Usuario' END)";
-            $estadoTexto = "(CASE WHEN NOT (u.registrado OR COALESCE(u.cedula,'') <> substr(md5(COALESCE(u.mail,'')), 1, 15)) THEN 'Pendiente registro' WHEN u.estado = 1 THEN 'Activo' ELSE 'Inactivo' END)";
+            $estadoTexto = "(CASE WHEN NOT " . self::sqlRegistrado('u') . " THEN 'Pendiente registro' WHEN u.estado = 1 THEN 'Activo' ELSE 'Inactivo' END)";
             $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula ILIKE '%{$b}%' OR u.mail ILIKE '%{$b}%'
                 OR {$nivelTexto} ILIKE '%{$b}%' OR {$estadoTexto} ILIKE '%{$b}%')";
         }
@@ -722,12 +763,9 @@ class Usuario extends BaseModel
         $countSql = "SELECT COUNT(DISTINCT u.id) AS total FROM {$from} {$where}";
         $total = (int) ($this->query($countSql)[0]['total'] ?? 0);
 
-        // Detección robusta de "registrado": la invitación (crearPorCorreo) inserta
-        // una cédula placeholder = substr(md5(correo),0,15). Al completar el registro,
-        // el usuario define su cédula REAL. Por eso: cédula = hash del correo => NO
-        // registrado. Se combina con la columna `registrado` (OR) para blindar el dato.
+        // Estado de registro: ver self::sqlRegistrado().
         $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token, u.puede_app_movil,
-                (u.registrado OR COALESCE(u.cedula,'') <> substr(md5(COALESCE(u.mail,'')), 1, 15)) AS registrado
+                " . self::sqlRegistrado('u') . " AS registrado
             FROM {$from} {$where}
             ORDER BY {$col} {$dir}
             LIMIT {$perPage} OFFSET {$offset}";
@@ -942,13 +980,38 @@ class Usuario extends BaseModel
     }
 
     /**
+     * Estado de registro REAL de un usuario, consultado al vuelo.
+     *
+     * La ficha del modal se arma con los `data-*` de la fila del listado, que son
+     * una foto del momento en que se pintó la tabla. Si en esa misma sesión se le
+     * asignó una clave provisional, se le reenvió la invitación o el propio usuario
+     * terminó su registro, esa foto queda vieja. Este método permite que el modal
+     * pregunte el estado cada vez que se abre, en lugar de confiar en el atributo.
+     *
+     * @return ?array ['registrado' => bool, 'mail' => string]
+     */
+    public function getEstadoRegistro(int $id): ?array
+    {
+        $id = (int) $id;
+        $sql = "SELECT mail, " . self::sqlRegistrado() . " AS registrado
+                FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1";
+        $r = $this->query($sql);
+        if (empty($r[0])) {
+            return null;
+        }
+        return [
+            'registrado' => self::pgBool($r[0]['registrado'] ?? false),
+            'mail'       => (string) ($r[0]['mail'] ?? ''),
+        ];
+    }
+
+    /**
      * Obtiene datos básicos y token para reenviar invitación.
      */
     public function getDatosInvitacion(int $id): ?array
     {
         $id = (int) $id;
-        $sql = "SELECT nombre, mail, token,
-                (registrado OR COALESCE(cedula,'') <> substr(md5(COALESCE(mail,'')), 1, 15)) AS registrado
+        $sql = "SELECT nombre, mail, token, " . self::sqlRegistrado() . " AS registrado
                 FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1";
         $r = $this->query($sql);
         return $r[0] ?? null;

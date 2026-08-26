@@ -33,6 +33,16 @@ class ProductoService
         return $this->repository->getSiguienteCodigo($idEmpresa, $tipo);
     }
 
+    public function getPrefijosCodigo(int $idEmpresa, string $tipo): array
+    {
+        return $this->repository->getPrefijosCodigo($idEmpresa, $tipo);
+    }
+
+    public function getSiguienteCodigoPorPrefijo(int $idEmpresa, string $tipo, string $prefijo): string
+    {
+        return $this->repository->getSiguienteCodigoPorPrefijo($idEmpresa, $tipo, $prefijo);
+    }
+
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
     {
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);

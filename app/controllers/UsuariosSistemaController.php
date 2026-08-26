@@ -297,6 +297,39 @@ class UsuariosSistemaController extends Controller
         }
     }
 
+    /**
+     * AJAX: estado de registro de un usuario, para que el modal decida si mostrar
+     * la opción de reenviar la invitación con el dato de AHORA y no con el que
+     * traía la fila cuando se pintó la tabla.
+     */
+    public function estadoRegistro(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+        if ($id <= 0) {
+            $this->json(['ok' => false, 'msg' => 'ID inválido.']);
+        }
+
+        $this->requireGestionable($id);
+
+        $estado = $this->model->getEstadoRegistro($id);
+        if ($estado === null) {
+            $this->json(['ok' => false, 'msg' => 'Usuario no encontrado.']);
+        }
+
+        $mail = trim($estado['mail']);
+        $this->json([
+            'ok'           => true,
+            'registrado'   => $estado['registrado'],
+            'mail'         => $mail,
+            // Sin correo no hay a dónde enviar la invitación: el modal muestra el
+            // bloque pero con el botón inhabilitado y el motivo a la vista.
+            'tiene_correo' => ($mail !== '' && $mail !== '-'),
+        ]);
+    }
+
     public function reenviarInvitacion(): void
     {
         $this->requireAuth();

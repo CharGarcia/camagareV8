@@ -569,6 +569,11 @@ class ConfigController extends Controller
         (new UsuariosSistemaController())->eliminar();
     }
 
+    public function usuariosSistemaEstadoRegistro(): void
+    {
+        (new UsuariosSistemaController())->estadoRegistro();
+    }
+
     public function usuariosSistemaReenviarInvitacion(): void
     {
         (new UsuariosSistemaController())->reenviarInvitacion();

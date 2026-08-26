@@ -517,6 +517,9 @@
         quitarRestriccionesEnUso();
         activarTabGeneral();
         window.toggleBienesFields();
+        const selPrefCrear = document.getElementById('prod_prefijo_codigo');
+        if (selPrefCrear) selPrefCrear.disabled = false;
+        await window.cargarPrefijosCodigo();
         window.actualizarCodigoSiguiente();
 
         // Aplicar medida default para tipo '01'
@@ -540,6 +543,8 @@
         const f = document.getElementById('formProducto');
         if (f) f.reset();
         quitarRestriccionesEnUso();
+        const selPrefEditar = document.getElementById('prod_prefijo_codigo');
+        if (selPrefEditar) { selPrefEditar.innerHTML = '<option value="">Auto</option>'; selPrefEditar.disabled = true; }
         document.getElementById('prod_id').value = data.id;
         document.getElementById('prod_codigo').value = data.codigo || '';
         document.getElementById('prod_nombre').value = data.nombre || '';
@@ -1041,14 +1046,43 @@
         const actual = codInp.value.trim();
         if (actual !== '' && actual !== codigoAutogenerado) return;
 
+        // Prefijo elegido por el usuario (CM, CB...) o vacío = automático (adivina
+        // el prefijo más usado para el tipo, comportamiento de siempre).
+        const selPref = document.getElementById('prod_prefijo_codigo');
+        const prefijo = selPref ? selPref.value.trim() : '';
+
         try {
-            const resp = await fetch(`${urlBaseProd}/getSiguienteCodigoAjax?tipo=${tipo}`);
+            const url = prefijo
+                ? `${urlBaseProd}/getSiguienteCodigoAjax?tipo=${encodeURIComponent(tipo)}&prefijo=${encodeURIComponent(prefijo)}`
+                : `${urlBaseProd}/getSiguienteCodigoAjax?tipo=${encodeURIComponent(tipo)}`;
+            const resp = await fetch(url);
             const json = await resp.json();
             if (json.ok) {
                 codInp.value = json.codigo;
                 codigoAutogenerado = json.codigo;
             }
         } catch (e) { console.error('Error al generar código:', e); }
+    };
+
+    /** Llena el selector de prefijos (CM, CB...) ya usados para el tipo de producción actual. Solo aplica a productos nuevos. */
+    window.cargarPrefijosCodigo = async function() {
+        const sel = document.getElementById('prod_prefijo_codigo');
+        if (!sel) return;
+        const idProd = document.getElementById('prod_id')?.value;
+        if (idProd) return;
+
+        const tipo = document.getElementById('prod_tipo_produccion')?.value || '01';
+        try {
+            const resp = await fetch(`${urlBaseProd}/getPrefijosCodigoAjax?tipo=${encodeURIComponent(tipo)}`);
+            const json = await resp.json();
+            let html = '<option value="">Auto</option>';
+            if (json.ok && Array.isArray(json.data)) {
+                json.data.forEach(p => {
+                    html += `<option value="${escapeHtml(p.prefijo)}">${escapeHtml(p.prefijo)} (${p.cantidad})</option>`;
+                });
+            }
+            sel.innerHTML = html;
+        } catch (e) { console.error('Error al cargar prefijos de código:', e); }
     };
 
     // Escuchar eventos de creación de catálogos desde otros modales

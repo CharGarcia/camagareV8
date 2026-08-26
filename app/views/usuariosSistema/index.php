@@ -308,6 +308,9 @@ $rowsHtml = $rowsHtml ?? '';
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="btn-reenviar-invitacion">
                                     <i class="bi bi-send"></i> Reenviar correo de invitación
                                 </button>
+                                <div id="aviso-invitacion-sin-correo" class="form-text text-danger mt-2 d-none">
+                                    El usuario no tiene un correo registrado: escriba uno en la ficha y guarde los cambios para poder invitarlo.
+                                </div>
                                 <div id="msg-resend-invitation" class="form-text mt-2"></div>
                             </div>
                             <?php if ($nivel >= 3): ?>
@@ -491,6 +494,55 @@ $rowsHtml = $rowsHtml ?? '';
             }
         }
 
+        // Muestra u oculta el bloque de "Invitación pendiente" del modal.
+        // pendiente = el usuario todavía NO completó su registro.
+        // tieneCorreo = hay una dirección a la cual mandar el correo.
+        function aplicarEstadoRegistro(pendiente, tieneCorreo) {
+            var sec = document.getElementById('section-reenviar-invitacion');
+            var btn = document.getElementById('btn-reenviar-invitacion');
+            var aviso = document.getElementById('aviso-invitacion-sin-correo');
+            if (!sec) return;
+            if (pendiente) {
+                sec.classList.remove('d-none');
+            } else {
+                sec.classList.add('d-none');
+            }
+            if (btn) btn.disabled = !tieneCorreo;
+            if (aviso) {
+                if (pendiente && !tieneCorreo) {
+                    aviso.classList.remove('d-none');
+                } else {
+                    aviso.classList.add('d-none');
+                }
+            }
+        }
+
+        // Cada apertura del modal pregunta al servidor si el usuario ya se activó.
+        // Los data-* de la fila son la foto del momento en que se pintó la tabla:
+        // si entre medio el usuario completó su registro, o se le guardó un cambio
+        // de ficha, esa foto queda vieja y la invitación se perdía de vista.
+        function verificarEstadoRegistro(id, fila) {
+            if (!id) return;
+            fetch(base + '/config/usuarios-sistema-estado-registro?id=' + encodeURIComponent(id), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    // El modal pudo cerrarse o cambiarse de usuario mientras respondía.
+                    if (!res || !res.ok || parseInt(id, 10) !== idUsuario) return;
+                    aplicarEstadoRegistro(!res.registrado, !!res.tiene_correo);
+                    // La cédula provisional y su texto de ayuda dependen del mismo dato.
+                    cedulaEsProvisional = !res.registrado;
+                    document.getElementById('ayuda-cedula').textContent = !res.registrado
+                        ? 'Provisional: el usuario definirá su identificación al completar el registro.'
+                        : 'Con este número inicia sesión el usuario.';
+                    actualizarAvisoClaveProvisional();
+                    // Se deja al día el atributo de la fila para la próxima apertura.
+                    if (fila) fila.dataset.registrado = res.registrado ? '1' : '0';
+                })
+                .catch(function() { /* sin red se conserva lo que trae la fila */ });
+        }
+
         function abrirModalUsuario(el) {
             idUsuario = parseInt(el.dataset.id, 10);
             document.getElementById('modal-usuario-id').value = idUsuario;
@@ -518,13 +570,11 @@ $rowsHtml = $rowsHtml ?? '';
             // Por estado de registro, no por token: enviar un correo de restablecimiento
             // le graba un token nuevo a un usuario YA registrado, y con eso el bloque
             // aparecía en usuarios que no admiten invitación (el backend la rechaza).
-            var secResend = document.getElementById('section-reenviar-invitacion');
-            if (el.dataset.registrado === '0') {
-                secResend.classList.remove('d-none');
-            } else {
-                secResend.classList.add('d-none');
-            }
+            // El atributo de la fila es solo la primera pintada (evita el parpadeo);
+            // enseguida se confirma contra el servidor con el estado de AHORA.
+            aplicarEstadoRegistro(el.dataset.registrado === '0', mailOriginal !== '' && mailOriginal !== '-');
             document.getElementById('msg-resend-invitation').textContent = '';
+            verificarEstadoRegistro(idUsuario, el);
 
             // Limpiar mensajes previos
             var msgModal = document.getElementById('usuario-modal-msg');

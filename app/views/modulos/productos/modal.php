@@ -168,14 +168,19 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                 <!-- Fila 1: Tipo Producción, Código Principal  codigo auxiliar Código de Barras-->
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Tipo Producción <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('productos', 'prod_tipo_produccion', 'tipo_produccion') ?></label>
-                                    <select name="tipo_produccion" id="prod_tipo_produccion" class="form-select form-select-sm shadow-none border-secondary-subtle" onchange="actualizarCodigoSiguiente(); toggleBienesFields();">
+                                    <select name="tipo_produccion" id="prod_tipo_produccion" class="form-select form-select-sm shadow-none border-secondary-subtle" onchange="cargarPrefijosCodigo().then(actualizarCodigoSiguiente); toggleBienesFields();">
                                         <option value="01">Producto</option>
                                         <option value="02">Servicio</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Código Principal *</label>
-                                    <input type="text" name="codigo" id="prod_codigo" class="form-control form-control-sm shadow-none border-secondary-subtle fw-bold" required maxlength="50" style="text-transform:uppercase;">
+                                    <div class="input-group input-group-sm" id="wrap_prefijo_codigo">
+                                        <select id="prod_prefijo_codigo" class="form-select flex-grow-0" style="max-width:88px" title="Sugerir el consecutivo de un prefijo existente (ej. CM, CB...)" onchange="actualizarCodigoSiguiente()">
+                                            <option value="">Auto</option>
+                                        </select>
+                                        <input type="text" name="codigo" id="prod_codigo" class="form-control shadow-none border-secondary-subtle fw-bold" required maxlength="50" style="text-transform:uppercase;">
+                                    </div>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Código Auxiliar</label>
