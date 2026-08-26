@@ -13,7 +13,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
 
-            <div class="modal-body">
+            <div class="modal-body position-relative">
+                <div id="cam-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información del cambio...</div>
+                </div>
                 <!-- Barra de acciones superior (PDF / Correo / WhatsApp) -->
                 <div class="d-flex gap-1 align-items-center flex-wrap mb-3 pb-2 border-bottom">
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="camPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
@@ -344,6 +348,11 @@
         document.getElementById('btnEliminarCambio').classList.toggle('d-none', !puedeEliminar);
 
         getModal().show();
+
+        // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
+        // usuario ve el modal "vacío" y piensa que el cambio no tiene datos.
+        document.getElementById('cam-modal-loader')?.classList.remove('d-none');
+
         await camCargarDetalle(row.id, editable);
     };
 
@@ -716,41 +725,48 @@
 
     // ─── Ver / editar detalle existente ───────────────────────────────────────
     async function camCargarDetalle(id, editable) {
-        const res = await fetch(`${RUTA}/getDetalleAjax?id=${id}`);
-        const data = await res.json();
-        if (!data.ok) { Swal.fire('Error', data.error || 'No se pudo cargar.', 'error'); return; }
-        const r = data.data;
+        try {
+            const res = await fetch(`${RUTA}/getDetalleAjax?id=${id}`);
+            const data = await res.json();
+            if (!data.ok) { Swal.fire('Error', data.error || 'No se pudo cargar.', 'error'); return; }
+            const r = data.data;
 
-        document.getElementById('cam_serie').value = r.serie || '';
-        const selSerie = document.getElementById('cam_select_serie');
-        if (r.id_punto_emision && selSerie.querySelector(`option[value="${r.id_punto_emision}"]`)) selSerie.value = r.id_punto_emision;
-        selSerie.disabled = true;
-        document.getElementById('cam_id_punto_emision').value = r.id_punto_emision || '';
-        document.getElementById('cam_secuencial').value = r.secuencial || '';
-        document.getElementById('cam_secuencial').dataset.sec = r.secuencial || '';
-        if (r.fecha_cambio) document.getElementById('cam_fecha_cambio').value = String(r.fecha_cambio).slice(0, 10);
+            document.getElementById('cam_serie').value = r.serie || '';
+            const selSerie = document.getElementById('cam_select_serie');
+            if (r.id_punto_emision && selSerie.querySelector(`option[value="${r.id_punto_emision}"]`)) selSerie.value = r.id_punto_emision;
+            selSerie.disabled = true;
+            document.getElementById('cam_id_punto_emision').value = r.id_punto_emision || '';
+            document.getElementById('cam_secuencial').value = r.secuencial || '';
+            document.getElementById('cam_secuencial').dataset.sec = r.secuencial || '';
+            if (r.fecha_cambio) document.getElementById('cam_fecha_cambio').value = String(r.fecha_cambio).slice(0, 10);
 
-        document.getElementById('cam_id_cliente').value = r.id_cliente || '';
-        document.getElementById('cam_cliente_email').value = r.cliente_email || '';
-        document.getElementById('cam_cliente_busqueda').value = (r.cliente_identificacion || '') + ' — ' + (r.cliente_nombre || '');
-        document.getElementById('cam_motivo').value = r.motivo || '';
-        document.getElementById('cam_observaciones').value = r.observaciones || '';
+            document.getElementById('cam_id_cliente').value = r.id_cliente || '';
+            document.getElementById('cam_cliente_email').value = r.cliente_email || '';
+            document.getElementById('cam_cliente_busqueda').value = (r.cliente_identificacion || '') + ' — ' + (r.cliente_nombre || '');
+            document.getElementById('cam_motivo').value = r.motivo || '';
+            document.getElementById('cam_observaciones').value = r.observaciones || '';
 
-        vaciarDev(); vaciarEnt();
-        const dets = r.detalles || [];
-        const devs = dets.filter(d => d.tipo_linea === 'devolucion');
-        const ents = dets.filter(d => d.tipo_linea === 'entrega');
+            vaciarDev(); vaciarEnt();
+            const dets = r.detalles || [];
+            const devs = dets.filter(d => d.tipo_linea === 'devolucion');
+            const ents = dets.filter(d => d.tipo_linea === 'entrega');
 
-        if (devs.length) {
-            document.querySelector('#cam_dev_body .cam-dev-empty')?.remove();
-            devs.forEach(d => camPintarDevExistente(d, editable));
+            if (devs.length) {
+                document.querySelector('#cam_dev_body .cam-dev-empty')?.remove();
+                devs.forEach(d => camPintarDevExistente(d, editable));
+            }
+            if (ents.length) {
+                document.querySelector('#cam_ent_body .cam-ent-empty')?.remove();
+                ents.forEach(d => camPintarEntExistente(d, editable));
+            }
+            if (editable) document.getElementById('cam_dev_busqueda').disabled = false;
+            camRecalcular();
+        } catch (err) {
+            console.error('Error cargando detalle del cambio:', err);
+            Swal.fire({ icon: 'error', title: 'No se pudo cargar el cambio', text: 'Ocurrió un error de conexión. Intenta cerrar y volver a abrir este registro.' });
+        } finally {
+            document.getElementById('cam-modal-loader')?.classList.add('d-none');
         }
-        if (ents.length) {
-            document.querySelector('#cam_ent_body .cam-ent-empty')?.remove();
-            ents.forEach(d => camPintarEntExistente(d, editable));
-        }
-        if (editable) document.getElementById('cam_dev_busqueda').disabled = false;
-        camRecalcular();
     }
 
     function camPintarDevExistente(d, editable) {

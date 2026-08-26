@@ -171,18 +171,26 @@ window.abrirModalCompra = function (el) {
         const row = JSON.parse(el.dataset.row);
         CMG_resetModal();
         document.getElementById('mcTitulo').textContent = 'Compra #' + (row.establecimiento_prov||'') + '-' + (row.punto_emision_prov||'') + '-' + (row.secuencial_prov||'') + ' - ' + (row.proveedor_nombre || '');
+
+        const modalEl = document.getElementById('modalCompra');
+        if (modalEl) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
+        // usuario ve el modal "vacío" y piensa que la compra no tiene datos.
+        document.getElementById('cmp-modal-loader')?.classList.remove('d-none');
+
         // Cargar datos completos
         fetch(`${window.CMG_urlBase}/getCompraAjax?id=${row.id}`)
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) { Swal.fire('Error', res.mensaje, 'error'); return; }
                 CMG_poblarModal(res.data);
-            }).catch(e => console.error(e));
-
-        const modalEl = document.getElementById('modalCompra');
-        if (modalEl) {
-            bootstrap.Modal.getOrCreateInstance(modalEl).show();
-        }
+            }).catch(e => console.error(e))
+            .finally(() => {
+                document.getElementById('cmp-modal-loader')?.classList.add('d-none');
+            });
     } catch (e) {
         console.error('Error al abrir modal para editar:', e);
     }

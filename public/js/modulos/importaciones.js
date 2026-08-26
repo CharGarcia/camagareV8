@@ -287,10 +287,12 @@ window.abrirModalImportacion = function (el) {
             .then(res => {
                 if (!res.ok) { Swal.fire('Error', res.mensaje, 'error'); return; }
                 IMP_poblarModal(res.data);
-            }).catch(e => console.error(e));
+            }).catch(e => console.error(e))
+            .finally(() => document.getElementById('imp-modal-loader')?.classList.add('d-none'));
 
         const modalEl = document.getElementById('modalImportacion');
         if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        document.getElementById('imp-modal-loader')?.classList.remove('d-none');
     } catch (e) {
         console.error('Error al abrir modal para editar:', e);
     }

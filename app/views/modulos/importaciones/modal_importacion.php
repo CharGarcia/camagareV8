@@ -9,7 +9,11 @@
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
 
-      <div class="modal-body p-0">
+      <div class="modal-body p-0 position-relative">
+        <div id="imp-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+            <div class="spinner-border text-primary mb-2" role="status"></div>
+            <div class="small text-muted">Cargando información de la importación...</div>
+        </div>
         <input type="hidden" id="impId" name="id">
 
         <!-- Barra de Acciones Superior -->

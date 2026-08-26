@@ -719,6 +719,22 @@ class CargaFacturasValidacionService
             $config = $this->getConfigEstablecimiento((int) $facturas[$clave]['id_establecimiento']);
             $toBool = static fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
 
+            // Decimales configurados por la empresa. Se avisa, no se bloquea: el
+            // documento se emite igual (el XML conserva los decimales reales hasta
+            // el tope de 6 del SRI), pero conviene saber que el archivo trae más
+            // precisión de la que la empresa usa en pantalla.
+            $decCantidad = max(0, min(6, (int) ($config['decimales_cantidad'] ?? 2)));
+            $decPrecio   = max(0, min(6, (int) ($config['decimales_precio']   ?? 2)));
+
+            if ($cantidad !== null && SriFichaTecnica::decimales($cantidad) > $decCantidad) {
+                $avisos[] = 'CANTIDAD tiene ' . SriFichaTecnica::decimales($cantidad)
+                    . ' decimales y la empresa está configurada con ' . $decCantidad . '.';
+            }
+            if ($precio !== null && SriFichaTecnica::decimales($precio) > $decPrecio) {
+                $avisos[] = 'PRECIO_UNITARIO tiene ' . SriFichaTecnica::decimales($precio)
+                    . ' decimales y la empresa está configurada con ' . $decPrecio . '.';
+            }
+
             if ($esLibre && !$toBool($config['facturacion_libre'] ?? true)) {
                 $errores[] = 'Este establecimiento no permite ítems libres: CODIGO_PRODUCTO es obligatorio.';
             }
@@ -878,17 +894,74 @@ class CargaFacturasValidacionService
         }
     }
 
+    /**
+     * Calcula los totales respetando cómo tiene configurada la empresa el
+     * cálculo del IVA (`empresa_establecimiento.calculo_iva_facturacion`), con
+     * el mismo algoritmo que la pantalla de Factura de Venta (`calcTotales()`
+     * en la vista del módulo):
+     *
+     *   - `linea_linea`: se redondea el IVA de cada línea y se suman.
+     *   - `subtotal`   : se acumula la base por tarifa y el IVA se calcula sobre
+     *                    esa base, una sola vez.
+     *
+     * La diferencia entre ambos modos es de céntimos por línea, pero se acumula:
+     * en una factura de 400 líneas llegó a 15 centavos, suficiente para que el
+     * control de cuadre bloqueara la carga.
+     *
+     * En modo `subtotal` el IVA de las líneas se REAJUSTA para que su suma sea
+     * exactamente el IVA del grupo. Si no, el XML llevaría un IVA por línea que
+     * no cuadra con el importe total del comprobante y el SRI lo rechazaría
+     * (XmlFacturaVentaService solo absorbe desfases de hasta 5 centavos).
+     */
     private function calcularTotales(array &$facturas): void
     {
         foreach ($facturas as $clave => $f) {
+            $config  = $this->getConfigEstablecimiento((int) $f['id_establecimiento']);
+            $modoIva = ($config['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal'
+                ? 'subtotal'
+                : 'linea_linea';
+
             $sinImp = 0.0;
             $desc   = 0.0;
-            $iva    = 0.0;
 
-            foreach ($f['detalles'] as $d) {
+            // Agrupar por tarifa: el IVA se calcula por grupo, como en la pantalla.
+            $grupos = [];
+            foreach ($f['detalles'] as $i => $d) {
                 $sinImp += $d['precio_total_sin_impuesto'];
                 $desc   += $d['descuento'];
-                $iva    += $d['valor_iva'];
+
+                $codigo = (string) $d['codigo_iva'];
+                if (!isset($grupos[$codigo])) {
+                    $grupos[$codigo] = ['pct' => $d['porcentaje_iva'], 'base' => 0.0, 'iva' => 0.0, 'lineas' => []];
+                }
+                $grupos[$codigo]['base']    += $d['precio_total_sin_impuesto'];
+                $grupos[$codigo]['iva']     += $d['valor_iva'];
+                $grupos[$codigo]['lineas'][] = $i;
+            }
+
+            $iva = 0.0;
+            foreach ($grupos as $g) {
+                if ($modoIva === 'subtotal') {
+                    $ivaGrupo = round(round($g['base'], 2) * $g['pct'] / 100, 2);
+
+                    // Repartir el desfase en la línea de mayor base del grupo, para
+                    // que la suma de los impuestos por línea dé exactamente esto.
+                    $desfase = round($ivaGrupo - round($g['iva'], 2), 2);
+                    if (abs($desfase) >= 0.01 && $g['lineas']) {
+                        $iMax = $g['lineas'][0];
+                        foreach ($g['lineas'] as $i) {
+                            if ($f['detalles'][$i]['precio_total_sin_impuesto']
+                                > $f['detalles'][$iMax]['precio_total_sin_impuesto']) {
+                                $iMax = $i;
+                            }
+                        }
+                        $ajustada = round($facturas[$clave]['detalles'][$iMax]['valor_iva'] + $desfase, 2);
+                        $facturas[$clave]['detalles'][$iMax]['valor_iva'] = $ajustada;
+                    }
+                    $iva += $ivaGrupo;
+                } else {
+                    $iva += round($g['iva'], 2);
+                }
             }
 
             $sinImp = round($sinImp, 2);

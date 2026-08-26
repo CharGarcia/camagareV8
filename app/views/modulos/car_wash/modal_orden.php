@@ -35,7 +35,11 @@
                 <button type="button" id="cw_btn_whatsapp" class="btn btn-outline-success btn-sm px-2" onclick="cwWhatsapp()" title="Enviar por WhatsApp" disabled><i class="bi bi-whatsapp"></i></button>
             </div>
 
-            <div class="modal-body">
+            <div class="modal-body position-relative">
+                <div id="cw-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información de la orden...</div>
+                </div>
                 <form id="formOrdenCW" autocomplete="off">
                     <input type="hidden" id="cw_id">
                     <input type="hidden" id="cw_id_vehiculo">
@@ -283,6 +287,7 @@
     window.cwAbrirVerId = async function (id, irAFacturar) {
         resetForm();
         getModal().show();
+        document.getElementById('cw-modal-loader')?.classList.remove('d-none');
         try {
             const res = await fetch(`${RUTA}/getDetalleAjax?id=${id}`);
             const data = await res.json();
@@ -335,6 +340,8 @@
             }
         } catch (e) {
             Swal.fire('Error', e.message, 'error');
+        } finally {
+            document.getElementById('cw-modal-loader')?.classList.add('d-none');
         }
     };
 

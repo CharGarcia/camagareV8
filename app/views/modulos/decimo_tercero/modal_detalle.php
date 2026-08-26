@@ -8,7 +8,11 @@
                 <h5 class="modal-title fw-bold"><i class="bi bi-cash-coin me-2 text-primary"></i>Décimo Tercero <span id="dt_det_titulo" class="text-muted fw-normal"></span></h5>
                 <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="modal-body p-0">
+            <div class="modal-body p-0 position-relative">
+                <div id="dt-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información...</div>
+                </div>
                 <input type="hidden" id="dt_det_id" value="">
 
                 <ul class="nav nav-tabs px-3 pt-2" id="dtDetTabs">

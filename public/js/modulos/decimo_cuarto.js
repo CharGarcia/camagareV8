@@ -61,30 +61,39 @@
         $('dc_det_titulo').textContent = 'Actualizando...';
         getModalDetalle().show();
 
-        let avisoRecalculo = '';
-        try {
-            const fdCalc = new FormData();
-            fdCalc.append('anio', rowData.anio);
-            fdCalc.append('region_grupo', rowData.region_grupo);
-            const respCalc = await fetch(`${urlModulo}/calcularAjax`, { method: 'POST', body: fdCalc });
-            const jsonCalc = await respCalc.json();
-            if (jsonCalc.ok) {
-                window.dispatchEvent(new CustomEvent('decimoCuartoActualizado'));
-            } else {
-                avisoRecalculo = jsonCalc.error || 'No se pudo actualizar automáticamente.';
-            }
-        } catch (e) {
-            avisoRecalculo = 'No se pudo actualizar automáticamente (sin conexión).';
-        }
+        // Loader: el detalle se pinta recién cuando el servidor termina de recalcular
+        // (calcularAjax) y luego responde el detalle (getDetalleAjax); sin esto el
+        // usuario ve el modal vacío mientras esos dos fetch encadenados se resuelven.
+        $('dc-modal-loader')?.classList.remove('d-none');
 
         try {
-            const resp = await fetch(`${urlModulo}/getDetalleAjax?id=${id}`);
-            const res = await resp.json();
-            if (!res.ok) return;
-            const totalPagado = (res.detalle || []).reduce((s, f) => s + (parseFloat(f.monto_pagado) || 0), 0);
-            pintarResumen(res.cabecera, totalPagado, avisoRecalculo);
-            pintarEmpleados(res.detalle);
-        } catch (e) {}
+            let avisoRecalculo = '';
+            try {
+                const fdCalc = new FormData();
+                fdCalc.append('anio', rowData.anio);
+                fdCalc.append('region_grupo', rowData.region_grupo);
+                const respCalc = await fetch(`${urlModulo}/calcularAjax`, { method: 'POST', body: fdCalc });
+                const jsonCalc = await respCalc.json();
+                if (jsonCalc.ok) {
+                    window.dispatchEvent(new CustomEvent('decimoCuartoActualizado'));
+                } else {
+                    avisoRecalculo = jsonCalc.error || 'No se pudo actualizar automáticamente.';
+                }
+            } catch (e) {
+                avisoRecalculo = 'No se pudo actualizar automáticamente (sin conexión).';
+            }
+
+            try {
+                const resp = await fetch(`${urlModulo}/getDetalleAjax?id=${id}`);
+                const res = await resp.json();
+                if (!res.ok) return;
+                const totalPagado = (res.detalle || []).reduce((s, f) => s + (parseFloat(f.monto_pagado) || 0), 0);
+                pintarResumen(res.cabecera, totalPagado, avisoRecalculo);
+                pintarEmpleados(res.detalle);
+            } catch (e) {}
+        } finally {
+            $('dc-modal-loader')?.classList.add('d-none');
+        }
     };
 
     function pintarResumen(c, totalPagado, avisoRecalculo) {

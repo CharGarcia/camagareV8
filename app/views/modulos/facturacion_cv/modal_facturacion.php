@@ -33,7 +33,12 @@
                 <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
-            <div class="modal-body p-0">
+            <div class="modal-body p-0 position-relative">
+                <!-- Loader mientras carga la información completa de la facturación vía AJAX -->
+                <div id="faccv-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información...</div>
+                </div>
                 <form id="formFaccv" autocomplete="off">
                     <input type="hidden" id="faccv_id">
                     <input type="hidden" id="faccv_id_factura">
@@ -446,12 +451,16 @@
         // "Crear nueva desde esta": disponible en documentos ya emitidos (facturada/anulada).
         $('faccv_btn_duplicar').classList.toggle('d-none', !((row.estado === 'anulada' || row.estado === 'facturada') && window.FACCV_PERM.crear));
         getModal().show();
+        // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
+        // usuario ve el modal "vacío" y piensa que la facturación no tiene datos.
+        $('faccv-modal-loader')?.classList.remove('d-none');
         await cargarDetalle(row.id, editable);
     };
 
     async function cargarDetalle(id, editable) {
         const body = $('faccv_lineas_body');
         body.innerHTML = '<tr><td colspan="10" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
+        try {
         const res = await fetch(`${RUTA}/getDetalleAjax?id=${id}`);
         const data = await res.json();
         if (!data.ok) { body.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">No se pudo cargar.</td></tr>'; return; }
@@ -520,6 +529,12 @@
         }));
         if (!dets.length) body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin líneas.</td></tr>';
         recalc();
+        } catch (err) {
+            console.error('Error cargando facturación de consignación:', err);
+            body.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">No se pudo cargar.</td></tr>';
+        } finally {
+            $('faccv-modal-loader')?.classList.add('d-none');
+        }
     }
 
     function pintarBadge(estado) {

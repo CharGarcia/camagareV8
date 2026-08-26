@@ -71,6 +71,9 @@
     window.seAbrirVerId = async function (id, irAFacturar) {
         resetForm();
         getModal().show();
+        // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
+        // usuario ve el modal "vacío" y piensa que la orden no tiene datos.
+        document.getElementById('se-modal-loader')?.classList.remove('d-none');
         try {
             const res = await fetch(`${RUTA}/getDetalleAjax?id=${id}`);
             const data = await res.json();
@@ -123,6 +126,8 @@
             }
         } catch (e) {
             Swal.fire('Error', e.message, 'error');
+        } finally {
+            document.getElementById('se-modal-loader')?.classList.add('d-none');
         }
     };
 

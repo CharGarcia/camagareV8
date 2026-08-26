@@ -16,7 +16,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
-            <div class="modal-body p-3">
+            <div class="modal-body p-3 position-relative">
+                <div id="oc-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información de la orden...</div>
+                </div>
                 <!-- Acciones Rápidas Superior -->
                 <div class="d-flex justify-content-start gap-1 mb-3">
                     <button type="button" class="btn btn-outline-success btn-sm px-2 py-1"

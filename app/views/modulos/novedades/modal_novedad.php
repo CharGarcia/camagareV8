@@ -19,7 +19,12 @@ $mesActual  = (int) date('n');
                     </h5>
                     <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body position-relative">
+                    <!-- Loader mientras carga la información completa de la novedad vía AJAX -->
+                    <div id="nov-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div class="small text-muted">Cargando información...</div>
+                    </div>
                     <div id="novBloqueoAviso" class="alert alert-secondary d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none">
                         <i class="bi bi-lock-fill"></i>
                         <span class="small" id="novBloqueoAvisoTexto">Esta novedad no se puede modificar: el rol de este período ya está pagado, o ya fue desembolsada por egreso (Anticipo/Préstamo Empresa). Anule el pago/egreso correspondiente, o registre una novedad nueva de ajuste, si necesita corregirla.</span>

@@ -374,7 +374,11 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <h6 class="modal-title fw-bold"><i class="bi bi-calendar-event me-2"></i>Cheques Posfechados</h6>
                 <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-3">
+            <div class="modal-body p-3 position-relative">
+                <div id="cb-posf-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando cheques posfechados...</div>
+                </div>
                 <ul class="nav nav-tabs mb-2" id="cb-tabs-posfechados">
                     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#cb-tab-recibidos" type="button">Recibidos (de clientes)</button></li>
                     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cb-tab-emitidos" type="button">Emitidos (a proveedores)</button></li>
@@ -458,7 +462,11 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <h6 class="modal-title fw-bold"><i class="bi bi-clock-history me-2"></i>Historial de Conciliaciones</h6>
                 <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-3">
+            <div class="modal-body p-3 position-relative">
+                <div id="cb-hist-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando historial de conciliaciones...</div>
+                </div>
                 <div class="table-responsive" style="max-height:420px;overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">

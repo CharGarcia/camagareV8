@@ -431,9 +431,13 @@ window.ocAbrirEditar = function(tr) {
         // volver a aplicar el bloqueo para alcanzar también esos inputs nuevos.
         if (soloLectura) ocAplicarSoloLectura(d.estado);
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => {
+        document.getElementById('oc-modal-loader')?.classList.add('d-none');
+    });
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalOrdenCompra')).show();
+    document.getElementById('oc-modal-loader')?.classList.remove('d-none');
 };
 
 document.getElementById('oc_id_punto_emision')?.addEventListener('change', function() {

@@ -14,7 +14,12 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
 
-            <div class="modal-body">
+            <div class="modal-body position-relative">
+                <!-- Loader mientras carga la información completa del retorno vía AJAX -->
+                <div id="ret-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información del retorno...</div>
+                </div>
                 <!-- Barra de acciones superior (estándar del sistema: PDF / Correo / WhatsApp) -->
                 <div class="d-flex gap-1 align-items-center flex-wrap mb-3 pb-2 border-bottom">
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="retPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
@@ -259,10 +264,18 @@
         document.getElementById('btnEliminarRetorno').classList.toggle('d-none', !puedeEliminar);
 
         getModal().show();
-        if (editable) {
-            await retCargarParaEditar(row);
-        } else {
-            await retCargarDetalle(row.id);
+
+        // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
+        // usuario ve la cabecera del modal "vacía" y piensa que el retorno no tiene datos.
+        document.getElementById('ret-modal-loader')?.classList.remove('d-none');
+        try {
+            if (editable) {
+                await retCargarParaEditar(row);
+            } else {
+                await retCargarDetalle(row.id);
+            }
+        } finally {
+            document.getElementById('ret-modal-loader')?.classList.add('d-none');
         }
     };
 

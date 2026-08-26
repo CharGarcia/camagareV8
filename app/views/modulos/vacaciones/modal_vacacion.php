@@ -13,7 +13,11 @@ $mesActual  = (int) date('n');
                     <h5 class="modal-title fw-bold"><i class="bi bi-umbrella me-2 text-primary"></i><span id="tituloModalVac">Nueva Vacación</span></h5>
                     <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body position-relative">
+                    <div id="vac-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div class="small text-muted">Cargando información...</div>
+                    </div>
                     <input type="hidden" name="id" id="vac_id" value="">
                     <div class="row g-3">
                         <div class="col-md-8 position-relative">

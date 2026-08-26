@@ -201,6 +201,10 @@
         document.getElementById('nov_estado').disabled = false;
         getModal()?.show();
 
+        // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
+        // usuario ve el modal "vacío" y piensa que la novedad no tiene datos.
+        document.getElementById('nov-modal-loader')?.classList.remove('d-none');
+
         try {
             const resp = await fetch(`${urlModulo}/getDetalleAjax?id=${id}`);
             const res = await resp.json();
@@ -227,7 +231,10 @@
             obsAuto = textoObsAuto();
 
             novAplicarSoloLectura(!!d.bloqueada);
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            document.getElementById('nov-modal-loader')?.classList.add('d-none');
+        }
     };
 
     if (form) {

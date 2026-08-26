@@ -142,6 +142,7 @@
         $('btnEliminarVac')?.classList.remove('d-none');
         $('vac_estado').disabled = false;
         getModal()?.show();
+        document.getElementById('vac-modal-loader')?.classList.remove('d-none');
 
         try {
             const resp = await fetch(`${urlModulo}/getDetalleAjax?id=${id}`);
@@ -158,7 +159,10 @@
             $('vac_afecta_rol').checked = (d.afecta_rol === true || d.afecta_rol === 't' || d.afecta_rol === '1' || d.afecta_rol === 1);
             $('vac_observacion').value = d.observacion || '';
             recalcularValor();
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            document.getElementById('vac-modal-loader')?.classList.add('d-none');
+        }
     };
 
     if (form) {

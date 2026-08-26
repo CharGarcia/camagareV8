@@ -32,7 +32,12 @@
                 <button type="button" id="se_btn_whatsapp" class="btn btn-outline-success btn-sm px-2" onclick="seWhatsapp()" title="Enviar por WhatsApp" disabled><i class="bi bi-whatsapp"></i></button>
             </div>
 
-            <div class="modal-body">
+            <div class="modal-body position-relative">
+                <!-- Loader mientras carga la información completa de la orden vía AJAX -->
+                <div id="se-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información de la orden...</div>
+                </div>
                 <form id="formOrdenSE" autocomplete="off">
                     <input type="hidden" id="se_id">
                     <input type="hidden" id="se_id_cliente">

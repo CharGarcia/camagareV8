@@ -239,11 +239,14 @@
     window.CB_abrirModalHistorialConciliaciones = async function () {
         if (!state.forma) return;
         new bootstrap.Modal(document.getElementById('modalHistorialConciliacionesCB')).show();
+        document.getElementById('cb-hist-modal-loader')?.classList.remove('d-none');
         try {
             const json = await fetchJson(`${CB_URL_BASE}/listarConciliacionesAjax?forma=${state.forma}&consolidado=${state.consolidado ? 1 : 0}`);
             renderConciliaciones(json.ok ? json.data : []);
         } catch (e) {
             console.error(e);
+        } finally {
+            document.getElementById('cb-hist-modal-loader')?.classList.add('d-none');
         }
     };
 
@@ -595,6 +598,7 @@
 
     window.CB_abrirModalPosfechados = async function () {
         new bootstrap.Modal(document.getElementById('modalPosfechadosCB')).show();
+        document.getElementById('cb-posf-modal-loader')?.classList.remove('d-none');
         try {
             const [recibidos, emitidos, emitidosEmp] = await Promise.all([
                 fetchJson(`${CB_URL_BASE}/chequesPosfechadosAjax?direccion=RECIBIDO`),
@@ -606,6 +610,8 @@
             renderPosfechados('cb-tbody-posf-emitidos-emp', emitidosEmp.ok ? emitidosEmp.data : []);
         } catch (e) {
             console.error(e);
+        } finally {
+            document.getElementById('cb-posf-modal-loader')?.classList.add('d-none');
         }
     };
 

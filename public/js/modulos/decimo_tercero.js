@@ -57,6 +57,7 @@
         if (!id) return;
         $('dt_det_id').value = id;
         getModalDetalle().show();
+        document.getElementById('dt-modal-loader')?.classList.remove('d-none');
 
         try {
             const resp = await fetch(`${urlModulo}/getDetalleAjax?id=${id}`);
@@ -65,7 +66,10 @@
             const totalPagado = (res.detalle || []).reduce((s, f) => s + (parseFloat(f.monto_pagado) || 0), 0);
             pintarResumen(res.cabecera, totalPagado);
             pintarEmpleados(res.detalle);
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            document.getElementById('dt-modal-loader')?.classList.add('d-none');
+        }
     };
 
     function pintarResumen(c, totalPagado) {

@@ -169,9 +169,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                 <h6 class="modal-title fw-bold"><i class="bi bi-box-seam me-2"></i>Carga de inventario <span id="ci-det-numero"></span></h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body position-relative">
+                <div id="ci-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información de la carga...</div>
+                </div>
                 <div id="ci-detalle-msg"></div>
-                <div id="ci-detalle-cuerpo" class="small text-muted text-center py-4">Cargando…</div>
+                <div id="ci-detalle-cuerpo" class="small text-muted text-center py-4"></div>
             </div>
             <div class="modal-footer py-2 d-flex justify-content-between">
                 <div>
@@ -243,10 +247,11 @@ document.getElementById('ci-form-importar').addEventListener('submit', async fun
 async function CI_verDetalle(id) {
     CI_cargaActual = null;
     document.getElementById('ci-detalle-msg').innerHTML = '';
-    document.getElementById('ci-detalle-cuerpo').innerHTML = 'Cargando…';
+    document.getElementById('ci-detalle-cuerpo').innerHTML = '';
     document.getElementById('ci-det-numero').textContent = '';
     ['ci-btn-aprobar', 'ci-btn-rechazar', 'ci-btn-eliminar'].forEach(b => { const el = document.getElementById(b); if (el) el.classList.add('d-none'); });
     new bootstrap.Modal(document.getElementById('ci-modal-detalle')).show();
+    document.getElementById('ci-modal-loader')?.classList.remove('d-none');
 
     try {
         const res = await fetch(`${CI_URL}/getDetalleAjax?id=${id}`);
@@ -311,6 +316,8 @@ async function CI_verDetalle(id) {
         }
     } catch (err) {
         document.getElementById('ci-detalle-cuerpo').innerHTML = '<div class="text-danger">Error de conexión.</div>';
+    } finally {
+        document.getElementById('ci-modal-loader')?.classList.add('d-none');
     }
 }
 

@@ -451,7 +451,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
-            <div class="modal-body p-0">
+            <div class="modal-body p-0 position-relative">
+                <div id="rv-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información del recibo...</div>
+                </div>
                 <form id="formFacturaModal">
                     <!-- Barra de Acciones Superior -->
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
@@ -4375,6 +4379,7 @@ $totalPages = $totalPagesOriginal;
         fvActualizarEstadoBotones(data.estado || 'borrador');
 
         modalMain.show();
+        document.getElementById('rv-modal-loader')?.classList.remove('d-none');
 
         // Cargar cobros en background para mostrar el botón de pago con tarjeta
         fvCargarCobrosTab();
@@ -4824,6 +4829,7 @@ $totalPages = $totalPagesOriginal;
             // Liberar el bloqueo: a partir de aquÃ­ cualquier cambio manual de punto de emisiÃ³n
             // podrÃ¡ volver a cargar el siguiente consecutivo normalmente
             RV_BLOQUEAR_SECUENCIAL = false;
+            document.getElementById('rv-modal-loader')?.classList.add('d-none');
         }
     };
 

@@ -457,7 +457,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
-            <div class="modal-body p-0">
+            <div class="modal-body p-0 position-relative">
+                <!-- Loader mientras carga la información completa de la factura vía AJAX -->
+                <div id="fv-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Cargando información de la factura...</div>
+                </div>
                 <!-- Aviso: otro usuario está editando/eliminando esta factura ahora mismo -->
                 <div id="aviso-bloqueo-factura" class="alert alert-warning d-flex align-items-center gap-2 mb-0 rounded-0 d-none" role="alert">
                     <i class="bi bi-lock-fill"></i>
@@ -5215,6 +5220,10 @@ $totalPages = $totalPagesOriginal;
 
         modalMain.show();
 
+        // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
+        // usuario ve el modal "vacío" y piensa que la factura no tiene datos.
+        document.getElementById('fv-modal-loader')?.classList.remove('d-none');
+
         // Cargar cobros en background para mostrar el botón de pago con tarjeta
         fvCargarCobrosTab();
 
@@ -5690,6 +5699,7 @@ $totalPages = $totalPagesOriginal;
             // Liberar el bloqueo: a partir de aquÃ­ cualquier cambio manual de punto de emisiÃ³n
             // podrÃ¡ volver a cargar el siguiente consecutivo normalmente
             FV_BLOQUEAR_SECUENCIAL = false;
+            document.getElementById('fv-modal-loader')?.classList.add('d-none');
         }
     };
 
