@@ -225,6 +225,10 @@ class UsuariosSistemaController extends Controller
         $mail = trim($_POST['mail'] ?? '');
         $nivel = (int) ($_POST['nivel'] ?? 1);
         $estado = !empty($_POST['estado']);
+        // El nombre lo edita quien gestiona al usuario (típicamente para corregir
+        // el de una invitación mal escrita); si no viene en el POST, null le dice
+        // al modelo que no lo toque.
+        $nombre = array_key_exists('nombre', $_POST) ? trim((string) $_POST['nombre']) : null;
         // La identificación la editan tanto el administrador como el superadmin;
         // si el campo no viene en el POST, null le dice al modelo que no la toque.
         $cedula = array_key_exists('cedula', $_POST) ? trim((string) $_POST['cedula']) : null;
@@ -246,7 +250,7 @@ class UsuariosSistemaController extends Controller
         $puedeAppMovil = $nivelActual >= 3 ? !empty($_POST['puede_app_movil']) : null;
 
         try {
-            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0, $puedeAppMovil, $cedula)) {
+            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0, $puedeAppMovil, $cedula, $nombre)) {
                 $this->json(['ok' => true, 'msg' => 'Usuario actualizado correctamente.']);
             } else {
                 $this->json(['ok' => false, 'msg' => 'No se realizaron cambios o hubo un error al actualizar.']);
@@ -349,6 +353,96 @@ class UsuariosSistemaController extends Controller
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'msg' => 'Error: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * AJAX: asigna una contraseña provisional al usuario. Es la salida cuando el
+     * correo de invitación no llega (buzón lleno, dominio que lo rechaza, correo
+     * mal escrito): el administrador fija una clave, se la entrega por otro medio
+     * y el usuario la cambia después desde su perfil.
+     *
+     * Al usuario que nunca completó su registro se le pide, en el mismo paso, la
+     * identificación con la que va a entrar: la invitación le dejó una provisional
+     * (el hash de su correo) que nadie puede teclear, y una contraseña sin un
+     * número real con el cual iniciar sesión no le sirve de nada.
+     */
+    public function claveProvisional(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['ok' => false, 'msg' => 'Método no permitido.']);
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $clave = (string) ($_POST['clave'] ?? '');
+        $cedula = trim((string) ($_POST['cedula'] ?? ''));
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        if ($id <= 0) {
+            $this->json(['ok' => false, 'msg' => 'ID inválido.']);
+        }
+
+        // Su propia contraseña se cambia desde el perfil, con la clave actual por
+        // delante: no tiene sentido (ni es seguro) hacerlo por esta vía.
+        if ($id === $idActual) {
+            $this->json(['ok' => false, 'msg' => 'Para cambiar su propia contraseña use la opción de su perfil.']);
+        }
+
+        $this->requireGestionable($id);
+
+        $usuario = $this->model->getIdentificacionPorId($id);
+        if (!$usuario) {
+            $this->json(['ok' => false, 'msg' => 'Usuario no encontrado.']);
+        }
+
+        // Identificación: solo se acepta (y se exige) cuando el usuario todavía
+        // carga la provisional. Si ya tiene una real, se edita en la ficha, no
+        // por aquí.
+        $cedulaAFijar = null;
+        if ($this->model->tieneCedulaProvisional($id)) {
+            if ($cedula === '') {
+                $this->json([
+                    'ok' => false,
+                    'msg' => 'Indique la identificación con la que iniciará sesión: este usuario nunca completó su registro y la que tiene es provisional.',
+                ]);
+            }
+            $cedulaAFijar = $cedula;
+        }
+
+        try {
+            if (!$this->model->establecerClaveProvisional($id, $clave, $idActual, $cedulaAFijar)) {
+                $this->json(['ok' => false, 'msg' => 'No se pudo asignar la contraseña provisional.']);
+            }
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['ok' => false, 'msg' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'msg' => 'Error: ' . $e->getMessage()]);
+        }
+
+        $cedulaFinal = $cedulaAFijar ?? (string) ($usuario['cedula'] ?? '');
+
+        // Auditoría: se registra el hecho, nunca la contraseña ni su hash.
+        (new \App\Services\LogSistemaService())->registrar(
+            $idActual,
+            null,                       // usuarios es una tabla global
+            'CLAVE_PROVISIONAL_USUARIO',
+            'usuarios',
+            $id,
+            null,
+            [
+                'usuario' => $usuario['nombre'] ?? '',
+                'identificacion' => $cedulaFinal,
+                'detalle' => 'Contraseña provisional asignada por un administrador. El registro queda como completado y el enlace de invitación anterior deja de ser válido.',
+            ]
+        );
+
+        $this->json([
+            'ok' => true,
+            'msg' => 'Contraseña provisional asignada. El usuario ingresa con la identificación ' . $cedulaFinal . ' y esta contraseña; pídale que la cambie desde su perfil.',
+            'cedula' => $cedulaFinal,
+        ]);
     }
 
     /**

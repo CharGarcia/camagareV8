@@ -59,22 +59,22 @@ class ConciliacionCobrosService
 
     /**
      * Clientes de la empresa actual que tienen al menos un documento de cuentas por cobrar
-     * pendiente (factura de venta / recibo / saldo inicial). Reutiliza
-     * IngresoRepository::getFacturasPendientes() para no duplicar el cálculo de saldos —
-     * esa consulta ya filtra facturas y recibos por el ambiente (pruebas/producción) actual
-     * de la empresa (los saldos iniciales no llevan ambiente, por diseño). Se usa tanto para
-     * la lista de candidatos del matching automático como para el buscador manual, así ningún
-     * cliente sin saldo pendiente ni una factura de otro ambiente aparece en ningún lado.
+     * pendiente (factura de venta / recibo / saldo inicial). Se resuelve en UNA sola consulta
+     * con IngresoRepository::getClientesConDocumentosPendientes(), que aplica exactamente el
+     * mismo cálculo de saldos que getFacturasPendientes() — incluido el filtro por el ambiente
+     * (pruebas/producción) actual de la empresa en facturas y recibos; los saldos iniciales no
+     * llevan ambiente, por diseño. Se usa tanto para la lista de candidatos del matching
+     * automático como para el buscador manual, así ningún cliente sin saldo pendiente ni una
+     * factura de otro ambiente aparece en ningún lado.
+     *
+     * OJO: antes esto recorría los clientes activos llamando a getFacturasPendientes() uno por
+     * uno. Esa consulta tiene 7 CTE de agregación sobre toda la cartera, así que en una empresa
+     * con varios cientos de clientes el módulo no llegaba a abrir (agotaba el tiempo de
+     * ejecución y saturaba las conexiones a PostgreSQL). No volver a ese patrón.
      */
     public function getClientesConSaldoPendiente(int $idEmpresa): array
     {
-        $conSaldo = [];
-        foreach ($this->repository->getClientesActivos($idEmpresa) as $cliente) {
-            if (!empty($this->ingresoRepository->getFacturasPendientes((int) $cliente['id'], $idEmpresa))) {
-                $conSaldo[] = $cliente;
-            }
-        }
-        return $conSaldo;
+        return $this->ingresoRepository->getClientesConDocumentosPendientes($idEmpresa);
     }
 
     // ── Perfiles de mapeo ────────────────────────────────────────────────────

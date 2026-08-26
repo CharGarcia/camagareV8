@@ -21,8 +21,32 @@ class ConciliacionMatchService
     /** Score mínimo (0-100) de similitud de texto para considerar un cliente como candidato. */
     private const UMBRAL_SCORE_CLIENTE = 35.0;
 
+    /**
+     * Documentos pendientes ya consultados en esta petición, indexados por "empresa:cliente".
+     * getFacturasPendientes() es una consulta con 7 CTE de agregación sobre toda la cartera y
+     * aquí se necesita hasta 6 veces por línea del extracto: sin esta caché, procesar un
+     * archivo de 200 líneas disparaba más de mil ejecuciones y colgaba el request.
+     *
+     * @var array<string, array<int, array<string, mixed>>>
+     */
+    private array $cachePendientes = [];
+
     public function __construct(private IngresoRepository $ingresoRepository)
     {
+    }
+
+    /**
+     * Documentos pendientes del cliente, servidos desde la caché de la petición.
+     * La caché vive solo mientras dura el request (el objeto se crea por petición), así que
+     * no puede devolver saldos de una petición anterior.
+     */
+    private function pendientesDe(int $idCliente, int $idEmpresa): array
+    {
+        $clave = $idEmpresa . ':' . $idCliente;
+        if (!isset($this->cachePendientes[$clave])) {
+            $this->cachePendientes[$clave] = $this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa);
+        }
+        return $this->cachePendientes[$clave];
     }
 
     /**
@@ -57,7 +81,7 @@ class ConciliacionMatchService
 
         foreach ($candidatos as $candidato) {
             $idCliente = (int) $candidato['cliente']['id'];
-            $pendientes = $this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa);
+            $pendientes = $this->pendientesDe($idCliente, $idEmpresa);
             if (empty($pendientes)) {
                 continue;
             }
@@ -85,7 +109,7 @@ class ConciliacionMatchService
         // para que "Documento Sugerido" siempre muestre un número de factura real del sistema
         // en vez de quedar vacío cuando sí hay un candidato razonable.
         $idMejorCliente = (int) $candidatos[0]['cliente']['id'];
-        $pendientesMejorCliente = $this->ingresoRepository->getFacturasPendientes($idMejorCliente, $idEmpresa);
+        $pendientesMejorCliente = $this->pendientesDe($idMejorCliente, $idEmpresa);
         if (!empty($pendientesMejorCliente)) {
             usort($pendientesMejorCliente, fn ($a, $b) =>
                 abs((float) $a['saldo_pendiente'] - (float) $fila['monto']) <=> abs((float) $b['saldo_pendiente'] - (float) $fila['monto'])
@@ -112,6 +136,10 @@ class ConciliacionMatchService
      */
     public function sugerirParaClienteConocido(int $idCliente, string $descripcion, float $monto, int $idEmpresa): array
     {
+        // A propósito NO usa pendientesDe(): este método corre justo DESPUÉS de haber generado
+        // el Ingreso que cobró parte de la línea, así que los saldos del cliente acaban de
+        // cambiar y hay que releerlos. Es una sola consulta por diferencia de pago parcial,
+        // no el bucle masivo que justifica la caché en sugerir().
         $pendientes = $this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa);
         if (empty($pendientes)) {
             return ['estado' => 'SIN_MATCH', 'id_cliente' => $idCliente, 'tipo_documento' => null, 'id_documento' => null, 'score' => null];

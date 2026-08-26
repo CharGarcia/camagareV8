@@ -251,7 +251,7 @@ $rowsHtml = $rowsHtml ?? '';
                         <button class="nav-link" id="tab-responsables" data-bs-toggle="tab" data-bs-target="#pane-responsables" type="button" role="tab">Responsables de traslado</button>
                     </li>
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="tab-restablecer" data-bs-toggle="tab" data-bs-target="#pane-restablecer" type="button" role="tab">Restablecer contraseña</button>
+                        <button class="nav-link" id="tab-restablecer" data-bs-toggle="tab" data-bs-target="#pane-restablecer" type="button" role="tab">Contraseña</button>
                     </li>
                 </ul>
                 <div class="tab-content mb-3" id="tabsUsuarioContent">
@@ -260,8 +260,9 @@ $rowsHtml = $rowsHtml ?? '';
                             <input type="hidden" name="id" id="edit-usuario-id" value="">
                             <div class="row g-3">
                                 <div class="col-md-6">
-                                    <label class="form-label text-muted small">Nombre</label>
-                                    <p class="mb-0" id="info-nombre"></p>
+                                    <label for="edit-nombre" class="form-label">Nombre</label>
+                                    <input type="text" id="edit-nombre" name="nombre" class="form-control form-control-sm" maxlength="100" autocomplete="off" placeholder="Nombre y apellido">
+                                    <div class="form-text small">Solo es la etiqueta con la que se muestra; no sirve para iniciar sesión.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="edit-cedula" class="form-label">Identificación</label>
@@ -396,6 +397,7 @@ $rowsHtml = $rowsHtml ?? '';
                         </div>
                     </div>
                     <div class="tab-pane fade" id="pane-restablecer" role="tabpanel">
+                        <h6 class="mb-1"><i class="bi bi-envelope"></i> Restablecer por correo</h6>
                         <p class="text-muted small">Se enviará un correo al usuario con un enlace para restablecer su contraseña.</p>
                         <p class="small mb-2"><strong>Correo de envío:</strong> <span id="correo-restablecer-actual" class="text-primary"></span></p>
                         <p class="small text-warning-emphasis mb-2 d-none" id="correo-restablecer-aviso"><i class="bi bi-exclamation-circle"></i> Modificó el correo en la pestaña General y aún no lo guarda: el envío irá al correo guardado. Guarde el cambio si quiere usar el nuevo.</p>
@@ -403,6 +405,42 @@ $rowsHtml = $rowsHtml ?? '';
                             <i class="bi bi-envelope"></i> Enviar correo para restablecer contraseña
                         </button>
                         <div id="msg-restablecer" class="form-text mt-2"></div>
+
+                        <hr class="my-3">
+
+                        <!-- Salida cuando el correo no llega (buzón lleno, dominio que lo
+                             rechaza, dirección mal escrita): el administrador fija la clave
+                             y se la entrega al usuario por otro medio. -->
+                        <h6 class="mb-1"><i class="bi bi-key"></i> Clave provisional</h6>
+                        <p class="text-muted small mb-2">
+                            Fije usted una contraseña y entréguesela al usuario por otro medio. Al asignarla,
+                            el enlace de invitación anterior deja de servir y el usuario ya puede entrar con su
+                            identificación; pídale que la cambie desde su perfil.
+                        </p>
+                        <div id="aviso-clave-provisional" class="alert alert-warning py-2 small d-none"></div>
+                        <div class="row g-2">
+                            <!-- Solo para el invitado que nunca se registró: su identificación
+                                 actual es provisional, así que se fija junto con la clave. -->
+                            <div class="col-md-5 d-none" id="campo-cedula-provisional">
+                                <label for="input-cedula-provisional" class="form-label small">Identificación</label>
+                                <input type="text" id="input-cedula-provisional" class="form-control form-control-sm" maxlength="15" autocomplete="off" placeholder="Cédula, RUC o pasaporte">
+                                <div class="form-text small">Con este número iniciará sesión.</div>
+                            </div>
+                            <div class="col-md-7">
+                                <label for="input-clave-provisional" class="form-label small">Nueva contraseña</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" id="input-clave-provisional" class="form-control" maxlength="72" autocomplete="off" placeholder="Mínimo 4 caracteres">
+                                    <button type="button" class="btn btn-outline-secondary" id="btn-generar-clave" title="Generar una contraseña">
+                                        <i class="bi bi-shuffle"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text small">Se muestra en pantalla a propósito, para poder copiarla y entregarla.</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm mt-2" id="btn-clave-provisional">
+                            <i class="bi bi-key"></i> Asignar clave provisional
+                        </button>
+                        <div id="msg-clave-provisional" class="form-text mt-2"></div>
                     </div>
                 </div>
             </div>
@@ -433,6 +471,11 @@ $rowsHtml = $rowsHtml ?? '';
         var selectEmpresa = document.getElementById('select-empresa-usuario');
         var idUsuario = 0;
         var mailOriginal = '';
+        var cedulaOriginal = '';
+        // Un usuario "no registrado" nunca fijó su identificación: la que tiene es
+        // provisional (el hash de su correo) y con ella no puede iniciar sesión,
+        // así que la clave provisional no le serviría de nada todavía.
+        var cedulaEsProvisional = false;
 
         // El enlace de recuperación se valida cruzando correo + token, así que solo
         // funciona con el correo GUARDADO. Si se cambió el correo y no se ha guardado,
@@ -453,8 +496,10 @@ $rowsHtml = $rowsHtml ?? '';
             document.getElementById('modal-usuario-id').value = idUsuario;
             document.getElementById('edit-usuario-id').value = idUsuario;
             document.getElementById('modal-usuario-nombre').textContent = el.dataset.nombre || '';
-            document.getElementById('info-nombre').textContent = el.dataset.nombre || '';
-            document.getElementById('edit-cedula').value = el.dataset.cedula || '';
+            document.getElementById('edit-nombre').value = el.dataset.nombre || '';
+            cedulaOriginal = el.dataset.cedula || '';
+            document.getElementById('edit-cedula').value = cedulaOriginal;
+            cedulaEsProvisional = el.dataset.registrado === '0';
             // En un usuario que aún no completa su registro la cédula es provisional
             // (se guardó su correo): él mismo la fijará al registrarse.
             document.getElementById('ayuda-cedula').textContent = el.dataset.registrado === '0'
@@ -493,7 +538,12 @@ $rowsHtml = $rowsHtml ?? '';
             }
             document.getElementById('msg-restablecer').textContent = '';
             document.getElementById('msg-restablecer').className = 'form-text mt-2';
+            document.getElementById('input-clave-provisional').value = '';
+            document.getElementById('input-cedula-provisional').value = '';
+            document.getElementById('msg-clave-provisional').textContent = '';
+            document.getElementById('msg-clave-provisional').className = 'form-text mt-2';
             actualizarCorreoRestablecer();
+            actualizarAvisoClaveProvisional();
             cargarIntentosAcceso();
             bootstrap.Tab.getInstance(document.getElementById('tab-general')) || new bootstrap.Tab(document.getElementById('tab-general'));
             document.getElementById('tab-general').click();
@@ -1100,7 +1150,7 @@ $rowsHtml = $rowsHtml ?? '';
 
         document.getElementById('btn-eliminar-usuario').addEventListener('click', function() {
             if (!idUsuario) return;
-            var nombre = document.getElementById('info-nombre').textContent;
+            var nombre = document.getElementById('edit-nombre').value;
             var msg = '¿Está seguro de eliminar al usuario "' + nombre + '"?';
 
             if (confirm(msg)) {
@@ -1134,6 +1184,121 @@ $rowsHtml = $rowsHtml ?? '';
                     msgModal.innerHTML = '<div class="alert alert-danger py-2 small">' + (err.message || 'Error de conexión') + '</div>';
                 });
             }
+        });
+
+        // ── Clave provisional ────────────────────────────────────────────────
+        // La contraseña sirve de poco sin la identificación con la que se entra:
+        // si el usuario aún carga la provisional, o si se cambió la del formulario
+        // sin guardarla, se avisa antes de dejar asignar la clave.
+        function actualizarAvisoClaveProvisional() {
+            var aviso = document.getElementById('aviso-clave-provisional');
+            var btn = document.getElementById('btn-clave-provisional');
+            if (!aviso || !btn) return;
+
+            var cedulaEnFormulario = document.getElementById('edit-cedula').value.trim();
+            var campoCedula = document.getElementById('campo-cedula-provisional');
+
+            if (cedulaEsProvisional) {
+                // Nunca completó su registro: la clave se guarda junto con la
+                // identificación, en un solo paso, para no dejarlo a medias.
+                campoCedula.classList.remove('d-none');
+                aviso.innerHTML = '<i class="bi bi-info-circle"></i> Este usuario nunca completó su registro, así que todavía no tiene identificación propia. Indique aquí con qué número iniciará sesión: se guardará junto con la contraseña.';
+                aviso.classList.remove('d-none');
+                btn.disabled = false;
+                return;
+            }
+
+            campoCedula.classList.add('d-none');
+
+            if (cedulaEnFormulario !== cedulaOriginal) {
+                aviso.innerHTML = '<i class="bi bi-exclamation-circle"></i> Modificó la identificación en <strong>General</strong> y aún no la guarda. Guárdela primero: es el número con el que el usuario iniciará sesión.';
+                aviso.classList.remove('d-none');
+                btn.disabled = true;
+                return;
+            }
+
+            aviso.classList.add('d-none');
+            aviso.innerHTML = '';
+            btn.disabled = false;
+        }
+
+        document.getElementById('edit-cedula').addEventListener('input', actualizarAvisoClaveProvisional);
+        document.getElementById('tab-restablecer').addEventListener('shown.bs.tab', actualizarAvisoClaveProvisional);
+
+        document.getElementById('btn-generar-clave').addEventListener('click', function() {
+            // Sin caracteres ambiguos (O/0, l/1): la clave se dicta o se copia a mano.
+            var abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+            var clave = '';
+            if (window.crypto && window.crypto.getRandomValues) {
+                var buf = new Uint32Array(10);
+                window.crypto.getRandomValues(buf);
+                for (var i = 0; i < buf.length; i++) clave += abc.charAt(buf[i] % abc.length);
+            } else {
+                for (var j = 0; j < 10; j++) clave += abc.charAt(Math.floor(Math.random() * abc.length));
+            }
+            document.getElementById('input-clave-provisional').value = clave;
+        });
+
+        document.getElementById('btn-clave-provisional').addEventListener('click', function() {
+            var btn = this;
+            var input = document.getElementById('input-clave-provisional');
+            var msgDiv = document.getElementById('msg-clave-provisional');
+            var clave = input.value.trim();
+
+            var cedulaNueva = cedulaEsProvisional
+                ? document.getElementById('input-cedula-provisional').value.trim()
+                : '';
+
+            if (!idUsuario) return;
+            if (clave.length < 4) {
+                msgDiv.textContent = 'La contraseña provisional debe tener al menos 4 caracteres.';
+                msgDiv.className = 'form-text mt-2 text-danger';
+                return;
+            }
+            if (cedulaEsProvisional && cedulaNueva === '') {
+                msgDiv.textContent = 'Indique la identificación con la que el usuario iniciará sesión.';
+                msgDiv.className = 'form-text mt-2 text-danger';
+                return;
+            }
+            if (!confirm('Se reemplazará la contraseña actual del usuario y el enlace de invitación anterior dejará de servir. ¿Continuar?')) {
+                return;
+            }
+
+            btn.disabled = true;
+            msgDiv.textContent = 'Guardando...';
+            msgDiv.className = 'form-text mt-2';
+
+            var formData = new FormData();
+            formData.append('id', idUsuario);
+            formData.append('clave', clave);
+            if (cedulaEsProvisional) {
+                formData.append('cedula', cedulaNueva);
+            }
+
+            fetch(base + '/config/usuarios-sistema-clave-provisional', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.ok) {
+                    msgDiv.textContent = res.msg;
+                    msgDiv.className = 'form-text mt-2 text-success';
+                    // El listado cambia (deja de figurar como pendiente de registro),
+                    // así que se refresca para que la ficha no quede desfasada.
+                    setTimeout(function() { location.reload(); }, 4000);
+                } else {
+                    msgDiv.textContent = res.msg || 'No se pudo asignar la contraseña.';
+                    msgDiv.className = 'form-text mt-2 text-danger';
+                    btn.disabled = false;
+                }
+            })
+            .catch(function() {
+                msgDiv.textContent = 'Error de conexión.';
+                msgDiv.className = 'form-text mt-2 text-danger';
+                btn.disabled = false;
+            });
         });
 
         // Reenviar invitación (NUEVO)

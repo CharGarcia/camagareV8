@@ -285,7 +285,7 @@ class EgresosController extends BaseModuloController
         $q = trim($_GET['q'] ?? '');
 
         $repo = new \App\repositories\modulos\EmpleadoRepository();
-        $result = $repo->getListado($idEmpresa, $q, 1, 15, 'nombre', 'ASC');
+        $result = $repo->getListado($idEmpresa, $q, 1, 15, 'nombres_apellidos', 'ASC');
 
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
         exit;

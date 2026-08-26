@@ -574,6 +574,11 @@ class ConfigController extends Controller
         (new UsuariosSistemaController())->reenviarInvitacion();
     }
 
+    public function usuariosSistemaClaveProvisional(): void
+    {
+        (new UsuariosSistemaController())->claveProvisional();
+    }
+
     public function usuariosSistemaSearch(): void
     {
         (new UsuariosSistemaController())->searchAjax();

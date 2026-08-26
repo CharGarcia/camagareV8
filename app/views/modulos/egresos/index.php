@@ -900,7 +900,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 dropdown.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias.</div>';
             } else {
                 res.data.forEach(item => {
-                    const name = item.razon_social || item.nombre;
+                    const name = item.razon_social || item.nombres_apellidos || '';
                     const ruc = item.ruc || item.identificacion || '';
                     const btn = document.createElement('button');
                     btn.type = 'button';
@@ -916,7 +916,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function selectSujeto(item, type) {
         document.getElementById('eg-input-id-sujeto').value = item.id;
-        document.getElementById('eg-search-input').value = item.razon_social || item.nombre;
+        document.getElementById('eg-search-input').value = item.razon_social || item.nombres_apellidos || '';
         document.getElementById('eg-dropdown-sujetos').classList.add('d-none');
         if (typeof EGR_renderSaldoForma === 'function') EGR_renderSaldoForma();
 

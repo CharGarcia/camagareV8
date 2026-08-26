@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/usuarios-sistema
 tipo: modulo
 visibilidad: admin
-etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion
-version: 1.2
+etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito
+version: 1.3
 orden: 3
 estado: activo
 ---
@@ -53,6 +53,70 @@ Al crear, se pide correo, nombre y **la(s) empresa(s) a asignar**:
 - **Correo ya registrado**: si el correo ya pertenece a un usuario existente,
   no se crea uno nuevo — se le asignan las empresas elegidas al que ya
   existe (opción "asignar si ya existe" en el formulario).
+
+## Reenviar la invitación
+
+Mientras el usuario **no complete su registro**, su fila del listado muestra
+la etiqueta **Pendiente registro** con un botón de envío (✉) al lado: un clic
+le reenvía el correo de bienvenida a la dirección que tiene registrada. Lo
+mismo está en su ficha, pestaña **General**, en el bloque **Invitación
+pendiente**.
+
+Se reutiliza el enlace de invitación que ya tenía; si por algún motivo lo
+perdió, se genera uno nuevo en ese momento. El enlace anterior deja de
+servir cuando el usuario completa el registro o cuando se le asigna una
+**clave provisional**.
+
+Antes de reenviar, revise que el **correo** de la ficha esté bien escrito:
+si la dirección está mal, el reenvío se va al mismo lugar equivocado.
+Corríjalo en la pestaña **General**, guarde y vuelva a reenviar.
+
+## Editar el nombre
+
+El **nombre** se edita en la pestaña **General** de la ficha, junto al resto
+de los datos. Es solo la etiqueta con la que la persona se muestra en el
+sistema: **no** sirve para iniciar sesión (eso es la identificación), así
+que cambiarlo no afecta su acceso.
+
+Se usa sobre todo para corregir el nombre de una **invitación mal escrita**,
+sin tener que borrar al usuario y volver a invitarlo. Admite hasta **100
+caracteres** y no puede quedar vacío.
+
+## Clave provisional
+
+Cuando el correo de invitación no llega — buzón lleno, dominio que lo
+rechaza, dirección mal escrita — el administrador puede **fijar él mismo la
+contraseña** y entregársela al usuario por otro medio (llamada, mensaje, en
+persona).
+
+Está en la ficha del usuario, pestaña **Contraseña**, bloque **Clave
+provisional**:
+
+1. Escriba una contraseña o pulse el botón de **generar** (crea una de 10
+   caracteres, sin letras ni números que se confundan al dictarla).
+2. Si el usuario **nunca completó su registro**, aparece además el campo
+   **Identificación**: es obligatorio, porque la que tiene es provisional y
+   con ella no podría entrar. Se guarda junto con la contraseña, en un solo
+   paso.
+3. Pulse **Asignar clave provisional** y confirme.
+
+Qué pasa al asignarla:
+
+- La contraseña anterior del usuario queda **reemplazada**.
+- El **enlace de invitación anterior deja de ser válido**: si ese correo se
+  filtró, ya no sirve para tomar la cuenta.
+- El usuario pasa a figurar como **registrado**, porque ya tiene
+  credenciales con las que entrar.
+- Queda anotado en la bitácora del sistema (`log_sistema`) quién la asignó y
+  sobre qué usuario. **La contraseña no se guarda en la bitácora.**
+
+La contraseña se muestra en pantalla a propósito, para poder copiarla y
+entregarla. Pídale al usuario que la cambie desde su perfil en cuanto entre:
+es una clave que otra persona conoce.
+
+Un administrador **no puede** usar esta opción sobre sí mismo: para cambiar
+su propia contraseña debe hacerlo desde su perfil, con la clave actual por
+delante.
 
 ## Editar la identificación (cédula)
 
@@ -125,6 +189,26 @@ cuando el usuario no tiene intentos fallidos pendientes.
 - **"Ya existe un usuario con esa identificación"**: otra ficha (activa o
   inactiva) ya usa esa cédula. Búsquela en la lista con el buscador: si es
   una cuenta duplicada en desuso, elimínela y vuelva a intentar.
+- **Al usuario no le llega el correo de invitación**: revise que el correo
+  de su ficha esté bien escrito y pídale que mire la carpeta de spam. Si aun
+  así no llega, use **Clave provisional** en la pestaña **Contraseña** y
+  entréguesela por otro medio.
+- **"Indique la identificación con la que iniciará sesión"**: se intentó
+  asignar una clave provisional a un usuario que nunca completó su registro
+  y todavía no tiene cédula propia. Escríbala en el campo que aparece en ese
+  mismo bloque; se guarda junto con la contraseña.
+- **"Modificó la identificación en General y aún no la guarda"**: guarde
+  primero la ficha con el botón **Guardar cambios** y luego asigne la clave;
+  así la contraseña queda asociada al número con el que realmente va a
+  entrar.
+- **"Para cambiar su propia contraseña use la opción de su perfil"**: la
+  clave provisional es para otros usuarios; la propia se cambia desde el
+  perfil, indicando la contraseña actual.
+- **Ya no aparece el botón de reenviar invitación**: el usuario dejó de
+  figurar como pendiente. Ocurre cuando completó el registro, cuando se le
+  asignó una clave provisional o cuando un administrador le fijó a mano la
+  identificación desde la ficha. Si todavía no tiene contraseña, use **Clave
+  provisional**.
 - **El usuario dice que no puede entrar y su contraseña es correcta**:
   revise el bloque **Intentos de acceso** de su ficha. Si figura como
   bloqueado, use **Reiniciar intentos**.
@@ -134,6 +218,13 @@ cuando el usuario no tiene intentos fallidos pendientes.
 
 ## Historial de cambios
 
+- **1.3** — Se documenta el **reenvío de la invitación** (listado y ficha).
+  El **nombre** pasa a ser editable desde la pestaña General. Se agregó el
+  bloque **Clave provisional** en la pestaña **Contraseña** (antes
+  "Restablecer contraseña"), que permite fijar la contraseña del usuario —y
+  su identificación, si nunca se registró— cuando el correo de invitación no
+  llega; queda registrado en `log_sistema` e invalida el enlace de
+  invitación anterior.
 - **1.2** — La **identificación (cédula)** pasa a ser editable desde la
   ficha, validando que no la use otro usuario del sistema (incluidos los
   inactivos). Se agregó el bloque **Intentos de acceso**, con el estado del

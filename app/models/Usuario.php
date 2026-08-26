@@ -537,13 +537,15 @@ class Usuario extends BaseModel
     }
 
     /**
-     * Actualiza correo, nivel, estado y (opcionalmente) identificación de un usuario.
-     * Valida que ni el correo ni la cédula estén registrados por otro usuario.
-     * Impide desactivar o degradar al último super administrador activo.
+     * Actualiza correo, nivel, estado y (opcionalmente) nombre e identificación
+     * de un usuario. Valida que ni el correo ni la cédula estén registrados por
+     * otro usuario. Impide desactivar o degradar al último super administrador
+     * activo.
      *
      * @param ?string $cedula null deja la identificación intacta.
+     * @param ?string $nombre null deja el nombre intacto.
      */
-    public function actualizar(int $id, string $mail, int $nivel, int $estado, ?bool $puedeAppMovil = null, ?string $cedula = null): bool
+    public function actualizar(int $id, string $mail, int $nivel, int $estado, ?bool $puedeAppMovil = null, ?string $cedula = null, ?string $nombre = null): bool
     {
         $id = (int) $id;
         $mail = trim($mail);
@@ -569,20 +571,23 @@ class Usuario extends BaseModel
             $cedula = null;
         }
         if ($cedula !== null) {
-            $cedula = trim($cedula);
-            if ($cedula === '') {
-                throw new \InvalidArgumentException('La identificación no puede quedar vacía.');
-            }
-            if (mb_strlen($cedula) > 15) {
-                throw new \InvalidArgumentException('La identificación no puede superar los 15 caracteres.');
-            }
-            if (!preg_match('/^[A-Za-z0-9-]+$/', $cedula)) {
-                throw new \InvalidArgumentException('La identificación solo admite letras, números y guiones.');
-            }
-            if ($this->existeCedulaEnUso($cedula, $id)) {
-                throw new \InvalidArgumentException('Ya existe un usuario con esa identificación.');
-            }
+            $cedula = $this->validarCedula($cedula, $id);
             $cedulaSet = ", cedula = '" . $this->escape($cedula) . "'";
+        }
+
+        // Nombre: no es credencial de ingreso (esa es la cédula), solo la etiqueta
+        // con la que se muestra a la persona. Se edita sobre todo en usuarios
+        // invitados, donde quien creó la invitación pudo escribirlo mal.
+        $nombreSet = '';
+        if ($nombre !== null) {
+            $nombre = trim(preg_replace('/\s+/u', ' ', $nombre));
+            if ($nombre === '') {
+                throw new \InvalidArgumentException('El nombre no puede quedar vacío.');
+            }
+            if (mb_strlen($nombre) > 100) {
+                throw new \InvalidArgumentException('El nombre no puede superar los 100 caracteres.');
+            }
+            $nombreSet = ", nombre = '" . $this->escape($nombre) . "'";
         }
 
         $nivel = max(1, min(3, $nivel));
@@ -605,7 +610,7 @@ class Usuario extends BaseModel
         }
 
         $movilSet = $puedeAppMovil === null ? '' : (', puede_app_movil = ' . ($puedeAppMovil ? 'true' : 'false'));
-        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado}{$movilSet}{$cedulaSet} WHERE id = {$id}";
+        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado}{$movilSet}{$cedulaSet}{$nombreSet} WHERE id = {$id}";
         return $this->execute($sql);
     }
 
@@ -837,6 +842,103 @@ class Usuario extends BaseModel
             ':id'       => $id,
             ':token'    => $token
         ]);
+    }
+
+    /**
+     * Valida una identificación para un usuario y la devuelve normalizada.
+     * Punto único de las reglas del campo: la usan tanto la edición de la ficha
+     * como la asignación de una clave provisional.
+     *
+     * Se valida contra todos los usuarios no eliminados (activos e inactivos):
+     * un usuario inactivo conserva su credencial de ingreso por si se reactiva.
+     */
+    private function validarCedula(string $cedula, int $id): string
+    {
+        $cedula = trim($cedula);
+        if ($cedula === '') {
+            throw new \InvalidArgumentException('La identificación no puede quedar vacía.');
+        }
+        if (mb_strlen($cedula) > 15) {
+            throw new \InvalidArgumentException('La identificación no puede superar los 15 caracteres.');
+        }
+        if (!preg_match('/^[A-Za-z0-9-]+$/', $cedula)) {
+            throw new \InvalidArgumentException('La identificación solo admite letras, números y guiones.');
+        }
+        if ($this->existeCedulaEnUso($cedula, $id)) {
+            throw new \InvalidArgumentException('Ya existe un usuario con esa identificación.');
+        }
+        return $cedula;
+    }
+
+    /**
+     * True si el usuario todavía carga la identificación PROVISIONAL que le puso
+     * la invitación (el hash de su correo): nunca completó el registro y, por
+     * tanto, no tiene un número real con el cual iniciar sesión.
+     *
+     * Misma expresión que usan el listado y getDatosInvitacion, para que
+     * "pendiente de registro" signifique lo mismo en todo el módulo.
+     */
+    public function tieneCedulaProvisional(int $id): bool
+    {
+        $id = (int) $id;
+        if ($id <= 0) return false;
+        $r = $this->query("SELECT (COALESCE(cedula,'') = substr(md5(COALESCE(mail,'')), 1, 15)) AS provisional
+            FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1");
+        return isset($r[0]) && self::pgBool($r[0]['provisional']);
+    }
+
+    /**
+     * Asigna una contraseña provisional a un usuario, fijada por un administrador
+     * (salida cuando el correo de invitación no llega: se le entrega la clave por
+     * otro medio y él la cambia luego desde su perfil).
+     *
+     * Deja el registro como completado (`registrado = true`) porque el usuario ya
+     * tiene credenciales, y borra el token: el enlace de invitación anterior deja
+     * de servir, así que un correo filtrado no puede usarse después para tomar la
+     * cuenta.
+     *
+     * @param ?string $cedula identificación a fijar en la misma operación (para el
+     *        usuario que nunca se registró y aún carga la provisional). La clave
+     *        sin un número real con el cual entrar no sirve de nada, así que las
+     *        dos cosas se guardan juntas o no se guarda ninguna.
+     */
+    public function establecerClaveProvisional(int $id, string $password, int $idAdmin, ?string $cedula = null): bool
+    {
+        $id = (int) $id;
+        $password = trim($password);
+        if ($id <= 0) return false;
+        if (mb_strlen($password) < 4) {
+            throw new \InvalidArgumentException('La contraseña provisional debe tener al menos 4 caracteres.');
+        }
+        if (strlen($password) > 72) {
+            throw new \InvalidArgumentException('La contraseña provisional no puede superar los 72 caracteres.');
+        }
+
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        if ($hash === false) {
+            throw new \RuntimeException('No se pudo cifrar la contraseña.');
+        }
+
+        $params = [
+            ':password'   => $hash,
+            ':updated_by' => $idAdmin > 0 ? $idAdmin : null,
+            ':id'         => $id,
+        ];
+        $cedulaSet = '';
+        if ($cedula !== null) {
+            $params[':cedula'] = $this->validarCedula($cedula, $id);
+            $cedulaSet = ', cedula = :cedula';
+        }
+
+        $sql = "UPDATE usuarios
+                SET password = :password{$cedulaSet},
+                    token = '',
+                    registrado = true,
+                    updated_at = CURRENT_TIMESTAMP,
+                    updated_by = :updated_by
+                WHERE id = :id AND eliminado = false";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute($params);
     }
 
     /**

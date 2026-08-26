@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-cobros
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias
-version: 1.0
+version: 1.1
 orden: 65
 estado: activo
 ---
@@ -44,4 +44,7 @@ Mientras eso no se cruce, el saldo contable no es el saldo real.
 
 ## Historial de cambios
 
+- **1.1** — Corregido el bloqueo al abrir el módulo (y al procesar un extracto) en
+  empresas con muchos clientes: la lista de clientes con cartera pendiente se calcula
+  ahora en una sola consulta, en vez de una por cada cliente.
 - **1.0** — Versión inicial.
