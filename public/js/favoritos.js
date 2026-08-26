@@ -380,6 +380,7 @@ function aplicarFavoritosModal(containerSelector = 'body') {
         const selectEl = document.querySelector(targetId);
         if (selectEl && APP_FAVORITOS[campo] !== undefined) {
             selectEl.value = APP_FAVORITOS[campo];
+            selectEl.dispatchEvent(new Event('change'));
             marcarEstrella(estrella, true);
         }
     });
