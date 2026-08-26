@@ -69,7 +69,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         font-family: monospace;
     }
     .total-big {
-        font-size: 1.3rem;
+        font-size: 1.05rem;
         font-weight: 800;
         color: var(--bs-primary);
     }
@@ -437,13 +437,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                             <div class="tab-content bg-white">
                                 <!-- TAB DOCUMENTOS PENDIENTES -->
-                                <div class="tab-pane fade show active p-3" id="eg-subtab-det" role="tabpanel">
-                                    
+                                <div class="tab-pane fade show active pt-1 px-3 pb-3" id="eg-subtab-det" role="tabpanel">
+
                                     <div id="eg-block-docs">
-                                        <div class="d-flex justify-content-between mb-2 align-items-center gap-2">
-                                            <h6 class="small fw-bold mb-0 text-secondary">Documentos seleccionados para pago</h6>
-                                            <span id="eg-status-docs" class="badge bg-light text-muted border d-none">Cargando...</span>
-                                        </div>
+                                        <span id="eg-status-docs" class="badge bg-light text-muted border d-none mb-1">Cargando...</span>
                                         <div class="table-responsive border rounded mb-3" style="max-height: 240px;">
                                             <table class="table table-sm table-detalle mb-0">
                                                 <thead class="table-light sticky-top">
@@ -495,14 +492,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <!-- Dropdown compartido del buscador de cuentas por línea -->
                                     <div id="eg-cuenta-drop" class="list-group shadow position-fixed d-none" style="z-index:2200; max-height:200px; overflow-y:auto; width:320px;"></div>
 
-                                    <div class="mt-3">
-                                        <label class="form-label small fw-bold">Observaciones del Egreso</label>
-                                        <textarea name="observaciones" id="eg-input-obs" rows="2" class="form-control form-control-sm"></textarea>
+                                    <div class="mt-3 d-flex align-items-center gap-2">
+                                        <label class="form-label small fw-bold mb-0 text-nowrap" for="eg-input-obs">Observaciones del Egreso</label>
+                                        <input type="text" name="observaciones" id="eg-input-obs" class="form-control form-control-sm">
                                     </div>
                                 </div>
 
                                 <!-- TAB PAGOS -->
-                                <div class="tab-pane fade p-3" id="eg-subtab-pag" role="tabpanel">
+                                <div class="tab-pane fade pt-1 px-3 pb-3" id="eg-subtab-pag" role="tabpanel">
                                     <div class="alert alert-light border p-2 small mb-3 d-flex align-items-center justify-content-between">
                                         <span>Saldo a Pagar:</span>
                                         <span class="fw-bold fs-5 text-dark" id="eg-sumary-total">$0.00</span>
@@ -602,13 +599,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             </div>
 
                             <!-- Footer Total -->
-                            <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
+                            <div class="py-1 px-3 bg-light border-top d-flex justify-content-between align-items-center">
                                 <div>
-                                    <div class="small text-muted mb-1">Total Formas de Pago:</div>
-                                    <div id="eg-footer-pago-tot" class="fw-bold text-muted">$0.00</div>
+                                    <div class="text-muted" style="font-size:0.68rem;">Total Formas de Pago:</div>
+                                    <div id="eg-footer-pago-tot" class="fw-bold text-muted" style="font-size:0.9rem;">$0.00</div>
                                 </div>
                                 <div class="text-end">
-                                    <div class="small fw-bold text-muted mb-0">MONTO TOTAL EGRESO</div>
+                                    <div class="fw-bold text-muted" style="font-size:0.68rem;">MONTO TOTAL EGRESO</div>
                                     <div class="total-big" id="eg-final-total">$ 0.00</div>
                                 </div>
                             </div>

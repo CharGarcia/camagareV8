@@ -80,7 +80,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     .total-big {
-        font-size: 1.3rem;
+        font-size: 1.05rem;
         font-weight: 800;
         color: var(--bs-primary);
     }
@@ -439,14 +439,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                             <div class="tab-content bg-white">
                                 <!-- SUB-TAB DETALLES -->
-                                <div class="tab-pane fade show active p-3" id="subtab-detalles" role="tabpanel">
+                                <div class="tab-pane fade show active pt-1 px-3 pb-3" id="subtab-detalles" role="tabpanel">
 
                                     <!-- Tabla para FACTURAS PENDIENTES -->
                                     <div id="m-block-facturas">
-                                        <div class="d-flex align-items-center gap-2 mb-2">
-                                            <h6 class="small fw-bold mb-0 text-secondary">Documentos seleccionados</h6>
-                                            <span id="m-lbl-status-pend" class="badge bg-light text-muted border d-none">Cargando...</span>
-                                        </div>
+                                        <span id="m-lbl-status-pend" class="badge bg-light text-muted border d-none mb-1">Cargando...</span>
                                         <div class="table-responsive border rounded mb-3" style="max-height: 220px;">
                                             <table class="table table-sm table-detalle mb-0">
                                                 <thead class="table-light sticky-top">
@@ -503,14 +500,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <div id="m-cuenta-drop" class="list-group shadow position-fixed d-none" style="z-index:2200; max-height:200px; overflow-y:auto; width:320px;"></div>
 
                                     <!-- Sección Observaciones Generales -->
-                                    <div class="mt-3">
-                                        <label class="form-label small fw-bold">Observaciones Generales</label>
-                                        <textarea name="observaciones" id="m-input-observaciones" rows="2" class="form-control form-control-sm" placeholder="Escriba anotaciones adicionales aquí..."></textarea>
+                                    <div class="mt-3 d-flex align-items-center gap-2">
+                                        <label class="form-label small fw-bold mb-0 text-nowrap" for="m-input-observaciones">Observaciones Generales</label>
+                                        <input type="text" name="observaciones" id="m-input-observaciones" class="form-control form-control-sm" placeholder="Escriba anotaciones adicionales aquí...">
                                     </div>
                                 </div>
 
                                 <!-- SUB-TAB COBROS -->
-                                <div class="tab-pane fade p-3" id="subtab-cobros" role="tabpanel">
+                                <div class="tab-pane fade pt-1 px-3 pb-3" id="subtab-cobros" role="tabpanel">
                                     <div class="alert alert-light border p-2 small mb-3 d-flex align-items-center justify-content-between">
                                         <span>Total a liquidar:</span>
                                         <span class="fw-bold fs-5 text-dark" id="m-sumary-total-doc">$0.00</span>
@@ -588,13 +585,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             </div>
 
                             <!-- FOOTER DENTRO DE MODAL BODY PARA MANTENER TOTALES VISIBLES -->
-                            <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
+                            <div class="py-1 px-3 bg-light border-top d-flex justify-content-between align-items-center">
                                 <div>
-                                    <div class="small text-muted mb-1">Suma Formas de Cobro:</div>
-                                    <div id="m-footer-cobro-tot" class="fw-bold text-muted">$0.00</div>
+                                    <div class="text-muted" style="font-size:0.68rem;">Suma Formas de Cobro:</div>
+                                    <div id="m-footer-cobro-tot" class="fw-bold text-muted" style="font-size:0.9rem;">$0.00</div>
                                 </div>
                                 <div class="text-end">
-                                    <div class="small fw-bold text-muted mb-0">MONTO TOTAL INGRESO</div>
+                                    <div class="fw-bold text-muted" style="font-size:0.68rem;">MONTO TOTAL INGRESO</div>
                                     <div class="total-big" id="m-final-total">$ 0.00</div>
                                 </div>
                             </div>
