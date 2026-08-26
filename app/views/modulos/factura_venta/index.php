@@ -1992,20 +1992,21 @@ $totalPages = $totalPagesOriginal;
         let _guardadoOk = false;
 
         try {
+            // La factura entera viaja en UN solo campo, no aplanada en un campo
+            // por dato. Antes se enviaba `detalles[0][cantidad]`, `detalles[0][precio]`…
+            // — 29 variables POST por línea — y PHP descarta en silencio todo lo
+            // que pase de `max_input_vars` (1000 por defecto): una factura de 400
+            // líneas perdía las formas de pago, o peor, se guardaba con menos
+            // líneas sin dar error. guardarAjax ya acepta este formato.
+            //
+            // Sigue siendo FormData a propósito: así csrf.js adjunta el token
+            // igual que en el resto del sistema.
+            //
+            // Ojo al tocar esto: por esta vía los valores conservan su tipo de
+            // JavaScript (un número llega como número, no como cadena), a
+            // diferencia del envío aplanado, donde todo llegaba como texto.
             const formData = new FormData();
-            const appendRecursive = (data, root = '') => {
-                for (const key in data) {
-                    const name = root ? `${root}[${key}]` : key;
-                    if (Array.isArray(data[key])) {
-                        data[key].forEach((item, i) => appendRecursive(item, `${name}[${i}]`));
-                    } else if (typeof data[key] === 'object' && data[key] !== null) {
-                        appendRecursive(data[key], name);
-                    } else {
-                        formData.append(name, data[key] ?? '');
-                    }
-                }
-            };
-            appendRecursive(payload);
+            formData.append('data', JSON.stringify(payload));
 
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/guardarAjax`, {
                 method: 'POST',

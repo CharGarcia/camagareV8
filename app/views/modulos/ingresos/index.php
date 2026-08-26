@@ -516,59 +516,55 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <span class="fw-bold fs-5 text-dark" id="m-sumary-total-doc">$0.00</span>
                                     </div>
 
-                                    <div class="row g-2 mb-2 bg-light p-2 rounded border">
-                                        <div class="col-md-7">
-                                            <label class="form-label small fw-bold d-flex align-items-center">Forma de Cobro <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-add-cobro-forma', 'id_forma_cobro_default') ?></label>
-                                            <select id="m-add-cobro-forma" class="form-select form-select-sm">
-                                                <option value="">-- Seleccione --</option>
-                                                <?php foreach ($formasCobro as $fc):
-                                                    $esAnt = !empty($fc['es_anticipo']);
-                                                    $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fc['saldo'] ?? 0), 2);
-                                                ?>
-                                                    <option value="<?= $fc['id'] ?>"
-                                                            data-tipo="<?= htmlspecialchars($fc['tipo'] ?? '') ?>"
-                                                            data-anticipo="<?= $esAnt ? '1' : '0' ?>"
-                                                            data-saldo="<?= $esAnt ? '' : number_format((float)($fc['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fc['nombre']) . $lblSaldo ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <div id="ing-saldo-forma" class="small mt-1 d-none"></div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label small fw-bold">Monto</label>
-                                            <input type="number" id="m-add-cobro-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" min="0" value="0.00">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-bold d-block">&nbsp;</label>
-                                            <button type="button" class="btn btn-primary btn-sm w-100 px-1" onclick="agregarLineaCobro()" title="Agregar forma de cobro">Agregar</button>
-                                        </div>
-                                        <!-- Campos condicionales para BANCO -->
-                                        <div id="wrapper-banco-extra" class="col-12 d-none">
-                                            <div class="p-2 bg-white border rounded shadow-sm mt-1 mb-1">
-                                                <div class="row g-2">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">Operación Bancaria</label>
-                                                        <select id="m-add-cobro-tipo-banco" class="form-select form-select-sm bg-warning bg-opacity-10">
-                                                            <option value="DEPOSITO">Depósito</option>
-                                                            <option value="TRANSFERENCIA" selected>Transferencia</option>
-                                                            <option value="CHEQUE">Cheque</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4 div-cheque-fields d-none">
-                                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-card-checklist me-1"></i>N° Cheque</label>
-                                                        <input type="text" id="m-add-cobro-num-cheque" class="form-control form-control-sm border-primary" placeholder="000123">
-                                                    </div>
-                                                    <div class="col-md-4 div-cheque-fields d-none">
-                                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
-                                                        <input type="date" id="m-add-cobro-fecha-cheque" class="form-control form-control-sm border-primary">
-                                                    </div>
-                                                </div>
+                                    <div class="mb-2 bg-light p-2 rounded border">
+                                        <div class="d-flex flex-wrap align-items-start gap-2">
+                                            <div style="width:210px;">
+                                                <label class="form-label small fw-bold d-flex align-items-center">Forma de Cobro <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-add-cobro-forma', 'id_forma_cobro_default') ?></label>
+                                                <select id="m-add-cobro-forma" class="form-select form-select-sm">
+                                                    <option value="">-- Seleccione --</option>
+                                                    <?php foreach ($formasCobro as $fc):
+                                                        $esAnt = !empty($fc['es_anticipo']);
+                                                        $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fc['saldo'] ?? 0), 2);
+                                                    ?>
+                                                        <option value="<?= $fc['id'] ?>"
+                                                                data-tipo="<?= htmlspecialchars($fc['tipo'] ?? '') ?>"
+                                                                data-anticipo="<?= $esAnt ? '1' : '0' ?>"
+                                                                data-saldo="<?= $esAnt ? '' : number_format((float)($fc['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fc['nombre']) . $lblSaldo ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            <div id="wrapper-banco-extra" class="d-none" style="width:150px;">
+                                                <label class="form-label small fw-bold d-flex align-items-center">Operación Bancaria <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-add-cobro-tipo-banco', 'tipo_operacion_bancaria_default') ?></label>
+                                                <select id="m-add-cobro-tipo-banco" class="form-select form-select-sm bg-warning bg-opacity-10">
+                                                    <option value="DEPOSITO">Depósito</option>
+                                                    <option value="TRANSFERENCIA" selected>Transferencia</option>
+                                                    <option value="CHEQUE">Cheque</option>
+                                                </select>
+                                            </div>
+                                            <div class="div-cheque-fields d-none" style="width:130px;">
+                                                <label class="form-label small fw-bold text-primary"><i class="bi bi-card-checklist me-1"></i>N° Cheque</label>
+                                                <input type="text" id="m-add-cobro-num-cheque" class="form-control form-control-sm border-primary" placeholder="000123">
+                                            </div>
+                                            <div class="div-cheque-fields d-none" style="width:140px;">
+                                                <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
+                                                <input type="date" id="m-add-cobro-fecha-cheque" class="form-control form-control-sm border-primary">
+                                            </div>
+                                            <div style="width:110px;">
+                                                <label class="form-label small fw-bold">Monto</label>
+                                                <input type="number" id="m-add-cobro-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" min="0" value="0.00">
+                                            </div>
+                                            <div style="flex:1 1 auto; min-width:160px;">
+                                                <label class="form-label small fw-bold">Referencia / Glosa General</label>
+                                                <input type="text" id="m-add-cobro-ref" class="form-control form-control-sm" placeholder="Ej: Comprobante #5522 o detalle extra...">
+                                            </div>
+                                            <div>
+                                                <label class="form-label small fw-bold d-block">&nbsp;</label>
+                                                <button type="button" class="btn btn-primary btn-sm px-2" onclick="agregarLineaCobro()" title="Agregar forma de cobro">
+                                                    <i class="bi bi-plus-lg"></i>
+                                                </button>
                                             </div>
                                         </div>
-
-                                        <div class="col-12">
-                                            <label class="form-label small fw-bold">Referencia / Glosa General</label>
-                                            <input type="text" id="m-add-cobro-ref" class="form-control form-control-sm" placeholder="Ej: Comprobante #5522 o detalle extra...">
-                                        </div>
+                                        <div id="ing-saldo-forma" class="small mt-1 d-none"></div>
                                     </div>
 
                                     <div class="table-responsive border rounded" style="min-height: 120px;">
@@ -862,6 +858,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         return (d.tipo_documento || 'FACTURA') + ':' + d.id;
     }
 
+    // Copia el nombre del cliente de una fila del modal y lo usa como filtro de búsqueda.
+    function copiarClienteABuscador(nombre) {
+        const inp = document.getElementById('inp-docs-buscar');
+        if (!inp || !nombre) return;
+        inp.value = nombre;
+        inp.focus();
+        clearTimeout(window._timerDocsBuscar);
+        buscarEnModalDocsPendientes(nombre.trim());
+    }
+
     function abrirModalDocsPendientes() {
         _selModal = {};
         const modalEl = document.getElementById('modalSelDocPendientes');
@@ -947,7 +953,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     }
                 </td>
                 <td><code class="text-primary small">${doc.numero_documento}</code>${badgeTipo}</td>
-                <td class="small">${doc.cliente_nombre}</td>
+                <td class="small">${doc.cliente_nombre} <button type="button" class="btn btn-link btn-sm p-0 sdp-btn-copiar-cliente align-baseline" title="Buscar solo por este cliente"><i class="bi bi-search-heart"></i></button></td>
                 <td class="small">${doc.fecha_emision ? doc.fecha_emision.split('-').reverse().join('/') : ''}</td>
                 <td class="small">${(() => {
                     if (!doc.fecha_emision) return '<span class="text-muted">-</span>';
@@ -975,6 +981,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                oninput="actualizarMontoModal('${uid}', this)">`
                     }
                 </td>`;
+            const btnCopiar = tr.querySelector('.sdp-btn-copiar-cliente');
+            if (btnCopiar) {
+                btnCopiar.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    copiarClienteABuscador(doc.cliente_nombre);
+                });
+            }
             tbody.appendChild(tr);
         });
 
@@ -1112,7 +1125,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     }
                 </td>
                 <td class="small"><strong>${desc}</strong>${it.cant ? ` <span class="text-muted">(x${it.cant})</span>` : ''}</td>
-                <td class="small">${it.cliente_nombre || ''}</td>
+                <td class="small">${it.cliente_nombre || ''} ${it.cliente_nombre ? `<button type="button" class="btn btn-link btn-sm p-0 sdp-btn-copiar-cliente align-baseline" title="Buscar solo por este cliente"><i class="bi bi-search-heart"></i></button>` : ''}</td>
                 <td class="small">${it.fecha ? it.fecha.split('-').reverse().join('/') : ''}</td>
                 <td class="small"><code class="text-primary">${it.numero_documento}</code></td>
                 <td class="text-end small">$${it.total_item.toFixed(2)}</td>
@@ -1125,6 +1138,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                ${checked ? '' : 'disabled'} oninput="actualizarItemMonto('${iuid}', this)">`
                     }
                 </td>`;
+            const btnCopiarItem = tr.querySelector('.sdp-btn-copiar-cliente');
+            if (btnCopiarItem) {
+                btnCopiarItem.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    copiarClienteABuscador(it.cliente_nombre);
+                });
+            }
             tbody.appendChild(tr);
         });
 
@@ -1977,7 +1997,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     window.ING_fetchSearch(1);
 
                     // Alerta visual atractiva
-                    Swal.fire('Éxito', res.mensaje, 'success');
+                    Toast.fire({ icon: 'success', title: res.mensaje });
                 } else {
                     Swal.fire('Error', res.mensaje, 'error');
                 }
@@ -2366,8 +2386,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const tipo = opt ? opt.dataset.tipo : '';
                 if (tipo === 'BANCO') {
                     divBancoExtra.classList.remove('d-none');
+                    if (comboTipoBanco) {
+                        const opciones = ['DEPOSITO', 'TRANSFERENCIA', 'CHEQUE'];
+                        const fav = (typeof APP_FAVORITOS !== 'undefined') ? APP_FAVORITOS['tipo_operacion_bancaria_default'] : null;
+                        comboTipoBanco.value = opciones.includes(fav) ? fav : 'TRANSFERENCIA';
+                        // Dispara 'change' para que el listener de abajo muestre/oculte los
+                        // campos de cheque y favoritos.js sincronice la estrella.
+                        comboTipoBanco.dispatchEvent(new Event('change'));
+                    }
                 } else {
                     divBancoExtra.classList.add('d-none');
+                    // Operación bancaria y N° cheque/fecha ya no están anidados dentro de
+                    // "divBancoExtra" (fila única): hay que ocultarlos explícitamente aquí.
+                    if (comboTipoBanco) comboTipoBanco.value = 'TRANSFERENCIA';
+                    divChequeFields.forEach(el => el.classList.add('d-none'));
                 }
                 ING_renderSaldoForma();
             });

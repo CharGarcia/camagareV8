@@ -37,6 +37,18 @@ class FacturaVentaRules
             \App\Helpers\SriFichaTecnica::erroresInfoAdicional($data['info_adicional'] ?? [], 2)
         );
 
+        // Tamaño del comprobante: el SRI rechaza por encima de 320 Kb, y lo hace
+        // en la recepción, con la factura ya creada y su secuencial gastado.
+        // Solo se bloquea al superar el máximo; el aviso previo (desde el 90%)
+        // lo dan los módulos que tienen dónde mostrarlo, como la carga por Excel.
+        $tamano = \App\Helpers\SriFichaTecnica::problemaTamanoXml(
+            $data['detalles'] ?? [],
+            $data['info_adicional'] ?? []
+        );
+        if ($tamano !== null && $tamano['nivel'] === 'error') {
+            $errores[] = $tamano['mensaje'];
+        }
+
         if ($errores) {
             throw new \Exception(implode(' ', $errores));
         }

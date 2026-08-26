@@ -90,6 +90,10 @@ $puedeCrear = !empty($perm['crear']);
                             <input class="form-check-input els-tipo" type="checkbox" value="liquidacion_compra" id="els-t-lc" checked>
                             <label class="form-check-label small" for="els-t-lc">Liquidaciones de compra</label>
                         </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input els-tipo" type="checkbox" value="guia_remision" id="els-t-gr" checked>
+                            <label class="form-check-label small" for="els-t-gr">Guías de remisión</label>
+                        </div>
                     </div>
                 </div>
             </div>

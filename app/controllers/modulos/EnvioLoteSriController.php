@@ -10,9 +10,10 @@ use App\Services\modulos\EnvioLoteSriService;
 /**
  * Envío en lote de comprobantes electrónicos al SRI.
  *
- * Permite filtrar comprobantes pendientes (facturas, notas de crédito,
- * retenciones y liquidaciones de compra) por ambiente, rango de fechas y tipo,
- * seleccionarlos y enviarlos al SRI en segundo plano (cola + worker CLI).
+ * Permite filtrar comprobantes pendientes (facturas, notas de crédito, notas de
+ * débito, retenciones, liquidaciones de compra y guías de remisión) por
+ * ambiente, rango de fechas y tipo, seleccionarlos y enviarlos al SRI en
+ * segundo plano (cola + worker CLI).
  */
 class EnvioLoteSriController extends BaseModuloController
 {

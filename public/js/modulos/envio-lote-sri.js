@@ -17,6 +17,7 @@
         nota_debito:        ['Nota débito', 'dark'],
         retencion_compra:   ['Retención', 'warning'],
         liquidacion_compra: ['Liquidación', 'secondary'],
+        guia_remision:      ['Guía remisión', 'success'],
     };
 
     let datos = [];            // filas enviables actuales
@@ -32,6 +33,17 @@
     }
     function money(n) {
         return (Number(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    // Las guías de remisión no tienen importe (el SRI no lo pide): llegan con
+    // total = null y se muestran con un guion en vez de $0.00.
+    function totalFmt(n) {
+        return (n === null || n === undefined || n === '') ? '<span class="text-muted">—</span>' : '$' + money(n);
+    }
+    // Aviso por fila que envía el repositorio (p. ej. guía con fecha de inicio
+    // de transporte ya pasada). Vacío en la mayoría de comprobantes.
+    function notaIcono(nota) {
+        if (!nota) return '';
+        return ` <i class="bi bi-exclamation-triangle-fill text-warning" title="${esc(nota)}"></i>`;
     }
     function fechaFmt(f) {
         if (!f) return '';
@@ -99,10 +111,10 @@
                     <input type="checkbox" class="form-check-input els-row" data-idx="${i}" onchange="ELS.actualizarContador()">
                 </td>
                 <td><span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25 els-badge-tipo">${esc(lbl)}</span></td>
-                <td class="text-nowrap fw-semibold">${esc(d.numero)}</td>
+                <td class="text-nowrap fw-semibold">${esc(d.numero)}${notaIcono(d.nota)}</td>
                 <td class="text-nowrap">${fechaFmt(d.fecha_emision)}</td>
                 <td class="text-truncate" style="max-width:260px;">${esc(d.contraparte)}</td>
-                <td class="text-end text-nowrap">$${money(d.total)}</td>
+                <td class="text-end text-nowrap">${totalFmt(d.total)}</td>
                 <td>${esc(d.estado)}</td>
                 <td>${ambienteBadge(String(d.tipo_ambiente))}</td>
             </tr>`;

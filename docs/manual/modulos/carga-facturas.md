@@ -160,6 +160,11 @@ Dos cosas que **no** hace, a propósito:
   - Los datos de la **empresa emisora**: RUC de 13 dígitos, razón social y
     dirección presentes y dentro de los límites. Esto se revisa una sola vez y,
     si falla, se rechaza el archivo entero: ninguna factura sería aceptada.
+  - El **tamaño del comprobante**. El SRI no acepta comprobantes de más de
+    320 Kb, y lo comprueba al recibirlos, cuando la factura ya está creada y con
+    su número gastado. El sistema lo estima antes: avisa a partir del 90% del
+    límite y bloquea al superarlo. En la práctica caben unas **600 líneas** por
+    factura; con descripciones más cortas, algunas más.
 - **Aplicación parcial**: las facturas con errores se omiten y las correctas se
   crean igual. Si una falla al escribirse, se informa y la carga continúa con las
   siguientes.
@@ -238,6 +243,9 @@ Dos cosas que **no** hace, a propósito:
 - **"El RUC de la empresa no tiene 13 dígitos"** y similares: el problema está en
   la configuración de la empresa, no en el archivo. Ninguna factura se puede
   emitir así, por eso se rechaza el archivo completo.
+- **"El comprobante pesará unos X Kb…"**: la factura tiene demasiadas líneas para
+  el tope de 320 Kb del SRI. Si es un aviso, entra pero va justa; si es un error,
+  hay que repartir las líneas en varias facturas.
 - **"Este archivo YA SE CARGÓ el …"**: está subiendo un archivo que ya se aplicó.
   Las facturas están en Facturas de Venta; si necesita cargar otras, prepare un
   archivo solo con las filas nuevas.

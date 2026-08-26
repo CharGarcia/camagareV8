@@ -159,6 +159,7 @@ class CargaFacturasValidacionService
 
         // 7. Cierres que necesitan la factura completa.
         $this->consolidarErroresDeHijas($facturas);
+        $this->validarTamanoComprobante($facturas);
         $this->calcularTotales($facturas);
         $this->resolverFormaPago($facturas);
         $this->validarLimiteConsumidorFinal($facturas);
@@ -902,6 +903,37 @@ class CargaFacturasValidacionService
     // ─────────────────────────────────────────────────────────────────────────
     // Cierres que necesitan la factura completa
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Tamaño del comprobante electrónico.
+     *
+     * El SRI no acepta comprobantes de más de 320 Kb en el envío individual, y
+     * lo comprueba al RECIBIRLO: para entonces la factura ya está creada y su
+     * secuencial gastado. Aquí se estima el peso antes de crear nada: aviso a
+     * partir del 90% del límite, error al superarlo.
+     */
+    private function validarTamanoComprobante(array &$facturas): void
+    {
+        foreach ($facturas as $clave => $f) {
+            // Los dos campos que el sistema añade solo (correo del cliente y RUC
+            // del proveedor) también ocupan sitio en el XML.
+            $infoAdicional = array_merge($f['info_adicional'], [
+                ['nombre' => 'Correo del cliente', 'valor' => str_repeat('x', 40)],
+                ['nombre' => 'RUC Proveedor',      'valor' => str_repeat('x', 13)],
+            ]);
+
+            $problema = SriFichaTecnica::problemaTamanoXml($f['detalles'], $infoAdicional);
+            if ($problema === null) {
+                continue;
+            }
+
+            if ($problema['nivel'] === 'error') {
+                $facturas[$clave]['errores'][] = $problema['mensaje'];
+            } else {
+                $facturas[$clave]['avisos'][] = $problema['mensaje'];
+            }
+        }
+    }
 
     /**
      * Convierte los contadores de filas hijas con error en un único mensaje por

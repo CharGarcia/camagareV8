@@ -1,9 +1,9 @@
 -- ============================================================================
 -- Módulo: Envío en lote de comprobantes electrónicos al SRI
 -- ----------------------------------------------------------------------------
--- Cola persistida para enviar comprobantes (facturas, notas de crédito,
--- retenciones de compra y liquidaciones de compra) al SRI en segundo plano
--- mediante un worker CLI (scripts/procesar_lote_sri.php).
+-- Cola persistida para enviar comprobantes (facturas, notas de crédito, notas
+-- de débito, retenciones, liquidaciones de compra y guías de remisión) al SRI
+-- en segundo plano mediante un worker CLI (scripts/procesar_lote_sri.php).
 --
 -- Tablas operativas (multiempresa): llevan id_empresa, auditoría y eliminado.
 -- ============================================================================
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS sri_lote_items (
     id                  BIGSERIAL   PRIMARY KEY,
     id_lote             BIGINT      NOT NULL REFERENCES sri_lotes(id) ON DELETE CASCADE,
     id_empresa          INTEGER     NOT NULL,
-    -- factura_venta | nota_credito | retencion_compra | liquidacion_compra
+    -- factura_venta | nota_credito | nota_debito | retencion_compra | liquidacion_compra | guia_remision
     tipo_comprobante    VARCHAR(30) NOT NULL,
     id_comprobante      INTEGER     NOT NULL,
     numero              VARCHAR(40),                    -- 001-001-000000123 (display)

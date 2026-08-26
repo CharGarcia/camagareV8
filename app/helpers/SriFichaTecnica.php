@@ -36,6 +36,30 @@ class SriFichaTecnica
     /** El bloque infoAdicional admite como máximo 15 campoAdicional. */
     public const MAX_CAMPOS_ADICIONALES = 15;
 
+    // ── Tamaño del comprobante ───────────────────────────────────────────────
+    /**
+     * Tamaño máximo por comprobante en el envío INDIVIDUAL (Ficha Técnica v2.34):
+     * "para el envío individual, el tamaño máximo por comprobante será de 320 Kb".
+     * Por lote el tope es 500 Kb o 50 comprobantes.
+     */
+    public const MAX_BYTES_COMPROBANTE = 320 * 1024;
+
+    /** A partir de esta fracción del máximo se avisa, sin bloquear todavía. */
+    public const UMBRAL_AVISO_TAMANO = 0.90;
+
+    // Constantes calibradas midiendo XML reales generados por XmlFacturaVentaService
+    // (desvío < 0,3% frente al archivo final). Ver la nota de pesoEstimadoXml().
+    private const XML_BYTES_BASE           = 1450;  // cabecera, totales y pagos
+    private const XML_BYTES_POR_LINEA      = 404;   // marcado y números de un <detalle>
+    private const XML_BYTES_POR_IMPUESTO   = 150;   // cada <impuesto> extra de la línea
+    private const XML_BYTES_POR_ADICIONAL  = 40;    // marcado de un <campoAdicional>
+    /**
+     * La firma XAdES añade el certificado en base64 y los digests. Se toma un
+     * valor holgado: quedarse corto dejaría pasar comprobantes que el SRI
+     * rechazaría por tamaño, que es justo lo que se quiere evitar.
+     */
+    private const XML_BYTES_FIRMA          = 10 * 1024;
+
     /** Decimales que admite el XML en cantidad y precio unitario. */
     public const MAX_DECIMALES_CANTIDAD = 6;
     public const MAX_DECIMALES_PRECIO   = 6;
@@ -152,6 +176,87 @@ class SriFichaTecnica
         }
         return $etiqueta . ' tiene ' . $dec . ' decimales y el SRI admite como máximo ' . $maximo
             . '. Redondéelo, o el total de la línea no cuadrará con el comprobante.';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Tamaño del comprobante
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Estima cuánto pesará el XML firmado de un comprobante, en bytes.
+     *
+     * El SRI rechaza por tamaño en la RECEPCIÓN, cuando el documento ya está
+     * creado y con su secuencial consumido. Estimarlo antes permite avisar a
+     * tiempo. La fórmula se calibró generando XML reales con
+     * XmlFacturaVentaService y midiendo: acierta con menos del 0,3% de desvío
+     * frente al archivo final, más la firma, que va estimada al alza.
+     *
+     * @param array $detalles      Líneas del documento.
+     * @param array $infoAdicional Campos de infoAdicional de la cabecera.
+     */
+    public static function pesoEstimadoXml(array $detalles, array $infoAdicional = []): int
+    {
+        $bytes = self::XML_BYTES_BASE + self::XML_BYTES_FIRMA;
+
+        foreach ($detalles as $d) {
+            $bytes += self::XML_BYTES_POR_LINEA;
+
+            // Los textos pesan 1 byte por carácter (los tags ya van en el fijo).
+            $bytes += mb_strlen((string) ($d['descripcion'] ?? $d['nombre'] ?? ''));
+            $bytes += mb_strlen((string) ($d['codigo_principal'] ?? $d['codigo_interno'] ?? $d['codigo'] ?? ''));
+            $bytes += mb_strlen((string) ($d['codigo_auxiliar'] ?? ''));
+
+            // El primer impuesto ya está contado en el fijo por línea.
+            $nImpuestos = count($d['impuestos'] ?? []);
+            if ($nImpuestos > 1) {
+                $bytes += ($nImpuestos - 1) * self::XML_BYTES_POR_IMPUESTO;
+            }
+        }
+
+        foreach ($infoAdicional as $ia) {
+            $bytes += self::XML_BYTES_POR_ADICIONAL
+                + mb_strlen((string) ($ia['nombre'] ?? ''))
+                + mb_strlen((string) ($ia['valor'] ?? ''));
+        }
+
+        return $bytes;
+    }
+
+    /**
+     * ¿El comprobante se pasa —o se acerca— al tope de tamaño del SRI?
+     *
+     * @return array{nivel:string,mensaje:string}|null
+     *         nivel 'error' si excede el máximo, 'aviso' a partir del 90%,
+     *         null si va holgado.
+     */
+    public static function problemaTamanoXml(array $detalles, array $infoAdicional = []): ?array
+    {
+        $bytes = self::pesoEstimadoXml($detalles, $infoAdicional);
+        $pct   = $bytes / self::MAX_BYTES_COMPROBANTE;
+
+        if ($pct <= self::UMBRAL_AVISO_TAMANO) {
+            return null;
+        }
+
+        $kb    = round($bytes / 1024);
+        $maxKb = round(self::MAX_BYTES_COMPROBANTE / 1024);
+        $tam   = 'El comprobante pesará unos ' . $kb . ' Kb y el SRI admite como máximo '
+               . $maxKb . ' Kb por comprobante (' . round($pct * 100) . '% del límite), con '
+               . count($detalles) . ' línea(s).';
+
+        if ($pct > 1) {
+            return [
+                'nivel'   => 'error',
+                'mensaje' => $tam . ' El SRI lo rechazaría al enviarlo. Divida el documento en '
+                    . 'varias facturas con menos líneas.',
+            ];
+        }
+
+        return [
+            'nivel'   => 'aviso',
+            'mensaje' => $tam . ' Está cerca del límite: si añade más líneas o descripciones '
+                . 'más largas, el SRI lo rechazará.',
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────────────────

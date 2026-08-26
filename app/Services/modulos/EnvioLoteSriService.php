@@ -14,7 +14,8 @@ use App\Services\LogSistemaService;
  *
  * - crearLote(): persiste el lote y sus ítems en una transacción.
  * - procesarLote(): worker que recorre los ítems pendientes y delega cada
- *   envío al SriEnvioService reutilizable (facturas, NC, retenciones, liq.).
+ *   envío al SriEnvioService reutilizable (facturas, NC, ND, retenciones,
+ *   liquidaciones de compra y guías de remisión).
  *
  * El procesamiento es secuencial (cada envío hace sleep() esperando la
  * autorización del SRI). Pensado para ejecutarse desde el worker CLI
@@ -22,7 +23,7 @@ use App\Services\LogSistemaService;
  */
 class EnvioLoteSriService
 {
-    private const TIPOS_VALIDOS = ['factura_venta', 'nota_credito', 'nota_debito', 'retencion_compra', 'liquidacion_compra'];
+    private const TIPOS_VALIDOS = ['factura_venta', 'nota_credito', 'nota_debito', 'retencion_compra', 'liquidacion_compra', 'guia_remision'];
 
     private EnvioLoteSriRepository $repo;
     private LogSistemaService $log;
@@ -173,6 +174,7 @@ class EnvioLoteSriService
                 'nota_debito'        => $svc->enviarNotaDebito($id, $idEmpresa, $idUsuario),
                 'retencion_compra'   => $svc->enviarRetencionCompra($id, $idEmpresa, $idUsuario),
                 'liquidacion_compra' => $svc->enviarLiquidacionCompra($id, $idEmpresa, $idUsuario),
+                'guia_remision'      => $svc->enviarGuiaRemision($id, $idEmpresa, $idUsuario),
                 default              => throw new \RuntimeException("Tipo de comprobante no soportado: {$tipo}"),
             };
         } catch (\Throwable $e) {

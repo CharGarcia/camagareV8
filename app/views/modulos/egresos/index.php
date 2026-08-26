@@ -508,69 +508,66 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <span class="fw-bold fs-5 text-dark" id="eg-sumary-total">$0.00</span>
                                     </div>
 
-                                    <div class="row g-2 mb-2 bg-light p-2 rounded border">
-                                        <div class="col-md-7">
-                                            <label class="form-label small fw-bold d-flex align-items-center">Forma de pago <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-add-pago-forma', 'id_forma_pago_default') ?></label>
-                                            <select id="eg-add-pago-forma" class="form-select form-select-sm" onchange="manejarCambioFormaPagoEgreso(this)">
-                                                <option value="">-- Seleccione --</option>
-                                                <?php foreach ($formasPago as $fp):
-                                                    $esAnt = !empty($fp['es_anticipo']);
-                                                    $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fp['saldo'] ?? 0), 2);
-                                                ?>
-                                                    <option value="<?= $fp['id'] ?>"
-                                                            data-tipo="<?= htmlspecialchars($fp['tipo'] ?? '') ?>"
-                                                            data-anticipo="<?= $esAnt ? '1' : '0' ?>"
-                                                            data-saldo="<?= $esAnt ? '' : number_format((float)($fp['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fp['nombre']) . $lblSaldo ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <div id="eg-saldo-forma" class="small mt-1 d-none"></div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label small fw-bold">Monto</label>
-                                            <input type="number" id="eg-add-pago-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" min="0" value="0.00">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-bold d-block">&nbsp;</label>
-                                            <button type="button" class="btn btn-primary btn-sm w-100 px-1" onclick="addEgresoPago()" title="Agregar forma de pago">Agregar</button>
-                                        </div>
-
-                                        <!-- Campos Condicionales para BANCO -->
-                                        <div id="eg-wrapper-banco-extra" class="col-12 d-none">
-                                            <div class="p-2 bg-white border rounded shadow-sm mt-1 mb-1">
-                                                <div class="row g-2">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">Operación Bancaria</label>
-                                                        <select id="eg-add-pago-tipo-banco" class="form-select form-select-sm bg-warning bg-opacity-10" onchange="manejarCambioTipoOperacionEgreso(this.value)">
-                                                            <option value="TRANSFERENCIA" selected>Transferencia</option>
-                                                            <option value="DEPOSITO">Depósito</option>
-                                                            <option value="DEBITO">Débito</option>
-                                                            <option value="CHEQUE">Cheque</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4 eg-div-cheque-fields d-none">
-                                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-card-checklist me-1"></i>N° Cheque</label>
-                                                        <div class="input-group input-group-sm">
-                                                            <input type="text" id="eg-add-pago-num-cheque" class="form-control border-primary" placeholder="Autogenerado...">
-                                                            <button type="button" class="btn btn-outline-primary btn-sm" title="Recargar secuencia" onclick="recargarSecuenciaCheque()">
-                                                                <i class="bi bi-arrow-clockwise"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-4 eg-div-cheque-fields d-none">
-                                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
-                                                        <input type="date" id="eg-add-pago-fecha-cheque" class="form-control form-control-sm border-primary">
-                                                    </div>
-                                                    <div class="col-12 eg-div-cheque-fields d-none">
-                                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-person me-1"></i>Nombre en el cheque <span class="text-muted fw-normal">(opcional, no cambia el beneficiario del egreso)</span></label>
-                                                        <input type="text" id="eg-add-pago-benef-cheque" class="form-control form-control-sm border-primary" placeholder="Por defecto: beneficiario del egreso" style="text-transform:uppercase">
-                                                    </div>
+                                    <div class="mb-2 bg-light p-2 rounded border">
+                                        <div class="d-flex flex-wrap align-items-start gap-2">
+                                            <div style="width:210px;">
+                                                <label class="form-label small fw-bold d-flex align-items-center">Forma de pago <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-add-pago-forma', 'id_forma_pago_default') ?></label>
+                                                <select id="eg-add-pago-forma" class="form-select form-select-sm" onchange="manejarCambioFormaPagoEgreso(this)">
+                                                    <option value="">-- Seleccione --</option>
+                                                    <?php foreach ($formasPago as $fp):
+                                                        $esAnt = !empty($fp['es_anticipo']);
+                                                        $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fp['saldo'] ?? 0), 2);
+                                                    ?>
+                                                        <option value="<?= $fp['id'] ?>"
+                                                                data-tipo="<?= htmlspecialchars($fp['tipo'] ?? '') ?>"
+                                                                data-anticipo="<?= $esAnt ? '1' : '0' ?>"
+                                                                data-saldo="<?= $esAnt ? '' : number_format((float)($fp['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fp['nombre']) . $lblSaldo ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            <div id="eg-wrapper-banco-extra" class="d-none" style="width:150px;">
+                                                <label class="form-label small fw-bold d-flex align-items-center">Operación Bancaria <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-add-pago-tipo-banco', 'tipo_operacion_bancaria_default') ?></label>
+                                                <select id="eg-add-pago-tipo-banco" class="form-select form-select-sm bg-warning bg-opacity-10" onchange="manejarCambioTipoOperacionEgreso(this.value)">
+                                                    <option value="TRANSFERENCIA" selected>Transferencia</option>
+                                                    <option value="DEPOSITO">Depósito</option>
+                                                    <option value="DEBITO">Débito</option>
+                                                    <option value="CHEQUE">Cheque</option>
+                                                </select>
+                                            </div>
+                                            <div class="eg-div-cheque-fields d-none" style="width:130px;">
+                                                <label class="form-label small fw-bold text-primary"><i class="bi bi-card-checklist me-1"></i>N° Cheque</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" id="eg-add-pago-num-cheque" class="form-control border-primary" placeholder="Auto...">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm" title="Recargar secuencia" onclick="recargarSecuenciaCheque()">
+                                                        <i class="bi bi-arrow-clockwise"></i>
+                                                    </button>
                                                 </div>
                                             </div>
+                                            <div class="eg-div-cheque-fields d-none" style="width:140px;">
+                                                <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
+                                                <input type="date" id="eg-add-pago-fecha-cheque" class="form-control form-control-sm border-primary">
+                                            </div>
+                                            <div style="width:110px;">
+                                                <label class="form-label small fw-bold">Monto</label>
+                                                <input type="number" id="eg-add-pago-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" min="0" value="0.00">
+                                            </div>
+                                            <div style="flex:1 1 auto; min-width:160px;">
+                                                <label class="form-label small fw-bold">Nº Referencia / Comprobante</label>
+                                                <input type="text" id="eg-add-pago-ref" class="form-control form-control-sm" placeholder="Nota, referencia, etc...">
+                                            </div>
+                                            <div>
+                                                <label class="form-label small fw-bold d-block">&nbsp;</label>
+                                                <button type="button" class="btn btn-primary btn-sm px-2" onclick="addEgresoPago()" title="Agregar forma de pago">
+                                                    <i class="bi bi-plus-lg"></i>
+                                                </button>
+                                            </div>
                                         </div>
+                                        <div id="eg-saldo-forma" class="small mt-1 d-none"></div>
 
-                                        <div class="col-12">
-                                            <label class="form-label small fw-bold">Nº Referencia / Comprobante</label>
-                                            <input type="text" id="eg-add-pago-ref" class="form-control form-control-sm" placeholder="Nota, referencia, etc...">
+                                        <!-- Campo secundario (opcional, solo cheque): no forma parte de la fila principal -->
+                                        <div class="eg-div-cheque-fields d-none mt-2" style="width:260px;">
+                                            <label class="form-label small fw-bold text-primary"><i class="bi bi-person me-1"></i>Nombre en el cheque <span class="text-muted fw-normal">(opcional)</span></label>
+                                            <input type="text" id="eg-add-pago-benef-cheque" class="form-control form-control-sm border-primary" placeholder="Por defecto: beneficiario del egreso" style="text-transform:uppercase">
                                         </div>
                                     </div>
 
@@ -1199,16 +1196,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function manejarCambioFormaPagoEgreso(el) {
         const wrapper = document.getElementById('eg-wrapper-banco-extra');
         if (!wrapper) return;
-        
+
         const sel = el.options[el.selectedIndex];
         const tipo = sel ? (sel.dataset.tipo || '') : '';
-        
+
         if (tipo.toUpperCase() === 'BANCO') {
             wrapper.classList.remove('d-none');
-            document.getElementById('eg-add-pago-tipo-banco').value = 'TRANSFERENCIA';
-            manejarCambioTipoOperacionEgreso('TRANSFERENCIA');
+            const selTipoBanco = document.getElementById('eg-add-pago-tipo-banco');
+            const opciones = ['TRANSFERENCIA', 'DEPOSITO', 'DEBITO', 'CHEQUE'];
+            const fav = (typeof APP_FAVORITOS !== 'undefined') ? APP_FAVORITOS['tipo_operacion_bancaria_default'] : null;
+            selTipoBanco.value = opciones.includes(fav) ? fav : 'TRANSFERENCIA';
+            // Dispara 'change' en vez de llamar la función directo: así corre el mismo
+            // onchange="manejarCambioTipoOperacionEgreso(this.value)" del <select> y de
+            // paso sincroniza la estrella de favorito (favoritos.js escucha 'change').
+            selTipoBanco.dispatchEvent(new Event('change'));
         } else {
             wrapper.classList.add('d-none');
+            // Operación bancaria y campos de cheque ya no están anidados dentro de
+            // "wrapper" (fila única): hay que ocultarlos explícitamente aquí también.
+            manejarCambioTipoOperacionEgreso('');
         }
         EGR_renderSaldoForma();
 
@@ -1881,7 +1887,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if(res.ok) {
                 bootstrap.Modal.getInstance(document.getElementById('modalNuevoEgreso')).hide();
                 window.EGR_fetchSearch(1);
-                Swal.fire('Éxito', res.mensaje, 'success');
+                Toast.fire({ icon: 'success', title: res.mensaje });
             } else {
                 Swal.fire('Error al guardar', res.mensaje, 'error');
             }
@@ -2264,7 +2270,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (res.ok) {
                 bootstrap.Modal.getInstance(document.getElementById('modalNuevoEgreso')).hide();
                 window.EGR_fetchSearch(1);
-                Swal.fire('Éxito', res.mensaje, 'success');
+                Toast.fire({ icon: 'success', title: res.mensaje });
             } else {
                 Swal.fire('Error al actualizar', res.mensaje, 'error');
             }

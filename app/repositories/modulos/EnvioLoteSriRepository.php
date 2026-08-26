@@ -12,7 +12,7 @@ use PDO;
  *
  * Responsable de:
  *   - Listar los comprobantes ENVIABLES (pendientes de autorización) de los
- *     4 tipos soportados, filtrados por ambiente, rango de fechas y texto.
+ *     tipos soportados, filtrados por ambiente, rango de fechas y texto.
  *   - Persistir y consultar los lotes (sri_lotes) y sus ítems (sri_lote_items).
  *
  * No contiene lógica de negocio (§3): solo acceso a datos con PDO preparado.
@@ -20,7 +20,7 @@ use PDO;
 class EnvioLoteSriRepository extends BaseRepository
 {
     /** Tipos soportados y su tabla/estados no enviables. */
-    private const TIPOS = ['factura_venta', 'nota_credito', 'nota_debito', 'retencion_compra', 'liquidacion_compra'];
+    private const TIPOS = ['factura_venta', 'nota_credito', 'nota_debito', 'retencion_compra', 'liquidacion_compra', 'guia_remision'];
 
     public function __construct()
     {
@@ -122,6 +122,14 @@ class EnvioLoteSriRepository extends BaseRepository
                 'p.razon_social', 'l.importe_total',
                 "('autorizado','aprobado','anulado')",
             ],
+            // La guía de remisión no tiene importe: el SRI no lo pide y la tabla
+            // no lo almacena. Se devuelve NULL y la vista muestra un guion.
+            'guia_remision' => [
+                'g', 'guias_remision_cabecera',
+                'LEFT JOIN clientes c ON c.id = g.id_cliente',
+                'c.nombre', 'NULL::numeric',
+                "('autorizado','aprobado','anulado')",
+            ],
         ];
 
         [$a, $tabla, $join, $contraparte, $total, $estadosNo] = $map[$tipo];
@@ -141,6 +149,18 @@ class EnvioLoteSriRepository extends BaseRepository
             $where .= " AND ({$numero} ILIKE :buscar OR " . $contraparte . " ILIKE :buscar)";
         }
 
+        // Aviso por fila (columna común del UNION). Hoy solo la usa la guía de
+        // remisión: el SRI toma la fecha de INICIO DE TRANSPORTE como fecha del
+        // comprobante, así que una guía con esa fecha ya pasada será rechazada
+        // por extemporánea. Se lista igual —para que el usuario la vea y pueda
+        // corregirla— pero marcada.
+        $nota = "''::text";
+        if ($tipo === 'guia_remision') {
+            $nota = "(CASE WHEN {$a}.fecha_inicio_transporte < CURRENT_DATE
+                           THEN 'La fecha de inicio de transporte ya pasó: el SRI la rechazará por extemporánea. Corrija la guía antes de enviarla.'
+                           ELSE '' END)::text";
+        }
+
         return "SELECT '{$tipo}' AS tipo,
                        {$a}.id AS id,
                        {$numero} AS numero,
@@ -148,7 +168,8 @@ class EnvioLoteSriRepository extends BaseRepository
                        COALESCE({$contraparte}, '') AS contraparte,
                        {$total} AS total,
                        {$a}.estado AS estado,
-                       {$a}.tipo_ambiente AS tipo_ambiente
+                       {$a}.tipo_ambiente AS tipo_ambiente,
+                       {$nota} AS nota
                 FROM {$tabla} {$a}
                 {$join}
                 WHERE {$where}";
