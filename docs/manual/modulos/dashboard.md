@@ -5,7 +5,7 @@ categoria: Primeros pasos
 ruta_modulo: modulos/dashboard
 tipo: modulo
 visibilidad: todos
-etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos
+etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos, ancho de tarjetas, redimensionar, cambiar tamaño, columnas
 version: 1.1
 orden: 2
 estado: activo
@@ -29,32 +29,50 @@ tableros distintos, y es correcto.
 Si además no tiene el permiso de *acceso total*, los indicadores reflejan solo
 sus propios registros.
 
-## Ordenar las tarjetas a su gusto
+## Arme el tablero a su gusto
 
-Las tarjetas del tablero se pueden **mover de lugar**, y cada usuario guarda su
-propio orden: lo que usted acomode no le cambia el tablero a nadie más.
+Todas las tarjetas del tablero —tanto los indicadores de arriba como los
+paneles de gráficos y tablas— se pueden **mover de lugar** y **cambiar de
+ancho**. Cada usuario guarda su propio tablero: lo que usted acomode no le
+cambia nada a nadie más, y lo encontrará igual la próxima vez que entre, desde
+cualquier equipo o navegador.
 
-Cómo se hace:
+### Mover una tarjeta
 
-1. Pase el cursor sobre la tarjeta que quiere mover. En su **esquina superior
-   izquierda** aparece un pequeño agarre (⣿).
-2. Mantenga presionado ese agarre y arrastre la tarjeta hasta la posición donde
-   la quiere. Las demás se van corriendo para dejarle el espacio.
-3. Suelte. El orden se guarda solo, en su usuario, y así lo encontrará la
-   próxima vez que entre — desde cualquier equipo o navegador.
+1. Pase el cursor sobre la tarjeta. En su **esquina superior izquierda** aparece
+   un pequeño agarre (⣿).
+2. Mantenga presionado ese agarre y arrastre la tarjeta hasta donde la quiere.
+   Las demás se van corriendo para dejarle el espacio.
+3. Suelte. Se guarda solo.
 
-Hay **dos grupos independientes**: la fila de indicadores de arriba (Ventas,
-Compras, Nómina, Utilidad, Margen, Ingresos, Egresos, CxC y CxP) y los paneles
-de abajo (saldos, gráficos y tablas). Una tarjeta se mueve dentro de su grupo;
-un indicador no baja a la zona de paneles ni al revés.
+Puede soltarla en **cualquier posición**: al final de una fila que quedó a
+medias, entre dos tarjetas, o debajo de la última. No hace falta que "encaje"
+en la fila; si no cabe, se acomoda en la siguiente. Un indicador puede quedar
+entre los paneles y un panel entre los indicadores: no hay zonas separadas.
 
-Para volver todo como venía de fábrica, use el enlace **Restablecer orden**, que
-está en el texto pequeño debajo del título.
+### Cambiar el ancho
 
-> Los paneles conservan su ancho al moverlos (unos ocupan dos tercios de la
-> pantalla y otros un tercio). Si el orden que arma no completa el ancho de una
-> fila, quedará un espacio en blanco a la derecha: es normal, basta acomodar los
-> paneles en otro orden.
+El tablero es una cuadrícula de **12 columnas**. Cada tarjeta ocupa un número de
+columnas: 12 es todo el ancho de la pantalla, 6 es la mitad, 4 es un tercio y 2
+es el mínimo.
+
+1. Pase el cursor sobre la tarjeta: en su **borde derecho** aparece una barrita
+   vertical.
+2. Arrástrela hacia la derecha para ensancharla o hacia la izquierda para
+   angostarla. Mientras arrastra, un cartelito muestra cuántas columnas de 12
+   está ocupando.
+3. Suelte. También se guarda solo.
+
+Si la suma de anchos de una fila no llega a 12, queda un espacio en blanco a la
+derecha: es normal, y se corrige ensanchando alguna tarjeta o moviendo otra a
+esa fila.
+
+Para volver todo como venía de fábrica —orden y anchos— use el enlace
+**Restablecer tablero**, en el texto pequeño debajo del título.
+
+> En celulares y tablets el tablero se ordena solo (indicadores de a dos por
+> fila y paneles a todo el ancho), así que ahí el ancho manual no se aplica. El
+> orden que usted definió sí se respeta.
 
 ## Los filtros quedan siempre a la vista
 
@@ -79,6 +97,6 @@ Suele ser una de tres cosas:
 
 ## Historial de cambios
 
-- **1.1** — Las tarjetas e indicadores se pueden arrastrar para reubicarlas y el
-  orden se guarda por usuario; la barra de filtros quedó fija bajo el menú.
+- **1.1** — Las tarjetas se pueden arrastrar a cualquier posición y cambiarles el
+  ancho; el tablero se guarda por usuario y la barra de filtros quedó fija bajo el menú.
 - **1.0** — Versión inicial.

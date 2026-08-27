@@ -38,27 +38,66 @@ $mesActual  = (int) date('n');
 /* ── Filtros fijos (pegados bajo el navbar al hacer scroll) ── */
 .db-filters { position:sticky; top:var(--cmg-sticky-h,80px); z-index:30; }
 
-/* ── Tarjetas reubicables (drag & drop) ── */
-.db-item { position:relative; }
+/* ── Tarjetas reubicables y redimensionables (grilla de 12 columnas) ── */
+.db-zone {
+    display:grid;
+    grid-template-columns:repeat(12, minmax(0,1fr));
+    gap:1rem;
+    align-items:stretch;
+}
+.db-item { position:relative; grid-column:span 4; min-width:0; }
+.db-item > .db-metric-card, .db-item > .db-panel { height:100%; }
+
+/* Agarre para mover */
 .db-drag-handle {
-    position:absolute; top:-7px; left:-7px; z-index:12;
+    position:absolute; top:-7px; left:-7px; z-index:14;
     width:22px; height:22px; border-radius:50%;
     display:flex; align-items:center; justify-content:center;
     background:#fff; color:#6b7280; border:1px solid #e5e7eb;
     box-shadow:0 1px 4px rgba(0,0,0,.12);
     font-size:.72rem; cursor:grab; touch-action:none;
+    opacity:0; transition:opacity .15s; padding:0;
+}
+/* Agarre para cambiar el ancho */
+.db-resize-handle {
+    position:absolute; top:8px; bottom:8px; right:-9px; width:14px; z-index:14;
+    cursor:col-resize; touch-action:none;
+    display:flex; align-items:center; justify-content:center;
     opacity:0; transition:opacity .15s;
 }
+.db-resize-handle::before {
+    content:''; width:4px; height:38px; border-radius:3px;
+    background:#cbd5e1; box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+.db-resize-handle:hover::before { background:#3b82f6; }
 .db-item:hover > .db-drag-handle,
+.db-item:hover > .db-resize-handle,
 .db-drag-handle:focus { opacity:1; }
 .db-drag-handle:active { cursor:grabbing; }
-.db-item.db-dragging { opacity:.45; }
+@media (hover:none) { .db-drag-handle { opacity:.55; } }
+
+/* Estados durante el arrastre / redimensionado */
+.db-item.db-dragging { opacity:.5; }
 .db-item.db-dragging > .db-metric-card,
-.db-item.db-dragging > .db-panel { outline:2px dashed #3b82f6; outline-offset:2px; }
-.db-zone.db-zone-active .db-item:not(.db-dragging) > .db-metric-card,
-.db-zone.db-zone-active .db-item:not(.db-dragging) > .db-panel { transition:transform .12s; }
-/* La fila de métricas conserva 5 por línea en pantallas grandes */
-@media (min-width:1200px){ .db-zone-metricas > .db-item { flex:0 0 20%; max-width:20%; } }
+.db-item.db-dragging > .db-panel,
+.db-item.db-resizing > .db-metric-card,
+.db-item.db-resizing > .db-panel { outline:2px dashed #3b82f6; outline-offset:2px; }
+.db-zone.db-zone-busy .db-metric-card:hover { transform:none; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+.db-ancho-badge {
+    position:absolute; top:6px; right:10px; z-index:15;
+    background:#111827; color:#fff; border-radius:.3rem;
+    padding:.1rem .4rem; font-size:.7rem; font-weight:600; pointer-events:none;
+}
+/* El valor de las tarjetas de indicador se adapta al ancho elegido */
+.db-metric-value { font-size:clamp(1.05rem, 1.35vw, 1.6rem); }
+
+/* En pantallas chicas la grilla se simplifica y el ancho manual no aplica */
+@media (max-width:991.98px) {
+    .db-zone { grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .db-zone > .db-item { grid-column:span 2 !important; }
+    .db-zone > .db-item--metrica { grid-column:span 1 !important; }
+    .db-resize-handle { display:none; }
+}
 </style>
 
 <div class="pb-4">
@@ -71,9 +110,10 @@ $mesActual  = (int) date('n');
         </h4>
         <p id="lblPeriodo" class="text-muted small mb-0">Cargando...</p>
         <p class="text-muted mb-0" style="font-size:.72rem">
-            <i class="bi bi-arrows-move me-1"></i>Pasa el cursor sobre una tarjeta y arrástrala desde el
-            <i class="bi bi-grip-vertical"></i> de su esquina superior izquierda para reubicarla. El orden se guarda para tu usuario.
-            <a href="#" class="ms-1" onclick="restablecerOrden();return false;">Restablecer orden</a>
+            <i class="bi bi-arrows-move me-1"></i>Las tarjetas se pueden reubicar: arrástralas desde el
+            <i class="bi bi-grip-vertical"></i> de su esquina superior izquierda, y cambia su ancho arrastrando
+            la barrita de su borde derecho. Todo se guarda para tu usuario.
+            <a href="#" class="ms-1" onclick="restablecerOrden();return false;">Restablecer tablero</a>
         </p>
     </div>
     <button class="btn btn-sm btn-primary" onclick="applyFilters()">
@@ -160,25 +200,29 @@ $mesActual  = (int) date('n');
     </div>
 </div>
 
-<!-- ── Tarjetas de métricas (reubicables por el usuario) ── -->
-<?php
-$metricas = [
-    ['k'=>'ventas',   'lbl'=>'Ventas',        'val'=>'mValVentas',   'chg'=>'mChgVentas',   'ico'=>'bi-receipt',        'color'=>'primary',   'ini'=>'$0.00'],
-    ['k'=>'compras',  'lbl'=>'Compras',       'val'=>'mValCompras',  'chg'=>'mChgCompras',  'ico'=>'bi-cart3',          'color'=>'danger',    'ini'=>'$0.00'],
-    ['k'=>'nomina',   'lbl'=>'Nómina',        'val'=>'mValNomina',   'chg'=>'mChgNomina',   'ico'=>'bi-people',         'color'=>'secondary', 'ini'=>'$0.00'],
-    ['k'=>'utilidad', 'lbl'=>'Utilidad Bruta','val'=>'mValUtilidad', 'chg'=>'mChgUtilidad', 'ico'=>'bi-graph-up-arrow', 'color'=>'success',   'ini'=>'$0.00'],
-    ['k'=>'margen',   'lbl'=>'Margen',        'val'=>'mValMargen',   'chg'=>'mChgMargen',   'ico'=>'bi-percent',        'color'=>'info',      'ini'=>'0%'],
-    ['k'=>'ingresos', 'lbl'=>'Ingresos (caja)','val'=>'mValIngresos','chg'=>'mChgIngresos', 'ico'=>'bi-cash-coin',      'color'=>'success',   'ini'=>'$0.00'],
-    ['k'=>'egresos',  'lbl'=>'Egresos (caja)','val'=>'mValEgresos',  'chg'=>'mChgEgresos',  'ico'=>'bi-cash-stack',     'color'=>'warning',   'ini'=>'$0.00'],
-    ['k'=>'cxc',      'lbl'=>'CxC Pendiente', 'val'=>'mValCxc',      'nota'=>'Pendiente de cobro del período', 'ico'=>'bi-person-check', 'color'=>'primary', 'ini'=>'$0.00'],
-    ['k'=>'cxp',      'lbl'=>'CxP Pendiente', 'val'=>'mValCxp',      'nota'=>'Pendiente de pago del período',  'ico'=>'bi-building',     'color'=>'danger',  'ini'=>'$0.00'],
-];
-?>
-<div id="zonaMetricas" class="row g-3 mb-3 db-zone db-zone-metricas" data-db-zone="metricas">
-    <?php foreach ($metricas as $m): ?>
-    <div class="col-6 col-md-4 db-item" data-db-key="<?= $m['k'] ?>">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-metric-card h-100">
+<!-- ── Tarjetas y paneles: una sola grilla libre (12 columnas).
+     El usuario los mueve y les cambia el ancho; ambas cosas se guardan
+     en sus preferencias (clave `layout` de __vista__).                  ── -->
+<div id="zonaDashboard" class="db-zone">
+
+    <?php
+    // Indicadores. `w` = ancho por defecto en columnas de 12.
+    $metricas = [
+        ['k'=>'ventas',   'w'=>2, 'lbl'=>'Ventas',         'val'=>'mValVentas',   'chg'=>'mChgVentas',   'ico'=>'bi-receipt',        'color'=>'primary',   'ini'=>'$0.00'],
+        ['k'=>'compras',  'w'=>2, 'lbl'=>'Compras',        'val'=>'mValCompras',  'chg'=>'mChgCompras',  'ico'=>'bi-cart3',          'color'=>'danger',    'ini'=>'$0.00'],
+        ['k'=>'nomina',   'w'=>2, 'lbl'=>'Nómina',         'val'=>'mValNomina',   'chg'=>'mChgNomina',   'ico'=>'bi-people',         'color'=>'secondary', 'ini'=>'$0.00'],
+        ['k'=>'utilidad', 'w'=>2, 'lbl'=>'Utilidad Bruta', 'val'=>'mValUtilidad', 'chg'=>'mChgUtilidad', 'ico'=>'bi-graph-up-arrow', 'color'=>'success',   'ini'=>'$0.00'],
+        ['k'=>'margen',   'w'=>2, 'lbl'=>'Margen',         'val'=>'mValMargen',   'chg'=>'mChgMargen',   'ico'=>'bi-percent',        'color'=>'info',      'ini'=>'0%'],
+        ['k'=>'ingresos', 'w'=>2, 'lbl'=>'Ingresos (caja)','val'=>'mValIngresos', 'chg'=>'mChgIngresos', 'ico'=>'bi-cash-coin',      'color'=>'success',   'ini'=>'$0.00'],
+        ['k'=>'egresos',  'w'=>4, 'lbl'=>'Egresos (caja)', 'val'=>'mValEgresos',  'chg'=>'mChgEgresos',  'ico'=>'bi-cash-stack',     'color'=>'warning',   'ini'=>'$0.00'],
+        ['k'=>'cxc',      'w'=>4, 'lbl'=>'CxC Pendiente',  'val'=>'mValCxc',      'nota'=>'Pendiente de cobro del período', 'ico'=>'bi-person-check', 'color'=>'primary', 'ini'=>'$0.00'],
+        ['k'=>'cxp',      'w'=>4, 'lbl'=>'CxP Pendiente',  'val'=>'mValCxp',      'nota'=>'Pendiente de pago del período',  'ico'=>'bi-building',     'color'=>'danger',  'ini'=>'$0.00'],
+    ];
+    foreach ($metricas as $m): ?>
+    <div class="db-item db-item--metrica" data-db-key="<?= $m['k'] ?>" data-db-w="<?= $m['w'] ?>" style="grid-column:span <?= $m['w'] ?>">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-metric-card">
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div>
                     <p class="db-metric-label mb-1"><?= $m['lbl'] ?></p>
@@ -194,15 +238,12 @@ $metricas = [
         </div>
     </div>
     <?php endforeach; ?>
-</div>
-
-<!-- ── Paneles (reubicables por el usuario) ── -->
-<div id="zonaPaneles" class="row g-3 db-zone db-zone-paneles" data-db-zone="paneles">
 
     <!-- Saldos de Bancos/Efectivo -->
-    <div class="col-xl-8 db-item" data-db-key="saldos_caja">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="saldos_caja" data-db-w="8" style="grid-column:span 8">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-bank me-2 text-success"></i>Saldos de Bancos, Efectivo, tarjetas y otros</h6>
                 <span id="siTotalCaja" class="small fw-bold text-success"></span>
@@ -217,9 +258,10 @@ $metricas = [
     </div>
 
     <!-- Anticipos -->
-    <div class="col-xl-4 db-item" data-db-key="anticipos">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="anticipos" data-db-w="4" style="grid-column:span 4">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-wallet2 me-2 text-info"></i>Anticipos</h6>
             </div>
@@ -237,9 +279,10 @@ $metricas = [
     </div>
 
     <!-- Comparativo mensual -->
-    <div class="col-xl-8 db-item" data-db-key="tendencia">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="tendencia" data-db-w="8" style="grid-column:span 8">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header flex-wrap gap-2">
                 <h6 class="db-panel-title"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Comparativo mensual</h6>
                 <div id="cmpSeries" class="d-flex flex-wrap gap-2">
@@ -266,9 +309,10 @@ $metricas = [
     </div>
 
     <!-- Top Productos -->
-    <div class="col-xl-4 db-item" data-db-key="top_productos">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="top_productos" data-db-w="4" style="grid-column:span 4">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-box-seam me-2 text-warning"></i>Top Productos</h6>
             </div>
@@ -277,9 +321,10 @@ $metricas = [
     </div>
 
     <!-- Top Proveedores -->
-    <div class="col-xl-8 db-item" data-db-key="top_proveedores">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="top_proveedores" data-db-w="8" style="grid-column:span 8">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-truck me-2 text-danger"></i>Top Proveedores (compras)</h6>
             </div>
@@ -288,9 +333,10 @@ $metricas = [
     </div>
 
     <!-- Egresos por Concepto -->
-    <div class="col-xl-4 db-item" data-db-key="egresos_concepto">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="egresos_concepto" data-db-w="4" style="grid-column:span 4">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-pie-chart me-2 text-warning"></i>Egresos por Concepto</h6>
             </div>
@@ -299,9 +345,10 @@ $metricas = [
     </div>
 
     <!-- Top Clientes -->
-    <div class="col-xl-4 db-item" data-db-key="top_clientes">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="top_clientes" data-db-w="4" style="grid-column:span 4">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-people me-2 text-info"></i>Top Clientes</h6>
             </div>
@@ -310,9 +357,10 @@ $metricas = [
     </div>
 
     <!-- CxC Vencidas -->
-    <div class="col-xl-4 db-item" data-db-key="cxc_vencidas">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="cxc_vencidas" data-db-w="4" style="grid-column:span 4">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>CxC Vencidas</h6>
             </div>
@@ -326,9 +374,10 @@ $metricas = [
     </div>
 
     <!-- CxP Vencidas -->
-    <div class="col-xl-4 db-item" data-db-key="cxp_vencidas">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="cxp_vencidas" data-db-w="4" style="grid-column:span 4">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-exclamation-triangle me-2 text-warning"></i>CxP Vencidas</h6>
             </div>
@@ -342,9 +391,10 @@ $metricas = [
     </div>
 
     <!-- Últimas Ventas -->
-    <div class="col-lg-6 db-item" data-db-key="ult_ventas">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="ult_ventas" data-db-w="6" style="grid-column:span 6">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-receipt me-2 text-success"></i>Últimas Ventas</h6>
             </div>
@@ -358,9 +408,10 @@ $metricas = [
     </div>
 
     <!-- Últimas Compras -->
-    <div class="col-lg-6 db-item" data-db-key="ult_compras">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="ult_compras" data-db-w="6" style="grid-column:span 6">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-bag-check me-2 text-danger"></i>Últimas Compras</h6>
             </div>
@@ -374,9 +425,10 @@ $metricas = [
     </div>
 
     <!-- Últimos Ingresos -->
-    <div class="col-lg-6 db-item" data-db-key="ult_ingresos">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="ult_ingresos" data-db-w="6" style="grid-column:span 6">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-cash-coin me-2 text-success"></i>Últimos Ingresos</h6>
             </div>
@@ -390,9 +442,10 @@ $metricas = [
     </div>
 
     <!-- Últimos Egresos -->
-    <div class="col-lg-6 db-item" data-db-key="ult_egresos">
-        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
-        <div class="db-panel h-100">
+    <div class="db-item db-item--panel" data-db-key="ult_egresos" data-db-w="6" style="grid-column:span 6">
+        <button type="button" class="db-drag-handle" title="Arrastrar para mover"><i class="bi bi-grip-vertical"></i></button>
+        <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
+        <div class="db-panel">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-cash-stack me-2 text-warning"></i>Últimos Egresos</h6>
             </div>
@@ -406,6 +459,7 @@ $metricas = [
     </div>
 
 </div>
+
 
 </div><!-- /.pb-4 -->
 
@@ -434,11 +488,8 @@ const PALETA = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9','#ec
 // entre navegadores y dispositivos.
 const PREF_MESES      = <?= json_encode($prefMeses ?? '6') ?>;
 const PREF_TIPO_CHART = <?= json_encode($prefTipoChart ?? 'bar') ?>;
-// Orden en que el usuario dejó las tarjetas/paneles (drag & drop).
-const PREF_ORDEN = {
-    metricas: <?= json_encode(array_values($prefOrdenMetricas ?? []), JSON_UNESCAPED_UNICODE) ?>,
-    paneles:  <?= json_encode(array_values($prefOrdenPaneles  ?? []), JSON_UNESCAPED_UNICODE) ?>,
-};
+// Tablero del usuario: orden y ancho de cada tarjeta, [{k, w}, ...].
+const PREF_LAYOUT = <?= json_encode(array_values($prefLayout ?? []), JSON_UNESCAPED_UNICODE) ?>;
 
 let _lastSavedPrefs = null;
 
@@ -847,127 +898,208 @@ async function applyFilters(){
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Tarjetas reubicables (drag & drop) — orden por usuario
-//  Se persiste en usuarios_preferencias (__vista__ del módulo
-//  dashboard), igual que el resto de preferencias visuales.
-//  Implementado con Pointer Events para que funcione también
-//  con pantalla táctil (HTML5 drag&drop no soporta touch).
+//  Tablero personalizable: mover y redimensionar tarjetas
+//  ---------------------------------------------------------
+//  Todas las tarjetas (indicadores y paneles) viven en una sola
+//  grilla CSS de 12 columnas, así que cualquiera puede ir a
+//  cualquier posición y ocupar de 2 a 12 columnas de ancho.
+//  El resultado (orden + ancho) se persiste en
+//  usuarios_preferencias (__vista__.layout), igual que el resto
+//  de preferencias visuales del módulo.
+//  Se usa Pointer Events para que funcione con mouse y con
+//  pantalla táctil (HTML5 drag&drop no soporta touch).
 // ─────────────────────────────────────────────────────────────
-const DB_ZONAS = { metricas: 'zonaMetricas', paneles: 'zonaPaneles' };
+const DB_COLS     = 12;   // columnas de la grilla
+const DB_MIN_SPAN = 2;    // ancho mínimo de una tarjeta
 
-function ordenActual(zona){
-    const z = $(DB_ZONAS[zona]);
-    if(!z) return [];
-    return Array.from(z.querySelectorAll(':scope > .db-item')).map(el => el.dataset.dbKey);
+function dbZona(){ return $('zonaDashboard'); }
+function dbItems(){
+    const z = dbZona();
+    return z ? Array.from(z.querySelectorAll(':scope > .db-item')) : [];
 }
 
-/** Guarda la posición original del HTML para poder restablecerla luego. */
-function marcarPosicionesOriginales(){
-    Object.values(DB_ZONAS).forEach(zid => {
-        const z = $(zid);
-        if(!z) return;
-        Array.from(z.querySelectorAll(':scope > .db-item'))
-             .forEach((el, i) => { el.dataset.dbPos = i; });
-    });
+/** Layout actual: [{k:'ventas', w:2}, ...] en el orden en que están. */
+function layoutActual(){
+    return dbItems().map(el => ({ k: el.dataset.dbKey, w: parseInt(el.dataset.dbW, 10) || 4 }));
 }
 
-function aplicarOrden(zona, orden){
-    const z = $(DB_ZONAS[zona]);
-    if(!z || !Array.isArray(orden) || !orden.length) return;
-    orden.forEach(k => {
-        const el = z.querySelector(':scope > .db-item[data-db-key="' + CSS.escape(k) + '"]');
-        if(el) z.appendChild(el);           // los reubica en el orden guardado
-    });
-    // Las tarjetas que aún no existían cuando el usuario guardó su orden se
-    // mandan al final, conservando su orden natural del HTML.
-    Array.from(z.querySelectorAll(':scope > .db-item'))
-         .filter(el => orden.indexOf(el.dataset.dbKey) === -1)
-         .forEach(el => z.appendChild(el));
+function setAncho(item, span){
+    span = Math.max(DB_MIN_SPAN, Math.min(DB_COLS, span));
+    item.dataset.dbW = span;
+    item.style.gridColumn = 'span ' + span;
+    return span;
 }
 
-function guardarOrden(){
+function guardarLayout(){
     if (typeof window.CMG_guardarVista !== 'function') return;
-    window.CMG_guardarVista('dashboard', {
-        orden_metricas: ordenActual('metricas'),
-        orden_paneles:  ordenActual('paneles')
-    }, { reload: false });
+    window.CMG_guardarVista('dashboard', { layout: layoutActual() }, { reload: false });
 }
 
-function initDragTarjetas(){
-    Object.values(DB_ZONAS).forEach(zid => {
-        const zona = $(zid);
-        if(!zona) return;
+/** Guarda el layout de fábrica (el del HTML) para poder restablecerlo. */
+let DB_LAYOUT_DEFECTO = [];
+function marcarLayoutDefecto(){ DB_LAYOUT_DEFECTO = layoutActual(); }
 
-        zona.querySelectorAll(':scope > .db-item > .db-drag-handle').forEach(handle => {
-            handle.addEventListener('pointerdown', ev => {
-                if(ev.button !== undefined && ev.button !== 0) return;
-                ev.preventDefault();
+/** Aplica un layout guardado (orden + anchos). */
+function aplicarLayout(layout){
+    const z = dbZona();
+    if(!z || !Array.isArray(layout) || !layout.length) return;
+    const vistos = [];
+    layout.forEach(cfg => {
+        const k = cfg && cfg.k;
+        if(!k) return;
+        const el = z.querySelector(':scope > .db-item[data-db-key="' + CSS.escape(k) + '"]');
+        if(!el) return;                       // tarjeta que ya no existe: se ignora
+        setAncho(el, parseInt(cfg.w, 10) || parseInt(el.dataset.dbW, 10));
+        z.appendChild(el);                    // la reubica en el orden guardado
+        vistos.push(k);
+    });
+    // Tarjetas que no existían cuando el usuario guardó su tablero: al final,
+    // con su ancho de fábrica.
+    dbItems().filter(el => vistos.indexOf(el.dataset.dbKey) === -1)
+             .forEach(el => z.appendChild(el));
+}
 
-                const item = handle.closest('.db-item');
-                let arrastrando = false;
-                const x0 = ev.clientX, y0 = ev.clientY;
+/**
+ * Punto de inserción para la posición (x,y) del cursor. No exige que el
+ * cursor esté encima de otra tarjeta: busca la más cercana y decide si va
+ * antes o después, de modo que también se puede soltar en el hueco que
+ * queda al final de una fila o debajo de la última tarjeta.
+ * @returns {Element|null} elemento ANTES del cual insertar (null = al final)
+ */
+function puntoInsercion(x, y, arrastrado){
+    let refe = null, antes = true, mejor = Infinity;
+    dbItems().forEach(el => {
+        if(el === arrastrado) return;
+        const r  = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top  + r.height / 2;
+        // Se pondera la distancia vertical para que el cursor "prefiera" la
+        // fila en la que está, aunque horizontalmente quede lejos.
+        const d = Math.hypot(x - cx, (y - cy) * 2);
+        if(d < mejor){
+            mejor = d;
+            refe  = el;
+            antes = (y < r.top) ? true : (y > r.bottom ? false : x < cx);
+        }
+    });
+    if(!refe) return null;
+    return antes ? refe : refe.nextElementSibling;
+}
 
-                const mover = e => {
-                    if(!arrastrando){
-                        if(Math.abs(e.clientX-x0) < 5 && Math.abs(e.clientY-y0) < 5) return;
-                        arrastrando = true;
-                        item.classList.add('db-dragging');
-                        zona.classList.add('db-zone-active');
-                        document.body.style.userSelect = 'none';
-                        try { handle.setPointerCapture(ev.pointerId); } catch(_){}
-                    }
-                    // Elemento bajo el cursor dentro de la misma zona
-                    const bajo = document.elementFromPoint(e.clientX, e.clientY);
-                    const destino = bajo && bajo.closest ? bajo.closest('.db-item') : null;
-                    if(!destino || destino === item || destino.parentElement !== zona) return;
+function initMoverTarjetas(){
+    const zona = dbZona();
+    if(!zona) return;
 
-                    const r = destino.getBoundingClientRect();
-                    // Compara por el centro del destino (horizontal y vertical) para
-                    // decidir si el elemento va antes o después.
-                    const mismaFila = e.clientY >= r.top && e.clientY <= r.bottom;
-                    const antes = mismaFila
-                        ? (e.clientX < r.left + r.width/2)
-                        : (e.clientY < r.top + r.height/2);
-                    zona.insertBefore(item, antes ? destino : destino.nextSibling);
-                };
+    zona.querySelectorAll(':scope > .db-item > .db-drag-handle').forEach(handle => {
+        handle.addEventListener('pointerdown', ev => {
+            if(ev.button !== undefined && ev.button !== 0) return;
+            ev.preventDefault();
 
-                const soltar = () => {
-                    document.removeEventListener('pointermove', mover);
-                    document.removeEventListener('pointerup', soltar);
-                    document.removeEventListener('pointercancel', soltar);
-                    document.body.style.userSelect = '';
-                    zona.classList.remove('db-zone-active');
-                    if(arrastrando){
-                        item.classList.remove('db-dragging');
-                        guardarOrden();
-                    }
-                };
+            const item = handle.closest('.db-item');
+            const x0 = ev.clientX, y0 = ev.clientY;
+            let activo = false;
 
-                document.addEventListener('pointermove', mover);
-                document.addEventListener('pointerup', soltar);
-                document.addEventListener('pointercancel', soltar);
-            });
+            const mover = e => {
+                if(!activo){
+                    if(Math.abs(e.clientX-x0) < 5 && Math.abs(e.clientY-y0) < 5) return;
+                    activo = true;
+                    item.classList.add('db-dragging');
+                    zona.classList.add('db-zone-busy');
+                    document.body.style.userSelect = 'none';
+                    try { handle.setPointerCapture(ev.pointerId); } catch(_){}
+                }
+                const ref = puntoInsercion(e.clientX, e.clientY, item);
+                // Solo se toca el DOM si la posición cambia (evita parpadeo).
+                if(ref !== item && ref !== item.nextElementSibling){
+                    zona.insertBefore(item, ref);
+                }
+            };
+
+            const soltar = () => {
+                document.removeEventListener('pointermove', mover);
+                document.removeEventListener('pointerup', soltar);
+                document.removeEventListener('pointercancel', soltar);
+                document.body.style.userSelect = '';
+                zona.classList.remove('db-zone-busy');
+                if(activo){
+                    item.classList.remove('db-dragging');
+                    guardarLayout();
+                }
+            };
+
+            document.addEventListener('pointermove', mover);
+            document.addEventListener('pointerup', soltar);
+            document.addEventListener('pointercancel', soltar);
         });
     });
 }
 
-/** Devuelve las tarjetas a su posición original y borra la preferencia. */
-function restablecerOrden(){
-    Object.values(DB_ZONAS).forEach(zid => {
-        const z = $(zid);
-        if(!z) return;
-        Array.from(z.querySelectorAll(':scope > .db-item'))
-             .sort((a,b) => (+a.dataset.dbPos) - (+b.dataset.dbPos))
-             .forEach(el => z.appendChild(el));
+function initRedimensionar(){
+    const zona = dbZona();
+    if(!zona) return;
+
+    zona.querySelectorAll(':scope > .db-item > .db-resize-handle').forEach(handle => {
+        handle.addEventListener('pointerdown', ev => {
+            if(ev.button !== undefined && ev.button !== 0) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+
+            const item  = handle.closest('.db-item');
+            const zr    = zona.getBoundingClientRect();
+            const gap   = parseFloat(getComputedStyle(zona).columnGap) || 0;
+            const colW  = (zr.width - gap * (DB_COLS - 1)) / DB_COLS;
+            if(colW <= 0) return;
+            // El ancho se calcula por el DESPLAZAMIENTO del cursor, no por la
+            // posición de la tarjeta: al ensancharla puede saltar de fila, y
+            // entonces su borde izquierdo cambia y el cálculo se volvería errático.
+            const x0     = ev.clientX;
+            const wIni   = parseInt(item.dataset.dbW, 10) || 4;
+
+            item.classList.add('db-resizing');
+            zona.classList.add('db-zone-busy');
+            document.body.style.userSelect = 'none';
+            try { handle.setPointerCapture(ev.pointerId); } catch(_){}
+
+            const badge = document.createElement('span');
+            badge.className = 'db-ancho-badge';
+            item.appendChild(badge);
+            const pintarBadge = n => { badge.textContent = n + '/' + DB_COLS; };
+            pintarBadge(wIni);
+
+            const mover = e => {
+                const span = wIni + Math.round((e.clientX - x0) / (colW + gap));
+                pintarBadge(setAncho(item, span));
+            };
+
+            const soltar = () => {
+                document.removeEventListener('pointermove', mover);
+                document.removeEventListener('pointerup', soltar);
+                document.removeEventListener('pointercancel', soltar);
+                document.body.style.userSelect = '';
+                item.classList.remove('db-resizing');
+                zona.classList.remove('db-zone-busy');
+                badge.remove();
+                guardarLayout();
+            };
+
+            document.addEventListener('pointermove', mover);
+            document.addEventListener('pointerup', soltar);
+            document.addEventListener('pointercancel', soltar);
+        });
     });
-    guardarOrden();
+}
+
+/** Devuelve el tablero al orden y a los anchos de fábrica. */
+function restablecerOrden(){
+    aplicarLayout(DB_LAYOUT_DEFECTO);
+    guardarLayout();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    marcarPosicionesOriginales();
-    aplicarOrden('metricas', PREF_ORDEN.metricas);
-    aplicarOrden('paneles',  PREF_ORDEN.paneles);
-    initDragTarjetas();
+    marcarLayoutDefecto();
+    aplicarLayout(PREF_LAYOUT);
+    initMoverTarjetas();
+    initRedimensionar();
     loadFilters();
     applyFilters();
 });

@@ -33,9 +33,8 @@ class DashboardController extends BaseModuloController
             'base'          => BASE_URL,
             'prefMeses'     => (string) ($prefsVista['meses'] ?? '6'),
             'prefTipoChart' => (string) ($prefsVista['tipoChart'] ?? 'bar'),
-            // Orden en que el usuario reubicó las tarjetas y los paneles (drag & drop).
-            'prefOrdenMetricas' => is_array($prefsVista['orden_metricas'] ?? null) ? $prefsVista['orden_metricas'] : [],
-            'prefOrdenPaneles'  => is_array($prefsVista['orden_paneles']  ?? null) ? $prefsVista['orden_paneles']  : [],
+            // Tablero del usuario: orden y ancho de cada tarjeta, [{k, w}, ...].
+            'prefLayout' => is_array($prefsVista['layout'] ?? null) ? $prefsVista['layout'] : [],
         ]);
     }
 
