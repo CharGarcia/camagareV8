@@ -79,6 +79,13 @@
                                     <td colspan="2" class="text-center fw-bold fs-6" id="asientoDiferencia">$0.00</td>
                                     <td></td>
                                 </tr>
+                                <!-- Cuadre contra el documento origen: solo aparece en asientos que
+                                     vienen de un documento (factura, compra, ingreso…). -->
+                                <tr id="asientoFilaCuadreDoc" class="d-none">
+                                    <td colspan="4" class="text-end fw-bold text-muted small" id="asientoCuadreDocEtiqueta">TOTAL DOCUMENTO</td>
+                                    <td class="text-end fw-bold fs-6" id="asientoCuadreDocTotal">$0.00</td>
+                                    <td colspan="2" class="small" id="asientoCuadreDocEstado"></td>
+                                </tr>
                             </tfoot>
                         </table>
                         </div>
@@ -99,7 +106,7 @@
                     </div>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnGuardarAsiento" disabled>
+                        <button type="submit" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnGuardarAsiento">
                             <i class="bi bi-check2-circle me-1"></i> Guardar Asiento
                         </button>
                     </div>

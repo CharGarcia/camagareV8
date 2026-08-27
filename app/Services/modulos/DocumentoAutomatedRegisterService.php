@@ -1310,7 +1310,11 @@ class DocumentoAutomatedRegisterService
                     'base_imponible' => (float)$imp->baseImponible,
                     'porcentaje_retener' => (float)$imp->porcentajeRetener,
                     'valor_retenido' => (float)$imp->valorRetenido,
-                    'cod_doc_sustento' => (string)($imp->codDocSustento ?? $tipoDocSustento),
+                    // <codDocSustento> es opcional en el esquema 1.0.0: si la linea no lo
+                    // trae se usa el del documento (o factura por defecto), igual que la cabecera.
+                    'cod_doc_sustento' => trim((string)$imp->codDocSustento) !== ''
+                        ? trim((string)$imp->codDocSustento)
+                        : (($tipoDocSustento ?: '01')),
                     'num_doc_sustento' => $this->formatearNumDocSustento((string)($imp->numDocSustento ?? $numDocSustento)),
                     'fecha_emision_doc_sustento' => $this->formatearFecha((string)($imp->fechaEmisionDocSustento ?? $fechaSustento))
                 ];
@@ -1320,7 +1324,9 @@ class DocumentoAutomatedRegisterService
         // Versión 2.0.0 (docsSustento/docSustento/retenciones/retencion)
         if (isset($xml->docsSustento->docSustento)) {
             foreach ($xml->docsSustento->docSustento as $doc) {
-                $codSustento = (string)$doc->codDocSustento;
+                $codSustento = trim((string)$doc->codDocSustento) !== ''
+                    ? trim((string)$doc->codDocSustento)
+                    : ($tipoDocSustento ?: '01');
                 $numSustento = $this->formatearNumDocSustento((string)$doc->numDocSustento);
                 $fecSustento = $this->formatearFecha((string)$doc->fechaEmisionDocSustento);
 
@@ -1431,6 +1437,31 @@ class DocumentoAutomatedRegisterService
             }
         }
 
+        // Codigo del documento de sustento por defecto.
+        // En el esquema 1.0.0 del SRI <codDocSustento> es OPCIONAL, asi que muchos emisores
+        // envian la retencion solo con numDocSustento/fechaEmisionDocSustento. Sin este
+        // respaldo la validacion de RetencionVentaRules rechazaba el XML autorizado con
+        // "el codigo del documento de sustento es obligatorio". Se toma el primer codigo
+        // presente en el propio XML y, si no hay ninguno, se asume factura ('01'), que es
+        // el unico sustento posible para una retencion recibida sobre nuestras ventas
+        // (mismo criterio que generarRetencionAutomatica()).
+        $codSustentoDefault = '';
+        if (isset($xml->impuestos->impuesto)) {
+            foreach ($xml->impuestos->impuesto as $imp) {
+                $c = trim((string)$imp->codDocSustento);
+                if ($c !== '') { $codSustentoDefault = $c; break; }
+            }
+        }
+        if ($codSustentoDefault === '' && isset($xml->docsSustento->docSustento)) {
+            foreach ($xml->docsSustento->docSustento as $doc) {
+                $c = trim((string)$doc->codDocSustento);
+                if ($c !== '') { $codSustentoDefault = $c; break; }
+            }
+        }
+        if ($codSustentoDefault === '') {
+            $codSustentoDefault = '01';
+        }
+
         // 1. Extraer lineas de retencion (Soporta v1.0 y v2.0)
         $lineas = [];
 
@@ -1438,15 +1469,18 @@ class DocumentoAutomatedRegisterService
         if (isset($xml->impuestos->impuesto)) {
             foreach ($xml->impuestos->impuesto as $imp) {
                 $numDoc = !empty((string)$imp->numDocSustento) ? $fmtDoc((string)$imp->numDocSustento) : '';
+                $codDoc = trim((string)$imp->codDocSustento);
                 $lineas[] = [
                     'codigo_impuesto'            => $mapImpuesto((string)$imp->codigo),
                     'codigo_retencion'           => (string)$imp->codigoRetencion,
                     'base_imponible'             => (float)$imp->baseImponible,
                     'porcentaje_retencion'       => (float)$imp->porcentajeRetener,
                     'valor_retenido'             => (float)$imp->valorRetenido,
-                    'cod_doc_sustento'           => (string)$imp->codDocSustento,
-                    'num_doc_sustento'           => $numDoc,
-                    'fecha_emision_doc_sustento' => $this->formatearFecha((string)$imp->fechaEmisionDocSustento),
+                    'cod_doc_sustento'           => $codDoc !== '' ? $codDoc : $codSustentoDefault,
+                    'num_doc_sustento'           => $numDoc !== '' ? $numDoc : ($numDocSustento ?? ''),
+                    'fecha_emision_doc_sustento' => !empty((string)$imp->fechaEmisionDocSustento)
+                        ? $this->formatearFecha((string)$imp->fechaEmisionDocSustento)
+                        : ($fechaSustento ?? ''),
                 ];
             }
         }
@@ -1454,7 +1488,8 @@ class DocumentoAutomatedRegisterService
         // Version 2.0.0 (docsSustento/docSustento/retenciones/retencion)
         if (isset($xml->docsSustento->docSustento)) {
             foreach ($xml->docsSustento->docSustento as $doc) {
-                $codSustento = (string)$doc->codDocSustento;
+                $codSustento = trim((string)$doc->codDocSustento);
+                if ($codSustento === '') { $codSustento = $codSustentoDefault; }
                 $numSustento = !empty((string)$doc->numDocSustento) ? $fmtDoc((string)$doc->numDocSustento) : '';
                 $fecSustento = $this->formatearFecha((string)$doc->fechaEmisionDocSustento);
 

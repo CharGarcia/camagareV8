@@ -5,6 +5,9 @@
     let proyectos = [];
     let datosCargados = false;
     let modalInstance = null;
+    // Cuadre contra el documento origen del asiento abierto (null = asiento de Diario o de un
+    // origen cuyo total no es comparable). Lo arma el backend en getDetalleAjax.
+    let cuadreDocumento = null;
 
     // Constantes de URLs
     const API_ASIENTOS = `${window.BASE_URL || ''}/modulos/asientos_contables`;
@@ -80,6 +83,7 @@
         document.getElementById('btnGuardarAsiento').classList.remove('d-none');
         document.getElementById('asientoBarraAcciones').classList.toggle('d-none', !(id > 0));
         document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
+        cuadreDocumento = null;
         aplicarModoLecturaAsiento(false);
         document.getElementById('asientoModalTitle').textContent = id > 0 ? 'Editar Asiento' : 'Nuevo Asiento';
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
@@ -131,6 +135,7 @@
         document.getElementById('btnRestablecerAsiento').classList.add('d-none');
         document.getElementById('btnGuardarAsiento').classList.remove('d-none');
         document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
+        cuadreDocumento = null;
         aplicarModoLecturaAsiento(false);
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
 
@@ -174,6 +179,8 @@
         document.getElementById('asiento_estado_label').value  = estadoVal.charAt(0).toUpperCase() + estadoVal.slice(1);
         document.getElementById('asiento_concepto').value      = data.concepto;
 
+        cuadreDocumento = data.cuadre_documento || null;
+
         if (data.modulo_origen) document.getElementById('asiento_modulo_origen').value = data.modulo_origen;
         if (data.id_referencia_origen) document.getElementById('asiento_id_referencia_origen').value = data.id_referencia_origen;
 
@@ -212,6 +219,12 @@
 
         const btnAgregar = document.getElementById('btnAgregarLineaAsiento');
         if (btnAgregar) btnAgregar.style.display = soloLectura ? 'none' : '';
+
+        // El botón Guardar se oculta con d-none en modo lectura, pero además hay que
+        // devolverle el estado habilitado: ASIENTO_guardar() lo deshabilita mientras envía
+        // y el modal se reutiliza entre aperturas sin recargar la página.
+        const btnGuardar = document.getElementById('btnGuardarAsiento');
+        if (btnGuardar) btnGuardar.disabled = soloLectura;
     }
 
     window.ASIENTO_agregarFila = function (datos = null) {
@@ -330,6 +343,75 @@
         });
     }
 
+    /**
+     * Monto del asiento que debe reflejar el importe del documento origen. Si la empresa tiene
+     * configurada la cuenta de cartera (por cobrar/por pagar) se mide sobre esas líneas; el
+     * Debe total no sirve de referencia en ventas, porque también lleva costo de ventas y
+     * descuento. Mismo criterio que AsientoContableRules::evaluarCuadreDocumento() en el
+     * servidor, que es quien decide al guardar.
+     */
+    function montoComparableConDocumento() {
+        const cuentas = (cuadreDocumento.cuentas_cartera || []).map(Number);
+        const lado = cuadreDocumento.lado === 'haber' ? 'haber' : 'debe';
+
+        let totalDebe = 0;
+        let montoCartera = 0;
+        let hayLineaCartera = false;
+
+        document.querySelectorAll('#tbodyAsientoDetalles tr').forEach(tr => {
+            const idCuenta = parseInt(tr.querySelector('.cuenta-id')?.value || 0, 10);
+            totalDebe += parseFloat(tr.querySelector('.input-debe')?.value || 0);
+
+            if (cuentas.length > 0 && cuentas.includes(idCuenta)) {
+                hayLineaCartera = true;
+                montoCartera += parseFloat(tr.querySelector(lado === 'haber' ? '.input-haber' : '.input-debe')?.value || 0);
+            }
+        });
+
+        return hayLineaCartera
+            ? { monto: montoCartera, base: 'cartera' }
+            : { monto: totalDebe, base: cuentas.length > 0 ? 'sin_cartera' : 'total_debe' };
+    }
+
+    /** Fila "TOTAL DOCUMENTO" del pie del modal: solo existe en asientos con documento origen. */
+    function renderCuadreDocumento() {
+        const fila = document.getElementById('asientoFilaCuadreDoc');
+        if (!fila) return;
+
+        if (!cuadreDocumento) {
+            fila.classList.add('d-none');
+            return;
+        }
+
+        fila.classList.remove('d-none');
+
+        const total = parseFloat(cuadreDocumento.total_documento || 0);
+        const tolerancia = parseFloat(cuadreDocumento.tolerancia || 0.03);
+        const doc = cuadreDocumento.etiqueta
+                  + (cuadreDocumento.numero_documento ? ' ' + cuadreDocumento.numero_documento : '');
+
+        document.getElementById('asientoCuadreDocEtiqueta').textContent = doc.toUpperCase();
+        document.getElementById('asientoCuadreDocTotal').textContent = `$${total.toFixed(2)}`;
+
+        const { monto, base } = montoComparableConDocumento();
+        const dif = Math.abs(total - monto);
+        const estado = document.getElementById('asientoCuadreDocEstado');
+
+        if (base === 'sin_cartera') {
+            estado.textContent = 'Falta la línea de la cuenta por ' + (cuadreDocumento.lado === 'haber' ? 'pagar' : 'cobrar');
+            estado.className = 'small fw-bold text-danger';
+        } else if (dif <= tolerancia) {
+            estado.textContent = base === 'cartera'
+                ? 'Coincide con la cartera del asiento'
+                : 'Coincide con el total del asiento';
+            estado.className = 'small text-success';
+        } else {
+            estado.textContent = (base === 'cartera' ? 'Cartera del asiento: ' : 'Asiento: ')
+                               + monto.toFixed(2) + ' · diferencia: ' + dif.toFixed(2);
+            estado.className = 'small fw-bold text-danger';
+        }
+    }
+
     function calcularTotales() {
         let totDebe = 0;
         let totHaber = 0;
@@ -369,6 +451,8 @@
             estadoInput.value = cuadrado ? 'contabilizado' : 'borrador';
             if (estadoLabel) estadoLabel.value = cuadrado ? 'Contabilizado' : 'Borrador (temporal)';
         }
+
+        renderCuadreDocumento();
     }
 
     window.ASIENTO_guardar = async function () {
@@ -411,8 +495,31 @@
         fd.append('detalles_json', JSON.stringify(detalles));
 
         try {
-            const resp = await fetch(url, { method: 'POST', body: fd });
-            const res = await resp.json();
+            let resp = await fetch(url, { method: 'POST', body: fd });
+            let res = await resp.json();
+
+            // El asiento no refleja el importe del documento origen (factura, compra, …). No se
+            // impide guardarlo —puede haber un ajuste legítimo—, pero se avisa y la confirmación
+            // queda registrada en la auditoría del sistema.
+            if (!res.ok && res.requiere_confirmacion) {
+                const confirmar = await Swal.fire({
+                    icon: 'warning',
+                    title: 'El asiento no cuadra con el documento',
+                    text: res.mensaje,
+                    showCancelButton: true,
+                    confirmButtonText: 'Guardar de todos modos',
+                    cancelButtonText: 'Revisar el asiento',
+                    confirmButtonColor: '#d33',
+                    reverseButtons: true,
+                });
+                if (!confirmar.isConfirmed) {
+                    return;
+                }
+                fd.append('confirmar_descuadre', '1');
+                resp = await fetch(url, { method: 'POST', body: fd });
+                res = await resp.json();
+            }
+
             if (res.ok) {
                 const estadoGuardado = document.getElementById('asiento_estado').value;
                 // Hook genérico para que quien haya abierto el modal (p. ej. la Declaración de
@@ -439,6 +546,7 @@
             await swalError('Error de red. Verifique su conexión e intente nuevamente.');
         } finally {
             btn.innerHTML = textOrig;
+            btn.disabled = false;
             calcularTotales();
         }
     };

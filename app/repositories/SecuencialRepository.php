@@ -228,6 +228,64 @@ class SecuencialRepository
     }
 
     /**
+     * Serie por defecto de la empresa: establecimiento ACTIVO + punto de emisión ACTIVO de menor
+     * código, EXCLUYENDO el punto dedicado a "Facturas de reembolso" (ver TIPOS_PUNTO_UNICO): ese
+     * punto existe solo para esa familia de codDoc y no debe recibir documentos de otros tipos.
+     *
+     * Es la serie que se asigna a los documentos que NO traen serie propia — hoy, los migrados del
+     * sistema anterior cuyo origen no guarda establecimiento/punto (ingresos, egresos, pedidos,
+     * cambios de producto). Los documentos autorizados por el SRI SIEMPRE traen la suya y nunca
+     * deben pasar por aquí.
+     *
+     * Los activos van primero en el ORDER BY (en vez de filtrarse con WHERE) para que una empresa
+     * cuyos establecimientos/puntos estén marcados inactivos siga obteniendo una serie en lugar de
+     * quedarse sin ninguna.
+     *
+     * @return array{id_establecimiento:int,establecimiento:string,id_punto_emision:int,punto_emision:string}|null
+     */
+    public function getSerieDefecto(int $idEmpresa): ?array
+    {
+        $sql = "SELECT e.id AS id_establecimiento,
+                       LPAD(REGEXP_REPLACE(e.codigo, '[^0-9]', '', 'g'), 3, '0')       AS establecimiento,
+                       p.id AS id_punto_emision,
+                       LPAD(REGEXP_REPLACE(p.codigo_punto, '[^0-9]', '', 'g'), 3, '0') AS punto_emision
+                  FROM empresa_punto_emision p
+                  INNER JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                 WHERE e.id_empresa = :id_empresa
+                   AND e.eliminado = false
+                   AND p.eliminado = false
+                   AND NOT EXISTS (
+                        SELECT 1 FROM empresa_secuencial s
+                         WHERE s.id_punto_emision = p.id
+                           AND s.eliminado = false
+                           AND s.tipo_documento = :tipo_reembolso
+                   )
+                 ORDER BY CASE WHEN LOWER(COALESCE(e.estado, '')) = 'activo' THEN 0 ELSE 1 END,
+                          CASE WHEN LOWER(COALESCE(p.estado, '')) = 'activo' THEN 0 ELSE 1 END,
+                          LPAD(REGEXP_REPLACE(e.codigo, '[^0-9]', '', 'g'), 3, '0') ASC,
+                          LPAD(REGEXP_REPLACE(p.codigo_punto, '[^0-9]', '', 'g'), 3, '0') ASC,
+                          p.id ASC
+                 LIMIT 1";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id_empresa'     => $idEmpresa,
+            ':tipo_reembolso' => 'Facturas de reembolso',
+        ]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'id_establecimiento' => (int) $row['id_establecimiento'],
+            'establecimiento'    => (string) $row['establecimiento'],
+            'id_punto_emision'   => (int) $row['id_punto_emision'],
+            'punto_emision'      => (string) $row['punto_emision'],
+        ];
+    }
+
+    /**
      * Obtiene la configuración del secuencial para un punto de emisión y tipo de documento.
      * Retorna el secuencial_inicial configurado.
      */

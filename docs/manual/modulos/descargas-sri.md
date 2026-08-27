@@ -62,9 +62,18 @@ personal del usuario, así que sigue funcionando igual.
   registrarlo como compra.
 - **La descarga tarda**: el portal del SRI impone sus propios tiempos; para
   periodos largos conviene descargar por tramos.
+- **"XML obtenido pero error en registro: el código del documento de sustento es
+  obligatorio"**: ocurría al registrar retenciones cuyo XML no incluye el código
+  del documento de sustento (el SRI lo permite: en la versión 1.0.0 del
+  comprobante de retención ese dato es opcional). Ya no bloquea: si el XML no lo
+  trae, el sistema toma el código presente en el propio comprobante y, si no hay
+  ninguno, asume **01 – Factura**. Puede corregirlo después desde la retención.
 
 ## Historial de cambios
 
+- **1.2** — El registro automático de retenciones ya no falla cuando el XML del
+  SRI omite el código del documento de sustento (dato opcional en la versión
+  1.0.0 del comprobante): se asume el del propio comprobante o **01 – Factura**.
 - **1.1** — El módulo pasa a exigir el permiso del submódulo (antes entraba
   cualquier usuario con sesión). Nueva sección *Permisos*.
 - **1.0** — Versión inicial.

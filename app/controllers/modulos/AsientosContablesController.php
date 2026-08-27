@@ -244,6 +244,13 @@ class AsientosContablesController extends BaseModuloController
         if (!$data) {
             echo json_encode(['ok' => false, 'error' => 'No se encontró el asiento.']);
         } else {
+            // Importe del documento origen: el modal lo muestra y avisa en vivo si el asiento
+            // deja de reflejarlo mientras se edita.
+            $data['cuadre_documento'] = $this->service->getContextoCuadreDocumento(
+                $data['modulo_origen'] ?? null,
+                (int) ($data['id_referencia_origen'] ?? 0),
+                $idEmpresa
+            );
             echo json_encode(['ok' => true, 'data' => $data]);
         }
         exit;
@@ -423,7 +430,15 @@ class AsientosContablesController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
+            $cuadre = $this->service->evaluarCuadreDocumento($data['cabecera'], $data['detalles'], $idEmpresa);
+            if ($this->cortarPorCuadreDocumento($cuadre)) {
+                exit;
+            }
+
             $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
+            if ($this->hayDescuadreDocumento($cuadre)) {
+                $this->service->registrarDescuadreConfirmado($id, $cuadre, $idEmpresa, $idUsuario);
+            }
             echo json_encode(['ok' => true, 'msg' => 'Asiento registrado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -455,7 +470,15 @@ class AsientosContablesController extends BaseModuloController
                 throw new \Exception('No se puede modificar un asiento anulado. Solo los de tipo Diario son editables.');
             }
 
+            $cuadre = $this->service->evaluarCuadreDocumento($data['cabecera'], $data['detalles'], $idEmpresa);
+            if ($this->cortarPorCuadreDocumento($cuadre)) {
+                exit;
+            }
+
             $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
+            if ($this->hayDescuadreDocumento($cuadre)) {
+                $this->service->registrarDescuadreConfirmado($id, $cuadre, $idEmpresa, $idUsuario);
+            }
             echo json_encode(['ok' => true, 'msg' => 'Asiento actualizado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -500,6 +523,44 @@ class AsientosContablesController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /** ¿El asiento no refleja el importe de su documento origen? (null = no aplica la comprobación) */
+    private function hayDescuadreDocumento(?array $cuadre): bool
+    {
+        return $cuadre !== null && (empty($cuadre['cuadra']) || !empty($cuadre['sin_linea_cartera']));
+    }
+
+    /**
+     * Corta el guardado cuando el asiento no cuadra con su documento origen y devuelve true si
+     * ya respondió. Dos casos distintos:
+     *  - falta la línea de cartera (cuenta por cobrar/pagar): no se puede guardar así, porque sin
+     *    ella no hay forma de comprobar que el asiento refleje el documento;
+     *  - hay diferencia de importe: se avisa y el usuario decide — el front reenvía con
+     *    `confirmar_descuadre` y el guardado queda registrado en la auditoría.
+     */
+    private function cortarPorCuadreDocumento(?array $cuadre): bool
+    {
+        if (!$this->hayDescuadreDocumento($cuadre)) {
+            return false;
+        }
+
+        if (!empty($cuadre['sin_linea_cartera'])) {
+            echo json_encode(['ok' => false, 'error' => $cuadre['mensaje']]);
+            return true;
+        }
+
+        if (!empty($_POST['confirmar_descuadre'])) {
+            return false;
+        }
+
+        echo json_encode([
+            'ok' => false,
+            'requiere_confirmacion' => true,
+            'mensaje' => $cuadre['mensaje'],
+            'cuadre' => $cuadre,
+        ]);
+        return true;
     }
 
     private function recogerDatosFormulario(): array

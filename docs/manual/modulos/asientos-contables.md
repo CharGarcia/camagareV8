@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen
-version: 1.3
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera
+version: 1.5
 orden: 20
 estado: activo
 ---
@@ -30,6 +30,46 @@ Además:
 - Debe tener **al menos un detalle de cuenta**.
 - Todos los valores deben ser **mayores a cero**.
 - La suma de los detalles debe coincidir con el total del asiento.
+
+## El asiento de un documento debe reflejar su importe
+
+Cuando el asiento **viene de un documento** (factura de venta, recibo de venta,
+factura de reembolso, compra, liquidación, nota de crédito, nota de débito,
+retención, ingreso o egreso), cuadrar Debe con Haber no alcanza: el asiento tiene que seguir
+reflejando el **importe de ese documento**. Al editarlo a mano, el modal lo
+muestra en una fila al pie del detalle, junto a los totales:
+
+| Lo que muestra | Qué significa |
+|----------------|---------------|
+| **TOTAL DOCUMENTO** con el número del documento | El importe contra el que se compara |
+| *Coincide con la cartera del asiento* | Todo en orden |
+| *Cartera del asiento: … · diferencia: …* | El asiento ya no refleja el documento |
+| *Falta la línea de la cuenta por cobrar / pagar* | El asiento perdió la línea de cartera |
+
+**Contra qué se compara.** En facturas y recibos de venta, notas de débito,
+facturas de reembolso, compras y liquidaciones se mide sobre la línea de la
+**cuenta por cobrar** (o por pagar), que es la que el sistema fija en el total
+del documento. El Debe total no sirve de referencia: en una venta incluye además
+el costo de ventas y el descuento, así que compararlo con el total de la factura
+daría diferencia estando todo bien. En los demás documentos —notas de crédito,
+retenciones, ingresos y egresos— se compara el **total del Debe** del asiento.
+Se aceptan diferencias de hasta **3 centavos**, que son redondeo.
+
+**Qué pasa al guardar.**
+
+- Si hay diferencia, el sistema **avisa y pregunta**: se puede guardar igual
+  ("Guardar de todos modos"), y esa decisión queda registrada en la auditoría
+  del sistema con las dos cifras.
+- Si al asiento le **falta la línea de la cuenta por cobrar/pagar** configurada
+  para ese documento, **no se guarda**: sin esa línea no hay forma de comprobar
+  que el asiento refleje el documento. Agregue la línea con la cuenta de cartera
+  y vuelva a guardar.
+- **No se comprueba** cuando el asiento se guarda como **borrador** (igual que el
+  cuadre Debe/Haber, se exige recién al registrarlo), en asientos de **diario**
+  (no tienen documento), en documentos con total en cero, ni en los orígenes
+  cuyo total no es comparable con el asiento por diseño: **nómina** (el asiento
+  incluye aportes y provisiones), **consignaciones**, **retornos**, **cambios de
+  producto** y los asientos **migrados** del sistema anterior.
 
 ## Datos obligatorios
 
@@ -111,11 +151,22 @@ tienen un documento individual con tercero que mostrar.
   Haber; la diferencia le dice qué línea falta o sobra.
 - **"El asiento debe contener al menos un detalle de cuenta"**: falta añadir
   líneas.
+- **"El asiento no cuadra con el documento"**: la cartera del asiento (o su total
+  Debe) dejó de coincidir con el importe del documento. Revise la línea que
+  cambió; si el ajuste es correcto, confirme con "Guardar de todos modos".
+- **"El asiento no tiene ninguna línea con la cuenta de cartera configurada"**:
+  falta la línea de la cuenta por cobrar/pagar del documento. Agréguela y
+  vuelva a guardar.
 - **Modifiqué un asiento automático y volvió a cambiar**: es el comportamiento
   esperado; corrija el documento de origen, no el asiento.
 
 ## Historial de cambios
 
+- **1.5** — Al editar el asiento de un documento, el modal muestra el total de ese
+  documento y avisa si el asiento deja de reflejarlo; se puede guardar igual
+  confirmando, salvo que falte la línea de la cuenta por cobrar/pagar.
+- **1.4** — Corregido: el botón **Guardar Asiento** aparecía apagado y no dejaba
+  registrar ni actualizar el asiento desde el modal.
 - **1.3** — Cada módulo genera en segundo plano los asientos que le faltan al abrirlo, sin mostrar mensajes.
 - **1.2** — Al sincronizar asientos, el resumen previo avisa también de las
   cuentas configuradas con una naturaleza que no corresponde al concepto, antes

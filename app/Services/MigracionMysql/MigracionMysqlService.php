@@ -1524,8 +1524,8 @@ class MigracionMysqlService
 
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare(
-            "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id"
+            "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, id_punto_emision, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO consignaciones_ventas_detalles (id_consignacion, id_empresa, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup, fecha_caducidad)
@@ -1594,7 +1594,10 @@ class MigracionMysqlService
 
                 $hd = self::nz($ec['hora_entrega_desde']); if ($hd === '00:00:00') { $hd = null; } // hora vacía → null (no medianoche)
                 $hh = self::nz($ec['hora_entrega_hasta']); if ($hh === '00:00:00') { $hh = null; }
-                $insCab->execute([$idEmpresa, substr((string) $ec['fecha_consignacion'], 0, 10), (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::fechaCorta($ec['fecha_entrega']), $hd, $hh, self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idUsuario]);
+                // La consignación SÍ trae serie propia (serie_sucursal): se respeta y el punto de emisión
+                // se resuelve de ESA serie, no de la serie por defecto de la empresa.
+                $idPtoCons = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+                $insCab->execute([$idEmpresa, substr((string) $ec['fecha_consignacion'], 0, 10), "$estab-$pto", $sec, $idCliente, $idVend, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::fechaCorta($ec['fecha_entrega']), $hd, $hh, self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idPtoCons, $idUsuario]);
                 $idCons = (int) $insCab->fetchColumn();
 
                 foreach ($dets as $d) {
@@ -1680,10 +1683,10 @@ class MigracionMysqlService
         $opFilter = $esFactura ? "operacion = 'FACTURA'" : "operacion LIKE 'DEVOL%'";
 
         if ($esFactura) {
-            $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, numero_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'facturada', ?, ?, ?, ?) RETURNING id");
+            $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, numero_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, id_punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'facturada', ?, ?, ?, ?, ?) RETURNING id");
             $insDet = $pg->prepare("INSERT INTO consignaciones_facturas_detalles (id_consignacion_factura, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         } else {
-            $insCab = $pg->prepare("INSERT INTO retornos_cv (id_empresa, fecha_retorno, serie, secuencial, id_cliente, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id");
+            $insCab = $pg->prepare("INSERT INTO retornos_cv (id_empresa, fecha_retorno, serie, secuencial, id_cliente, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, id_punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?) RETURNING id");
             $insDet = $pg->prepare("INSERT INTO retornos_cv_detalles (id_retorno, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         }
 
@@ -1759,6 +1762,9 @@ class MigracionMysqlService
             $sec    = str_pad(preg_replace('/\D+/', '', (string) $ec['numero_consignacion']), 9, '0', STR_PAD_LEFT);
             $fe     = substr((string) $ec['fecha_consignacion'], 0, 10);
             $idConsCab = $lineas[0][0];
+            // Retornos y facturación de consignación heredan la serie del documento de origen: el punto
+            // de emisión se resuelve de esa serie (no de la serie por defecto de la empresa).
+            $idPtoCons = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
 
             try {
                 $pg->beginTransaction();
@@ -1778,7 +1784,7 @@ class MigracionMysqlService
                             if ($cliFac) { $idCliente = $cliFac; }
                         }
                     }
-                    $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $numFac, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $numFac, $fe, "$estab-$pto", $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idPtoCons, $idUsuario]);
                     $idParent = (int) $insCab->fetchColumn();
                     foreach ($lineas as $ln) {
                         $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7]]);
@@ -1786,7 +1792,7 @@ class MigracionMysqlService
                 } else {
                     $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ec['traslado_por'], $mysql, $pg, $respCache);
                     $est = ((int) $ec['status'] === 0) ? 'Anulada' : 'Emitida';
-                    $insCab->execute([$idEmpresa, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $fe, "$estab-$pto", $sec, $idCliente, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idPtoCons, $idUsuario]);
                     $idParent = (int) $insCab->fetchColumn();
                     foreach ($lineas as $ln) {
                         $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7]]);
@@ -1839,7 +1845,10 @@ class MigracionMysqlService
         $insMap      = $this->stmtMap($pg,'cambios_producto');
         $oldProd     = $mysql->prepare("SELECT codigo_producto, nombre_producto FROM productos_servicios WHERE id_producto = :id LIMIT 1");
 
-        $insCab = $pg->prepare("INSERT INTO cambios_producto_cv (id_empresa, fecha_cambio, serie, secuencial, id_cliente, observaciones, estado, subtotal_devuelto, subtotal_entregado, diferencia, created_by) VALUES (?, ?, ?, ?, ?, ?, 'Emitida', 0, 0, 0, ?) RETURNING id");
+        // cambio_productos_facturados no tiene número ni serie en el viejo: el secuencial se deriva del
+        // id_cambio y la serie se completa con la activa de la empresa (serieDefecto).
+        $serie  = $this->serieDefecto($idEmpresa, $idUsuario);
+        $insCab = $pg->prepare("INSERT INTO cambios_producto_cv (id_empresa, fecha_cambio, id_punto_emision, establecimiento, punto_emision, serie, secuencial, id_cliente, observaciones, estado, subtotal_devuelto, subtotal_entregado, diferencia, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Emitida', 0, 0, 0, ?) RETURNING id");
         $insDet = $pg->prepare("INSERT INTO cambios_producto_cv_detalles (id_cambio, id_empresa, tipo_linea, id_producto, cantidad, id_bodega, lote) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_cambio, fecha_cambio, id_cliente, id_producto_anterior, id_nuevo_producto, cant_cambiada, lote_anterior, nuevo_lote, id_bodega_anterior, id_nueva_bodega, observaciones
@@ -1868,7 +1877,7 @@ class MigracionMysqlService
                 $pg->beginTransaction();
                 $prodAnt = $resolverProd((int) $c['id_producto_anterior']);
                 $prodNew = $resolverProd((int) $c['id_nuevo_producto']);
-                $insCab->execute([$idEmpresa, substr((string) $c['fecha_cambio'], 0, 10), '001-001', $sec, $idCliente, self::nz($c['observaciones']), $idUsuario]);
+                $insCab->execute([$idEmpresa, substr((string) $c['fecha_cambio'], 0, 10), $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], $serie['establecimiento'] . '-' . $serie['punto_emision'], $sec, $idCliente, self::nz($c['observaciones']), $idUsuario]);
                 $idCambio = (int) $insCab->fetchColumn();
                 $insDet->execute([$idCambio, $idEmpresa, 'devolucion', $prodAnt, $cant, (((int) $c['id_bodega_anterior'] > 0) ? ($mapBod[(string) (int) $c['id_bodega_anterior']] ?? null) : null), self::nz($c['lote_anterior'])]);
                 $insDet->execute([$idCambio, $idEmpresa, 'entrega', $prodNew, $cant, (((int) $c['id_nueva_bodega'] > 0) ? ($mapBod[(string) (int) $c['id_nueva_bodega']] ?? null) : null), self::nz($c['nuevo_lote'])]);
@@ -2447,7 +2456,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'pedidos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'pedido sin cliente', 'errores' => 0];
+        $res = ['entidad' => 'pedidos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'pedido sin cliente', 'errores' => 0, 'serie_omitida' => 0];
 
         $done        = $this->idsMigrados($pg, $idEmpresa, 'pedidos');
         $insMap      = $this->stmtMap($pg, 'pedidos');
@@ -2461,9 +2470,12 @@ class MigracionMysqlService
         $precioProd = [];
         foreach ($pg->query("SELECT id, COALESCE(precio_base, 0) pb FROM productos WHERE id_empresa = " . (int) $idEmpresa) as $p) { $precioProd[(int) $p['id']] = (float) $p['pb']; }
 
-        // Sin establecimiento/punto en el viejo: se usan '001'/'001'; secuencial = numero_pedido.
-        $buscar  = $pg->prepare("SELECT id FROM pedidos_cabecera WHERE id_empresa = :e AND establecimiento = '001' AND punto_emision = '001' AND secuencial = :sec ORDER BY eliminado, id LIMIT 1");
-        $insCab  = $pg->prepare("INSERT INTO pedidos_cabecera (id_empresa, id_cliente, fecha_pedido, estado, observaciones, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '001', '001', ?, ?, ?) RETURNING id");
+        // El viejo (encabezado_pedido) no guarda establecimiento/punto: solo numero_pedido. La serie se
+        // completa con la activa de la empresa (serieDefecto), no con un '001-001' fijo — así el pedido
+        // queda enlazado a un punto real y el generador de secuenciales lo cuenta.
+        $serie   = $this->serieDefecto($idEmpresa, $idUsuario);
+        $buscar  = $pg->prepare("SELECT id FROM pedidos_cabecera WHERE id_empresa = :e AND establecimiento = :est AND punto_emision = :pto AND secuencial = :sec ORDER BY eliminado, id LIMIT 1");
+        $insCab  = $pg->prepare("INSERT INTO pedidos_cabecera (id_empresa, id_cliente, fecha_pedido, estado, observaciones, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total) VALUES (?, ?, ?, ?, ?, 0, ?)");
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, producto, cantidad FROM detalle_pedido WHERE id_pedido = :id");
         // Reconcile (re-migrar): actualiza la cabecera (estado/entrega/observaciones) de los ya migrados
@@ -2473,6 +2485,12 @@ class MigracionMysqlService
         $qmd->execute([$idEmpresa]);
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
         $updCab = $pg->prepare("UPDATE pedidos_cabecera SET estado = :est, fecha_entrega = :fent, hora_inicial_entrega = :hi, hora_maxima_entrega = :hm, observaciones = :obs, observaciones_internas = :obsi, updated_at = now(), updated_by = :u WHERE id = :id");
+        $updSerie = $pg->prepare("UPDATE pedidos_cabecera
+                                     SET id_establecimiento = COALESCE(id_establecimiento, :iest),
+                                         id_punto_emision   = COALESCE(id_punto_emision, :ipto),
+                                         establecimiento    = COALESCE(NULLIF(establecimiento, ''), :est),
+                                         punto_emision      = COALESCE(NULLIF(punto_emision, ''), :pto)
+                                   WHERE id = :id AND id_punto_emision IS NULL");
 
         $sql = "SELECT id, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
                   FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
@@ -2484,29 +2502,35 @@ class MigracionMysqlService
             $old = (int) $ep['id'];
             // status viejo → estado nuevo (confirmado por el usuario): 1=Pendiente, 2=Procesado, 3=Anulado.
             $est  = ['1' => 'Pendiente', '2' => 'Procesado', '3' => 'Anulado'][(string) $ep['status']] ?? 'Pendiente';
+            $sec  = str_pad(preg_replace('/\D+/', '', (string) $ep['numero_pedido']), 9, '0', STR_PAD_LEFT);
             if (isset($mapDest[(string) $old])) { // ya migrado: reconciliar estado + entrega (solo insertados)
                 if (!$mapDest[(string) $old]['vin']) {
                     try { $updCab->execute([':est' => $est, ':fent' => self::fechaCorta($ep['fecha_entrega']), ':hi' => self::nz($ep['hora_entrega_desde']), ':hm' => self::nz($ep['hora_entrega_hasta']), ':obs' => self::nz($ep['observaciones_cliente']), ':obsi' => self::nz($ep['observaciones_interna']), ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
                     catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
+                    // Completar la serie de los pedidos migrados antes de que se guardara. Va en su propio
+                    // try: uq_pedidos_secuencial rechaza el UPDATE si otro pedido ya ocupa ese número en el
+                    // punto (el viejo numera por establecimiento y puede repetir). Ese caso se cuenta y se
+                    // reporta en vez de abortar la reconciliación del resto.
+                    try { $updSerie->execute([':iest' => $serie['id_establecimiento'], ':ipto' => $serie['id_punto_emision'], ':est' => $serie['establecimiento'], ':pto' => $serie['punto_emision'], ':id' => $mapDest[(string) $old]['id']]); }
+                    catch (Throwable $ex) { $res['serie_omitida']++; if (empty($res['serie_omitida_muestra'])) { $res['serie_omitida_muestra'] = self::numeroDoc($serie, $sec); } }
                 }
                 $res['ya_migrados']++; continue;
             }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ep['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
-            $sec  = str_pad(preg_replace('/\D+/', '', (string) $ep['numero_pedido']), 9, '0', STR_PAD_LEFT);
             $fped = self::fechaCorta($ep['datecreated']);
             $fent = self::fechaCorta($ep['fecha_entrega']);
 
             try {
                 $pg->beginTransaction();
-                $buscar->execute([':e' => $idEmpresa, ':sec' => $sec]);
+                $buscar->execute([':e' => $idEmpresa, ':est' => $serie['establecimiento'], ':pto' => $serie['punto_emision'], ':sec' => $sec]);
                 $exId = $buscar->fetchColumn();
                 if ($exId !== false) {
                     $idPed = (int) $exId; $vin = true; $res['vinculados']++;
-                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = '001-001-' . $sec; }
+                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = self::numeroDoc($serie, $sec); }
                 } else {
-                    $insCab->execute([$idEmpresa, $idCliente, $fped, $est, self::nz($ep['observaciones_cliente']), self::nz($ep['observaciones_interna']), $fent, self::nz($ep['hora_entrega_desde']), self::nz($ep['hora_entrega_hasta']), $sec, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $idCliente, $fped, $est, self::nz($ep['observaciones_cliente']), self::nz($ep['observaciones_interna']), $fent, self::nz($ep['hora_entrega_desde']), self::nz($ep['hora_entrega_hasta']), $serie['id_establecimiento'], $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], $sec, $amb, $idUsuario]);
                     $idPed = (int) $insCab->fetchColumn(); $vin = false; $res['migrados']++;
                 }
 
@@ -2777,10 +2801,28 @@ class MigracionMysqlService
         $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, tipo_ingreso = ?, id_ingreso_concepto = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
         $delPag      = $pg->prepare("DELETE FROM ingresos_pagos WHERE id_ingreso = ?");
+        // Re-correr la migración completa la serie de los ingresos migrados ANTES de que se guardara
+        // (quedaron con establecimiento/punto/id_punto_emision en NULL). Solo toca los que la tienen
+        // incompleta: nunca pisa una serie ya asignada.
+        $updSerie    = $pg->prepare("UPDATE ingresos_cabecera
+                                        SET id_establecimiento = COALESCE(id_establecimiento, ?),
+                                            id_punto_emision   = COALESCE(id_punto_emision, ?),
+                                            establecimiento    = COALESCE(NULLIF(establecimiento, ''), ?),
+                                            punto_emision      = COALESCE(NULLIF(punto_emision, ''), ?),
+                                            numero_ingreso     = ?,
+                                            updated_at = now(), updated_by = ?
+                                      WHERE id = ?
+                                        AND (id_punto_emision IS NULL
+                                             OR establecimiento IS NULL OR establecimiento = ''
+                                             OR punto_emision   IS NULL OR punto_emision   = '')");
         // Conciliación bancaria: al re-migrar, borra los movimientos de banco (cheques cobrados) de los pagos viejos.
         $delCbm      = $pg->prepare("DELETE FROM control_bancario_movimientos WHERE origen_tipo = 'ingreso' AND origen_id IN (SELECT id FROM ingresos_pagos WHERE id_ingreso = ?)");
 
-        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_ingreso_concepto, id_cliente, monto_total, observaciones, estado, recibo_de, id_recibo_cliente, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        // El viejo (ingresos_egresos) NO guarda establecimiento/punto: solo numero_ing_egr. La serie
+        // se completa con la activa de la empresa (ver serieDefecto) para que el ingreso sea visible
+        // al generador de secuenciales, que filtra por id_punto_emision.
+        $serie   = $this->serieDefecto($idEmpresa, $idUsuario);
+        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, numero_ingreso, tipo_ingreso, id_ingreso_concepto, id_cliente, monto_total, observaciones, estado, recibo_de, id_recibo_cliente, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?) RETURNING id");
         // Cheque COBRADO en el viejo (estado_pago='PAGADO') → fila en control_bancario_movimientos con
@@ -2846,12 +2888,13 @@ class MigracionMysqlService
                 if ($idIngExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
                     $idIng = (int) $idIngExist;
                     $updCab->execute([$fe, $tipoIngreso, $idConcepto, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario, $idIng]);
+                    $updSerie->execute([$serie['id_establecimiento'], $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], self::numeroDoc($serie, $sec), $idUsuario, $idIng]);
                     $delDet->execute([$idIng]);
                     $delCbm->execute([$idIng]); // antes de delPag: borra los movimientos de banco de los pagos viejos
                     $delPag->execute([$idIng]);
                     $res['ya_migrados']++;
                 } else {
-                    $insCab->execute([$idEmpresa, $idUsuario, $fe, $sec, (string) $ie['numero_ing_egr'], $tipoIngreso, $idConcepto, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $idUsuario, $fe, $serie['id_establecimiento'], $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], $sec, self::numeroDoc($serie, $sec), $tipoIngreso, $idConcepto, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario]);
                     $idIng = (int) $insCab->fetchColumn();
                     $res['migrados']++;
                 }
@@ -2979,7 +3022,20 @@ class MigracionMysqlService
         $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
         $delCbm      = $pg->prepare("DELETE FROM control_bancario_movimientos WHERE origen_tipo = 'egreso' AND origen_id IN (SELECT id FROM egresos_pagos WHERE id_egreso = ?)");
 
-        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, id_empleado, id_egreso_concepto, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        // Igual que ingresos: el viejo no guarda establecimiento/punto, se completa con la serie activa
+        // de la empresa (serieDefecto). egresos_cabecera no tiene columna id_establecimiento.
+        $serie   = $this->serieDefecto($idEmpresa, $idUsuario);
+        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, id_punto_emision, establecimiento, punto_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, id_empleado, id_egreso_concepto, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $updSerie = $pg->prepare("UPDATE egresos_cabecera
+                                     SET id_punto_emision = COALESCE(id_punto_emision, ?),
+                                         establecimiento  = COALESCE(NULLIF(establecimiento, ''), ?),
+                                         punto_emision    = COALESCE(NULLIF(punto_emision, ''), ?),
+                                         numero_egreso    = ?,
+                                         updated_at = now(), updated_by = ?
+                                   WHERE id = ?
+                                     AND (id_punto_emision IS NULL
+                                          OR establecimiento IS NULL OR establecimiento = ''
+                                          OR punto_emision   IS NULL OR punto_emision   = '')");
         $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque, tipo_operacion_bancaria) VALUES (?, ?, ?, ?, ?, ?) RETURNING id");
         // Cheque COBRADO (estado_pago='PAGADO') → fila en control_bancario_movimientos (fecha_banco=fecha_pago)
@@ -3086,12 +3142,13 @@ class MigracionMysqlService
                 if ($idEgrExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
                     $idEgr = (int) $idEgrExist;
                     $updCab->execute([$fe, $tipoEgreso, $tipoSujeto, $idConcepto, $idProv, $idEmpleado, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario, $idEgr]);
+                    $updSerie->execute([$serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], self::numeroDoc($serie, $sec), $idUsuario, $idEgr]);
                     $delDet->execute([$idEgr]);
                     $delCbm->execute([$idEgr]); // antes de delPag
                     $delPag->execute([$idEgr]);
                     $res['ya_migrados']++;
                 } else {
-                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $tipoEgreso, $tipoSujeto, $idProv, $idEmpleado, $idConcepto, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $fe, $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], self::numeroDoc($serie, $sec), $sec, $tipoEgreso, $tipoSujeto, $idProv, $idEmpleado, $idConcepto, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario]);
                     $idEgr = (int) $insCab->fetchColumn();
                     $res['migrados']++;
                 }
@@ -5064,6 +5121,56 @@ class MigracionMysqlService
         $ins = $db->prepare("INSERT INTO empresa_punto_emision (id_empresa, id_establecimiento, nombre, codigo_punto, logo_ruta, estado, created_by, updated_by) VALUES (?, ?, ?, ?, '', 'activo', ?, ?) RETURNING id");
         $ins->execute([$idEmpresa, $idEst, "Punto $pto", $pto, $idUsuario, $idUsuario]);
         return (int) $ins->fetchColumn();
+    }
+
+    /**
+     * Serie a usar para los documentos cuyo ORIGEN no guarda establecimiento/punto de emisión
+     * (ingresos, egresos, pedidos, cambios de producto: el viejo solo tiene un número correlativo).
+     *
+     * Regla: establecimiento ACTIVO + punto de emisión ACTIVO de MENOR código, saltando el punto
+     * dedicado a "Facturas de reembolso" (ver SecuencialRepository::getSerieDefecto). Si se eligió un
+     * establecimiento de DESTINO para la migración, manda ese. Si la empresa no tiene ningún punto,
+     * se crea 001-001 como respaldo (mismo get-or-create que el resto del migrador).
+     *
+     * NO se aplica a los documentos que sí traen serie propia (facturas, notas de crédito, guías,
+     * liquidaciones, retenciones, consignaciones…): ésos conservan SIEMPRE la del sistema anterior.
+     *
+     * @return array{establecimiento:string,punto_emision:string,id_establecimiento:int,id_punto_emision:int}
+     */
+    private function serieDefecto(int $idEmpresa, int $idUsuario): array
+    {
+        $cacheKey = $idEmpresa . '|' . ($this->estabDestino ?? '');
+        if (isset($this->serieDefectoCache[$cacheKey])) {
+            return $this->serieDefectoCache[$cacheKey];
+        }
+
+        $serie = (new \App\repositories\SecuencialRepository())->getSerieDefecto($idEmpresa);
+
+        if ($serie === null) { // empresa sin puntos de emisión: respaldo 001-001
+            $serie = ['establecimiento' => '001', 'punto_emision' => '001', 'id_establecimiento' => 0, 'id_punto_emision' => 0];
+        }
+        // getPuntoEmisionId aplica estabDestino y crea el punto si hiciera falta; con eso los ids
+        // quedan siempre consistentes con el establecimiento en el que realmente cae la migración.
+        $idPto = $this->getPuntoEmisionId($idEmpresa, $serie['establecimiento'], $serie['punto_emision'], $idUsuario);
+        $idEst = $this->getEstablecimientoId($idEmpresa, $serie['establecimiento'], $idUsuario);
+        if ($this->estabDestino !== null) { $serie['establecimiento'] = $this->estabDestino; }
+
+        $this->serieDefectoCache[$cacheKey] = [
+            'establecimiento'    => $serie['establecimiento'],
+            'punto_emision'      => $serie['punto_emision'],
+            'id_establecimiento' => $idEst,
+            'id_punto_emision'   => $idPto,
+        ];
+        return $this->serieDefectoCache[$cacheKey];
+    }
+
+    /** Cache de serieDefecto() por empresa + establecimiento destino. */
+    private array $serieDefectoCache = [];
+
+    /** Número de documento completo "EEE-PPP-SSSSSSSSS" a partir de una serie y un secuencial. */
+    private static function numeroDoc(array $serie, string $secuencial): string
+    {
+        return $serie['establecimiento'] . '-' . $serie['punto_emision'] . '-' . $secuencial;
     }
 
     /** Ids ya migrados de una entidad (anti-reproceso). */

@@ -86,6 +86,143 @@ class AsientoContableService
         return $this->repository->getMaxUpdatedAt($ids);
     }
 
+    /**
+     * ¿El asiento sigue cuadrando con el documento que lo originó?
+     *
+     * Un asiento de factura de venta tiene que reflejar el total de esa factura, uno de compra
+     * el total de la compra, etc. Se comprueba al editar el asiento a mano desde el módulo de
+     * Asientos Contables (store/update); los asientos que generan los propios módulos no pasan
+     * por acá — su cuadre lo vigila Auditoría Contable.
+     *
+     * No aplica (devuelve null) cuando: el asiento es de Diario/manual o de un origen cuyo total
+     * no es comparable (nómina, consignaciones, retornos, cambios, migrados), cuando se guarda
+     * como borrador —igual que el cuadre Debe/Haber, se exige recién al registrarlo— o cuando el
+     * documento origen ya no existe.
+     *
+     * @return array{cuadra: bool, base: string, monto_asiento: float, total_documento: float,
+     *               diferencia: float, sin_linea_cartera: bool, etiqueta: string,
+     *               numero_documento: ?string, mensaje: string}|null
+     */
+    public function evaluarCuadreDocumento(array $cabeceraData, array $detallesData, int $idEmpresa): ?array
+    {
+        if (strtolower(trim((string) ($cabeceraData['estado'] ?? ''))) === 'borrador') {
+            return null;
+        }
+
+        $moduloOrigen = (string) ($cabeceraData['modulo_origen'] ?? 'manual');
+        $idRefOrigen  = (int) ($cabeceraData['id_referencia_origen'] ?? 0);
+
+        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
+        if ($cfg === null || $idRefOrigen <= 0) {
+            return null;
+        }
+
+        // Documento sin importe (o en 0): no hay nada con qué comparar. Mismo criterio que el
+        // chequeo de montos de Auditoría Contable, que solo mira documentos con total > 0.
+        $totalDocumento = $this->repository->getTotalDocumentoOrigen($moduloOrigen, $idRefOrigen, $idEmpresa);
+        if ($totalDocumento === null || $totalDocumento <= 0) {
+            return null;
+        }
+
+        $cuentasCartera = $this->repository->getCuentasSlotCartera($idEmpresa, (array) ($cfg['slots'] ?? []));
+
+        $res = $this->rules->evaluarCuadreDocumento($cfg, $totalDocumento, $detallesData, $cuentasCartera);
+        $res['numero_documento'] = $this->numeroDocumentoOrigen($moduloOrigen, $idRefOrigen, $idEmpresa);
+        $res['mensaje'] = $this->mensajeCuadreDocumento($res);
+
+        return $res;
+    }
+
+    /**
+     * Datos para que el modal muestre en vivo el cuadre contra el documento mientras se edita:
+     * el importe del documento y con qué parte del asiento se compara. Devuelve null cuando ese
+     * origen no se compara con su documento (ver evaluarCuadreDocumento).
+     *
+     * @return array{etiqueta: string, numero_documento: ?string, total_documento: float,
+     *               lado: string, cuentas_cartera: int[], tolerancia: float}|null
+     */
+    public function getContextoCuadreDocumento(?string $moduloOrigen, int $idRefOrigen, int $idEmpresa): ?array
+    {
+        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
+        if ($cfg === null || $idRefOrigen <= 0) {
+            return null;
+        }
+
+        $totalDocumento = $this->repository->getTotalDocumentoOrigen($moduloOrigen, $idRefOrigen, $idEmpresa);
+        if ($totalDocumento === null || $totalDocumento <= 0) {
+            return null;
+        }
+
+        return [
+            'etiqueta' => (string) $cfg['etiqueta'],
+            'numero_documento' => $this->numeroDocumentoOrigen($moduloOrigen, $idRefOrigen, $idEmpresa),
+            'total_documento' => $totalDocumento,
+            'lado' => ($cfg['lado'] ?? 'debe') === 'haber' ? 'haber' : 'debe',
+            'cuentas_cartera' => $this->repository->getCuentasSlotCartera($idEmpresa, (array) ($cfg['slots'] ?? [])),
+            'tolerancia' => \App\Helpers\CuadreDocumentoAsiento::TOLERANCIA,
+        ];
+    }
+
+    /**
+     * Número del documento origen para nombrarlo en los mensajes de cuadre. Sale del mapa general
+     * (DocumentoOrigenAsiento) y, para los módulos que no están ahí, de la expresión propia del
+     * mapa de cuadre — hoy, la factura de reembolso.
+     */
+    private function numeroDocumentoOrigen(string $moduloOrigen, int $idRefOrigen, int $idEmpresa): ?string
+    {
+        $datosDoc = $this->repository->getDatosDocumentoOrigen($moduloOrigen, $idRefOrigen, $idEmpresa);
+        return $datosDoc['numero_documento']
+            ?? $this->repository->getNumeroDocumentoCuadre($moduloOrigen, $idRefOrigen, $idEmpresa);
+    }
+
+    /** Texto que ve el usuario cuando el asiento no cuadra con su documento. */
+    private function mensajeCuadreDocumento(array $res): string
+    {
+        $doc = $res['etiqueta'] . (!empty($res['numero_documento']) ? ' ' . $res['numero_documento'] : '');
+
+        if ($res['cuadra'] && !$res['sin_linea_cartera']) {
+            return 'El asiento coincide con el total de ' . $doc . '.';
+        }
+
+        if ($res['sin_linea_cartera']) {
+            return 'El asiento no tiene ninguna línea con la cuenta de cartera configurada para '
+                 . $res['etiqueta'] . ', así que no se puede comprobar que refleje el total del documento ('
+                 . number_format($res['total_documento'], 2) . ').';
+        }
+
+        $base = $res['base'] === 'cartera'
+            ? 'La cartera del asiento (cuenta por cobrar/pagar)'
+            : 'El total Debe del asiento';
+
+        return $base . ' es ' . number_format($res['monto_asiento'], 2)
+             . ' y el total de ' . $doc . ' es ' . number_format($res['total_documento'], 2)
+             . ' · diferencia: ' . number_format(abs($res['diferencia']), 2) . '.';
+    }
+
+    /**
+     * Deja constancia de que el usuario guardó a sabiendas un asiento que no cuadra con su
+     * documento (el sistema avisa, pero no lo impide).
+     */
+    public function registrarDescuadreConfirmado(int $idAsiento, array $cuadre, int $idEmpresa, int $idUsuario): void
+    {
+        $this->logService->registrar(
+            idUsuario: $idUsuario,
+            idEmpresa: $idEmpresa,
+            accion: 'Guardar Asiento Descuadrado vs Documento',
+            tabla: 'asientos_contables_cabecera',
+            idRegistro: $idAsiento,
+            antes: null,
+            despues: [
+                'documento' => trim($cuadre['etiqueta'] . ' ' . ($cuadre['numero_documento'] ?? '')),
+                'total_documento' => $cuadre['total_documento'],
+                'monto_asiento' => $cuadre['monto_asiento'],
+                'base_comparacion' => $cuadre['base'],
+                'diferencia' => $cuadre['diferencia'],
+                'confirmado_por_usuario' => true,
+            ]
+        );
+    }
+
     public function guardarAsiento(array $cabeceraData, array $detallesData, int $idEmpresa, int $idUsuario): int
     {
         // Ordenar detalles: cuentas con 'debe' > 0 primero

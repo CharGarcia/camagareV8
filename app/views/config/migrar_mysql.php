@@ -584,6 +584,12 @@ $base = BASE_URL;
                 if (d.revividos > 0) {
                     html += `<br><span class="text-success small">♻ ${fmt(d.revividos)} estaban eliminado(s) y se restauraron (volvieron a mostrarse).</span>`;
                 }
+                if (d.serie_omitida > 0) {
+                    // El sistema anterior numera estos documentos POR ESTABLECIMIENTO: el mismo número
+                    // puede existir dos veces y solo uno puede ocupar la serie de destino.
+                    const ej = d.serie_omitida_muestra ? ` (ej. ${String(d.serie_omitida_muestra).replace(/</g, '&lt;')})` : '';
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.serie_omitida)} quedaron sin serie${ej}: ese número ya está usado en el punto de emisión de destino. Revíselos manualmente.</span>`;
+                }
                 logMig(ent, html);
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
               finally { clearInterval(sondeo); hecho++; if (curTotal) curDone = curTotal; recalcRestante(); pintarSwal(); }

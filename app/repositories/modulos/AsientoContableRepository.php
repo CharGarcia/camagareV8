@@ -435,6 +435,116 @@ class AsientoContableRepository
         ];
     }
 
+    /**
+     * Importe del documento que originó el asiento (total de la factura, de la compra, del
+     * ingreso…), con el que debe cuadrar el asiento. El mapa vive en
+     * App\Helpers\CuadreDocumentoAsiento; devuelve null si ese origen no se compara con su
+     * documento, si el documento ya no existe o si su tabla no está en esta instalación.
+     */
+    public function getTotalDocumentoOrigen(?string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): ?float
+    {
+        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
+        if ($cfg === null || $idReferenciaOrigen <= 0) {
+            return null;
+        }
+
+        $pdo = \App\core\Database::getConnection();
+        try {
+            // La expresión del total es una constante del código; los valores van preparados.
+            $sql = "SELECT ({$cfg['total']})::numeric AS total_documento
+                    FROM {$cfg['tabla']} t
+                    WHERE t.id = :id AND t.id_empresa = :id_empresa AND t.eliminado = false
+                    LIMIT 1";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
+            $total = $stmt->fetchColumn();
+        } catch (\Throwable $e) {
+            // Tabla o columna inexistente en esta instalación: no se comprueba el cuadre.
+            error_log('Asientos: no se pudo leer el total del documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
+            return null;
+        }
+
+        return $total === false || $total === null ? null : round((float) $total, 2);
+    }
+
+    /**
+     * Cuentas contables con las que la empresa resuelve uno o varios slots de cartera
+     * (PORCOBRARFACTURAVENTA, PORPAGARFACTURACOMPRA, FACTREEMB_CXC_CLIENTE…), según su
+     * configuración contable. Mismo criterio que AsientoBuilderService::cuentasDelSlot(): sirve
+     * para reconocer, dentro de un asiento editado a mano, cuáles de sus líneas son la cartera
+     * del documento. Se aceptan varios códigos porque algunos documentos resuelven su cuenta con
+     * fallback (la factura de reembolso usa la suya y, si no está configurada, la de ventas).
+     *
+     * @param string[] $codigosSlot
+     * @return int[] ids de cuenta (vacío si la empresa no tiene ninguno de esos slots configurado)
+     */
+    public function getCuentasSlotCartera(int $idEmpresa, array $codigosSlot): array
+    {
+        $codigosSlot = array_values(array_filter($codigosSlot));
+        if ($codigosSlot === []) {
+            return [];
+        }
+
+        $pdo = \App\core\Database::getConnection();
+        try {
+            $placeholders = [];
+            $params = [':id_empresa' => $idEmpresa];
+            foreach ($codigosSlot as $i => $codigo) {
+                $placeholders[] = ':codigo' . $i;
+                $params[':codigo' . $i] = $codigo;
+            }
+
+            $stmt = $pdo->prepare(
+                "SELECT DISTINCT ap.id_cuenta
+                   FROM asientos_programados ap
+                   JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                  WHERE ap.id_empresa = :id_empresa
+                    AND at.codigo IN (" . implode(', ', $placeholders) . ")
+                    AND ap.eliminado = false
+                    AND ap.id_cuenta IS NOT NULL"
+            );
+            $stmt->execute($params);
+            return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
+        } catch (\Throwable $e) {
+            // Sin catálogo de configuración contable no se puede identificar la cartera:
+            // el llamador cae al criterio del total Debe.
+            error_log('Asientos: no se pudieron leer las cuentas de los slots '
+                . implode(', ', $codigosSlot) . '. ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Número del documento origen para los módulos que no están en DocumentoOrigenAsiento pero sí
+     * definen su propia expresión en CuadreDocumentoAsiento (hoy, la factura de reembolso).
+     * Solo se usa para nombrar el documento en los mensajes de cuadre.
+     */
+    public function getNumeroDocumentoCuadre(?string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): ?string
+    {
+        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
+        if ($cfg === null || empty($cfg['numero']) || $idReferenciaOrigen <= 0) {
+            return null;
+        }
+
+        $pdo = \App\core\Database::getConnection();
+        try {
+            // La expresión del número es una constante del código; los valores van preparados.
+            $stmt = $pdo->prepare(
+                "SELECT ({$cfg['numero']})::varchar AS numero
+                   FROM {$cfg['tabla']} t
+                  WHERE t.id = :id AND t.id_empresa = :id_empresa
+                  LIMIT 1"
+            );
+            $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
+            $numero = $stmt->fetchColumn();
+        } catch (\Throwable $e) {
+            error_log('Asientos: no se pudo leer el número del documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
+            return null;
+        }
+
+        return $numero === false || $numero === null || $numero === '' ? null : (string) $numero;
+    }
+
     public function updateEstado(int $idAsiento, string $estado, int $updatedBy): void
     {
         $sql = "UPDATE asientos_contables_cabecera SET estado = :estado, updated_by = :updated_by, updated_at = CURRENT_TIMESTAMP WHERE id = :id";

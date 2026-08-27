@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado
-version: 1.1
+etiquetas: migracion, migrar, sistema anterior, mysql, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie
+version: 1.2
 orden: 2
 estado: activo
 ---
@@ -59,8 +59,50 @@ defecto cada una se migra como su propia empresa nueva** — no se combinan.
   el sistema nuevo — los que ya se migraron no vuelven a aparecer, pero el
   resto de la base sigue disponible.
 
+## Series de los documentos migrados
+
+Cada documento del sistema lleva una **serie** (establecimiento + punto de
+emisión, por ejemplo `001-101`) y un **secuencial**. La migración los trata de
+dos maneras distintas, según lo que traiga el sistema anterior:
+
+- **Documentos que ya tienen serie propia** — facturas, notas de crédito,
+  recibos, proformas, guías de remisión, liquidaciones de compra, retenciones
+  y consignaciones. Son los documentos **autorizados por el SRI** y los que se
+  numeran con serie en el sistema anterior: se migran **exactamente con la
+  serie y el secuencial que ya tenían**. La migración nunca los renumera.
+- **Documentos sin serie en el sistema anterior** — ingresos, egresos, pedidos
+  y cambios de producto. El sistema anterior solo les guarda un número
+  correlativo. La migración les asigna la **serie activa de la empresa**: el
+  establecimiento activo y el **punto de emisión activo de menor número**,
+  saltando el punto reservado a *Facturas de reembolso*. El número original se
+  conserva como secuencial; en Ingresos y Egresos el "Nº documento" pasa a
+  mostrarse completo (`001-001-000000123`), igual que los emitidos aquí.
+
+Esto importa porque el sistema calcula el **siguiente número disponible**
+mirando los documentos ya emitidos **en ese punto de emisión**. Un documento
+migrado sin punto de emisión es invisible para ese cálculo, y el sistema
+volvería a repartir números ya usados.
+
+### Números repetidos
+
+En el sistema anterior los ingresos, egresos y pedidos se numeran **por
+establecimiento**: una empresa con dos establecimientos puede tener dos
+documentos con el mismo número. Al quedar todos en una sola serie, esos
+números chocan. La migración completa la serie del primero y **deja sin serie
+al repetido**, avisando al final del proceso con el mensaje *"N quedaron sin
+serie: ese número ya está usado en el punto de emisión de destino"*. Esos
+documentos hay que revisarlos a mano: nada se borra ni se renumera solo.
+
 ## Errores frecuentes
 
+- **Un ingreso, egreso o pedido migrado no aparece con serie**: su número
+  ya estaba usado por otro documento en el punto de emisión de destino (el
+  sistema anterior numeraba por establecimiento). Hay que abrirlo y darle un
+  número libre, o dejarlo así si es un duplicado real del sistema viejo.
+- **La empresa no tiene punto de emisión activo**: los documentos sin serie
+  propia no pueden completarse. Primero se crea el establecimiento y el punto
+  de emisión en **Configuración → Empresas del sistema**, y luego se vuelve a
+  correr la migración de esa entidad (completa la serie de lo ya migrado).
 - **Se fusionó un establecimiento por error**: no hay forma de deshacerlo
   desde acá — sus datos no se guardaron en ningún lado. Si de verdad hacía
   falta como cliente separado, se crea una empresa nueva a mano desde
@@ -72,6 +114,14 @@ defecto cada una se migra como su propia empresa nueva** — no se combinan.
   datos reales todavía).
 
 ## Historial de cambios
+
+- **1.2** — Se documenta cómo se asigna la **serie** a los documentos
+  migrados: los que ya la traen del sistema anterior (autorizados del SRI y
+  consignaciones) la conservan intacta; los que no la traen (ingresos,
+  egresos, pedidos, cambios de producto) reciben la serie activa de la
+  empresa — establecimiento activo y punto de emisión de menor número, sin
+  usar el punto de Facturas de reembolso. Se explica el caso de los números
+  repetidos entre establecimientos.
 
 - **1.1** — Cambio de modelo: cada establecimiento del sistema anterior se
   migra por defecto como su **propia empresa** (antes: se elegía uno solo por

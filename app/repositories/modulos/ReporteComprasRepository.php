@@ -315,11 +315,16 @@ class ReporteComprasRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        // valor = lo que queda escrito en el buscador al elegir: el código cuando existe
-        // (más preciso para re-filtrar, ya que el nombre puede repetirse entre productos
-        // distintos), o el nombre si la línea no tiene código.
+        // valor = lo que queda escrito en el buscador al elegir: siempre el nombre
+        // (descripción), igual que si el usuario lo hubiera tecleado a mano — así el
+        // filtro producto_texto (que ya busca por descripcion OR codigo_principal)
+        // encuentra TODAS las líneas con ese nombre, no solo las que comparten el
+        // código exacto de la línea elegida (un mismo producto puede aparecer con
+        // código vacío o distinto entre documentos). El código solo se muestra como
+        // referencia (sub) en la lista, para que el usuario pueda buscar por código
+        // sin que eso reduzca el resultado a una sola variante.
         return array_map(fn($r) => [
-            'valor' => $r['codigo'] !== '' ? $r['codigo'] : $r['descripcion'],
+            'valor' => $r['descripcion'],
             'label' => $r['descripcion'],
             'sub'   => $r['codigo'],
         ], $rows);
