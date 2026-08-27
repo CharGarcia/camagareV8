@@ -33,11 +33,16 @@ class SecuencialService
      * 
      * Algoritmo:
      * 1. Obtener el secuencial_inicial configurado (ej: 100)
-     * 2. Obtener todos los secuenciales ya usados en la tabla del documento
-     * 3. Desde el secuencial_inicial, buscar el primer número NO usado (gap detection)
-     * 4. Si no hay gaps, retornar max_usado + 1
-     * 5. Nunca retornar un número inferior al secuencial_inicial
-     * 
+     * 2. Desde ese inicial, buscar el primer número NO usado en la tabla del documento
+     * 3. Si no hay huecos, retornar max_usado + 1
+     * 4. Nunca retornar un número inferior al secuencial_inicial
+     *
+     * Ejemplos (el cálculo lo resuelve SecuencialRepository::getSiguienteDisponible):
+     *   inicial 5, existe solo el 11         → 5   (el 5 está libre: se rellena el hueco)
+     *   inicial 1, existen del 1 al 10       → 11  (no hay huecos: sigue al máximo)
+     *   inicial 5, existen 5, 6 y 11         → 7   (primer hueco por encima del inicial)
+     *   inicial 20, existen 1, 2 y 3         → 20  (nunca por debajo del inicial)
+     *
      * @param int    $idPuntoEmision  ID del punto de emisión
      * @param string $tipoDocumento   Tipo de documento (ej: 'Facturas de venta')
      * @return array ['secuencial' => int, 'formateado' => string, 'es_gap' => bool, 'detalle' => string]
@@ -58,52 +63,28 @@ class SecuencialService
         $configurado = !empty($config['id']);
         $secuencialInicial = max(1, (int) $config['secuencial_inicial']);
 
-        // 2. Obtener secuenciales ya usados
-        $usados = $this->repository->getSecuencialesUsados($idPuntoEmision, $tipoDocumento);
+        // 2. El cálculo (hueco o siguiente al máximo) lo resuelve el motor en una sola consulta.
+        //    Antes se traían TODOS los secuenciales del punto a memoria y se recorría el rango
+        //    [inicial .. máximo] número por número en PHP: con un punto que ya llegó al 500.000,
+        //    medio millón de iteraciones en cada emisión.
+        $res = $this->repository->getSiguienteDisponible($idPuntoEmision, $tipoDocumento, $secuencialInicial);
 
-        // Si no hay documentos emitidos, el siguiente es el inicial
-        if (empty($usados)) {
-            return [
-                'secuencial'  => $secuencialInicial,
-                'formateado'  => str_pad((string) $secuencialInicial, 9, '0', STR_PAD_LEFT),
-                'es_gap'      => false,
-                'configurado' => $configurado,
-                'detalle'     => 'Primer documento - secuencial inicial',
-            ];
+        $siguiente = max($secuencialInicial, (int) $res['siguiente']);
+
+        if ((int) $res['total_usados'] === 0) {
+            $detalle = 'Primer documento - secuencial inicial';
+        } elseif (!empty($res['es_gap'])) {
+            $detalle = 'Número faltante detectado (gap) en la secuencia';
+        } else {
+            $detalle = 'Siguiente número consecutivo';
         }
-
-        // 3. Normalizar los secuenciales usados (pueden estar guardados como "000000100" o "100")
-        $usadosNormalizados = array_map(function ($sec) {
-            return (int) ltrim((string) $sec, '0') ?: 0;
-        }, $usados);
-
-        // Eliminar duplicados y ordenar
-        $usadosSet = array_unique($usadosNormalizados);
-        sort($usadosSet);
-
-        // 4. Buscar el primer hueco desde el secuencial_inicial
-        $gap = $this->encontrarPrimerGap($secuencialInicial, $usadosSet);
-
-        if ($gap !== null) {
-            return [
-                'secuencial'  => $gap,
-                'formateado'  => str_pad((string) $gap, 9, '0', STR_PAD_LEFT),
-                'es_gap'      => true,
-                'configurado' => $configurado,
-                'detalle'     => "Número faltante detectado (gap) en la secuencia",
-            ];
-        }
-
-        // 5. Sin gaps → siguiente después del máximo
-        $maxUsado = end($usadosSet);
-        $siguiente = max($maxUsado + 1, $secuencialInicial);
 
         return [
             'secuencial'  => $siguiente,
             'formateado'  => str_pad((string) $siguiente, 9, '0', STR_PAD_LEFT),
-            'es_gap'      => false,
+            'es_gap'      => (bool) $res['es_gap'],
             'configurado' => $configurado,
-            'detalle'     => 'Siguiente número consecutivo',
+            'detalle'     => $detalle,
         ];
     }
 
@@ -174,41 +155,6 @@ class SecuencialService
         }
 
         return $resumen;
-    }
-
-    /**
-     * Busca el primer número faltante (gap) en una secuencia a partir de un inicio dado.
-     * 
-     * @param int   $inicio    Número desde el cual empezar a buscar
-     * @param array $usadosSet Conjunto ordenado de números ya utilizados
-     * @return int|null El número del gap, o null si no hay gaps
-     */
-    private function encontrarPrimerGap(int $inicio, array $usadosSet): ?int
-    {
-        if (empty($usadosSet)) {
-            return null;
-        }
-
-        // Crear un set para búsqueda O(1)
-        $usadosFlip = array_flip($usadosSet);
-
-        // Obtener el máximo para saber hasta dónde buscar
-        $max = end($usadosSet);
-
-        // Solo buscar gaps si el inicial es <= al máximo usado
-        // (si es mayor, no hay gaps, simplemente se empieza desde el inicial)
-        if ($inicio > $max) {
-            return null;
-        }
-
-        // Buscar desde el inicio hasta el máximo usado
-        for ($i = $inicio; $i <= $max; $i++) {
-            if (!isset($usadosFlip[$i])) {
-                return $i;
-            }
-        }
-
-        return null;
     }
 
     /**

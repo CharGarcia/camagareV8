@@ -354,11 +354,15 @@ class SecuencialRepository
         $colPunto = $map['col_punto'];
         $tipoAmbiente = $this->getTipoAmbiente($idPuntoEmision);
 
-        $sql = "SELECT CAST({$colSec} AS BIGINT) AS sec_num
+        // Se ignoran los secuenciales que no sean enteros ("", "ABC-1", basura de cargas viejas):
+        // un solo valor no numérico hacía fallar el CAST y dejaba al módulo sin poder emitir.
+        $sql = "SELECT CAST(TRIM({$colSec}) AS BIGINT) AS sec_num
                 FROM {$tabla}
                 WHERE {$colPunto} = :id_punto 
                   AND tipo_ambiente = :tipo_ambiente
                   AND eliminado = false
+                  AND {$colSec} IS NOT NULL
+                  AND TRIM({$colSec}) ~ '^[0-9]+$'
                 ORDER BY sec_num ASC";
 
         $stmt = $this->db->prepare($sql);
@@ -368,6 +372,90 @@ class SecuencialRepository
         ]);
 
         return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Resuelve EN SQL el siguiente secuencial disponible para un punto + tipo, a partir del
+     * secuencial inicial configurado. Devuelve el primer hueco libre desde ese inicial y, si no
+     * hay ninguno, el siguiente al máximo usado.
+     *
+     * Reglas (las mismas que documenta SecuencialService):
+     *   - Si el propio inicial está libre, ese es el número — aunque ya existan documentos con
+     *     números mayores. Ej.: inicial 5 y solo existe el 11 → devuelve 5.
+     *   - Si el inicial está ocupado, se busca el primer número libre por encima de él.
+     *     Ej.: inicial 1 y existen del 1 al 10 → devuelve 11.
+     *   - Nunca devuelve un número menor al inicial.
+     *
+     * Por qué en SQL y no en PHP: la versión anterior traía TODOS los secuenciales del punto a
+     * memoria y recorría uno a uno el rango [inicial .. máximo]. Con un punto que ya llegó al
+     * 500.000 eso son medio millón de iteraciones en cada emisión. Aquí el motor resuelve el
+     * hueco con dos búsquedas sobre el mismo conjunto.
+     *
+     * Los secuenciales que no sean enteros ("", "ABC-1", basura de una carga vieja) se IGNORAN
+     * en vez de romper la consulta: antes, un solo valor no numérico hacía fallar el CAST y el
+     * módulo entero se quedaba sin poder emitir.
+     *
+     * @return array{siguiente:int,max_usado:int,total_usados:int,es_gap:bool}
+     */
+    public function getSiguienteDisponible(int $idPuntoEmision, string $tipoDocumento, int $secuencialInicial): array
+    {
+        $map = self::DOCUMENT_MAP[$tipoDocumento] ?? null;
+        $inicial = max(1, $secuencialInicial);
+
+        if (!$map || !$this->tableExists($map['tabla'])) {
+            return ['siguiente' => $inicial, 'max_usado' => 0, 'total_usados' => 0, 'es_gap' => false];
+        }
+
+        $tabla    = $map['tabla'];
+        $colSec   = $map['col_sec'];
+        $colPunto = $map['col_punto'];
+
+        // Placeholders distintos para el mismo valor: PDO/pgsql no permite repetir uno nombrado.
+        $sql = "WITH usados AS (
+                    SELECT DISTINCT CAST(TRIM({$colSec}) AS BIGINT) AS sec
+                      FROM {$tabla}
+                     WHERE {$colPunto} = :id_punto
+                       AND tipo_ambiente = :tipo_ambiente
+                       AND eliminado = false
+                       AND {$colSec} IS NOT NULL
+                       AND TRIM({$colSec}) ~ '^[0-9]+$'
+                )
+                SELECT
+                    (SELECT COALESCE(MAX(sec), 0) FROM usados) AS max_usado,
+                    (SELECT COUNT(*)              FROM usados) AS total_usados,
+                    CASE
+                        WHEN NOT EXISTS (SELECT 1 FROM usados WHERE sec = :ini_libre) THEN :ini_valor
+                        ELSE (
+                            SELECT MIN(u.sec + 1) FROM usados u
+                             WHERE u.sec >= :ini_desde
+                               AND NOT EXISTS (SELECT 1 FROM usados v WHERE v.sec = u.sec + 1)
+                        )
+                    END AS siguiente";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id_punto'      => $idPuntoEmision,
+            ':tipo_ambiente' => $this->getTipoAmbiente($idPuntoEmision),
+            ':ini_libre'     => $inicial,
+            ':ini_valor'     => $inicial,
+            ':ini_desde'     => $inicial,
+        ]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $maxUsado  = (int) ($row['max_usado'] ?? 0);
+        $total     = (int) ($row['total_usados'] ?? 0);
+        $siguiente = (int) ($row['siguiente'] ?? 0);
+        if ($siguiente < $inicial) {
+            $siguiente = max($inicial, $maxUsado + 1);
+        }
+
+        return [
+            'siguiente'    => $siguiente,
+            'max_usado'    => $maxUsado,
+            'total_usados' => $total,
+            // Es "hueco" cuando el número cae dentro del rango ya emitido, no al final de la serie.
+            'es_gap'       => $total > 0 && $siguiente < $maxUsado,
+        ];
     }
 
     /**
@@ -386,11 +474,13 @@ class SecuencialRepository
         $colPunto = $map['col_punto'];
         $tipoAmbiente = $this->getTipoAmbiente($idPuntoEmision);
 
-        $sql = "SELECT COALESCE(MAX(CAST({$colSec} AS BIGINT)), 0) AS max_sec
+        $sql = "SELECT COALESCE(MAX(CAST(TRIM({$colSec}) AS BIGINT)), 0) AS max_sec
                 FROM {$tabla}
                 WHERE {$colPunto} = :id_punto 
                   AND tipo_ambiente = :tipo_ambiente
-                  AND eliminado = false";
+                  AND eliminado = false
+                  AND {$colSec} IS NOT NULL
+                  AND TRIM({$colSec}) ~ '^[0-9]+$'";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([

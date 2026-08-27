@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados
-version: 1.20
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion
+version: 1.21
 orden: 5
 estado: activo
 ---
@@ -179,8 +179,38 @@ Vigencia, hay una tarjeta con dos bloques:
 
 En la pestaña **Secuenciales** se configura, por cada **punto de emisión**, el
 número inicial de cada tipo de comprobante (factura, nota de crédito, ingreso,
-egreso, pedido, etc.). El sistema detecta huecos desde ese número y nunca
-asigna uno menor al configurado.
+egreso, pedido, etc.).
+
+### Cómo se elige el siguiente número
+
+El sistema **no lleva un contador aparte**: cada vez que se va a emitir un
+documento mira los que ya existen en ese punto de emisión y en ese ambiente
+(pruebas o producción), y toma el **primer número libre a partir del inicial
+configurado**. Dos reglas, y de ahí salen todos los casos:
+
+1. **Si el número inicial está libre, ese es el que se usa** — aunque ya
+   existan documentos con números mayores. El sistema rellena el hueco.
+2. **Si está ocupado, se busca el primer libre por encima de él.** Si no hay
+   ninguno, sigue al mayor emitido.
+
+Nunca asigna un número **menor** al inicial configurado.
+
+| Inicial configurado | Documentos que ya existen | Siguiente número |
+|---|---|---|
+| 5 | solo el 11 | **5** — el 5 está libre, se rellena el hueco |
+| 1 | del 1 al 10 | **11** — no hay huecos, sigue al mayor |
+| 5 | el 5, el 6 y el 11 | **7** — primer libre por encima del inicial |
+| 20 | el 1, el 2 y el 3 | **20** — nunca por debajo del inicial |
+| 5 | ninguno | **5** — primer documento de la serie |
+
+Por eso, **subir el número inicial salta los números anteriores** y **bajarlo
+hace que el sistema vuelva a ofrecer los huecos** que hayan quedado por
+debajo. Es la forma de retomar una numeración que venía de otro sistema o de
+un talonario físico.
+
+Un documento **eliminado** libera su número: vuelve a estar disponible para el
+siguiente que se emita en esa serie. Un documento **anulado**, en cambio,
+conserva el suyo.
 
 - **Agregar un tipo puntual**: el selector **"Agregar Tipo Documento"** solo
   ofrece los tipos que todavía faltan en ese punto, sea un punto nuevo (sin
@@ -231,6 +261,11 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.21** — Se explica con ejemplos **cómo se elige el siguiente número** de un
+  comprobante: el sistema rellena el primer hueco libre a partir del inicial
+  configurado y, si no hay huecos, sigue al mayor emitido. Se aclara qué pasa al
+  subir o bajar el número inicial y la diferencia entre eliminar y anular.
 
 - **1.20** — Nueva excepción a la regla de "no se puede eliminar un punto de
   emisión con documentos": ahora sí se permite, siempre que quede al menos
