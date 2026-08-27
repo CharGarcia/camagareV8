@@ -279,19 +279,42 @@ class ReporteVentasRepository extends BaseRepository
         // r.id_venta (registrada directo desde la factura), cubre la retención electrónica del SRI
         // que solo referencia el número de la factura en su detalle (num_doc_sustento) sin haber
         // quedado enlazada por id_venta.
-        $reten = $f['retenciones']
-            ? "COALESCE((SELECT SUM(r.total_iva + r.total_renta + r.total_isd) FROM retencion_venta_cabecera r
-                          WHERE r.eliminado = false AND r.id_empresa = v.id_empresa
-                            AND (r.id_venta = v.id
-                                 OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id
-                                             AND rd.num_doc_sustento = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)))), 0)"
-            : "0";
+        // Se resuelve como CTE (una sola pasada sobre las retenciones de la empresa), no como
+        // subconsulta correlacionada por fila: con un filtro amplio (producto_texto por nombre)
+        // el reporte puede devolver muchas filas, y repetir el escaneo de retenciones por cada
+        // una escala mal (N filas × M retenciones) — en el droplet de producción (1 vCPU) eso
+        // fue suficiente para saturar la conexión a BD y colgar el sitio entero.
+        if ($f['retenciones']) {
+            $retenCte = ",
+                retenciones_map AS (
+                    SELECT COALESCE(r.id_venta, vv.id) AS id_venta,
+                           r.total_iva, r.total_renta, r.total_isd
+                    FROM retencion_venta_cabecera r
+                    LEFT JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id AND r.id_venta IS NULL
+                    LEFT JOIN ventas_cabecera vv ON r.id_venta IS NULL
+                        AND vv.id_empresa = r.id_empresa
+                        AND CONCAT(vv.establecimiento, '-', vv.punto_emision, '-', vv.secuencial) = rd.num_doc_sustento
+                    WHERE r.eliminado = false AND r.id_empresa = :id_empresa
+                ),
+                retenciones_agg AS (
+                    SELECT id_venta, SUM(total_iva + total_renta + total_isd) AS monto_retenciones
+                    FROM retenciones_map
+                    WHERE id_venta IS NOT NULL
+                    GROUP BY id_venta
+                )";
+            $retenJoin = "LEFT JOIN retenciones_agg ra ON ra.id_venta = v.id";
+            $reten = "COALESCE(ra.monto_retenciones, 0)";
+        } else {
+            $retenCte = "";
+            $retenJoin = "";
+            $reten = "0";
+        }
         // Las notas de crédito no tienen id_vendedor: se omite el join.
         $vendedorSel  = $f['vendedor'] ? "COALESCE(vend.nombre, '')" : "''";
         $vendedorJoin = $f['vendedor'] ? "LEFT JOIN vendedores vend ON vend.id = v.id_vendedor" : "";
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f) . "){$retenCte}
             SELECT
                 v.id,
                 v.fecha_emision,
@@ -311,6 +334,7 @@ class ReporteVentasRepository extends BaseRepository
             FROM {$f['cab']} v
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN bases b ON b.id_doc = v.id
+            {$retenJoin}
             {$vendedorJoin}
             LEFT JOIN usuarios    ucaj ON ucaj.id = v.id_usuario
             LEFT JOIN usuarios    uusr ON uusr.id = v.created_by
