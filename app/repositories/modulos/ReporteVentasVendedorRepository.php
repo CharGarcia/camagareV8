@@ -258,6 +258,11 @@ class ReporteVentasVendedorRepository extends BaseRepository
 
     /**
      * CTE de bases e impuestos para sumatorias (según la fuente).
+     * Se une contra la cabecera y se filtra por id_empresa: sin este JOIN, el GROUP BY
+     * agregaba el detalle de TODOS los documentos del sistema (todas las empresas) en
+     * cada consulta del reporte (mismo problema encontrado y corregido en
+     * ReporteVentasRepository/ReporteComprasRepository). Requiere que el llamador
+     * incluya :id_empresa en sus params (ya lo hace vía buildWhereYParams).
      */
     private function getCteBasesImpuestos(array $f): string
     {
@@ -268,6 +273,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
                 SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(i.valor) as valor_iva
             FROM {$f['det']} d
+            JOIN {$f['cab']} vcte ON vcte.id = d.{$f['fk_det']} AND vcte.id_empresa = :id_empresa
             LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
             GROUP BY d.{$f['fk_det']}
         ";

@@ -45,6 +45,12 @@ class ReporteComprasRepository extends BaseRepository
 
     /**
      * CTE de bases e impuestos para compras.
+     * Se une contra la cabecera y se filtra por id_empresa: sin este JOIN, el GROUP BY
+     * agregaba el detalle de TODOS los documentos del sistema (todas las empresas) en
+     * cada consulta del reporte — el costo crecía con el tamaño de la BD completa, no
+     * con los datos de la empresa activa (mismo problema encontrado y corregido en
+     * ReporteVentasRepository). Requiere que el llamador incluya :id_empresa en sus
+     * params (ya lo hace vía buildWhereYParams).
      */
     private function getCteBasesImpuestos(): string
     {
@@ -55,6 +61,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(i.valor) as valor_iva
             FROM compras_detalle d
+            JOIN compras_cabecera cbc ON cbc.id = d.id_compra AND cbc.id_empresa = :id_empresa
             LEFT JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
             GROUP BY d.id_compra
         ";

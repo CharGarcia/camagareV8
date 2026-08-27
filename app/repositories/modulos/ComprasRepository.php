@@ -18,6 +18,14 @@ class ComprasRepository extends BaseRepository
         try {
             $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS id_orden_compra INTEGER REFERENCES ordenes_compra(id);");
         } catch (\Throwable $e) {}
+        // Valores recaudados por cuenta de terceros en planillas de servicios básicos
+        // (bomberos, tasa de basura). Cuentas por Pagar y Egresos leen esta columna en
+        // su SQL, así que debe existir aunque todavía no se haya corrido
+        // database/migrations/20260827_compras_total_terceros.sql (que además trae el
+        // comentario de la columna y el backfill).
+        try {
+            $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS total_terceros NUMERIC(12,2) NOT NULL DEFAULT 0;");
+        } catch (\Throwable $e) {}
     }
 
     public function query(string $sql, array $params = []): \PDOStatement
@@ -834,6 +842,20 @@ class ComprasRepository extends BaseRepository
     public function deleteInfoAdicional(int $idCompra): void
     {
         $this->query("DELETE FROM compras_adicional WHERE id_compra = ?", [$idCompra]);
+    }
+
+    /**
+     * Valores recaudados por cuenta de terceros (contribución bomberos, tasa de basura…)
+     * declarados en la info adicional de las planillas de servicios básicos.
+     * NO forman parte de importe_total —que es el valor declarado al SRI— pero sí del
+     * saldo por pagar. El desglose vive en compras_adicional; aquí solo el total.
+     */
+    public function updateTotalTerceros(int $idCompra, float $total): void
+    {
+        $this->query(
+            "UPDATE compras_cabecera SET total_terceros = ? WHERE id = ?",
+            [round($total, 2), $idCompra]
+        );
     }
 
     // ─────────────────────────────────────────────────────────────────────────

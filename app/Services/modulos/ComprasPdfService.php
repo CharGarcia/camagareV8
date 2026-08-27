@@ -522,6 +522,27 @@ class ComprasPdfService
         $pdf->Cell($valW, $lh, number_format($total, 2), 1, 1, 'R', true);
         $yTot += $lh;
 
+        // Valores recaudados por cuenta de terceros (planillas de luz/agua: contribucion
+        // bomberos, tasa de basura). Van DESPUES del VALOR TOTAL a proposito: no forman
+        // parte del importe declarado al SRI, pero si de lo que se paga en ventanilla.
+        // Solo se imprimen cuando la factura los trae.
+        $terceros = (float) ($cab['total_terceros'] ?? 0);
+        if ($terceros > 0) {
+            $pdf->SetFont('helvetica', '', 7.5);
+            $pdf->SetFillColor(255, 255, 255);
+            $pdf->SetXY($totX, $yTot);
+            $pdf->Cell($lblW, $lh, 'VALORES DE TERCEROS', 1, 0, 'L', true);
+            $pdf->Cell($valW, $lh, number_format($terceros, 2), 1, 1, 'R', true);
+            $yTot += $lh;
+
+            $pdf->SetFont('helvetica', 'B', 8);
+            $pdf->SetFillColor(210, 210, 210);
+            $pdf->SetXY($totX, $yTot);
+            $pdf->Cell($lblW, $lh, 'TOTAL A PAGAR', 1, 0, 'L', true);
+            $pdf->Cell($valW, $lh, number_format($total + $terceros, 2), 1, 1, 'R', true);
+            $yTot += $lh;
+        }
+
         // ── Columna izquierda: Información Adicional + Observaciones + Pagos ───
         $yIzq = $y;
 

@@ -101,7 +101,13 @@ class ReporteVentasController extends BaseModuloController
                 $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 12 :
                            (($filtros['agrupar_por'] === 'PRODUCTO') ? 7 :
                            (($filtros['agrupar_por'] === 'VARIANTE') ? 8 : 6));
-                echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>No se encontraron resultados.</td></tr>';
+                $mensajeVacio = 'No se encontraron resultados.';
+                if (!empty($filtros['fecha_desde']) && !empty($filtros['fecha_hasta'])) {
+                    $desde = date('d-m-Y', strtotime($filtros['fecha_desde']));
+                    $hasta = date('d-m-Y', strtotime($filtros['fecha_hasta']));
+                    $mensajeVacio = "No se encontraron resultados en el periodo del {$desde} al {$hasta}.";
+                }
+                echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>'.htmlspecialchars($mensajeVacio).'</td></tr>';
             } else {
                 foreach ($rows as $r) {
                     echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA');

@@ -400,10 +400,30 @@
                   <hr class="my-1 opacity-25">
 
                   <!-- Total Factura -->
-                  <!-- Total Factura -->
                   <div class="d-flex justify-content-between align-items-center bg-light border py-1 px-2 rounded">
                     <span class="fw-bold text-dark" style="font-size:0.8rem;">TOTAL</span>
                     <span class="fw-bold text-dark" style="font-size:1rem;" id="mcLabelTotal">0.00</span>
+                  </div>
+
+                  <!-- Valores recaudados por cuenta de terceros (planillas de luz/agua:
+                       contribución bomberos, tasa de basura…). NO son parte del importe
+                       declarado al SRI, pero sí de lo que se paga: por eso van DEBAJO del
+                       TOTAL y cierran con un "TOTAL A PAGAR" propio. Todo el bloque queda
+                       oculto en las facturas que no traen estos rubros. -->
+                  <div id="mcBloqueTerceros" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                      <span class="text-muted">
+                        (+) Valores de terceros
+                        <i class="bi bi-info-circle ms-1 text-info" style="cursor:help;"
+                           id="mcIconoTerceros"
+                           title="Rubros que el proveedor recauda para terceros (bomberos, tasa de basura). No forman parte del importe declarado al SRI, pero sí del valor a pagar."></i>
+                      </span>
+                      <span class="fw-bold text-info" id="mcLabelTerceros">0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center bg-light border py-1 px-2 rounded mt-1">
+                      <span class="fw-bold text-dark" style="font-size:0.8rem;">TOTAL A PAGAR</span>
+                      <span class="fw-bold text-dark" style="font-size:1rem;" id="mcLabelTotalPagar">0.00</span>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -465,13 +465,11 @@ class EgresosController extends BaseModuloController
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['usuario_id'] = (int) $_SESSION['id_usuario'];
 
-            // Componer número Egreso
-            $est = str_pad((string)($data['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
-            $pto = str_pad((string)($data['punto_emision'] ?? '001'), 3, '0', STR_PAD_LEFT);
-            $sec = str_pad((string)($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
-            $data['numero_egreso'] = "{$est}-{$pto}-{$sec}";
-
-            $id = $this->service->registrar($data);
+            // El número lo asigna el SERVIDOR, no el navegador: el secuencial que llega en el POST
+            // lo calculó getSecuencialAjax() al abrir el modal y puede tener minutos de antigüedad
+            // (dos usuarios que abren el modal a la vez reciben el mismo). Se recalcula dentro de la
+            // transacción para que el pg_advisory_xact_lock lo proteja hasta el INSERT (CLAUDE.md §8).
+            $id = $this->registrarConSecuencialReservado($data);
 
             echo json_encode(['ok' => true, 'mensaje' => 'Egreso registrado satisfactoriamente.', 'id' => $id]);
         } catch (\Throwable $e) {
@@ -479,6 +477,64 @@ class EgresosController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Registra un egreso reservando su secuencial dentro de la MISMA transacción que lo inserta.
+     *
+     * El punto de emisión se valida contra la empresa activa y la serie de texto se toma de ESE
+     * punto, no de lo que mande el navegador: así nunca queda desalineada de la FK, que es por
+     * donde el generador cuenta los números ya usados.
+     *
+     * EgresoService::registrar() detecta la transacción abierta y no abre otra ni hace commit, de
+     * modo que el lock del secuencial sigue vigente hasta el COMMIT de aquí.
+     */
+    private function registrarConSecuencialReservado(array $data): int
+    {
+        $idEmpresa = (int) $data['id_empresa'];
+        $idPunto   = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            throw new \Exception('Debe seleccionar la serie (punto de emisión) del egreso.');
+        }
+
+        $db = \App\core\Database::getConnection();
+        $stPunto = $db->prepare(
+            "SELECT id, establecimiento, punto, id_establecimiento
+               FROM empresa_puntos_emision
+              WHERE id = ? AND id_empresa = ? AND eliminado = false"
+        );
+        $stPunto->execute([$idPunto, $idEmpresa]);
+        $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
+        if (!$punto) {
+            throw new \Exception('Punto de emisión no válido.');
+        }
+
+        $est    = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT);
+        $ptoNum = str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT);
+
+        $db->beginTransaction();
+        try {
+            $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+
+            $data['id_establecimiento'] = (int) ($punto['id_establecimiento'] ?? 0) ?: null;
+            $data['id_punto_emision']   = $idPunto;
+            $data['establecimiento']    = $est;
+            $data['punto_emision']      = $ptoNum;
+            $data['secuencial']         = $secRes['formateado'];
+            $data['numero_egreso']      = "{$est}-{$ptoNum}-{$secRes['formateado']}";
+
+            $id = $this->service->registrar($data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) { $db->rollBack(); }
+            throw $e;
+        }
+
+        // Asiento contable y sincronización de nómina van FUERA de la transacción (un fallo ahí no
+        // debe revertir el egreso, y dentro de la transacción abortaría el COMMIT). registrar() solo
+        // los ejecuta cuando él mismo abre la transacción, así que se piden aquí, ya comiteado.
+        $this->service->tareasPostCommit($id, $data);
+        return $id;
     }
 
     public function getAsientoContableAjax(): void

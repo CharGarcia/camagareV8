@@ -23,6 +23,13 @@
 --     incompleta, nunca pisan un valor existente.
 --   * Filas sin secuencial: sin número no hay documento que numerar. Se reportan (sección 8).
 --
+-- ⚠ EJECUTAR DESPUÉS 20260827_reparar_duplicados_ingresos_egresos.sql
+--   Mientras los migrados no tenían punto de emisión eran invisibles para el generador de
+--   secuenciales, así que el sistema volvió a repartir esos mismos números a documentos nuevos.
+--   Al darles serie aquí, esos números CHOCAN. El script de reparación resuelve cada choque
+--   dejando el número al MIGRADO y renumerando el documento nativo. Sin ese paso, el índice
+--   único de ingresos/egresos no se puede crear.
+--
 -- IDEMPOTENTE: se puede ejecutar varias veces; la segunda pasada no encuentra nada que hacer.
 --
 -- Contraparte en el código: MigracionMysqlService::serieDefecto() aplica esta misma regla

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso
-version: 1.4
+etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -117,6 +117,22 @@ tarjeta, no se puede anular desde aquí. Primero hay que **reversar el pago desd
 la factura, en la pestaña Pagos**; al hacerlo, el ingreso se anula solo. El
 sistema lo avisa con ese mensaje si lo intenta al revés.
 
+## El número del documento
+
+Cada documento lleva una **serie** (establecimiento y punto de emisión, por
+ejemplo `001-101`) y un **secuencial**, que juntos forman el Nº de documento:
+`001-101-000000123`.
+
+El número que se ve al abrir el formulario es solo una **vista previa**: el
+definitivo lo asigna el sistema en el momento de guardar, tomando el siguiente
+libre de esa serie. Por eso, si dos personas abren el formulario a la vez, el
+segundo en guardar recibe el número siguiente y no el mismo — el documento no
+se pierde ni se rechaza, simplemente sale con el número que le toca.
+
+Si se elimina un documento, su número queda libre y el sistema lo vuelve a
+ofrecer al siguiente que se cree en esa serie, para que la numeración no
+quede con saltos.
+
 ## Asiento contable
 
 Cada ingreso genera su asiento automáticamente según la configuración contable de
@@ -152,6 +168,11 @@ deseable; para el contador o el administrador, active el acceso total.
   cliente, que no está ya cobrada y que no fue anulada.
 
 ## Historial de cambios
+
+- **1.5** — Se documenta cómo se asigna el **número del documento**: la serie
+  y el secuencial definitivos los pone el sistema al guardar, no al abrir el
+  formulario, así que dos ingresos creados a la vez ya no pueden salir con el
+  mismo número.
 
 - **1.4** — La columna "Tipo" del listado muestra el tipo real del documento
   (Factura de Venta, Recibo de Venta, Factura de Reembolso) en vez de repetir

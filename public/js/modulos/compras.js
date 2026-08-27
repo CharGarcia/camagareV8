@@ -298,6 +298,13 @@ function CMG_poblarModal(d) {
     }
 
     // Información adicional (nombre/valor, viene como objeto desde ComprasService::getPorId)
+    // Valores recaudados por cuenta de terceros (bomberos, tasa de basura...). No se
+    // recalculan en el navegador: los detecta el backend al cargar el XML del SRI
+    // (App\Helpers\RubrosTerceros) y viajan en la cabecera, porque el dato original
+    // esta en la info adicional y su interpretacion no debe divergir entre capas.
+    const modalTerceros = document.getElementById('modalCompra');
+    if (modalTerceros) modalTerceros.dataset.totalTerceros = (parseFloat(d.total_terceros || 0) || 0).toFixed(2);
+
     const tbodyInfo = document.getElementById('mc-tbody-info-adicional');
     if (tbodyInfo) {
         tbodyInfo.innerHTML = '';
@@ -677,6 +684,12 @@ function CMG_resetModal() {
     if (document.getElementById('tbodyDetalle')) document.getElementById('tbodyDetalle').innerHTML = '';
     if (document.getElementById('mc-container-pagos-sri')) document.getElementById('mc-container-pagos-sri').innerHTML = '';
     if (document.getElementById('mc-tbody-info-adicional')) document.getElementById('mc-tbody-info-adicional').innerHTML = '';
+
+    // Sin esto, el bloque de valores de terceros de la compra anterior se arrastraria
+    // a la siguiente que se abra en el mismo modal.
+    const modalLimpio = document.getElementById('modalCompra');
+    if (modalLimpio) modalLimpio.dataset.totalTerceros = '0.00';
+    if (document.getElementById('mcBloqueTerceros')) document.getElementById('mcBloqueTerceros').classList.add('d-none');
 
     // Compra nueva = tipo_registro 'fisica' por defecto (ver arriba); su forma de
     // pago SRI se preselecciona en '20' (Otros con utilización del sistema
@@ -1546,6 +1559,20 @@ function CMG_recalcularTotales() {
     document.getElementById('mcLabelDescuento').textContent = totalDesc.toFixed(2);
     document.getElementById('mcContenedorIvasIva').innerHTML = htmlIvas;
     document.getElementById('mcLabelTotal').textContent = totalFinal.toFixed(2);
+
+    // Valores de terceros: se suman al TOTAL solo para mostrar el "TOTAL A PAGAR".
+    // El TOTAL de arriba sigue siendo el importe declarado al SRI y es el que se guarda.
+    const bloqueTerceros = document.getElementById('mcBloqueTerceros');
+    if (bloqueTerceros) {
+        const terceros = modalEl ? (parseFloat(modalEl.dataset.totalTerceros || 0) || 0) : 0;
+        if (terceros > 0) {
+            document.getElementById('mcLabelTerceros').textContent = terceros.toFixed(2);
+            document.getElementById('mcLabelTotalPagar').textContent = r2(totalFinal + terceros).toFixed(2);
+            bloqueTerceros.classList.remove('d-none');
+        } else {
+            bloqueTerceros.classList.add('d-none');
+        }
+    }
     
     // Sincronizar con el total de la pestaña de pagos si existe
     if (document.getElementById('totalComprobanteRef')) {

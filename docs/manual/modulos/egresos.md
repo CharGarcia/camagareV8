@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago
-version: 1.7
+etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado
+version: 1.8
 orden: 20
 estado: activo
 ---
@@ -195,6 +195,22 @@ Los ajustes que se guarden ahí **aplican a todos los cheques de ese banco**, si
 afectar a los de otros bancos. Ver también
 [Plantillas de Documentos](modulos/plantillas-pdf).
 
+## El número del documento
+
+Cada documento lleva una **serie** (establecimiento y punto de emisión, por
+ejemplo `001-101`) y un **secuencial**, que juntos forman el Nº de documento:
+`001-101-000000123`.
+
+El número que se ve al abrir el formulario es solo una **vista previa**: el
+definitivo lo asigna el sistema en el momento de guardar, tomando el siguiente
+libre de esa serie. Por eso, si dos personas abren el formulario a la vez, el
+segundo en guardar recibe el número siguiente y no el mismo — el documento no
+se pierde ni se rechaza, simplemente sale con el número que le toca.
+
+Si se elimina un documento, su número queda libre y el sistema lo vuelve a
+ofrecer al siguiente que se cree en esa serie, para que la numeración no
+quede con saltos.
+
 ## Asiento contable
 
 Cada egreso genera su asiento automáticamente según la configuración contable de
@@ -228,6 +244,11 @@ ve solo los que registró.
   proveedor, que no esté ya pagada y que la compra no fuera anulada.
 
 ## Historial de cambios
+
+- **1.8** — Se documenta cómo se asigna el **número del documento**: la serie
+  y el secuencial definitivos los pone el sistema al guardar, no al abrir el
+  formulario, así que dos egresos creados a la vez ya no pueden salir con el
+  mismo número.
 
 - **1.7** — La fila del pago con cheque ahora indica siempre su estado:
   "Cobrado el DD-MM-AAAA" (con la fecha real del banco) o "No cobrado". Además,

@@ -20,8 +20,12 @@ class CuentasPorPagarRepository extends BaseRepository
 
     /**
      * CTE que acumula lo pagado desde egresos_detalle hasta una fecha de corte opcional.
+     * $idEmpresa: filtra por empresa (multiempresa, §4) — sin esto el GROUP BY sumaba
+     * los pagos de TODAS las empresas del sistema en cada consulta del reporte (mismo
+     * problema encontrado y corregido en ReporteVentasRepository/CuentasPorCobrarRepository
+     * y afines). Se interpola directo (int validado por el tipo del parámetro).
      */
-    private function getCtePagado(?string $fechaHasta = null): string
+    private function getCtePagado(int $idEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND ec.fecha_emision <= :pagado_hasta" : '';
         return "
@@ -34,6 +38,7 @@ class CuentasPorPagarRepository extends BaseRepository
               AND ec.estado    != 'anulado'
               AND ec.eliminado  = false
               AND ed.eliminado  = false
+              AND ec.id_empresa = {$idEmpresa}
               {$filtroFecha}
             GROUP BY ed.tipo_documento, ed.id_referencia_documento
         ";
@@ -41,8 +46,11 @@ class CuentasPorPagarRepository extends BaseRepository
 
     /**
      * CTE que suma NC/ND de compras_cabecera hasta una fecha de corte opcional.
+     * $idEmpresa: mismo motivo que getCtePagado. El JOIN externo ya comparaba
+     * nn.id_empresa = c.id_empresa (no había bug de datos cruzados entre empresas),
+     * pero igual agregaba TODAS las NC/ND del sistema en cada consulta.
      */
-    private function getCteNcNd(?string $fechaHasta = null): string
+    private function getCteNcNd(int $idEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND nc.fecha_emision <= :nc_nd_hasta" : '';
         return "
@@ -54,6 +62,7 @@ class CuentasPorPagarRepository extends BaseRepository
             FROM compras_cabecera nc
             WHERE nc.tipo_comprobante IN ('04','05')
               AND nc.eliminado = false
+              AND nc.id_empresa = {$idEmpresa}
               {$filtroFecha}
             GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
         ";
@@ -61,8 +70,9 @@ class CuentasPorPagarRepository extends BaseRepository
 
     /**
      * CTE que suma retenciones autorizadas hasta una fecha de corte opcional.
+     * $idEmpresa: mismo motivo que getCtePagado.
      */
-    private function getCteRetenciones(?string $fechaHasta = null): string
+    private function getCteRetenciones(int $idEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :ret_hasta" : '';
         // Cubre dos vías de enlace: id_compra/id_liquidacion directo (flujo normal) y
@@ -75,6 +85,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE r.eliminado = false
                   AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
                   AND (r.id_compra IS NOT NULL OR r.id_liquidacion IS NOT NULL)
+                  AND r.id_empresa = {$idEmpresa}
                   {$filtroFecha}
 
                 UNION
@@ -90,6 +101,7 @@ class CuentasPorPagarRepository extends BaseRepository
                   AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
                   AND r.id_compra IS NULL AND r.id_liquidacion IS NULL
                   AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
+                  AND r.id_empresa = {$idEmpresa}
                   {$filtroFecha}
             ) tmp
             GROUP BY tmp.id_compra, tmp.id_liquidacion
@@ -185,9 +197,9 @@ class CuentasPorPagarRepository extends BaseRepository
 
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado($fh) . "),
-            nc_nd  AS (" . $this->getCteNcNd($fh) . "),
-            ret    AS (" . $this->getCteRetenciones($fh) . "),
+            pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($idEmpresa, $fh) . "),
+            ret    AS (" . $this->getCteRetenciones($idEmpresa, $fh) . "),
             docs   AS (
                 -- ── FACTURAS DE COMPRA ────────────────────────────────────
                 SELECT
@@ -200,12 +212,19 @@ class CuentasPorPagarRepository extends BaseRepository
                     COALESCE(p.telefono,'')                                       AS proveedor_telefono,
                     CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) AS numero_documento,
                     c.fecha_emision,
-                    c.importe_total                                               AS total,
+                    -- El total del documento incluye los valores de terceros (bomberos, tasa
+                    -- de basura de las planillas de servicios básicos): es lo que se paga.
+                    -- importe_total, sin ellos, sigue siendo el valor declarado al SRI.
+                    c.importe_total + COALESCE(c.total_terceros, 0)                AS total,
                     COALESCE(pg.total_pagado, 0)                                  AS total_pagado,
                     COALESCE(nn.total_nc, 0)                                      AS total_nc,
                     COALESCE(nn.total_nd, 0)                                      AS total_nd,
                     COALESCE(ret.total_retenido, 0)                               AS total_retenido,
+                    -- Valores recaudados por cuenta de terceros (planillas de luz/agua:
+                    -- bomberos, tasa de basura). No son parte del importe declarado al SRI
+                    -- pero sí se transfieren al proveedor, así que suman al saldo por pagar.
                     c.importe_total
+                        + COALESCE(c.total_terceros,  0)
                         - COALESCE(pg.total_pagado,   0)
                         - COALESCE(ret.total_retenido,0)
                         - COALESCE(nn.total_nc,       0)
@@ -327,14 +346,17 @@ class CuentasPorPagarRepository extends BaseRepository
 
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado($fh) . "),
-            nc_nd  AS (" . $this->getCteNcNd($fh) . "),
-            ret    AS (" . $this->getCteRetenciones($fh) . "),
+            pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($idEmpresa, $fh) . "),
+            ret    AS (" . $this->getCteRetenciones($idEmpresa, $fh) . "),
             docs   AS (
                 SELECT c.id_proveedor,
                        'COMPRA'::text                                              AS tipo_fuente,
                        c.fecha_emision,
+                       -- + total_terceros: los rubros de terceros de las planillas de
+                       -- servicios básicos se pagan junto con la factura (ver listado).
                        c.importe_total
+                           + COALESCE(c.total_terceros,  0)
                            - COALESCE(pg.total_pagado,   0)
                            - COALESCE(ret.total_retenido,0)
                            - COALESCE(nn.total_nc,       0)
@@ -468,14 +490,17 @@ class CuentasPorPagarRepository extends BaseRepository
 
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado($fh) . "),
-            nc_nd  AS (" . $this->getCteNcNd($fh) . "),
-            ret    AS (" . $this->getCteRetenciones($fh) . "),
+            pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($idEmpresa, $fh) . "),
+            ret    AS (" . $this->getCteRetenciones($idEmpresa, $fh) . "),
             docs   AS (
                 SELECT c.id_proveedor,
                        'COMPRA'::text                                              AS tipo_fuente,
                        c.fecha_emision,
+                       -- + total_terceros: los rubros de terceros de las planillas de
+                       -- servicios básicos se pagan junto con la factura (ver listado).
                        c.importe_total
+                           + COALESCE(c.total_terceros,  0)
                            - COALESCE(pg.total_pagado,   0)
                            - COALESCE(ret.total_retenido,0)
                            - COALESCE(nn.total_nc,       0)

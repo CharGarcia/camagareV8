@@ -19,7 +19,14 @@ class CuentasPorCobrarRepository extends BaseRepository
      * Si $fechaHasta es null, incluye todos los cobros (comportamiento en tiempo real).
      * $tipoDoc: 'FACTURA' (facturas de venta) o 'RECIBO' (recibos de venta).
      */
-    private function getCteCobrado(?string $fechaHasta = null, string $tipoDoc = 'FACTURA'): string
+    /**
+     * $idEmpresa: filtra por empresa (multiempresa, §4) — sin esto el GROUP BY sumaba
+     * los cobros de TODAS las empresas del sistema en cada consulta del reporte (mismo
+     * problema encontrado y corregido en ReporteVentasRepository y afines). Se
+     * interpola directo igual que getCteNC/getCteND en este mismo archivo (int
+     * validado por el tipo del parámetro → interpolación segura).
+     */
+    private function getCteCobrado(int $idEmpresa, ?string $fechaHasta = null, string $tipoDoc = 'FACTURA'): string
     {
         $filtroFecha = $fechaHasta ? "AND ic2.fecha_emision <= :cobrado_hasta" : '';
         $tipoDoc     = $tipoDoc === 'RECIBO' ? 'RECIBO' : 'FACTURA'; // literal seguro
@@ -32,6 +39,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             WHERE id2.tipo_documento = '{$tipoDoc}'
               AND ic2.estado    != 'anulado'
               AND ic2.eliminado  = false
+              AND ic2.id_empresa = {$idEmpresa}
               {$filtroFecha}
             GROUP BY id2.id_referencia_documento
         ";
@@ -40,8 +48,10 @@ class CuentasPorCobrarRepository extends BaseRepository
     /**
      * CTE que calcula lo retenido por factura hasta una fecha de corte opcional.
      * Cubre dos vías de enlace: id_venta directo y num_doc_sustento en el detalle.
+     * $idEmpresa: mismo motivo que getCteCobrado — sin filtrar, sumaba retenciones
+     * de todas las empresas.
      */
-    private function getCteRetenido(?string $fechaHasta = null): string
+    private function getCteRetenido(int $idEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :retenido_hasta" : '';
         return "
@@ -52,6 +62,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                        r.id AS id_ret
                 FROM retencion_venta_cabecera r
                 WHERE r.eliminado = false AND r.id_venta IS NOT NULL
+                  AND r.id_empresa = {$idEmpresa}
                 {$filtroFecha}
 
                 UNION
@@ -66,6 +77,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                     AND vc.id_empresa = r.id_empresa
                     AND vc.eliminado  = false
                 WHERE r.eliminado = false
+                  AND r.id_empresa = {$idEmpresa}
                 {$filtroFecha}
             ) tmp
             GROUP BY tmp.id_venta
@@ -142,8 +154,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
-                 retenido AS (" . $this->getCteRetenido($fh) . "),
+            WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa, $fh) . "),
+                 retenido AS (" . $this->getCteRetenido($idEmpresa, $fh) . "),
                  nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
                  nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
             SELECT
@@ -204,8 +216,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
             $sql = "
-                WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
-                     retenido AS (" . $this->getCteRetenido($fh) . "),
+                WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa, $fh) . "),
+                     retenido AS (" . $this->getCteRetenido($idEmpresa, $fh) . "),
                      nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
                      nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
                 SELECT
@@ -342,8 +354,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
             $sql = "
-                WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
-                     retenido AS (" . $this->getCteRetenido($fh) . "),
+                WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa, $fh) . "),
+                     retenido AS (" . $this->getCteRetenido($idEmpresa, $fh) . "),
                      nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
                      nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
                 SELECT
@@ -539,7 +551,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         if ($fh) $params[':cobrado_hasta'] = $fh;
 
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado($fh, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, $fh, 'RECIBO') . ")
             SELECT
                 v.id,
                 v.fecha_emision,
@@ -580,7 +592,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         if ($fh) $params[':cobrado_hasta'] = $fh;
 
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado($fh, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, $fh, 'RECIBO') . ")
             SELECT
                 COUNT(v.id) AS cnt,
                 COALESCE(SUM(v.importe_total - COALESCE(cb.total_cobrado, 0)), 0) AS total_saldo,
@@ -622,7 +634,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         if ($fh) $params[':cobrado_hasta'] = $fh;
 
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado($fh, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, $fh, 'RECIBO') . ")
             SELECT
                 COALESCE(SUM(CASE WHEN dias_vencido <= 0              THEN saldo ELSE 0 END), 0) AS tramo_vigente,
                 COALESCE(SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30  THEN saldo ELSE 0 END), 0) AS tramo_1_30,
@@ -660,7 +672,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function getReciboParaCobro(int $idRecibo, int $idEmpresa): ?array
     {
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado(null, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, null, 'RECIBO') . ")
             SELECT
                 v.*,
                 c.nombre         AS cliente_nombre,
@@ -759,8 +771,8 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function getFacturaParaCobro(int $idVenta, int $idEmpresa): ?array
     {
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado() . "),
-                 retenido AS (" . $this->getCteRetenido() . "),
+            WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa) . "),
+                 retenido AS (" . $this->getCteRetenido($idEmpresa) . "),
                  nc_aplic AS (" . $this->getCteNC($idEmpresa) . "),
                  nd_aplic AS (" . $this->getCteND($idEmpresa) . ")
             SELECT
@@ -962,8 +974,8 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function getFacturasPendientesParaEnvio(int $idEmpresa, bool $soloVencidas, int $diasMin): array
     {
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado() . "),
-                 retenido AS (" . $this->getCteRetenido() . "),
+            WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa) . "),
+                 retenido AS (" . $this->getCteRetenido($idEmpresa) . "),
                  nc_aplic AS (" . $this->getCteNC($idEmpresa) . "),
                  nd_aplic AS (" . $this->getCteND($idEmpresa) . ")
             SELECT

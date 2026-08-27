@@ -1279,6 +1279,18 @@ class ComprasService
                 ]);
             }
         }
+
+        // Valores recaudados por cuenta de terceros (planillas de luz/agua: contribución
+        // bomberos, tasa de basura). Viven en la info adicional porque el SRI no tiene un
+        // nodo propio para ellos, y quedan FUERA de importe_total —que es el valor
+        // declarado— pero dentro de lo que se paga, así que se totalizan aparte.
+        // Se recalcula siempre, también cuando la lista llega vacía: al editar una compra
+        // primero se borran todos los adicionales, y sin este recálculo el total anterior
+        // sobreviviría a la eliminación del rubro que lo originó.
+        $this->repository->updateTotalTerceros(
+            $idCompra,
+            \App\Helpers\RubrosTerceros::total($adicionales)
+        );
     }
 
     private function calcularTotales(array $data): array

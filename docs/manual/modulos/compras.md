@@ -132,6 +132,37 @@ módulo y quedan vinculadas al documento que modifican. En Cuentas por Pagar no
 aparecen como documentos sueltos: se restan del saldo de la factura a la que
 corresponden.
 
+## Planillas de luz y agua: valores de terceros
+
+Las facturas de servicios básicos cobran, además de su propio importe, rubros que
+la empresa recauda **para terceros**: contribución al Cuerpo de Bomberos, tasa de
+recolección de basura y similares. Esos valores **no forman parte del importe de
+la factura** que se declara al SRI ni de las bases de IVA — el emisor los publica
+como campos sueltos de la información adicional del comprobante.
+
+Al cargar una de estas facturas desde **Descargas SRI**, el sistema los reconoce
+solo y los totaliza aparte. En la compra se ven así:
+
+| Línea | Ejemplo |
+|---|---|
+| TOTAL | 66.59 — el importe de la factura, el que se declara |
+| (+) Valores de terceros | 2.41 — bomberos y tasa de basura |
+| **TOTAL A PAGAR** | **69.00** — lo que se transfiere al proveedor |
+
+Ese **total a pagar** es el que usan **Cuentas por Pagar** y el registro de
+**egresos**, así que la planilla se salda por su valor real y no queda un
+descuadre de centavos cada mes. El **subtotal, el IVA y el total** que se
+declaran al SRI (y que alimentan el ATS y la declaración de IVA) no cambian: los
+valores de terceros nunca se suman ahí.
+
+El detalle de cada rubro queda en la pestaña **Info Adicional** de la compra, tal
+como lo envió el proveedor, y se imprime en el PDF.
+
+El reconocimiento es automático y no depende de la distribuidora: se detectan los
+campos cuyo nombre menciona *bomberos*, *basura*, *recolección* o *terceros* y
+cuyo valor es un número. En una compra registrada a mano se consigue lo mismo
+agregando el rubro en la pestaña Info Adicional con uno de esos nombres.
+
 ## Documentos del módulo
 
 Desde la compra guardada se puede generar el **PDF** del documento, exportarlo a
@@ -213,6 +244,12 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.0** — Las facturas de **servicios básicos** (luz, agua) que descargan del
+  SRI ahora reconocen los **valores recaudados para terceros** (contribución
+  bomberos, tasa de recolección de basura) que viajan en la información
+  adicional del comprobante. Se totalizan aparte del importe declarado y se
+  suman al saldo por pagar y al egreso, de modo que la planilla se cancele por
+  su valor real. Nueva sección *Planillas de luz y agua: valores de terceros*.
 - **1.9** — El modal ya no arrastra datos de la compra abierta anteriormente:
   al registrar una compra nueva (o al abrir otra) se limpian el **asiento
   contable**, el aviso y los botones de **aprobación** (pendiente / rechazada)

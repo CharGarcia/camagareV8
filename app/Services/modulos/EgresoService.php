@@ -258,14 +258,13 @@ class EgresoService
             throw $e;
         }
 
-        // Asiento contable fuera de la transacción: un fallo aquí no revierte el egreso.
+        // Asiento y sincronización de nómina van FUERA de la transacción: un fallo aquí no debe
+        // revertir el egreso — y, si la transacción la abrió el llamador, un error SQL en estas
+        // tareas dejaría su transacción abortada y su COMMIT fallaría (Postgres, 25P02). Cuando el
+        // llamador gestiona la transacción, las ejecuta él con tareasPostCommit().
         if (!$inTrans) {
-            $this->generarAsientoContableSeguro($idEgreso, $data);
+            $this->tareasPostCommit($idEgreso, $data);
         }
-
-        // Si este egreso paga semanas/quincenas, re-generar el rol MENSUAL del período
-        // para que aplique el neteo por lo realmente pagado.
-        $this->sincronizarNominaMensual($idEgreso, (int) $data['id_empresa'], (int) $data['usuario_id']);
 
         return $idEgreso;
     }
@@ -630,6 +629,21 @@ class EgresoService
         }
         $detalle = $asientoService->getDetalleAsiento((int) $previo['id'], $idEmpresa);
         return $detalle ?: null;
+    }
+
+    /**
+     * Tareas que van DESPUÉS de que el egreso está confirmado en la base: asiento contable y
+     * sincronización del rol mensual (si el egreso paga semanas/quincenas). Ninguna debe correr
+     * dentro de la transacción que insertó el egreso.
+     *
+     * registrar() las ejecuta solo cuando él mismo gestiona la transacción. Si la abrió el
+     * llamador —el alta que reserva el secuencial antes de insertar (CLAUDE.md §8)—, es ese
+     * llamador quien debe invocar este método justo después de su COMMIT.
+     */
+    public function tareasPostCommit(int $idEgreso, array $data): void
+    {
+        $this->generarAsientoContableSeguro($idEgreso, $data);
+        $this->sincronizarNominaMensual($idEgreso, (int) $data['id_empresa'], (int) $data['usuario_id']);
     }
 
     /** Genera el asiento sin propagar errores (lo contable no bloquea lo operativo). */

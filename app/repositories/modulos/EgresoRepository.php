@@ -471,9 +471,12 @@ class EgresoRepository extends BaseRepository
                 SELECT 'COMPRA' as tipo_doc_bd, c.id,
                        CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) AS numero_documento,
                        c.fecha_emision,
-                       c.importe_total AS monto_total,
+                       -- + total_terceros: rubros que la planilla de luz/agua recauda para
+                       -- terceros (bomberos, tasa de basura). Fuera del importe declarado al
+                       -- SRI, pero dentro de lo que se le transfiere al proveedor.
+                       (c.importe_total + COALESCE(c.total_terceros, 0)) AS monto_total,
                        COALESCE(p.total_pagado, 0) AS monto_pagado_previo,
-                       (c.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
+                       (c.importe_total + COALESCE(c.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
                        0 AS dias_credito
                 FROM compras_cabecera c
                 LEFT JOIN pagado p ON c.id = p.id_referencia_documento AND p.tipo_documento = 'COMPRA'
@@ -485,7 +488,7 @@ class EgresoRepository extends BaseRepository
                   AND c.eliminado = FALSE
                   AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04','05')
                   AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND (c.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
+                  AND (c.importe_total + COALESCE(c.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                 UNION ALL
                 SELECT 'LIQUIDACION' as tipo_doc_bd, l.id,
                        CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial) AS numero_documento,
@@ -694,10 +697,10 @@ class EgresoRepository extends BaseRepository
                            CONCAT(cb.establecimiento_prov,'-',cb.punto_emision_prov,'-',cb.secuencial_prov) AS numero_documento,
                            cb.fecha_emision,
                            0 AS dias_credito,
-                           cb.importe_total AS monto_total,
+                           (cb.importe_total + COALESCE(cb.total_terceros, 0)) AS monto_total,
                            COALESCE(p.total_pagado, 0) AS monto_cobrado,
                            COALESCE(rcp.total_retenido, 0) AS monto_retenido,
-                           (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
+                           (cb.importe_total + COALESCE(cb.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
                            prov.id             AS proveedor_id,
                            prov.razon_social   AS proveedor_nombre,
                            prov.identificacion AS proveedor_ruc
@@ -712,7 +715,7 @@ class EgresoRepository extends BaseRepository
                       AND cb.eliminado = FALSE
                       AND COALESCE(cb.tipo_comprobante, '01') NOT IN ('04','05')
                       AND cb.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
+                      AND (cb.importe_total + COALESCE(cb.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                       $filtroBusq
                     ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
                     LIMIT 301";

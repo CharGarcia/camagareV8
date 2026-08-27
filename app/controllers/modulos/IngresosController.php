@@ -482,16 +482,22 @@ class IngresosController extends BaseModuloController
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
             
-            $est = str_pad((string)($data['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
-            $punto = str_pad((string)($data['punto_emision'] ?? '001'), 3, '0', STR_PAD_LEFT);
-            $sec = str_pad((string)($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
-            $data['numero_ingreso'] = "{$est}-{$punto}-{$sec}";
-
             if ($id > 0) {
+                // Edición: conserva el número que ya tiene el documento.
+                $est   = str_pad((string)($data['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
+                $punto = str_pad((string)($data['punto_emision'] ?? '001'), 3, '0', STR_PAD_LEFT);
+                $sec   = str_pad((string)($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+                $data['numero_ingreso'] = "{$est}-{$punto}-{$sec}";
                 $this->service->actualizar($id, $data);
                 echo json_encode(['ok' => true, 'mensaje' => 'Ingreso actualizado correctamente.', 'id' => $id]);
             } else {
-                $newId = $this->service->crear($data);
+                // Alta: el número lo asigna el SERVIDOR, no el navegador. El secuencial que llega en
+                // el POST lo calculó getSecuencialAjax() al abrir el modal y puede tener minutos de
+                // antigüedad: dos usuarios que abren el modal a la vez reciben el mismo número y
+                // ambos lo guardan. Se recalcula aquí dentro de la transacción, para que el
+                // pg_advisory_xact_lock de obtenerSiguienteSecuencial() lo proteja hasta el INSERT
+                // (CLAUDE.md §8: abrir la transacción ANTES de calcular y mantenerla hasta escribir).
+                $newId = $this->crearConSecuencialReservado($data);
                 echo json_encode(['ok' => true, 'mensaje' => 'Ingreso registrado correctamente.', 'id' => $newId]);
             }
         } catch (\Throwable $e) {
@@ -499,6 +505,64 @@ class IngresosController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Crea un ingreso reservando su secuencial dentro de la MISMA transacción que lo inserta.
+     *
+     * El punto de emisión se valida contra la empresa activa y el establecimiento/punto de la
+     * serie se toman de ESE punto, no de lo que mande el navegador: así la serie de texto nunca
+     * queda desalineada de la FK, que es por donde el generador cuenta los números usados.
+     *
+     * IngresoService::crear() detecta la transacción abierta y no abre otra ni hace commit,
+     * de modo que el lock del secuencial sigue vigente hasta el COMMIT de aquí.
+     */
+    private function crearConSecuencialReservado(array $data): int
+    {
+        $idEmpresa = (int) $data['id_empresa'];
+        $idPunto   = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            throw new \Exception('Debe seleccionar la serie (punto de emisión) del ingreso.');
+        }
+
+        $db = \App\core\Database::getConnection();
+        $stPunto = $db->prepare(
+            "SELECT id, establecimiento, punto, id_establecimiento
+               FROM empresa_puntos_emision
+              WHERE id = ? AND id_empresa = ? AND eliminado = false"
+        );
+        $stPunto->execute([$idPunto, $idEmpresa]);
+        $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
+        if (!$punto) {
+            throw new \Exception('Punto de emisión no válido.');
+        }
+
+        $est   = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT);
+        $ptoNum = str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT);
+
+        $db->beginTransaction();
+        try {
+            $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
+
+            $data['id_establecimiento'] = (int) ($punto['id_establecimiento'] ?? 0) ?: null;
+            $data['id_punto_emision']   = $idPunto;
+            $data['establecimiento']    = $est;
+            $data['punto_emision']      = $ptoNum;
+            $data['secuencial']         = $secRes['formateado'];
+            $data['numero_ingreso']     = "{$est}-{$ptoNum}-{$secRes['formateado']}";
+
+            $newId = $this->service->crear($data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) { $db->rollBack(); }
+            throw $e;
+        }
+
+        // Asiento contable y recálculo de saldos van FUERA de la transacción (un fallo ahí no
+        // debe revertir el ingreso, y dentro de la transacción abortaría el COMMIT). crear() solo
+        // los ejecuta cuando él mismo abre la transacción, así que se piden aquí, ya comiteado.
+        $this->service->tareasPostCommit($newId, $data);
+        return $newId;
     }
 
     public function getAsientoContableAjax(): void
@@ -761,6 +825,9 @@ class IngresosController extends BaseModuloController
 
             $idIngreso = $this->service->crear($payload);
             $db->commit();
+            // Igual que en el alta normal: crear() no ejecuta las tareas posteriores cuando la
+            // transacción la abre el llamador, así que se piden aquí, ya con el COMMIT hecho.
+            $this->service->tareasPostCommit($idIngreso, $payload);
             echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
             if (isset($db) && $db->inTransaction()) $db->rollBack();

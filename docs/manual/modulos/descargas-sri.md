@@ -71,6 +71,11 @@ personal del usuario, así que sigue funcionando igual.
 
 ## Historial de cambios
 
+- **1.3** — Las facturas de **servicios básicos** (luz, agua) cargadas desde el
+  SRI reconocen los **valores de terceros** (contribución bomberos, tasa de
+  recolección de basura) que el emisor declara en la información adicional. Se
+  totalizan aparte del importe de la factura y se suman al saldo por pagar. Ver
+  *Compras → Planillas de luz y agua: valores de terceros*.
 - **1.2** — El registro automático de retenciones ya no falla cuando el XML del
   SRI omite el código del documento de sustento (dato opcional en la versión
   1.0.0 del comprobante): se asume el del propio comprobante o **01 – Factura**.

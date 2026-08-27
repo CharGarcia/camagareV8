@@ -131,13 +131,13 @@ class IngresoService
             throw $e;
         }
 
-        // Asiento contable fuera de la transacción: un fallo aquí no revierte el ingreso.
+        // Asiento y recálculos van FUERA de la transacción: un fallo aquí no debe revertir el
+        // ingreso — y, si la transacción la abrió el llamador, un error SQL en estas tareas
+        // dejaría su transacción abortada y su COMMIT fallaría (Postgres, 25P02). Cuando el
+        // llamador gestiona la transacción, las ejecuta él con tareasPostCommit().
         if ($managedTransaction) {
-            $this->generarAsientoContableSeguro($idIngreso, $data);
+            $this->tareasPostCommit($idIngreso, $data);
         }
-
-        // Recalcular saldos iniciales CXC cobrados (no debe bloquear el ingreso)
-        $this->recalcularSaldosInicialesCxc($this->saldoIdsDesdeDetalles($data), (int) $data['id_empresa']);
 
         return $idIngreso;
     }
@@ -524,6 +524,22 @@ class IngresoService
             }
         }
         unset($d);
+    }
+
+    /**
+     * Tareas que van DESPUÉS de que el ingreso está confirmado en la base: asiento contable y
+     * recálculo de saldos iniciales CXC. Ninguna debe correr dentro de la transacción que
+     * insertó el ingreso.
+     *
+     * crear() las ejecuta solo cuando él mismo gestiona la transacción. Si la abrió el llamador
+     * —los flujos que reservan el secuencial antes de insertar (CLAUDE.md §8): el alta normal y
+     * el cobro rápido desde factura—, es ese llamador quien debe invocar este método justo
+     * después de su COMMIT.
+     */
+    public function tareasPostCommit(int $idIngreso, array $data): void
+    {
+        $this->generarAsientoContableSeguro($idIngreso, $data);
+        $this->recalcularSaldosInicialesCxc($this->saldoIdsDesdeDetalles($data), (int) $data['id_empresa']);
     }
 
     /** Genera el asiento sin propagar errores (lo contable no bloquea lo operativo). */

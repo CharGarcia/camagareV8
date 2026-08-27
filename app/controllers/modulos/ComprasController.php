@@ -227,7 +227,12 @@ class ComprasController extends BaseModuloController
                 $pagado       = (float)($r['total_pagado'] ?? 0);
                 $nc           = (float)($r['total_nc'] ?? 0);
                 $retencion    = (float)($r['total_retencion'] ?? 0);
-                $saldo        = max(0, $importeTotal - $pagado - $nc - $retencion);
+                // Los valores de terceros (bomberos, tasa de basura de las planillas de
+                // servicios básicos) no están en importe_total —que es el importe declarado
+                // al SRI y el que muestra la columna Total— pero sí se pagan: sin sumarlos
+                // aquí, una planilla pagada por completo quedaría con saldo negativo.
+                $terceros     = (float)($r['total_terceros'] ?? 0);
+                $saldo        = max(0, $importeTotal + $terceros - $pagado - $nc - $retencion);
 
                 if ((string)($r['tipo_comprobante'] ?? '') === '04') {
                     // Las notas de crédito de compra son un crédito a favor: no se pagan → Pagada.
@@ -291,7 +296,9 @@ class ComprasController extends BaseModuloController
         $pagado       = (float)($r['total_pagado'] ?? 0);
         $nc           = (float)($r['total_nc'] ?? 0);
         $retencion    = (float)($r['total_retencion'] ?? 0);
-        $saldo        = max(0, $importeTotal - $pagado - $nc - $retencion);
+        // + total_terceros: ver la nota del listado (fila de la tabla).
+        $terceros     = (float)($r['total_terceros'] ?? 0);
+        $saldo        = max(0, $importeTotal + $terceros - $pagado - $nc - $retencion);
 
         if ((string)($r['tipo_comprobante'] ?? '') === '04') {
             return 'Pagada';
@@ -336,7 +343,9 @@ class ComprasController extends BaseModuloController
             $pagado       = (float)($r['total_pagado'] ?? 0);
             $nc           = (float)($r['total_nc'] ?? 0);
             $retencion    = (float)($r['total_retencion'] ?? 0);
-            $saldo        = ((string)($r['tipo_comprobante'] ?? '') === '04') ? 0 : max(0, $importeTotal - $pagado - $nc - $retencion);
+            // + total_terceros: ver la nota del listado (fila de la tabla).
+            $terceros     = (float)($r['total_terceros'] ?? 0);
+            $saldo        = ((string)($r['tipo_comprobante'] ?? '') === '04') ? 0 : max(0, $importeTotal + $terceros - $pagado - $nc - $retencion);
 
             $exportData[] = [
                 (string)$numero,

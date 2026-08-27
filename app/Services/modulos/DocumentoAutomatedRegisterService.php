@@ -20,6 +20,7 @@ use App\Services\modulos\RetencionCompraService;
 use App\Services\modulos\RetencionVentaService;
 use App\Rules\modulos\RetencionCompraRules;
 use App\Services\LogSistemaService;
+use App\Helpers\RubrosTerceros;
 use App\core\Database;
 use Exception;
 use SimpleXMLElement;
@@ -659,13 +660,30 @@ class DocumentoAutomatedRegisterService
             ]);
 
             // 1.5 Información Adicional
+            $camposAdicionales = [];
             if (isset($xml->infoAdicional->campoAdicional)) {
                 foreach ($xml->infoAdicional->campoAdicional as $ad) {
+                    $nombreAd = (string)$ad['nombre'];
+                    $valorAd  = (string)$ad;
+                    $camposAdicionales[] = ['nombre' => $nombreAd, 'valor' => $valorAd];
                     $this->compraRepo->insertInfoAdicional([
                         'id_compra' => $idCompra,
-                        'nombre' => (string)$ad['nombre'],
-                        'valor' => (string)$ad
+                        'nombre' => $nombreAd,
+                        'valor' => $valorAd
                     ]);
+                }
+            }
+
+            // 1.6 Valores recaudados por cuenta de terceros (planillas de luz/agua:
+            // contribución bomberos, tasa de basura…). Van en <infoAdicional> porque el
+            // SRI no tiene nodo para ellos y NO están dentro del importeTotal, pero sí se
+            // pagan junto con la factura. Se guardan aparte para que el saldo por pagar
+            // refleje lo que se transfiere de verdad, sin alterar importe_total (que es
+            // el valor declarado al SRI y la base del ATS y de la declaración de IVA).
+            if ($camposAdicionales !== []) {
+                $terceros = RubrosTerceros::total($camposAdicionales);
+                if ($terceros > 0) {
+                    $this->compraRepo->updateTotalTerceros($idCompra, $terceros);
                 }
             }
 

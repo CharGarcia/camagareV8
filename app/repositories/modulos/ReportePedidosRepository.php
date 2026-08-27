@@ -126,13 +126,21 @@ class ReportePedidosRepository
         ], $rows);
     }
 
-    /** Cantidad total pedida (suma del detalle, líneas no eliminadas) por pedido, como subconsulta. */
+    /**
+     * Cantidad total pedida (suma del detalle, líneas no eliminadas) por pedido, como subconsulta.
+     * Se une contra la cabecera y se filtra por id_empresa: sin este JOIN, el GROUP BY agregaba
+     * el detalle de TODOS los pedidos del sistema (todas las empresas) en cada consulta del
+     * reporte — el costo crecía con el tamaño de la BD completa, no con los datos de la empresa
+     * activa (mismo problema encontrado y corregido en ReporteVentasRepository/ReporteComprasRepository).
+     * Requiere que el llamador incluya :id_empresa en sus params (ya lo hace vía buildWhereYParams).
+     */
     private function cteCantidad(): string
     {
-        return "SELECT id_pedido, SUM(cantidad) AS cantidad_total
-                FROM pedidos_detalle
-                WHERE eliminado = false
-                GROUP BY id_pedido";
+        return "SELECT pd.id_pedido, SUM(pd.cantidad) AS cantidad_total
+                FROM pedidos_detalle pd
+                JOIN pedidos_cabecera pcte ON pcte.id = pd.id_pedido AND pcte.id_empresa = :id_empresa
+                WHERE pd.eliminado = false
+                GROUP BY pd.id_pedido";
     }
 
     public function getReporteDetallado(int $idEmpresa, array $filtros, ?int $idUsuarioFiltro = null): array
