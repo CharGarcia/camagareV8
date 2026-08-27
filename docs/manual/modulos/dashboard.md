@@ -5,8 +5,8 @@ categoria: Primeros pasos
 ruta_modulo: modulos/dashboard
 tipo: modulo
 visibilidad: todos
-etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home
-version: 1.0
+etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos
+version: 1.1
 orden: 2
 estado: activo
 ---
@@ -29,6 +29,39 @@ tableros distintos, y es correcto.
 Si además no tiene el permiso de *acceso total*, los indicadores reflejan solo
 sus propios registros.
 
+## Ordenar las tarjetas a su gusto
+
+Las tarjetas del tablero se pueden **mover de lugar**, y cada usuario guarda su
+propio orden: lo que usted acomode no le cambia el tablero a nadie más.
+
+Cómo se hace:
+
+1. Pase el cursor sobre la tarjeta que quiere mover. En su **esquina superior
+   izquierda** aparece un pequeño agarre (⣿).
+2. Mantenga presionado ese agarre y arrastre la tarjeta hasta la posición donde
+   la quiere. Las demás se van corriendo para dejarle el espacio.
+3. Suelte. El orden se guarda solo, en su usuario, y así lo encontrará la
+   próxima vez que entre — desde cualquier equipo o navegador.
+
+Hay **dos grupos independientes**: la fila de indicadores de arriba (Ventas,
+Compras, Nómina, Utilidad, Margen, Ingresos, Egresos, CxC y CxP) y los paneles
+de abajo (saldos, gráficos y tablas). Una tarjeta se mueve dentro de su grupo;
+un indicador no baja a la zona de paneles ni al revés.
+
+Para volver todo como venía de fábrica, use el enlace **Restablecer orden**, que
+está en el texto pequeño debajo del título.
+
+> Los paneles conservan su ancho al moverlos (unos ocupan dos tercios de la
+> pantalla y otros un tercio). Si el orden que arma no completa el ancho de una
+> fila, quedará un espacio en blanco a la derecha: es normal, basta acomodar los
+> paneles en otro orden.
+
+## Los filtros quedan siempre a la vista
+
+La barra de filtros (período, rango de fechas, tendencia y tipo de gráfico) se
+queda **fija bajo el menú** mientras usted baja por el tablero, de modo que
+puede cambiar el período sin volver arriba.
+
 ## Si el tablero sale vacío
 
 Suele ser una de tres cosas:
@@ -46,4 +79,6 @@ Suele ser una de tres cosas:
 
 ## Historial de cambios
 
+- **1.1** — Las tarjetas e indicadores se pueden arrastrar para reubicarlas y el
+  orden se guarda por usuario; la barra de filtros quedó fija bajo el menú.
 - **1.0** — Versión inicial.

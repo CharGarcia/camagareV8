@@ -34,6 +34,31 @@ $mesActual  = (int) date('n');
 @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .text-tr { color:transparent!important; }
 .db-filters { background:#fff;border-radius:10px;padding:.75rem 1.25rem;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.05); }
+
+/* ── Filtros fijos (pegados bajo el navbar al hacer scroll) ── */
+.db-filters { position:sticky; top:var(--cmg-sticky-h,80px); z-index:30; }
+
+/* ── Tarjetas reubicables (drag & drop) ── */
+.db-item { position:relative; }
+.db-drag-handle {
+    position:absolute; top:-7px; left:-7px; z-index:12;
+    width:22px; height:22px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:#fff; color:#6b7280; border:1px solid #e5e7eb;
+    box-shadow:0 1px 4px rgba(0,0,0,.12);
+    font-size:.72rem; cursor:grab; touch-action:none;
+    opacity:0; transition:opacity .15s;
+}
+.db-item:hover > .db-drag-handle,
+.db-drag-handle:focus { opacity:1; }
+.db-drag-handle:active { cursor:grabbing; }
+.db-item.db-dragging { opacity:.45; }
+.db-item.db-dragging > .db-metric-card,
+.db-item.db-dragging > .db-panel { outline:2px dashed #3b82f6; outline-offset:2px; }
+.db-zone.db-zone-active .db-item:not(.db-dragging) > .db-metric-card,
+.db-zone.db-zone-active .db-item:not(.db-dragging) > .db-panel { transition:transform .12s; }
+/* La fila de métricas conserva 5 por línea en pantallas grandes */
+@media (min-width:1200px){ .db-zone-metricas > .db-item { flex:0 0 20%; max-width:20%; } }
 </style>
 
 <div class="pb-4">
@@ -45,6 +70,11 @@ $mesActual  = (int) date('n');
             <span id="badgeAmbiente" class="badge rounded-pill align-middle ms-2 d-none" style="font-size:.6em;"></span>
         </h4>
         <p id="lblPeriodo" class="text-muted small mb-0">Cargando...</p>
+        <p class="text-muted mb-0" style="font-size:.72rem">
+            <i class="bi bi-arrows-move me-1"></i>Pasa el cursor sobre una tarjeta y arrástrala desde el
+            <i class="bi bi-grip-vertical"></i> de su esquina superior izquierda para reubicarla. El orden se guarda para tu usuario.
+            <a href="#" class="ms-1" onclick="restablecerOrden();return false;">Restablecer orden</a>
+        </p>
     </div>
     <button class="btn btn-sm btn-primary" onclick="applyFilters()">
         <i class="bi bi-arrow-clockwise me-1"></i> Actualizar
@@ -130,98 +160,48 @@ $mesActual  = (int) date('n');
     </div>
 </div>
 
-<!-- ── Fila 1: Ventas / Compras / Nómina / Utilidad / Margen ── -->
-<div class="row g-3 mb-3">
-    <div class="col-6 col-xl">
-        <div class="db-metric-card">
+<!-- ── Tarjetas de métricas (reubicables por el usuario) ── -->
+<?php
+$metricas = [
+    ['k'=>'ventas',   'lbl'=>'Ventas',        'val'=>'mValVentas',   'chg'=>'mChgVentas',   'ico'=>'bi-receipt',        'color'=>'primary',   'ini'=>'$0.00'],
+    ['k'=>'compras',  'lbl'=>'Compras',       'val'=>'mValCompras',  'chg'=>'mChgCompras',  'ico'=>'bi-cart3',          'color'=>'danger',    'ini'=>'$0.00'],
+    ['k'=>'nomina',   'lbl'=>'Nómina',        'val'=>'mValNomina',   'chg'=>'mChgNomina',   'ico'=>'bi-people',         'color'=>'secondary', 'ini'=>'$0.00'],
+    ['k'=>'utilidad', 'lbl'=>'Utilidad Bruta','val'=>'mValUtilidad', 'chg'=>'mChgUtilidad', 'ico'=>'bi-graph-up-arrow', 'color'=>'success',   'ini'=>'$0.00'],
+    ['k'=>'margen',   'lbl'=>'Margen',        'val'=>'mValMargen',   'chg'=>'mChgMargen',   'ico'=>'bi-percent',        'color'=>'info',      'ini'=>'0%'],
+    ['k'=>'ingresos', 'lbl'=>'Ingresos (caja)','val'=>'mValIngresos','chg'=>'mChgIngresos', 'ico'=>'bi-cash-coin',      'color'=>'success',   'ini'=>'$0.00'],
+    ['k'=>'egresos',  'lbl'=>'Egresos (caja)','val'=>'mValEgresos',  'chg'=>'mChgEgresos',  'ico'=>'bi-cash-stack',     'color'=>'warning',   'ini'=>'$0.00'],
+    ['k'=>'cxc',      'lbl'=>'CxC Pendiente', 'val'=>'mValCxc',      'nota'=>'Pendiente de cobro del período', 'ico'=>'bi-person-check', 'color'=>'primary', 'ini'=>'$0.00'],
+    ['k'=>'cxp',      'lbl'=>'CxP Pendiente', 'val'=>'mValCxp',      'nota'=>'Pendiente de pago del período',  'ico'=>'bi-building',     'color'=>'danger',  'ini'=>'$0.00'],
+];
+?>
+<div id="zonaMetricas" class="row g-3 mb-3 db-zone db-zone-metricas" data-db-zone="metricas">
+    <?php foreach ($metricas as $m): ?>
+    <div class="col-6 col-md-4 db-item" data-db-key="<?= $m['k'] ?>">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
+        <div class="db-metric-card h-100">
             <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">Ventas</p><div class="db-metric-value text-tr sk" id="mValVentas">$0.00</div></div>
-                <div class="db-metric-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-receipt"></i></div>
+                <div>
+                    <p class="db-metric-label mb-1"><?= $m['lbl'] ?></p>
+                    <div class="db-metric-value text-tr sk" id="<?= $m['val'] ?>"><?= $m['ini'] ?></div>
+                </div>
+                <div class="db-metric-icon bg-<?= $m['color'] ?> bg-opacity-10 text-<?= $m['color'] ?>"><i class="bi <?= $m['ico'] ?>"></i></div>
             </div>
-            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgVentas">—</div>
+            <?php if (isset($m['chg'])): ?>
+            <div class="db-metric-change ch-neu text-tr sk mt-2" id="<?= $m['chg'] ?>">—</div>
+            <?php else: ?>
+            <div class="db-metric-change ch-neu mt-2 small text-muted"><?= $m['nota'] ?></div>
+            <?php endif; ?>
         </div>
     </div>
-    <div class="col-6 col-xl">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">Compras</p><div class="db-metric-value text-tr sk" id="mValCompras">$0.00</div></div>
-                <div class="db-metric-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-cart3"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgCompras">—</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">Nómina</p><div class="db-metric-value text-tr sk" id="mValNomina">$0.00</div></div>
-                <div class="db-metric-icon bg-secondary bg-opacity-10 text-secondary"><i class="bi bi-people"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgNomina">—</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">Utilidad Bruta</p><div class="db-metric-value text-tr sk" id="mValUtilidad">$0.00</div></div>
-                <div class="db-metric-icon bg-success bg-opacity-10 text-success"><i class="bi bi-graph-up-arrow"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgUtilidad">—</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">Margen</p><div class="db-metric-value text-tr sk" id="mValMargen">0%</div></div>
-                <div class="db-metric-icon bg-info bg-opacity-10 text-info"><i class="bi bi-percent"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgMargen">—</div>
-        </div>
-    </div>
+    <?php endforeach; ?>
 </div>
 
-<!-- ── Fila 2: Ingresos / Egresos / CxC / CxP ── -->
-<div class="row g-3 mb-3">
-    <div class="col-6 col-xl-3">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">Ingresos (caja)</p><div class="db-metric-value text-tr sk" id="mValIngresos">$0.00</div></div>
-                <div class="db-metric-icon bg-success bg-opacity-10 text-success"><i class="bi bi-cash-coin"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgIngresos">—</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">Egresos (caja)</p><div class="db-metric-value text-tr sk" id="mValEgresos">$0.00</div></div>
-                <div class="db-metric-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-cash-stack"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgEgresos">—</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">CxC Pendiente</p><div class="db-metric-value text-tr sk" id="mValCxc">$0.00</div></div>
-                <div class="db-metric-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-person-check"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu mt-2 small text-muted">Pendiente de cobro del período</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="db-metric-card">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div><p class="db-metric-label mb-1">CxP Pendiente</p><div class="db-metric-value text-tr sk" id="mValCxp">$0.00</div></div>
-                <div class="db-metric-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-building"></i></div>
-            </div>
-            <div class="db-metric-change ch-neu mt-2 small text-muted">Pendiente de pago del período</div>
-        </div>
-    </div>
-</div>
+<!-- ── Paneles (reubicables por el usuario) ── -->
+<div id="zonaPaneles" class="row g-3 db-zone db-zone-paneles" data-db-zone="paneles">
 
-<!-- ── Saldos de Bancos/Efectivo + Anticipos ── -->
-<div class="row g-3 mb-3">
-    <div class="col-xl-8">
+    <!-- Saldos de Bancos/Efectivo -->
+    <div class="col-xl-8 db-item" data-db-key="saldos_caja">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-bank me-2 text-success"></i>Saldos de Bancos, Efectivo, tarjetas y otros</h6>
@@ -235,7 +215,10 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
-    <div class="col-xl-4">
+
+    <!-- Anticipos -->
+    <div class="col-xl-4 db-item" data-db-key="anticipos">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-wallet2 me-2 text-info"></i>Anticipos</h6>
@@ -252,11 +235,10 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
-</div>
 
-<!-- ── Gráfico comparativo (tendencia) + Top Productos ── -->
-<div class="row g-3 mb-3">
-    <div class="col-xl-8">
+    <!-- Comparativo mensual -->
+    <div class="col-xl-8 db-item" data-db-key="tendencia">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header flex-wrap gap-2">
                 <h6 class="db-panel-title"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Comparativo mensual</h6>
@@ -282,7 +264,10 @@ $mesActual  = (int) date('n');
             <div class="p-3" style="height:280px"><canvas id="chartTendencia"></canvas></div>
         </div>
     </div>
-    <div class="col-xl-4">
+
+    <!-- Top Productos -->
+    <div class="col-xl-4 db-item" data-db-key="top_productos">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-box-seam me-2 text-warning"></i>Top Productos</h6>
@@ -290,11 +275,10 @@ $mesActual  = (int) date('n');
             <div class="p-3" style="height:280px"><canvas id="chartTopProductos"></canvas></div>
         </div>
     </div>
-</div>
 
-<!-- ── Top Proveedores + Egresos por Concepto ── -->
-<div class="row g-3 mb-3">
-    <div class="col-xl-8">
+    <!-- Top Proveedores -->
+    <div class="col-xl-8 db-item" data-db-key="top_proveedores">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-truck me-2 text-danger"></i>Top Proveedores (compras)</h6>
@@ -302,7 +286,10 @@ $mesActual  = (int) date('n');
             <div class="p-3" style="height:260px"><canvas id="chartTopProveedores"></canvas></div>
         </div>
     </div>
-    <div class="col-xl-4">
+
+    <!-- Egresos por Concepto -->
+    <div class="col-xl-4 db-item" data-db-key="egresos_concepto">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-pie-chart me-2 text-warning"></i>Egresos por Concepto</h6>
@@ -310,11 +297,10 @@ $mesActual  = (int) date('n');
             <div class="p-3" style="height:260px"><canvas id="chartEgresosConcepto"></canvas></div>
         </div>
     </div>
-</div>
 
-<!-- ── Top Clientes + CxC Vencidas + CxP Vencidas ── -->
-<div class="row g-3 mb-3">
-    <div class="col-xl-4">
+    <!-- Top Clientes -->
+    <div class="col-xl-4 db-item" data-db-key="top_clientes">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-people me-2 text-info"></i>Top Clientes</h6>
@@ -322,7 +308,10 @@ $mesActual  = (int) date('n');
             <div class="p-3" style="height:240px"><canvas id="chartTopClientes"></canvas></div>
         </div>
     </div>
-    <div class="col-xl-4">
+
+    <!-- CxC Vencidas -->
+    <div class="col-xl-4 db-item" data-db-key="cxc_vencidas">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>CxC Vencidas</h6>
@@ -335,7 +324,10 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
-    <div class="col-xl-4">
+
+    <!-- CxP Vencidas -->
+    <div class="col-xl-4 db-item" data-db-key="cxp_vencidas">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
         <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-exclamation-triangle me-2 text-warning"></i>CxP Vencidas</h6>
@@ -348,12 +340,11 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
-</div>
 
-<!-- ── 4 Tablas recientes ── -->
-<div class="row g-3">
-    <div class="col-lg-6">
-        <div class="db-panel">
+    <!-- Últimas Ventas -->
+    <div class="col-lg-6 db-item" data-db-key="ult_ventas">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
+        <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-receipt me-2 text-success"></i>Últimas Ventas</h6>
             </div>
@@ -365,8 +356,11 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
-    <div class="col-lg-6">
-        <div class="db-panel">
+
+    <!-- Últimas Compras -->
+    <div class="col-lg-6 db-item" data-db-key="ult_compras">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
+        <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-bag-check me-2 text-danger"></i>Últimas Compras</h6>
             </div>
@@ -378,8 +372,11 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
-    <div class="col-lg-6">
-        <div class="db-panel">
+
+    <!-- Últimos Ingresos -->
+    <div class="col-lg-6 db-item" data-db-key="ult_ingresos">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
+        <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-cash-coin me-2 text-success"></i>Últimos Ingresos</h6>
             </div>
@@ -391,8 +388,11 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
-    <div class="col-lg-6">
-        <div class="db-panel">
+
+    <!-- Últimos Egresos -->
+    <div class="col-lg-6 db-item" data-db-key="ult_egresos">
+        <button type="button" class="db-drag-handle" title="Arrastrar para reubicar"><i class="bi bi-grip-vertical"></i></button>
+        <div class="db-panel h-100">
             <div class="db-panel-header">
                 <h6 class="db-panel-title"><i class="bi bi-cash-stack me-2 text-warning"></i>Últimos Egresos</h6>
             </div>
@@ -404,6 +404,7 @@ $mesActual  = (int) date('n');
             </div>
         </div>
     </div>
+
 </div>
 
 </div><!-- /.pb-4 -->
@@ -433,6 +434,11 @@ const PALETA = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9','#ec
 // entre navegadores y dispositivos.
 const PREF_MESES      = <?= json_encode($prefMeses ?? '6') ?>;
 const PREF_TIPO_CHART = <?= json_encode($prefTipoChart ?? 'bar') ?>;
+// Orden en que el usuario dejó las tarjetas/paneles (drag & drop).
+const PREF_ORDEN = {
+    metricas: <?= json_encode(array_values($prefOrdenMetricas ?? []), JSON_UNESCAPED_UNICODE) ?>,
+    paneles:  <?= json_encode(array_values($prefOrdenPaneles  ?? []), JSON_UNESCAPED_UNICODE) ?>,
+};
 
 let _lastSavedPrefs = null;
 
@@ -840,7 +846,128 @@ async function applyFilters(){
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Tarjetas reubicables (drag & drop) — orden por usuario
+//  Se persiste en usuarios_preferencias (__vista__ del módulo
+//  dashboard), igual que el resto de preferencias visuales.
+//  Implementado con Pointer Events para que funcione también
+//  con pantalla táctil (HTML5 drag&drop no soporta touch).
+// ─────────────────────────────────────────────────────────────
+const DB_ZONAS = { metricas: 'zonaMetricas', paneles: 'zonaPaneles' };
+
+function ordenActual(zona){
+    const z = $(DB_ZONAS[zona]);
+    if(!z) return [];
+    return Array.from(z.querySelectorAll(':scope > .db-item')).map(el => el.dataset.dbKey);
+}
+
+/** Guarda la posición original del HTML para poder restablecerla luego. */
+function marcarPosicionesOriginales(){
+    Object.values(DB_ZONAS).forEach(zid => {
+        const z = $(zid);
+        if(!z) return;
+        Array.from(z.querySelectorAll(':scope > .db-item'))
+             .forEach((el, i) => { el.dataset.dbPos = i; });
+    });
+}
+
+function aplicarOrden(zona, orden){
+    const z = $(DB_ZONAS[zona]);
+    if(!z || !Array.isArray(orden) || !orden.length) return;
+    orden.forEach(k => {
+        const el = z.querySelector(':scope > .db-item[data-db-key="' + CSS.escape(k) + '"]');
+        if(el) z.appendChild(el);           // los reubica en el orden guardado
+    });
+    // Las tarjetas que aún no existían cuando el usuario guardó su orden se
+    // mandan al final, conservando su orden natural del HTML.
+    Array.from(z.querySelectorAll(':scope > .db-item'))
+         .filter(el => orden.indexOf(el.dataset.dbKey) === -1)
+         .forEach(el => z.appendChild(el));
+}
+
+function guardarOrden(){
+    if (typeof window.CMG_guardarVista !== 'function') return;
+    window.CMG_guardarVista('dashboard', {
+        orden_metricas: ordenActual('metricas'),
+        orden_paneles:  ordenActual('paneles')
+    }, { reload: false });
+}
+
+function initDragTarjetas(){
+    Object.values(DB_ZONAS).forEach(zid => {
+        const zona = $(zid);
+        if(!zona) return;
+
+        zona.querySelectorAll(':scope > .db-item > .db-drag-handle').forEach(handle => {
+            handle.addEventListener('pointerdown', ev => {
+                if(ev.button !== undefined && ev.button !== 0) return;
+                ev.preventDefault();
+
+                const item = handle.closest('.db-item');
+                let arrastrando = false;
+                const x0 = ev.clientX, y0 = ev.clientY;
+
+                const mover = e => {
+                    if(!arrastrando){
+                        if(Math.abs(e.clientX-x0) < 5 && Math.abs(e.clientY-y0) < 5) return;
+                        arrastrando = true;
+                        item.classList.add('db-dragging');
+                        zona.classList.add('db-zone-active');
+                        document.body.style.userSelect = 'none';
+                        try { handle.setPointerCapture(ev.pointerId); } catch(_){}
+                    }
+                    // Elemento bajo el cursor dentro de la misma zona
+                    const bajo = document.elementFromPoint(e.clientX, e.clientY);
+                    const destino = bajo && bajo.closest ? bajo.closest('.db-item') : null;
+                    if(!destino || destino === item || destino.parentElement !== zona) return;
+
+                    const r = destino.getBoundingClientRect();
+                    // Compara por el centro del destino (horizontal y vertical) para
+                    // decidir si el elemento va antes o después.
+                    const mismaFila = e.clientY >= r.top && e.clientY <= r.bottom;
+                    const antes = mismaFila
+                        ? (e.clientX < r.left + r.width/2)
+                        : (e.clientY < r.top + r.height/2);
+                    zona.insertBefore(item, antes ? destino : destino.nextSibling);
+                };
+
+                const soltar = () => {
+                    document.removeEventListener('pointermove', mover);
+                    document.removeEventListener('pointerup', soltar);
+                    document.removeEventListener('pointercancel', soltar);
+                    document.body.style.userSelect = '';
+                    zona.classList.remove('db-zone-active');
+                    if(arrastrando){
+                        item.classList.remove('db-dragging');
+                        guardarOrden();
+                    }
+                };
+
+                document.addEventListener('pointermove', mover);
+                document.addEventListener('pointerup', soltar);
+                document.addEventListener('pointercancel', soltar);
+            });
+        });
+    });
+}
+
+/** Devuelve las tarjetas a su posición original y borra la preferencia. */
+function restablecerOrden(){
+    Object.values(DB_ZONAS).forEach(zid => {
+        const z = $(zid);
+        if(!z) return;
+        Array.from(z.querySelectorAll(':scope > .db-item'))
+             .sort((a,b) => (+a.dataset.dbPos) - (+b.dataset.dbPos))
+             .forEach(el => z.appendChild(el));
+    });
+    guardarOrden();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    marcarPosicionesOriginales();
+    aplicarOrden('metricas', PREF_ORDEN.metricas);
+    aplicarOrden('paneles',  PREF_ORDEN.paneles);
+    initDragTarjetas();
     loadFilters();
     applyFilters();
 });

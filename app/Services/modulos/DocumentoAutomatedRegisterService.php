@@ -11,7 +11,6 @@ use App\repositories\modulos\NotaCreditoRepository;
 use App\repositories\modulos\NotaDebitoRepository;
 use App\repositories\modulos\ProveedorRepository;
 use App\repositories\modulos\RetencionCompraRepository;
-use App\repositories\modulos\RetencionRepository;
 use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\ClienteRepository;
 use App\repositories\modulos\DocumentoIgnoradoRepository;
@@ -35,7 +34,6 @@ class DocumentoAutomatedRegisterService
     private LiquidacionCompraRepository $liquidacionRepo;
     private NotaCreditoRepository $ncRepo;
     private NotaDebitoRepository $ndRepo;
-    private RetencionRepository $retRepo;
     private EmpresaRepository $empresaRepo;
     private PeriodosContablesService $periodosService;
     private RetencionCompraService $retencionService;
@@ -75,7 +73,6 @@ class DocumentoAutomatedRegisterService
         $this->liquidacionRepo = new LiquidacionCompraRepository();
         $this->ncRepo = new NotaCreditoRepository();
         $this->ndRepo = new NotaDebitoRepository();
-        $this->retRepo = new RetencionRepository();
         $this->empresaRepo = new EmpresaRepository();
         
         // Carga manual de dependencias
