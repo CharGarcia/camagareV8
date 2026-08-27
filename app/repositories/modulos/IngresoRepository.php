@@ -613,7 +613,11 @@ class IngresoRepository extends BaseRepository
             ':fecha_emision'        => $data['fecha_emision'],
             ':establecimiento'      => $data['establecimiento'] ?? null,
             ':punto_emision'        => $data['punto_emision'] ?? null,
-            ':secuencial'           => $data['secuencial'],
+            // Formato canónico (9 dígitos): el índice único uq_ingresos_secuencial_activo
+            // compara TEXTO, así que '16' y '000000016' pasarían como valores distintos.
+            // Se normaliza aquí, en el punto de escritura, porque los ingresos se crean
+            // desde muchos flujos (cobro al facturar, suscripciones, conciliación…).
+            ':secuencial'           => \App\Helpers\SecuencialFormato::normalizar($data['secuencial']),
             ':numero_ingreso'       => $data['numero_ingreso'],
             ':tipo_ingreso'         => $data['tipo_ingreso'],
             ':id_ingreso_concepto'  => !empty($data['id_ingreso_concepto']) ? (int) $data['id_ingreso_concepto'] : null,
@@ -659,7 +663,11 @@ class IngresoRepository extends BaseRepository
             ':fecha_emision'        => $data['fecha_emision'],
             ':establecimiento'      => $data['establecimiento'] ?? null,
             ':punto_emision'        => $data['punto_emision'] ?? null,
-            ':secuencial'           => $data['secuencial'],
+            // Formato canónico (9 dígitos): el índice único uq_ingresos_secuencial_activo
+            // compara TEXTO, así que '16' y '000000016' pasarían como valores distintos.
+            // Se normaliza aquí, en el punto de escritura, porque los ingresos se crean
+            // desde muchos flujos (cobro al facturar, suscripciones, conciliación…).
+            ':secuencial'           => \App\Helpers\SecuencialFormato::normalizar($data['secuencial']),
             ':numero_ingreso'       => $data['numero_ingreso'],
             ':tipo_ingreso'         => $data['tipo_ingreso'],
             ':id_ingreso_concepto'  => !empty($data['id_ingreso_concepto']) ? (int) $data['id_ingreso_concepto'] : null,
@@ -1060,7 +1068,10 @@ class IngresoRepository extends BaseRepository
                 WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ?
                   AND secuencial = ? AND eliminado = FALSE
                   AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)";
-        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial, $idEmpresa];
+        // Mismo formato canónico que usa insertCabecera: comparar '16' contra '000000016'
+        // devolvía siempre "no existe" y la validación no servía de nada.
+        $params = [$idEmpresa, $idEstablecimiento, $idPunto,
+                   \App\Helpers\SecuencialFormato::normalizar($secuencial), $idEmpresa];
 
         if ($excluirId !== null) {
             $sql .= " AND id <> ?";

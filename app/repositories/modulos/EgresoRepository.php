@@ -533,7 +533,8 @@ class EgresoRepository extends BaseRepository
             ':id_punto'     => !empty($data['id_punto_emision']) ? (int)$data['id_punto_emision'] : null,
             ':est'          => $data['establecimiento'] ?? null,
             ':pto'          => $data['punto_emision'] ?? null,
-            ':sec'          => $data['secuencial'] ?? null,
+            // Formato canónico (9 dígitos): ver la nota de IngresoRepository::insertCabecera.
+            ':sec'          => \App\Helpers\SecuencialFormato::normalizar($data['secuencial'] ?? null),
             ':num'          => $data['numero_egreso'],
             ':fecha'        => $data['fecha_emision'],
             ':tipo_egreso'  => $data['tipo_egreso'],
@@ -618,7 +619,9 @@ class EgresoRepository extends BaseRepository
                   AND punto_emision = (SELECT codigo_punto FROM empresa_punto_emision WHERE id = ?)
                   AND secuencial = ? AND eliminado = FALSE
                   AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)";
-        return (int) $this->query($sql, [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial, $idEmpresa])->fetchColumn() > 0;
+        // Formato canónico, igual que insertCabecera (si no, la comparación de texto falla).
+        return (int) $this->query($sql, [$idEmpresa, $idEstablecimiento, $idPunto,
+            \App\Helpers\SecuencialFormato::normalizar($secuencial), $idEmpresa])->fetchColumn() > 0;
     }
 
     public function buscarDocumentosPendientesEgreso(int $idEmpresa, string $q = '', string $tipo = 'COMPRA', ?int $excluirEgresoId = null): array

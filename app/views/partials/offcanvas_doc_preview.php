@@ -125,6 +125,22 @@
         const n = parseFloat(v);
         return '$' + (isNaN(n) ? 0 : n).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    // Precio unitario: se muestra TAL CUAL está guardado (la columna es NUMERIC con
+    // varios decimales, p.ej. 6), no redondeado a 2 como el resto de montos — redondear
+    // aquí ocultaba la precisión real del precio guardado. Solo se agrupan los miles de
+    // la parte entera; los decimales se dejan intactos, con los que devuelva la BD.
+    function precioUnitarioTexto(raw) {
+        if (raw === null || raw === undefined || raw === '') return money(0);
+        const s = String(raw).trim();
+        const n = parseFloat(s);
+        if (isNaN(n)) return money(0);
+        const neg = s.startsWith('-');
+        const [intPart, decPart] = s.replace('-', '').split('.');
+        const intFmt = parseInt(intPart || '0', 10).toLocaleString('es-EC');
+        // Separador decimal ',' (no '.'), igual que money(): 'es-EC' agrupa miles con '.'
+        // y ese mismo '.' no puede repetirse como separador decimal sin ambigüedad.
+        return (neg ? '-$' : '$') + intFmt + (decPart ? ',' + decPart : '');
+    }
     // 'YYYY-MM-DD ...' -> 'DD-MM-YYYY'
     function fecha(f) {
         if (!f) return '';
@@ -172,9 +188,10 @@
             return;
         }
         cont.innerHTML = dets.map(d => {
-            const cant   = parseFloat(d.cantidad || 0);
-            const pUni   = parseFloat(d.precio_unitario || d.costo_unitario || 0);
-            const dTotal = parseFloat(d.precio_total_sin_impuesto || d.subtotal || (cant * pUni));
+            const cant    = parseFloat(d.cantidad || 0);
+            const pUniRaw = (d.precio_unitario ?? d.costo_unitario ?? 0);
+            const pUni    = parseFloat(pUniRaw || 0);
+            const dTotal  = parseFloat(d.precio_total_sin_impuesto || d.subtotal || (cant * pUni));
             const desc   = d.descripcion || d.producto_nombre || 'Ítem';
             const cod    = d.codigo_principal || d.codigo || '';
             return `
@@ -190,7 +207,7 @@
                     </div>
                     <div class="d-flex justify-content-between align-items-center mt-1 pt-1 border-top border-light" style="font-size:0.75rem;">
                         <span class="text-muted">Cant: <strong>${cant}</strong></span>
-                        <span class="text-muted">P.U: <strong>${money(pUni)}</strong></span>
+                        <span class="text-muted">P.U: <strong>${precioUnitarioTexto(pUniRaw)}</strong></span>
                     </div>
                 </div>`;
         }).join('');

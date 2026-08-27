@@ -169,6 +169,13 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **1.6** — Corregido un caso en que el número seguía repitiéndose pese a la
+  corrección anterior: los ingresos creados **automáticamente** (cobro con
+  tarjeta al facturar, cobro de suscripciones) guardaban el secuencial sin los
+  ceros a la izquierda, y la validación que impide repetir un número compara el
+  texto, así que `16` y `000000016` pasaban como si fueran distintos. Ahora el
+  formato lo fija el sistema al escribir, venga el ingreso del formulario o de
+  un cobro automático.
 - **1.5** — Se documenta cómo se asigna el **número del documento**: la serie
   y el secuencial definitivos los pone el sistema al guardar, no al abrir el
   formulario, así que dos ingresos creados a la vez ya no pueden salir con el

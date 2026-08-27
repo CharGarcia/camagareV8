@@ -77,6 +77,55 @@ SELECT 'egresos_cabecera' AS tabla,
  ORDER BY c.id_empresa, c.id_punto_emision, c.secuencial, c.id;
 
 
+-- ── Estado del backfill de series ────────────────────────────────────────────────────
+-- Si aquí sale algo, el backfill de series NO se aplicó (o no llegó a estos documentos) y
+-- esos registros son INVISIBLES para el generador de secuenciales: el sistema les volverá a
+-- repartir sus números a documentos nuevos.
+SELECT 'Sin punto de emisión (backfill pendiente)' AS reporte, tabla, id_empresa, documentos FROM (
+    SELECT 'ingresos_cabecera' AS tabla, id_empresa, COUNT(*) AS documentos
+      FROM ingresos_cabecera WHERE eliminado = false AND id_punto_emision IS NULL GROUP BY 1,2
+    UNION ALL
+    SELECT 'egresos_cabecera', id_empresa, COUNT(*)
+      FROM egresos_cabecera  WHERE eliminado = false AND id_punto_emision IS NULL GROUP BY 1,2
+) x ORDER BY tabla, id_empresa;
+
+
+-- ── Duplicados por NÚMERO VISIBLE ────────────────────────────────────────────────────
+-- Agrupa por la serie de TEXTO (establecimiento-punto-secuencial), que es lo que se ve en el
+-- listado. A diferencia del índice único, incluye los documentos sin id_punto_emision y los
+-- secuenciales guardados sin relleno de ceros ('1' y '000000001' cuentan como el mismo número).
+SELECT 'Repetidos por número visible' AS reporte, tabla, id_empresa, numero, documentos,
+       nativos, migrados, sin_punto FROM (
+    SELECT 'ingresos_cabecera' AS tabla, c.id_empresa,
+           COALESCE(NULLIF(c.establecimiento, ''), '???') || '-'
+        || COALESCE(NULLIF(c.punto_emision,   ''), '???') || '-'
+        || LPAD(REGEXP_REPLACE(COALESCE(c.secuencial, ''), '[^0-9]', '', 'g'), 9, '0') AS numero,
+           string_agg(c.id::text, ', ' ORDER BY c.id)          AS documentos,
+           COUNT(*) FILTER (WHERE m.id_destino IS NULL)        AS nativos,
+           COUNT(*) FILTER (WHERE m.id_destino IS NOT NULL)    AS migrados,
+           COUNT(*) FILTER (WHERE c.id_punto_emision IS NULL)  AS sin_punto
+      FROM ingresos_cabecera c
+      LEFT JOIN migracion_mysql_map m
+             ON m.id_empresa = c.id_empresa AND m.entidad = 'ingresos' AND m.id_destino = c.id
+     WHERE c.eliminado = false AND COALESCE(c.secuencial, '') <> ''
+     GROUP BY 1,2,3 HAVING COUNT(*) > 1
+    UNION ALL
+    SELECT 'egresos_cabecera', c.id_empresa,
+           COALESCE(NULLIF(c.establecimiento, ''), '???') || '-'
+        || COALESCE(NULLIF(c.punto_emision,   ''), '???') || '-'
+        || LPAD(REGEXP_REPLACE(COALESCE(c.secuencial, ''), '[^0-9]', '', 'g'), 9, '0'),
+           string_agg(c.id::text, ', ' ORDER BY c.id),
+           COUNT(*) FILTER (WHERE m.id_destino IS NULL),
+           COUNT(*) FILTER (WHERE m.id_destino IS NOT NULL),
+           COUNT(*) FILTER (WHERE c.id_punto_emision IS NULL)
+      FROM egresos_cabecera c
+      LEFT JOIN migracion_mysql_map m
+             ON m.id_empresa = c.id_empresa AND m.entidad = 'egresos' AND m.id_destino = c.id
+     WHERE c.eliminado = false AND COALESCE(c.secuencial, '') <> ''
+     GROUP BY 1,2,3 HAVING COUNT(*) > 1
+) y ORDER BY tabla, id_empresa, numero;
+
+
 -- Resumen: cuántos grupos duplicados hay y de qué tipo son.
 SELECT tabla, COUNT(*) AS grupos_duplicados, SUM(documentos) AS documentos_afectados,
        COUNT(*) FILTER (WHERE nativos = 0)                  AS grupos_solo_migrados,

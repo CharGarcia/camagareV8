@@ -596,7 +596,7 @@ class SuscripcionesHandler extends BaseHandler
             'fecha_emision'       => date('Y-m-d'),
             'establecimiento'     => $punto['establecimiento'],
             'punto_emision'       => $punto['punto'],
-            'secuencial'          => $secRes['secuencial'],
+            'secuencial'          => $secRes['formateado'],
             'numero_ingreso'      => $numeroIngreso,
             'tipo_ingreso'        => $esFactura ? 'FACTURA_VENTA' : 'RECIBO_VENTA',
             'id_ingreso_concepto' => null,
