@@ -5,8 +5,8 @@ categoria: Herramientas
 ruta_modulo: modulos/soporte-chat
 tipo: modulo
 visibilidad: todos
-etiquetas: soporte, chat, ayuda, consulta, mesa de ayuda, asistencia, contactar soporte, hablar con alguien, burbuja, no me funciona, reportar problema, ticket
-version: 1.0
+etiquetas: soporte, chat, ayuda, aviso whatsapp, alerta soporte, consulta, mesa de ayuda, asistencia, contactar soporte, hablar con alguien, burbuja, no me funciona, reportar problema, ticket
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -97,13 +97,22 @@ queda asignada automáticamente a quien contestó.
 
 ## Quién puede atender las consultas
 
-Atiende quien tenga **asignado el submódulo "Chat de Soporte"** en la empresa
-desde la que trabaja. Se asigna en la pantalla de permisos, igual que cualquier
-otro módulo. Los superadministradores entran siempre.
+Atiende quien tenga **asignado el submódulo "Chat de Soporte"** en **cualquiera
+de sus empresas**. Se asigna en la pantalla de permisos, igual que cualquier otro
+módulo. Los superadministradores entran siempre.
 
-Se puede asignar a **varias empresas**: todas verán la misma bandeja y podrán
-responder. Conviene tenerlo presente, porque la bandeja muestra las consultas de
-todas las empresas del sistema, no solo las de la empresa que atiende.
+No hace falta que sea la empresa desde la que está trabajando en ese momento:
+basta con tenerlo asignado en una. Es a propósito, porque la bandeja **no es por
+empresa** — muestra las consultas de todo el sistema —, así que quien atiende
+soporte lo sigue haciendo aunque cambie de empresa para hacer otra cosa.
+
+Mientras tenga ese acceso, el **ícono de soporte (auricular) del navbar está
+siempre visible**, aunque no haya nada por atender: es el acceso directo a la
+bandeja. La **cifra roja** sobre el ícono aparece solo cuando hay consultas en
+espera o respuestas sin leer.
+
+Solo cuentan las empresas **activas**: si la única empresa donde tenía el módulo
+asignado se desactiva o se elimina, deja de atender.
 
 El permiso de **acceso total** no cambia nada aquí: quien entra a la bandeja ve
 todas las conversaciones. Del lado de la burbuja, en cambio, cada persona ve
@@ -152,6 +161,9 @@ valen para todas las empresas, no para cada una por separado.
 | Mensaje fuera de horario | Aviso que se muestra fuera del horario de atención |
 | Días y horario de atención | Cuándo se considera que hay alguien atendiendo |
 | Correo para avisos | Opcional. Si se deja vacío, el aviso llega igual (ver más abajo) |
+| WhatsApp para avisos | Opcional. Número que recibe el mismo aviso por WhatsApp |
+| Plantilla de WhatsApp | Opcional. Plantilla aprobada en Meta con la que se manda el aviso |
+| Idioma | Idioma de esa plantilla (por defecto `es`) |
 | Avisar tras (min) | Minutos en espera antes de mandar el aviso. 0 = no avisar |
 | Archivar tras (días) | Días desde el cierre antes de archivar. 0 = nunca |
 
@@ -165,6 +177,10 @@ Si el tiempo de espera es mayor que cero, el sistema avisa por correo de las
 consultas que llevan demasiado tiempo sin atender. El aviso incluye la empresa,
 la persona, el asunto, cuánto lleva esperando y si alguien la había tomado ya.
 
+De fábrica ese tiempo es de **1 minuto**, es decir, prácticamente inmediato: el
+proceso del servidor revisa cada minuto y el propio sistema evita repetir el
+aviso mientras la lista no cambie.
+
 El aviso llega al **correo de todas las empresas que tengan asignado el
 submódulo** del chat, es decir, a las que atienden. No hay que configurar nada
 más: basta con asignar el módulo.
@@ -174,6 +190,31 @@ ejemplo— indíquela en *Correo para avisos* y se usará esa en lugar de las de
 
 No se repite mientras la lista no cambie, así que no llena el buzón con el mismo
 recordatorio.
+
+## Aviso por WhatsApp
+
+El mismo aviso puede salir **también por WhatsApp**, con el **nombre de la
+empresa y de la persona** que están pidiendo soporte, el asunto y cuánto lleva
+esperando. Es el aviso más rápido: llega al teléfono sin abrir el correo.
+
+Se apoya en el módulo de **Chat de WhatsApp**, no monta nada aparte:
+
+- **Quién lo envía**: una empresa que atienda soporte y tenga su WhatsApp
+  configurado. Si ninguna lo tiene, se usa el WhatsApp de la empresa que está
+  pidiendo el soporte. Si no hay ninguno de los dos, no se envía y el aviso por
+  correo sigue igual.
+- **A quién llega**: a los números registrados para recibir avisos en la
+  configuración de WhatsApp de esa empresa — los mismos del aviso de chats sin
+  leer, no hay que mantener otra lista. Si prefiere un número distinto solo para
+  soporte, escríbalo en *WhatsApp para avisos*.
+- **Con qué mensaje**: si deja vacía la *Plantilla de WhatsApp*, se manda un
+  mensaje de texto normal. Tenga en cuenta que WhatsApp **solo entrega texto
+  libre si ese número escribió al negocio en las últimas 24 horas**; para que
+  llegue siempre, cree una plantilla aprobada en Meta con tres variables
+  (`{{1}}` empresa, `{{2}}` usuario, `{{3}}` asunto) e indique su nombre ahí.
+
+Un fallo de WhatsApp —credenciales caducadas, por ejemplo— nunca impide que el
+aviso por correo salga.
 
 ## Qué pasa con las conversaciones antiguas
 
@@ -190,17 +231,32 @@ trabajo diario, y se sigue consultando marcando **Archivadas** en los filtros.
   venta, cocina, mesas, comandas).
 - **No me deja escribir en una conversación**: está *cerrada*. Abra una consulta
   nueva; el historial anterior se conserva.
-- **Entro a la bandeja y me devuelve al inicio**: la empresa desde la que trabaja
-  no tiene asignado el submódulo del chat.
+- **Entro a la bandeja y me devuelve al inicio**: no tiene asignado el submódulo
+  del chat en ninguna de sus empresas activas.
+- **No veo el ícono de soporte en la barra superior**: aparece únicamente para
+  quien atiende consultas. Si acaban de asignarle el módulo, puede tardar hasta
+  un minuto en aparecer; recargue la página.
 - **No aparece el botón Sugerir respuesta**: el copiloto está desactivado, o la
   empresa no tiene configurado su proveedor de IA en IA Soporte.
 - **No llegan los avisos por correo**: los minutos de aviso están en 0, o ninguna
   empresa con el submódulo asignado tiene correo registrado en su ficha.
+- **No llega el aviso por WhatsApp**: revise que la empresa que atiende tenga su
+  WhatsApp configurado y números registrados para avisos. Si no usa plantilla,
+  recuerde que WhatsApp solo entrega mensajes de texto a quien escribió al
+  negocio en las últimas 24 horas.
 - **El adjunto no se envía**: revise que no supere los 10 MB y que sea de un tipo
   permitido.
 
 ## Historial de cambios
 
+- **1.2** — El aviso de consultas sin atender pasa a 1 minuto (prácticamente
+  inmediato) y puede salir también por **WhatsApp**, con la empresa y la persona
+  que piden soporte. Nueva sección *Aviso por WhatsApp* y tres ajustes nuevos en
+  la configuración.
+- **1.1** — Quien atiende soporte conserva el acceso desde cualquiera de sus
+  empresas, no solo desde aquella en la que tiene el módulo asignado, y el ícono
+  de soporte del navbar queda siempre visible mientras tenga ese acceso (la cifra
+  roja sigue apareciendo solo cuando hay consultas pendientes).
 - **1.0** — Versión inicial: burbuja de consulta, bandeja del equipo, adjuntos,
   respuestas rápidas, sugerencia con IA, calificación, avisos por correo y
   archivado automático.

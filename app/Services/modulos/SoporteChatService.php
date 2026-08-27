@@ -37,6 +37,8 @@ class SoporteChatService
     private const TTL_CONTADORES = 30;
     /** TTL de la configuración global (la lee el layout en cada página). */
     private const TTL_CONFIG = 120;
+    /** TTL del flag "atiende soporte" por usuario (se invalida al cambiar permisos). */
+    private const TTL_AGENTE = 60;
 
     /** Ruta MVC del módulo: define quién atiende (quien la tenga asignada). */
     private const RUTA_MODULO = 'modulos/soporte-chat';
@@ -51,28 +53,65 @@ class SoporteChatService
     // ── Quién es agente de soporte ───────────────────────────────────────────
 
     /**
-     * Agente = quien tiene asignado el submódulo del chat en la empresa activa.
+     * Agente = quien tiene asignado el submódulo del chat en CUALQUIERA de sus
+     * empresas, no solo en la activa.
      *
-     * El control es el permiso del sistema y nada más: si a una empresa y a un
-     * usuario se les asigna "Chat de Soporte", atienden. El nivel 3 entra
-     * siempre, como en cualquier módulo.
+     * Es una excepción consciente a §4 (permisos por empresa) y va con el alcance
+     * del módulo: la bandeja NO es por empresa —recibe las consultas de todas—, así
+     * que a quien atiende soporte no puede dejar de atenderle porque en ese momento
+     * esté trabajando en otra de sus empresas. El permiso sigue siendo el del
+     * sistema: si nadie le asignó "Chat de Soporte" en ninguna empresa, no es
+     * agente. El nivel 3 entra siempre, como en cualquier módulo.
      *
-     * Se resuelve con el helper de permisos —la misma fuente que usa el resto
-     * del sistema— y nunca con un dato que mande el cliente.
+     * Se resuelve con el helper de permisos —la misma fuente que usa el resto del
+     * sistema— y nunca con un dato que mande el cliente.
      */
     public function esAgente(int $idUsuario, int $idEmpresa, int $nivel): bool
     {
         if ($nivel >= 3) {
             return true;
         }
-        if ($idEmpresa <= 0 || $idUsuario <= 0) {
+        if ($idUsuario <= 0) {
             return false;
         }
 
+        // Cacheado por usuario (no por empresa: la respuesta ya no depende de la
+        // activa). Lo pregunta cada polling de la burbuja y de la bandeja, y para
+        // quien NO es agente en la empresa activa implica mirar modulos_asignados
+        // en todas sus empresas: sin caché sería una consulta por petición.
+        $clave = self::claveAgente($idUsuario);
+        $cache = Cache::get($clave);
+        if (is_bool($cache)) {
+            return $cache;
+        }
+
         try {
-            return \App\Helpers\Permisos::puedeVer(self::RUTA_MODULO);
+            // La empresa activa primero: es la respuesta en el caso normal y sale de
+            // la caché por request del helper, sin tocar la base.
+            $es = ($idEmpresa > 0 && \App\Helpers\Permisos::puedeVer(self::RUTA_MODULO))
+                || \App\Helpers\Permisos::puedeVerEnAlgunaEmpresa(self::RUTA_MODULO);
         } catch (\Throwable $e) {
-            return false;
+            return false;   // sin cachear: el fallo puede ser transitorio
+        }
+
+        Cache::set($clave, $es, self::TTL_AGENTE);
+        return $es;
+    }
+
+    private static function claveAgente(int $idUsuario): string
+    {
+        return 'cmg_soporte_agente_' . $idUsuario;
+    }
+
+    /**
+     * Invalida el flag "atiende soporte" de un usuario. La llama el modelo de
+     * permisos tras escribir en modulos_asignados: dar o quitar el Chat de Soporte
+     * debe verse en el navbar sin esperar a que expire el TTL.
+     */
+    public static function invalidarAgente(int $idUsuario): void
+    {
+        if ($idUsuario > 0) {
+            Cache::delete(self::claveAgente($idUsuario));
         }
     }
 
@@ -684,39 +723,57 @@ class SoporteChatService
     // ── Mantenimiento (cron) ─────────────────────────────────────────────────
 
     /**
-     * Avisa por correo de las conversaciones que llevan demasiado tiempo en
-     * espera. Se autolimita: no vuelve a avisar de las mismas hasta que cambien.
+     * Avisa de las conversaciones que llevan demasiado tiempo en espera: por
+     * correo y, si hay WhatsApp disponible, también por WhatsApp. Se autolimita:
+     * no vuelve a avisar de las mismas hasta que cambien.
      *
-     * @return array{enviado:bool,conversaciones:int}
+     * Los dos canales son independientes —basta con que uno esté configurado
+     * para que el aviso salga—, pero comparten la misma huella: si ya se avisó
+     * de esta lista, no se repite por ningún canal.
+     *
+     * @return array{enviado:bool,conversaciones:int,correo:bool,whatsapp:int}
      */
     public function alertarSinAtender(): array
     {
         $config  = $this->repo->getConfig();
         $minutos = (int) ($config['minutos_alerta_sin_atender'] ?? 0);
+        $vacio   = ['enviado' => false, 'conversaciones' => 0, 'correo' => false, 'whatsapp' => 0];
 
-        $destinatarios = $this->destinatariosAlerta($config);
-
-        if ($minutos <= 0 || $destinatarios === [] || empty($config['activo'])) {
-            return ['enviado' => false, 'conversaciones' => 0];
+        if ($minutos <= 0 || empty($config['activo'])) {
+            return $vacio;
         }
 
         $pendientes = $this->repo->getSinAtender($minutos);
         if ($pendientes === []) {
-            return ['enviado' => false, 'conversaciones' => 0];
+            return $vacio;
         }
 
         // Huella de lo que se está avisando: si es la misma que la última vez,
-        // no se reenvía. Sin esto el cron mandaría un correo por minuto mientras
+        // no se reenvía. Sin esto el cron mandaría un aviso por minuto mientras
         // la conversación siga sin atender.
         $huella = md5(implode(',', array_map(static fn ($c) => $c['id'] . ':' . $c['ultimo_mensaje_at'], $pendientes)));
         $archivo = $this->archivoMarcaAlerta();
         if (is_file($archivo) && trim((string) @file_get_contents($archivo)) === $huella) {
-            return ['enviado' => false, 'conversaciones' => count($pendientes)];
+            return ['enviado' => false, 'conversaciones' => count($pendientes), 'correo' => false, 'whatsapp' => 0];
         }
 
-        require_once MVC_APP . '/helpers/mail.php';
-        $ok = enviar_correo_soporte_pendiente($destinatarios, $pendientes);
+        $okCorreo = false;
+        $destinatarios = $this->destinatariosAlerta($config);
+        if ($destinatarios !== []) {
+            require_once MVC_APP . '/helpers/mail.php';
+            $okCorreo = enviar_correo_soporte_pendiente($destinatarios, $pendientes);
+        }
 
+        // Nunca debe tumbar el aviso por correo: si WhatsApp falla (credenciales
+        // caducadas, Meta caído), se registra y se sigue.
+        $enviadosWa = 0;
+        try {
+            $enviadosWa = $this->notificarWhatsappSinAtender($config, $pendientes);
+        } catch (\Throwable $e) {
+            $enviadosWa = 0;
+        }
+
+        $ok = $okCorreo || $enviadosWa > 0;
         if ($ok) {
             $dir = dirname($archivo);
             if (!is_dir($dir)) {
@@ -725,7 +782,160 @@ class SoporteChatService
             @file_put_contents($archivo, $huella);
         }
 
-        return ['enviado' => $ok, 'conversaciones' => count($pendientes)];
+        return [
+            'enviado'        => $ok,
+            'conversaciones' => count($pendientes),
+            'correo'         => $okCorreo,
+            'whatsapp'       => $enviadosWa,
+        ];
+    }
+
+    /**
+     * Manda el aviso por WhatsApp con la empresa y el usuario que están pidiendo
+     * soporte. Reutiliza el módulo de WhatsApp tal cual: las credenciales de Meta
+     * son las de empresa_whatsapp_config y los destinos, los números de aviso ya
+     * registrados ahí (whatsapp_aviso_numeros), para no llevar dos listas.
+     *
+     * QUIÉN LO ENVÍA. Primero, una empresa que atienda soporte y tenga WhatsApp
+     * configurado; si ninguna lo tiene, la empresa del usuario que consulta
+     * —tiene WhatsApp y es la interesada en que su consulta se vea—. Si no hay
+     * ninguna de las dos, no se envía nada y el correo sigue su curso.
+     *
+     * TEXTO LIBRE vs PLANTILLA. Meta solo entrega texto libre dentro de la
+     * ventana de 24 h desde el último mensaje del destinatario. Por eso, si se
+     * configuró una plantilla aprobada, se usa esa ({{1}} empresa, {{2}} usuario,
+     * {{3}} asunto) y el aviso llega siempre.
+     *
+     * @param array<string,mixed>       $config
+     * @param array<int,array<string,mixed>> $pendientes
+     * @return int números avisados correctamente
+     */
+    private function notificarWhatsappSinAtender(array $config, array $pendientes): int
+    {
+        $idEmpresaEmisora = $this->empresaEmisoraWhatsapp($pendientes);
+        if ($idEmpresaEmisora === null) {
+            return 0;
+        }
+
+        $destinos = $this->numerosAlertaWhatsapp($config, $idEmpresaEmisora);
+        if ($destinos === []) {
+            return 0;
+        }
+
+        $primera   = $pendientes[0];
+        $empresa   = trim((string) ($primera['empresa_nombre'] ?? '')) ?: 'Empresa sin nombre';
+        $usuario   = trim((string) ($primera['usuario_nombre'] ?? '')) ?: 'Usuario sin nombre';
+        $asunto    = trim((string) ($primera['asunto'] ?? '')) ?: 'Consulta de soporte';
+        $plantilla = trim((string) ($config['whatsapp_plantilla'] ?? ''));
+        $idioma    = trim((string) ($config['whatsapp_plantilla_idioma'] ?? '')) ?: 'es';
+
+        $wa       = new \App\services\WhatsappService();
+        $enviados = 0;
+
+        foreach ($destinos as $telefono) {
+            if ($plantilla !== '') {
+                $componentes = [[
+                    'type'       => 'body',
+                    'parameters' => [
+                        ['type' => 'text', 'text' => $empresa],
+                        ['type' => 'text', 'text' => $usuario],
+                        ['type' => 'text', 'text' => mb_substr($asunto, 0, 200)],
+                    ],
+                ]];
+                $res = $wa->sendTemplateMessage($idEmpresaEmisora, $telefono, $plantilla, $idioma, $componentes);
+            } else {
+                $res = $wa->sendTextMessage($idEmpresaEmisora, $telefono, $this->textoAlertaWhatsapp($pendientes));
+            }
+
+            if (!empty($res['success'])) {
+                $enviados++;
+            }
+        }
+
+        return $enviados;
+    }
+
+    /**
+     * Empresa cuyas credenciales de WhatsApp envían el aviso: la que atiende, y
+     * si ninguna de las que atienden tiene WhatsApp, la del usuario que consulta.
+     *
+     * @param array<int,array<string,mixed>> $pendientes
+     */
+    private function empresaEmisoraWhatsapp(array $pendientes): ?int
+    {
+        try {
+            $idSubmodulo = (new \App\models\PermisoSubmodulo())->getIdSubmoduloPorRutaMvc(self::RUTA_MODULO);
+        } catch (\Throwable $e) {
+            $idSubmodulo = null;
+        }
+
+        if ($idSubmodulo !== null) {
+            $conWhatsapp = $this->repo->getEmpresasAsignadasConWhatsapp($idSubmodulo);
+            if ($conWhatsapp !== []) {
+                return $conWhatsapp[0];
+            }
+        }
+
+        $idEmpresaConsulta = (int) ($pendientes[0]['id_empresa'] ?? 0);
+
+        return $idEmpresaConsulta > 0 && $this->repo->empresaTieneWhatsapp($idEmpresaConsulta)
+            ? $idEmpresaConsulta
+            : null;
+    }
+
+    /**
+     * Números que reciben el aviso: el configurado en el chat si lo hay, y si no
+     * los que la empresa emisora ya tiene registrados para los avisos de WhatsApp.
+     *
+     * @param array<string,mixed> $config
+     * @return array<int,string>
+     */
+    private function numerosAlertaWhatsapp(array $config, int $idEmpresaEmisora): array
+    {
+        $configurado = preg_replace('/\D/', '', (string) ($config['whatsapp_alertas'] ?? ''));
+        if ($configurado !== '') {
+            return [$configurado];
+        }
+
+        return $this->repo->getNumerosAvisoWhatsapp($idEmpresaEmisora);
+    }
+
+    /**
+     * Texto del aviso. Empieza por la empresa y el usuario —que es lo que hay que
+     * saber para reaccionar— y añade el resto de consultas en espera si las hay.
+     *
+     * @param array<int,array<string,mixed>> $pendientes
+     */
+    private function textoAlertaWhatsapp(array $pendientes): string
+    {
+        $primera = $pendientes[0];
+        $empresa = trim((string) ($primera['empresa_nombre'] ?? '')) ?: 'Empresa sin nombre';
+        $usuario = trim((string) ($primera['usuario_nombre'] ?? '')) ?: 'Usuario sin nombre';
+        $asunto  = trim((string) ($primera['asunto'] ?? ''));
+        $minutos = (int) round((float) ($primera['minutos_espera'] ?? 0));
+
+        $texto  = "🎧 *Consulta de soporte sin atender*\n\n";
+        $texto .= "*Empresa:* {$empresa}\n";
+        $texto .= "*Usuario:* {$usuario}\n";
+        if ($asunto !== '') {
+            $texto .= "*Asunto:* " . mb_substr($asunto, 0, 200) . "\n";
+        }
+        $texto .= "*Esperando:* {$minutos} min\n";
+
+        $otras = count($pendientes) - 1;
+        if ($otras > 0) {
+            $texto .= "\nHay {$otras} consulta(s) más en espera:\n";
+            foreach (array_slice($pendientes, 1, 5) as $c) {
+                $emp = trim((string) ($c['empresa_nombre'] ?? '')) ?: 'Empresa sin nombre';
+                $usu = trim((string) ($c['usuario_nombre'] ?? '')) ?: 'Usuario sin nombre';
+                $texto .= "• {$emp} — {$usu}\n";
+            }
+            if ($otras > 5) {
+                $texto .= '• … y ' . ($otras - 5) . " más\n";
+            }
+        }
+
+        return $texto;
     }
 
     /**

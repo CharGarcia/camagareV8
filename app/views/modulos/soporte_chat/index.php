@@ -256,6 +256,32 @@ $base = rtrim(BASE_URL, '/');
                         <input type="number" id="cfgMinutos" class="form-control form-control-sm" min="0" max="1440">
                         <div class="form-text" style="font-size:.72rem;">0 = no avisar</div>
                     </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label small fw-semibold">WhatsApp para avisos</label>
+                        <input type="text" id="cfgWhatsapp" class="form-control form-control-sm"
+                               placeholder="Opcional — con código de país, sin +" maxlength="20" inputmode="numeric">
+                        <div class="form-text" style="font-size:.72rem;">
+                            El mismo aviso sale también por WhatsApp con la empresa y el usuario que
+                            piden soporte. Si lo deja vacío, se envía a los números ya registrados en
+                            la configuración de WhatsApp de la empresa que atiende.
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label class="form-label small fw-semibold">Plantilla de WhatsApp</label>
+                        <input type="text" id="cfgWhatsappPlantilla" class="form-control form-control-sm"
+                               placeholder="Opcional" maxlength="150">
+                        <div class="form-text" style="font-size:.72rem;">
+                            Nombre de la plantilla aprobada en Meta ({{1}} empresa, {{2}} usuario,
+                            {{3}} asunto). Vacío = mensaje de texto, que solo llega si el número
+                            escribió al negocio en las últimas 24 horas.
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small fw-semibold">Idioma</label>
+                        <input type="text" id="cfgWhatsappIdioma" class="form-control form-control-sm"
+                               placeholder="es" maxlength="10">
+                    </div>
                     <div class="col-6 col-md-3">
                         <label class="form-label small fw-semibold">Archivar tras (días)</label>
                         <input type="number" id="cfgDiasArchivar" class="form-control form-control-sm" min="0" max="3650">

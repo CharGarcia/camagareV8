@@ -2831,5 +2831,19 @@ window.onOpcionCreada = function (id, nombre, comportamiento) {
     });
 };
 
-// window.abrirModalClienteCrear ya lo expone clientes/modal.php automáticamente
+// window.abrirModalClienteCrear ya lo expone public/js/modulos/clientes_modal.js
+// (incluido más abajo). Tras guardar el nuevo cliente, se auto-selecciona en "Recibo de".
+document.addEventListener('clienteGuardado', async (ev) => {
+    let ident = '';
+    if (ev.detail && ev.detail.data && ev.detail.data.identificacion) ident = String(ev.detail.data.identificacion).trim();
+    if (!ident) return;
+    try {
+        const res  = await fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getClientesAjax?q=${encodeURIComponent(ident)}`);
+        const data = await res.json();
+        const lista = data.data || [];
+        const match = lista.find(c => String(c.identificacion || '') === ident) || lista[0];
+        if (match) seleccionarClienteReciboDe(match);
+    } catch (e) {}
+});
 </script>
+<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>

@@ -87,7 +87,15 @@ try {
     );
     $alerta = $svcAlerta->alertarSinAtender();
     if (!empty($alerta['enviado'])) {
-        echo "[" . date('Y-m-d H:i:s') . "] Soporte: aviso enviado por {$alerta['conversaciones']} consulta(s) sin atender.\n";
+        $canales = [];
+        if (!empty($alerta['correo'])) {
+            $canales[] = 'correo';
+        }
+        if (!empty($alerta['whatsapp'])) {
+            $canales[] = "WhatsApp ({$alerta['whatsapp']} número/s)";
+        }
+        echo "[" . date('Y-m-d H:i:s') . "] Soporte: aviso enviado por {$alerta['conversaciones']} consulta(s) sin atender"
+            . ($canales !== [] ? ' — ' . implode(' + ', $canales) : '') . ".\n";
     }
 } catch (\Throwable $e) {
     // Si el módulo de soporte aún no está desplegado, el resto del cron sigue.

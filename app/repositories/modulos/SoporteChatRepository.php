@@ -494,7 +494,7 @@ class SoporteChatRepository extends BaseRepository
      */
     public function getSinAtender(int $minutos): array
     {
-        $sql = "SELECT c.id, c.asunto, c.estado, c.ultimo_mensaje, c.ultimo_mensaje_at, c.origen_modulo,
+        $sql = "SELECT c.id, c.id_empresa, c.asunto, c.estado, c.ultimo_mensaje, c.ultimo_mensaje_at, c.origen_modulo,
                        e.nombre AS empresa_nombre,
                        u.nombre AS usuario_nombre,
                        a.nombre AS agente_nombre,
@@ -549,6 +549,96 @@ class SoporteChatRepository extends BaseRepository
         ));
     }
 
+    /**
+     * Empresas que atienden (tienen asignado el submódulo del chat) y además
+     * tienen WhatsApp configurado, en orden de id. La primera es la que se usa
+     * para emitir el aviso: sus credenciales de Meta son las que envían.
+     *
+     * @param int $idSubmodulo id de submodulos_menu para 'modulos/soporte-chat'
+     * @return int[] ids de empresa
+     */
+    public function getEmpresasAsignadasConWhatsapp(int $idSubmodulo): array
+    {
+        if ($idSubmodulo <= 0) {
+            return [];
+        }
+
+        $sql = "SELECT DISTINCT e.id
+                  FROM modulos_asignados ma
+                  INNER JOIN empresas e ON e.id = ma.id_empresa
+                  INNER JOIN empresa_whatsapp_config w ON w.id_empresa = e.id
+                 WHERE ma.id_submodulo = :id_submodulo
+                   AND ma.r = 1
+                   AND e.eliminado = false
+                   AND e.estado = '1'
+                   AND COALESCE(w.eliminado, false) = false
+                   AND COALESCE(w.status, true) = true
+                   AND w.access_token    IS NOT NULL AND TRIM(w.access_token)    <> ''
+                   AND w.phone_number_id IS NOT NULL AND TRIM(w.phone_number_id) <> ''
+                 ORDER BY e.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_submodulo' => $idSubmodulo]);
+
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** ¿Esta empresa tiene WhatsApp utilizable (credenciales completas y activo)? */
+    public function empresaTieneWhatsapp(int $idEmpresa): bool
+    {
+        if ($idEmpresa <= 0) {
+            return false;
+        }
+
+        $sql = "SELECT 1
+                  FROM empresa_whatsapp_config w
+                  INNER JOIN empresas e ON e.id = w.id_empresa
+                 WHERE w.id_empresa = :id_empresa
+                   AND COALESCE(w.eliminado, false) = false
+                   AND COALESCE(w.status, true) = true
+                   AND w.access_token    IS NOT NULL AND TRIM(w.access_token)    <> ''
+                   AND w.phone_number_id IS NOT NULL AND TRIM(w.phone_number_id) <> ''
+                   AND e.eliminado = false
+                   AND e.estado = '1'
+                 LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+
+        return $st->fetchColumn() !== false;
+    }
+
+    /**
+     * Números que reciben los avisos de WhatsApp de una empresa. Es la misma
+     * lista que usa el aviso de chats sin leer del módulo de WhatsApp
+     * (whatsapp_aviso_numeros): quien atiende no tiene por qué mantener dos.
+     *
+     * @return array<int,string> solo dígitos
+     */
+    public function getNumerosAvisoWhatsapp(int $idEmpresa): array
+    {
+        if ($idEmpresa <= 0) {
+            return [];
+        }
+
+        $sql = "SELECT telefono
+                  FROM whatsapp_aviso_numeros
+                 WHERE id_empresa = :id_empresa
+                   AND activo    = true
+                   AND eliminado = false
+                 ORDER BY id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+
+        $numeros = [];
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $tel) {
+            $limpio = preg_replace('/\D/', '', (string) $tel);
+            if ($limpio !== '') {
+                $numeros[$limpio] = true;   // clave = número: descarta repetidos
+            }
+        }
+
+        return array_keys($numeros);
+    }
+
     // ── Configuración global ─────────────────────────────────────────────────
 
     public function getConfig(): array
@@ -557,24 +647,17 @@ class SoporteChatRepository extends BaseRepository
         return $row ?: [];
     }
 
-    /** @param array<string,mixed> $data claves ya validadas por Rules */
+    /**
+     * @param array<string,mixed> $data claves ya validadas por Rules
+     *
+     * Las columnas de WhatsApp llegaron después (migración
+     * 20260827_soporte_chat_whatsapp_alertas.sql). Si todavía no están en la
+     * base, se guarda el resto en lugar de dejar la pantalla de configuración
+     * sin poder guardar nada hasta desplegar el SQL.
+     */
     public function guardarConfig(array $data, int $idUsuario): void
     {
-        $sql = "UPDATE soporte_config
-                   SET activo                     = :activo,
-                       copiloto_activo            = :copiloto_activo,
-                       mensaje_bienvenida         = :mensaje_bienvenida,
-                       mensaje_fuera_horario      = :mensaje_fuera_horario,
-                       dias_atencion              = :dias_atencion,
-                       hora_inicio                = :hora_inicio,
-                       hora_fin                   = :hora_fin,
-                       minutos_alerta_sin_atender = :minutos_alerta,
-                       correo_alertas             = :correo_alertas,
-                       dias_archivar_cerradas     = :dias_archivar,
-                       updated_at = CURRENT_TIMESTAMP,
-                       updated_by = :updated_by
-                 WHERE id = 1";
-        $this->db->prepare($sql)->execute([
+        $comunes = [
             ':activo'                => $data['activo'] ? 'true' : 'false',
             ':copiloto_activo'       => $data['copiloto_activo'] ? 'true' : 'false',
             ':mensaje_bienvenida'    => $data['mensaje_bienvenida'],
@@ -586,7 +669,61 @@ class SoporteChatRepository extends BaseRepository
             ':correo_alertas'        => $data['correo_alertas'],
             ':dias_archivar'         => $data['dias_archivar_cerradas'],
             ':updated_by'            => $idUsuario,
-        ]);
+        ];
+
+        $set = "activo                     = :activo,
+                       copiloto_activo            = :copiloto_activo,
+                       mensaje_bienvenida         = :mensaje_bienvenida,
+                       mensaje_fuera_horario      = :mensaje_fuera_horario,
+                       dias_atencion              = :dias_atencion,
+                       hora_inicio                = :hora_inicio,
+                       hora_fin                   = :hora_fin,
+                       minutos_alerta_sin_atender = :minutos_alerta,
+                       correo_alertas             = :correo_alertas,
+                       dias_archivar_cerradas     = :dias_archivar,
+                       updated_at = CURRENT_TIMESTAMP,
+                       updated_by = :updated_by";
+
+        $setWhatsapp = "whatsapp_alertas          = :whatsapp_alertas,
+                       whatsapp_plantilla         = :whatsapp_plantilla,
+                       whatsapp_plantilla_idioma  = :whatsapp_idioma,
+                       ";
+
+        // Se comprueba antes en vez de intentar y capturar el error: un fallo de
+        // SQL dentro de una transacción la deja abortada (25P02) y el reintento
+        // fallaría igual.
+        if (!$this->tieneColumnasWhatsapp()) {
+            $this->db->prepare("UPDATE soporte_config SET {$set} WHERE id = 1")->execute($comunes);
+            return;
+        }
+
+        $this->db->prepare("UPDATE soporte_config SET {$setWhatsapp}{$set} WHERE id = 1")->execute(
+            $comunes + [
+                ':whatsapp_alertas'   => $data['whatsapp_alertas'] ?? null,
+                ':whatsapp_plantilla' => $data['whatsapp_plantilla'] ?? null,
+                ':whatsapp_idioma'    => $data['whatsapp_plantilla_idioma'] ?? 'es',
+            ]
+        );
+    }
+
+    /** ¿Está desplegada la migración del aviso por WhatsApp? Se resuelve una vez por request. */
+    private function tieneColumnasWhatsapp(): bool
+    {
+        static $existe = null;
+        if ($existe !== null) {
+            return $existe;
+        }
+
+        try {
+            $st = $this->db->query(
+                "SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'soporte_config' AND column_name = 'whatsapp_alertas'
+                  LIMIT 1"
+            );
+            return $existe = ($st !== false && $st->fetchColumn() !== false);
+        } catch (\Throwable $e) {
+            return $existe = false;
+        }
     }
 
     // ── Archivado (lo ejecuta el cron) ───────────────────────────────────────

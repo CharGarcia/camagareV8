@@ -492,7 +492,10 @@
             $('cfgHoraInicio').value = String(c.hora_inicio || '08:00:00').substring(0, 5);
             $('cfgHoraFin').value = String(c.hora_fin || '18:00:00').substring(0, 5);
             $('cfgCorreo').value = c.correo_alertas || '';
-            $('cfgMinutos').value = c.minutos_alerta_sin_atender != null ? c.minutos_alerta_sin_atender : 15;
+            $('cfgMinutos').value = c.minutos_alerta_sin_atender != null ? c.minutos_alerta_sin_atender : 1;
+            $('cfgWhatsapp').value = c.whatsapp_alertas || '';
+            $('cfgWhatsappPlantilla').value = c.whatsapp_plantilla || '';
+            $('cfgWhatsappIdioma').value = c.whatsapp_plantilla_idioma || 'es';
             $('cfgDiasArchivar').value = c.dias_archivar_cerradas != null ? c.dias_archivar_cerradas : 90;
 
             var dias = String(c.dias_atencion || '').split(',');
@@ -517,6 +520,9 @@
             hora_inicio: $('cfgHoraInicio').value,
             hora_fin: $('cfgHoraFin').value,
             correo_alertas: $('cfgCorreo').value,
+            whatsapp_alertas: $('cfgWhatsapp').value,
+            whatsapp_plantilla: $('cfgWhatsappPlantilla').value,
+            whatsapp_plantilla_idioma: $('cfgWhatsappIdioma').value,
             minutos_alerta_sin_atender: parseInt($('cfgMinutos').value || '0', 10),
             dias_archivar_cerradas: parseInt($('cfgDiasArchivar').value || '0', 10)
         }).then(function (r) {

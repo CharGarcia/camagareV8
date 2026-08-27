@@ -19,8 +19,10 @@ use App\Services\modulos\SoporteChatService;
  *     permiso sobre el submódulo dejaría sin soporte justo a quien más lo
  *     necesita (un nivel 1 con dos módulos asignados).
  *
- *   - LA BANDEJA es el módulo propiamente dicho y sí exige permiso (requireLeer),
- *     y encima de eso el Service exige ser agente de soporte.
+ *   - LA BANDEJA es el módulo propiamente dicho y sí exige permiso (requireAgente),
+ *     y encima de eso el Service exige ser agente de soporte. Ese permiso se
+ *     acepta desde CUALQUIER empresa del usuario, no solo la activa: la bandeja
+ *     no es por empresa (ver SoporteChatService::esAgente()).
  *
  * Los endpoints compartidos (mensajes, enviar, pulso) solo piden sesión: quién
  * puede ver qué conversación lo decide el Service con la sesión en la mano,
@@ -51,7 +53,7 @@ class SoporteChatController extends BaseModuloController
 
     public function index(): void
     {
-        $this->requireLeer();
+        $this->requireAgente('r');
 
         if (!$this->service->esAgente($this->idUsuario(), $this->idEmpresa(), $this->nivel())) {
             $this->redirect(rtrim(BASE_URL, '/') . '/home/index');
@@ -71,7 +73,7 @@ class SoporteChatController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos/soporte_chat/index', [
             'titulo'          => 'Chat de Soporte',
-            'perm'            => $this->getPermisos(),
+            'perm'            => $this->permisosAgente(),
             'rutaModulo'      => self::RUTA_MODULO,
             'fullWidth'       => true,
             'copilotoActivo'  => $copiloto,
@@ -208,7 +210,7 @@ class SoporteChatController extends BaseModuloController
 
     public function bandejaAjax(): void
     {
-        $this->requireLeer();
+        $this->requireAgente('r');
 
         try {
             $datos = $this->service->listarBandeja($this->idUsuario(), $this->idEmpresa(), $this->nivel(), [
@@ -225,7 +227,7 @@ class SoporteChatController extends BaseModuloController
 
     public function pulsoBandejaAjax(): void
     {
-        $this->requireLeer();
+        $this->requireAgente('r');
 
         try {
             $this->json(['ok' => true, 'v' => $this->service->getVersionBandeja($this->idUsuario(), $this->idEmpresa(), $this->nivel())]);
@@ -240,7 +242,7 @@ class SoporteChatController extends BaseModuloController
      */
     public function sugerirAjax(): void
     {
-        $this->requireLeer();
+        $this->requireAgente('r');
         $input = $this->inputJson();
 
         try {
@@ -256,7 +258,7 @@ class SoporteChatController extends BaseModuloController
 
     public function tomarAjax(): void
     {
-        $this->requireActualizar();
+        $this->requireAgente('u');
         $input = $this->inputJson();
 
         try {
@@ -271,7 +273,7 @@ class SoporteChatController extends BaseModuloController
 
     public function respuestasRapidasAjax(): void
     {
-        $this->requireLeer();
+        $this->requireAgente('r');
 
         try {
             $this->json(['ok' => true, 'data' => $this->service->listarRespuestasRapidas($this->idUsuario(), $this->idEmpresa(), $this->nivel())]);
@@ -282,7 +284,7 @@ class SoporteChatController extends BaseModuloController
 
     public function guardarRespuestaRapidaAjax(): void
     {
-        $this->requireCrear();
+        $this->requireAgente('w');
         $input = $this->inputJson();
 
         try {
@@ -301,7 +303,7 @@ class SoporteChatController extends BaseModuloController
 
     public function eliminarRespuestaRapidaAjax(): void
     {
-        $this->requireEliminar();
+        $this->requireAgente('d');
         $input = $this->inputJson();
 
         try {
@@ -369,7 +371,7 @@ class SoporteChatController extends BaseModuloController
 
     public function configGet(): void
     {
-        $this->requireLeer();
+        $this->requireAgente('r');
 
         try {
             $config = $this->service->getConfig();
@@ -382,7 +384,7 @@ class SoporteChatController extends BaseModuloController
 
     public function configStore(): void
     {
-        $this->requireActualizar();
+        $this->requireAgente('u');
         $input = $this->inputJson();
 
         try {
@@ -395,7 +397,7 @@ class SoporteChatController extends BaseModuloController
 
     public function eliminarAjax(): void
     {
-        $this->requireEliminar();
+        $this->requireAgente('d');
         $input = $this->inputJson();
 
         try {
@@ -407,6 +409,61 @@ class SoporteChatController extends BaseModuloController
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Permisos para la VISTA de la bandeja, con el mismo criterio que
+     * requireAgente(): lo asignado en la empresa activa o, si ahí no hay nada, en
+     * cualquier otra empresa del usuario. Si se usara getPermisos() a secas, un
+     * agente que entra desde una empresa donde no tiene el módulo vería la bandeja
+     * sin los botones de tomar/eliminar aunque los endpoints sí se lo permitan.
+     *
+     * @return array{ver:bool,crear:bool,actualizar:bool,eliminar:bool,todo:bool,id_submodulo:?int}
+     */
+    private function permisosAgente(): array
+    {
+        $perm  = $this->getPermisos();
+        $letra = ['ver' => 'r', 'crear' => 'w', 'actualizar' => 'u', 'eliminar' => 'd', 'todo' => 't'];
+
+        foreach ($letra as $clave => $l) {
+            if (empty($perm[$clave])) {
+                $perm[$clave] = \App\Helpers\Permisos::tienePermisoEnAlgunaEmpresa(self::RUTA_MODULO, $l);
+            }
+        }
+
+        return $perm;
+    }
+
+    /**
+     * Guard de la BANDEJA: exige el permiso $letra sobre el módulo en cualquiera de
+     * las empresas del usuario, no solo en la activa.
+     *
+     * Va con el alcance del módulo (la bandeja recibe consultas de TODAS las
+     * empresas, ver SoporteChatService::esAgente()): si el permiso se pidiera solo
+     * en la empresa activa, quien atiende soporte perdería la bandeja —y el aviso
+     * del navbar— apenas cambiara de empresa. Cuando no lo tiene en ninguna, se
+     * delega en el guard estándar para responder igual que el resto del sistema
+     * (403 en AJAX, redirección al dashboard en vista).
+     *
+     * @param string $letra r (ver), w (crear), u (actualizar), d (eliminar)
+     */
+    private function requireAgente(string $letra = 'r'): void
+    {
+        $this->requireEmpresaSesion();
+
+        // Eliminar en la empresa demo se decide siempre en el guard estándar: ahí
+        // vive el bloqueo central de esa cuenta y no debe poder saltarse por tener
+        // el permiso en otra empresa.
+        $esDemoBloqueante = $letra === 'd'
+            && (int) ($_SESSION['nivel'] ?? 0) < 3
+            && $this->empresaActualEsDemo();
+
+        if (!$esDemoBloqueante
+            && \App\Helpers\Permisos::tienePermisoEnAlgunaEmpresa(self::RUTA_MODULO, $letra)) {
+            return;
+        }
+
+        $this->requirePermisoModulo(self::RUTA_MODULO, $letra);
+    }
 
     private function idUsuario(): int
     {

@@ -40,7 +40,7 @@ class ContadoresNavbarService
         'ordenes_compra_borrador'      => 'modulos/ordenes-compra',
         'pedidos_pendientes'           => 'modulos/pedidos',
         'factura_express_pendientes'   => 'modulos/factura-express-solicitudes',
-        'whatsapp_unread'              => 'modulos/whatsapp-chat',
+        'whatsapp_unread'              => self::RUTA_WHATSAPP,
     ];
 
     /**
@@ -67,8 +67,16 @@ class ContadoresNavbarService
     /** Ruta MVC del módulo de suscripciones (aviso para la empresa ADMINISTRADORA). */
     public const RUTA_SUSCRIPCIONES = 'modulos/suscripciones';
 
-    /** Ruta MVC de la bandeja de soporte (badge solo para el equipo que atiende). */
+    /**
+     * Ruta MVC de la bandeja de soporte (badge solo para el equipo que atiende).
+     * NO va en permisosNavbar(): ese permiso se evalúa contra la empresa activa y
+     * el de soporte vale desde cualquier empresa del usuario, así que lo resuelve
+     * SoporteChatService::esAgente() con su propia caché.
+     */
     public const RUTA_SOPORTE = 'modulos/soporte-chat';
+
+    /** Ruta MVC del chat de WhatsApp (ícono siempre visible para quien lo tiene). */
+    public const RUTA_WHATSAPP = 'modulos/whatsapp-chat';
 
     /** Ventana en días para "suscripciones por vencer" (cobros próximos de los clientes). */
     private const DIAS_SUSCRIPCIONES_POR_VENCER = 7;
@@ -133,6 +141,7 @@ class ContadoresNavbarService
         return 'cmg_submod_nuevos_' . $idEmpresa . '_' . $idUsuario;
     }
 
+
     /** Invalida el aviso "submódulo nuevo" de un usuario+empresa puntual. */
     public static function invalidarSubmodulosNuevos(int $idUsuario, int $idEmpresa): void
     {
@@ -141,6 +150,7 @@ class ContadoresNavbarService
         }
         Cache::delete(self::claveSubmodulosNuevos($idEmpresa, $idUsuario));
     }
+
 
     /**
      * Invalida la caché de contadores de una empresa si la tabla afectada es relevante.
@@ -247,7 +257,7 @@ class ContadoresNavbarService
         $rutas = array_unique(array_merge(
             array_values(self::RUTAS_MODULO),
             array_values(self::NOVEDAD_RUTAS),
-            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES, self::RUTA_SOPORTE]
+            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES]
         ));
         $perms = [];
         foreach ($rutas as $ruta) {
@@ -280,6 +290,16 @@ class ContadoresNavbarService
                     continue;
                 }
                 $out[$clave] = (int) ($empresa[$clave] ?? 0);
+            }
+
+            // Chat de WhatsApp: a diferencia de los demás contadores, su ícono no
+            // depende de que haya mensajes sin leer. Es una bandeja de conversación
+            // —se entra a escribir, no solo a atender lo pendiente—, así que el
+            // acceso queda a la vista mientras el usuario tenga el módulo asignado
+            // EN ESTA EMPRESA (los chats sí son por empresa, §4: aquí no aplica la
+            // excepción del chat de soporte).
+            if (!empty($permRuta[self::RUTA_WHATSAPP])) {
+                $out['whatsapp_acceso'] = true;
             }
 
             // Novedades SRI por tipo (solo módulos permitidos)
@@ -362,9 +382,18 @@ class ContadoresNavbarService
 
                 $out['soporte_sin_leer'] = $soporte->contarSinLeerUsuario($idUsuario);
 
-                // La bandeja solo cuenta para el equipo de soporte, y además
-                // exige permiso 'ver' sobre el módulo.
-                if (!empty($permRuta[self::RUTA_SOPORTE]) && $soporte->esAgente($idUsuario, $idEmpresa, $nivel)) {
+                // La bandeja es para el equipo de soporte. El permiso se mira en
+                // CUALQUIER empresa del usuario, no solo en la activa (la bandeja
+                // recibe consultas de todas: ver SoporteChatService::esAgente()),
+                // así que aquí ya no se consulta $permRuta —que es de la empresa
+                // en sesión— sino directamente al Service, cacheado por usuario.
+                if ($soporte->esAgente($idUsuario, $idEmpresa, $nivel)) {
+                    // El acceso a la bandeja se avisa siempre, aunque no haya nada
+                    // por atender: el ícono del navbar debe estar visible mientras
+                    // el usuario tenga el módulo, y el badge aparece solo si hay
+                    // consultas pendientes.
+                    $out['soporte_agente'] = true;
+
                     $bandeja = $soporte->contarBandeja();
                     $out['soporte_bandeja'] = $bandeja['espera'] + $bandeja['sin_leer'];
                 }

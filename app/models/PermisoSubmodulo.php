@@ -20,6 +20,10 @@ class PermisoSubmodulo extends BaseModel
     {
         try {
             \App\Services\ContadoresNavbarService::invalidarSubmodulosNuevos($idUsuario, $idEmpresa);
+            // Y el flag "atiende soporte", que se cachea por usuario (no por
+            // empresa): quitar o dar el Chat de Soporte debe reflejarse en el
+            // navbar sin esperar a que expire el TTL.
+            \App\Services\modulos\SoporteChatService::invalidarAgente($idUsuario);
         } catch (\Throwable $e) {
             // Silencioso a propósito.
         }
@@ -521,6 +525,79 @@ class PermisoSubmodulo extends BaseModel
         }
 
         return $cache = [];
+    }
+
+    /**
+     * ¿El usuario tiene el permiso $letra sobre alguno de estos submódulos en
+     * ALGUNA empresa asignada (no necesariamente la activa)?
+     *
+     * Los permisos son por empresa (§4), así que esto es una EXCEPCIÓN y solo debe
+     * usarse en módulos cuyo alcance real no es la empresa activa: la bandeja del
+     * chat de soporte es global —atiende consultas de todas las empresas—, así que
+     * quien la tenga asignada en una empresa la sigue atendiendo mientras trabaja
+     * en otra. No usar esto para módulos operativos normales.
+     *
+     * Solo cuentan las empresas vigentes: una asignación sobre una empresa inactiva
+     * o eliminada no debe habilitar nada.
+     *
+     * @param int[]  $idsSubmodulo
+     * @param string $letra r (ver), w (crear), u (actualizar), d (eliminar), t (todo)
+     */
+    public function tienePermisoEnAlgunaEmpresa(int $idUsuario, array $idsSubmodulo, string $letra = 'r'): bool
+    {
+        $idU = (int) $idUsuario;
+        if ($idU <= 0) {
+            return false;
+        }
+
+        $ids = [];
+        foreach ($idsSubmodulo as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $ids[$id] = true;
+            }
+        }
+        if ($ids === []) {
+            return false;
+        }
+        $inIds = implode(',', array_keys($ids));
+        $col   = in_array($letra, ['r', 'w', 'u', 'd', 't'], true) ? $letra : 'r';
+
+        // Primero con JOIN a empresas (descarta asignaciones sobre empresas dadas de
+        // baja); si ese esquema no responde, se cae a la consulta simple para no
+        // dejar sin bandeja a una instalación con otro esquema de empresas.
+        $queries = [
+            // La PK de empresas es 'id' (ver App\models\Empresa); la segunda variante
+            // cubre el esquema alterno con 'id_empresa', igual que el resto del modelo.
+            "SELECT 1 FROM modulos_asignados ma
+                INNER JOIN empresas e ON e.id = ma.id_empresa
+                    AND e.estado = '1' AND e.eliminado = false
+                WHERE ma.id_usuario = {$idU}
+                  AND ma.id_submodulo IN ({$inIds})
+                  AND COALESCE(ma.{$col}, 0) = 1
+                LIMIT 1",
+            "SELECT 1 FROM modulos_asignados ma
+                INNER JOIN empresas e ON e.id_empresa = ma.id_empresa
+                    AND e.estado = '1' AND e.eliminado = false
+                WHERE ma.id_usuario = {$idU}
+                  AND ma.id_submodulo IN ({$inIds})
+                  AND COALESCE(ma.{$col}, 0) = 1
+                LIMIT 1",
+            "SELECT 1 FROM modulos_asignados
+                WHERE id_usuario = {$idU}
+                  AND id_submodulo IN ({$inIds})
+                  AND COALESCE({$col}, 0) = 1
+                LIMIT 1",
+        ];
+        foreach ($queries as $sql) {
+            try {
+                return !empty($this->query($sql));
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        return false;
     }
 
     /**

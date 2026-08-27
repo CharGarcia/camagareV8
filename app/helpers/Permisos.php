@@ -27,6 +27,9 @@ class Permisos
     /** @var array<string,array> Caché por (ruta|usuario|empresa) dentro del request. */
     private static array $cache = [];
 
+    /** @var array<string,bool> Caché de tienePermisoEnAlgunaEmpresa() dentro del request. */
+    private static array $cacheAlguna = [];
+
     private static ?PermisoSubmodulo $model = null;
 
     private static function model(): PermisoSubmodulo
@@ -122,6 +125,49 @@ class Permisos
                 'eliminar' => false, 'todo' => false, 'id_submodulo' => null,
             ];
         }
+    }
+
+    /**
+     * ¿Tiene el permiso $letra sobre esta ruta en ALGUNA de sus empresas, aunque no
+     * sea la activa?
+     *
+     * EXCEPCIÓN a §4, reservada a módulos cuyo alcance real no es la empresa activa
+     * (hoy: la bandeja del chat de soporte, que atiende consultas de todas las
+     * empresas). Para cualquier módulo operativo la respuesta correcta sigue siendo
+     * porRuta()/puedeVer(), que se evalúa contra la empresa en sesión.
+     *
+     * @param string $letra r (ver), w (crear), u (actualizar), d (eliminar), t (todo)
+     */
+    public static function tienePermisoEnAlgunaEmpresa(string $pathMvc, string $letra = 'r'): bool
+    {
+        $idU   = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+
+        if ($nivel >= 3) {
+            return true;    // superadmin: acceso total, como en porRutaEnEmpresa()
+        }
+        if ($idU <= 0) {
+            return false;
+        }
+
+        $key = '__any__|' . $pathMvc . '|' . $letra . '|' . $idU;
+        if (isset(self::$cacheAlguna[$key])) {
+            return self::$cacheAlguna[$key];
+        }
+
+        try {
+            $model  = self::model();
+            $idsSub = $model->getIdsSubmoduloPorRutaMvc($pathMvc);
+            return self::$cacheAlguna[$key] = $model->tienePermisoEnAlgunaEmpresa($idU, $idsSub, $letra);
+        } catch (\Throwable $e) {
+            return self::$cacheAlguna[$key] = false;
+        }
+    }
+
+    /** Atajo de lectura de la excepción anterior. */
+    public static function puedeVerEnAlgunaEmpresa(string $ruta): bool
+    {
+        return self::tienePermisoEnAlgunaEmpresa($ruta, 'r');
     }
 
     public static function puedeVer(string $ruta): bool        { return !empty(self::porRuta($ruta)['ver']); }

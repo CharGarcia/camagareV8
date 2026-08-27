@@ -734,6 +734,44 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     }
                 });
 
+                // Chat de WhatsApp: el ícono NO depende del contador. Quien tiene el
+                // módulo asignado en esta empresa lo ve siempre —es una bandeja de
+                // conversación, se entra también a escribir— y el badge rojo aparece
+                // solo cuando hay mensajes sin leer. El bucle de arriba ya lo ocultó
+                // por tener el contador en 0: aquí se corrige.
+                if (c.whatsapp_acceso) {
+                    const nWa = parseInt(c.whatsapp_unread || 0, 10);
+                    document.querySelectorAll('.whatsapp-unread-icon').forEach(function(i){
+                        i.classList.remove('d-none');
+                        i.setAttribute('title', nWa > 0
+                            ? 'WhatsApp sin leer'
+                            : 'Chat de WhatsApp — sin mensajes nuevos');
+                    });
+                    document.querySelectorAll('.whatsapp-unread-badge').forEach(function(b){
+                        b.textContent = nWa > 99 ? '99+' : nWa;
+                        b.classList.toggle('d-none', nWa <= 0);
+                    });
+                }
+
+                // Bandeja de soporte: el ícono NO depende del contador. Si el usuario
+                // tiene asignado el Chat de Soporte (en esta empresa o en cualquier
+                // otra suya), el acceso queda siempre a la vista; el badge rojo solo
+                // aparece cuando hay consultas por atender. El bucle de arriba ya lo
+                // ocultó por tener el contador en 0: aquí se corrige.
+                if (c.soporte_agente) {
+                    const nSop = parseInt(c.soporte_bandeja || 0, 10);
+                    document.querySelectorAll('.soporte-bandeja-icon').forEach(function(i){
+                        i.classList.remove('d-none');
+                        i.setAttribute('title', nSop > 0
+                            ? 'Consultas de soporte por atender'
+                            : 'Chat de Soporte — sin consultas pendientes');
+                    });
+                    document.querySelectorAll('.soporte-bandeja-badge').forEach(function(b){
+                        b.textContent = nSop > 99 ? '99+' : nSop;
+                        b.classList.toggle('d-none', nSop <= 0);
+                    });
+                }
+
                 // Novedad SRI (documentos devueltos/no autorizados/con error): total + desglose por tipo
                 const nov = c.novedad_sri || {};
                 const tiposNov = ['facturas', 'liquidaciones', 'retenciones_compras', 'notas_credito', 'guias_remision'];

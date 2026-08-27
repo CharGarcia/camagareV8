@@ -201,6 +201,18 @@ class SoporteChatRules
             throw new \InvalidArgumentException('El correo para alertas no es válido.');
         }
 
+        // Número de WhatsApp para los avisos: se guarda solo con dígitos (es lo
+        // que espera la API de Meta) y se admite vacío, que es el caso normal
+        // —entonces el aviso va a los números ya registrados en el módulo de
+        // WhatsApp de la empresa que atiende—.
+        $whatsapp = preg_replace('/\D/', '', (string) ($data['whatsapp_alertas'] ?? ''));
+        if ($whatsapp !== '' && (strlen($whatsapp) < 8 || strlen($whatsapp) > 15)) {
+            throw new \InvalidArgumentException('El número de WhatsApp para avisos no es válido (incluya el código de país, sin el signo +).');
+        }
+
+        $plantilla = mb_substr(trim((string) ($data['whatsapp_plantilla'] ?? '')), 0, 150);
+        $idioma    = mb_substr(trim((string) ($data['whatsapp_plantilla_idioma'] ?? '')), 0, 10);
+
         $minutos = (int) ($data['minutos_alerta_sin_atender'] ?? 0);
         if ($minutos < 0 || $minutos > 1440) {
             throw new \InvalidArgumentException('Los minutos de alerta deben estar entre 0 y 1440.');
@@ -221,6 +233,9 @@ class SoporteChatRules
             'hora_fin'                   => $horaFin,
             'minutos_alerta_sin_atender' => $minutos,
             'correo_alertas'             => $correo !== '' ? $correo : null,
+            'whatsapp_alertas'           => $whatsapp !== '' ? $whatsapp : null,
+            'whatsapp_plantilla'         => $plantilla !== '' ? $plantilla : null,
+            'whatsapp_plantilla_idioma'  => $idioma !== '' ? $idioma : 'es',
             'dias_archivar_cerradas'     => $diasArchivar,
         ];
     }
