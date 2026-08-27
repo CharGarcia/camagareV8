@@ -94,29 +94,9 @@ class FacturaVentaService
             return null;
         }
 
-        // Punto de emisiÃ³n de la factura (con fallback a tabla renombrada)
-        $punto = null;
-        try {
-            $stPunto = $db->prepare(
-                "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
-                 FROM empresa_punto_emision p
-                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                 WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false"
-            );
-            $stPunto->execute([(int) $factura['id_punto_emision'], $idEmpresa]);
-            $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {}
-        if (!$punto) {
-            try {
-                $stPunto2 = $db->prepare(
-                    "SELECT id, establecimiento, punto, id_establecimiento
-                     FROM empresa_puntos_emision
-                     WHERE id = ? AND id_empresa = ? AND eliminado = false"
-                );
-                $stPunto2->execute([(int) $factura['id_punto_emision'], $idEmpresa]);
-                $punto = $stPunto2->fetch(\PDO::FETCH_ASSOC);
-            } catch (\Throwable $e) {}
-        }
+        // Serie del punto de emisión de la factura (fuente única: SecuencialRepository).
+        $punto = (new \App\repositories\SecuencialRepository())
+            ->getPuntoEmisionSerie((int) $factura['id_punto_emision'], $idEmpresa);
         if (!$punto) {
             return null;
         }
@@ -258,29 +238,9 @@ class FacturaVentaService
             return null;
         }
 
-        // Punto de emisión de la factura (con fallback a tabla renombrada)
-        $punto = null;
-        try {
-            $stPunto = $db->prepare(
-                "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
-                 FROM empresa_punto_emision p
-                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                 WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false"
-            );
-            $stPunto->execute([(int) $factura['id_punto_emision'], $idEmpresa]);
-            $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {}
-        if (!$punto) {
-            try {
-                $stPunto2 = $db->prepare(
-                    "SELECT id, establecimiento, punto, id_establecimiento
-                     FROM empresa_puntos_emision
-                     WHERE id = ? AND id_empresa = ? AND eliminado = false"
-                );
-                $stPunto2->execute([(int) $factura['id_punto_emision'], $idEmpresa]);
-                $punto = $stPunto2->fetch(\PDO::FETCH_ASSOC);
-            } catch (\Throwable $e) {}
-        }
+        // Serie del punto de emisión de la factura (fuente única: SecuencialRepository).
+        $punto = (new \App\repositories\SecuencialRepository())
+            ->getPuntoEmisionSerie((int) $factura['id_punto_emision'], $idEmpresa);
         if (!$punto) {
             return null;
         }

@@ -541,16 +541,10 @@ class NotasCreditoController extends BaseModuloController
             $data['empresa_config'] = $empresaData;
 
             if (!empty($data['id_punto_emision'])) {
-                $db = \App\core\Database::getConnection();
-                $st = $db->prepare("
-                    SELECT p.id_establecimiento, p.codigo_punto, e.codigo AS cod_establecimiento
-                    FROM empresa_punto_emision p
-                    JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                    WHERE p.id = ?
-                    LIMIT 1
-                ");
-                $st->execute([$data['id_punto_emision']]);
-                $puntoRow = $st->fetch(\PDO::FETCH_ASSOC);
+                // La serie sale del punto REAL, validando que sea de la empresa activa (antes la
+                // consulta filtraba solo por p.id: un id de otra empresa se aceptaba).
+                $puntoRow = (new \App\repositories\SecuencialRepository())
+                    ->getPuntoEmisionSerie((int) $data['id_punto_emision'], (int) $data['id_empresa']);
 
                 if ($puntoRow) {
                     if (empty($data['id_establecimiento'])) {

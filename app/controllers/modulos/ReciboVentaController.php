@@ -819,26 +819,7 @@ class ReciboVentaController extends BaseModuloController
         $db        = \App\core\Database::getConnection();
         $puntos = []; $conceptos = []; $formas = []; $bancos = [];
 
-        try {
-            $stP = $db->prepare(
-                "SELECT p.id AS id_punto, e.codigo AS cod_establecimiento, p.codigo_punto, p.id_establecimiento
-                 FROM empresa_punto_emision p
-                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                 WHERE p.id_empresa = ? AND p.eliminado = false AND e.eliminado = false
-                 ORDER BY e.codigo, p.codigo_punto"
-            );
-            $stP->execute([$idEmpresa]);
-            $puntos = $stP->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            try {
-                $stP2 = $db->prepare(
-                    "SELECT id AS id_punto, establecimiento AS cod_establecimiento, punto AS codigo_punto, id_establecimiento
-                     FROM empresa_puntos_emision WHERE id_empresa = ? AND eliminado = false ORDER BY establecimiento, punto"
-                );
-                $stP2->execute([$idEmpresa]);
-                $puntos = $stP2->fetchAll(\PDO::FETCH_ASSOC);
-            } catch (\Throwable $ignored) {}
-        }
+        $puntos = (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa);
 
         try {
             $stC = $db->prepare(
@@ -912,24 +893,8 @@ class ReciboVentaController extends BaseModuloController
             }
 
             $punto = null;
-            try {
-                $stPunto = $db->prepare(
-                    "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
-                     FROM empresa_punto_emision p
-                     JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                     WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false"
-                );
-                $stPunto->execute([(int)$data['id_punto_emision'], $idEmpresa]);
-                $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
-            } catch (\Throwable $ignored) {}
-            if (!$punto) {
-                $stPunto2 = $db->prepare(
-                    "SELECT id, establecimiento, punto, id_establecimiento
-                     FROM empresa_puntos_emision WHERE id = ? AND id_empresa = ? AND eliminado = false"
-                );
-                $stPunto2->execute([(int)$data['id_punto_emision'], $idEmpresa]);
-                $punto = $stPunto2->fetch(\PDO::FETCH_ASSOC);
-            }
+            $punto = (new \App\repositories\SecuencialRepository())
+                ->getPuntoEmisionSerie((int) $data['id_punto_emision'], $idEmpresa);
             if (!$punto) {
                 throw new \Exception('Punto de emisión no válido.');
             }

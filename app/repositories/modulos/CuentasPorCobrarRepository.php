@@ -809,37 +809,7 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     public function getPuntosEmision(int $idEmpresa): array
     {
-        try {
-            $sql = "SELECT p.id         AS id_punto,
-                           e.codigo     AS cod_establecimiento,
-                           p.codigo_punto,
-                           p.id_establecimiento
-                    FROM empresa_punto_emision p
-                    JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                    WHERE p.id_empresa = :id_empresa
-                      AND p.eliminado  = false
-                      AND e.eliminado  = false
-                    ORDER BY e.codigo, p.codigo_punto";
-            $st = $this->db->prepare($sql);
-            $st->execute([':id_empresa' => $idEmpresa]);
-            return $st->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            // Fallback tabla alternativa
-            try {
-                $sql2 = "SELECT id AS id_punto,
-                                establecimiento AS cod_establecimiento,
-                                punto AS codigo_punto,
-                                id_establecimiento
-                         FROM empresa_puntos_emision
-                         WHERE id_empresa = :id_empresa AND eliminado = false
-                         ORDER BY establecimiento, punto";
-                $st2 = $this->db->prepare($sql2);
-                $st2->execute([':id_empresa' => $idEmpresa]);
-                return $st2->fetchAll(PDO::FETCH_ASSOC);
-            } catch (\Throwable $e2) {
-                return [];
-            }
-        }
+        return (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa);
     }
 
     /**
@@ -847,30 +817,7 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     public function getPuntoEmisionPorId(int $idPunto, int $idEmpresa): ?array
     {
-        try {
-            $sql = "SELECT p.id,
-                           e.codigo       AS establecimiento,
-                           p.codigo_punto AS punto,
-                           p.id_establecimiento
-                    FROM empresa_punto_emision p
-                    JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                    WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false";
-            $st = $this->db->prepare($sql);
-            $st->execute([':id' => $idPunto, ':id_empresa' => $idEmpresa]);
-            $row = $st->fetch(PDO::FETCH_ASSOC);
-            if ($row) return $row;
-        } catch (\Throwable $e) {}
-
-        try {
-            $sql2 = "SELECT id, establecimiento, punto, id_establecimiento
-                     FROM empresa_puntos_emision
-                     WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
-            $st2 = $this->db->prepare($sql2);
-            $st2->execute([':id' => $idPunto, ':id_empresa' => $idEmpresa]);
-            return $st2->fetch(PDO::FETCH_ASSOC) ?: null;
-        } catch (\Throwable $e2) {
-            return null;
-        }
+        return (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
     }
 
     /**

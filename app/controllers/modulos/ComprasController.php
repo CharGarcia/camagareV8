@@ -1012,16 +1012,7 @@ class ComprasController extends BaseModuloController
             $conceptos = $stC->fetchAll(\PDO::FETCH_ASSOC);
             
             // Puntos de emisión activos para reservar secuencial correlativo del egreso
-            $stPto = $db->prepare("
-                SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
-                FROM empresa_punto_emision pe
-                JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
-                WHERE es.id_empresa = ? AND pe.eliminado = FALSE AND es.eliminado = FALSE
-                  AND LOWER(pe.estado) = 'activo'
-                ORDER BY es.codigo ASC, pe.codigo_punto ASC
-            ");
-            $stPto->execute([$idEmpresa]);
-            $puntos = $stPto->fetchAll(\PDO::FETCH_ASSOC);
+            $puntos = (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa, true);
             
             // Obtener también bancos de ecuador si alguna forma de pago requiere banco
             $stBancos = $db->query("SELECT id, nombre_banco FROM bancos_ecuador WHERE status = 1 ORDER BY nombre_banco ASC");
@@ -1071,15 +1062,8 @@ class ComprasController extends BaseModuloController
             $idPunto = (int)($post['id_punto_emision'] ?? 0);
             if ($idPunto <= 0) throw new \Exception("Debe seleccionar un Punto de emisión.");
             
-            $db = \App\core\Database::getConnection();
-            $stPto = $db->prepare("
-                SELECT pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
-                FROM empresa_punto_emision pe
-                JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
-                WHERE pe.id = ? AND es.id_empresa = ? AND pe.eliminado = FALSE
-            ");
-            $stPto->execute([$idPunto, $idEmpresa]);
-            $pto = $stPto->fetch(\PDO::FETCH_ASSOC);
+            $db  = \App\core\Database::getConnection();
+            $pto = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
             if (!$pto) throw new \Exception("El punto de emisión no existe o está inactivo.");
             
             // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el

@@ -2327,38 +2327,7 @@ class FacturaVentaController extends BaseModuloController
         $bancos    = [];
 
         // ── 1. Puntos de Emisión ──────────────────────────────────────────────────
-        try {
-            $stP = $db->prepare(
-                "SELECT p.id         AS id_punto,
-                        e.codigo     AS cod_establecimiento,
-                        p.codigo_punto,
-                        p.id_establecimiento
-                 FROM empresa_punto_emision p
-                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                 WHERE p.id_empresa = ?
-                   AND p.eliminado  = false
-                   AND e.eliminado  = false
-                   AND LOWER(p.estado) = 'activo'
-                 ORDER BY e.codigo, p.codigo_punto"
-            );
-            $stP->execute([$idEmpresa]);
-            $puntos = $stP->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            // Fallback: tabla renombrada (empresa_puntos_emision)
-            try {
-                $stP2 = $db->prepare(
-                    "SELECT id AS id_punto,
-                            establecimiento AS cod_establecimiento,
-                            punto           AS codigo_punto,
-                            id_establecimiento
-                     FROM empresa_puntos_emision
-                     WHERE id_empresa = ? AND eliminado = false
-                     ORDER BY establecimiento, punto"
-                );
-                $stP2->execute([$idEmpresa]);
-                $puntos = $stP2->fetchAll(\PDO::FETCH_ASSOC);
-            } catch (\Throwable $ignored) {}
-        }
+        $puntos = (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa, true);
 
         // ── 2. Conceptos de Ingreso ───────────────────────────────────────────────
         $error_conceptos = null;
@@ -2462,31 +2431,8 @@ class FacturaVentaController extends BaseModuloController
             }
 
             // Obtener punto de emisión (con fallback para tabla renombrada)
-            $punto = null;
-            try {
-                $stPunto = $db->prepare(
-                    "SELECT p.id,
-                            e.codigo       AS establecimiento,
-                            p.codigo_punto AS punto,
-                            p.id_establecimiento
-                     FROM empresa_punto_emision p
-                     JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                     WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false"
-                );
-                $stPunto->execute([(int)$data['id_punto_emision'], $idEmpresa]);
-                $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
-            } catch (\Throwable $ignored) {}
-
-            if (!$punto) {
-                // Fallback: empresa_puntos_emision (tabla renombrada)
-                $stPunto2 = $db->prepare(
-                    "SELECT id, establecimiento, punto, id_establecimiento
-                     FROM empresa_puntos_emision
-                     WHERE id = ? AND id_empresa = ? AND eliminado = false"
-                );
-                $stPunto2->execute([(int)$data['id_punto_emision'], $idEmpresa]);
-                $punto = $stPunto2->fetch(\PDO::FETCH_ASSOC);
-            }
+            $punto = (new \App\repositories\SecuencialRepository())
+                ->getPuntoEmisionSerie((int) $data['id_punto_emision'], $idEmpresa);
 
             if (!$punto) {
                 throw new \Exception('Punto de emisión no válido.');

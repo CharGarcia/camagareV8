@@ -536,14 +536,7 @@ class LiquidacionCompraController extends BaseModuloController
             $conceptos = $stC->fetchAll(\PDO::FETCH_ASSOC);
 
             // Puntos de emisión activos (para reservar el secuencial del egreso)
-            $stPto = $db->prepare("SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
-                                   FROM empresa_punto_emision pe
-                                   JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
-                                   WHERE es.id_empresa = ? AND pe.eliminado = FALSE AND es.eliminado = FALSE
-                                     AND LOWER(pe.estado) = 'activo'
-                                   ORDER BY es.codigo ASC, pe.codigo_punto ASC");
-            $stPto->execute([$idEmpresa]);
-            $puntos = $stPto->fetchAll(\PDO::FETCH_ASSOC);
+            $puntos = (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa, true);
 
             // Bancos (catálogo global)
             $bancos = $db->query("SELECT id, nombre_banco FROM bancos_ecuador WHERE status = 1 ORDER BY nombre_banco ASC")->fetchAll(\PDO::FETCH_ASSOC);

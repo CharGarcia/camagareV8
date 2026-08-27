@@ -508,19 +508,10 @@ class ConsignacionFacturaRepository extends BaseRepository
 
     public function getEstablecimientoPorPunto(int $idPunto): ?int
     {
-        foreach (['empresa_punto_emision', 'empresa_puntos_emision'] as $tabla) {
-            try {
-                $st = $this->db->prepare("SELECT id_establecimiento FROM $tabla WHERE id = ? LIMIT 1");
-                $st->execute([$idPunto]);
-                $val = $st->fetchColumn();
-                if ($val !== false && $val !== null) {
-                    return (int) $val;
-                }
-            } catch (\Throwable $e) {
-                // Tabla inexistente: probar la siguiente.
-            }
-        }
-        return null;
+        $st = $this->db->prepare("SELECT id_establecimiento FROM empresa_punto_emision WHERE id = ? LIMIT 1");
+        $st->execute([$idPunto]);
+        $val = $st->fetchColumn();
+        return ($val !== false && $val !== null) ? (int) $val : null;
     }
 
     /** Costo unitario al que salió la mercadería en la consignación (kardex de la salida). */

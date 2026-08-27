@@ -296,14 +296,19 @@ class SecuencialRepository
      * La empresa se resuelve por el establecimiento (`empresa_establecimiento.id_empresa`), que
      * es el vínculo real de la jerarquía, no por la copia que lleva el propio punto.
      *
-     * @return array{id:int,id_establecimiento:int,establecimiento:string,punto:string}|null
+     * Las claves redundantes (`id`/`id_punto`, `establecimiento`/`cod_establecimiento`,
+     * `punto`/`codigo_punto`) existen porque los módulos que consumen este dato fueron escritos
+     * con nombres distintos; así todos comparten la consulta sin tocar sus vistas.
+     *
+     * @return array{id:int,id_punto:int,id_establecimiento:int,establecimiento:string,cod_establecimiento:string,punto:string,codigo_punto:string,nombre:string}|null
      */
     public function getPuntoEmisionSerie(int $idPuntoEmision, int $idEmpresa): ?array
     {
         $sql = "SELECT p.id,
                        p.id_establecimiento,
                        LPAD(REGEXP_REPLACE(e.codigo,        '[^0-9]', '', 'g'), 3, '0') AS establecimiento,
-                       LPAD(REGEXP_REPLACE(p.codigo_punto,  '[^0-9]', '', 'g'), 3, '0') AS punto
+                       LPAD(REGEXP_REPLACE(p.codigo_punto,  '[^0-9]', '', 'g'), 3, '0') AS punto,
+                       COALESCE(p.nombre, '') AS nombre
                   FROM empresa_punto_emision p
                   INNER JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
                  WHERE p.id = :id_punto
@@ -320,11 +325,67 @@ class SecuencialRepository
         }
 
         return [
-            'id'                 => (int) $row['id'],
-            'id_establecimiento' => (int) $row['id_establecimiento'],
-            'establecimiento'    => (string) $row['establecimiento'],
-            'punto'              => (string) $row['punto'],
+            'id'                  => (int) $row['id'],
+            'id_punto'            => (int) $row['id'],
+            'id_establecimiento'  => (int) $row['id_establecimiento'],
+            'establecimiento'     => (string) $row['establecimiento'],
+            'cod_establecimiento' => (string) $row['establecimiento'],
+            'punto'               => (string) $row['punto'],
+            'codigo_punto'        => (string) $row['punto'],
+            'id_estab'            => (int) $row['id_establecimiento'],
+            'estab'               => (string) $row['establecimiento'],
+            'nombre'              => (string) $row['nombre'],
         ];
+    }
+
+    /**
+     * Puntos de emisión de una empresa, con su serie ya normalizada. Fuente única para los
+     * selectores de "Serie" de todos los módulos.
+     *
+     * Devuelve cada punto con claves redundantes a propósito (`id`/`id_punto`,
+     * `establecimiento`/`cod_establecimiento`, `punto`/`codigo_punto`) porque los módulos que
+     * consumen esta lista fueron escritos con nombres distintos; así todos leen la misma
+     * consulta sin tener que tocar sus vistas y su JS.
+     *
+     * @param bool $soloActivos Excluye los puntos inhabilitados (estado <> 'activo').
+     * @return array<int, array{id:int,id_punto:int,id_establecimiento:int,establecimiento:string,cod_establecimiento:string,punto:string,codigo_punto:string,nombre:string}>
+     */
+    public function getPuntosEmisionSerie(int $idEmpresa, bool $soloActivos = false): array
+    {
+        $filtroEstado = $soloActivos ? " AND LOWER(COALESCE(p.estado, '')) = 'activo'" : '';
+
+        $sql = "SELECT p.id,
+                       p.id_establecimiento,
+                       LPAD(REGEXP_REPLACE(e.codigo,       '[^0-9]', '', 'g'), 3, '0') AS establecimiento,
+                       LPAD(REGEXP_REPLACE(p.codigo_punto, '[^0-9]', '', 'g'), 3, '0') AS punto,
+                       COALESCE(p.nombre, '') AS nombre
+                  FROM empresa_punto_emision p
+                  INNER JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                 WHERE e.id_empresa = :id_empresa
+                   AND p.eliminado = false
+                   AND e.eliminado = false
+                   {$filtroEstado}
+                 ORDER BY establecimiento, punto";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id_empresa' => $idEmpresa]);
+
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[] = [
+                'id'                  => (int) $row['id'],
+                'id_punto'            => (int) $row['id'],
+                'id_establecimiento'  => (int) $row['id_establecimiento'],
+                'establecimiento'     => (string) $row['establecimiento'],
+                'cod_establecimiento' => (string) $row['establecimiento'],
+                'punto'               => (string) $row['punto'],
+                'codigo_punto'        => (string) $row['punto'],
+                'id_estab'            => (int) $row['id_establecimiento'],
+                'estab'               => (string) $row['establecimiento'],
+                'nombre'              => (string) $row['nombre'],
+            ];
+        }
+        return $out;
     }
 
     /**

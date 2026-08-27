@@ -1230,43 +1230,7 @@ class ProformasController extends BaseModuloController
 
     private function cargarTodosPuntosSinFiltrar(int $idEmpresa): array
     {
-        $db = \App\core\Database::getConnection();
-        try {
-            $st = $db->prepare(
-                "SELECT p.id              AS id,
-                        p.id             AS id_punto,
-                        e.codigo         AS cod_establecimiento,
-                        e.id             AS id_establecimiento,
-                        p.codigo_punto,
-                        p.nombre
-                 FROM empresa_punto_emision p
-                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                 WHERE p.id_empresa = ?
-                   AND p.eliminado  = false
-                   AND e.eliminado  = false
-                   AND LOWER(p.estado) = 'activo'
-                 ORDER BY e.codigo, p.codigo_punto"
-            );
-            $st->execute([$idEmpresa]);
-            return $st->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            // fallback tabla antigua
-            try {
-                $st2 = $db->prepare(
-                    "SELECT id,
-                            id               AS id_punto,
-                            establecimiento  AS cod_establecimiento,
-                            punto            AS codigo_punto,
-                            id_establecimiento,
-                            '' AS nombre
-                     FROM empresa_puntos_emision
-                     WHERE id_empresa = ? AND eliminado = false
-                     ORDER BY establecimiento, punto"
-                );
-                $st2->execute([$idEmpresa]);
-                return $st2->fetchAll(\PDO::FETCH_ASSOC);
-            } catch (\Throwable $ignored) { return []; }
-        }
+        return (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa, true);
     }
 
     private function renderFilaHtml(array $r): string

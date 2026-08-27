@@ -581,14 +581,7 @@ class SaldosInicialesController extends BaseModuloController
             $this->jsonErr('Datos incompletos. Verifique serie, monto y forma de cobro.');
         }
 
-        $punto = $this->repo->getDb()->prepare(
-            "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
-             FROM empresa_punto_emision p
-             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-             WHERE p.id = :id AND p.id_empresa = :ie AND p.eliminado = false"
-        );
-        $punto->execute([':id' => $idPunto, ':ie' => $idEmpresa]);
-        $puntoData = $punto->fetch(\PDO::FETCH_ASSOC);
+        $puntoData = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
 
         if (!$puntoData) {
             $this->jsonErr('Punto de emisión no válido.');
@@ -631,14 +624,7 @@ class SaldosInicialesController extends BaseModuloController
             $this->jsonErr('Datos incompletos. Verifique serie, monto y forma de pago.');
         }
 
-        $puntoSt = $this->repo->getDb()->prepare(
-            "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
-             FROM empresa_punto_emision p
-             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-             WHERE p.id = :id AND p.id_empresa = :ie AND p.eliminado = false"
-        );
-        $puntoSt->execute([':id' => $idPunto, ':ie' => $idEmpresa]);
-        $puntoData = $puntoSt->fetch(\PDO::FETCH_ASSOC);
+        $puntoData = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
 
         if (!$puntoData) {
             $this->jsonErr('Punto de emisión no válido.');
@@ -694,15 +680,7 @@ class SaldosInicialesController extends BaseModuloController
         $idEmpresa = (int)$_SESSION['id_empresa'];
         $db = $this->repo->getDb();
 
-        $puntosSt = $db->prepare(
-            "SELECT p.id AS id_punto, e.codigo AS cod_establecimiento,
-                    p.codigo_punto, p.id_establecimiento
-             FROM empresa_punto_emision p
-             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-             WHERE p.id_empresa = :ie AND p.eliminado = false AND e.eliminado = false
-             ORDER BY e.codigo, p.codigo_punto"
-        );
-        $puntosSt->execute([':ie' => $idEmpresa]);
+        $puntos = (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa);
 
         $formasSt = $db->prepare(
             "SELECT id, nombre, tipo FROM empresa_formas_pago
@@ -726,7 +704,7 @@ class SaldosInicialesController extends BaseModuloController
         $conceptosEgrSt->execute([':ie' => $idEmpresa]);
 
         $this->jsonOk([
-            'puntos'          => $puntosSt->fetchAll(\PDO::FETCH_ASSOC),
+            'puntos'          => $puntos,
             'formas'          => $formasSt->fetchAll(\PDO::FETCH_ASSOC),
             'conceptos_ing'   => $conceptosIngSt->fetchAll(\PDO::FETCH_ASSOC),
             'conceptos_egr'   => $conceptosEgrSt->fetchAll(\PDO::FETCH_ASSOC),
