@@ -248,7 +248,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             };
                             ?>
                             <tr class="egreso-row" role="button" onclick="abrirModalEgresoVer(<?= $r['id'] ?>)">
-                                <td class="ps-3" data-col="numero_egreso"><code><?= htmlspecialchars($r['numero_egreso'] ?? '') ?></code></td>
+                                <td class="ps-3" data-col="numero_egreso"><code class="text-secondary"><?= htmlspecialchars($r['numero_egreso'] ?? '') ?></code></td>
                                 <td data-col="fecha_emision"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
                                 <td data-col="tipo_egreso"><span class="badge bg-light text-dark border"><?= htmlspecialchars($tipoLabel) ?></span></td>
                                 <td class="fw-medium text-truncate" data-col="sujeto_nombre" style="max-width:200px"><?= htmlspecialchars($r['sujeto_nombre'] ?? '') ?></td>

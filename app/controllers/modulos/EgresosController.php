@@ -497,26 +497,20 @@ class EgresosController extends BaseModuloController
             throw new \Exception('Debe seleccionar la serie (punto de emisión) del egreso.');
         }
 
-        $db = \App\core\Database::getConnection();
-        $stPunto = $db->prepare(
-            "SELECT id, establecimiento, punto, id_establecimiento
-               FROM empresa_puntos_emision
-              WHERE id = ? AND id_empresa = ? AND eliminado = false"
-        );
-        $stPunto->execute([$idPunto, $idEmpresa]);
-        $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
+        $punto = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
         if (!$punto) {
             throw new \Exception('Punto de emisión no válido.');
         }
 
-        $est    = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT);
-        $ptoNum = str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT);
+        $est    = $punto['establecimiento'];
+        $ptoNum = $punto['punto'];
 
+        $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
             $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Egresos');
 
-            $data['id_establecimiento'] = (int) ($punto['id_establecimiento'] ?? 0) ?: null;
+            $data['id_establecimiento'] = $punto['id_establecimiento'] ?: null;
             $data['id_punto_emision']   = $idPunto;
             $data['establecimiento']    = $est;
             $data['punto_emision']      = $ptoNum;

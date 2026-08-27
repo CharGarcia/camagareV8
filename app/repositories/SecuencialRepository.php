@@ -286,6 +286,48 @@ class SecuencialRepository
     }
 
     /**
+     * Serie de un punto de emisión concreto, validando que pertenezca a la empresa indicada.
+     * Devuelve null si el punto no existe, está eliminado o es de otra empresa.
+     *
+     * Úsese al guardar un documento para derivar `establecimiento`/`punto_emision` del punto
+     * REAL en vez de confiar en lo que mande el navegador: así la serie de texto nunca queda
+     * desalineada de `id_punto_emision`, que es por donde se cuentan los números ya usados.
+     *
+     * La empresa se resuelve por el establecimiento (`empresa_establecimiento.id_empresa`), que
+     * es el vínculo real de la jerarquía, no por la copia que lleva el propio punto.
+     *
+     * @return array{id:int,id_establecimiento:int,establecimiento:string,punto:string}|null
+     */
+    public function getPuntoEmisionSerie(int $idPuntoEmision, int $idEmpresa): ?array
+    {
+        $sql = "SELECT p.id,
+                       p.id_establecimiento,
+                       LPAD(REGEXP_REPLACE(e.codigo,        '[^0-9]', '', 'g'), 3, '0') AS establecimiento,
+                       LPAD(REGEXP_REPLACE(p.codigo_punto,  '[^0-9]', '', 'g'), 3, '0') AS punto
+                  FROM empresa_punto_emision p
+                  INNER JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                 WHERE p.id = :id_punto
+                   AND e.id_empresa = :id_empresa
+                   AND p.eliminado = false
+                   AND e.eliminado = false
+                 LIMIT 1";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id_punto' => $idPuntoEmision, ':id_empresa' => $idEmpresa]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'id'                 => (int) $row['id'],
+            'id_establecimiento' => (int) $row['id_establecimiento'],
+            'establecimiento'    => (string) $row['establecimiento'],
+            'punto'              => (string) $row['punto'],
+        ];
+    }
+
+    /**
      * Obtiene la configuración del secuencial para un punto de emisión y tipo de documento.
      * Retorna el secuencial_inicial configurado.
      */

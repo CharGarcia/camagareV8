@@ -525,26 +525,20 @@ class IngresosController extends BaseModuloController
             throw new \Exception('Debe seleccionar la serie (punto de emisión) del ingreso.');
         }
 
-        $db = \App\core\Database::getConnection();
-        $stPunto = $db->prepare(
-            "SELECT id, establecimiento, punto, id_establecimiento
-               FROM empresa_puntos_emision
-              WHERE id = ? AND id_empresa = ? AND eliminado = false"
-        );
-        $stPunto->execute([$idPunto, $idEmpresa]);
-        $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
+        $punto = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
         if (!$punto) {
             throw new \Exception('Punto de emisión no válido.');
         }
 
-        $est   = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT);
-        $ptoNum = str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT);
+        $est    = $punto['establecimiento'];
+        $ptoNum = $punto['punto'];
 
+        $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
             $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
 
-            $data['id_establecimiento'] = (int) ($punto['id_establecimiento'] ?? 0) ?: null;
+            $data['id_establecimiento'] = $punto['id_establecimiento'] ?: null;
             $data['id_punto_emision']   = $idPunto;
             $data['establecimiento']    = $est;
             $data['punto_emision']      = $ptoNum;
@@ -647,12 +641,17 @@ class IngresosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $db = \App\core\Database::getConnection();
 
-        // 1. Puntos de Emisión
-        $sqlP = "SELECT pe.id AS id_punto, pe.establecimiento AS estab, pe.punto,
+        // 1. Puntos de Emisión. El código del establecimiento vive en empresa_establecimiento
+        // (el punto solo guarda el suyo), y `estado` es texto ('activo'), no booleano.
+        $sqlP = "SELECT pe.id AS id_punto,
+                        LPAD(REGEXP_REPLACE(ee.codigo,          '[^0-9]', '', 'g'), 3, '0') AS estab,
+                        LPAD(REGEXP_REPLACE(pe.codigo_punto,    '[^0-9]', '', 'g'), 3, '0') AS punto,
                         pe.id_establecimiento AS id_establecimiento
-                 FROM empresa_puntos_emision pe
-                 WHERE pe.id_empresa = ? AND pe.eliminado = false AND pe.estado = true
-                 ORDER BY pe.establecimiento, pe.punto";
+                 FROM empresa_punto_emision pe
+                 INNER JOIN empresa_establecimiento ee ON ee.id = pe.id_establecimiento
+                 WHERE ee.id_empresa = ? AND pe.eliminado = false AND ee.eliminado = false
+                   AND LOWER(COALESCE(pe.estado, '')) = 'activo'
+                 ORDER BY estab, punto";
         $stP = $db->prepare($sqlP);
         $stP->execute([$idEmpresa]);
         $puntos = $stP->fetchAll(\PDO::FETCH_ASSOC);
@@ -730,14 +729,9 @@ class IngresosController extends BaseModuloController
                 throw new \Exception('Factura no encontrada.');
             }
 
-            // 2. Obtener datos del punto de emisión
-            $stPunto = $db->prepare(
-                "SELECT id, establecimiento, punto, id_establecimiento
-                 FROM empresa_puntos_emision
-                 WHERE id = ? AND id_empresa = ? AND eliminado = false"
-            );
-            $stPunto->execute([(int)$data['id_punto_emision'], $idEmpresa]);
-            $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
+            // 2. Obtener datos del punto de emisión (valida que sea de la empresa activa).
+            $punto = (new \App\repositories\SecuencialRepository())
+                ->getPuntoEmisionSerie((int) $data['id_punto_emision'], $idEmpresa);
 
             if (!$punto) {
                 throw new \Exception('Punto de emisión no válido.');
