@@ -778,7 +778,14 @@ class FacturaVentaRepository extends BaseRepository
      * Crea un producto tipo "servicio" con código secuencial al vuelo (facturación libre).
      * Retorna el ID del producto creado.
      */
-    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null, ?string $codigoPorcentaje = null): int
+    /**
+     * @return array{id: int, codigo: string} id del producto creado y su código
+     *         real generado (p. ej. "S001") — el llamador debe usar este código
+     *         para reemplazar el "__LIBRE__" que llega del frontend en
+     *         codigo_principal del detalle, o el PDF/listados quedan mostrando
+     *         ese literal en vez del código del catálogo.
+     */
+    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null, ?string $codigoPorcentaje = null): array
     {
         $productoRepo = new ProductoRepository();
         $codigo = $productoRepo->getSiguienteCodigo($idEmpresa, '02'); // Genera S001, S002, etc.
@@ -822,7 +829,7 @@ class FacturaVentaRepository extends BaseRepository
             ':tarifa' => $idTarifaIva
         ]);
 
-        return (int) $st->fetchColumn();
+        return ['id' => (int) $st->fetchColumn(), 'codigo' => $codigo];
     }
 
     public function updateDetalleLoteNup(int $idDetalle, array $data): void

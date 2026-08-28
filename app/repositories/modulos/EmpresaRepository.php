@@ -522,6 +522,7 @@ class EmpresaRepository extends BaseModel
         $id = (int) $idEst;
         $sql = "SELECT id, decimales_cantidad, decimales_precio, calculo_iva_facturacion,
                        facturacion_inventario, metodo_costeo, facturacion_libre,
+                       id_tarifa_iva_defecto_libre,
                        factura_solo_stock_positivo,
                        obligatorio_lotes, obligatorio_caducidad, obligatorio_nup,
                        mostrar_cajero_factura, mostrar_vendedor_factura,
@@ -594,6 +595,7 @@ class EmpresaRepository extends BaseModel
         $allowed = [
             'decimales_cantidad', 'decimales_precio', 'calculo_iva_facturacion',
             'facturacion_inventario', 'metodo_costeo', 'facturacion_libre',
+            'id_tarifa_iva_defecto_libre',
             'factura_solo_stock_positivo',
             'obligatorio_lotes', 'obligatorio_caducidad', 'obligatorio_nup',
             'mostrar_cajero_factura', 'mostrar_vendedor_factura',
@@ -610,7 +612,7 @@ class EmpresaRepository extends BaseModel
         ];
 
         // Campos numéricos que admiten NULL
-        $numericNullable = ['valor_limite_consumidor_final', 'id_forma_pago_sri_def'];
+        $numericNullable = ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'id_tarifa_iva_defecto_libre'];
 
         $sets = [];
         foreach ($data as $k => $v) {

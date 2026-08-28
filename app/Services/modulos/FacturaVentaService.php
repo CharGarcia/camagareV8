@@ -728,7 +728,7 @@ class FacturaVentaService
             if (!empty($data['detalles']) && is_array($data['detalles'])) {
                 foreach ($data['detalles'] as &$d) {
                     if (!empty($d['es_libre']) && $d['es_libre'] == '1' && empty($d['id_producto'])) {
-                        $d['id_producto'] = $this->repository->crearServicioLibre(
+                        $servicioLibre = $this->repository->crearServicioLibre(
                             $idEmpresa,
                             $idUsuario,
                             $d['nombre'] ?? ($d['descripcion'] ?? ''),
@@ -736,6 +736,11 @@ class FacturaVentaService
                             isset($d['porcentaje_iva']) ? (float) $d['porcentaje_iva'] : null,
                             isset($d['codigo_porcentaje']) ? (string) $d['codigo_porcentaje'] : null
                         );
+                        $d['id_producto']     = $servicioLibre['id'];
+                        // El frontend manda "__LIBRE__" como bandera en codigo_principal;
+                        // reemplazarlo por el código real del catálogo recién creado, si no
+                        // el PDF/listados muestran el literal en vez del código (p. ej. S001).
+                        $d['codigo_principal'] = $servicioLibre['codigo'];
                     }
                     $d['id_venta'] = $id;
                     $idDetalle     = $this->repository->insertDetalle($d);
@@ -988,7 +993,7 @@ class FacturaVentaService
             if (!empty($data['detalles']) && is_array($data['detalles'])) {
                 foreach ($data['detalles'] as &$d) {
                     if (!empty($d['es_libre']) && $d['es_libre'] == '1' && empty($d['id_producto'])) {
-                        $d['id_producto'] = $this->repository->crearServicioLibre(
+                        $servicioLibre = $this->repository->crearServicioLibre(
                             $idEmpresa,
                             $idUsuario,
                             $d['nombre'] ?? ($d['descripcion'] ?? ''),
@@ -996,6 +1001,11 @@ class FacturaVentaService
                             isset($d['porcentaje_iva']) ? (float) $d['porcentaje_iva'] : null,
                             isset($d['codigo_porcentaje']) ? (string) $d['codigo_porcentaje'] : null
                         );
+                        $d['id_producto']     = $servicioLibre['id'];
+                        // El frontend manda "__LIBRE__" como bandera en codigo_principal;
+                        // reemplazarlo por el código real del catálogo recién creado, si no
+                        // el PDF/listados muestran el literal en vez del código (p. ej. S001).
+                        $d['codigo_principal'] = $servicioLibre['codigo'];
                     }
                     $d['id_venta'] = $idVenta;
                     $idDetalle     = $this->repository->insertDetalle($d);

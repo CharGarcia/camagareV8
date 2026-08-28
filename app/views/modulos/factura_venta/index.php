@@ -1480,6 +1480,7 @@ $totalPages = $totalPagesOriginal;
         calculo_iva: '<?= $empresa['calculo_iva_facturacion'] ?? 'linea_linea' ?>',
         valor_limite_consumidor_final: <?= isset($empresa['valor_limite_consumidor_final']) && $empresa['valor_limite_consumidor_final'] !== null && $empresa['valor_limite_consumidor_final'] !== '' ? (float)$empresa['valor_limite_consumidor_final'] : 'null' ?>,
         id_forma_pago_sri_def: <?= isset($empresa['id_forma_pago_sri_def']) && $empresa['id_forma_pago_sri_def'] !== null ? (int)$empresa['id_forma_pago_sri_def'] : 'null' ?>,
+        id_tarifa_iva_defecto_libre: <?= isset($empresa['id_tarifa_iva_defecto_libre']) && $empresa['id_tarifa_iva_defecto_libre'] !== null ? (int)$empresa['id_tarifa_iva_defecto_libre'] : 'null' ?>,
         factura_operadora_transporte: <?= (($empresa['factura_operadora_transporte'] ?? false) === 'true' || ($empresa['factura_operadora_transporte'] ?? false) === true) ? 'true' : 'false' ?>,
         editar_precio_factura: <?= (($empresa['editar_precio_factura'] ?? true) === 'true' || ($empresa['editar_precio_factura'] ?? true) === true) ? 'true' : 'false' ?>,
         editar_iva_factura: <?= (($empresa['editar_iva_factura'] ?? true) === 'true' || ($empresa['editar_iva_factura'] ?? true) === true) ? 'true' : 'false' ?>,
@@ -4553,10 +4554,18 @@ $totalPages = $totalPagesOriginal;
         row.querySelector('.input-precio-iva').value = '0.00';
         row.querySelector('.input-cantidad').value = '1';
 
-        // Seleccionar por defecto la primera tarifa IVA disponible
+        // Seleccionar por defecto la tarifa IVA configurada para ítems libres
+        // (Empresa → Facturación → "Tipo de IVA por defecto para ítems libres");
+        // si no hay ninguna configurada, se usa la primera tarifa de la lista.
         const selIva = row.querySelector('.input-iva');
         if (selIva && selIva.options.length > 0) {
-            selIva.selectedIndex = 0;
+            let idx = 0;
+            if (EMPRESA_CONFIG.id_tarifa_iva_defecto_libre) {
+                const opciones = Array.from(selIva.options);
+                const encontrado = opciones.findIndex(o => parseInt(o.dataset.id) === EMPRESA_CONFIG.id_tarifa_iva_defecto_libre);
+                if (encontrado >= 0) idx = encontrado;
+            }
+            selIva.selectedIndex = idx;
         }
 
         // Ocultar selector de medidas (servicios libres no tienen unidad fija)

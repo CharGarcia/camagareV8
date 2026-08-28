@@ -448,9 +448,19 @@ class EmpresaService
             $data['id_forma_pago_sri_def'] = 'NULL';
         }
 
+        // Tarifa de IVA que se preselecciona al crear un ítem libre (solo aplica
+        // si facturacion_libre está activo, pero se guarda igual aunque esté
+        // apagado por si se vuelve a activar después).
+        $ivaLibreDef = $data['id_tarifa_iva_defecto_libre'] ?? '';
+        if ($ivaLibreDef !== '' && is_numeric($ivaLibreDef) && (int)$ivaLibreDef > 0) {
+            $data['id_tarifa_iva_defecto_libre'] = (int)$ivaLibreDef;
+        } else {
+            $data['id_tarifa_iva_defecto_libre'] = 'NULL';
+        }
+
         $fields = array_merge($boolFields, [
             'valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'calculo_iva_facturacion',
-            'factura_agrupar_items',
+            'factura_agrupar_items', 'id_tarifa_iva_defecto_libre',
         ]);
 
         // Recargo por servicio del POS Restaurante: se emite como propina, y la

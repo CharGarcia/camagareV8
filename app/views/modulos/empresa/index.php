@@ -1495,6 +1495,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <label class="form-check-label small fw-bold" for="sw_libre">Permitir ingreso de registros libremente (solo servicios)</label>
                                             <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Permite escribir libremente un servicio en la factura, sin que se haya registrado previamente.</div>
                                         </div>
+                                        <div class="mb-3" id="div-iva-libre" style="<?= (($empresa['facturacion_libre'] ?? false) === 'true' || ($empresa['facturacion_libre'] ?? false) === true) ? '' : 'display:none;' ?>">
+                                            <label class="form-label small fw-bold mb-1" for="id_tarifa_iva_defecto_libre">Tipo de IVA por defecto para ítems libres</label>
+                                            <select class="form-select form-select-sm" name="id_tarifa_iva_defecto_libre" id="id_tarifa_iva_defecto_libre">
+                                                <option value="">(la primera tarifa de la lista)</option>
+                                                <?php foreach ($tarifasIva as $tar): ?>
+                                                    <option value="<?= (int) $tar['id'] ?>" <?= ((int) ($empresa['id_tarifa_iva_defecto_libre'] ?? 0) === (int) $tar['id']) ? 'selected' : '' ?>><?= htmlspecialchars($tar['tarifa']) ?> (<?= $tar['porcentaje_iva'] ?>%)</option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Se preselecciona automáticamente al escribir un servicio libre en la factura o el recibo de venta.</div>
+                                        </div>
                                         <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" role="switch" name="facturacion_inventario" id="sw_inv" <?= (($empresa['facturacion_inventario'] ?? true) === 'true' || ($empresa['facturacion_inventario'] ?? true) === true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small fw-bold" for="sw_inv">La facturación afecta al inventario</label>
@@ -2586,6 +2596,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
             const libreChecked = swLibre.checked;
             const invChecked = swInv.checked;
+
+            const divIvaLibre = document.getElementById('div-iva-libre');
+            if (divIvaLibre) divIvaLibre.style.display = libreChecked ? '' : 'none';
 
             // Dependencias totales de Facturación Libre
             const allDeps = ['sw_inv', 'sw_lotes', 'sw_cad', 'sw_nup', 'sw_solo_pos', 'sw_medida'];
