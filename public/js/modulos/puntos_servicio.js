@@ -114,8 +114,13 @@
     };
 
     // ---- QR ----------------------------------------------------------
-    function pintarQr(nombre, token) {
-        const contenido = `${window.BASE_URL.replace(/\/$/, '')}/asistencia/marcar?p=${encodeURIComponent(token)}`;
+    // El QR se escanea con la cámara de un celular: el contenido tiene que ser una URL
+    // ABSOLUTA (con dominio). El servidor la arma con url_absoluta() y la manda en url_qr;
+    // el fallback con location.origin es solo por si un endpoint viejo no la envía —
+    // nunca se debe volver a usar BASE_URL a secas (es una ruta relativa: '' en producción).
+    function pintarQr(nombre, token, urlQr) {
+        const contenido = urlQr
+            || `${location.origin}${window.BASE_URL.replace(/\/$/, '')}/asistencia/marcar?p=${encodeURIComponent(token)}`;
         const img = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(contenido)}&size=300x300&margin=10`;
 
         document.getElementById('casisQrNombre').textContent = nombre;
@@ -137,8 +142,8 @@
             .then(r => r.json())
             .then(j => {
                 if (!j.ok) { swalErr(j.error || 'No encontrado'); return; }
-                qrPuntoActual = { id: j.data.id, nombre: j.data.nombre, qr_token: j.data.qr_token };
-                pintarQr(j.data.nombre, j.data.qr_token);
+                qrPuntoActual = { id: j.data.id, nombre: j.data.nombre, qr_token: j.data.qr_token, url_qr: j.data.url_qr };
+                pintarQr(j.data.nombre, j.data.qr_token, j.data.url_qr);
                 getModalQr()?.show();
             })
             .catch(() => swalErr('Error de red.'));
@@ -163,7 +168,7 @@
             fetch(`${urlBase}/regenerarQr`, { method: 'POST', body: fd })
                 .then(r => r.json())
                 .then(j => {
-                    if (j.ok) { qrPuntoActual.qr_token = j.qr_token; pintarQr(qrPuntoActual.nombre, j.qr_token); swalOk(j.msg); }
+                    if (j.ok) { qrPuntoActual.qr_token = j.qr_token; qrPuntoActual.url_qr = j.url_qr; pintarQr(qrPuntoActual.nombre, j.qr_token, j.url_qr); swalOk(j.msg); }
                     else swalErr(j.error);
                 });
         };

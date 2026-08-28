@@ -216,8 +216,23 @@ class PuntosServicioController extends BaseModuloController
         $id = (int) ($_GET['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $data = $this->puntoService->getDetalle($id, $idEmpresa);
+        if ($data) {
+            $data['url_qr'] = $this->urlPublicaQr((string) ($data['qr_token'] ?? ''));
+        }
         echo json_encode($data ? ['ok' => true, 'data' => $data] : ['ok' => false, 'error' => 'No encontrado']);
         exit;
+    }
+
+    /**
+     * URL pública completa del punto de marcación. El QR se escanea con la cámara
+     * de un celular, así que necesita una URL absoluta (esquema + dominio): una
+     * ruta relativa como "/asistencia/marcar?p=..." no la puede abrir ningún lector.
+     * url_absoluta() usa APP_URL (config/local.php) si está configurado y, si no,
+     * la deriva del host de la petición actual — mismo criterio que MesasController.
+     */
+    private function urlPublicaQr(string $token): string
+    {
+        return url_absoluta('asistencia/marcar?p=' . rawurlencode($token));
     }
 
     /** Regenera el QR del punto (revoca el anterior). */
@@ -233,7 +248,7 @@ class PuntosServicioController extends BaseModuloController
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
             $token = $this->puntoService->regenerarQr($id, $idEmpresa, $idUsuario);
-            echo json_encode(['ok' => true, 'qr_token' => $token, 'msg' => 'QR regenerado.']);
+            echo json_encode(['ok' => true, 'qr_token' => $token, 'url_qr' => $this->urlPublicaQr($token), 'msg' => 'QR regenerado.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
