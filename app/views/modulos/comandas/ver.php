@@ -465,6 +465,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
     // muestra, no decide.
     const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
 
+    // IVA y total CON impuestos de UNA línea. El recargo por servicio queda
+    // fuera a propósito: es un recargo de la cuenta (se muestra y se cobra una
+    // sola vez en el pie), no del ítem — sumarlo aquí lo mostraría dos veces.
+    const ivaLinea = (d) => round2(round2(d.subtotal) * (parseFloat(d.porcentaje_iva) || 0) / 100);
+    const totalLineaConIva = (d) => round2(round2(d.subtotal) + ivaLinea(d));
+
     // El recargo por servicio se calcula sobre la base sin impuestos de ESE
     // conjunto de líneas, así que al dividir la cuenta cada parte carga el suyo
     // — igual que PosVentaService, que aplica el porcentaje sobre el subtotal
@@ -560,11 +566,16 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 const sinEstacionEnviado = !d.id_estacion_impresion && d.estado_linea === 'enviado';
                 const [label, color] = sinEstacionEnviado ? [null, null] : (ESTADO_LABEL[d.estado_linea] || ['—', 'secondary']);
                 const descuento = parseFloat(d.descuento || 0);
-                const base = parseFloat(d.precio_unitario || 0) * parseFloat(d.cantidad || 0);
+                // El importe de cada ítem se muestra CON impuestos: mismo criterio
+                // con el que se ve el precio en el catálogo (tarjetas del grid) y
+                // el que el cliente compara contra su comprobante. El pie sigue
+                // desglosando Subtotal / IVA / Servicio / Total.
+                const pctLinea = parseFloat(d.porcentaje_iva) || 0;
+                const base = round2(parseFloat(d.precio_unitario || 0) * parseFloat(d.cantidad || 0) * (1 + pctLinea / 100));
                 const descTag = descuento > 0 ? ' <span class="badge bg-danger bg-opacity-10 text-danger">-' + money(descuento) + '</span>' : '';
                 const totalHtml = descuento > 0
-                    ? '<span class="text-decoration-line-through text-muted small d-block">' + money(base) + '</span>' + money(d.subtotal)
-                    : money(d.subtotal);
+                    ? '<span class="text-decoration-line-through text-muted small d-block">' + money(base) + '</span>' + money(totalLineaConIva(d))
+                    : money(totalLineaConIva(d));
                 const puedeEditar = d.estado_linea !== 'anulado' && !d.id_grupo_cobro && PUEDE_ACTUALIZAR;
                 // Sin estación configurada = no hay nada que preparar (ej. una bebida embotellada):
                 // se puede entregar directo, sin esperar a que cocina/barra lo marque 'listo'.
@@ -580,7 +591,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                         ${d.estado_linea === 'anulado' && PUEDE_ACTUALIZAR ? '<button type="button" class="btn btn-sm btn-outline-secondary restaurar mt-1" data-id="' + d.id + '"><i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar</button>' : ''}
                     </div>
                     ${puedeEditar ? '<button type="button" class="btn btn-outline-secondary btn-desc" data-id="' + d.id + '" title="Aplicar descuento"><i class="bi bi-percent"></i></button>' : ''}
-                    <div class="total">${totalHtml}</div>
+                    <div class="total" title="IVA incluido">${totalHtml}</div>
                     ${puedeEditar ? '<span class="rm" data-id="' + d.id + '" title="Eliminar ítem"><i class="bi bi-x-lg"></i></span>' : ''}
                 </div>`;
             }).join('');
@@ -1170,7 +1181,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 <label class="cb-linea${enPreparacion ? ' text-muted' : ''}">
                     <input type="checkbox" class="form-check-input cb-check" data-id="${d.id}" ${enPreparacion ? 'disabled' : 'checked'}>
                     <span class="desc">${escapeHtml(d.cantidad)} x ${escapeHtml(d.descripcion)}${enPreparacion ? ' <span class="badge bg-warning-subtle text-warning-emphasis">en preparación</span>' : ''}</span>
-                    <span class="total">${money(calcularTotales([d]).total)}</span>
+                    <span class="total">${money(totalLineaConIva(d))}</span>
                 </label>`;
             }).join('');
         }

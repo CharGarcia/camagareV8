@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, recargo, total con iva
-version: 1.2
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -40,10 +40,19 @@ el impuesto de cada ítem desde el producto, así que el documento de venta mand
 siempre sobre esta vista previa.
 
 El mismo criterio se aplica en todo el recorrido del cobro: el importe de cada
-mesa en el tablero, el **Total seleccionado** al dividir la cuenta y el **Total
-a cobrar** del pago están todos con impuestos incluidos. Así, si una cuenta pasa
-el límite de venta a Consumidor Final, el aviso salta al elegir los ítems y no
-recién al confirmar el pago.
+ítem en la lista de la comanda, el importe de cada mesa en el tablero, el
+**Total seleccionado** al dividir la cuenta y el **Total a cobrar** del pago
+están todos con impuestos incluidos. Así, si una cuenta pasa el límite de venta
+a Consumidor Final, el aviso salta al elegir los ítems y no recién al confirmar
+el pago.
+
+El importe que aparece a la derecha de cada ítem también es **con IVA**, igual
+que el precio de las tarjetas del catálogo: lo que se ve al tocar el producto es
+lo que se suma a la cuenta. Por eso la columna de importes **no suma el
+subtotal** del pie — el pie es el desglose contable (subtotal, IVA, servicio,
+total), la lista es lo que paga el cliente por cada cosa. El recargo por
+servicio no se reparte entre los ítems: se cobra una sola vez, en su propia
+línea del pie.
 
 ## El recargo por servicio (el 10%)
 
@@ -121,6 +130,9 @@ Una comanda vacía se anula sin más.
 
 ## Historial de cambios
 
+- **1.3** — El importe de cada ítem de la comanda (y el de la lista de cobro) se
+  muestra con IVA incluido, igual que el precio del catálogo. El pie mantiene el
+  desglose de subtotal, IVA, servicio y total.
 - **1.2** — Recargo por servicio (el 10%) cobrado como propina, supeditado al
   campo de propina de la factura: se configura por
   establecimiento como obligatorio u opcional, con su porcentaje.
