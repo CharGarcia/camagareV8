@@ -182,11 +182,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <button class="nav-link active" id="tab-menu-general-btn" data-bs-toggle="tab" data-bs-target="#tab-menu-general" type="button">General</button>
                         </li>
                         <li class="nav-item">
-                            <button class="nav-link" id="tab-menu-categorias-btn" data-bs-toggle="tab" data-bs-target="#tab-menu-categorias" type="button" onclick="cargarListaMenuCategorias()">
-                                <i class="bi bi-tags me-1"></i>Categorías
-                            </button>
-                        </li>
-                        <li class="nav-item">
                             <button class="nav-link" id="tab-menu-estaciones-btn" data-bs-toggle="tab" data-bs-target="#tab-menu-estaciones" type="button" onclick="cargarListaEstaciones()">
                                 <i class="bi bi-printer me-1"></i>Estaciones
                             </button>
@@ -237,32 +232,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <hr class="my-3">
 
                     <div class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Precio *</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">$</span>
-                                <input type="number" class="form-control" name="precio" id="menu_precio" step="0.01" min="0" required value="0.00">
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Tarifa IVA <span class="text-danger" title="Obligatoria si el ítem no tiene un producto vinculado">*</span></label>
-                            <select class="form-select form-select-sm" name="id_tarifa_iva" id="menu_id_tarifa_iva">
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Categoría del menú</label>
-                            <select class="form-select form-select-sm" name="id_categoria" id="menu_id_categoria">
-                                <option value="">Sin categoría</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Precio con impuestos</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">$</span>
-                                <input type="number" class="form-control" id="menu_precio_con_iva" step="0.01" min="0" value="0.00">
-                            </div>
-                        </div>
-                        <div class="col-md-8">
+                        <div class="col-md-6">
                             <label class="form-label small fw-bold">Producto vinculado (opcional)</label>
                             <div class="position-relative">
                                 <input type="text" class="form-control form-control-sm" id="menu_producto_texto" placeholder="Buscar producto o combo..." autocomplete="off">
@@ -274,31 +244,44 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             </div>
                         </div>
                         <div class="col-md-4">
+                            <label class="form-label small fw-bold">Categoría</label>
+                            <select class="form-select form-select-sm" name="id_categoria" id="menu_id_categoria">
+                                <option value="">Sin categoría</option>
+                            </select>
+                            <div class="form-text mt-0" style="font-size:0.65rem;">Son las mismas de Productos; se crean y editan en ese módulo.</div>
+                        </div>
+                        <div class="col-md-2">
                             <label class="form-label small fw-bold">Orden</label>
                             <input type="number" class="form-control form-control-sm" name="orden" id="menu_orden" step="1" value="0">
                         </div>
-                    </div>
-                    </div>
-
-                    <div class="tab-pane fade" id="tab-menu-categorias">
-                        <div class="row g-2 align-items-end mb-3">
-                            <div class="col-5">
-                                <label class="form-label small fw-bold">Nombre</label>
-                                <input type="text" class="form-control form-control-sm" id="mcat_nombre" maxlength="60" placeholder="Ej. Entradas">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Precio *</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" name="precio" id="menu_precio" step="0.01" min="0" required value="0.00">
                             </div>
-                            <div class="col-4">
-                                <label class="form-label small fw-bold">Enviar a</label>
-                                <select class="form-select form-select-sm" id="mcat_estacion">
-                                    <option value="">Ninguna</option>
-                                </select>
-                            </div>
-                            <div class="col-3">
-                                <button type="button" class="btn btn-primary btn-sm w-100" id="btnAgregarMenuCategoria"><i class="bi bi-plus-lg"></i> Agregar</button>
+                            <div class="form-text mt-0 d-none" id="menu_precio_ayuda" style="font-size:0.65rem;">Lo define el producto vinculado; se cambia en Productos.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Tarifa IVA <span class="text-danger" title="Obligatoria si el ítem no tiene un producto vinculado">*</span></label>
+                            <select class="form-select form-select-sm" name="id_tarifa_iva" id="menu_id_tarifa_iva">
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Precio con impuestos</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" id="menu_precio_con_iva" step="0.01" min="0" value="0.00">
                             </div>
                         </div>
-                        <div class="form-text mt-0 mb-2" style="font-size:0.65rem;">Las estaciones (impresoras/pantallas de cocina o barra) se crean en la pestaña "Estaciones".</div>
-                        <input type="hidden" id="mcat_id_editando" value="">
-                        <div id="mcat_lista" class="list-group" style="max-height:220px; overflow-y:auto;"></div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Enviar a</label>
+                            <select class="form-select form-select-sm" name="id_estacion_impresion" id="menu_id_estacion">
+                                <option value="">Ninguna</option>
+                            </select>
+                            <div class="form-text mt-0" style="font-size:0.65rem;">Cocina o barra a la que se manda el plato. Sin estación, se entrega directo sin pasar por preparación. Se crean en la pestaña "Estaciones".</div>
+                        </div>
+                    </div>
                     </div>
 
                     <div class="tab-pane fade" id="tab-menu-estaciones">
@@ -350,6 +333,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     let modalInst = null;
     let pendienteCategoria = null;
     let pendienteTarifa = null;
+    let pendienteEstacion = null;
 
     async function cargarCategorias() {
         try {
@@ -416,8 +400,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     });
     document.getElementById('menu_id_tarifa_iva').addEventListener('change', recalcularPrecios);
 
+    // Estación del ítem: a qué cocina/barra se manda el plato. Antes salía de la
+    // categoría; ahora se elige por ítem, así dos platos de la misma categoría
+    // pueden ir a estaciones distintas.
     async function cargarEstacionesEnSelect() {
-        const sel = document.getElementById('mcat_estacion');
+        const sel = document.getElementById('menu_id_estacion');
         if (!sel) return;
         try {
             const r = await fetch(`${urlBase}/getEstacionesAjax`);
@@ -425,7 +412,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const actual = sel.value;
             Array.from(sel.options).slice(1).forEach(o => o.remove());
             (d.ok ? (d.data || []) : []).forEach(e => sel.add(new Option(e.nombre, e.id)));
-            sel.value = actual;
+            if (pendienteEstacion !== null) { sel.value = pendienteEstacion; pendienteEstacion = null; }
+            else if (actual) { sel.value = actual; }
         } catch (e) {}
     }
 
@@ -439,88 +427,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function escapeHtmlMcat(s) {
         return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
-
-    // ─── Pestaña "Categorías" del menú (propias, separadas de Productos) ──────
-
-    window.cargarListaMenuCategorias = async function () {
-        await cargarEstacionesEnSelect();
-        const cont = document.getElementById('mcat_lista');
-        cont.innerHTML = '<div class="text-center text-muted small py-3"><span class="spinner-border spinner-border-sm"></span></div>';
-        try {
-            const r = await fetch(`${urlBase}/getMenuCategoriasAjax`);
-            const d = await r.json();
-            const rows = d.ok ? (d.data || []) : [];
-            if (!rows.length) {
-                cont.innerHTML = '<div class="text-center text-muted small py-3">Aún no hay categorías del menú.</div>';
-                return;
-            }
-            cont.innerHTML = rows.map(c => {
-                const badge = c.estacion_nombre
-                    ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-2">${escapeHtmlMcat(c.estacion_nombre)}</span>`
-                    : `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 ms-2">Sin estación</span>`;
-                return `<div class="list-group-item d-flex justify-content-between align-items-center py-2">
-                            <div>
-                                <span class="fw-medium">${escapeHtmlMcat(c.nombre)}</span>
-                                ${badge}
-                            </div>
-                            <div class="d-flex gap-1">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="editarMenuCategoria(${c.id}, '${escapeHtmlMcat(c.nombre)}', ${c.id_estacion_impresion || 'null'})"><i class="bi bi-pencil"></i></button>
-                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarMenuCategoria(${c.id})"><i class="bi bi-trash"></i></button>
-                            </div>
-                        </div>`;
-            }).join('');
-        } catch (e) {
-            cont.innerHTML = '<div class="text-center text-danger small py-3">Error al cargar.</div>';
-        }
-    };
-
-    window.editarMenuCategoria = function (id, nombre, idEstacion) {
-        document.getElementById('mcat_id_editando').value = id;
-        document.getElementById('mcat_nombre').value = nombre;
-        document.getElementById('mcat_estacion').value = idEstacion || '';
-        document.getElementById('btnAgregarMenuCategoria').innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
-    };
-
-    function resetFormMenuCategoria() {
-        document.getElementById('mcat_id_editando').value = '';
-        document.getElementById('mcat_nombre').value = '';
-        document.getElementById('mcat_estacion').value = '';
-        document.getElementById('btnAgregarMenuCategoria').innerHTML = '<i class="bi bi-plus-lg"></i> Agregar';
-    }
-
-    document.getElementById('btnAgregarMenuCategoria').addEventListener('click', async () => {
-        const nombre = document.getElementById('mcat_nombre').value.trim();
-        if (!nombre) { swalErrorCat('Ingresa un nombre para la categoría.'); return; }
-        const id = document.getElementById('mcat_id_editando').value;
-        const fd = new FormData();
-        fd.append('nombre', nombre);
-        fd.append('id_estacion_impresion', document.getElementById('mcat_estacion').value);
-        if (id) fd.append('id', id);
-
-        try {
-            const r = await fetch(`${urlBase}/${id ? 'actualizarMenuCategoriaAjax' : 'crearMenuCategoriaAjax'}`, { method: 'POST', body: fd });
-            const d = await r.json();
-            if (!d.ok) { swalErrorCat(d.error || 'No se pudo guardar la categoría.'); return; }
-            resetFormMenuCategoria();
-            await Promise.all([cargarListaMenuCategorias(), cargarCategorias()]);
-        } catch (e) { swalErrorCat('Error de conexión.'); }
-    });
-
-    window.eliminarMenuCategoria = async function (id) {
-        const { isConfirmed } = await Swal.fire({
-            title: '¿Eliminar esta categoría del menú?', icon: 'warning', showCancelButton: true,
-            confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545',
-        });
-        if (!isConfirmed) return;
-        const fd = new FormData();
-        fd.append('id', id);
-        try {
-            const r = await fetch(`${urlBase}/eliminarMenuCategoriaAjax`, { method: 'POST', body: fd });
-            const d = await r.json();
-            if (!d.ok) { swalErrorCat(d.error || 'No se pudo eliminar.'); return; }
-            await Promise.all([cargarListaMenuCategorias(), cargarCategorias()]);
-        } catch (e) { swalErrorCat('Error de conexión.'); }
-    };
 
     // ─── Pestaña "Estaciones" (catálogo compartido: Productos + Menú + KDS) ───
 
@@ -629,10 +535,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function resetProducto() {
         document.getElementById('menu_producto_id').value = '';
         document.getElementById('menu_producto_texto').value = '';
+        setPreciosEditables(true);
     }
 
     function volverATabGeneral() {
-        resetFormMenuCategoria();
         resetFormEstacion();
         if (typeof bootstrap !== 'undefined') {
             const tabEl = document.getElementById('tab-menu-general-btn');
@@ -687,12 +593,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         } else {
             selTarifa.value = '';
         }
+
+        const selEst = document.getElementById('menu_id_estacion');
+        if (d.id_estacion_impresion && Array.from(selEst.options).some(o => o.value == d.id_estacion_impresion)) {
+            selEst.value = d.id_estacion_impresion;
+        } else if (d.id_estacion_impresion) {
+            pendienteEstacion = d.id_estacion_impresion;
+        } else {
+            selEst.value = '';
+        }
         document.getElementById('menu_disponible').checked = (d.disponible === true || d.disponible === 't' || d.disponible === 'true');
         document.getElementById('menu_destacado').checked = (d.destacado === true || d.destacado === 't' || d.destacado === 'true');
 
         if (d.id_producto) {
             document.getElementById('menu_producto_id').value = d.id_producto;
             document.getElementById('menu_producto_texto').value = (d.producto_codigo ? d.producto_codigo + ' - ' : '') + (d.producto_nombre || '');
+            // Se muestra el precio guardado del ítem, no se recopia el del
+            // producto; pero como tiene producto vinculado, no se puede editar.
+            setPreciosEditables(false);
         } else {
             resetProducto();
         }
@@ -735,13 +653,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     };
 
     // ─── Typeahead del producto vinculado (mismo patrón que mayores/index.php) ─
-    function setupTypeahead(inputEl, dropdownEl, hiddenEl, fetchFn, renderLabel) {
+    function setupTypeahead(inputEl, dropdownEl, hiddenEl, fetchFn, renderLabel, onSelect) {
         let debounceTimer;
+        // Último lote de resultados, por id: el dropdown solo guarda id y etiqueta
+        // en el DOM, y onSelect necesita el objeto completo (precio, tarifa, etc.).
+        let ultimosItems = new Map();
         inputEl.addEventListener('keydown', (e) => {
             if ((e.key === 'Backspace' || e.key === 'Delete') && hiddenEl.value !== '') {
                 e.preventDefault();
                 hiddenEl.value = ''; inputEl.value = '';
                 dropdownEl.style.display = 'none'; dropdownEl.innerHTML = '';
+                onSelect?.(null);
             }
         });
         inputEl.addEventListener('input', () => {
@@ -753,6 +675,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 let items = [];
                 try { items = await fetchFn(q); } catch (e) { return; }
                 if (!items.length) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
+                ultimosItems = new Map(items.map(it => [String(it.id), it]));
                 dropdownEl.innerHTML = items.map(it => {
                     const label = renderLabel(it);
                     return `<a href="#" class="list-group-item list-group-item-action py-1 px-2 small" data-id="${it.id}" data-label="${label.replace(/"/g, '&quot;')}">${label}</a>`;
@@ -767,6 +690,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             hiddenEl.value = a.dataset.id;
             inputEl.value = a.dataset.label;
             dropdownEl.style.display = 'none';
+            onSelect?.(ultimosItems.get(String(a.dataset.id)) || null);
         });
         document.addEventListener('click', (e) => {
             if (e.target !== inputEl && !dropdownEl.contains(e.target)) dropdownEl.style.display = 'none';
@@ -782,8 +706,61 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const d = await r.json();
             return d.ok ? d.data : [];
         },
-        (it) => `${it.codigo ? it.codigo + ' - ' : ''}${it.nombre}${it.tipo_produccion === '02' ? ' (combo)' : ''}`
+        (it) => `${it.codigo ? it.codigo + ' - ' : ''}${it.nombre}${it.tipo_produccion === '02' ? ' (combo)' : ''}`,
+        aplicarProductoVinculado
     );
+
+    /**
+     * Precio del ítem: solo se escribe a mano cuando NO hay producto vinculado.
+     * Con producto, el precio lo define él y aquí queda de solo lectura — se
+     * cambia en Productos, no en la carta.
+     * Va con `readonly` y no con `disabled` a propósito: un campo deshabilitado
+     * no se envía en el submit, y el precio es obligatorio.
+     */
+    function setPreciosEditables(editables) {
+        const $base = document.getElementById('menu_precio');
+        const $conIva = document.getElementById('menu_precio_con_iva');
+        [$base, $conIva].forEach(el => {
+            el.readOnly = !editables;
+            el.classList.toggle('bg-light', !editables);
+        });
+        document.getElementById('menu_precio_ayuda').classList.toggle('d-none', editables);
+    }
+
+    /**
+     * Al elegir un producto vinculado se copian su precio, su tarifa de IVA y su
+     * categoría, y se recalcula el precio con impuestos.
+     * El precio queda bloqueado (lo manda el producto); la tarifa y la categoría
+     * quedan editables: son del ítem de la carta y se pueden cambiar aquí.
+     * Con `null` (se limpió el producto) se habilitan los precios; lo ya escrito
+     * no se toca, para no borrar un precio puesto a mano.
+     */
+    function aplicarProductoVinculado(prod) {
+        if (!prod) { setPreciosEditables(true); return; }
+
+        const selTarifa = document.getElementById('menu_id_tarifa_iva');
+        const idTarifa = prod.tarifa_iva ?? '';
+        if (idTarifa !== '' && Array.from(selTarifa.options).some(o => o.value == idTarifa)) {
+            selTarifa.value = idTarifa;
+        }
+
+        // Categoría: las del menú son las de Productos, así que la del producto
+        // sirve tal cual. Si todavía no cargó la lista del select, queda
+        // pendiente y cargarCategorias() la aplica al terminar.
+        const selCat = document.getElementById('menu_id_categoria');
+        const idCat = prod.id_categoria ?? '';
+        if (idCat !== '' && idCat !== null) {
+            if (Array.from(selCat.options).some(o => o.value == idCat)) selCat.value = idCat;
+            else pendienteCategoria = idCat;
+        }
+
+        document.getElementById('menu_precio').value = (parseFloat(prod.precio_base) || 0).toFixed(2);
+
+        // El precio base es el ancla: el precio con impuestos se deriva de él.
+        anclaPrecio = 'base';
+        recalcularPrecios();
+        setPreciosEditables(false);
+    }
 
     if (form) {
         form.addEventListener('submit', async (e) => {

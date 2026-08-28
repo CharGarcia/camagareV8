@@ -136,7 +136,22 @@ class PosVentaService
             }
 
             // Resolver IVA desde el producto (misma fuente de verdad que Recibos/Facturas).
+            // Excepción: si el llamador manda 'id_tarifa_iva', esa tarifa gana. La
+            // usan las comandas, donde el ítem de la carta define con qué IVA se
+            // vende el plato (ver ComandaRepository::SQL_SELECT_IVA); así el
+            // comprobante sale con la misma tarifa que vio el mesero en pantalla.
+            // Los demás flujos no mandan la clave y siguen resolviendo por producto.
             $tar = $this->reciboRepo->getTarifaIvaProducto($idProducto);
+            $idTarItem = (int) ($it['id_tarifa_iva'] ?? 0);
+            if ($idTarItem > 0 && (!$tar || $idTarItem !== (int) $tar['id'])) {
+                $tarItem = $this->reciboRepo->getTarifaIvaById($idTarItem);
+                if ($tarItem) {
+                    // codigo_producto sigue saliendo del producto: la tarifa solo
+                    // reemplaza el impuesto, no la identidad del ítem facturado.
+                    $tarItem['codigo_producto'] = $tar['codigo_producto'] ?? '';
+                    $tar = $tarItem;
+                }
+            }
             $pct = $tar ? (float) $tar['porcentaje_iva'] : 0.0;
             $codPct = $tar ? (string) $tar['codigo'] : '0';
             $idTar = $tar ? (int) $tar['id'] : 0;

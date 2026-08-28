@@ -104,6 +104,7 @@ class MenuService
             'imagen'        => trim((string) ($data['imagen'] ?? '')),
             'id_categoria'  => (int) ($data['id_categoria'] ?? 0) ?: null,
             'id_tarifa_iva' => (int) ($data['id_tarifa_iva'] ?? 0) ?: null,
+            'id_estacion_impresion' => (int) ($data['id_estacion_impresion'] ?? 0) ?: null,
             'disponible'    => !empty($data['disponible']),
             'destacado'     => !empty($data['destacado']),
             'orden'         => (int) ($data['orden'] ?? 0),
@@ -111,64 +112,16 @@ class MenuService
         ];
     }
 
-    // ─── Categorías del menú (propias, separadas de `categorias` de Productos) ────
+    // ─── Categorías ──────────────────────────────────────────────────────────────
 
-    public function getMenuCategorias(int $idEmpresa): array
+    /**
+     * Las categorías del menú son las de Productos: se administran en ese módulo
+     * y aquí solo se leen. Antes el menú tenía su propia tabla (menu_categorias),
+     * que quedó sin uso.
+     */
+    public function getCategorias(int $idEmpresa): array
     {
-        return $this->repository->getMenuCategorias($idEmpresa);
-    }
-
-    public function crearMenuCategoria(array $data): int
-    {
-        $idEmpresa = (int) $data['id_empresa'];
-        $nombre = trim((string) ($data['nombre'] ?? ''));
-        if ($nombre === '') {
-            throw new Exception('El nombre de la categoría es obligatorio.');
-        }
-        if ($this->repository->existeMenuCategoriaNombre($idEmpresa, $nombre)) {
-            throw new Exception("Ya existe una categoría del menú con el nombre '{$nombre}'.");
-        }
-
-        $insert = [
-            'id_empresa'            => $idEmpresa,
-            'nombre'                => mb_strtoupper($nombre, 'UTF-8'),
-            'id_estacion_impresion' => (int) ($data['id_estacion_impresion'] ?? 0) ?: null,
-            'orden'                 => (int) ($data['orden'] ?? 0),
-            'created_by'            => (int) $data['id_usuario'],
-        ];
-        $id = $this->repository->crearMenuCategoria($insert);
-        $this->logService->registrar((int) $data['id_usuario'], $idEmpresa, 'crear', 'menu_categorias', $id, null, $insert);
-        return $id;
-    }
-
-    public function actualizarMenuCategoria(int $id, int $idEmpresa, array $data): void
-    {
-        $nombre = trim((string) ($data['nombre'] ?? ''));
-        if ($nombre === '') {
-            throw new Exception('El nombre de la categoría es obligatorio.');
-        }
-        if ($this->repository->existeMenuCategoriaNombre($idEmpresa, $nombre, $id)) {
-            throw new Exception("Ya existe otra categoría del menú con el nombre '{$nombre}'.");
-        }
-
-        $update = [
-            'nombre'                => mb_strtoupper($nombre, 'UTF-8'),
-            'id_estacion_impresion' => (int) ($data['id_estacion_impresion'] ?? 0) ?: null,
-            'orden'                 => (int) ($data['orden'] ?? 0),
-            'updated_by'            => (int) $data['id_usuario'],
-        ];
-        $this->repository->actualizarMenuCategoria($id, $idEmpresa, $update);
-        $this->logService->registrar((int) $data['id_usuario'], $idEmpresa, 'actualizar', 'menu_categorias', $id, null, $update);
-    }
-
-    public function eliminarMenuCategoria(int $id, int $idEmpresa, int $idUsuario): void
-    {
-        $usos = $this->repository->contarMenuItemsEnCategoria($id, $idEmpresa);
-        if ($usos > 0) {
-            throw new Exception("No se puede eliminar: {$usos} ítem(s) del menú usan esta categoría.");
-        }
-        $this->repository->eliminarMenuCategoria($id, $idEmpresa, $idUsuario);
-        $this->logService->registrar($idUsuario, $idEmpresa, 'eliminar', 'menu_categorias', $id, null, ['eliminado' => true]);
+        return $this->repository->getCategorias($idEmpresa);
     }
 
     // ─── Estaciones de impresión (catálogo compartido: Productos + Menú + KDS) ────

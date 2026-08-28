@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, recargo, total con iva
-version: 1.3
+version: 1.4
 orden: 20
 estado: activo
 ---
@@ -34,10 +34,11 @@ Al pie de la comanda se muestra el **subtotal**, el **IVA** desglosado por tarif
 y el **Total**. Ese total es el valor **con impuestos incluidos**: es lo que el
 cliente va a pagar, no la suma de precios sin IVA.
 
-El IVA que se muestra aquí es informativo y sirve para que nadie tenga que
-calcularlo de cabeza al leer la cuenta. Al cobrar, el sistema vuelve a resolver
-el impuesto de cada ítem desde el producto, así que el documento de venta manda
-siempre sobre esta vista previa.
+El IVA que se muestra aquí sirve para que nadie tenga que calcularlo de cabeza al
+leer la cuenta, y es el mismo que sale en el comprobante: para los ítems de la
+carta manda la **tarifa configurada en el ítem del Menú**, y solo si ese ítem no
+tiene tarifa propia se usa la del producto vinculado. Si un plato aparece con un
+IVA que no esperaba, la tarifa se corrige en **Menú**, no aquí.
 
 El mismo criterio se aplica en todo el recorrido del cobro: el importe de cada
 ítem en la lista de la comanda, el importe de cada mesa en el tablero, el
@@ -130,6 +131,9 @@ Una comanda vacía se anula sin más.
 
 ## Historial de cambios
 
+- **1.4** — Los ítems de la carta se muestran y se facturan con la tarifa de IVA
+  configurada en el ítem del Menú; antes se usaba la del producto vinculado y la
+  del ítem se ignoraba.
 - **1.3** — El importe de cada ítem de la comanda (y el de la lista de cobro) se
   muestra con IVA incluido, igual que el precio del catálogo. El pie mantiene el
   desglose de subtotal, IVA, servicio y total.

@@ -163,7 +163,7 @@ class ReporteRestauranteRepository extends BaseRepository
             FROM ventas
             JOIN comandas c ON c.id = ventas.id_comanda
             LEFT JOIN menu_items mi ON mi.id = ventas.id_menu_item
-            LEFT JOIN menu_categorias mc ON mc.id = mi.id_categoria
+            LEFT JOIN categorias mc ON mc.id = mi.id_categoria AND mc.id_empresa = mi.id_empresa
             WHERE 1=1 {$condComanda} {$condMenu}
             GROUP BY COALESCE(mi.id, 0), COALESCE(mi.nombre, ventas.descripcion), COALESCE(mc.nombre, 'Sin categoría')
             ORDER BY cantidad_vendida DESC
@@ -187,7 +187,7 @@ class ReporteRestauranteRepository extends BaseRepository
             FROM ventas
             JOIN comandas c ON c.id = ventas.id_comanda
             LEFT JOIN menu_items mi ON mi.id = ventas.id_menu_item
-            LEFT JOIN menu_categorias mc ON mc.id = mi.id_categoria
+            LEFT JOIN categorias mc ON mc.id = mi.id_categoria AND mc.id_empresa = mi.id_empresa
             WHERE 1=1 {$condComanda}
             GROUP BY COALESCE(mc.id, 0), COALESCE(mc.nombre, 'Sin categoría')
             ORDER BY total DESC
@@ -250,7 +250,7 @@ class ReporteRestauranteRepository extends BaseRepository
     /** Categorías del menú de la empresa (para el filtro). */
     public function getCategoriasMenu(int $idEmpresa): array
     {
-        $sql = "SELECT id, nombre FROM menu_categorias WHERE id_empresa = :e AND eliminado = false ORDER BY nombre";
+        $sql = "SELECT id, nombre FROM categorias WHERE id_empresa = :e AND eliminado = false ORDER BY nombre";
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);

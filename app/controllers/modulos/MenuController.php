@@ -203,6 +203,7 @@ class MenuController extends BaseModuloController
             'imagen'        => trim($_POST['imagen'] ?? ''),
             'id_categoria'  => (int) ($_POST['id_categoria'] ?? 0),
             'id_tarifa_iva' => (int) ($_POST['id_tarifa_iva'] ?? 0),
+            'id_estacion_impresion' => (int) ($_POST['id_estacion_impresion'] ?? 0),
             'disponible'    => isset($_POST['disponible']),
             'destacado'     => isset($_POST['destacado']),
             'orden'         => (int) ($_POST['orden'] ?? 0),
@@ -257,64 +258,13 @@ class MenuController extends BaseModuloController
         }
     }
 
-    // ─── Categorías del menú (propias — pestaña "Categorías" del modal) ───────
+    // ─── Categorías (las de Productos — se administran en su propio módulo) ───
 
     public function getMenuCategoriasAjax(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $this->json(['ok' => true, 'data' => $this->service->getMenuCategorias($idEmpresa)]);
-    }
-
-    public function crearMenuCategoriaAjax(): void
-    {
-        $this->requireCrear();
-        try {
-            $id = $this->service->crearMenuCategoria([
-                'id_empresa'            => (int) $_SESSION['id_empresa'],
-                'id_usuario'            => (int) $_SESSION['id_usuario'],
-                'nombre'                => trim($_POST['nombre'] ?? ''),
-                'id_estacion_impresion' => (int) ($_POST['id_estacion_impresion'] ?? 0),
-                'orden'                 => (int) ($_POST['orden'] ?? 0),
-            ]);
-            $this->json(['ok' => true, 'msg' => 'Categoría creada.', 'id' => $id]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'error' => $e->getMessage()]);
-        }
-    }
-
-    public function actualizarMenuCategoriaAjax(): void
-    {
-        $this->requireActualizar();
-        try {
-            $id = (int) ($_POST['id'] ?? 0);
-            if ($id <= 0) throw new Exception('Categoría no válida.');
-            $this->service->actualizarMenuCategoria($id, (int) $_SESSION['id_empresa'], [
-                'id_usuario'            => (int) $_SESSION['id_usuario'],
-                'nombre'                => trim($_POST['nombre'] ?? ''),
-                'id_estacion_impresion' => (int) ($_POST['id_estacion_impresion'] ?? 0),
-                'orden'                 => (int) ($_POST['orden'] ?? 0),
-            ]);
-            $this->json(['ok' => true, 'msg' => 'Categoría actualizada.']);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'error' => $e->getMessage()]);
-        }
-    }
-
-    public function eliminarMenuCategoriaAjax(): void
-    {
-        $this->requireEliminar();
-        try {
-            $id = (int) ($_POST['id'] ?? 0);
-            if ($id <= 0) throw new Exception('Categoría no válida.');
-            $this->service->eliminarMenuCategoria($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
-            $this->json(['ok' => true, 'msg' => 'Categoría eliminada.']);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'error' => $e->getMessage()]);
-        }
+        $this->json(['ok' => true, 'data' => $this->service->getCategorias($idEmpresa)]);
     }
 
     /** Tarifas de IVA activas, para el ítem cuando no tiene producto vinculado. */

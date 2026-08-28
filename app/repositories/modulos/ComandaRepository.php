@@ -254,14 +254,19 @@ class ComandaRepository extends BaseRepository
     // ─── LÍNEAS ────────────────────────────────────────────────────────────────
 
     /**
-     * % de IVA de una línea (alias 'd'): primero el del producto vinculado y, si
-     * no hay uno (ítem puro del Menú), el del tarifa_iva propio del menu_item —
-     * mismo criterio que MenuRepository::getDisponibles(). Es informativo: sirve
-     * para que la pantalla muestre el total que se va a cobrar (IVA incluido);
-     * al cobrar, PosVentaService resuelve el impuesto de nuevo desde el
-     * producto, esto no lo reemplaza.
+     * IVA de una línea (alias 'd'): manda la tarifa del ítem del Menú y, solo si
+     * la línea no viene del Menú, la del producto — mismo criterio que
+     * MenuRepository::getDisponibles(). La carta define con qué impuesto se
+     * vende el plato: si el ítem se creó con una tarifa, esa es la que ve el
+     * mesero y la que termina en el comprobante.
+     *
+     * Devuelve también el id de la tarifa resuelta, porque al cobrar viaja hasta
+     * PosVentaService (clave 'id_tarifa_iva' de cada ítem) para que el documento
+     * se emita con esta misma tarifa en vez de volver a resolverla desde el
+     * producto. Sin eso, la pantalla mostraría una y la factura saldría con otra.
      */
-    private const SQL_SELECT_IVA = "COALESCE(tp.porcentaje_iva, tm.porcentaje_iva, 0) AS porcentaje_iva";
+    private const SQL_SELECT_IVA = "COALESCE(tm.porcentaje_iva, tp.porcentaje_iva, 0) AS porcentaje_iva,
+                COALESCE(mi.id_tarifa_iva, p.tarifa_iva) AS id_tarifa_iva";
     private const SQL_JOIN_IVA = "LEFT JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN tarifa_iva tp ON tp.id = p.tarifa_iva
                 LEFT JOIN menu_items mi ON mi.id = d.id_menu_item
@@ -438,16 +443,6 @@ class ComandaRepository extends BaseRepository
                 WHERE p.id = :id AND p.id_empresa = :e";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $idProducto, ':e' => $idEmpresa]);
-        $val = $st->fetchColumn();
-        return $val !== false && $val !== null ? (int) $val : null;
-    }
-
-    /** Estación de impresión configurada en la categoría del menú (ítems sin producto). */
-    public function getEstacionImpresionMenuCategoria(int $idCategoria, int $idEmpresa): ?int
-    {
-        $sql = "SELECT id_estacion_impresion FROM menu_categorias WHERE id = :id AND id_empresa = :e AND eliminado = false";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id' => $idCategoria, ':e' => $idEmpresa]);
         $val = $st->fetchColumn();
         return $val !== false && $val !== null ? (int) $val : null;
     }

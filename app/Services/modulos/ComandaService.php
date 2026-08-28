@@ -1019,6 +1019,10 @@ class ComandaService
             'precio_unitario' => (float) $l['precio_unitario'],
             'descuento'       => $esPartesIguales ? round((float) $l['descuento'] / $numPartes, 2) : (float) $l['descuento'],
             'descripcion'     => (string) $l['descripcion'],
+            // Tarifa ya resuelta por ComandaRepository (la del ítem del Menú si la
+            // línea vino de la carta, si no la del producto): el comprobante se
+            // emite con ella, así coincide con lo que mostró la comanda.
+            'id_tarifa_iva'   => (int) ($l['id_tarifa_iva'] ?? 0),
             'lote'            => (string) ($l['lote'] ?? ''),
             'caducidad'       => (string) ($l['caducidad'] ?? ''),
             'nup'             => (string) ($l['nup'] ?? ''),

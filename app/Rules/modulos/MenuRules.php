@@ -22,10 +22,12 @@ class MenuRules
         if ((float) ($data['precio'] ?? -1) < 0) {
             $errores[] = 'El precio no puede ser negativo.';
         }
-        // Todo ítem del menú necesita un IVA con el que facturarse: si no hay
-        // producto vinculado (que ya trae el suyo), la tarifa del propio ítem
-        // es obligatoria — el menú es su propio catálogo vendible, igual que
-        // productos, y ninguna línea puede llegar a la factura sin IVA.
+        // Todo ítem del menú necesita un IVA con el que facturarse. La tarifa del
+        // ítem manda sobre la del producto vinculado (ver
+        // MenuRepository::getDisponibles), así que solo se puede omitir cuando hay
+        // un producto del cual heredarla; sin producto es obligatoria — el menú es
+        // su propio catálogo vendible, igual que productos, y ninguna línea puede
+        // llegar a la factura sin IVA.
         if (empty($data['id_producto']) && empty($data['id_tarifa_iva'])) {
             $errores[] = 'Selecciona la tarifa de IVA del ítem (obligatoria cuando no tiene un producto vinculado).';
         }
