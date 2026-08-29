@@ -132,6 +132,114 @@ class ReporteRetencionesController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Detalle de una retención para el panel lateral (offcanvas_doc_preview.php,
+     * tipo RETENCION_COMPRA/RETENCION_VENTA). No reutiliza getFacturaAjax/getCompraAjax
+     * porque una retención no es un documento de producto (cantidad/precio unitario);
+     * sus líneas son de impuesto (código, concepto, base, %, valor retenido) — por
+     * eso el panel las renderiza con cfg.modo === 'retencion', no como ítems de venta.
+     */
+    public function getRetencionCompraAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido']); exit; }
+
+        $repo = new \App\repositories\modulos\RetencionCompraRepository();
+        $cabCompleta = $repo->getPorId($id, $idEmpresa);
+        if (!$cabCompleta) { echo json_encode(['ok' => false, 'mensaje' => 'Retención no encontrada']); exit; }
+        // Solo lo que necesita el panel — getPorId() trae también el XML autorizado y
+        // mensajes del SRI (varios KB) que aquí no hacen falta.
+        $cab = [
+            'establecimiento' => $cabCompleta['establecimiento'] ?? '',
+            'punto_emision'   => $cabCompleta['punto_emision'] ?? '',
+            'secuencial'      => $cabCompleta['secuencial'] ?? '',
+            'fecha_emision'   => $cabCompleta['fecha_emision'] ?? '',
+            'proveedor_nombre' => $cabCompleta['proveedor_razon_social'] ?? '',
+        ];
+
+        $detalleOriginal = $repo->getDetalle($id);
+        // retencion_compra_cabecera solo guarda total_retenido_renta/total_retenido_iva
+        // (sin columna propia de ISD) — se recalculan los 3 desde el detalle para no
+        // depender de esa asimetría con retencion_venta_cabecera (que sí trae total_isd).
+        $cab = array_merge($cab, $this->sumarPorImpuesto($detalleOriginal));
+
+        $detalles = array_map(fn($d) => [
+            'codigo_retencion' => $d['codigo_retencion'] ?? '',
+            'concepto'         => $d['concepto'] ?: ($d['codigo_retencion'] ?? 'Retención'),
+            'base_imponible'   => $d['base_imponible'] ?? 0,
+            'porcentaje'       => $d['porcentaje_retener'] ?? 0,
+            'valor_retenido'   => $d['valor_retenido'] ?? 0,
+        ], $detalleOriginal);
+
+        echo json_encode(['ok' => true, 'cabecera' => $cab, 'detalles' => $detalles]);
+        exit;
+    }
+
+    /** Ver getRetencionCompraAjax(). Misma idea, para retenciones de ventas. */
+    public function getRetencionVentaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido']); exit; }
+
+        $repo = new \App\repositories\modulos\RetencionVentaRepository();
+        $cabCompleta = $repo->getPorId($id, $idEmpresa);
+        if (!$cabCompleta) { echo json_encode(['ok' => false, 'mensaje' => 'Retención no encontrada']); exit; }
+        // Solo lo que necesita el panel (ver nota en getRetencionCompraAjax()).
+        $cab = [
+            'establecimiento' => $cabCompleta['establecimiento'] ?? '',
+            'punto_emision'   => $cabCompleta['punto_emision'] ?? '',
+            'secuencial'      => $cabCompleta['secuencial'] ?? '',
+            'fecha_emision'   => $cabCompleta['fecha_emision'] ?? '',
+            'cliente_nombre'  => $cabCompleta['cliente_nombre'] ?? '',
+        ];
+
+        $detalleOriginal = $repo->getDetalle($id);
+        // total_renta/total_iva/total_isd se recalculan desde el detalle para ser
+        // consistentes con el lado de compras (ver sumarPorImpuesto()).
+        $cab = array_merge($cab, $this->sumarPorImpuesto($detalleOriginal));
+
+        $detalles = array_map(fn($d) => [
+            'codigo_retencion' => $d['codigo_retencion'] ?? '',
+            'concepto'         => $d['sri_concepto'] ?: ($d['codigo_retencion'] ?? 'Retención'),
+            'base_imponible'   => $d['base_imponible'] ?? 0,
+            'porcentaje'       => $d['porcentaje_retencion'] ?? 0,
+            'valor_retenido'   => $d['valor_retenido'] ?? 0,
+        ], $detalleOriginal);
+
+        echo json_encode(['ok' => true, 'cabecera' => $cab, 'detalles' => $detalles]);
+        exit;
+    }
+
+    /**
+     * Normaliza codigo_impuesto (código SRI '1'/'2'/'6' o texto) y suma valor_retenido
+     * por tipo, igual que ReporteRetencionesRepository::impuestoCase() pero en PHP —
+     * el detalle de una retención puede venir de compras o de ventas indistintamente.
+     */
+    private function sumarPorImpuesto(array $detalle): array
+    {
+        $totales = ['total_renta' => 0.0, 'total_iva' => 0.0, 'total_isd' => 0.0];
+        foreach ($detalle as $d) {
+            $cod = strtoupper(trim((string)($d['codigo_impuesto'] ?? '')));
+            $tipo = match (true) {
+                in_array($cod, ['1', 'RENTA'], true) => 'total_renta',
+                in_array($cod, ['2', 'IVA'], true)   => 'total_iva',
+                in_array($cod, ['6', 'ISD'], true)   => 'total_isd',
+                default                               => null,
+            };
+            if ($tipo !== null) {
+                $totales[$tipo] += (float)($d['valor_retenido'] ?? 0);
+            }
+        }
+        $totales['total_retenido'] = $totales['total_renta'] + $totales['total_iva'] + $totales['total_isd'];
+        return $totales;
+    }
+
     // ── Render de filas ───────────────────────────────────────────────────────
 
     private function badgeTipo(string $tipo): string
@@ -154,7 +262,7 @@ class ReporteRetencionesController extends BaseModuloController
         $h = '';
         foreach ($rows as $r) {
             $fecha = !empty($r['fecha']) ? date('d-m-Y', strtotime($r['fecha'])) : '—';
-            $h .= '<tr>'
+            $h .= '<tr' . $this->attrsClicDoc($r) . '>'
                 . '<td>' . $this->badgeTipo($r['tipo_retencion']) . '</td>'
                 . '<td><code class="text-secondary">' . htmlspecialchars($r['numero'] ?? '') . '</code></td>'
                 . '<td>' . $fecha . '</td>'
@@ -179,7 +287,7 @@ class ReporteRetencionesController extends BaseModuloController
         $h = '';
         foreach ($rows as $r) {
             $fecha = !empty($r['fecha']) ? date('d-m-Y', strtotime($r['fecha'])) : '—';
-            $h .= '<tr>'
+            $h .= '<tr' . $this->attrsClicDoc($r) . '>'
                 . '<td>' . $this->badgeTipo($r['tipo_retencion']) . '</td>'
                 . '<td><code class="text-secondary">' . htmlspecialchars($r['numero'] ?? '') . '</code></td>'
                 . '<td>' . $fecha . '</td>'
@@ -192,6 +300,20 @@ class ReporteRetencionesController extends BaseModuloController
                 . '</tr>';
         }
         return $h;
+    }
+
+    /** Atributos data-doc-* para abrir el panel lateral de detalle al hacer clic en la fila. */
+    private function attrsClicDoc(array $r): string
+    {
+        if (empty($r['id_comprobante'])) {
+            return '';
+        }
+        $tipoDoc = $r['tipo_retencion'] === 'COMPRA' ? 'RETENCION_COMPRA' : 'RETENCION_VENTA';
+        return ' style="cursor:pointer;" title="Clic para ver el detalle"'
+             . ' data-doc-id="' . (int)$r['id_comprobante'] . '"'
+             . ' data-doc-tipo="' . $tipoDoc . '"'
+             . ' data-doc-numero="' . htmlspecialchars($r['numero'] ?? '', ENT_QUOTES) . '"'
+             . ' data-doc-sujeto="' . htmlspecialchars($r['tercero_nombre'] ?? '', ENT_QUOTES) . '"';
     }
 
     private function renderTercero(array $rows): string

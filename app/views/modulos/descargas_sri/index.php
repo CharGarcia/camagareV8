@@ -164,7 +164,12 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         <!-- Columna izquierda: Configuración -->
                         <div class="col-lg-5">
 
-                            <!-- Acordeón configuración (colapsado por defecto) -->
+                            <?php if (!empty($puedeCredenciales)): ?>
+                            <!-- Acordeón configuración (colapsado por defecto).
+                                 Solo nivel 2 y 3: la clave del portal SRI da acceso al portal
+                                 tributario de la empresa entera. Un nivel 1 con permiso del
+                                 módulo sí puede ejecutar la descarga, pero no ve esta tarjeta
+                                 (y guardarConfigDescargaAjax lo rechaza igual si la llama). -->
                             <div class="accordion shadow-sm mb-3" id="accordionConfigSri">
                               <div class="accordion-item border border-secondary border-opacity-25 rounded-3 overflow-hidden">
                                 <h2 class="accordion-header">
@@ -193,13 +198,12 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                                 <i class="bi bi-lock-fill me-1"></i>Guardada
                                             </span>
                                         </label>
-                                        <div class="input-group input-group-sm">
-                                            <input type="password" id="auto_sri_clave" class="form-control form-control-sm shadow-none"
-                                                placeholder="Dejar vacío para conservar la actual" autocomplete="new-password" maxlength="100">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleVerClave()" title="Ver/ocultar clave">
-                                                <i class="bi bi-eye" id="iconoOjoClave"></i>
-                                            </button>
-                                        </div>
+                                        <!-- Sin botón de "ver clave" a propósito: la clave guardada nunca
+                                             se envía al navegador (el repositorio solo expone el booleano
+                                             sri_clave_guardada), así que este campo siempre arranca vacío
+                                             y el ojo no tenía nada que revelar. -->
+                                        <input type="password" id="auto_sri_clave" class="form-control form-control-sm shadow-none"
+                                            placeholder="Dejar vacío para conservar la actual" autocomplete="new-password" maxlength="100">
                                         <div class="form-text">Se almacena cifrada en la base de datos.</div>
                                     </div>
 
@@ -230,6 +234,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                 </div>
                               </div>
                             </div>
+                            <?php endif; ?>
 
                             <!-- Descarga del SRI con la extensión -->
                             <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 mb-3">

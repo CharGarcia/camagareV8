@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_retenciones
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de retenciones, retenciones practicadas, retenciones recibidas, iva, renta, declaracion, cuadrar 103
-version: 1.1
+version: 1.2
 orden: 50
 estado: activo
 ---
@@ -26,6 +26,26 @@ comprobante.
 
 Por periodo, por tipo de retención (IVA o renta) y por tercero.
 
+El selector **Mostrar** (Retenciones de compras / de ventas) tiene una estrella de
+favorito: al marcarla, ese valor queda precargado la próxima vez que se abre el
+reporte.
+
+## Ver por
+
+- **Línea de impuesto (detalle)**: una fila por cada línea de impuesto retenido
+  (más granular).
+- **Por retención (resumen)**: una fila por comprobante de retención, con el
+  desglose Renta/IVA/ISD ya sumado.
+- **Sujeto retenido**: una fila por cliente/proveedor, con el total acumulado.
+
+## Detalle de una retención
+
+En las vistas **Línea de impuesto** y **Por retención**, un clic sobre la fila
+abre un panel lateral con el desglose completo de esa retención: número, fecha,
+sujeto retenido, cada línea de impuesto (código, concepto, base imponible, %) y
+los totales de Renta/IVA/ISD. La vista **Sujeto retenido** no lo tiene porque
+agrupa varios comprobantes en una sola fila, sin una retención puntual que mostrar.
+
 ## Exportar
 
 Disponible en **PDF** y **Excel**.
@@ -40,6 +60,10 @@ Disponible en **PDF** y **Excel**.
 
 ## Historial de cambios
 
+- **1.2** — Estrella de favorito en el selector "Mostrar". La vista "Comprobante
+  (resumen)" se renombró a "Por retención (resumen)". Clic sobre una fila (vistas
+  Detalle y Por retención) abre un panel lateral con el desglose completo de esa
+  retención.
 - **1.1** — El detalle exportado a Excel/PDF ya no se corta en 5000 filas; el tope
   de 5000 se mantiene solo para la vista en pantalla.
 - **1.0** — Versión inicial.

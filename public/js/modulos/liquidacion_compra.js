@@ -145,6 +145,9 @@
     // --- Modal Logic ---
     function lcResetearYMostrar() {
         liquidacionActual = null;
+        // Sin esto, LC_ID_ACTIVO conserva el id de la liquidación abierta antes: las
+        // acciones de documento (anular, eliminar) apuntarían al registro equivocado.
+        window.LC_ID_ACTIVO = null;
         detalles = [];
         const defaultPago = document.getElementById('liq-pago-fav') ? document.getElementById('liq-pago-fav').value : '';
         pagos = [{ id: Date.now(), id_forma_pago: defaultPago, total: 0 }];
@@ -283,6 +286,16 @@
         if (btnGuardar) btnGuardar.style.display = bloqueado ? 'none' : '';
         const btnSri = document.getElementById('btnEnviarSri');
         if (btnSri) btnSri.style.display = (estado === 'autorizado') ? 'none' : '';
+
+        // Eliminar: solo con la liquidación ya guardada y en BORRADOR (un comprobante
+        // emitido se anula, no se borra). El botón no existe si el usuario no tiene
+        // permiso de eliminar (lo condiciona la vista).
+        const btnEliminar = document.getElementById('btnEliminarLiq');
+        if (btnEliminar) {
+            const tieneId = !!(cab && cab.id);
+            const puedeEliminar = tieneId && (estado === '' || estado === 'borrador');
+            btnEliminar.classList.toggle('d-none', !puedeEliminar);
+        }
     }
 
     // Badge de estado junto al número, en el encabezado del modal.
@@ -1643,6 +1656,55 @@
                 }
             } else {
                 Swal.fire({ icon: 'error', title: 'Error al anular', text: json.mensaje || 'No se pudo completar la operación.', confirmButtonColor: '#d33' });
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'Intente nuevamente.', confirmButtonColor: '#d33' });
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = btnOrigHtml; }
+        }
+    };
+
+    // Eliminar (borrado lógico). Solo aplica a liquidaciones en BORRADOR: un comprobante
+    // ya emitido se anula, no se borra. El Service repite la validación del estado.
+    window.LC_eliminar = async function() {
+        const id = document.getElementById('liq-id')?.value || window.LC_ID_ACTIVO;
+        if (!id) return;
+
+        const result = await Swal.fire({
+            title: '¿Eliminar liquidación?',
+            html: 'Se eliminará esta liquidación en <strong>borrador</strong>.<br>' +
+                  '<small class="text-muted">También se anularán su asiento contable y los pagos (egresos) vinculados, si los tiene.</small>',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '<i class="bi bi-trash3 me-2"></i>Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true
+        });
+        if (!result.isConfirmed) return;
+
+        const btn = document.getElementById('btnEliminarLiq');
+        const btnOrigHtml = btn?.innerHTML;
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Eliminando...'; }
+
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            const resp = await fetch(`${API_URL}/eliminarAjax`, { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if (json.ok) {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLiquidacion')).hide();
+                Swal.fire({ icon: 'success', title: 'Eliminada', text: json.mensaje || 'Liquidación eliminada correctamente.', timer: 3000 });
+                if (typeof window.LC_fetchSearch === 'function') {
+                    window.LC_fetchSearch(window.LC_currentPage || 1);
+                } else {
+                    location.reload();
+                }
+            } else {
+                Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: json.mensaje || 'No se pudo completar la operación.', confirmButtonColor: '#d33' });
             }
         } catch (err) {
             console.error(err);

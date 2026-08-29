@@ -51,6 +51,18 @@ mercadería entre al inventario hay que vincularlas con productos de su catálog
 La extensión de Chrome no usa estos permisos: se identifica con el token
 personal del usuario, así que sigue funcionando igual.
 
+### La contraseña del portal SRI
+
+La tarjeta **Contraseña SRI** solo la ven los **administradores (nivel 2)** y
+**superadministradores (nivel 3)**. Un usuario de nivel 1 con permiso en el
+módulo puede descargar y registrar comprobantes, pero no ve ni puede cambiar
+las credenciales del portal, aunque tenga el permiso *Modificar*.
+
+La clave se guarda cifrada y **nunca se devuelve a la pantalla**: el campo
+siempre aparece vacío y dejarlo así conserva la que ya estaba guardada. Por eso
+tampoco hay un botón de "ver clave" — no habría nada que mostrar. Si se olvida,
+se escribe una nueva; no hay forma de recuperarla desde el sistema.
+
 ## Errores frecuentes
 
 - **No descarga nada**: revise las credenciales del SRI de la empresa y el rango
@@ -71,6 +83,11 @@ personal del usuario, así que sigue funcionando igual.
 
 ## Historial de cambios
 
+- **1.4** — La tarjeta **Contraseña SRI** queda reservada a administradores y
+  superadministradores; los usuarios de nivel 1 ya no la ven ni pueden guardar
+  credenciales. Se retiró el botón de "ver clave", que nunca tuvo nada que
+  mostrar porque la clave guardada no viaja a la pantalla. Nueva sección
+  *La contraseña del portal SRI*.
 - **1.3** — Las facturas de **servicios básicos** (luz, agua) cargadas desde el
   SRI reconocen los **valores de terceros** (contribución bomberos, tasa de
   recolección de basura) que el emisor declara en la información adicional. Se

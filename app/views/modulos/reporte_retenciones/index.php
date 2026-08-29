@@ -4,6 +4,7 @@
 <style>
     .retenciones-scroll { overflow-x: auto; }
     .retenciones-scroll thead th { background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; }
+    .retenciones-scroll tbody tr[data-doc-id] { cursor: pointer; }
     /* Altura idéntica y explícita para todos los controles de filtros */
     #form-filtros-rr .form-select,
     #form-filtros-rr .form-control,
@@ -26,7 +27,9 @@
 
                 <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mostrar</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mostrar
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rr-tipo', 'tipo_retencion') ?>
+                        </label>
                         <select id="rr-tipo" class="form-select form-select-sm shadow-none border" style="width:180px;">
                             <option value="COMPRA">Retenciones de compras</option>
                             <option value="VENTA">Retenciones de ventas</option>
@@ -36,7 +39,7 @@
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Ver por</label>
                         <select id="rr-ver-por" class="form-select form-select-sm shadow-none border" style="width:190px;">
                             <option value="DETALLE">Línea de impuesto (detalle)</option>
-                            <option value="CABECERA">Comprobante (resumen)</option>
+                            <option value="CABECERA">Por retención (resumen)</option>
                             <option value="TERCERO">Sujeto retenido</option>
                         </select>
                     </div>
@@ -190,6 +193,9 @@
     </div>
 </div>
 
+<?php // Panel lateral con el detalle de la retención (clic sobre una fila)
+require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
+
 <script>
 (function () {
     const RUTA = '<?= $rutaModulo ?>';
@@ -301,6 +307,22 @@
         }, 300);
     });
     document.addEventListener('click', e => { if (!e.target.closest('#rr-tercero-txt') && !e.target.closest('#rr-tercero-drop')) $('rr-tercero-drop').classList.add('d-none'); });
+
+    /* Abre el panel lateral con el detalle de la retención al hacer clic en una
+       fila (vistas Detalle y Por retención — Sujeto retenido agrupa varios
+       comprobantes y no tiene un id de retención propio que mostrar). */
+    document.addEventListener('click', function (e) {
+        const tr = e.target.closest('tr[data-doc-id]');
+        if (!tr) return;
+        if (e.target.closest('button, a, input, select, label')) return;
+        if (typeof window.CMG_abrirPreviewDoc !== 'function') return;
+        window.CMG_abrirPreviewDoc(tr.dataset.docId, tr.dataset.docTipo, {
+            numero:      tr.dataset.docNumero || '',
+            sujetoLabel: tr.dataset.docTipo === 'RETENCION_COMPRA' ? 'Proveedor' : 'Cliente',
+            sujeto:      tr.dataset.docSujeto || ''
+        });
+    });
+
     $('rr-tipo').addEventListener('change', () => { actualizarTipoUI(); generar(); });
     $('rr-anio').addEventListener('change', () => { actualizarFechas(); generar(); });
     $('rr-mes').addEventListener('change', () => { actualizarFechas(); generar(); });
@@ -316,6 +338,8 @@
         actualizarFechas();
         generar();
     });
+
+    if (typeof aplicarFavoritosModal === 'function') aplicarFavoritosModal();
 
     actualizarTipoUI();
     actualizarFechas();

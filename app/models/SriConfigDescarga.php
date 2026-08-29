@@ -27,6 +27,36 @@ class SriConfigDescarga
         return $row ?: null;
     }
 
+    /**
+     * Igual que getPorEmpresa(), pero solo si la empresa dueña sigue ACTIVA.
+     *
+     * Lo usa el flujo que entrega credenciales a la extensión de Chrome
+     * (DescargasSriController::agenteLoginPendienteAjax), que es un endpoint público:
+     * se autentica con el token del agente y NO pasa por AuthMiddleware, así que nunca
+     * recibe la revalidación de empresa activa que sí tienen los usuarios con sesión
+     * (CLAUDE.md §6). Sin este filtro, una empresa desactivada seguiría entregando la
+     * contraseña de su portal SRI durante la ventana de login pendiente.
+     *
+     * Se filtra aquí, en el mismo query que resuelve la empresa, siguiendo el patrón de
+     * FacturaExpressQrRepository::getPlantillaByToken().
+     */
+    public function getPorEmpresaActiva(int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT c.*
+               FROM sri_config_descarga_auto c
+               JOIN empresas e ON e.id = c.id_empresa
+              WHERE c.id_empresa = ?
+                AND c.eliminado = FALSE
+                AND e.estado = '1'
+                AND e.eliminado = false
+              LIMIT 1"
+        );
+        $st->execute([$idEmpresa]);
+        $row = $st->fetch();
+        return $row ?: null;
+    }
+
     public function upsert(array $data): bool
     {
         $existente = $this->getPorEmpresa((int) $data['id_empresa']);

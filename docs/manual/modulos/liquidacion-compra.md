@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento
-version: 1.1
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular
+version: 1.2
 orden: 40
 estado: activo
 ---
@@ -50,8 +50,31 @@ Desde la liquidación guardada están disponibles el **PDF** del documento, su
 **Excel**, su **XML** y el envío por **correo** o **WhatsApp**, en la barra de
 acciones al inicio del formulario.
 
+## Eliminar una liquidación
+
+Solo se pueden eliminar las liquidaciones en estado **borrador** —incluidas las
+que llegaron así desde una migración—. Una vez emitida al SRI (autorizada) el
+comprobante ya no se borra: se **anula**.
+
+El botón **Eliminar** aparece abajo a la izquierda del formulario, y solo si su
+usuario tiene el permiso de eliminar en el módulo. Al confirmar:
+
+- La liquidación deja de aparecer en el listado (eliminación lógica: el registro
+  se conserva en la base y queda anotado en la auditoría).
+- Se **anula el asiento contable** de la liquidación, si tenía uno.
+- Se **anulan los pagos (egresos) vinculados** que no estuvieran ya anulados.
+- Se limpian los casilleros de la declaración de IVA correspondientes.
+
+Si la liquidación tiene una **retención asociada**, el sistema no la deja
+eliminar: primero elimine la retención desde el módulo *Retenciones de compra* y
+vuelva a intentarlo.
+
 ## Errores frecuentes
 
+- **"Solo se pueden eliminar liquidaciones en estado borrador"**: el comprobante
+  ya fue emitido. Use **Anular** en la barra de acciones.
+- **"No se puede eliminar la liquidación porque tiene una retención asociada"**:
+  elimine primero esa retención en el módulo *Retenciones de compra*.
 - **"La liquidación debe tener al menos un ítem"**: añada el detalle antes de
   guardar.
 - **"Debe seleccionar el código de sustento tributario"**: es obligatorio para
@@ -61,5 +84,6 @@ acciones al inicio del formulario.
 
 ## Historial de cambios
 
+- **1.2** — Se puede eliminar una liquidación en estado borrador desde el formulario (botón Eliminar). Anula su asiento y sus pagos vinculados; bloqueada si tiene retención asociada.
 - **1.1** — Nuevo botón Excel en el documento de la liquidación (junto a PDF y XML).
 - **1.0** — Versión inicial.

@@ -73,12 +73,16 @@
             <!-- Totales -->
             <div class="bg-white p-3 border-top shadow-sm mt-auto">
                 <div class="d-flex justify-content-between mb-1" id="p-row-subtotal">
-                    <span class="small text-muted" style="font-size:0.75rem;">Subtotal</span>
+                    <span class="small text-muted" style="font-size:0.75rem;" id="p-lbl-subtotal">Subtotal</span>
                     <span id="p-txt-subtotal" class="small fw-medium text-dark">$0.00</span>
                 </div>
                 <div class="d-flex justify-content-between mb-1" id="p-row-iva">
-                    <span class="small text-muted" style="font-size:0.75rem;">IVA</span>
+                    <span class="small text-muted" style="font-size:0.75rem;" id="p-lbl-iva">IVA</span>
                     <span id="p-txt-iva" class="small fw-medium text-dark">$0.00</span>
+                </div>
+                <div class="d-flex justify-content-between mb-1 d-none" id="p-row-extra">
+                    <span class="small text-muted" style="font-size:0.75rem;" id="p-lbl-extra">ISD</span>
+                    <span id="p-txt-extra" class="small fw-medium text-dark">$0.00</span>
                 </div>
                 <div class="d-flex justify-content-between pt-2 border-top border-2">
                     <span class="fw-bold text-dark" style="font-size:0.85rem;" id="p-lbl-total">Total Documento</span>
@@ -112,7 +116,9 @@
         COMPRA:        { url: BASE + '/modulos/compras/getCompraAjax',               badge: 'FACTURA DE COMPRA', sujeto: 'Proveedor', forma: 'data' },
         LIQUIDACION:   { url: BASE + '/modulos/liquidacion-compra/getLiquidacionAjax', badge: 'LIQUIDACIÓN',    sujeto: 'Proveedor', forma: 'cabecera' },
         IMPORTACION:   { url: BASE + '/modulos/importaciones/getImportacionAjax',     badge: 'IMPORTACIÓN',     sujeto: 'Proveedor exterior', forma: 'data' },
-        PEDIDO:        { url: BASE + '/modulos/pedidos/getPedidoAjax',                badge: 'PEDIDO',           sujeto: 'Cliente',   forma: 'cabecera' }
+        PEDIDO:        { url: BASE + '/modulos/pedidos/getPedidoAjax',                badge: 'PEDIDO',           sujeto: 'Cliente',   forma: 'cabecera' },
+        RETENCION_COMPRA: { url: BASE + '/modulos/reporte_retenciones/getRetencionCompraAjax', badge: 'RETENCIÓN DE COMPRA', sujeto: 'Proveedor', forma: 'cabecera', modo: 'retencion' },
+        RETENCION_VENTA:  { url: BASE + '/modulos/reporte_retenciones/getRetencionVentaAjax',  badge: 'RETENCIÓN DE VENTA',  sujeto: 'Cliente',   forma: 'cabecera', modo: 'retencion' }
     };
 
     const $ = (id) => document.getElementById(id);
@@ -166,18 +172,57 @@
         $('p-txt-sujeto').textContent = sujeto || '—';
     }
 
-    function pintarTotales({ subtotal, iva, total, soloTotal, labelTotal }) {
+    // extra/labelExtra: tercera línea opcional (p.ej. ISD en retenciones, que además
+    // de Renta/IVA puede tener un tercer impuesto retenido) — oculta si no se pasa.
+    function pintarTotales({ subtotal, iva, extra, total, soloTotal, labelTotal, labelSubtotal, labelIva, labelExtra }) {
         $('p-row-subtotal').classList.toggle('d-none', !!soloTotal);
         $('p-row-iva').classList.toggle('d-none', !!soloTotal);
+        $('p-row-extra').classList.toggle('d-none', !!soloTotal || extra === undefined || extra === null);
         $('p-lbl-total').textContent = labelTotal || 'Total Documento';
         if (!soloTotal) {
+            $('p-lbl-subtotal').textContent = labelSubtotal || 'Subtotal';
             $('p-txt-subtotal').textContent = money(subtotal);
-            $('p-txt-iva').textContent      = money(iva);
+            $('p-lbl-iva').textContent = labelIva || 'IVA';
+            $('p-txt-iva').textContent = money(iva);
+            if (extra !== undefined && extra !== null) {
+                $('p-lbl-extra').textContent = labelExtra || 'Extra';
+                $('p-txt-extra').textContent = money(extra);
+            }
         }
         $('p-txt-total').textContent = money(total);
     }
 
-    function pintarItems(dets, aviso) {
+    // modo 'retencion': las líneas de una retención son de IMPUESTO (código, concepto,
+    // base imponible, %, valor retenido), no ítems de producto (cantidad/precio
+    // unitario) — se renderizan distinto, no con el layout de producto de abajo.
+    function pintarItemsRetencion(dets) {
+        const cont = $('p-container-items');
+        cont.innerHTML = dets.map(d => {
+            const base = parseFloat(d.base_imponible || 0);
+            const pct  = parseFloat(d.porcentaje || 0);
+            const val  = parseFloat(d.valor_retenido || 0);
+            const concepto = d.concepto || d.codigo_retencion || 'Retención';
+            const cod  = d.codigo_retencion || '';
+            return `
+                <div class="bg-white border rounded-3 p-2 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div style="max-width:70%">
+                            ${cod ? `<small class="d-block text-muted" style="font-size:0.7rem;">Cód: ${esc(cod)}</small>` : ''}
+                            <strong class="d-block text-dark small text-truncate" title="${esc(concepto)}">${esc(concepto)}</strong>
+                        </div>
+                        <div class="text-end">
+                            <span class="fw-bold text-secondary small">${money(val)}</span>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-1 pt-1 border-top border-light" style="font-size:0.75rem;">
+                        <span class="text-muted">Base: <strong>${money(base)}</strong></span>
+                        <span class="text-muted">%: <strong>${pct}</strong></span>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    function pintarItems(dets, aviso, modo) {
         const cont = $('p-container-items');
         if (aviso) {
             cont.innerHTML = `<div class="text-center py-3 text-muted small">${esc(aviso)}</div>`;
@@ -187,6 +232,7 @@
             cont.innerHTML = '<div class="text-center py-3 text-muted small">Sin ítems registrados.</div>';
             return;
         }
+        if (modo === 'retencion') { pintarItemsRetencion(dets); return; }
         cont.innerHTML = dets.map(d => {
             const cant    = parseFloat(d.cantidad || 0);
             const pUniRaw = (d.precio_unitario ?? d.costo_unitario ?? 0);
@@ -274,8 +320,16 @@
                     sujeto:      cab.cliente_nombre || cab.proveedor_nombre || extra.sujeto || ''
                 });
 
-                let subtotal, total, iva;
-                if (tipo === 'IMPORTACION') {
+                let subtotal, total, iva, extra, labelSubtotal, labelIva, labelExtra, labelTotal;
+                if (cfg.modo === 'retencion') {
+                    // Una retención no tiene subtotal/IVA/total como una factura: sus 3
+                    // componentes son Renta, IVA e ISD (ISD puede no aplicar → 3ra fila oculta si es 0).
+                    labelSubtotal = 'Renta'; labelIva = 'IVA'; labelExtra = 'ISD'; labelTotal = 'Total Retenido';
+                    subtotal = parseFloat(cab.total_renta || 0);
+                    iva      = parseFloat(cab.total_iva || 0);
+                    extra    = parseFloat(cab.total_isd || 0);
+                    total    = parseFloat(cab.total_retenido || (subtotal + iva + extra));
+                } else if (tipo === 'IMPORTACION') {
                     // Importaciones: FOB + gastos capitalizables = costo nacionalizado; el IVA es crédito tributario aparte.
                     subtotal = parseFloat(cab.subtotal_fob || 0);
                     iva      = parseFloat(cab.total_iva || 0);
@@ -292,8 +346,8 @@
                     iva      = parseFloat(cab.monto_iva || 0) || (total - subtotal);
                 }
 
-                pintarItems(dets);
-                pintarTotales({ subtotal, iva, total });
+                pintarItems(dets, null, cfg.modo);
+                pintarTotales({ subtotal, iva, extra, total, labelSubtotal, labelIva, labelExtra, labelTotal });
                 mostrar('preview-doc-content');
             })
             .catch(e => {

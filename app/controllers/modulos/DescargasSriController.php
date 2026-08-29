@@ -44,6 +44,9 @@ class DescargasSriController extends BaseModuloController
             // Versión publicada de la extensión (leída de su manifest.json), para avisar al
             // usuario cuál es la versión vigente junto al botón de instalación.
             'extensionVersion' => $this->obtenerVersionExtension(),
+            // La tarjeta de la contraseña del portal SRI solo se pinta para nivel 2 y 3
+            // (ver puedeAdministrarCredenciales); el endpoint que la guarda lo revalida.
+            'puedeCredenciales' => $this->puedeAdministrarCredenciales(),
             // 'perm' => $this->getPermisos('descargas_sri')
         ]);
     }
@@ -411,6 +414,19 @@ class DescargasSriController extends BaseModuloController
     // DESCARGA AUTOMÁTICA — configuración, ejecución manual e historial
     // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * ¿Puede el usuario administrar las credenciales del portal SRI?
+     *
+     * La contraseña del SRI da acceso al portal tributario de la empresa entera, muy por
+     * encima de lo que abarca este módulo, así que se reserva a administradores (nivel 2) y
+     * superadministradores (nivel 3). Un usuario de nivel 1 puede ejecutar la descarga —para
+     * eso le basta el permiso del módulo— pero no ve ni toca las credenciales.
+     */
+    private function puedeAdministrarCredenciales(): bool
+    {
+        return (int) ($_SESSION['nivel'] ?? 1) >= 2;
+    }
+
     public function obtenerConfigDescargaAjax(): void
     {
         $this->requireLeer();
@@ -436,6 +452,14 @@ class DescargasSriController extends BaseModuloController
         // Siempre exponer el RUC de la empresa activa como usuario SRI
         $config['sri_usuario'] = $rucEmpresa;
 
+        // Nivel 1 no administra credenciales: se le quitan del payload los campos de la
+        // tarjeta de contraseña (la vista tampoco se la muestra). El resto —estado de la
+        // descarga automática y resultado de la última— sí lo necesita la pantalla.
+        $config['puede_administrar_credenciales'] = $this->puedeAdministrarCredenciales();
+        if (!$config['puede_administrar_credenciales']) {
+            unset($config['sri_usuario'], $config['sri_clave_guardada']);
+        }
+
         echo json_encode(['ok' => true, 'config' => $config]);
         exit;
     }
@@ -444,6 +468,13 @@ class DescargasSriController extends BaseModuloController
     {
         $this->requireActualizar();
         header('Content-Type: application/json');
+
+        // Ocultar la tarjeta en la vista no basta: el endpoint se puede llamar directo.
+        if (!$this->puedeAdministrarCredenciales()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para configurar las credenciales del SRI.']);
+            return;
+        }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
@@ -614,14 +645,20 @@ class DescargasSriController extends BaseModuloController
             exit;
         }
 
-        // Ventana MUY corta: el login automático solo procede justo tras pulsar el botón en el sistema.
+        // Ventana de 5 MINUTOS (el parámetro de getLoginPendiente es $ventanaMin): el login
+        // automático solo procede poco después de pulsar el botón en el sistema, no en cualquier
+        // momento. Es el margen para que el operador llegue a la pantalla de login del portal.
         $idEmpresa = $model->getLoginPendiente((int) $usuario['id'], 5);
         if (!$idEmpresa) {
             echo json_encode(['ok' => false, 'error' => 'No hay una descarga pendiente. Pulsa "Generar descarga del SRI" en el sistema.']);
             exit;
         }
 
-        $config = (new SriConfigDescarga())->getPorEmpresa($idEmpresa);
+        // getPorEmpresaActiva (no getPorEmpresa): este endpoint es público —se autentica con el
+        // token del agente y no pasa por AuthMiddleware—, así que la empresa activa hay que
+        // revalidarla aquí (CLAUDE.md §6). Una empresa desactivada se comporta como si no
+        // tuviera credenciales, sin revelar el motivo.
+        $config = (new SriConfigDescarga())->getPorEmpresaActiva($idEmpresa);
         if (!$config || empty($config['sri_usuario'])) {
             echo json_encode(['ok' => false, 'error' => 'La empresa no tiene credenciales del SRI configuradas.']);
             exit;

@@ -811,7 +811,13 @@ $pestanasConfigLiq = [
 
                     <!-- Footer -->
                     <div class="modal-footer justify-content-between bg-light border-top p-2 px-3">
-                        <div></div>
+                        <div>
+                            <?php if (!empty($perm['eliminar'])): ?>
+                            <button type="button" id="btnEliminarLiq" class="btn btn-outline-danger btn-sm px-3 d-none" onclick="window.LC_eliminar()">
+                                <i class="bi bi-trash3 me-1"></i> Eliminar
+                            </button>
+                            <?php endif; ?>
+                        </div>
                         <div>
                             <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="bi bi-x me-1"></i>Cerrar</button>
                             <button type="button" class="btn btn-primary px-4 btn-sm shadow-sm" id="btnGuardarLiq" onclick="window.LC_guardar()">

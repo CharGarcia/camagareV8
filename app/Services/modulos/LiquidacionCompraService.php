@@ -323,10 +323,37 @@ class LiquidacionCompraService
             throw new \Exception('Liquidación no encontrada.');
         }
 
+        // Solo borradores: un comprobante ya emitido (autorizado/anulado) es inmutable —
+        // se anula, no se borra. Mismo candado que FacturaVentaService::eliminar().
+        $estadoActual = strtolower((string)($cabecera['estado'] ?? ''));
+        if ($estadoActual !== '' && $estadoActual !== 'borrador') {
+            throw new \Exception('Solo se pueden eliminar liquidaciones en estado borrador.');
+        }
+
+        // Retención vinculada: no dejarla huérfana apuntando a un documento borrado.
+        // Mismo criterio que ComprasService::eliminar().
+        $retRepo = new \App\repositories\modulos\RetencionCompraRepository();
+        if ($retRepo->existeRetencionParaLiquidacion($id, $idEmpresa)) {
+            throw new \Exception('No se puede eliminar la liquidación porque tiene una retención asociada. Elimine primero la retención (módulo Retenciones de Compra).');
+        }
+
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
 
         try {
+            // Egresos (pagos internos) vinculados: se anulan antes del borrado lógico, igual
+            // que en ComprasService::eliminar(), para no dejar el pago apuntando a un
+            // documento eliminado. Un borrador normalmente no tiene, pero los migrados sí.
+            $egresoService = new \App\Services\modulos\EgresoService(
+                new \App\repositories\modulos\EgresoRepository(),
+                new \App\Rules\modulos\EgresoRules(),
+                $this->logService
+            );
+            foreach ($this->repository->getEgresosVinculados($id) as $egr) {
+                if (strtolower((string)($egr['estado'] ?? '')) === 'anulado') continue;
+                $egresoService->anular((int)$egr['id'], $idEmpresa, $idUsuario);
+            }
+
             // Anular el asiento contable de la liquidación si existe (mismo patrón que
             // FacturaVentaService::eliminar()): un borrador no debería tener asiento activo
             // tras el fix en crear(), pero esto cierra el hueco para datos previos al fix.

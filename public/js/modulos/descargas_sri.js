@@ -568,8 +568,15 @@ function renderUltimoEstado(c) {
 }
 
 function guardarConfigDescarga() {
-    const usuario = document.getElementById('auto_sri_usuario').value.trim();
-    const clave   = document.getElementById('auto_sri_clave').value;
+    // La tarjeta de credenciales solo existe para nivel 2 y 3: en nivel 1 la vista no la
+    // pinta, así que estos campos no están en el DOM y leerlos daría un error. El servidor
+    // lo revalida igual (guardarConfigDescargaAjax responde 403).
+    const inpUsuario = document.getElementById('auto_sri_usuario');
+    const inpClave   = document.getElementById('auto_sri_clave');
+    if (!inpUsuario || !inpClave) return;
+
+    const usuario = inpUsuario.value.trim();
+    const clave   = inpClave.value;
     const estado  = document.querySelector('input[name="auto_estado"]:checked')?.value || 'inactivo';
 
     if (!usuario) {
@@ -592,7 +599,7 @@ function guardarConfigDescarga() {
     .then(data => {
         if (data.ok) {
             Swal.fire({ icon: 'success', title: 'Guardado', text: data.mensaje, timer: 2500, showConfirmButton: false });
-            document.getElementById('auto_sri_clave').value = '';
+            if (inpClave) inpClave.value = '';
             cargarConfigDescarga();
         } else {
             Swal.fire('Error', data.error || 'No se pudo guardar.', 'error');
@@ -604,18 +611,6 @@ function guardarConfigDescarga() {
     });
 }
 
-function toggleVerClave() {
-    const input = document.getElementById('auto_sri_clave');
-    const icono = document.getElementById('iconoOjoClave');
-    if (!input || !icono) return;
-    if (input.type === 'password') {
-        input.type = 'text';
-        icono.className = 'bi bi-eye-slash';
-    } else {
-        input.type = 'password';
-        icono.className = 'bi bi-eye';
-    }
-}
 
 function cargarHistorialDescargas() {
     const tbody = document.getElementById('tbodyHistorialDescargas');

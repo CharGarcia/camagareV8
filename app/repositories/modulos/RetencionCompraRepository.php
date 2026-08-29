@@ -782,6 +782,22 @@ class RetencionCompraRepository extends BaseRepository
         return (int) $st->fetchColumn() > 0;
     }
 
+    // ── Verificar si ya existe una retención para una liquidación de compra ─────
+
+    public function existeRetencionParaLiquidacion(int $idLiquidacion, int $idEmpresa, ?int $excluirId = null): bool
+    {
+        $sql    = "SELECT COUNT(*) FROM retencion_compra_cabecera
+                   WHERE id_liquidacion = :il AND id_empresa = :ie AND eliminado = false AND estado <> 'anulada'";
+        $params = [':il' => $idLiquidacion, ':ie' => $idEmpresa];
+        if ($excluirId !== null) {
+            $sql          .= ' AND id <> :eid';
+            $params[':eid'] = $excluirId;
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (int) $st->fetchColumn() > 0;
+    }
+
     public function getRetencionSriPorId(int $id): ?array
     {
         $st = $this->db->prepare("SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret FROM retenciones_sri WHERE id = ?");
