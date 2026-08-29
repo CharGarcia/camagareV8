@@ -65,9 +65,16 @@ class ComandaService
     public function getTablero(int $idEmpresa): array
     {
         // El importe de cada mesa incluye el recargo por servicio, así que el
-        // repositorio necesita saber cómo está configurado (ver getTablero).
+        // repositorio necesita saber cómo está configurado (ver getTablero). El
+        // producto de propina viaja para poder dejar esa línea fuera de la base
+        // del recargo, igual que hacen el pie de la comanda y PosVentaService.
         $servicio = $this->getConfigServicio($idEmpresa);
-        return $this->repository->getTablero($idEmpresa, $servicio['modo'], $servicio['porcentaje']);
+        return $this->repository->getTablero(
+            $idEmpresa,
+            $servicio['modo'],
+            $servicio['porcentaje'],
+            (int) ($servicio['id_producto_propina'] ?? 0)
+        );
     }
 
     // ─── Abrir comanda ────────────────────────────────────────────────────────
@@ -97,11 +104,22 @@ class ComandaService
             // en el salón siguen con el que se les prometió al cliente.
             $servicio = $this->getConfigServicio($idEmpresa);
 
+            // Turno de caja de la comanda: de él sale el punto de emisión con el
+            // que se factura al cobrar. El tablero de mesas no lo manda (el
+            // mesero no elige caja), así que se resuelve aquí el turno abierto de
+            // la empresa. Sin esto la comanda nace huérfana y recién al cobrar
+            // salta "la mesa se abrió sin un turno de caja asociado", cuando ya
+            // no hay forma cómoda de arreglarlo.
+            $idCajaSesion = (int) ($data['id_caja_sesion'] ?? 0);
+            if ($idCajaSesion <= 0) {
+                $idCajaSesion = (int) ($this->ventaService->getSesionAbiertaEmpresa($idEmpresa)['id'] ?? 0);
+            }
+
             $cabecera = [
                 'id_empresa'          => $idEmpresa,
                 'id_mesa'             => $idMesa,
                 'id_usuario_mesero'   => $idUsuario,
-                'id_caja_sesion'      => !empty($data['id_caja_sesion']) ? (int) $data['id_caja_sesion'] : null,
+                'id_caja_sesion'      => $idCajaSesion ?: null,
                 'numero_comanda'      => $numero,
                 'estado'              => 'abierta',
                 'id_cliente'          => !empty($data['id_cliente']) ? (int) $data['id_cliente'] : null,
@@ -213,6 +231,11 @@ class ComandaService
         $subtotal  = round($precio * $cantidad - $descuento, 2);
         if ($subtotal < 0) $subtotal = 0.0;
 
+        // Toda línea nace 'pendiente', tenga estación o no: hasta confirmarla, el
+        // cliente del QR debe poder quitarla y el botón "Confirmar pedido" tiene
+        // que contarla. Lo que cambia es a dónde va al confirmar: las que tienen
+        // estación pasan a 'enviado' (cocina/barra) y las que no, directo a
+        // 'entregado' — ver ComandaRepository::enviarLineasACocina.
         $this->db->beginTransaction();
         try {
             $idLinea = $this->repository->insertLinea([
@@ -303,6 +326,98 @@ class ComandaService
     }
 
     /**
+     * Propina voluntaria: la que el cliente deja por su cuenta, además del
+     * recargo por servicio.
+     *
+     * Va como una LÍNEA MÁS de la comanda, no como un campo aparte: el campo
+     * <propina> del comprobante es uno solo, ya lo ocupa el recargo por servicio
+     * y está topado al 10% del subtotal, así que no hay dónde poner una segunda.
+     * Siendo una línea, el resto del recorrido (totales, división de la cuenta,
+     * cobro, ticket) la trata como a cualquier ítem sin tocar nada más.
+     *
+     * Es única por comanda: con un monto nuevo se actualiza la que ya existe, y
+     * con 0 se elimina. El producto con el que se emite lo configura el
+     * establecimiento (Empresa → Facturación); sin él, la función no existe.
+     *
+     * Devuelve ['monto' => float, 'id_linea' => ?int]: el id lo necesita el
+     * portal QR para meter la propina en la misma cuenta que el cliente va a
+     * pagar.
+     */
+    public function guardarPropina(int $idComanda, int $idEmpresa, int $idUsuario, float $monto, array $empresaConfig): array
+    {
+        $comanda = $this->repository->find($idComanda, $idEmpresa);
+        $this->rules->validarPuedeModificar($comanda);
+
+        $idProducto = (int) ($empresaConfig['id_producto_propina'] ?? 0);
+        if ($idProducto <= 0) {
+            throw new Exception('No hay un producto configurado para la propina. Configúralo en Empresa → Facturación → Propina voluntaria.');
+        }
+        if ($monto < 0) {
+            throw new Exception('La propina no puede ser negativa.');
+        }
+        $monto = round($monto, 2);
+
+        // Solo la propina libre: getLineaPropina() ya deja fuera la que está en
+        // una cuenta. Si la comanda se dividió y la anterior ya viajó en un
+        // grupo, aquí se crea una nueva para la cuenta que se esté armando.
+        $linea = $this->repository->getLineaPropina($idComanda, $idEmpresa, $idProducto);
+
+        $idLineaPropina = $linea ? (int) $linea['id'] : null;
+
+        $this->db->beginTransaction();
+        try {
+            if ($monto <= 0) {
+                if ($linea) {
+                    $this->repository->eliminarLineaPropina((int) $linea['id'], $idEmpresa);
+                    $this->logService->registrar(
+                        $idUsuario, $idEmpresa, 'QUITAR_PROPINA_COMANDA', 'comanda_detalle', (int) $linea['id'],
+                        ['subtotal' => $linea['subtotal']], null
+                    );
+                    $idLineaPropina = null;
+                }
+            } elseif ($linea) {
+                $this->repository->actualizarMontoPropina((int) $linea['id'], $idEmpresa, $monto);
+                $this->logService->registrar(
+                    $idUsuario, $idEmpresa, 'PROPINA_COMANDA', 'comanda_detalle', (int) $linea['id'],
+                    ['subtotal' => $linea['subtotal']], ['subtotal' => $monto]
+                );
+            } else {
+                $idLinea = $this->repository->insertLinea([
+                    'id_empresa'            => $idEmpresa,
+                    'id_comanda'            => $idComanda,
+                    'id_producto'           => $idProducto,
+                    'id_menu_item'          => null,
+                    'descripcion'           => $this->productoRepo->getNombre($idProducto) ?: 'PROPINA',
+                    'cantidad'              => 1,
+                    'precio_unitario'       => $monto,
+                    'descuento'             => 0,
+                    'subtotal'              => $monto,
+                    'observacion_item'      => null,
+                    // Nunca va a cocina/barra, aunque la categoría del producto
+                    // tenga estación: no hay nada que preparar.
+                    'id_estacion_impresion' => null,
+                    'lote'                  => null,
+                    'caducidad'             => null,
+                    'nup'                   => null,
+                    'estado_linea'          => 'entregado',
+                    'created_by'            => $idUsuario,
+                ]);
+                $this->logService->registrar(
+                    $idUsuario, $idEmpresa, 'PROPINA_COMANDA', 'comanda_detalle', $idLinea,
+                    null, ['id_comanda' => $idComanda, 'subtotal' => $monto]
+                );
+                $idLineaPropina = $idLinea;
+            }
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
+
+        return ['monto' => $monto, 'id_linea' => $idLineaPropina];
+    }
+
+    /**
      * Descuento por línea (Porcentaje o Valor, ya resuelto a $ por el cliente
      * — mismo patrón que el descuento de línea del POS mostrador). Solo
      * mientras la línea no esté anulada ni ya asignada a un grupo de cobro.
@@ -343,6 +458,12 @@ class ComandaService
         }
     }
 
+    /** El mesero abrió la comanda: ya vio lo que pidió el cliente desde el QR, se apaga el aviso del tablero. */
+    public function marcarPedidoQrVisto(int $idComanda, int $idEmpresa): void
+    {
+        $this->repository->marcarPedidoQr($idComanda, $idEmpresa, false);
+    }
+
     // ─── Cocina / barra (KDS) ─────────────────────────────────────────────────
 
     /**
@@ -350,7 +471,7 @@ class ComandaService
      * las indicadas). No mueve inventario ni genera nada: solo cambia el
      * estado que lee el KDS.
      */
-    public function enviarACocina(int $idComanda, int $idEmpresa, int $idUsuario, array $idsLineas = []): int
+    public function enviarACocina(int $idComanda, int $idEmpresa, int $idUsuario, array $idsLineas = [], bool $desdeQr = false): int
     {
         $comanda = $this->repository->find($idComanda, $idEmpresa);
         $this->rules->validarPuedeModificar($comanda);
@@ -358,6 +479,13 @@ class ComandaService
         $this->db->beginTransaction();
         try {
             $n = $this->repository->enviarLineasACocina($idComanda, $idEmpresa, $idsLineas);
+            // Confirmado desde el celular del cliente: se enciende el aviso del
+            // tablero para que alguien del salón se entere. Los ítems se van
+            // solos a cocina (o quedan entregados si no pasan por estación), así
+            // que sin esto la mesa pediría sin que nadie lo note.
+            if ($desdeQr && $n > 0) {
+                $this->repository->marcarPedidoQr($idComanda, $idEmpresa, true);
+            }
             if ($n > 0) {
                 $this->logService->registrar(
                     $idUsuario,
@@ -813,7 +941,7 @@ class ComandaService
      * documento ya resueltos — el mesero solo confirma la forma de pago
      * física para cerrarlo (ver comandas/ver.php).
      */
-    public function crearGrupoCobroQr(int $idComanda, int $idEmpresa, int $idUsuario, array $idsLineas, int $idCliente, string $tipoDocumentoSolicitado): int
+    public function crearGrupoCobroQr(int $idComanda, int $idEmpresa, int $idUsuario, array $idsLineas, int $idCliente, string $tipoDocumentoSolicitado, int $idFormaPagoSugerida = 0): int
     {
         $comanda = $this->repository->find($idComanda, $idEmpresa);
         $this->rules->validarPuedeModificar($comanda);
@@ -847,6 +975,9 @@ class ComandaService
                 'id_cliente'                => $idCliente,
                 'tipo_documento_solicitado' => $tipoDocumentoSolicitado,
                 'origen'                    => 'qr',
+                // Cómo dijo el cliente que piensa pagar. Es informativa: el
+                // mesero la ve precargada al cobrar y puede cambiarla.
+                'id_forma_pago_sugerida'    => $idFormaPagoSugerida ?: null,
             ]);
             $ids = array_map(fn($l) => (int) $l['id'], $lineas);
             $this->repository->asignarLineasAGrupo($ids, $idGrupo, $idComanda, $idEmpresa);
@@ -1006,19 +1137,31 @@ class ComandaService
         if ($idPuntoEmision <= 0) {
             $idPuntoEmision = (int) ($this->repository->getIdPuntoEmisionDeComanda($idComanda, $idEmpresa) ?? 0);
         }
+        // Comanda abierta antes de que se atara el turno al abrir la mesa: en vez
+        // de dejarla sin poder cobrar, se factura con el turno abierto de la
+        // empresa. Es el mismo que habría tomado si se hubiera abierto hoy.
         if ($idPuntoEmision <= 0) {
-            throw new Exception('No se pudo determinar el punto de emisión de esta comanda (la mesa se abrió sin un turno de caja asociado).');
+            $idPuntoEmision = (int) ($this->ventaService->getSesionAbiertaEmpresa($idEmpresa)['id_punto_emision'] ?? 0);
+        }
+        if ($idPuntoEmision <= 0) {
+            throw new Exception('No se pudo cobrar: no hay ningún turno de caja abierto. Abre la caja y vuelve a intentarlo.');
         }
 
         // En "partes iguales" cada línea del pool se reparte 1/N entre cada
         // parte (misma unidad, misma tarifa de IVA) — el precio_unitario no
         // cambia, así que el subtotal de cada parte queda proporcional.
+        // Propina voluntaria: se factura como una línea más, pero PosVentaService
+        // la deja fuera de la base sobre la que calcula el recargo por servicio
+        // (si no, la propina inflaría ese recargo).
+        $idProductoPropina = (int) ($empresaConfig['id_producto_propina'] ?? 0);
+
         $items = array_map(fn($l) => [
             'id_producto'     => (int) $l['id_producto'],
             'cantidad'        => $esPartesIguales ? round((float) $l['cantidad'] / $numPartes, 4) : (float) $l['cantidad'],
             'precio_unitario' => (float) $l['precio_unitario'],
             'descuento'       => $esPartesIguales ? round((float) $l['descuento'] / $numPartes, 2) : (float) $l['descuento'],
             'descripcion'     => (string) $l['descripcion'],
+            'es_propina'      => $idProductoPropina > 0 && (int) $l['id_producto'] === $idProductoPropina,
             // Tarifa ya resuelta por ComandaRepository (la del ítem del Menú si la
             // línea vino de la carta, si no la del producto): el comprobante se
             // emite con ella, así coincide con lo que mostró la comanda.

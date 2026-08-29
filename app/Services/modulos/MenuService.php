@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\MenuRepository;
+use App\repositories\modulos\ProductoRepository;
 use App\Rules\modulos\MenuRules;
 use App\Services\LogSistemaService;
 use Exception;
@@ -18,12 +19,29 @@ class MenuService
     private MenuRepository $repository;
     private MenuRules $rules;
     private LogSistemaService $logService;
+    private ProductoRepository $productoRepo;
 
-    public function __construct(MenuRepository $repository, MenuRules $rules, LogSistemaService $logService)
+    public function __construct(MenuRepository $repository, MenuRules $rules, LogSistemaService $logService, ?ProductoRepository $productoRepo = null)
     {
-        $this->repository = $repository;
-        $this->rules      = $rules;
-        $this->logService = $logService;
+        $this->repository   = $repository;
+        $this->rules        = $rules;
+        $this->logService   = $logService;
+        $this->productoRepo = $productoRepo ?? new ProductoRepository();
+    }
+
+    /**
+     * La foto del ítem y la del producto vinculado son la misma: al guardarla
+     * desde la carta se replica en Productos, para que no queden dos fotos
+     * distintas del mismo artículo según dónde se lo mire.
+     * Un ítem sin producto vinculado conserva su foto propia y no toca nada.
+     */
+    private function sincronizarImagenConProducto(array $datos, int $idEmpresa, int $idUsuario): void
+    {
+        $idProducto = (int) ($datos['id_producto'] ?? 0);
+        if ($idProducto <= 0) {
+            return;
+        }
+        $this->productoRepo->actualizarImagen($idProducto, $idEmpresa, $datos['imagen'] ?? null, $idUsuario);
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
@@ -53,6 +71,7 @@ class MenuService
 
         $insert = $this->armarDatos($data);
         $id = $this->repository->create($insert);
+        $this->sincronizarImagenConProducto($insert, $idEmpresa, (int) $data['id_usuario']);
 
         $this->logService->registrar((int) $data['id_usuario'], $idEmpresa, 'crear', 'menu_items', $id, null, $insert);
         return $id;
@@ -79,6 +98,7 @@ class MenuService
         $update = $this->armarDatos($data);
         $update['updated_by'] = (int) $data['id_usuario'];
         $this->repository->update($id, $idEmpresa, $update);
+        $this->sincronizarImagenConProducto($update, $idEmpresa, (int) $data['id_usuario']);
 
         $this->logService->registrar((int) $data['id_usuario'], $idEmpresa, 'actualizar', 'menu_items', $id, $antes, $update);
     }

@@ -95,7 +95,7 @@ class MenuController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-egg-fried fs-3 d-block mb-2"></i>No se encontraron ítems.</td></tr>';
+            echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-egg-fried fs-3 d-block mb-2"></i>No se encontraron ítems.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $thumb = !empty($r['imagen'])
@@ -107,6 +107,9 @@ class MenuController extends BaseModuloController
                 $destBadge = !empty($r['destacado'])
                     ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25"><i class="bi bi-star-fill"></i> Destacado</span>'
                     : '<span class="text-muted small">—</span>';
+                $estBadge = !empty($r['estacion_nombre'])
+                    ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"><i class="bi bi-printer"></i> ' . htmlspecialchars($r['estacion_nombre']) . '</span>'
+                    : '<span class="text-muted small">Ninguna</span>';
                 $pct = (float) ($r['porcentaje_iva'] ?? 0);
                 $precioConIva = (float) ($r['precio'] ?? 0) * (1 + $pct / 100);
                 $dataAttr = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
@@ -118,6 +121,7 @@ class MenuController extends BaseModuloController
                         <td class="text-center" data-col="iva">' . ($pct > 0 ? number_format($pct, 0) . '%' : '—') . '</td>
                         <td class="text-end" data-col="precio_con_iva">$' . number_format($precioConIva, 2) . '</td>
                         <td class="text-center" data-col="producto">' . htmlspecialchars($r['producto_nombre'] ?? '—') . '</td>
+                        <td class="text-center" data-col="estacion">' . $estBadge . '</td>
                         <td class="text-center" data-col="destacado">' . $destBadge . '</td>
                         <td class="text-center pe-3" data-col="disponible">' . $dispBadge . '</td>
                       </tr>';

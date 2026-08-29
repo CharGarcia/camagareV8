@@ -85,7 +85,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 $columnasTabla = [
                     'foto' => 'Foto', 'nombre' => 'Nombre', 'categoria' => 'Categoría',
                     'precio' => 'Precio', 'iva' => 'IVA', 'precio_con_iva' => 'Precio c/IVA',
-                    'producto' => 'Producto', 'destacado' => 'Destacado', 'disponible' => 'Disponible',
+                    'producto' => 'Producto', 'estacion' => 'Preparar en',
+                    'destacado' => 'Destacado', 'disponible' => 'Disponible',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -115,13 +116,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-center" data-col="iva">IVA</th>
                         <th class="text-end" data-col="precio_con_iva">Precio c/IVA</th>
                         <th class="text-center" data-col="producto">Producto</th>
+                        <th class="text-center" data-col="estacion">Preparar en</th>
                         <th class="text-center" data-col="destacado">Destacado</th>
                         <th class="text-center pe-3" data-col="disponible">Disponible</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyMenu">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-egg-fried fs-3 d-block mb-2"></i>No se encontraron ítems.</td></tr>
+                        <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-egg-fried fs-3 d-block mb-2"></i>No se encontraron ítems.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
@@ -142,6 +144,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-center" data-col="iva"><?= $pct > 0 ? number_format($pct, 0) . '%' : '—' ?></td>
                                 <td class="text-end" data-col="precio_con_iva">$<?= number_format($precioConIva, 2) ?></td>
                                 <td class="text-center" data-col="producto"><?= htmlspecialchars($r['producto_nombre'] ?? '—') ?></td>
+                                <td class="text-center" data-col="estacion">
+                                    <?php if (!empty($r['estacion_nombre'])): ?>
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"><i class="bi bi-printer"></i> <?= htmlspecialchars($r['estacion_nombre']) ?></span>
+                                    <?php else: ?>
+                                        <span class="text-muted small">Ninguna</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-center" data-col="destacado">
                                     <?php if (!empty($r['destacado'])): ?>
                                         <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25"><i class="bi bi-star-fill"></i> Destacado</span>
@@ -233,14 +242,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label small fw-bold">Producto vinculado (opcional)</label>
+                            <label class="form-label small fw-bold">Producto vinculado <span class="text-danger">*</span></label>
                             <div class="position-relative">
                                 <input type="text" class="form-control form-control-sm" id="menu_producto_texto" placeholder="Buscar producto o combo..." autocomplete="off">
                                 <input type="hidden" name="id_producto" id="menu_producto_id">
                                 <div id="menu_producto_dropdown" class="list-group position-absolute w-100 shadow-sm" style="z-index:1080; display:none; max-height:220px; overflow-y:auto;"></div>
                             </div>
                             <div class="form-text mt-0" style="font-size:0.65rem;">
-                                Si lo vinculas a un producto compuesto (combo armado en Productos → Componentes), el inventario de cada componente se descuenta automáticamente al facturar. Déjalo vacío si es un ítem sin inventario.
+                                Todo ítem de la carta apunta a un producto: de ahí salen su precio, su foto y el movimiento de inventario. Si es un plato preparado, créalo primero en Productos (puede ser un combo con sus componentes, y el inventario de cada uno se descuenta al facturar).
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -275,11 +284,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label small fw-bold">Enviar a</label>
+                            <label class="form-label small fw-bold">Preparar en</label>
                             <select class="form-select form-select-sm" name="id_estacion_impresion" id="menu_id_estacion">
                                 <option value="">Ninguna</option>
                             </select>
-                            <div class="form-text mt-0" style="font-size:0.65rem;">Cocina o barra a la que se manda el plato. Sin estación, se entrega directo sin pasar por preparación. Se crean en la pestaña "Estaciones".</div>
+                            <div class="form-text mt-0" style="font-size:0.65rem;">Cocina o barra donde se prepara el plato. Con "Ninguna" no pasa por preparación: se entrega directo. Las estaciones se crean en la pestaña "Estaciones".</div>
                         </div>
                     </div>
                     </div>
@@ -756,6 +765,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         document.getElementById('menu_precio').value = (parseFloat(prod.precio_base) || 0).toFixed(2);
 
+        // La foto es la del producto: la carta y el catálogo muestran la misma.
+        // Si el producto no tiene, se conserva la que ya tuviera el ítem en vez
+        // de dejarlo sin imagen.
+        if (prod.imagen) {
+            document.getElementById('menu_imagen').value = prod.imagen;
+            document.getElementById('menuImagePreview').innerHTML =
+                `<img src="${base}/${prod.imagen}" class="img-fluid" style="max-height:100%;object-fit:cover;">`;
+            document.getElementById('menuBtnRemoveImage').classList.remove('d-none');
+        }
+
         // El precio base es el ancla: el precio con impuestos se deriva de él.
         anclaPrecio = 'base';
         recalcularPrecios();
@@ -765,6 +784,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     if (form) {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // El producto vinculado es obligatorio (MenuRules lo vuelve a exigir
+            // en el servidor). Se avisa acá para no perder el resto de lo escrito
+            // en un viaje de ida y vuelta.
+            if (!document.getElementById('menu_producto_id').value) {
+                swalError('Selecciona el producto vinculado: todo ítem del menú debe apuntar a un producto.');
+                document.getElementById('menu_producto_texto').focus();
+                return;
+            }
+
             const btn = document.getElementById('btnGuardarMenu');
             const actionUrl = document.getElementById('menu_id').value ? `${urlBase}/update` : `${urlBase}/store`;
             btn.disabled = true;

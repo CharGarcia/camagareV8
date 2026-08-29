@@ -134,6 +134,9 @@ class ComandasController extends BaseModuloController
             $comanda = $id > 0 ? $this->service->getDetalle($id, $idEmpresa) : null;
             if (!$comanda) throw new Exception('Comanda no encontrada.');
             $_SESSION['pos_id_comanda'] = $id;
+            // Alguien del salón ya está viendo la comanda: se apaga el aviso de
+            // "pidió desde el QR" que se encendió en el tablero.
+            $this->service->marcarPedidoQrVisto($id, $idEmpresa);
             $this->json(['ok' => true]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -308,6 +311,33 @@ class ComandasController extends BaseModuloController
         }
     }
 
+    /**
+     * Propina voluntaria de la comanda (un monto libre que deja el cliente).
+     * Pide permiso de crear, no de actualizar: es equivalente a agregar un ítem
+     * más a la cuenta, que es exactamente lo que hace por dentro.
+     */
+    public function guardarPropinaAjax(): void
+    {
+        $this->requireCrear();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $idComanda = (int) ($_POST['id_comanda'] ?? 0);
+            if ($idComanda <= 0) throw new Exception('Comanda no válida.');
+            $monto = (float) str_replace(',', '.', (string) ($_POST['monto'] ?? 0));
+            $res = $this->service->guardarPropina($idComanda, $idEmpresa, $idUsuario, $monto, $this->getEmpresaConfig($idEmpresa));
+            $this->json([
+                'ok'  => true,
+                'msg' => $res['monto'] > 0 ? 'Propina registrada.' : 'Propina quitada.',
+                'monto' => $res['monto'],
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
     // ─── Cocina / barra ────────────────────────────────────────────────────────
 
     /** Envía a cocina/barra las líneas 'pendiente' (todas, o solo las marcadas por el mesero). */
@@ -374,6 +404,10 @@ class ComandasController extends BaseModuloController
             $repo = new \App\repositories\modulos\ProductoRepository();
             $result = $repo->getListado($idEmpresa, $buscar, 1, 24, 'nombre', 'ASC', null, 'venta', true);
 
+            // El producto con el que se emite la propina no es un plato: se agrega
+            // desde su campo del pie de la comanda, no tocándolo en el catálogo.
+            $idProductoPropina = (int) ($this->getEmpresaConfig($idEmpresa)['id_producto_propina'] ?? 0);
+
             $rows = [];
             foreach ($menuItems as $m) {
                 $rows[] = [
@@ -393,6 +427,7 @@ class ComandasController extends BaseModuloController
             }
             foreach ($result['rows'] as $p) {
                 if (in_array((int) $p['id'], $idsProductoEnMenu, true)) continue;
+                if ($idProductoPropina > 0 && (int) $p['id'] === $idProductoPropina) continue;
                 $rows[] = [
                     'origen'         => 'producto',
                     'id_menu_item'   => null,
@@ -588,7 +623,11 @@ class ComandasController extends BaseModuloController
                 'id_cliente'              => (int) ($_POST['id_cliente'] ?? 0),
                 'tipo_documento'          => $tipoDocumento,
                 'forma_pago'              => trim($_POST['forma_pago'] ?? '01'),
-                'id_forma_pago_empresa'   => (int) ($_POST['id_forma_pago'] ?? 0),
+                // El modal manda 'id_forma_pago_empresa'. Se acepta también el
+                // nombre viejo por si algún cliente quedó cacheado. Sin este id
+                // PosVentaService no genera el Ingreso del cobro: la venta queda
+                // registrada pero su Cuenta por Cobrar sin cancelar.
+                'id_forma_pago_empresa'   => (int) ($_POST['id_forma_pago_empresa'] ?? $_POST['id_forma_pago'] ?? 0),
                 'tipo_operacion_bancaria' => $tipoOperacionBancaria,
                 'numero_operacion'        => trim($_POST['numero_operacion'] ?? ''),
                 'fecha_cobro'             => $fechaCobro,
@@ -626,6 +665,9 @@ class ComandasController extends BaseModuloController
         $servicio = $this->service->getConfigServicio($idEmpresa);
         $empresaData['servicio_restaurante'] = $servicio['modo'];
         $empresaData['servicio_restaurante_porcentaje'] = $servicio['porcentaje'];
+        // Propina voluntaria: con 0 (sin producto configurado) la pantalla no
+        // muestra el campo y el Service rechaza cualquier intento de guardarla.
+        $empresaData['id_producto_propina'] = $servicio['id_producto_propina'];
 
         return $empresaData;
     }

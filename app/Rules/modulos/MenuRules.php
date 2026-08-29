@@ -22,14 +22,19 @@ class MenuRules
         if ((float) ($data['precio'] ?? -1) < 0) {
             $errores[] = 'El precio no puede ser negativo.';
         }
-        // Todo ítem del menú necesita un IVA con el que facturarse. La tarifa del
+        // El producto vinculado es obligatorio: sin él el ítem no se puede cobrar
+        // (ComandaService rechaza al cobrar cualquier línea sin producto), no
+        // mueve inventario y no tiene de dónde tomar precio ni foto. La carta es
+        // una forma de presentar el catálogo, no un catálogo aparte.
+        if (empty($data['id_producto'])) {
+            $errores[] = 'Selecciona el producto vinculado: todo ítem del menú debe apuntar a un producto.';
+        }
+        // Todo ítem necesita además un IVA con el que facturarse. La tarifa del
         // ítem manda sobre la del producto vinculado (ver
-        // MenuRepository::getDisponibles), así que solo se puede omitir cuando hay
-        // un producto del cual heredarla; sin producto es obligatoria — el menú es
-        // su propio catálogo vendible, igual que productos, y ninguna línea puede
-        // llegar a la factura sin IVA.
+        // MenuRepository::getDisponibles); si se deja vacía se hereda la del
+        // producto, así que solo falta cuando tampoco hay producto.
         if (empty($data['id_producto']) && empty($data['id_tarifa_iva'])) {
-            $errores[] = 'Selecciona la tarifa de IVA del ítem (obligatoria cuando no tiene un producto vinculado).';
+            $errores[] = 'Selecciona la tarifa de IVA del ítem.';
         }
 
         if (!empty($errores)) {

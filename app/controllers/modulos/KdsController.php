@@ -71,7 +71,30 @@ class KdsController extends BaseModuloController
             'estaciones' => $estaciones,
             'idEstacion' => $idEstacion,
             'comandas'   => $idEstacion ? $this->kdsService->getComandas($idEmpresa, $idEstacion) : [],
+            // Decimales de cantidad del establecimiento: las cantidades llegan de
+            // Postgres como numeric ("1.000000") y cocina vería eso en la tarjeta.
+            'decimalesCantidad' => $this->getDecimalesCantidad($idEmpresa),
         ]);
+    }
+
+    /**
+     * Decimales de cantidad del establecimiento (Empresa → Facturación), para
+     * que cocina vea "1" y no "1.000000". Si no se puede leer la configuración
+     * se usan 2: la pantalla de preparación no puede caerse por esto.
+     */
+    private function getDecimalesCantidad(int $idEmpresa): int
+    {
+        try {
+            $establecimientos = (new \App\models\Empresa())->getEstablecimientos($idEmpresa);
+            if (empty($establecimientos)) {
+                return 2;
+            }
+            $cfg = (new \App\repositories\modulos\EmpresaRepository())
+                ->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+            return (int) ($cfg['decimales_cantidad'] ?? 2);
+        } catch (\Throwable $e) {
+            return 2;
+        }
     }
 
     public function pollAjax(): void

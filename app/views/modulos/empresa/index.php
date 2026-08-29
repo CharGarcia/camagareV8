@@ -1615,6 +1615,115 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                 </div>
                                             </div>
                                         </div>
+                                        <?php
+                                            // Propina voluntaria de las comandas. NO cuelga del switch de
+                                            // propina: el campo <propina> del comprobante ya lo ocupa el
+                                            // recargo por servicio de arriba —y es uno solo, topado al 10%—,
+                                            // así que esta propina se emite como una LÍNEA MÁS del detalle.
+                                            // De ahí que haga falta un producto con el cual emitirla.
+                                            $idProdPropina = (int) ($empresa['id_producto_propina'] ?? 0);
+                                            $productoPropina = $productoPropina ?? null;
+                                            $etiquetaPropina = $productoPropina
+                                                ? (($productoPropina['codigo'] ? $productoPropina['codigo'] . ' - ' : '') . $productoPropina['nombre']
+                                                   . ' (IVA ' . (float) ($productoPropina['porcentaje_iva'] ?? 0) . '%)')
+                                                : '';
+                                        ?>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-bold mb-1" for="buscar_producto_propina">Propina voluntaria (restaurantes)</label>
+                                            <div class="form-text mt-0 sub-text mb-2" style="font-size:0.65rem;">
+                                                La que deja el cliente por su cuenta, aparte del recargo por servicio. Como el campo de
+                                                propina del comprobante ya lo ocupa ese recargo, esta se emite como <strong>una línea más</strong>
+                                                de la factura. Busque con qué producto: debe ser un <strong>servicio</strong> (no inventariable),
+                                                con <strong>IVA 0%</strong> y precio 0 — el monto lo pone el mesero en cada comanda.
+                                                Déjelo vacío para que el salón no pueda cobrar propina voluntaria.
+                                            </div>
+                                            <div class="position-relative">
+                                                <input type="text" class="form-control form-control-sm" id="buscar_producto_propina"
+                                                       placeholder="Buscar servicio por nombre o código..." autocomplete="off"
+                                                       value="<?= htmlspecialchars($etiquetaPropina) ?>">
+                                                <input type="hidden" name="id_producto_propina" id="id_producto_propina" value="<?= $idProdPropina ?: '' ?>">
+                                                <div id="dropdown_producto_propina" class="list-group position-absolute w-100 shadow-sm"
+                                                     style="z-index:1080; display:none; max-height:220px; overflow-y:auto;"></div>
+                                            </div>
+                                            <div class="form-text mt-1 sub-text" style="font-size:0.65rem;">
+                                                Solo aparecen los productos marcados como servicio. Para borrar la selección, pulse Backspace sobre el campo.
+                                            </div>
+                                        </div>
+                                        <script>
+                                        // Buscador del producto de propina: el catálogo puede tener miles
+                                        // de ítems, así que se piden al servidor a medida que se escribe en
+                                        // vez de volcarlos todos en un <select>. Mismo patrón que el
+                                        // producto vinculado del Menú.
+                                        (function () {
+                                            const input    = document.getElementById('buscar_producto_propina');
+                                            const hidden   = document.getElementById('id_producto_propina');
+                                            const dropdown = document.getElementById('dropdown_producto_propina');
+                                            if (!input || !hidden || !dropdown) return;
+
+                                            const urlBuscar = '<?= rtrim(BASE_URL, "/") ?>/modulos/empresa/getServiciosAjax';
+                                            let timer;
+
+                                            const escapar = (s) => String(s ?? '').replace(/[&<>"']/g,
+                                                c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+                                            function cerrar() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; }
+
+                                            // Con una selección hecha, Backspace/Delete la borra entera en vez
+                                            // de ir comiendo la etiqueta letra por letra.
+                                            input.addEventListener('keydown', (e) => {
+                                                if ((e.key === 'Backspace' || e.key === 'Delete') && hidden.value !== '') {
+                                                    e.preventDefault();
+                                                    hidden.value = ''; input.value = '';
+                                                    cerrar();
+                                                }
+                                            });
+
+                                            input.addEventListener('input', () => {
+                                                hidden.value = '';
+                                                clearTimeout(timer);
+                                                const q = input.value.trim();
+                                                timer = setTimeout(async () => {
+                                                    let items = [];
+                                                    try {
+                                                        const r = await fetch(`${urlBuscar}?q=${encodeURIComponent(q)}`);
+                                                        const d = await r.json();
+                                                        items = d.ok ? (d.data || []) : [];
+                                                    } catch (err) { return; }
+                                                    if (!items.length) {
+                                                        dropdown.innerHTML = '<div class="list-group-item py-1 px-2 small text-muted">Sin servicios que coincidan.</div>';
+                                                        dropdown.style.display = 'block';
+                                                        return;
+                                                    }
+                                                    dropdown.innerHTML = items.map(it => {
+                                                        const etiqueta = (it.codigo ? it.codigo + ' - ' : '') + it.nombre
+                                                                       + ' (IVA ' + (parseFloat(it.porcentaje_iva) || 0) + '%)';
+                                                        return `<a href="#" class="list-group-item list-group-item-action py-1 px-2 small"
+                                                                   data-id="${it.id}" data-label="${escapar(etiqueta).replace(/"/g, '&quot;')}">${escapar(etiqueta)}</a>`;
+                                                    }).join('');
+                                                    dropdown.style.display = 'block';
+                                                }, 300);
+                                            });
+
+                                            dropdown.addEventListener('click', (e) => {
+                                                const a = e.target.closest('a[data-id]');
+                                                if (!a) return;
+                                                e.preventDefault();
+                                                hidden.value = a.dataset.id;
+                                                input.value  = a.dataset.label;
+                                                cerrar();
+                                            });
+
+                                            document.addEventListener('click', (e) => {
+                                                if (e.target !== input && !dropdown.contains(e.target)) cerrar();
+                                            });
+
+                                            // Texto escrito a medias y sin elegir nada de la lista: se limpia al
+                                            // salir, para no dejar creyendo que hay un producto configurado.
+                                            input.addEventListener('blur', () => {
+                                                setTimeout(() => { if (hidden.value === '') input.value = ''; }, 200);
+                                            });
+                                        })();
+                                        </script>
                                         <script>
                                         // El recargo por servicio vive dentro del campo de propina del
                                         // comprobante: sin ese campo no hay dónde emitirlo, así que al

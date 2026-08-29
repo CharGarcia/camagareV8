@@ -506,7 +506,14 @@ class CajaPosController extends BaseModuloController
     {
         $this->requireLeer();
         $empresaModel = new Empresa();
-        $data = $empresaModel->getEstablecimientos((int) $_SESSION['id_empresa']);
+        // Solo activos: abrir una caja es emitir desde ese establecimiento, y no
+        // tiene sentido ofrecer uno dado de baja. getEstablecimientos() devuelve
+        // todos a propósito (un documento histórico necesita el suyo aunque esté
+        // inactivo), así que el filtro va aquí y no en el modelo.
+        $data = array_values(array_filter(
+            $empresaModel->getEstablecimientos((int) $_SESSION['id_empresa']),
+            fn($e) => strtolower((string) ($e['estado'] ?? '')) === 'activo'
+        ));
         $this->json(['ok' => true, 'data' => $data]);
     }
 

@@ -492,6 +492,19 @@ class EmpresaService
                 $fields[] = 'servicio_restaurante_porcentaje';
             }
         }
+
+        // Producto con el que se emite la propina VOLUNTARIA de las comandas
+        // (una línea más del detalle). Va aparte del recargo de arriba y no
+        // depende de él ni del campo de propina del comprobante. Vacío = la
+        // función queda desactivada.
+        if ($this->repository->tieneColumnaProductoPropina()) {
+            $idProdPropina = $data['id_producto_propina'] ?? '';
+            $data['id_producto_propina'] = ($idProdPropina !== '' && is_numeric($idProdPropina) && (int) $idProdPropina > 0)
+                ? (int) $idProdPropina
+                : 'NULL';
+            $fields[] = 'id_producto_propina';
+        }
+
         $filtered = array_intersect_key($data, array_flip($fields));
         return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
     }

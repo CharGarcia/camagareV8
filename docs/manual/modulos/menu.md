@@ -5,35 +5,32 @@ categoria: Restaurante
 ruta_modulo: modulos/menu
 tipo: modulo
 visibilidad: todos
-etiquetas: menu, carta, platos, bebidas, restaurante, precio, iva, tarifa iva, producto vinculado, categoria, categorias, estacion, cocina, barra, enviar a, receta, comanda
-version: 1.3
+etiquetas: menu, carta, platos, bebidas, restaurante, precio, iva, tarifa iva, producto vinculado, categoria, categorias, estacion, cocina, barra, preparar en, enviar a, receta, comanda
+version: 1.6
 orden: 30
 estado: activo
 ---
 
 El **menú** es la carta: los platos y bebidas que el personal elige al tomar una
-comanda. Un ítem del menú puede estar vinculado a un producto del catálogo o
-existir solo en la carta.
+comanda. Cada ítem apunta a un producto del catálogo, del que toma su precio, su
+foto y el movimiento de inventario.
 
 ## Cómo se registra un ítem
 
 1. Pulse **Nuevo**.
 2. Escriba el **nombre** (máximo 200 caracteres).
-3. Si corresponde, elija el **producto vinculado**: al seleccionarlo se copian su
-   precio, su tarifa de IVA y su categoría, y se calcula el precio con impuestos.
-4. Revise la **tarifa de IVA** y la **categoría**, que puede cambiar. El
-   **precio** solo se escribe si el ítem no tiene producto vinculado.
-5. Elija la estación de **Enviar a**.
+3. Elija el **producto vinculado** (obligatorio): al seleccionarlo se copian su
+   precio, su tarifa de IVA, su categoría y su foto, y se calcula el precio con
+   impuestos.
+4. Revise la **tarifa de IVA** y la **categoría**, que puede cambiar.
+5. Elija dónde se prepara, en **Preparar en**.
 6. Guarde.
 
-## El precio: quién lo define
+## El precio lo define el producto
 
-- **Con producto vinculado**: el precio lo pone el producto y aquí queda de solo
-  lectura, junto con el precio con impuestos. Para cambiarlo, se edita el
-  producto en **Productos**. Así un mismo artículo no termina con dos precios
-  distintos según dónde se lo mire.
-- **Sin producto**: se escribe a mano, como cualquier precio de carta. También
-  puede escribir el **precio con impuestos** y el precio base se calcula solo.
+El **precio y el precio con impuestos son de solo lectura**: los pone el producto
+vinculado. Para cambiarlos se edita el producto en **Productos**. Así un mismo
+artículo no termina con dos precios distintos según dónde se lo mire.
 
 La **tarifa de IVA** y la **categoría** son distintas: se copian del producto
 como punto de partida, pero quedan editables — son del ítem de la carta.
@@ -48,9 +45,9 @@ estaban clasificados **quedaron sin categoría**: las dos listas no eran
 equivalentes y conservar la anterior habría dejado cada plato en una categoría
 que no le corresponde. Hay que volver a asignarlas una vez.
 
-## A qué cocina o barra se envía cada plato
+## Dónde se prepara cada plato
 
-Lo define el campo **Enviar a** del propio ítem. Antes salía de la categoría, de
+Lo define el campo **Preparar en** del propio ítem. Antes salía de la categoría, de
 modo que toda una categoría iba a la misma estación; ahora se elige plato por
 plato, así dos ítems de la misma categoría pueden ir a estaciones distintas.
 
@@ -60,17 +57,27 @@ bebida embotellada, por ejemplo.
 
 Las estaciones se crean en la pestaña **Estaciones** de este mismo modal.
 
-## Vinculado a un producto, o no
+## Todo ítem va vinculado a un producto
 
-Es la decisión importante de este módulo:
+El **producto vinculado es obligatorio**. La carta es una forma de presentar el
+catálogo, no un catálogo aparte: del producto salen el precio, la foto y el
+movimiento de inventario, y sin él el ítem **no se puede cobrar** — al cerrar la
+cuenta el sistema rechaza cualquier línea que no apunte a un producto.
 
-- **Vinculado a un producto**: el ítem mueve el stock del producto si es
-  inventariable, toma su precio (que ya no se edita aquí) y copia su tarifa de
-  IVA y su categoría. Úselo para lo que se vende tal cual se compra: bebidas
-  embotelladas, productos empacados.
-- **Sin producto**: hay que **indicar la tarifa de IVA obligatoriamente**, porque
-  no hay de dónde copiarla. Úselo para platos preparados, que no existen como
-  producto del inventario.
+Si el plato no existe todavía como producto, créelo primero en **Productos**.
+Para un plato preparado, lo habitual es un producto **compuesto** (un combo con
+sus componentes): así, al facturar, se descuenta el inventario de cada
+ingrediente.
+
+## La foto es la del producto
+
+La foto que se ve en la carta es la **del producto vinculado**: son el mismo
+artículo, no tiene sentido que tengan dos fotos distintas según dónde se lo mire.
+
+Al elegir el producto, su foto se trae al modal. Y si la **cambia desde aquí**,
+se actualiza también en **Productos** — es la misma foto, no una copia. Cámbiela
+sabiendo eso: afecta al catálogo, a la búsqueda de productos y a donde sea que
+esa foto se muestre.
 
 ## La tarifa de IVA de la carta manda
 
@@ -89,24 +96,29 @@ Solo cuando el ítem **no** tiene tarifa propia se usa la del producto vinculado
 
 ## Errores frecuentes
 
-- **"Selecciona la tarifa de IVA del ítem"**: el ítem no tiene producto vinculado,
-  así que la tarifa hay que indicarla a mano.
+- **"Selecciona el producto vinculado"**: es obligatorio. Si el plato no existe
+  como producto, créelo primero en **Productos**. Los ítems cargados antes de
+  esta regla siguen funcionando, pero al editarlos habrá que vincularlos para
+  poder guardar.
 - **El plato sale en la comanda con otro IVA del que le puse**: revise la tarifa
   del ítem en este módulo — es la que manda. Si está vacía, se usa la del
   producto vinculado.
-- **El plato no llega a la pantalla de cocina**: no tiene estación en **Enviar
-  a**. Sin estación, el ítem se entrega directo sin pasar por preparación.
+- **El plato no llega a la pantalla de cocina**: no tiene estación en **Preparar
+  en**. Sin estación, el ítem se entrega directo sin pasar por preparación.
 - **No encuentro una categoría en la lista**: se crea en el módulo **Productos →
   Categorías**, no aquí.
-- **No me deja escribir el precio**: el ítem tiene un producto vinculado, así que
-  el precio sale de él. Cámbielo en **Productos**, o quite el vínculo (Backspace
-  sobre el buscador de producto) si el plato debe llevar precio propio.
+- **No me deja escribir el precio**: es lo esperado — el precio lo define el
+  producto vinculado. Cámbielo en **Productos**.
 - **"El precio no puede ser negativo"**: revise el valor.
-- **El plato no descuenta inventario**: es lo esperado si no tiene producto
-  vinculado.
 
 ## Historial de cambios
 
+- **1.6** — La columna y el campo de la estación pasan a llamarse "Preparar en".
+- **1.5** — El producto vinculado pasa a ser obligatorio: un ítem de la carta
+  siempre apunta a un producto del catálogo.
+- **1.4** — La foto del ítem es la del producto vinculado: se trae al elegirlo y,
+  al cambiarla desde la carta, se actualiza también en Productos. El listado
+  muestra una columna "Enviar a" con la estación de cada plato.
 - **1.3** — El precio de un ítem con producto vinculado ya no se edita en la
   carta: lo define el producto. Al vincularlo también se copia su categoría.
 - **1.2** — Las categorías del menú pasan a ser las de Productos (se quitó la

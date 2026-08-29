@@ -73,6 +73,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .mt-aviso.enviar { background: #b5792c; }
         .mt-aviso.entregar { background: #3f7d64; }
         .mt-aviso.asistencia { background: #a5433a; animation: mt-pulse 1.2s infinite; }
+        /* Pedido hecho por el cliente desde el QR: parpadea hasta que un mesero
+           entra a la comanda, porque nadie del salón lo tomó. */
+        .mt-aviso.pedido-qr { background: #0d6efd; animation: mt-pulse 1.2s infinite; }
         .mt-mesa.pide-asistencia { border-left-color: #a5433a; box-shadow: 0 0 0 2px rgba(165,67,58,.35); }
         @keyframes mt-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
         .mt-qr-trigg { position: absolute; top: -8px; left: -8px; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 1px solid #dadde2; display: flex; align-items: center; justify-content: center; color: #495057; box-shadow: 0 1px 3px rgba(16,24,40,.2); font-size: .8rem; }
@@ -238,8 +241,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const pendientes = parseInt(m.pendientes_comanda || 0, 10);
             const listos = parseInt(m.listos_comanda || 0, 10);
             const asistencia = !!m.solicita_asistencia;
-            const avisos = (pendientes > 0 || listos > 0 || asistencia) ? `
+            // El cliente confirmó un pedido desde el QR y todavía nadie del salón
+            // entró a esa comanda. Se apaga solo cuando el mesero la abre.
+            const pedidoQr = m.pedido_qr_pendiente === true || m.pedido_qr_pendiente === 't' || m.pedido_qr_pendiente === 'true';
+            const avisos = (pendientes > 0 || listos > 0 || asistencia || pedidoQr) ? `
                 <div class="mt-avisos">
+                    ${pedidoQr ? '<span class="mt-aviso pedido-qr" title="El cliente pidió desde el QR de la mesa"><i class="bi bi-qr-code-scan"></i></span>' : ''}
                     ${asistencia ? '<span class="mt-aviso asistencia" title="El cliente pidió que se acerque un mesero"><i class="bi bi-hand-index-thumb"></i></span>' : ''}
                     ${pendientes > 0 ? '<span class="mt-aviso enviar" title="Por enviar a preparación"><i class="bi bi-send"></i>' + pendientes + '</span>' : ''}
                     ${listos > 0 ? '<span class="mt-aviso entregar" title="Listo para entregar"><i class="bi bi-check2-circle"></i>' + listos + '</span>' : ''}

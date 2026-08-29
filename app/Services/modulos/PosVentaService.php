@@ -39,6 +39,17 @@ class PosVentaService
     }
 
     /**
+     * Turno de caja abierto de la empresa, sin exigir un punto de emisión. Lo
+     * usan las comandas: el mesero no elige caja al abrir una mesa, pero la
+     * comanda tiene que quedar atada a un turno porque de ahí sale el punto de
+     * emisión con el que se factura al cobrar.
+     */
+    public function getSesionAbiertaEmpresa(int $idEmpresa): ?array
+    {
+        return $this->cajaService->getSesionAbiertaEmpresa($idEmpresa);
+    }
+
+    /**
      * Recargo por servicio configurado para la empresa, resuelto ya con sus
      * reglas. Vive aquí porque lo comparten los dos puntos de venta: el salón
      * (comandas) y el mostrador (caja-pos).
@@ -68,6 +79,10 @@ class PosVentaService
         return [
             'modo'       => $modo,
             'porcentaje' => $modo === 'no' ? 0.0 : min(10.0, max(0.0, $porcentaje)),
+            // Producto con el que se emite la propina VOLUNTARIA (una línea más
+            // del detalle). Va aparte del recargo de arriba y no depende de él:
+            // el salón puede cobrar propina voluntaria sin cobrar el 10%.
+            'id_producto_propina' => (int) ($cfg['id_producto_propina'] ?? 0) ?: 0,
         ];
     }
 
@@ -122,6 +137,9 @@ class PosVentaService
         $totalSinImp = 0.0;
         $totalDesc = 0.0;
         $ivaTotal = 0.0;
+        // Suma de las líneas marcadas como propina voluntaria: se factura como
+        // una línea normal, pero queda fuera de la base del recargo por servicio.
+        $totalPropinaItems = 0.0;
         foreach ($items as $it) {
             $idProducto = (int) ($it['id_producto'] ?? 0);
             $cant = (float) ($it['cantidad'] ?? 0);
@@ -160,6 +178,9 @@ class PosVentaService
             $totalSinImp += $base;
             $totalDesc += $dscto;
             $ivaTotal += $ivaLinea;
+            if (!empty($it['es_propina'])) {
+                $totalPropinaItems += $base;
+            }
 
             $descripcion = (string) ($it['descripcion'] ?? '');
             $det[] = [
@@ -205,8 +226,15 @@ class PosVentaService
         // sobre el subtotal real del documento. Así la propina nunca puede
         // superar el 10% que exige la Ficha Técnica del SRI —el comprobante
         // sería rechazado— ni depender de una cifra armada en el navegador.
+        // La base del recargo es el CONSUMO, no el total de las líneas: si el
+        // cliente dejó una propina voluntaria (que viaja como una línea más del
+        // detalle, ver ComandaService::guardarPropina), esa línea no puede
+        // inflar el recargo. Con consumo 80 + IVA 12 + servicio 8 = 100, una
+        // propina de 5 tiene que dar 105 y no 105.50.
         $pctPropina = min(10.0, max(0.0, (float) ($data['porcentaje_propina'] ?? 0)));
-        $propina = round($totalSinImp * $pctPropina / 100, 2);
+        $baseServicio = round($totalSinImp - $totalPropinaItems, 2);
+        if ($baseServicio < 0) $baseServicio = 0.0;
+        $propina = round($baseServicio * $pctPropina / 100, 2);
 
         $importeTotal = round($totalSinImp + $ivaTotal + $propina, 2);
 

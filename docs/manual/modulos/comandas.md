@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, recargo, total con iva
-version: 1.4
+etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva
+version: 1.12
 orden: 20
 estado: activo
 ---
@@ -101,6 +101,140 @@ Al **dividir la cuenta**, cada parte carga su propio recargo, proporcional a lo
 que se le cobra. Lo mismo vale para el cliente que paga desde el QR de la mesa:
 ve el recargo antes de confirmar y paga exactamente lo que dirá su comprobante.
 
+## La propina voluntaria
+
+Es la que el cliente deja por su cuenta, **además** del recargo por servicio. Se
+escribe en el campo **Propina** del pie de la comanda: se guarda al salir del
+campo o con Enter, se cambia escribiendo otro valor y se quita dejándolo en 0.
+No tiene tope.
+
+Se suma al total **tal cual, sin impuestos y sin afectar al recargo**. Si la
+cuenta con todo iba en $100 y el cliente deja $5, el total es **$105** exacto —
+el recargo por servicio se sigue calculando sobre el consumo, no sobre la
+propina.
+
+### Por qué aparece como un ítem de la factura
+
+El comprobante electrónico tiene **un solo** campo de propina, y ese ya lo ocupa
+el recargo por servicio (que además no puede pasar del 10%). Para una segunda
+propina no queda lugar, así que se emite como **una línea más del detalle**, con
+un producto de tipo servicio e IVA 0%.
+
+Ese producto se busca una vez en **Empresa → Facturación → Propina voluntaria**
+(el buscador solo ofrece productos marcados como servicio). Mientras no esté
+configurado, el campo no aparece en la comanda. Debe ser un servicio (no
+inventariable), con IVA 0% y precio 0: el monto lo pone el mesero en cada
+comanda.
+
+Dos consecuencias de emitirla así, que conviene conocer:
+
+- La propina **entra en las ventas de la empresa**: figura en el asiento contable
+  y en la casilla de ventas 0% de la declaración de IVA. El campo de propina del
+  comprobante no funciona así — el SRI lo trata aparte.
+- Al **dividir la cuenta** se comporta como cualquier ítem: en *partes iguales*
+  se reparte entre las partes; en *por ítems* se marca en la cuenta que se
+  quiera.
+
+La propina no se envía a cocina ni pasa por preparación, y no se le puede aplicar
+descuento. Se cambia desde su campo del pie, y se quita de dos formas: dejando
+ese campo en 0, o con la **x** de su propia fila en la lista de ítems. El cliente
+también puede quitarla desde el QR con esa misma x, aunque ya la haya dejado. En
+todos los casos la línea desaparece, no queda como un ítem anulado.
+
+Se puede cambiar o quitar **aunque el cliente ya haya pedido su cuenta**, mientras
+esa cuenta no se haya cobrado: si decide dejar más propina, el mesero pone el
+nuevo valor y la cuenta se recalcula sola. Una vez cobrada, la propina pertenece
+al documento emitido y ya no se toca.
+
+En pantalla y en la tirilla, la propina se muestra **sin cantidad**: es un valor
+único, no un consumo de N unidades.
+
+### El cliente también puede dejarla desde el QR
+
+Al pulsar **Pedir mi cuenta** en el portal de la mesa, el cliente ve un campo
+*¿Dejas propina?*: lo que escriba se suma al total antes de confirmar y entra en
+**la misma cuenta** que va a pagar, así viaja en el mismo documento. Si paga con
+tarjeta, el monto que se le cobra ya la incluye.
+
+La propina es **una sola por comanda**: si el cliente escribe un valor y el
+mesero ya había puesto otro, queda el último. El campo solo aparece si el
+establecimiento tiene configurado el producto de propina.
+
+Si el mesero **quita la propina** desde el salón, la cuenta que el cliente está
+mirando en su celular se actualiza sola en unos segundos, incluso con el modal de
+la cuenta abierto (salvo que en ese momento esté escribiendo en el campo, para no
+pisarle lo que teclea).
+
+## El mesero se entera de lo que se pide por el QR
+
+Cuando el cliente **confirma su pedido** desde el celular, la mesa muestra en el
+tablero un aviso azul con el ícono de QR, parpadeando. Sin eso el pedido pasaría
+desapercibido en el salón: los ítems se van solos a la pantalla de cocina —o
+quedan servidos, si no pasan por estación— y nadie del salón se enteraría.
+
+El aviso se apaga solo cuando un mesero **entra a esa comanda** desde el tablero,
+que es la señal de que alguien ya lo vio.
+
+El cliente puede **quitar sus ítems hasta que confirma el pedido**; después ya no,
+y lo que quiera cambiar pasa por el mesero.
+
+## Con la cuenta pedida, el cliente ya no agrega
+
+Una vez que el cliente **pide su cuenta** desde el QR, deja de poder agregar
+ítems: el menú sigue a la vista pero el botón *Agregar* queda deshabilitado y un
+aviso le dice que le avise al mesero. Lo mismo si la cuenta ya se cobró.
+
+Para que vuelva a pedir, el mesero **deshace la cuenta** desde la comanda (el
+botón de la flecha en el grupo pendiente): al quedar anulada, el portal se reabre
+solo en unos segundos.
+
+Del lado del salón pasa lo simétrico: mientras haya una cuenta pedida desde el QR
+esperando cobro, el botón **Cobrar** del pie de la comanda queda deshabilitado.
+Esa cuenta ya está armada y se cobra con el botón del propio grupo — así no se
+arma otra por encima y no se pasa por alto lo que pidió el cliente. Las cuentas
+que arma el mesero no bloquean nada: puede seguir armando las que necesite.
+
+## Cómo piensa pagar el cliente (QR)
+
+Al pedir su cuenta desde el celular, el cliente elige **cómo piensa pagar** de
+la lista de formas de pago de la empresa. Es **solo una sugerencia**: el mesero
+la ve en dos lugares —en la cuenta pendiente ("Sugiere pagar con…") y dentro del
+modal **Registrar cobro**, bajo el selector de forma de pago— y la encuentra ya
+seleccionada, pero puede cambiarla; quien decide la forma real sigue siendo él.
+
+La nota del modal dice expresamente que viene del cliente: sin eso el mesero no
+distinguiría una sugerencia del QR de su propia forma favorita.
+
+Si el cliente sugirió una forma, esa gana sobre la **forma favorita** del cajero:
+es específica de esa cuenta. El cliente también puede dejarlo en *Lo decido con
+el mesero* y no sugerir nada.
+
+Desde el portal QR **ya no se paga en línea**: el cliente avisa que quiere su
+cuenta y el cobro lo cierra el mesero.
+
+## Ítems que no pasan por cocina
+
+Un ítem cuyo **Preparar en** en el Menú está en *Ninguna* no se prepara: entra a la
+comanda **ya entregado**. No suma al botón **Enviar a preparación** ni ofrece el
+botón **Entregar**, porque no hay nada que esperar — es el caso de una bebida
+embotellada o de un servicio.
+
+Si un plato no llega a la pantalla de cocina, casi siempre es esto: revise su
+campo *Preparar en* en el módulo **Menú**.
+
+## Forma de pago favorita
+
+En el modal **Registrar cobro**, la estrella junto a *Forma de pago* fija la que
+usa habitualmente: queda preseleccionada cada vez que se abre el modal. Es por
+usuario y por empresa, igual que el resto de los favoritos del sistema. Se quita
+pulsando la estrella de nuevo sobre la misma forma.
+
+## El cobro siempre emite Factura
+
+El modal **Registrar cobro** ya no pregunta el tipo de documento: toda cuenta del
+salón se cobra con **Factura**. Vale también para los pedidos que llegan desde el
+QR de la mesa, aunque el cliente haya marcado "recibo" al pedir.
+
 ## Anular con motivo
 
 Anular una comanda **que ya tiene ítems** exige indicar un **motivo**. No es
@@ -119,6 +253,7 @@ Una comanda vacía se anula sin más.
 | Cantidad | Mayor a cero |
 | Motivo de anulación | Obligatorio si la comanda ya tiene ítems |
 | Recargo por servicio | Máximo 10% del subtotal; solo se puede quitar si el establecimiento lo tiene como opcional |
+| Propina voluntaria | No puede ser negativa; no tiene tope. Requiere el producto configurado en Empresa → Facturación |
 
 ## Errores frecuentes
 
@@ -128,9 +263,40 @@ Una comanda vacía se anula sin más.
 - **"El recargo por servicio es obligatorio en este establecimiento"**: así está
   configurado en Empresa → Facturación; cámbielo a *opcional* si el salón debe
   poder retirarlo.
+- **"No hay un producto configurado para la propina"**: falta elegirlo en Empresa
+  → Facturación → Propina voluntaria. Debe ser un servicio con IVA 0%.
+- **No veo el campo de propina en la comanda**: no hay producto de propina
+  configurado, o el usuario no tiene permiso para crear en comandas.
+- **"La propina ya forma parte de una cuenta cobrada"**: se cobró junto con esa
+  parte de la cuenta; la corrección va sobre el documento emitido.
 
 ## Historial de cambios
 
+- **1.12** — El tablero avisa cuando el cliente confirma un pedido desde el QR
+  (se apaga al entrar el mesero a la comanda). Los ítems sin estación vuelven a
+  nacer pendientes: el cliente puede quitarlos y confirmarlos, y al confirmar
+  quedan entregados sin pasar por cocina.
+- **1.11** — Con la cuenta ya pedida desde el QR, el cliente no puede seguir
+  agregando ítems y el botón Cobrar del pie queda deshabilitado (se cobra desde
+  esa cuenta). La propina se puede quitar desde su fila, en el salón y en el QR,
+  y se muestra sin cantidad.
+- **1.10** — El cliente sugiere desde el QR cómo piensa pagar (el mesero decide
+  la forma real) y se quitó el pago en línea del portal. La cuenta que ve el
+  cliente se sincroniza cuando el mesero cambia o quita la propina.
+- **1.9** — El cliente puede dejar propina desde el QR de la mesa, al pedir su
+  cuenta. Se corrigió además el total del tablero de mesas y el del portal QR,
+  que calculaban el recargo por servicio incluyendo la propina y resolvían el
+  IVA con la tarifa del producto en vez de la del ítem del Menú.
+- **1.8** — La forma de pago del cobro admite favorito (estrella): queda
+  preseleccionada al abrir el modal.
+- **1.7** — Los ítems sin estación de preparación ("Enviar a: Ninguna") entran ya
+  entregados: no habilitan el botón Enviar a preparación ni el de Entregar.
+- **1.6** — El cobro emite siempre Factura: se quitó la opción de Recibo de venta
+  del modal Registrar cobro.
+- **1.5** — Propina voluntaria: un monto libre que el mesero agrega en el pie de
+  la comanda y se suma al total sin impuestos; se emite como una línea más del
+  comprobante (el campo de propina ya lo ocupa el recargo por servicio) y no
+  altera el cálculo de ese recargo.
 - **1.4** — Los ítems de la carta se muestran y se facturan con la tarifa de IVA
   configurada en el ítem del Menú; antes se usaba la del producto vinculado y la
   del ítem se ignoraba.

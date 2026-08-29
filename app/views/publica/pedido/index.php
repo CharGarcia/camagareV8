@@ -106,6 +106,11 @@ $ajax = $base . '/pedido/' . $token;
     <button type="button" class="cancelar" id="pq-btn-cancelar-asistencia">¿Fue un error? Cancelar</button>
 </div>
 
+<div class="pq-aviso-asistencia d-none" id="pq-aviso-cuenta-pedida">
+    <i class="bi bi-receipt-cutoff"></i>
+    <span>Ya pediste tu cuenta. Si quieres pedir algo más, avísale al mesero.</span>
+</div>
+
 <div class="pq-menu-wrap">
     <div class="pq-menu-title">Menú</div>
     <div class="pq-menu-scroll" id="pq-menu"><div class="pq-empty">Cargando menú...</div></div>
@@ -142,10 +147,46 @@ $ajax = $base . '/pedido/' . $token;
       <div class="modal-body">
         <div class="mb-2 small text-muted">Elige lo que quieres pagar:</div>
         <div id="pq-cuenta-items"></div>
+        <?php if (!empty($idProductoPropina)): ?>
+        <div class="border-top pt-2 mt-2 d-flex justify-content-between align-items-center" id="pq-propina-wrap">
+            <label class="small mb-0" for="pq-propina">
+                ¿Dejas propina?
+                <span class="d-block text-muted" style="font-size:.7rem;">Opcional, para el equipo</span>
+            </label>
+            <div class="input-group input-group-sm" style="width:96px;">
+                <span class="input-group-text px-1">$</span>
+                <input type="number" class="form-control text-end px-1" id="pq-propina" step="0.01" min="0" placeholder="0.00" inputmode="decimal">
+            </div>
+        </div>
+        <?php endif; ?>
+        <div class="border-top pt-2 mt-2" style="font-size:.82rem;">
+            <div class="d-flex justify-content-between" style="padding:2px 0;">
+                <span class="text-muted">Subtotal</span><span id="pq-cuenta-subtotal">$0.00</span>
+            </div>
+            <div id="pq-cuenta-impuestos"></div>
+            <div class="d-flex justify-content-between d-none" id="pq-cuenta-fila-servicio" style="padding:2px 0;">
+                <span class="text-muted" id="pq-cuenta-servicio-label">Servicio</span><span id="pq-cuenta-servicio">$0.00</span>
+            </div>
+            <div class="d-flex justify-content-between d-none" id="pq-cuenta-fila-propina" style="padding:2px 0;">
+                <span class="text-muted">Propina</span><span id="pq-cuenta-propina">$0.00</span>
+            </div>
+        </div>
         <div class="d-flex justify-content-between fw-bold border-top pt-2 mt-2">
-            <span>Total seleccionado</span><span id="pq-cuenta-total">$0.00</span>
+            <span>Total a pagar</span><span id="pq-cuenta-total">$0.00</span>
         </div>
         <hr>
+        <?php if (!empty($formasPago)): ?>
+        <div class="mb-2">
+            <label class="form-label small mb-1 d-block" for="pq-forma-pago">Forma de pago sugerida</label>
+            <select class="form-select form-select-sm" id="pq-forma-pago">
+                <option value="">Lo decido con el mesero</option>
+                <?php foreach ($formasPago as $f): ?>
+                    <option value="<?= (int) $f['id'] ?>"><?= htmlspecialchars($f['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <div class="form-text mt-0" style="font-size:.7rem;">Es solo para avisarle al mesero; él confirma el cobro.</div>
+        </div>
+        <?php endif; ?>
         <div class="mb-2" id="pq-doc-wrap">
             <label class="form-label small mb-1 d-block">Quiero que me den</label>
             <div class="btn-group w-100" role="group">
@@ -218,6 +259,9 @@ $ajax = $base . '/pedido/' . $token;
     <div class="total-row d-none" id="pq-fila-servicio" style="font-size:.85rem;font-weight:500;">
         <span class="text-muted" id="pq-servicio-label">Servicio</span><span id="pq-servicio">$0.00</span>
     </div>
+    <div class="total-row d-none" id="pq-fila-propina-pie" style="font-size:.85rem;font-weight:500;">
+        <span class="text-muted">Propina</span><span id="pq-propina-pie">$0.00</span>
+    </div>
     <div class="total-row"><span>Total</span><span id="pq-total">$0.00</span></div>
     <button type="button" class="btn btn-success w-100" id="pq-btn-confirmar" disabled>
         <i class="bi bi-send me-1"></i>Confirmar pedido <span id="pq-badge-confirmar" class="badge bg-light text-success ms-1 d-none"></span>
@@ -231,13 +275,27 @@ $ajax = $base . '/pedido/' . $token;
     const BASE = "<?= $base ?>";
     const AJAX = "<?= $ajax ?>";
     let detalles = <?= json_encode($comanda['detalles'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
+    let grupos = <?= json_encode($comanda['grupos'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
     let solicitaAsistencia = <?= !empty($comanda['solicita_asistencia']) ? 'true' : 'false' ?>;
+
+    /**
+     * ¿Ya pidió la cuenta? Con una cuenta viva (esperando al mesero o ya
+     * cobrada) el cliente deja de poder agregar por su cuenta: lo que quiera
+     * pedir después pasa por el mesero. Un grupo anulado no cuenta — esa cuenta
+     * se deshizo y la mesa volvió a quedar abierta.
+     */
+    function cuentaYaPedida() {
+        return grupos.some(g => g.estado === 'pendiente' || g.estado === 'cobrado');
+    }
     <?php $svcOn = in_array((string) ($comanda['aplica_servicio'] ?? ''), ['1', 't', 'true'], true) || ($comanda['aplica_servicio'] ?? false) === true; ?>
     const APLICA_SERVICIO = <?= $svcOn ? 'true' : 'false' ?>;
     const PORCENTAJE_SERVICIO = <?= (float) ($comanda['porcentaje_servicio'] ?? 0) ?>;
     const DOC_PERMITIDOS = { factura: <?= !empty($documentos['factura']) ? 'true' : 'false' ?>, recibo: <?= !empty($documentos['recibo']) ? 'true' : 'false' ?> };
     let menu = [];
     const mdCuenta = new bootstrap.Modal(document.getElementById('mdCuenta'));
+    // Al cerrar el modal, el pie vuelve a mostrar la propina realmente guardada:
+    // lo que el cliente hubiera escrito sin confirmar no cuenta.
+    document.getElementById('mdCuenta').addEventListener('hidden.bs.modal', () => renderLineas());
 
     function money(v) { return '$' + (parseFloat(v || 0)).toFixed(2); }
     function escapeHtml(s) {
@@ -255,25 +313,48 @@ $ajax = $base . '/pedido/' . $token;
         preparando: ['Preparando', 'warning'], listo: ['Listo para servir', 'success'], entregado: ['Entregado', 'secondary'],
     };
 
-    // El subtotal de la línea (comanda_detalle.subtotal) es sin impuestos —
-    // esto es solo para mostrarle al cliente lo que realmente paga; el cobro
-    // real vuelve a resolver el IVA desde el producto, esto no lo reemplaza.
+    const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+
+    // Cantidades con los decimales que configuró el establecimiento: Postgres
+    // devuelve numeric como "1.000000" y sin esto el cliente vería eso.
+    // No hace falta el equivalente para el precio: en este portal todo importe
+    // que ve el cliente es dinero (money, 2 decimales) — el precio unitario con
+    // decimales extendidos solo aparece en las tirillas del salón.
+    const DEC_CANT = <?= (int) ($decimales['cantidad'] ?? 2) ?>;
+    function cantidad(v) { return (parseFloat(v) || 0).toFixed(DEC_CANT); }
+
+    // La propina voluntaria viaja como una línea más de la comanda, pero no
+    // genera recargo por servicio. Se reconoce por su producto, el mismo que
+    // usan el salón y la emisión del documento.
+    const ID_PRODUCTO_PROPINA = <?= (int) ($idProductoPropina ?? 0) ?>;
+    const esLineaPropina = (d) => ID_PRODUCTO_PROPINA > 0 && parseInt(d.id_producto, 10) === ID_PRODUCTO_PROPINA;
+
+    // El subtotal de la línea (comanda_detalle.subtotal) es sin impuestos. El
+    // IVA se redondea LÍNEA POR LÍNEA, igual que en el salón y que
+    // PosVentaService::cobrar() al emitir: agrupar y redondear al final daría a
+    // veces un centavo distinto del que termina en la factura, y el cliente
+    // compara ese número con lo que le cobraron.
     function lineaConIva(d) {
-        return parseFloat(d.subtotal || 0) * (1 + parseFloat(d.porcentaje_iva || 0) / 100);
+        const base = round2(d.subtotal);
+        return round2(base + round2(base * (parseFloat(d.porcentaje_iva) || 0) / 100));
     }
 
-    // Recargo por servicio ("el 10%"): sobre la base sin impuestos, igual que
-    // en el salón y que la propina del comprobante. Se le muestra al cliente
-    // aparte para que sepa qué está pagando antes de confirmar.
+    // Recargo por servicio ("el 10%"): sobre la base sin impuestos DEL CONSUMO,
+    // sin la propina voluntaria. Se le muestra al cliente aparte para que sepa
+    // qué está pagando antes de confirmar.
     function servicioDe(lineas) {
         if (!APLICA_SERVICIO || PORCENTAJE_SERVICIO <= 0) return 0;
-        const base = lineas.reduce((a, d) => a + parseFloat(d.subtotal || 0), 0);
-        return Math.round(base * PORCENTAJE_SERVICIO) / 100;
+        const base = lineas.reduce((a, d) => esLineaPropina(d) ? a : a + (parseFloat(d.subtotal) || 0), 0);
+        return round2(round2(base) * PORCENTAJE_SERVICIO / 100);
     }
 
     function renderMenu() {
         const $menu = document.getElementById('pq-menu');
         if (!menu.length) { $menu.innerHTML = '<div class="pq-empty">El menú todavía no tiene ítems disponibles.</div>'; return; }
+        // Con la cuenta ya pedida el menú queda a la vista pero sin poder
+        // agregar: el aviso de arriba explica por qué (el servidor lo rechaza
+        // igual, esto solo evita el intento).
+        const bloqueado = cuentaYaPedida();
         $menu.innerHTML = menu.map(m => {
             const foto = m.imagen
                 ? `<img class="foto" src="${BASE}/${escapeHtml(m.imagen)}" alt="" loading="lazy">`
@@ -286,7 +367,7 @@ $ajax = $base . '/pedido/' . $token;
                     <div class="nombre">${escapeHtml(m.nombre)}</div>
                     <div class="precio">${money(precioConIva)}</div>
                     ${m.descripcion ? '<div class="descripcion">' + escapeHtml(m.descripcion) + '</div>' : ''}
-                    <button type="button" class="btn btn-sm btn-primary btn-agregar" data-id="${m.id}" data-nombre="${escapeHtml(m.nombre)}">
+                    <button type="button" class="btn btn-sm btn-primary btn-agregar" data-id="${m.id}" data-nombre="${escapeHtml(m.nombre)}" ${bloqueado ? 'disabled' : ''}>
                         <i class="bi bi-plus-lg"></i> Agregar
                     </button>
                 </div>
@@ -301,12 +382,22 @@ $ajax = $base . '/pedido/' . $token;
             $lineas.innerHTML = '<div class="pq-empty">Todavía no has agregado nada. Elige algo del menú arriba 👆</div>';
         } else {
             $lineas.innerHTML = vivas.map(d => {
-                const [label, color] = ESTADO_LABEL[d.estado_linea] || ['—', 'secondary'];
-                const puedeQuitar = d.estado_linea === 'pendiente';
+                // Sin estación de preparación no hay estado que mostrarle al
+                // cliente: "Entregado" sobre una bebida embotellada no aporta
+                // nada. Solo se etiqueta mientras esté pendiente de confirmar.
+                // La propina, ni eso.
+                const esPropina = esLineaPropina(d);
+                const sinEstacion = !d.id_estacion_impresion;
+                const ocultarEstado = esPropina || (sinEstacion && d.estado_linea !== 'pendiente');
+                const [label, color] = ocultarEstado ? [null, null] : (ESTADO_LABEL[d.estado_linea] || ['—', 'secondary']);
+                // La propina se puede quitar siempre (mientras no esté ya en una
+                // cuenta cobrada): la dejó el cliente y puede arrepentirse. Los
+                // demás ítems, solo antes de mandarlos a preparación.
+                const puedeQuitar = esPropina ? !d.id_grupo_cobro : d.estado_linea === 'pendiente';
                 return `<div class="pq-linea">
                     <div class="desc">
-                        <div class="nombre">${escapeHtml(d.cantidad)} x ${escapeHtml(d.descripcion)}</div>
-                        <div class="estado"><span class="badge bg-${color}-subtle text-${color}-emphasis">${label}</span></div>
+                        <div class="nombre">${esPropina ? '' : cantidad(d.cantidad) + ' x '}${escapeHtml(d.descripcion)}</div>
+                        ${label ? '<div class="estado"><span class="badge bg-' + color + '-subtle text-' + color + '-emphasis">' + label + '</span></div>' : ''}
                     </div>
                     <div class="total">${money(lineaConIva(d))}</div>
                     ${puedeQuitar ? '<span class="quitar" data-id="' + d.id + '"><i class="bi bi-x-lg"></i></span>' : ''}
@@ -321,14 +412,34 @@ $ajax = $base . '/pedido/' . $token;
             document.getElementById('pq-servicio-label').textContent = `Servicio ${PORCENTAJE_SERVICIO}%`;
             document.getElementById('pq-servicio').textContent = money(servicio);
         }
-        const total = vivas.reduce((a, d) => a + lineaConIva(d), 0) + servicio;
+
+        // La propina va en su propia fila del pie. Con el modal abierto se
+        // muestra lo que el cliente está escribiendo (todavía sin guardar), para
+        // que vea el efecto en su cuenta mientras decide; con el modal cerrado,
+        // la que está guardada en la comanda.
+        const propinaGuardada = round2(vivas.filter(esLineaPropina).reduce((a, d) => a + (parseFloat(d.subtotal) || 0), 0));
+        const modalAbierto = document.getElementById('mdCuenta')?.classList.contains('show');
+        const propina = modalAbierto ? propinaEscrita() : propinaGuardada;
+        const $filaProp = document.getElementById('pq-fila-propina-pie');
+        $filaProp.classList.toggle('d-none', propina <= 0);
+        if (propina > 0) document.getElementById('pq-propina-pie').textContent = money(propina);
+
+        // Las líneas ya traen la propina guardada; se descuenta para no contarla
+        // dos veces y se suma la que corresponde mostrar.
+        const totalLineas = round2(vivas.reduce((a, d) => a + lineaConIva(d), 0));
+        const total = round2(totalLineas - propinaGuardada + propina + servicio);
         document.getElementById('pq-total').textContent = money(total);
 
         const pendientes = vivas.filter(d => d.estado_linea === 'pendiente').length;
         const $btnConfirmar = document.getElementById('pq-btn-confirmar');
         const $badgeConfirmar = document.getElementById('pq-badge-confirmar');
+        // Con la cuenta ya pedida el botón desaparece: el cliente cerró su
+        // pedido y lo que quiera agregar después pasa por el mesero. Deshabilitado
+        // no alcanza — seguiría ofreciendo una acción que ya no le corresponde.
+        const yaPidioCuenta = cuentaYaPedida();
+        $btnConfirmar.classList.toggle('d-none', yaPidioCuenta);
         $btnConfirmar.disabled = pendientes === 0;
-        if (pendientes > 0) { $badgeConfirmar.textContent = pendientes; $badgeConfirmar.classList.remove('d-none'); }
+        if (pendientes > 0 && !yaPidioCuenta) { $badgeConfirmar.textContent = pendientes; $badgeConfirmar.classList.remove('d-none'); }
         else { $badgeConfirmar.classList.add('d-none'); }
 
         const listos = vivas.filter(d => d.estado_linea === 'listo').length;
@@ -336,8 +447,10 @@ $ajax = $base . '/pedido/' . $token;
         if (listos > 0) { $badgeListos.textContent = listos + ' listo(s)'; $badgeListos.classList.remove('d-none'); }
         else { $badgeListos.classList.add('d-none'); }
 
-        const entregadosSinCuenta = vivas.filter(d => d.estado_linea === 'entregado' && !d.id_grupo_cobro).length;
-        document.getElementById('pq-cuenta-card').classList.toggle('d-none', entregadosSinCuenta === 0);
+        // Misma lista que ofrece el modal (la propina no cuenta como ítem
+        // pagable): si no, con solo una propina suelta se ofrecería pedir la
+        // cuenta y el modal respondería que no hay nada que pagar.
+        document.getElementById('pq-cuenta-card').classList.toggle('d-none', lineasEntregadasSinCuenta().length === 0);
     }
 
     function actualizarAvisoAsistencia() {
@@ -345,6 +458,10 @@ $ajax = $base . '/pedido/' . $token;
         const $btn = document.getElementById('pq-btn-mesero');
         $btn.disabled = solicitaAsistencia;
         $btn.innerHTML = solicitaAsistencia ? '<i class="bi bi-bell-fill"></i>' : '<i class="bi bi-bell"></i>';
+    }
+
+    function actualizarAvisoCuentaPedida() {
+        document.getElementById('pq-aviso-cuenta-pedida').classList.toggle('d-none', !cuentaYaPedida());
     }
 
     async function cargarMenu() {
@@ -357,15 +474,52 @@ $ajax = $base . '/pedido/' . $token;
         } catch (e) { document.getElementById('pq-menu').innerHTML = '<div class="pq-empty">Error al cargar el menú.</div>'; }
     }
 
+    // Última propina que vino del servidor. Sirve para distinguir un cambio
+    // hecho por el mesero (el valor guardado cambió) de una edición del propio
+    // cliente (el guardado sigue igual y lo que difiere es el campo).
+    let propinaSincronizada = null;
+
+    /**
+     * Mantiene el modal "Pedir mi cuenta" al día mientras está abierto: la
+     * comanda se sigue moviendo del lado del mesero (puede quitar la propina,
+     * anular un ítem o entregar otro) y el cliente no puede quedarse mirando un
+     * total que ya no existe.
+     *
+     * El campo de propina solo se pisa cuando el cambio viene DEL SERVIDOR. Si
+     * se sobreescribiera cada vez que difiere del guardado, el cliente no podría
+     * borrarla: al vaciar el campo se le repondría en el siguiente refresco.
+     */
+    function sincronizarModalCuenta() {
+        const guardada = propinaExistente();
+        const cambioDelMesero = propinaSincronizada !== null && round2(guardada) !== round2(propinaSincronizada);
+        propinaSincronizada = guardada;
+
+        const $modal = document.getElementById('mdCuenta');
+        if (!$modal || !$modal.classList.contains('show')) return;
+
+        const $prop = document.getElementById('pq-propina');
+        if ($prop && cambioDelMesero && document.activeElement !== $prop) {
+            $prop.value = guardada > 0 ? guardada.toFixed(2) : '';
+        }
+        recalcularTotalCuenta();
+    }
+
     async function refrescarEstado() {
         try {
             const r = await fetch(AJAX + '/estado');
             const d = await r.json();
             if (d.ok) {
                 detalles = d.data.detalles || [];
+                grupos = d.data.grupos || [];
                 solicitaAsistencia = !!d.data.solicita_asistencia;
                 renderLineas();
+                // El menú se repinta porque el bloqueo de "Agregar" depende de
+                // si ya hay una cuenta pedida, y eso puede cambiar del lado del
+                // mesero (deshace la cuenta y el cliente vuelve a poder pedir).
+                renderMenu();
                 actualizarAvisoAsistencia();
+                actualizarAvisoCuentaPedida();
+                sincronizarModalCuenta();
             }
         } catch (e) { /* silencioso: reintenta en el próximo ciclo */ }
     }
@@ -402,7 +556,7 @@ $ajax = $base . '/pedido/' . $token;
 
     document.getElementById('pq-btn-confirmar').addEventListener('click', async () => {
         const { isConfirmed } = await Swal.fire({
-            title: '¿Confirmar pedido?', text: 'Se enviará a cocina/barra — ya no podrás quitar estos ítems.',
+            title: '¿Confirmar pedido?', text: 'Se enviará a preparación — ya no podrás quitar estos ítems.',
             icon: 'question', showCancelButton: true, confirmButtonText: 'Sí, confirmar', cancelButtonText: 'Cancelar',
             confirmButtonColor: '#198754',
         });
@@ -446,17 +600,74 @@ $ajax = $base . '/pedido/' . $token;
     });
 
     // ─── Pedir mi cuenta ────────────────────────────────────────────────────
+    /**
+     * Ítems que el cliente puede pagar. La línea de propina queda FUERA a
+     * propósito: se administra desde su campo del modal, no como un ítem más.
+     * Si apareciera en la lista se contaría dos veces (como ítem y en el campo),
+     * y el cliente podría desmarcarla dejándola huérfana en la comanda.
+     */
     function lineasEntregadasSinCuenta() {
-        return detalles.filter(d => d.estado_linea === 'entregado' && !d.id_grupo_cobro);
+        return detalles.filter(d => d.estado_linea === 'entregado' && !d.id_grupo_cobro && !esLineaPropina(d));
     }
 
+    /** La propina ya cargada en la comanda (la puso el mesero o el propio cliente antes). */
+    function propinaExistente() {
+        const l = detalles.find(d => esLineaPropina(d) && !d.id_grupo_cobro);
+        return l ? round2(l.subtotal) : 0;
+    }
+
+    /** Lo que el cliente escribió en el campo de propina (0 si no hay campo o está vacío). */
+    function propinaEscrita() {
+        const $p = document.getElementById('pq-propina');
+        const v = $p ? parseFloat($p.value) : 0;
+        return (v > 0) ? round2(v) : 0;
+    }
+
+    /**
+     * Desglose de lo que el cliente marcó, con el mismo criterio que el pie de
+     * la comanda y que la emisión del documento: IVA redondeado línea por línea
+     * y agrupado por tarifa, y recargo por servicio sobre el consumo.
+     */
     function recalcularTotalCuenta() {
         const marcados = Array.from(document.querySelectorAll('#pq-cuenta-items .form-check-input:checked'));
-        const total = marcados.reduce((a, chk) => a + parseFloat(chk.dataset.total || 0), 0);
+
+        let subtotal = 0;
+        const impuestos = {};
+        marcados.forEach(chk => {
+            const base = round2(chk.dataset.base);
+            subtotal = round2(subtotal + base);
+            const pct = parseFloat(chk.dataset.pct) || 0;
+            if (pct > 0) {
+                const lbl = `IVA ${pct}%`;
+                impuestos[lbl] = round2((impuestos[lbl] || 0) + round2(base * pct / 100));
+            }
+        });
+        const totalImpuestos = round2(Object.values(impuestos).reduce((a, v) => a + v, 0));
+
         // El recargo por servicio de esta parte de la cuenta, para que el total
-        // que ve el cliente sea el mismo que le va a cobrar Payphone.
-        const servicio = servicioDe(marcados.map(chk => ({ subtotal: chk.dataset.base })));
-        document.getElementById('pq-cuenta-total').textContent = money(total + servicio);
+        // que ve el cliente sea el mismo que le va a cobrar Payphone. Se manda
+        // id_producto porque servicioDe() debe dejar fuera la línea de propina.
+        const servicio = servicioDe(marcados.map(chk => ({ subtotal: chk.dataset.base, id_producto: chk.dataset.idProducto })));
+        // La propina que escribe el cliente se suma tal cual: no paga impuestos
+        // ni genera recargo por servicio.
+        const propina = propinaEscrita();
+
+        document.getElementById('pq-cuenta-subtotal').textContent = money(subtotal);
+        document.getElementById('pq-cuenta-impuestos').innerHTML = Object.entries(impuestos).map(([lbl, val]) =>
+            `<div class="d-flex justify-content-between" style="padding:2px 0;"><span class="text-muted">${lbl}</span><span>${money(val)}</span></div>`).join('');
+
+        const $filaSrv = document.getElementById('pq-cuenta-fila-servicio');
+        $filaSrv.classList.toggle('d-none', servicio <= 0);
+        if (servicio > 0) {
+            document.getElementById('pq-cuenta-servicio-label').textContent = `Servicio ${PORCENTAJE_SERVICIO}%`;
+            document.getElementById('pq-cuenta-servicio').textContent = money(servicio);
+        }
+
+        const $filaProp = document.getElementById('pq-cuenta-fila-propina');
+        $filaProp.classList.toggle('d-none', propina <= 0);
+        if (propina > 0) document.getElementById('pq-cuenta-propina').textContent = money(propina);
+
+        document.getElementById('pq-cuenta-total').textContent = money(round2(subtotal + totalImpuestos + servicio + propina));
     }
 
     function configurarSelectorDocumento() {
@@ -484,11 +695,23 @@ $ajax = $base . '/pedido/' . $token;
         if (!lineas.length) { swalError('No tienes ítems entregados pendientes por pagar.'); return; }
         document.getElementById('pq-cuenta-items').innerHTML = lineas.map(d => `
             <label class="pq-cuenta-item mb-0">
-                <input type="checkbox" class="form-check-input mt-0" checked data-total="${lineaConIva(d)}" data-base="${d.subtotal}">
-                <span class="nombre">${escapeHtml(d.cantidad)} x ${escapeHtml(d.descripcion)}</span>
+                <input type="checkbox" class="form-check-input mt-0" checked data-total="${lineaConIva(d)}" data-base="${d.subtotal}" data-pct="${d.porcentaje_iva || 0}" data-id-producto="${d.id_producto || ''}">
+                <span class="nombre">${cantidad(d.cantidad)} x ${escapeHtml(d.descripcion)}</span>
                 <span class="total">${money(lineaConIva(d))}</span>
             </label>`).join('');
+        // Si la comanda ya trae una propina (la puso el mesero, o el cliente en
+        // un intento anterior), se muestra en el campo para que se vea y se
+        // pueda cambiar; si no hay, arranca vacío.
+        const $prop = document.getElementById('pq-propina');
+        if ($prop) {
+            const yaHay = propinaExistente();
+            $prop.value = yaHay > 0 ? yaHay.toFixed(2) : '';
+            // Punto de partida para distinguir después un cambio del mesero de
+            // una edición del cliente (ver sincronizarModalCuenta).
+            propinaSincronizada = yaHay;
+        }
         recalcularTotalCuenta();
+        renderLineas();
         configurarSelectorDocumento();
         document.getElementById('pq-modo-datos').checked = true;
         configurarModoCliente();
@@ -505,6 +728,13 @@ $ajax = $base . '/pedido/' . $token;
     document.querySelectorAll('input[name="pq-modo-cliente"]').forEach(r => r.addEventListener('change', configurarModoCliente));
     document.getElementById('pq-cuenta-items').addEventListener('change', (ev) => {
         if (ev.target.matches('.form-check-input')) recalcularTotalCuenta();
+    });
+    // El total se actualiza mientras el cliente escribe la propina, para que vea
+    // de inmediato cuánto va a pagar: tanto en el modal como en la cuenta que
+    // queda detrás.
+    document.getElementById('pq-propina')?.addEventListener('input', () => {
+        recalcularTotalCuenta();
+        renderLineas();
     });
 
     // ─── Consulta SRI por identificación (autocompleta nombre/correo/teléfono/dirección) ──
@@ -550,6 +780,10 @@ $ajax = $base . '/pedido/' . $token;
         const fd = new FormData();
         fd.append('ids_lineas', JSON.stringify(idsSeleccionados));
         fd.append('tipo_documento', tipoDocumento);
+        // El servidor crea la línea de propina y la mete en esta misma cuenta.
+        fd.append('propina', String(propinaEscrita()));
+        // Sugerencia de forma de pago: el mesero la ve y decide.
+        fd.append('id_forma_pago_sugerida', document.getElementById('pq-forma-pago')?.value || '');
 
         if (esConsumidorFinal) {
             fd.append('consumidor_final', '1');
@@ -578,30 +812,20 @@ $ajax = $base . '/pedido/' . $token;
             mdCuenta.hide();
             await refrescarEstado();
 
-            const { isConfirmed } = await Swal.fire({
+            // El pago lo cierra el mesero: el cliente solo avisa que quiere su
+            // cuenta y con qué piensa pagar (sugerencia). Por eso este aviso ya
+            // no ofrece pagar en línea.
+            await Swal.fire({
                 icon: 'success', title: '¡Listo!', text: d.msg || 'Ya avisamos para que te cobren.',
-                showCancelButton: true, confirmButtonText: 'Pagar ahora con tarjeta',
-                cancelButtonText: 'Esperar al mesero', confirmButtonColor: '#0d6efd',
+                confirmButtonText: 'Entendido', confirmButtonColor: '#0d6efd',
             });
-            if (isConfirmed) await pagarConTarjeta(d.id_grupo);
         } catch (e) { swalError('Error de conexión.'); }
         finally { $btn.disabled = false; }
     });
 
-    async function pagarConTarjeta(idGrupo) {
-        Swal.fire({ title: 'Preparando el pago...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        const fd = new FormData();
-        fd.append('id_grupo', idGrupo);
-        try {
-            const r = await fetch(AJAX + '/pagar', { method: 'POST', body: fd });
-            const d = await r.json();
-            if (!d.ok) { swalError(d.error || 'No se pudo iniciar el pago en línea.'); return; }
-            window.location.href = d.redirect;
-        } catch (e) { swalError('Error de conexión.'); }
-    }
-
     renderLineas();
     actualizarAvisoAsistencia();
+    actualizarAvisoCuentaPedida();
     cargarMenu();
     setInterval(refrescarEstado, 6000);
 

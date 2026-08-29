@@ -70,7 +70,88 @@ class PedidoPublicoController extends Controller
             'mesa'       => $mesa,
             'comanda'    => $comanda,
             'documentos' => $this->getDocumentosPermitidos($mesa),
+            // La propina voluntaria es una línea más de la comanda, pero no
+            // genera recargo por servicio: la pantalla necesita reconocerla para
+            // no cobrarle al cliente un total distinto del que dirá su factura.
+            'idProductoPropina' => (int) ($this->comandaService->getConfigServicio((int) $mesa['id_empresa'])['id_producto_propina'] ?? 0),
+            // Decimales configurados por el establecimiento: las cantidades
+            // llegan de Postgres como numeric ("1.000000") y sin esto el cliente
+            // vería "1.000000 x Hamburguesa".
+            'decimales' => $this->getDecimalesEmpresa((int) $mesa['id_empresa']),
+            // Para que el cliente sugiera cómo piensa pagar al pedir su cuenta.
+            'formasPago' => $this->getFormasPagoEmpresa((int) $mesa['id_empresa']),
         ]);
+    }
+
+    /**
+     * ¿El cliente ya pidió su cuenta? Basta con que exista un grupo de cobro
+     * vivo (pendiente de que lo cobre el mesero, o ya cobrado). Un grupo anulado
+     * no cuenta: esa cuenta se deshizo y la mesa volvió a quedar abierta.
+     */
+    private function tieneCuentaPedida(array $comanda): bool
+    {
+        foreach (($comanda['grupos'] ?? []) as $g) {
+            if (in_array((string) ($g['estado'] ?? ''), ['pendiente', 'cobrado'], true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Formas de pago activas de la empresa, para que el cliente elija con cuál
+     * piensa pagar. Es la MISMA lista que ve el mesero al cobrar, así lo que el
+     * cliente sugiere se le puede precargar tal cual.
+     */
+    private function getFormasPagoEmpresa(int $idEmpresa): array
+    {
+        try {
+            $formas = (new \App\repositories\modulos\FormaPagoRepository())->getFormasFiltradas($idEmpresa, 'INGRESO');
+            // Anticipos fuera: no son una forma de pagar la cuenta en la mesa
+            // (mismo criterio que ComandasController::getFormasPagoAjax).
+            return array_values(array_filter(
+                $formas,
+                fn($f) => strtoupper((string) ($f['tipo'] ?? '')) !== 'ANTICIPO'
+            ));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** ¿Ese id de forma de pago es realmente de esta empresa y está activo? (el dato llega de un formulario público). */
+    private function esFormaPagoDeLaEmpresa(int $idForma, int $idEmpresa): bool
+    {
+        foreach ($this->getFormasPagoEmpresa($idEmpresa) as $f) {
+            if ((int) $f['id'] === $idForma) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Decimales de cantidad y precio del establecimiento (Empresa → Facturación),
+     * para que el portal del cliente muestre los mismos números que el salón.
+     * Si la configuración no se puede leer, se usan 2 y 2: es un portal público y
+     * un fallo aquí no puede tumbar la pantalla del cliente.
+     */
+    private function getDecimalesEmpresa(int $idEmpresa): array
+    {
+        $default = ['cantidad' => 2, 'precio' => 2];
+        try {
+            $establecimientos = (new \App\models\Empresa())->getEstablecimientos($idEmpresa);
+            if (empty($establecimientos)) {
+                return $default;
+            }
+            $cfg = (new \App\repositories\modulos\EmpresaRepository())
+                ->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+            return [
+                'cantidad' => (int) ($cfg['decimales_cantidad'] ?? 2),
+                'precio'   => (int) ($cfg['decimales_precio'] ?? 2),
+            ];
+        } catch (\Throwable $e) {
+            return $default;
+        }
     }
 
     /** Qué documento(s) puede pedir el cliente al "Pedir mi cuenta" — configurado por mesa (modulos/mesas). Factura es la opción principal cuando ambas están permitidas. */
@@ -148,6 +229,12 @@ class PedidoPublicoController extends Controller
             if ($idMenuItem <= 0) {
                 throw new Exception('Selecciona un ítem del menú.');
             }
+            // Con la cuenta ya pedida, el cliente no sigue agregando por su
+            // cuenta: lo que pida a partir de ahí tiene que pasar por el mesero,
+            // que es quien decide si reabre la cuenta o arma otra.
+            if ($this->tieneCuentaPedida($comanda)) {
+                throw new Exception('Ya pediste tu cuenta. Si quieres pedir algo más, avísale al mesero.');
+            }
             $this->comandaService->agregarLinea((int) $comanda['id'], (int) $mesa['id_empresa'], (int) $comanda['id_usuario_mesero'], [
                 'id_menu_item'     => $idMenuItem,
                 'cantidad'         => (float) ($_POST['cantidad'] ?? 1),
@@ -173,6 +260,23 @@ class PedidoPublicoController extends Controller
             if (!$linea) {
                 throw new Exception('Ítem no encontrado.');
             }
+
+            // La propina se quita poniéndola en 0, no anulando la línea: así
+            // desaparece igual que cuando la borra el mesero, en vez de quedar
+            // como un ítem anulado. Y no le aplica la regla de "solo antes de
+            // enviar a preparación": nace entregada porque no se prepara.
+            $idProductoPropina = (int) ($this->comandaService->getConfigServicio((int) $mesa['id_empresa'])['id_producto_propina'] ?? 0);
+            if ($idProductoPropina > 0 && (int) ($linea['id_producto'] ?? 0) === $idProductoPropina) {
+                $this->comandaService->guardarPropina(
+                    (int) $comanda['id'],
+                    (int) $mesa['id_empresa'],
+                    (int) $comanda['id_usuario_mesero'],
+                    0,
+                    ['id_producto_propina' => $idProductoPropina]
+                );
+                $this->json(['ok' => true, 'msg' => 'Propina quitada.']);
+            }
+
             if ($linea['estado_linea'] !== 'pendiente') {
                 throw new Exception('Este ítem ya se envió a preparación; pídele a un mesero que lo quite.');
             }
@@ -189,7 +293,7 @@ class PedidoPublicoController extends Controller
         $token = trim($_GET['token'] ?? $_POST['token'] ?? '');
         try {
             [$mesa, $comanda] = $this->resolver($token);
-            $n = $this->comandaService->enviarACocina((int) $comanda['id'], (int) $mesa['id_empresa'], (int) $comanda['id_usuario_mesero']);
+            $n = $this->comandaService->enviarACocina((int) $comanda['id'], (int) $mesa['id_empresa'], (int) $comanda['id_usuario_mesero'], [], true);
             $this->json(['ok' => true, 'msg' => $n > 0 ? "Se confirmaron {$n} ítem(s)." : 'No había ítems pendientes por confirmar.']);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
@@ -216,6 +320,24 @@ class PedidoPublicoController extends Controller
                 throw new Exception('Selecciona al menos un ítem para pagar.');
             }
 
+            // Propina voluntaria que dejó el cliente: se guarda como una línea
+            // más (misma vía que el mesero) y se suma a ESTA cuenta, para que
+            // viaje en el mismo documento y en el mismo cobro. Se hace antes de
+            // armar el grupo, porque su línea tiene que entrar en él.
+            $propina = round((float) str_replace(',', '.', (string) ($_POST['propina'] ?? 0)), 2);
+            if ($propina > 0) {
+                $resPropina = $this->comandaService->guardarPropina(
+                    (int) $comanda['id'],
+                    $idEmpresa,
+                    $idUsuarioAtribuido,
+                    $propina,
+                    ['id_producto_propina' => (int) ($this->comandaService->getConfigServicio($idEmpresa)['id_producto_propina'] ?? 0)]
+                );
+                if (!empty($resPropina['id_linea']) && !in_array((int) $resPropina['id_linea'], $idsLineas, true)) {
+                    $idsLineas[] = (int) $resPropina['id_linea'];
+                }
+            }
+
             // Qué documento puede pedir el cliente lo decide la mesa (modulos/mesas,
             // permite_factura/permite_recibo — Factura es la opción principal).
             $permitidos = $this->getDocumentosPermitidos($mesa);
@@ -240,7 +362,16 @@ class PedidoPublicoController extends Controller
                 ];
                 $idCliente = $this->comandaService->resolverClienteQr($datosCliente, $idEmpresa, $idUsuarioAtribuido);
             }
-            $idGrupo = $this->comandaService->crearGrupoCobroQr((int) $comanda['id'], $idEmpresa, $idUsuarioAtribuido, $idsLineas, $idCliente, $tipoDocumento);
+            // Forma de pago que sugiere el cliente. Se valida contra las de la
+            // empresa: llega de un formulario público, así que un id inventado
+            // no puede entrar en la base. Si no es válida, se ignora — es una
+            // sugerencia y no vale la pena frenarle la cuenta por esto.
+            $idFormaPagoSugerida = (int) ($_POST['id_forma_pago_sugerida'] ?? 0);
+            if ($idFormaPagoSugerida > 0 && !$this->esFormaPagoDeLaEmpresa($idFormaPagoSugerida, $idEmpresa)) {
+                $idFormaPagoSugerida = 0;
+            }
+
+            $idGrupo = $this->comandaService->crearGrupoCobroQr((int) $comanda['id'], $idEmpresa, $idUsuarioAtribuido, $idsLineas, $idCliente, $tipoDocumento, $idFormaPagoSugerida);
 
             $this->json(['ok' => true, 'msg' => 'Listo — ya se avisó para que te cobren esta cuenta.', 'id_grupo' => $idGrupo]);
         } catch (\Throwable $e) {
@@ -302,14 +433,25 @@ class PedidoPublicoController extends Controller
                 return;
             }
 
-            $totalBase = 0.0;
-            $totalIva  = 0.0;
+            // El IVA se redondea LÍNEA POR LÍNEA, igual que PosVentaService al
+            // emitir el documento: acumular sin redondear daba a veces un centavo
+            // de diferencia entre lo que se cobra y lo que dice el comprobante.
+            $idProductoPropina = (int) ($this->comandaService->getConfigServicio($idEmpresa)['id_producto_propina'] ?? 0);
+            $totalBase    = 0.0;
+            $totalIva     = 0.0;
+            $baseServicio = 0.0;
             foreach (($comanda['detalles'] ?? []) as $d) {
                 if ((int) ($d['id_grupo_cobro'] ?? 0) !== $idGrupo) continue;
-                $base = (float) $d['subtotal'];
+                $base = round((float) $d['subtotal'], 2);
                 $totalBase += $base;
-                $totalIva  += $base * ((float) ($d['porcentaje_iva'] ?? 0) / 100);
+                $totalIva  += round($base * ((float) ($d['porcentaje_iva'] ?? 0)) / 100, 2);
+                // La propina voluntaria se cobra, pero no genera recargo.
+                if ($idProductoPropina <= 0 || (int) ($d['id_producto'] ?? 0) !== $idProductoPropina) {
+                    $baseServicio += $base;
+                }
             }
+            $totalBase = round($totalBase, 2);
+            $totalIva  = round($totalIva, 2);
             if ($totalBase <= 0) {
                 throw new Exception('Esta cuenta no tiene ítems por cobrar.');
             }
@@ -319,7 +461,7 @@ class PedidoPublicoController extends Controller
             // aprobarse el pago (ComandaService::cobrarGrupo) lo incluye como
             // propina. Si aquí se calculara aparte, el cliente podría pagar algo
             // distinto de lo que dice su comprobante.
-            $servicio = round($totalBase * $this->comandaService->porcentajeServicioComanda($comanda) / 100, 2);
+            $servicio = round(round($baseServicio, 2) * $this->comandaService->porcentajeServicioComanda($comanda) / 100, 2);
 
             $pp = new \App\Services\PayphoneService($ppRepo);
             $cajita = $pp->prepararCajita($idEmpresa, [

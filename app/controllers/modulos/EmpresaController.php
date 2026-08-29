@@ -54,6 +54,15 @@ class EmpresaController extends BaseModuloController
         $documentosLegales = (new DocumentosLegalesService())->getEnviosDeEmpresa($idEmpresa);
         $documentosEmpresa = (new EmpresaDocumento())->getPorEmpresa($idEmpresa);
 
+        // Producto con el que se emite la propina voluntaria de las comandas
+        // (Facturación). Se elige con un buscador —el catálogo puede tener miles
+        // de ítems—, así que aquí solo viaja el ya configurado, para mostrar su
+        // nombre; el resto los sirve getServiciosAjax() a medida que se escribe.
+        $idProdPropina = (int) ($data['empresa']['id_producto_propina'] ?? 0);
+        $productoPropina = $idProdPropina > 0
+            ? (new \App\repositories\modulos\ProductoRepository())->getServicioPorId($idProdPropina, $idEmpresa)
+            : null;
+
         $this->viewWithLayout('layouts.main', 'modulos.empresa.index', [
             'tiposSecuencialAgrupados' => $tiposSecuencialAgrupados,
             'tiposSecuencialSoportados' => $tiposSecuencialSoportados,
@@ -81,6 +90,7 @@ class EmpresaController extends BaseModuloController
             'usuarios_empresa' => $data['usuarios_empresa'] ?? [],
             'documentosLegales' => $documentosLegales,
             'documentosEmpresa' => $documentosEmpresa,
+            'productoPropina' => $productoPropina,
             'rutaModulo' => self::RUTA_MODULO,
             'fullWidth' => true
         ]);
@@ -230,6 +240,26 @@ class EmpresaController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Servicios que coinciden con lo escrito, para el buscador del producto de
+     * propina (Facturación). Solo no inventariables: una propina no mueve stock.
+     */
+    public function getServiciosAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+            $buscar = trim((string) ($_GET['q'] ?? ''));
+            $rows = (new \App\repositories\modulos\ProductoRepository())->getServicios($idEmpresa, $buscar);
+            echo json_encode(['ok' => true, 'data' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
         exit;
     }

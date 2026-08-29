@@ -29,6 +29,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
     <link rel="shortcut icon" type="image/png" href="<?= $base ?>/image/logofinal.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <?php
+        // Favoritos (estrella de la forma de pago). Esta vista es standalone —no
+        // pasa por partials/head.php—, así que las variables y el JS se cargan
+        // aquí a mano, igual que se hace con el token CSRF de arriba.
+        echo \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo);
+    ?>
+    <script src="<?= $base ?>/js/favoritos.js?v=<?= time() ?>"></script>
     <style>
         html, body { height: 100%; }
         body { background: #f4f6f9; overflow: hidden; }
@@ -66,6 +73,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .cm-totales { flex: 0 0 auto; padding: 12px 16px; border-top: 1px dashed #dee2e6; font-size: .85rem; }
         .cm-totales .row div { display: flex; justify-content: space-between; padding: 2px 0; }
         .cm-totales .row.total div { font-size: 1.15rem; font-weight: 700; border-top: 1px solid #dee2e6; margin-top: 6px; padding-top: 8px; }
+        /* El campo de propina se ajusta al alto de las demás filas del pie: un
+           input-group-sm de Bootstrap mide bastante más que el texto de al lado
+           y hacía crecer la fila. */
+        .cm-totales .cm-propina-grp { width: 84px; }
+        .cm-totales .cm-propina-grp .input-group-text,
+        .cm-totales .cm-propina-grp .form-control { height: 22px; min-height: 22px; font-size: .78rem; line-height: 1; }
         .cm-footer { flex: 0 0 auto; padding: 0 16px 16px; }
 
         .cm-grupo { border: 1px solid #dee2e6; border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; font-size: .78rem; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -128,9 +141,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     </div>
                 </div>
                 <div class="btn-group btn-group-sm" role="group" id="cm-filtro-origen">
-                    <input type="radio" class="btn-check" name="cm-origen" id="cm-origen-todos" value="todos" checked>
+                    <input type="radio" class="btn-check" name="cm-origen" id="cm-origen-todos" value="todos">
                     <label class="btn btn-outline-secondary" for="cm-origen-todos">Todos</label>
-                    <input type="radio" class="btn-check" name="cm-origen" id="cm-origen-menu" value="menu">
+                    <!-- El salón trabaja con la carta: arranca filtrado en Menú
+                         para no tener que buscar entre todo el stock general. -->
+                    <input type="radio" class="btn-check" name="cm-origen" id="cm-origen-menu" value="menu" checked>
                     <label class="btn btn-outline-secondary" for="cm-origen-menu"><i class="bi bi-book me-1"></i>Menú</label>
                     <input type="radio" class="btn-check" name="cm-origen" id="cm-origen-producto" value="producto">
                     <label class="btn btn-outline-secondary" for="cm-origen-producto"><i class="bi bi-box-seam me-1"></i>Stock general</label>
@@ -162,6 +177,21 @@ $rutaAjax = $base . '/' . $rutaModulo;
                         <span id="cm-servicio">$0.00</span>
                     </div>
                 </div>
+                <?php if (!empty($empresaConfig['id_producto_propina']) && !empty($perm['crear']) && ($comanda['estado'] ?? '') === 'abierta'): ?>
+                <div class="row" id="cm-fila-propina">
+                    <div>
+                        <span class="text-muted">Propina voluntaria</span>
+                        <span class="input-group input-group-sm cm-propina-grp">
+                            <span class="input-group-text px-1">$</span>
+                            <input type="number" class="form-control text-end px-1" id="cm-propina" step="0.01" min="0" placeholder="0.00">
+                        </span>
+                    </div>
+                </div>
+                <?php else: ?>
+                <div class="row d-none" id="cm-fila-propina">
+                    <div><span class="text-muted">Propina</span><span id="cm-propina-valor">$0.00</span></div>
+                </div>
+                <?php endif; ?>
                 <div class="row total"><div><span>Total</span><span id="cm-total">$0.00</span></div></div>
             </div>
             <?php if (!empty($perm['crear']) && ($comanda['estado'] ?? '') === 'abierta'): ?>
@@ -225,14 +255,15 @@ $rutaAjax = $base . '/' . $rutaModulo;
       </div>
       <div class="modal-body">
         <div class="mb-2 fw-semibold" id="pg-monto"></div>
+        <!-- El salón emite siempre Factura: ya no se elige el tipo de documento.
+             El valor viaja igual en el hidden para no cambiar lo que espera el
+             servidor (PosVentaService sigue recibiendo tipo_documento). -->
         <div class="mb-2">
           <label class="form-label small mb-1">Documento</label>
-          <div class="btn-group w-100" role="group">
-            <input type="radio" class="btn-check" name="pg-tipo-doc" id="pg-doc-recibo" value="RECIBO" checked>
-            <label class="btn btn-outline-primary btn-sm" for="pg-doc-recibo">Recibo de venta</label>
-            <input type="radio" class="btn-check" name="pg-tipo-doc" id="pg-doc-factura" value="FACTURA">
-            <label class="btn btn-outline-primary btn-sm" for="pg-doc-factura">Factura</label>
+          <div class="form-control form-control-sm bg-light d-flex align-items-center gap-2" style="cursor:default;">
+            <i class="bi bi-receipt-cutoff text-primary"></i><span class="fw-semibold">Factura</span>
           </div>
+          <input type="hidden" id="pg-tipo-doc" value="FACTURA">
         </div>
         <div class="mb-2 position-relative">
           <label class="form-label small mb-1">Cliente (opcional; Consumidor Final si se deja vacío)</label>
@@ -245,8 +276,14 @@ $rutaAjax = $base . '/' . $rutaModulo;
         </div>
         <div id="pg-aviso-cf" class="small text-danger mb-2 d-none"></div>
         <div class="mb-2">
-          <label class="form-label small mb-1">Forma de pago</label>
+          <label class="form-label small mb-1">
+            Forma de pago
+            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'pg-forma-pago', 'id_forma_pago') ?>
+          </label>
           <select class="form-select form-select-sm" id="pg-forma-pago"></select>
+          <div class="form-text mt-1 d-none" id="pg-forma-sugerida" style="font-size:.72rem;">
+            <i class="bi bi-qrcode me-1"></i>El cliente sugirió pagar con <b id="pg-forma-sugerida-nombre"></b>. Puedes cambiarla.
+          </div>
         </div>
         <div id="pg-banco-wrap" class="d-none border rounded-2 p-2 bg-light">
           <div class="row g-2">
@@ -438,6 +475,18 @@ $rutaAjax = $base . '/' . $rutaModulo;
     let clienteTimer = null;
 
     function money(v) { return '$' + (parseFloat(v || 0)).toFixed(2); }
+
+    // Las cantidades vienen de Postgres como numeric ("1.000000"). Se muestran
+    // con los decimales que tenga configurada la empresa (Empresa → Facturación
+    // → Decimales), igual que en Factura de Venta.
+    const DEC_CANT = <?= (int) ($empresaConfig['decimales_cantidad'] ?? 2) ?>;
+    function cantidad(v) { return (parseFloat(v) || 0).toFixed(DEC_CANT); }
+
+    // Lo mismo para el PRECIO UNITARIO, que puede llevar más decimales que el
+    // dinero (un producto a 15.6522). Solo aplica al unitario: los importes
+    // —subtotales, IVA, totales— son dinero y van siempre a 2 decimales.
+    const DEC_PRECIO = <?= (int) ($empresaConfig['decimales_precio'] ?? 2) ?>;
+    function precio(v) { return (parseFloat(v) || 0).toFixed(DEC_PRECIO); }
     function escapeHtml(s) {
         return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
@@ -471,16 +520,47 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const ivaLinea = (d) => round2(round2(d.subtotal) * (parseFloat(d.porcentaje_iva) || 0) / 100);
     const totalLineaConIva = (d) => round2(round2(d.subtotal) + ivaLinea(d));
 
+    // La propina voluntaria del cliente viaja como una línea más (el campo
+    // <propina> del comprobante ya lo ocupa el recargo por servicio, y es uno
+    // solo). Se reconoce por su producto, el configurado en el establecimiento.
+    const ID_PRODUCTO_PROPINA = <?= (int) ($empresaConfig['id_producto_propina'] ?? 0) ?>;
+    const esLineaPropina = (d) => ID_PRODUCTO_PROPINA > 0 && parseInt(d.id_producto, 10) === ID_PRODUCTO_PROPINA;
+
+    /**
+     * ¿Esta línea todavía se puede tocar? Sí mientras no esté en una cuenta, o
+     * esté en una que aún no se cobró: el cliente puede pedir la cuenta y
+     * después decidir dejar más propina. Una vez cobrada pertenece a un
+     * documento emitido y no se toca. Mismo criterio que
+     * ComandaRepository::getLineaPropina.
+     */
+    function lineaEditable(d) {
+        if (!d.id_grupo_cobro) return true;
+        const g = grupos.find(x => String(x.id) === String(d.id_grupo_cobro));
+        // Solo lo cobrado está protegido: un grupo anulado ya no representa nada.
+        return !g || g.estado !== 'cobrado';
+    }
+
+    /**
+     * Propina que se edita desde el pie: la que no está en ninguna cuenta o está
+     * en una todavía pendiente de cobro.
+     */
+    function propinaLibre() {
+        return round2(detalles
+            .filter(d => d.estado_linea !== 'anulado' && esLineaPropina(d) && lineaEditable(d))
+            .reduce((a, d) => a + (parseFloat(d.subtotal) || 0), 0));
+    }
+
     // El recargo por servicio se calcula sobre la base sin impuestos de ESE
     // conjunto de líneas, así que al dividir la cuenta cada parte carga el suyo
     // — igual que PosVentaService, que aplica el porcentaje sobre el subtotal
     // del documento al emitirlo.
     function calcularTotales(vivas) {
-        let subtotal = 0, totalImpuestos = 0;
+        let subtotal = 0, totalImpuestos = 0, propina = 0;
         const impuestos = {};
         vivas.forEach(d => {
             const base = round2(d.subtotal);
             subtotal = round2(subtotal + base);
+            if (esLineaPropina(d)) propina = round2(propina + base);
             const pct = parseFloat(d.porcentaje_iva || 0);
             if (pct > 0) {
                 const lbl = `IVA ${pct}%`;
@@ -489,10 +569,14 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 totalImpuestos = round2(totalImpuestos + iva);
             }
         });
+        // El recargo se calcula sobre el CONSUMO, así que la propina voluntaria
+        // —que es una línea más— se descuenta de la base. Mismo criterio que
+        // PosVentaService al emitir: si no, dejar propina subiría el recargo.
+        const baseServicio = round2(subtotal - propina);
         const servicio = (aplicaServicio && porcentajeServicio > 0)
-            ? round2(subtotal * porcentajeServicio / 100)
+            ? round2(baseServicio * porcentajeServicio / 100)
             : 0;
-        return { subtotal, impuestos, totalImpuestos, servicio, total: round2(subtotal + totalImpuestos + servicio) };
+        return { subtotal, impuestos, totalImpuestos, servicio, propina, total: round2(subtotal + totalImpuestos + servicio) };
     }
 
     /**
@@ -548,6 +632,68 @@ $rutaAjax = $base . '/' . $rutaModulo;
         });
     }
 
+    // ─── Propina voluntaria ─────────────────────────────────────────────────
+    // Se guarda al salir del campo (o con Enter), no en cada tecla: cada guardado
+    // crea o actualiza la línea en el servidor.
+    const $propina = document.getElementById('cm-propina');
+    const $propinaValor = document.getElementById('cm-propina-valor');
+    const $filaPropina = document.getElementById('cm-fila-propina');
+    let guardandoPropina = false;
+
+    /** Refleja en el pie lo que realmente hay guardado (el input no se pisa mientras se escribe). */
+    function renderPropina(valor) {
+        if ($propina) {
+            if (document.activeElement !== $propina) {
+                $propina.value = valor > 0 ? valor.toFixed(2) : '';
+            }
+            return;
+        }
+        // Sin permiso o comanda cerrada: solo se muestra, y únicamente si hay algo.
+        if (!$filaPropina || !$propinaValor) return;
+        $filaPropina.classList.toggle('d-none', !(valor > 0));
+        $propinaValor.textContent = money(valor);
+    }
+
+    /** Guarda un monto de propina (0 la quita). Lo usan el campo del pie y la "x" de su fila. */
+    async function guardarPropinaMonto(monto) {
+        if (guardandoPropina) return;
+        guardandoPropina = true;
+        if ($propina) $propina.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.append('id_comanda', ID_COMANDA);
+            fd.append('monto', String(monto));
+            const r = await fetch(AJAX + '/guardarPropinaAjax', { method: 'POST', body: fd });
+            const d = await r.json();
+            if (!d.ok) { swalError(d.error || 'No se pudo guardar la propina.'); return; }
+            swalToast('success', d.msg);
+            await refrescarComanda();
+        } catch (e) {
+            swalError('Error de conexión.');
+        } finally {
+            guardandoPropina = false;
+            if ($propina) $propina.disabled = false;
+        }
+    }
+
+    async function guardarPropina() {
+        if (!$propina || guardandoPropina) return;
+        const monto = parseFloat($propina.value) || 0;
+        if (monto < 0) { swalError('La propina no puede ser negativa.'); $propina.value = ''; return; }
+
+        // Si no cambió respecto de lo guardado, no se molesta al servidor.
+        if (round2(monto) === propinaLibre()) return;
+
+        await guardarPropinaMonto(monto);
+    }
+
+    if ($propina) {
+        $propina.addEventListener('blur', guardarPropina);
+        $propina.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); $propina.blur(); }
+        });
+    }
+
     const ESTADO_LABEL = {
         pendiente: ['Sin enviar', 'secondary'], enviado: ['En preparación', 'info'],
         preparando: ['Preparando', 'warning'], listo: ['Listo para servir', 'success'],
@@ -563,8 +709,14 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 // "En preparación" solo tiene sentido si el ítem realmente pasa por una
                 // estación (cocina/barra); si no tiene, se saltó directo a poder entregarse
                 // y ese estado intermedio no le aplica — no se muestra ninguna etiqueta.
-                const sinEstacionEnviado = !d.id_estacion_impresion && d.estado_linea === 'enviado';
-                const [label, color] = sinEstacionEnviado ? [null, null] : (ESTADO_LABEL[d.estado_linea] || ['—', 'secondary']);
+                // Un ítem que no pasa por ninguna estación no tiene un estado que
+                // contar: decir "Entregado" sobre una bebida embotellada no le
+                // dice nada a nadie. Solo lleva etiqueta mientras esté pendiente
+                // de confirmar, que es lo único accionable. La propina, ni eso.
+                const esPropina = esLineaPropina(d);
+                const sinEstacion = !d.id_estacion_impresion;
+                const ocultarEstado = esPropina || (sinEstacion && d.estado_linea !== 'pendiente');
+                const [label, color] = ocultarEstado ? [null, null] : (ESTADO_LABEL[d.estado_linea] || ['—', 'secondary']);
                 const descuento = parseFloat(d.descuento || 0);
                 // El importe de cada ítem se muestra CON impuestos: mismo criterio
                 // con el que se ve el precio en el catálogo (tarjetas del grid) y
@@ -576,15 +728,30 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 const totalHtml = descuento > 0
                     ? '<span class="text-decoration-line-through text-muted small d-block">' + money(base) + '</span>' + money(totalLineaConIva(d))
                     : money(totalLineaConIva(d));
-                const puedeEditar = d.estado_linea !== 'anulado' && !d.id_grupo_cobro && PUEDE_ACTUALIZAR;
-                // Sin estación configurada = no hay nada que preparar (ej. una bebida embotellada):
-                // se puede entregar directo, sin esperar a que cocina/barra lo marque 'listo'.
-                const puedeEntregar = PUEDE_ACTUALIZAR && !['entregado', 'anulado'].includes(d.estado_linea)
-                    && (d.estado_linea === 'listo' || !d.id_estacion_impresion);
+                const editable = d.estado_linea !== 'anulado' && !d.id_grupo_cobro && PUEDE_ACTUALIZAR;
+                // La propina no admite descuento (no es un consumo), pero sí se
+                // puede quitar desde su propia fila: es lo más directo cuando el
+                // cliente se arrepiente. La quita el mismo endpoint que el campo
+                // del pie (guardarPropina con 0), no el de anular un ítem: así
+                // desaparece en vez de quedar como una línea anulada con opción
+                // de restaurar, que para una propina no tiene sentido.
+                const puedeEditar = editable && !esPropina;
+                // Con PUEDE_CREAR y no PUEDE_ACTUALIZAR: quitar la propina va por
+                // guardarPropinaAjax, que pide permiso de crear — el mismo con el
+                // que se muestra su campo en el pie.
+                // Se puede quitar aunque la cuenta ya esté pedida (mientras no se
+                // haya cobrado): si el cliente cambia de idea sobre la propina, el
+                // mesero la borra y pone otra, y esa cuenta se recalcula sola.
+                const puedeQuitarPropina = esPropina && PUEDE_CREAR && d.estado_linea !== 'anulado' && lineaEditable(d);
+                // Solo se entrega lo que cocina/barra marcó 'listo'. Un ítem sin
+                // estación no pasa por preparación (nace entregado), así que no
+                // tiene nada que entregar; si arrastra un estado viejo, tampoco
+                // se le ofrece el botón.
+                const puedeEntregar = PUEDE_ACTUALIZAR && d.estado_linea === 'listo' && !!d.id_estacion_impresion;
                 return `
                 <div class="cm-linea ${d.estado_linea === 'anulado' ? 'anulado' : ''}">
                     <div class="desc">
-                        <div class="n">${escapeHtml(d.cantidad)} x ${escapeHtml(d.descripcion)}${descTag}</div>
+                        <div class="n">${esPropina ? '' : cantidad(d.cantidad) + ' x '}${escapeHtml(d.descripcion)}${descTag}</div>
                         ${d.observacion_item ? '<div class="p">' + escapeHtml(d.observacion_item) + '</div>' : ''}
                         ${d.estado_linea !== 'anulado' && label ? '<div class="estado"><span class="badge bg-' + color + '-subtle text-' + color + '-emphasis">' + label + '</span></div>' : ''}
                         ${puedeEntregar ? '<button type="button" class="btn btn-sm btn-success entregar mt-1" data-id="' + d.id + '"><i class="bi bi-check2-circle me-1"></i>Entregar</button>' : ''}
@@ -593,6 +760,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     ${puedeEditar ? '<button type="button" class="btn btn-outline-secondary btn-desc" data-id="' + d.id + '" title="Aplicar descuento"><i class="bi bi-percent"></i></button>' : ''}
                     <div class="total" title="IVA incluido">${totalHtml}</div>
                     ${puedeEditar ? '<span class="rm" data-id="' + d.id + '" title="Eliminar ítem"><i class="bi bi-x-lg"></i></span>' : ''}
+                    ${puedeQuitarPropina ? '<span class="rm rm-propina" title="Quitar la propina"><i class="bi bi-x-lg"></i></span>' : ''}
                 </div>`;
             }).join('');
         }
@@ -601,6 +769,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
         $impuestos.innerHTML = Object.entries(t.impuestos).map(([lbl, val]) =>
             `<div class="row"><div><span class="text-muted">${lbl}</span><span>${money(val)}</span></div></div>`).join('');
         renderServicio(t.servicio);
+        // El campo del pie edita solo la propina que todavía no está en ninguna
+        // cuenta: la que ya viajó en un grupo pertenece a esa cuenta y no se
+        // toca (mismo criterio que ComandaRepository::getLineaPropina).
+        renderPropina(propinaLibre());
         $total.textContent = money(t.total);
         renderGrupos();
         actualizarBadgePendientes();
@@ -608,6 +780,23 @@ $rutaAjax = $base . '/' . $rutaModulo;
         actualizarAvisoAsistencia();
         const $btnVistaPrevia = document.getElementById('cm-btn-vista-previa');
         if ($btnVistaPrevia) $btnVistaPrevia.disabled = vivas.length === 0;
+        actualizarBotonCobrar();
+    }
+
+    /**
+     * El botón "Cobrar" del pie arma una cuenta nueva. Si el cliente ya pidió la
+     * suya desde el QR, esa cuenta ya está armada y esperando: el mesero la
+     * cobra con el botón del propio grupo, no armando otra. Se deshabilita para
+     * que no se le pase por alto la que el cliente pidió.
+     */
+    function actualizarBotonCobrar() {
+        const $btn = document.getElementById('cm-btn-cobrar');
+        if (!$btn) return;
+        const pedidaPorCliente = grupos.some(g => g.origen === 'qr' && g.estado === 'pendiente');
+        $btn.disabled = pedidaPorCliente;
+        $btn.title = pedidaPorCliente
+            ? 'El cliente ya pidió su cuenta desde el QR: cóbrala con el botón de esa cuenta.'
+            : '';
     }
 
     // Aviso persistente (no un toast que se pierde) de ítems que cocina/barra
@@ -652,6 +841,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
     // distintas terminen repartiéndose.
     function actualizarBadgePendientes() {
         if (!$btnEnviarCocina) return;
+        // Cuentan todas las pendientes, tengan estación o no: el botón es el que
+        // cierra el pedido. Las que no tienen estación no van a cocina — quedan
+        // entregadas de una vez (ver enviarLineasACocina) — pero igual hay que
+        // poder despacharlas, o se quedarían pendientes para siempre.
         const pendientes = detalles.filter(d => d.estado_linea === 'pendiente').length;
         const $badge = document.getElementById('cm-badge-pendientes');
         if ($badge) {
@@ -672,9 +865,14 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const solicitud = (g.origen === 'qr' && g.estado === 'pendiente')
                 ? `<div class="doc"><i class="bi bi-qrcode me-1"></i>Pedido desde el QR — ${escapeHtml(g.cliente_nombre || '')} (${g.tipo_documento_solicitado === 'FACTURA' ? 'Factura' : 'Recibo'})</div>`
                 : '';
+            // Cómo dijo el cliente que piensa pagar. Es una sugerencia: se
+            // precarga al cobrar, pero el mesero elige la forma definitiva.
+            const sugerencia = (g.estado === 'pendiente' && g.forma_pago_sugerida_nombre)
+                ? `<div class="doc"><i class="bi bi-cash-coin me-1"></i>Sugiere pagar con <b>${escapeHtml(g.forma_pago_sugerida_nombre)}</b></div>`
+                : '';
             const btns = g.estado === 'pendiente' && PUEDE_CREAR ? `
                 <div class="d-flex gap-1">
-                    <button type="button" class="btn btn-sm btn-success py-0 px-2 cb-cobrar-grupo" data-id="${g.id}" data-monto="${monto}" data-id-cliente="${g.id_cliente || ''}" data-cliente-nombre="${escapeHtml(g.cliente_nombre || '')}" data-tipo-doc="${g.tipo_documento_solicitado || ''}">Cobrar</button>
+                    <button type="button" class="btn btn-sm btn-success py-0 px-2 cb-cobrar-grupo" data-id="${g.id}" data-monto="${monto}" data-id-cliente="${g.id_cliente || ''}" data-cliente-nombre="${escapeHtml(g.cliente_nombre || '')}" data-tipo-doc="${g.tipo_documento_solicitado || ''}" data-forma-sugerida="${g.id_forma_pago_sugerida || ''}" data-forma-sugerida-nombre="${escapeHtml(g.forma_pago_sugerida_nombre || '')}">Cobrar</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 cb-deshacer-grupo" data-id="${g.id}" title="Deshacer"><i class="bi bi-arrow-counterclockwise"></i></button>
                 </div>` : (g.estado === 'cobrado' ? `
                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 cb-imprimir-grupo" data-id-doc="${g.id_documento}" data-tipo-doc="${g.tipo_documento}" title="Imprimir tirilla"><i class="bi bi-receipt"></i></button>` : '');
@@ -684,6 +882,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     <div class="doc">${money(monto)}</div>
                     ${doc}
                     ${solicitud}
+                    ${sugerencia}
                 </div>
                 ${btns}
             </div>`;
@@ -789,6 +988,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
         const restaurar = ev.target.closest('.restaurar');
         const desc = ev.target.closest('.btn-desc');
         if (desc) { abrirDescuentoLinea(parseInt(desc.dataset.id, 10)); return; }
+        // La propina se quita poniéndola en 0: mismo camino que el campo del pie,
+        // así la línea desaparece en vez de quedar anulada.
+        if (rm && rm.classList.contains('rm-propina')) {
+            if ($propina) { $propina.value = ''; }
+            await guardarPropinaMonto(0);
+            return;
+        }
         if (rm) {
             const fd = new FormData();
             fd.append('id_linea', rm.dataset.id);
@@ -876,7 +1082,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
     }
 
     let catalogoCompleto = [];
-    let filtroOrigen = 'todos';
+    // Arranca en 'menu', igual que el radio marcado en el HTML: el mesero toma
+    // pedidos de la carta, no del stock general.
+    let filtroOrigen = 'menu';
 
     function aplicarFiltroOrigen() {
         const rows = filtroOrigen === 'todos' ? catalogoCompleto : catalogoCompleto.filter(p => p.origen === filtroOrigen);
@@ -1180,7 +1388,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 return `
                 <label class="cb-linea${enPreparacion ? ' text-muted' : ''}">
                     <input type="checkbox" class="form-check-input cb-check" data-id="${d.id}" ${enPreparacion ? 'disabled' : 'checked'}>
-                    <span class="desc">${escapeHtml(d.cantidad)} x ${escapeHtml(d.descripcion)}${enPreparacion ? ' <span class="badge bg-warning-subtle text-warning-emphasis">en preparación</span>' : ''}</span>
+                    <span class="desc">${esLineaPropina(d) ? '' : cantidad(d.cantidad) + ' x '}${escapeHtml(d.descripcion)}${enPreparacion ? ' <span class="badge bg-warning-subtle text-warning-emphasis">en preparación</span>' : ''}</span>
                     <span class="total">${money(totalLineaConIva(d))}</span>
                 </label>`;
             }).join('');
@@ -1268,11 +1476,36 @@ $rutaAjax = $base . '/' . $rutaModulo;
         document.getElementById('pg-fecha-cobro').value = '';
         document.getElementById('pg-tipo-op-banco').value = 'TRANSFERENCIA';
         document.getElementById('pg-fecha-cobro-wrap').classList.add('d-none');
-        document.getElementById(preset.tipoDocumento === 'FACTURA' ? 'pg-doc-factura' : 'pg-doc-recibo').checked = true;
+        // El tipo de documento ya no se elige: siempre Factura, también cuando el
+        // pedido vino del QR pidiendo recibo (preset.tipoDocumento se ignora).
+        document.getElementById('pg-tipo-doc').value = 'FACTURA';
 
         const $sel = document.getElementById('pg-forma-pago');
         const formas = await cargarFormasPago();
         $sel.innerHTML = formas.map(f => `<option value="${f.id}" data-tipo="${escapeHtml(f.tipo || '')}" data-cod="${f.codigo_sri}">${escapeHtml(f.nombre)}</option>`).join('');
+
+        // Forma de pago favorita del usuario (la estrella junto al rótulo): se
+        // aplica recién ahora, porque el select se llena por AJAX y antes no
+        // existía la opción. El 'change' sincroniza la estrella y los campos de
+        // banco, que dependen del tipo de la forma elegida.
+        // Si el cliente sugirió una forma desde el QR, esa gana sobre el
+        // favorito del cajero: es específica de esta cuenta. Igual queda
+        // editable — quien decide el cobro es el mesero.
+        const favFormaPago = (typeof APP_FAVORITOS !== 'undefined') ? APP_FAVORITOS['id_forma_pago'] : null;
+        const formaPreseleccionada = preset.formaSugerida || favFormaPago;
+        if (formaPreseleccionada && Array.from($sel.options).some(o => o.value == formaPreseleccionada)) {
+            $sel.value = formaPreseleccionada;
+        }
+
+        // Se dice explícitamente que la forma viene del cliente: si no, el mesero
+        // no distinguiría una sugerencia suya de su propio favorito.
+        const $notaSugerida = document.getElementById('pg-forma-sugerida');
+        if ($notaSugerida) {
+            const hayNombre = !!preset.formaSugeridaNombre;
+            $notaSugerida.classList.toggle('d-none', !hayNombre);
+            if (hayNombre) document.getElementById('pg-forma-sugerida-nombre').textContent = preset.formaSugeridaNombre;
+        }
+        $sel.dispatchEvent(new Event('change'));
         toggleCamposBanco();
         revisarLimiteConsumidorFinal();
 
@@ -1348,6 +1581,8 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 idCliente: btnCobrar.dataset.idCliente,
                 clienteNombre: btnCobrar.dataset.clienteNombre,
                 tipoDocumento: btnCobrar.dataset.tipoDoc,
+                formaSugerida: btnCobrar.dataset.formaSugerida,
+                formaSugeridaNombre: btnCobrar.dataset.formaSugeridaNombre,
             });
         }
         if (btnImprimir) {
@@ -1646,8 +1881,16 @@ $rutaAjax = $base . '/' . $rutaModulo;
         const lineas = vivas.map(d => {
             const pct = parseFloat(d.porcentaje_iva || 0);
             const descExtra = parseFloat(d.descuento || 0) > 0 ? ` — desc. $${fmt(d.descuento)}` : '';
+            // La propina va en UNA sola fila, con el importe a la derecha del
+            // nombre: no es un consumo con cantidad y precio unitario, así que no
+            // tiene segunda línea de detalle — sin esto el valor quedaba colgando
+            // un renglón más abajo que su texto.
+            if (esLineaPropina(d)) {
+                return `<tr><td style="padding:1px 0;">${escapeHtml(d.descripcion)}</td>
+                    <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(d.subtotal)}</td></tr>`;
+            }
             return `<tr><td colspan="2" style="padding:1px 0;">${escapeHtml(d.descripcion + descExtra)}</td></tr>
-                <tr><td style="padding:1px 0;color:#555;">${fmt(d.cantidad)} x $${fmt(d.precio_unitario)} (IVA ${pct}%)</td>
+                <tr><td style="padding:1px 0;color:#555;">${cantidad(d.cantidad)} x $${precio(d.precio_unitario)} (IVA ${pct}%)</td>
                 <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(d.subtotal)}</td></tr>`;
         }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
 
@@ -1673,6 +1916,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 .totales td { padding: 1px 0; }
                 .totales tr:last-child td { font-weight: bold; font-size: 10px; }
                 h2 { font-size: 11px; margin: 2px 0; }
+                h3 { font-size: 9px; margin: 1px 0; font-weight: normal; }
                 @media print { body { width: 74mm; } button { display: none; } }
             </style>
         </head><body>
@@ -1692,8 +1936,6 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 ${servicio > 0 ? `<tr><td>Servicio ${porcentajeServicio}%</td><td style="text-align:right;">$${fmt(servicio)}</td></tr>` : ''}
                 <tr><td>TOTAL A PAGAR</td><td style="text-align:right;">$${fmt(total)}</td></tr>
             </table>
-            <hr class="sep">
-            <div class="center" style="font-size:8px;">Esta cuenta es solo una vista previa.<br>No tiene validez tributaria.</div>
             <br><br>
             <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
         </body></html>`;
@@ -1755,8 +1997,15 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 const desc = parseFloat(d.descuento || 0);
                 const tot = parseFloat(d.precio_total_sin_impuesto || 0);
                 const ivaPct = (d.impuestos && d.impuestos[0]) ? parseFloat(d.impuestos[0].tarifa || 0).toFixed(0) : '0';
+                // La propina va en UNA sola fila, con el importe junto al nombre:
+                // sin cantidad ni precio unitario no hay segunda línea que
+                // ocupar, y el valor quedaría colgando un renglón más abajo.
+                if (esLineaPropina(d)) {
+                    return `<tr><td style="padding:1px 0;">${escapeHtml(d.descripcion)}</td>
+                        <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(tot)}</td></tr>`;
+                }
                 return `<tr><td colspan="2" style="padding:1px 0;">${escapeHtml(d.descripcion)}</td></tr>
-                    <tr><td style="padding:1px 0;color:#555;">${fmt(cant)} x $${fmt(pu)}${desc > 0 ? ` desc.$${fmt(desc)}` : ''} (IVA ${ivaPct}%)</td>
+                    <tr><td style="padding:1px 0;color:#555;">${cantidad(cant)} x $${precio(pu)}${desc > 0 ? ` desc.$${fmt(desc)}` : ''} (IVA ${ivaPct}%)</td>
                     <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(tot)}</td></tr>`;
             }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
 
@@ -1833,7 +2082,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         const $sel = document.getElementById('pg-forma-pago');
         const opt = $sel.options[$sel.selectedIndex];
         if (!opt) { swalError('No hay formas de pago configuradas para esta empresa.'); return; }
-        const tipoDoc = document.querySelector('input[name="pg-tipo-doc"]:checked').value;
+        const tipoDoc = document.getElementById('pg-tipo-doc').value;
         const esBanco = (opt.dataset.tipo || '').toUpperCase() === 'BANCO';
         const tipoOperacionBancaria = esBanco ? document.getElementById('pg-tipo-op-banco').value : '';
         const fechaCobro = document.getElementById('pg-fecha-cobro').value;

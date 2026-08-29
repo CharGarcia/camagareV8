@@ -73,6 +73,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const $grid = document.getElementById('kd-grid');
     let comandas = <?= json_encode($comandas, JSON_UNESCAPED_UNICODE) ?>;
 
+    // Las cantidades vienen de Postgres como numeric ("1.000000"): se muestran
+    // con los decimales configurados en Empresa → Facturación.
+    const DEC_CANT = <?= (int) ($decimalesCantidad ?? 2) ?>;
+    function cantidad(v) { return (parseFloat(v) || 0).toFixed(DEC_CANT); }
+
     function escapeHtml(s) {
         return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
@@ -111,7 +116,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                         </div>
                         ${c.lineas.map(item => `
                             <div class="kd-item">
-                                <div class="desc">${escapeHtml(item.cantidad)} x ${escapeHtml(item.descripcion)}</div>
+                                <div class="desc">${cantidad(item.cantidad)} x ${escapeHtml(item.descripcion)}</div>
                                 ${item.observacion_item ? '<div class="obs"><i class="bi bi-chat-left-text me-1"></i>' + escapeHtml(item.observacion_item) + '</div>' : ''}
                                 ${badgeAccion(item)}
                             </div>`).join('')}

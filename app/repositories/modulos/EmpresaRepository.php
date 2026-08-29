@@ -556,6 +556,7 @@ class EmpresaRepository extends BaseModel
             'servicio_restaurante'            => 'no',
             'servicio_restaurante_porcentaje' => 0.0,
             'mostrar_propina_factura'         => 'false',
+            'id_producto_propina'             => null,
         ];
         if (!$this->tieneColumnasServicioRestaurante()) {
             return $default;
@@ -564,10 +565,31 @@ class EmpresaRepository extends BaseModel
         // mostrar_propina_factura viaja aquí porque es el interruptor maestro:
         // sin campo de propina en el comprobante no hay dónde emitir el recargo
         // (quien aplica esa regla es ComandaService::getConfigServicio).
-        $res = $this->query("SELECT servicio_restaurante, servicio_restaurante_porcentaje, mostrar_propina_factura
+        // id_producto_propina llegó después (comandas_propina_voluntaria.sql), así
+        // que se pide solo si la columna ya existe — mismo criterio defensivo que
+        // el resto de este método.
+        $colPropina = $this->tieneColumnaProductoPropina() ? ', id_producto_propina' : '';
+        $res = $this->query("SELECT servicio_restaurante, servicio_restaurante_porcentaje, mostrar_propina_factura{$colPropina}
                              FROM empresa_establecimiento
                              WHERE id = {$id} AND eliminado = false");
-        return $res[0] ?? $default;
+        return array_merge($default, $res[0] ?? []);
+    }
+
+    /** Cacheado por request: el esquema no cambia a media petición. */
+    public function tieneColumnaProductoPropina(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            try {
+                $res = $this->query("SELECT 1 FROM information_schema.columns
+                                     WHERE table_name = 'empresa_establecimiento'
+                                       AND column_name = 'id_producto_propina'");
+                $existe = !empty($res);
+            } catch (\Throwable $e) {
+                $existe = false;
+            }
+        }
+        return $existe;
     }
 
     /** Cacheado por request: el esquema no cambia a media petición. */
@@ -603,7 +625,7 @@ class EmpresaRepository extends BaseModel
             'id_forma_pago_sri_def',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
             'mostrar_propina_factura',
-            'servicio_restaurante', 'servicio_restaurante_porcentaje',
+            'servicio_restaurante', 'servicio_restaurante_porcentaje', 'id_producto_propina',
             'factura_agrupar_items', 'factura_item_mostrar_unidad',
             'factura_item_mostrar_lote', 'factura_item_mostrar_caducidad',
             'factura_item_mostrar_nup',
@@ -612,7 +634,7 @@ class EmpresaRepository extends BaseModel
         ];
 
         // Campos numéricos que admiten NULL
-        $numericNullable = ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'id_tarifa_iva_defecto_libre'];
+        $numericNullable = ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'id_tarifa_iva_defecto_libre', 'id_producto_propina'];
 
         $sets = [];
         foreach ($data as $k => $v) {

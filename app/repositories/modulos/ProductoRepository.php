@@ -586,6 +586,70 @@ class ProductoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Servicios (no inventariables) activos, con su tarifa de IVA. Lo usa el
+     * buscador de Empresa → Facturación para elegir el producto con el que se
+     * emite la propina voluntaria de las comandas: tiene que ser un servicio,
+     * porque una propina no mueve stock.
+     *
+     * Va con búsqueda y tope de filas a propósito: un catálogo puede tener miles
+     * de ítems y volcarlos todos en la pantalla no sirve para elegir uno.
+     */
+    public function getServicios(int $idEmpresa, string $buscar = '', int $limite = 15): array
+    {
+        $where = "p.id_empresa = :id_empresa AND p.eliminado = false
+                  AND p.inventariable = false AND p.status = 1";
+        $params = [':id_empresa' => $idEmpresa];
+        $buscar = trim($buscar);
+        if ($buscar !== '') {
+            $where .= " AND (p.nombre ILIKE :b OR p.codigo ILIKE :b2)";
+            $params[':b']  = '%' . $buscar . '%';
+            $params[':b2'] = '%' . $buscar . '%';
+        }
+        $limite = max(1, min(50, $limite));
+        $sql = "SELECT p.id, p.codigo, p.nombre, ti.porcentaje_iva
+                FROM {$this->table} p
+                LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+                WHERE {$where}
+                ORDER BY p.nombre ASC
+                LIMIT {$limite}";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cambia SOLO la foto de un producto. Lo usa el módulo Menú: la foto del
+     * plato y la del producto vinculado son la misma, así que al cambiarla desde
+     * la carta se actualiza también en el catálogo. Es un update acotado a
+     * propósito — no toca precio, stock ni nada más del producto.
+     */
+    public function actualizarImagen(int $id, int $idEmpresa, ?string $imagen, int $idUsuario): void
+    {
+        $sql = "UPDATE {$this->table}
+                   SET imagen = :img, updated_at = CURRENT_TIMESTAMP, updated_by = :u
+                 WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $this->db->prepare($sql)->execute([
+            ':img' => ($imagen !== null && $imagen !== '') ? $imagen : null,
+            ':u'   => $idUsuario,
+            ':id'  => $id,
+            ':e'   => $idEmpresa,
+        ]);
+    }
+
+    /** Un servicio por id, con el mismo shape que getServicios() — para mostrar el ya elegido en el buscador. */
+    public function getServicioPorId(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT p.id, p.codigo, p.nombre, ti.porcentaje_iva
+                FROM {$this->table} p
+                LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+                WHERE p.id = :id AND p.id_empresa = :e AND p.eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function getPrecios(int $idProducto, int $idEmpresa): array
     {
         $sql = "SELECT id, nombre_precio, precio, valido_desde, valido_hasta, estado

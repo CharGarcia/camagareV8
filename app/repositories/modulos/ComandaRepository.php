@@ -50,6 +50,60 @@ class ComandaRepository extends BaseRepository
         return $existe;
     }
 
+    /** Cacheado por request. Mientras falte comandas_aviso_pedido_qr.sql, el aviso simplemente no existe. */
+    public function tieneColumnaAvisoPedidoQr(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            try {
+                $st = $this->db->query("SELECT 1 FROM information_schema.columns
+                                        WHERE table_name = 'comandas' AND column_name = 'pedido_qr_pendiente'");
+                $existe = (bool) $st->fetchColumn();
+            } catch (\Throwable $e) {
+                $existe = false;
+            }
+        }
+        return $existe;
+    }
+
+    /** Enciende o apaga el aviso de "esta mesa pidió desde el QR" (lo lee el tablero). */
+    public function marcarPedidoQr(int $idComanda, int $idEmpresa, bool $pendiente): void
+    {
+        if (!$this->tieneColumnaAvisoPedidoQr()) {
+            return;
+        }
+        $sql = "UPDATE comandas
+                   SET pedido_qr_pendiente = :p,
+                       pedido_qr_at = CASE WHEN :p2 THEN CURRENT_TIMESTAMP ELSE pedido_qr_at END
+                 WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $this->db->prepare($sql)->execute([
+            ':p'  => $pendiente ? 'true' : 'false',
+            ':p2' => $pendiente ? 'true' : 'false',
+            ':id' => $idComanda,
+            ':e'  => $idEmpresa,
+        ]);
+    }
+
+    /**
+     * Cacheado por request. Igual que arriba: si el código llega al servidor
+     * antes que comandas_forma_pago_sugerida_qr.sql, la sugerencia del cliente
+     * simplemente no se lee, en vez de tumbar la pantalla de la comanda.
+     */
+    public function tieneColumnaFormaPagoSugerida(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            try {
+                $st = $this->db->query("SELECT 1 FROM information_schema.columns
+                                        WHERE table_name = 'comanda_grupos_cobro' AND column_name = 'id_forma_pago_sugerida'");
+                $existe = (bool) $st->fetchColumn();
+            } catch (\Throwable $e) {
+                $existe = false;
+            }
+        }
+        return $existe;
+    }
+
     /**
      * @param string $modoServicio 'no' | 'obligatorio' | 'opcional', ya resuelto
      *                             por PosVentaService::getConfigServicio().
@@ -57,8 +111,21 @@ class ComandaRepository extends BaseRepository
      *                             se abrieron antes de que existiera el recargo
      *                             y no tienen snapshot propio.
      */
-    public function getTablero(int $idEmpresa, string $modoServicio = 'no', float $pctVigente = 0.0): array
+    public function getTablero(int $idEmpresa, string $modoServicio = 'no', float $pctVigente = 0.0, int $idProductoPropina = 0): array
     {
+        // La propina voluntaria viaja como una línea más, pero no genera recargo
+        // por servicio: se excluye de la base igual que en PosVentaService y en
+        // el pie de la comanda, o el tablero mostraría un total mayor.
+        $condPropina = $idProductoPropina > 0
+            ? "d.id_producto IS DISTINCT FROM " . $idProductoPropina
+            : "true";
+
+        // Aviso de "esta mesa pidió desde el QR". Mientras falte su migración se
+        // devuelve en false, para no tumbar el tablero.
+        $selPedidoQr = $this->tieneColumnaAvisoPedidoQr()
+            ? "COALESCE(c.pedido_qr_pendiente, false) AS pedido_qr_pendiente,"
+            : "false AS pedido_qr_pendiente,";
+
         // Misma regla que ComandaService::porcentajeServicioComanda(): con
         // 'obligatorio' el recargo va sí o sí, sin mirar el estado de la
         // comanda; con 'opcional' manda lo que decidió el mesero.
@@ -66,7 +133,7 @@ class ComandaRepository extends BaseRepository
         $pct = "COALESCE(NULLIF(c.porcentaje_servicio, 0), " . (float) $pctVigente . ")";
         $condicion = $modoServicio === 'obligatorio' ? "c.id IS NOT NULL" : "COALESCE(c.aplica_servicio, false)";
         $exprServicio = "CASE WHEN {$condicion}
-                              THEN ROUND(COALESCE(dt.base, 0) * {$pct} / 100.0, 2)
+                              THEN ROUND(COALESCE(dt.base_servicio, 0) * {$pct} / 100.0, 2)
                               ELSE 0 END";
 
         $selServicio = $conServicio
@@ -80,6 +147,7 @@ class ComandaRepository extends BaseRepository
                        c.id AS id_comanda, c.numero_comanda, c.fecha_apertura, c.comensales,
                        c.id_usuario_mesero, u.nombre AS mesero_nombre,
                        COALESCE(c.solicita_asistencia, false) AS solicita_asistencia,
+                       {$selPedidoQr}
                        -- Recargo por servicio (el 10%): sobre la base sin impuestos,
                        -- igual que la propina del comprobante.
                        {$selServicio}
@@ -98,7 +166,12 @@ class ComandaRepository extends BaseRepository
                     -- factura digan el mismo número.
                     SELECT d.id_comanda,
                            SUM(d.subtotal) AS base,
-                           SUM(ROUND(d.subtotal * COALESCE(tp.porcentaje_iva, tm.porcentaje_iva, 0) / 100.0, 2)) AS iva,
+                           -- Mismo orden que SQL_SELECT_IVA: manda la tarifa del
+                           -- ítem del Menú y solo si no tiene, la del producto.
+                           SUM(ROUND(d.subtotal * COALESCE(tm.porcentaje_iva, tp.porcentaje_iva, 0) / 100.0, 2)) AS iva,
+                           -- Base del recargo por servicio: el consumo, sin la
+                           -- línea de propina voluntaria (que no lo genera).
+                           SUM(d.subtotal) FILTER (WHERE {$condPropina}) AS base_servicio,
                            COUNT(*) AS items,
                            COUNT(*) FILTER (WHERE d.estado_linea = 'pendiente') AS pendientes,
                            COUNT(*) FILTER (WHERE d.estado_linea = 'listo') AS listos
@@ -286,12 +359,18 @@ class ComandaRepository extends BaseRepository
 
     public function insertLinea(array $d): int
     {
+        // estado_linea normalmente arranca en 'pendiente' (falta enviarla a
+        // preparación). La propina voluntaria entra ya como 'entregado': no se
+        // prepara ni se sirve, y dejarla pendiente la haría figurar en el aviso
+        // de ítems por entregar y bloquearía el pago desde el QR del cliente
+        // (ComandaRules::validarLineaCobrableQr exige que todo esté entregado).
+        $estado = (string) ($d['estado_linea'] ?? 'pendiente');
         $sql = "INSERT INTO comanda_detalle (
                     id_empresa, id_comanda, id_producto, id_menu_item, descripcion, cantidad, precio_unitario,
                     descuento, subtotal, observacion_item, id_estacion_impresion, lote, caducidad, nup, estado_linea, created_by
                 ) VALUES (
                     :e, :ic, :prod, :menu, :desc, :cant, :pu,
-                    :dscto, :sub, :obs, :est, :lote, :cad, :nup, 'pendiente', :cb
+                    :dscto, :sub, :obs, :est, :lote, :cad, :nup, :estado, :cb
                 ) RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -309,9 +388,54 @@ class ComandaRepository extends BaseRepository
             ':lote'  => $d['lote'] ?: null,
             ':cad'   => $d['caducidad'] ?: null,
             ':nup'   => $d['nup'] ?: null,
+            ':estado' => $estado,
             ':cb'    => $d['created_by'],
         ]);
         return (int) $st->fetchColumn();
+    }
+
+    // ─── Propina voluntaria ───────────────────────────────────────────────────
+
+    /**
+     * La línea de propina de una comanda, si ya existe. Es única por comanda: el
+     * mesero cambia el monto, no acumula varias. Se reconoce por su producto (el
+     * configurado en el establecimiento), no por la descripción.
+     */
+    public function getLineaPropina(int $idComanda, int $idEmpresa, int $idProductoPropina): ?array
+    {
+        // La propina editable: la que no está en ninguna cuenta y, si no hay, la
+        // de una cuenta todavía PENDIENTE — el cliente pide la cuenta y después
+        // decide dejar más propina, y esa cuenta se recalcula sola al cambiarla.
+        // La de una cuenta ya cobrada queda fuera: pertenece a un documento
+        // emitido. Así, además, una comanda dividida puede llevar una propina por
+        // cuenta en vez de chocar con la anterior.
+        $sql = "SELECT d.* FROM comanda_detalle d
+                LEFT JOIN comanda_grupos_cobro g ON g.id = d.id_grupo_cobro AND g.eliminado = false
+                WHERE d.id_comanda = :ic AND d.id_empresa = :e AND d.id_producto = :p
+                  AND d.eliminado = false AND d.estado_linea != 'anulado'
+                  AND (d.id_grupo_cobro IS NULL OR COALESCE(g.estado, '') <> 'cobrado')
+                ORDER BY (d.id_grupo_cobro IS NULL) DESC, d.id ASC
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ic' => $idComanda, ':e' => $idEmpresa, ':p' => $idProductoPropina]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Cambia el monto de la línea de propina (precio y subtotal van siempre iguales: cantidad 1, sin descuento). */
+    public function actualizarMontoPropina(int $idLinea, int $idEmpresa, float $monto): void
+    {
+        $sql = "UPDATE comanda_detalle SET precio_unitario = :m, subtotal = :m2
+                WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $this->db->prepare($sql)->execute([':m' => $monto, ':m2' => $monto, ':id' => $idLinea, ':e' => $idEmpresa]);
+    }
+
+    /** Quita la propina (monto 0): eliminación lógica, no queda como ítem anulado a la vista. */
+    public function eliminarLineaPropina(int $idLinea, int $idEmpresa): void
+    {
+        $sql = "UPDATE comanda_detalle SET eliminado = true
+                WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $this->db->prepare($sql)->execute([':id' => $idLinea, ':e' => $idEmpresa]);
     }
 
     public function anularLinea(int $idLinea, int $idComanda, int $idEmpresa): void
@@ -402,8 +526,15 @@ class ComandaRepository extends BaseRepository
             }
             $filtroIds = " AND id IN (" . implode(',', $ph) . ")";
         }
+        // Cada línea va a donde le corresponde: la que tiene estación pasa a
+        // 'enviado' y espera a cocina/barra; la que no tiene ("Preparar en:
+        // Ninguna") queda 'entregado' de una vez, porque no hay nada que preparar
+        // ni confirmación que esperar. Marcarla 'enviado' la dejaría colgada,
+        // sin poder entregarse ni pagarse desde el QR.
         $sql = "UPDATE comanda_detalle
-                SET estado_linea = 'enviado', enviado_at = CURRENT_TIMESTAMP
+                SET estado_linea = CASE WHEN id_estacion_impresion IS NULL THEN 'entregado' ELSE 'enviado' END,
+                    enviado_at = CURRENT_TIMESTAMP,
+                    entregado_at = CASE WHEN id_estacion_impresion IS NULL THEN CURRENT_TIMESTAMP ELSE entregado_at END
                 WHERE id_comanda = :ic AND id_empresa = :e AND eliminado = false
                   AND estado_linea = 'pendiente' $filtroIds";
         $st = $this->db->prepare($sql);
@@ -518,17 +649,21 @@ class ComandaRepository extends BaseRepository
 
     public function crearGrupoCobro(array $d): int
     {
+        // Mientras falte la migración de la sugerencia, el grupo se crea igual
+        // (sin ella) en vez de romper el cobro entero.
+        $tieneFps = $this->tieneColumnaFormaPagoSugerida();
+        $colFps = $tieneFps ? ', id_forma_pago_sugerida' : '';
+        $valFps = $tieneFps ? ', :fps' : '';
         $sql = "INSERT INTO comanda_grupos_cobro (
                     id_empresa, id_comanda, numero_grupo, etiqueta, tipo_split, created_by,
-                    id_cliente, tipo_documento_solicitado, origen,
+                    id_cliente, tipo_documento_solicitado, origen{$colFps},
                     id_grupo_padre, numero_parte, total_partes
                 ) VALUES (
                     :e, :ic, :num, :et, :split, :cb,
-                    :cli, :tds, :origen,
+                    :cli, :tds, :origen{$valFps},
                     :padre, :nparte, :tpartes
                 ) RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $params = [
             ':e'       => $d['id_empresa'],
             ':ic'      => $d['id_comanda'],
             ':num'     => $d['numero_grupo'],
@@ -541,7 +676,13 @@ class ComandaRepository extends BaseRepository
             ':padre'   => $d['id_grupo_padre'] ?? null,
             ':nparte'  => $d['numero_parte'] ?? null,
             ':tpartes' => $d['total_partes'] ?? null,
-        ]);
+        ];
+        if ($tieneFps) {
+            // Sugerencia del cliente desde el QR; el cobro real lo decide el mesero.
+            $params[':fps'] = !empty($d['id_forma_pago_sugerida']) ? (int) $d['id_forma_pago_sugerida'] : null;
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return (int) $st->fetchColumn();
     }
 
@@ -556,9 +697,15 @@ class ComandaRepository extends BaseRepository
 
     public function getGruposDeComanda(int $idComanda, int $idEmpresa): array
     {
-        $sql = "SELECT g.*, cl.nombre AS cliente_nombre
+        // fps: cómo dijo el cliente que piensa pagar al pedir su cuenta desde el
+        // QR. Se muestra al mesero y se le precarga al cobrar; la decisión final
+        // sigue siendo suya.
+        $selFps  = $this->tieneColumnaFormaPagoSugerida() ? ", fps.nombre AS forma_pago_sugerida_nombre" : ", NULL AS forma_pago_sugerida_nombre";
+        $joinFps = $this->tieneColumnaFormaPagoSugerida() ? "LEFT JOIN empresa_formas_pago fps ON fps.id = g.id_forma_pago_sugerida" : "";
+        $sql = "SELECT g.*, cl.nombre AS cliente_nombre{$selFps}
                 FROM comanda_grupos_cobro g
                 LEFT JOIN clientes cl ON cl.id = g.id_cliente
+                {$joinFps}
                 WHERE g.id_comanda = :ic AND g.id_empresa = :e AND g.eliminado = false
                 ORDER BY g.numero_grupo ASC";
         $st = $this->db->prepare($sql);

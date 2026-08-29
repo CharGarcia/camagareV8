@@ -73,7 +73,8 @@ class MenuRepository extends BaseRepository
 
         $sql = "SELECT m.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
                        c.nombre AS categoria_nombre, ti.porcentaje_iva,
-                       e.nombre AS estacion_nombre
+                       e.nombre AS estacion_nombre,
+                       COALESCE(p.imagen, m.imagen) AS imagen_efectiva
                 FROM menu_items m
                 LEFT JOIN productos p ON p.id = m.id_producto
                 LEFT JOIN categorias c ON c.id = m.id_categoria AND c.id_empresa = m.id_empresa
@@ -84,16 +85,34 @@ class MenuRepository extends BaseRepository
                 {$limitClause}";
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $rows = array_map([$this, 'aplicarImagenEfectiva'], $st->fetchAll(PDO::FETCH_ASSOC));
 
         return ['total' => $total, 'rows' => $rows];
+    }
+
+    /**
+     * La foto del ítem es la del producto vinculado: son la misma cosa, y al
+     * cambiarla desde la carta se actualiza también en Productos (ver
+     * MenuService::armarDatos). Solo un ítem sin producto lleva foto propia.
+     *
+     * Se resuelve aquí y no en el SELECT para no tener dos columnas 'imagen'
+     * (una de m.* y otra del COALESCE) y depender de cuál gana al leerlas.
+     */
+    private function aplicarImagenEfectiva(array $row): array
+    {
+        if (array_key_exists('imagen_efectiva', $row)) {
+            $row['imagen'] = $row['imagen_efectiva'];
+            unset($row['imagen_efectiva']);
+        }
+        return $row;
     }
 
     public function find(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT m.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
                        c.nombre AS categoria_nombre, ti.porcentaje_iva,
-                       e.nombre AS estacion_nombre
+                       e.nombre AS estacion_nombre,
+                       COALESCE(p.imagen, m.imagen) AS imagen_efectiva
                 FROM menu_items m
                 LEFT JOIN productos p ON p.id = m.id_producto
                 LEFT JOIN categorias c ON c.id = m.id_categoria AND c.id_empresa = m.id_empresa
@@ -103,7 +122,7 @@ class MenuRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':e' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+        return $row ? $this->aplicarImagenEfectiva($row) : null;
     }
 
     public function create(array $d): int
@@ -189,7 +208,7 @@ class MenuRepository extends BaseRepository
             $where .= " AND (m.nombre ILIKE :b OR m.descripcion ILIKE :b)";
             $params[':b'] = '%' . $buscar . '%';
         }
-        $sql = "SELECT m.id, m.id_producto, m.nombre, m.descripcion, m.precio, m.imagen,
+        $sql = "SELECT m.id, m.id_producto, m.nombre, m.descripcion, m.precio, COALESCE(p.imagen, m.imagen) AS imagen,
                        m.destacado, m.orden,
                        COALESCE(m.id_estacion_impresion, c.id_estacion_impresion, cp.id_estacion_impresion) AS id_estacion_impresion,
                        p.codigo AS producto_codigo, p.codigo_barras, p.codigo_auxiliar, p.inventariable, p.tipo_produccion,
@@ -212,7 +231,7 @@ class MenuRepository extends BaseRepository
     /** Mismo shape que getDisponibles() pero para un solo ítem — usado al agregarlo a una comanda. */
     public function getDisponibleById(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT m.id, m.id_producto, m.nombre, m.descripcion, m.precio, m.imagen,
+        $sql = "SELECT m.id, m.id_producto, m.nombre, m.descripcion, m.precio, COALESCE(p.imagen, m.imagen) AS imagen,
                        COALESCE(m.id_estacion_impresion, c.id_estacion_impresion, cp.id_estacion_impresion) AS id_estacion_impresion,
                        COALESCE(m.id_tarifa_iva, p.tarifa_iva) AS id_tarifa_iva
                 FROM menu_items m
