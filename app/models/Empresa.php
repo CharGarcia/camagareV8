@@ -51,6 +51,24 @@ class Empresa extends BaseModel
     }
 
     /**
+     * Cuenta los usuarios reales (nivel 1 o 2, activos, no eliminados) asignados a
+     * una empresa — excluye nivel 3 (superadmin), que no es personal de la empresa
+     * sino de la plataforma. Usado para distinguir un negocio con equipo de una
+     * persona natural trabajando sola (ver AuthController API: restricción iOS
+     * por Guideline 3.1.3(c) de Apple).
+     */
+    public function contarUsuariosRealesAsignados(int $idEmpresa): int
+    {
+        $id = $this->escape((string) $idEmpresa);
+        $sql = "SELECT COUNT(DISTINCT u.id) AS total
+                FROM empresa_asignada ea
+                INNER JOIN usuarios u ON u.id = ea.id_usuario
+                WHERE ea.id_empresa = '{$id}' AND u.nivel IN (1, 2) AND u.eliminado = false AND u.estado = 1";
+        $row = $this->query($sql);
+        return (int) ($row[0]['total'] ?? 0);
+    }
+
+    /**
      * Lista empresas para el módulo empresas del sistema.
      * SuperAdmin: todas. Admin: solo las que tiene asignadas.
      */

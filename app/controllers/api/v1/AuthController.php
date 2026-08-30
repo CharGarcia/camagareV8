@@ -24,6 +24,14 @@ class AuthController extends ApiBaseController
     private const ACCESS_TTL = 1800; // 30 minutos
 
     /**
+     * Mínimo de usuarios reales (nivel 1/2) que debe tener una empresa para que sus
+     * usuarios (no superadmin) puedan entrar por iOS — Apple exige (Guideline 3.1.1 /
+     * 3.1.3(c)) que los "servicios empresariales" vendidos sin In-App Purchase se
+     * usen por organizaciones/equipos, no por una persona individual trabajando sola.
+     */
+    private const MIN_USUARIOS_EMPRESA_IOS = 2;
+
+    /**
      * No aplica: AuthController no usa requireLeer/Crear/Actualizar/Eliminar (login/refresh
      * son públicos; el resto solo exige requireAuthApi(), sin permiso de submódulo).
      * Se implementa solo para satisfacer el método abstracto de ApiBaseController.
@@ -48,6 +56,7 @@ class AuthController extends ApiBaseController
         $password = trim((string) ($body['password'] ?? ''));
         $dispositivoId = trim((string) ($body['dispositivo_id'] ?? ''));
         $forceLogin = !empty($body['force_login']);
+        $plataforma = strtolower(trim((string) ($body['plataforma'] ?? '')));
 
         if ($cedula === '' || $password === '') {
             $this->jsonError('CREDENCIALES', 'Usuario o contraseña incorrectos.', 401);
@@ -95,6 +104,7 @@ class AuthController extends ApiBaseController
         if ($errorSinEmpresa) {
             $this->jsonError('SIN_EMPRESA', 'El usuario no tiene empresas asignadas.', 403);
         }
+        $this->validarEquipoRealParaIOS($plataforma, (int) $user['nivel'], $idEmpresa);
 
         $sessionToken = $sesionSvc->iniciarSesion((int) $user['id'], self::CANAL);
         $refreshToken = (new RefreshTokenService())->emitir((int) $user['id'], $sessionToken, $dispositivoId, self::CANAL);
@@ -241,6 +251,7 @@ class AuthController extends ApiBaseController
 
         $body = $this->getJsonBody();
         $idEmpresa = (int) ($body['id_empresa'] ?? 0);
+        $plataforma = strtolower(trim((string) ($body['plataforma'] ?? '')));
         if ($idEmpresa <= 0) {
             $this->jsonError('ID_EMPRESA_REQUERIDO', 'Falta id_empresa.', 422);
         }
@@ -249,6 +260,7 @@ class AuthController extends ApiBaseController
         if ($idEmpresaValidado === null) {
             $this->jsonError('EMPRESA_NO_ASIGNADA', 'No tiene permiso para acceder a esta empresa.', 403);
         }
+        $this->validarEquipoRealParaIOS($plataforma, $nivel, $idEmpresaValidado);
 
         $accessToken = $this->emitirAccessToken($idUsuario, (string) ($_SESSION['nombre'] ?? ''), $nivel, $idEmpresaValidado, (string) $claims['session_token']);
 
@@ -326,6 +338,28 @@ class AuthController extends ApiBaseController
         $asignadas = $model->getEmpresasAsignadas($idUsuario);
         $ids = array_map('intval', array_column($asignadas, 'id_empresa'));
         return in_array($idEmpresa, $ids, true) ? $idEmpresa : null;
+    }
+
+    /**
+     * Guideline 3.1.1 / 3.1.3(c) de Apple: los servicios "empresariales" sin
+     * In-App Purchase deben venderse a organizaciones/equipos, no a una persona
+     * individual trabajando sola. Nivel 3 (superadmin) no aplica: es personal de
+     * la plataforma, no un cliente. Solo bloquea en iOS — Android y la web no
+     * tienen esta restricción, Apple es la única tienda que la exige.
+     */
+    private function validarEquipoRealParaIOS(string $plataforma, int $nivel, ?int $idEmpresa): void
+    {
+        if ($plataforma !== 'ios' || $nivel >= 3 || $idEmpresa === null) {
+            return;
+        }
+        $totalUsuarios = (new Empresa())->contarUsuariosRealesAsignados($idEmpresa);
+        if ($totalUsuarios < self::MIN_USUARIOS_EMPRESA_IOS) {
+            $this->jsonError(
+                'EMPRESA_UNIPERSONAL_IOS',
+                'La app para iPhone/iPad está disponible para equipos de trabajo. Continúa usando CaMaGaRe desde la web o desde Android.',
+                403
+            );
+        }
     }
 
     private function emitirAccessToken(int $idUsuario, string $nombre, int $nivel, ?int $idEmpresa, string $sessionToken): string

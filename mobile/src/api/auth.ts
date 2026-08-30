@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 import { API_BASE_URL } from './config';
 import { api } from './client';
 
@@ -23,6 +24,7 @@ export async function login(
     password,
     dispositivo_id: dispositivoId,
     force_login: forceLogin,
+    plataforma: Platform.OS,
   });
   return resp.data.data;
 }
@@ -35,7 +37,7 @@ export async function empresas(): Promise<Empresa[]> {
 }
 
 export async function seleccionarEmpresa(idEmpresa: number): Promise<{ access_token: string; id_empresa: number }> {
-  const resp = await api.post('/auth/seleccionar-empresa', { id_empresa: idEmpresa });
+  const resp = await api.post('/auth/seleccionar-empresa', { id_empresa: idEmpresa, plataforma: Platform.OS });
   return resp.data.data;
 }
 
