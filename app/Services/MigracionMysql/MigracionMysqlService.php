@@ -1522,7 +1522,6 @@ class MigracionMysqlService
         $updDetCadProd = $pg->prepare("UPDATE consignaciones_ventas_detalles SET fecha_caducidad = :cad, updated_at = now() WHERE id_consignacion = :cons AND id_producto = :prod");
         $updDetCad     = $pg->prepare("UPDATE consignaciones_ventas_detalles SET fecha_caducidad = :cad, updated_at = now() WHERE id_consignacion = :cons AND id_producto = :prod AND COALESCE(lote,'') = COALESCE(:lote,'')");
 
-        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare(
             "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, id_punto_emision, created_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?) RETURNING id"
@@ -1535,6 +1534,13 @@ class MigracionMysqlService
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, fecha_entrega, hora_entrega_desde, hora_entrega_hasta
                   FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        // PRE-CARGA del detalle en UNA consulta (evita N+1 contra el MySQL viejo remoto, que con muchas
+        // consignaciones provoca timeout / "Failed to fetch"). Se agrupa por codigo_unico.
+        $detByCod = [];
+        foreach ($mysql->query("SELECT codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento
+                                  FROM detalle_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
+            $detByCod[(string) $d['codigo_unico']][] = $d;
+        }
         $stmt = $mysql->query($sql);
 
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -1549,9 +1555,8 @@ class MigracionMysqlService
                         $updEntrega->execute([':fe' => self::fechaCorta($ec['fecha_entrega']), ':hd' => $hd, ':hh' => $hh, ':u' => $idUsuario, ':id' => $dest]);
                         // Caducidad: se agrupa el detalle viejo por producto resuelto. Producto único →
                         // match sin lote (robusto); repetido → por lote. (Sin crear productos.)
-                        $detStmt->execute([':cu' => (string) $ec['codigo_unico'], ':base' => $base]);
                         $porProd = [];
-                        foreach ($detStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                        foreach ($detByCod[(string) $ec['codigo_unico']] ?? [] as $d) {
                             $idProdR = $mapProd[(string) (int) $d['id_producto']] ?? ($prodPorCod[(string) $d['codigo_producto']] ?? null);
                             if ($idProdR) { $porProd[$idProdR][] = $d; }
                         }
@@ -1586,8 +1591,7 @@ class MigracionMysqlService
                 $idVend = $mapVend[(string) (int) $ec['responsable']] ?? null;
                 $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ec['traslado_por'], $mysql, $pg, $respCache);
 
-                $detStmt->execute([':cu' => (string) $ec['codigo_unico'], ':base' => $base]);
-                $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+                $dets = $detByCod[(string) $ec['codigo_unico']] ?? [];
                 $sub = 0.0;
                 foreach ($dets as $d) { $sub += (float) $d['cant_consignacion'] * (float) $d['precio']; }
                 $est = ((int) $ec['status'] === 0) ? 'Anulada' : 'Emitida';
@@ -1664,7 +1668,6 @@ class MigracionMysqlService
         // factura por RUC base + serie (= serie_sucursal) + secuencial = factura_venta. NO se filtra por
         // cliente: en datos viejos el id_cli_pro de la consignación a veces apunta a un cliente de OTRA
         // empresa (referencia corrupta), pero el secuencial sí identifica la factura correcta (fecha coincide).
-        $oldFacNum = $esFactura ? $mysql->prepare("SELECT id_encabezado_factura, serie_factura, secuencial_factura, id_cliente FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = :b AND serie_factura = :serie AND CAST(secuencial_factura AS UNSIGNED) = :fv ORDER BY id_encabezado_factura LIMIT 1") : null;
         // Reconcile (re-migrar): actualiza los ya migrados (solo insertados, no vinculados) sin "Eliminar migrados".
         // La bodega del detalle se toma de la línea de ENTRADA (consignaciones_ventas_detalles) que ya la tiene.
         $mapDest = [];
@@ -1679,7 +1682,6 @@ class MigracionMysqlService
             $updDetBod = $pg->prepare("UPDATE retornos_cv_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_retorno = :id AND d.id_bodega IS NULL");
         }
 
-        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $opFilter = $esFactura ? "operacion = 'FACTURA'" : "operacion LIKE 'DEVOL%'";
 
         if ($esFactura) {
@@ -1693,6 +1695,26 @@ class MigracionMysqlService
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, factura_venta
                   FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND " . $opFilter . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        // PRE-CARGA para evitar N+1 contra el MySQL viejo remoto (causa de timeout / "Failed to fetch"):
+        // el detalle por codigo_unico, y (si es factura) las facturas del RUC por serie|secuencial.
+        $detByCod = [];
+        foreach ($mysql->query("SELECT codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup
+                                  FROM detalle_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
+            $detByCod[(string) $d['codigo_unico']][] = $d;
+        }
+        $facByKey = [];
+        if ($esFactura) {
+            foreach ($mysql->query("SELECT id_encabezado_factura, serie_factura, secuencial_factura, id_cliente
+                                      FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " ORDER BY id_encabezado_factura") as $f) {
+                $k = (string) $f['serie_factura'] . '|' . (int) $f['secuencial_factura'];
+                if (!isset($facByKey[$k])) { $facByKey[$k] = $f; } // primera por serie+secuencial (como el LIMIT 1 original)
+            }
+        }
+        // Busca la factura vieja por serie+secuencial (factura_venta) — o null.
+        $facLookup = static function (array $ec) use (&$facByKey): ?array {
+            if ((int) $ec['factura_venta'] <= 0) { return null; }
+            return $facByKey[(string) $ec['serie_sucursal'] . '|' . (int) $ec['factura_venta']] ?? null;
+        };
         $stmt = $mysql->query($sql);
 
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -1705,14 +1727,11 @@ class MigracionMysqlService
                         $pg->beginTransaction();
                         if ($esFactura) {
                             $numFac = null; $idFac = null; $cliFac = null;
-                            if ((int) $ec['factura_venta'] > 0) {
-                                $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta']]);
-                                $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
-                                if ($ff) {
-                                    $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
-                                    $idFac  = $mapFactura[(string) (int) $ff['id_encabezado_factura']] ?? null;
-                                    $cliFac = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ff['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg) ?: null;
-                                }
+                            $ff = $facLookup($ec);
+                            if ($ff) {
+                                $numFac = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+                                $idFac  = $mapFactura[(string) (int) $ff['id_encabezado_factura']] ?? null;
+                                $cliFac = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ff['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg) ?: null;
                             }
                             $updFacCab->execute([':nf' => $numFac, ':idf' => $idFac, ':cli' => $cliFac, ':u' => $idUsuario, ':id' => $dest]);
                         }
@@ -1730,8 +1749,7 @@ class MigracionMysqlService
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             // Resolver todas las líneas contra su ENTRADA origen ANTES de insertar (id_consignacion_detalle es NOT NULL)
-            $detStmt->execute([':cu' => (string) $ec['codigo_unico'], ':base' => $base]);
-            $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+            $dets = $detByCod[(string) $ec['codigo_unico']] ?? [];
             $lineas = [];
             $sub = 0.0;
             $incompleto = false;
@@ -1772,10 +1790,9 @@ class MigracionMysqlService
                     $idVend = $mapVend[(string) (int) $ec['responsable']] ?? null;
                     // factura_venta = SECUENCIAL de la factura → número real + id real (por RUC+serie+secuencial).
                     $numFac = null; $idFactura = null;
-                    if ((int) $ec['factura_venta'] > 0) {
-                        $oldFacNum->execute([':b' => $base, ':serie' => (string) $ec['serie_sucursal'], ':fv' => (int) $ec['factura_venta']]);
-                        $ff = $oldFacNum->fetch(PDO::FETCH_ASSOC);
-                        if ($ff) {
+                    $ff = $facLookup($ec);
+                    if ($ff) {
+                        {
                             $numFac    = trim((string) $ff['serie_factura']) . '-' . str_pad(preg_replace('/\D+/', '', (string) $ff['secuencial_factura']), 9, '0', STR_PAD_LEFT);
                             $idFactura = $mapFactura[(string) (int) $ff['id_encabezado_factura']] ?? null;
                             // El cliente correcto es el de la FACTURA (el id_cli_pro de la consignación a veces
