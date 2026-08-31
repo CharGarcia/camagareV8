@@ -674,10 +674,18 @@ class EgresoService
         // Cuentas por línea elegidas en el modal (si vinieron en el payload). En regeneración
         // masiva/sincronización no llegan y el builder las recupera del asiento existente.
         $detallesConCuenta = $data['detalles'] ?? [];
-        $detalles = (new AsientoBuilderService())->generarAsientoEgreso($idEmpresa, $idEgreso, $detallesConCuenta);
+        $builder  = new AsientoBuilderService();
+        $detalles = $builder->generarAsientoEgreso($idEmpresa, $idEgreso, $detallesConCuenta);
         if (empty($detalles)) {
             return;
         }
+
+        // Si el asiento quedó descuadrado por cuentas sin configurar, fallar aquí con el motivo
+        // concreto (qué cuenta falta y dónde se configura). Sin esto el error que ve el usuario es
+        // el de AsientoContableRules —"Total Debe (0) no coincide con Total Haber (…)"—, que no
+        // dice qué corregir. Si no se pudo determinar la causa no lanza nada y sigue el camino
+        // de siempre.
+        AsientoBuilderService::verificarCuadre($detalles, $builder->getMotivosFaltantes());
 
         $num        = $egreso['numero_egreso'] ?? (string) $idEgreso;
         $tipoSujeto = strtolower((string) ($egreso['tipo_sujeto'] ?? ''));

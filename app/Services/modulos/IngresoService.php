@@ -570,10 +570,15 @@ class IngresoService
         // Cuentas por línea elegidas en el modal (si vinieron en el payload). En regeneración
         // masiva/sincronización no llegan y el builder las recupera del asiento existente.
         $detallesConCuenta = $data['detalles'] ?? [];
-        $detalles = (new AsientoBuilderService())->generarAsientoIngreso($idEmpresa, $idIngreso, $detallesConCuenta);
+        $builder  = new AsientoBuilderService();
+        $detalles = $builder->generarAsientoIngreso($idEmpresa, $idIngreso, $detallesConCuenta);
         if (empty($detalles)) {
             return;
         }
+
+        // Mismo diagnóstico que en EgresoService::procesarAsientoContable: explicar qué cuenta
+        // falta en vez de dejar salir el genérico "El asiento no está cuadrado".
+        AsientoBuilderService::verificarCuadre($detalles, $builder->getMotivosFaltantes());
 
         $num = $ingreso['numero_ingreso'] ?? (string) $idIngreso;
         foreach ($detalles as &$d) {

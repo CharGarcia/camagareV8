@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes
-version: 1.3
+version: 1.4
 orden: 50
 estado: activo
 ---
@@ -119,11 +119,31 @@ Revise en este orden:
   detalle" del aviso. Si dice que no queda ningún cheque vigente o que no hay
   formas de cobro/pago, no falta configurar nada: ese documento no tiene valor que
   contabilizar. Los documentos **anulados** no se toman en cuenta.
+- **"El asiento no está cuadrado. Total Debe (0) no coincide con Total Haber"**:
+  ese aviso ya no debería aparecer en Ingresos ni en Egresos. En su lugar el
+  detalle dice **qué cuenta falta y dónde se configura** — por ejemplo *"Falta la
+  cuenta «Cuentas por Pagar» en Configuración Contable → Adquisiciones de
+  Compras/Servicios, o las facturas de compra que paga este egreso todavía no
+  tienen su propio asiento generado"*. Un Debe (o un Haber) en cero significa
+  siempre lo mismo: la contrapartida se quedó sin cuenta, no que el documento
+  esté mal.
+- **Un egreso que paga varias facturas de compra no genera su asiento**: no es
+  por tener varios documentos. Cada factura pagada toma su cuenta del asiento de
+  **esa** factura, así que si las facturas todavía no están contabilizadas —o son
+  documentos migrados, que no se sincronizan— el egreso se queda sin
+  contrapartida. Genere primero los asientos de Facturas de Compra y vuelva a
+  intentarlo; si aun así falta, configure la cuenta «Cuentas por Pagar» en
+  Configuración Contable.
 - **La utilidad no coincide con lo esperado**: compare con el mayor de las
   cuentas de ingreso y gasto para ver qué documento falta o sobra.
 
 ## Historial de cambios
 
+- **1.4** — Cuando el asiento de un ingreso o un egreso no se puede generar por
+  cuentas sin configurar, el aviso dice **qué cuenta falta y en qué sección de
+  Configuración Contable se asigna**, en lugar del genérico "El asiento no está
+  cuadrado. Total Debe (0) no coincide con Total Haber". Los documentos que fallan
+  por la misma causa se agrupan en un solo aviso.
 - **1.3** — El control de asientos pendientes deja de avisar cuentas faltantes que
   no lo son: reconoce la cuenta configurada en Configuración Contable (no solo la
   del módulo de Opciones/Formas) y omite los conceptos cuya cuenta la define su

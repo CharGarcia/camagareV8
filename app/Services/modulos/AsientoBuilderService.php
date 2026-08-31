@@ -91,6 +91,104 @@ class AsientoBuilderService
     /** Caché de cuentasDelSlot() por "empresa:codigo": se consulta una vez por lote, no por documento. */
     private array $cacheCuentasSlot = [];
 
+    /**
+     * Motivos por los que el asiento que se acaba de armar quedó incompleto: qué cuenta se buscó
+     * y no estaba configurada. Se llena mientras se arma y lo lee el Service para explicar el
+     * fallo en vez de dejar que salte el genérico "El asiento no está cuadrado. Debe (0)...",
+     * que no dice qué corregir. Los textos son ESTABLES a propósito —sin montos ni números de
+     * documento— para que SincronizadorAsientosService agrupe todos los documentos que fallan por
+     * la misma causa en un solo aviso, en lugar de una línea por documento.
+     */
+    private array $motivosFaltantes = [];
+
+    /** Motivos registrados al armar el último asiento (sin repetidos). */
+    public function getMotivosFaltantes(): array
+    {
+        return array_values($this->motivosFaltantes);
+    }
+
+    /** Registra un motivo, evitando duplicados (la misma forma puede repetirse en varias líneas). */
+    private function registrarFaltante(string $motivo): void
+    {
+        $this->motivosFaltantes[$motivo] = $motivo;
+    }
+
+    /**
+     * Motivo de que la contrapartida (el lado contrario a banco/caja) se quedara sin cuenta.
+     * El texto depende del comportamiento del concepto, porque cada uno toma su cuenta de una
+     * sección distinta de Configuración Contable — ver COMPORTAMIENTO_CUENTA_OFICIAL en
+     * AsientoProgramadoRepository.
+     *
+     * @param string $flujo 'ingreso' | 'egreso'
+     */
+    private function registrarFaltanteContrapartida(string $flujo, string $comportamiento, string $conceptoNombre): void
+    {
+        $comportamiento = strtoupper(trim($comportamiento));
+        $documento = $flujo === 'egreso' ? 'este egreso' : 'este ingreso';
+
+        switch ($comportamiento) {
+            case 'COMPRA':
+            case 'LIQUIDACION':
+                $this->registrarFaltante(
+                    'Falta la cuenta «Cuentas por Pagar» en Configuración Contable → Adquisiciones de '
+                    . "Compras/Servicios, o las facturas de compra que paga {$documento} todavía no tienen "
+                    . 'su propio asiento generado (genere primero los de Facturas de Compra).'
+                );
+                return;
+            case 'FACTURA_VENTA':
+                $this->registrarFaltante(
+                    'Falta la cuenta «Cuentas por Cobrar» en Configuración Contable → Ventas con Factura, '
+                    . "o las facturas que cobra {$documento} todavía no tienen su propio asiento generado "
+                    . '(genere primero los de Facturas de Venta).'
+                );
+                return;
+            case 'RECIBO_VENTA':
+                $this->registrarFaltante(
+                    'Falta la cuenta «Cuentas por Cobrar» en Configuración Contable → Recibos de Venta, '
+                    . "o los recibos que cobra {$documento} todavía no tienen su propio asiento generado."
+                );
+                return;
+            case 'ROL':
+                $this->registrarFaltante(
+                    'Faltan las cuentas «Sueldos por Pagar» y/o «Anticipos y Descuentos» en '
+                    . 'Configuración Contable → Nómina.'
+                );
+                return;
+        }
+
+        $seccion = 'Configuración Contable → Ingresos y Egresos';
+        $this->registrarFaltante($conceptoNombre !== ''
+            ? "El concepto «{$conceptoNombre}» no tiene cuenta contable asignada ({$seccion})."
+            : "El concepto de {$documento} no tiene cuenta contable asignada ({$seccion}).");
+    }
+
+    /**
+     * Convierte los motivos recogidos en una excepción que sí dice qué corregir. La lanza el
+     * Service antes de guardar, cuando el asiento no cuadra: sin esto el error que llega al
+     * usuario es el de AsientoContableRules ("Total Debe (0) no coincide con Total Haber (…)"),
+     * que ni nombra la cuenta ni dice dónde configurarla.
+     *
+     * No hace nada si el asiento cuadra o si no se pudo determinar la causa (en ese caso sigue el
+     * camino de siempre y salta la validación de Rules, para no inventar un diagnóstico).
+     *
+     * @param array $detalles Líneas del asiento tal como las devolvió el builder.
+     * @throws \Exception
+     */
+    public static function verificarCuadre(array $detalles, array $motivos): void
+    {
+        if (empty($detalles) || empty($motivos)) {
+            return;
+        }
+
+        $debe  = round(array_sum(array_map(static fn($d) => (float) ($d['debe'] ?? 0), $detalles)), 2);
+        $haber = round(array_sum(array_map(static fn($d) => (float) ($d['haber'] ?? 0), $detalles)), 2);
+        if (abs($debe - $haber) < 0.005) {
+            return; // Cuadra: los motivos recogidos no impidieron armarlo.
+        }
+
+        throw new \Exception('Faltan cuentas por configurar: ' . implode(' ', $motivos));
+    }
+
     private AsientoProgramadoRepository $programadoRepo;
     private CosteoVentaSeguimientoRepository $costeoRepo;
 
@@ -3763,6 +3861,7 @@ class AsientoBuilderService
      */
     public function generarAsientoIngreso(int $idEmpresa, int $idIngreso, array $detallesConCuenta = []): array
     {
+        $this->motivosFaltantes = [];
         $db = \App\core\Database::getConnection();
 
         $sqlCab = "SELECT i.id,
@@ -3835,6 +3934,16 @@ class AsientoBuilderService
                 (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
                 $restante, $detallesConCuenta
             );
+            // Igual que en el egreso: el trozo no cubierto es el hueco del Haber (ver comentario
+            // en generarAsientoEgreso).
+            $cubierto = round(array_sum(array_column($contrapartida, 'monto')), 2);
+            if ($cubierto < round($restante, 2) - 0.005) {
+                $this->registrarFaltanteContrapartida(
+                    'ingreso',
+                    (string) ($ingreso['concepto_comportamiento'] ?? ''),
+                    (string) ($ingreso['concepto_nombre'] ?? '')
+                );
+            }
             foreach ($contrapartida as $linea) {
                 $detalles[] = [
                     'id_cuenta_contable' => $linea['id_cuenta'],
@@ -3856,6 +3965,7 @@ class AsientoBuilderService
      */
     public function generarAsientoEgreso(int $idEmpresa, int $idEgreso, array $detallesConCuenta = []): array
     {
+        $this->motivosFaltantes = [];
         $db = \App\core\Database::getConnection();
 
         $sqlCab = "SELECT e.id,
@@ -3991,6 +4101,17 @@ class AsientoBuilderService
                 (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
                 $restante, $detallesConCuenta
             );
+            // Lo que la contrapartida no llegó a cubrir es exactamente el hueco del Debe. Se anota
+            // qué cuenta faltó para poder explicarlo (el motivo depende del comportamiento del
+            // concepto: cartera de compras, nómina o la cuenta libre del propio concepto).
+            $cubierto = round(array_sum(array_column($contrapartida, 'monto')), 2);
+            if ($cubierto < round($restante, 2) - 0.005) {
+                $this->registrarFaltanteContrapartida(
+                    'egreso',
+                    (string) ($egreso['concepto_comportamiento'] ?? ''),
+                    (string) ($egreso['concepto_nombre'] ?? '')
+                );
+            }
             foreach ($contrapartida as $linea) {
                 $detalles[] = [
                     'id_cuenta_contable' => $linea['id_cuenta'],
@@ -4615,6 +4736,10 @@ class AsientoBuilderService
             $desc  = trim((string) ($row['descripcion'] ?? ''));
             $monto = round((float) ($row['monto'] ?? 0), 2);
             if ($monto <= 0) continue;
+            // $mapaCuenta solo guarda cuentas > 0, así que llegar aquí sin cuenta significa que
+            // tampoco la tiene el concepto. El motivo lo registra quien llama
+            // (registrarFaltanteContrapartida), que sabe de qué sección de Configuración Contable
+            // debía salir esa cuenta; anotarlo también aquí solo repetiría el mismo aviso.
             $cta = $mapaCuenta[$desc] ?? $conceptoCuenta;
             if ($cta <= 0) { $faltaCuenta = true; continue; } // sin cuenta → descuadre intencional
             if (!isset($grupos[$cta])) {
@@ -4704,7 +4829,14 @@ class AsientoBuilderService
             }
             $total += $monto;
             if (empty($p['id_cuenta'])) {
-                continue; // forma sin cuenta configurada → se omite (descuadra)
+                // Forma sin cuenta configurada: se omite y el asiento descuadra. Se anota el
+                // motivo para poder decir CUÁL forma falta, en vez del genérico de descuadre.
+                $this->registrarFaltante(sprintf(
+                    'La forma de %s «%s» no tiene cuenta contable asignada (Configuración Contable → Cobros y Pagos).',
+                    $esDebe ? 'cobro' : 'pago',
+                    trim((string) ($p['forma_nombre'] ?? '')) !== '' ? $p['forma_nombre'] : 'sin nombre'
+                ));
+                continue;
             }
             $detalles[] = [
                 'id_cuenta_contable' => (int) $p['id_cuenta'],
