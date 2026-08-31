@@ -2376,6 +2376,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         const inpBuscar = document.getElementById('eg-sdp-buscar');
         if (inpBuscar) inpBuscar.value = '';
+        const inpFDesde = document.getElementById('eg-sdp-fecha-desde');
+        const inpFHasta = document.getElementById('eg-sdp-fecha-hasta');
+        if (inpFDesde) inpFDesde.value = '';
+        if (inpFHasta) inpFHasta.value = '';
 
         // Reset del modo "Pagar por ítems"; solo aplica a COMPRA/LIQUIDACION (documentos con ítems).
         _egModoItems = false;
@@ -2402,8 +2406,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const excluirId = document.getElementById('eg-input-id')?.value || '';
         tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Buscando...</td></tr>';
 
+        const fDesde = document.getElementById('eg-sdp-fecha-desde')?.value || '';
+        const fHasta = document.getElementById('eg-sdp-fecha-hasta')?.value || '';
+
         let uri = `${EGR_URL}/buscarDocumentosPendientesEgresoAjax?q=${encodeURIComponent(q)}&tipo=${encodeURIComponent(_egTipoDocActual)}`;
         if (excluirId) uri += `&excluir_egreso_id=${encodeURIComponent(excluirId)}`;
+        if (fDesde) uri += `&fecha_desde=${encodeURIComponent(fDesde)}`;
+        if (fHasta) uri += `&fecha_hasta=${encodeURIComponent(fHasta)}`;
 
         fetch(uri)
             .then(r => r.json())
@@ -3082,6 +3091,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 title="Limpiar">
                             <i class="bi bi-x-lg"></i>
                         </button>
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="date" id="eg-sdp-fecha-desde" class="form-control form-control-sm" style="width:135px;" title="Fecha desde"
+                               onchange="buscarEnModalEgDocsPendientes(document.getElementById('eg-sdp-buscar').value.trim())">
+                        <span class="text-muted small">a</span>
+                        <input type="date" id="eg-sdp-fecha-hasta" class="form-control form-control-sm" style="width:135px;" title="Fecha hasta"
+                               onchange="buscarEnModalEgDocsPendientes(document.getElementById('eg-sdp-buscar').value.trim())">
                     </div>
                     <div class="form-check form-switch mb-0 text-nowrap d-none" id="eg-sdp-modo-items-wrap" title="Desglosa los ítems de cada documento para pagar por ítem">
                         <input class="form-check-input" type="checkbox" role="switch" id="eg-sdp-modo-items" onchange="toggleEgModoItems(this.checked)">

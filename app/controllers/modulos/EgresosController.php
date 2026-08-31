@@ -608,12 +608,14 @@ class EgresosController extends BaseModuloController
             $tipo      = strtoupper(trim($_GET['tipo'] ?? 'COMPRA'));
             $excluirId = isset($_GET['excluir_egreso_id']) && $_GET['excluir_egreso_id'] !== ''
                          ? (int) $_GET['excluir_egreso_id'] : null;
+            $fechaDesde = trim($_GET['fecha_desde'] ?? '') ?: null;
+            $fechaHasta = trim($_GET['fecha_hasta'] ?? '') ?: null;
 
             if (!in_array($tipo, ['COMPRA', 'LIQUIDACION', 'ROL'])) {
                 $tipo = 'COMPRA';
             }
 
-            $result = $this->repository->buscarDocumentosPendientesEgreso($idEmpresa, $q, $tipo, $excluirId);
+            $result = $this->repository->buscarDocumentosPendientesEgreso($idEmpresa, $q, $tipo, $excluirId, $fechaDesde, $fechaHasta);
             echo json_encode(['ok' => true, 'data' => $result['data'], 'has_more' => $result['has_more']]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

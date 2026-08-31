@@ -787,7 +787,7 @@ class IngresoRepository extends BaseRepository
         $this->query("DELETE FROM ingresos_pagos WHERE id_ingreso = ?", [$idIngreso]);
     }
 
-    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA'): array
+    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA', ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         // Según el concepto del ingreso: 'RECIBO' muestra solo recibos de venta;
         // 'FACTURA_REEMBOLSO' muestra solo facturas de reembolso; cualquier otro
@@ -803,6 +803,19 @@ class IngresoRepository extends BaseRepository
         $filtroBusq = '';
         $filtroBusqRec = '';
         $filtroBusqFr = '';
+
+        // Filtro de fecha de emisión (opcional): se aplica una sola vez sobre el
+        // envoltorio final, ya que todas las ramas del UNION alias su columna a
+        // "fecha_emision".
+        $filtroFecha = '';
+        if ($fechaDesde !== null && $fechaDesde !== '') {
+            $filtroFecha .= " AND docs.fecha_emision >= :fecha_desde";
+            $params[':fecha_desde'] = $fechaDesde;
+        }
+        if ($fechaHasta !== null && $fechaHasta !== '') {
+            $filtroFecha .= " AND docs.fecha_emision <= :fecha_hasta";
+            $params[':fecha_hasta'] = $fechaHasta;
+        }
 
         if ($excluirIngresoId !== null) {
             $excluirSql = " AND i.id <> :excluir";
@@ -1054,6 +1067,7 @@ class IngresoRepository extends BaseRepository
                       $filtroBusqFr
                 ) docs
                 WHERE docs.tipo_documento = ANY(:tipos::text[])
+                $filtroFecha
                 ORDER BY cliente_nombre ASC, fecha_emision ASC, id ASC
                 LIMIT 301";
 

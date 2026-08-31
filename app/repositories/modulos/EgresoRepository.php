@@ -613,7 +613,7 @@ class EgresoRepository extends BaseRepository
             \App\Helpers\SecuencialFormato::normalizar($secuencial), $idEmpresa])->fetchColumn() > 0;
     }
 
-    public function buscarDocumentosPendientesEgreso(int $idEmpresa, string $q = '', string $tipo = 'COMPRA', ?int $excluirEgresoId = null): array
+    public function buscarDocumentosPendientesEgreso(int $idEmpresa, string $q = '', string $tipo = 'COMPRA', ?int $excluirEgresoId = null, ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $params     = [':id_empresa' => $idEmpresa];
         $excluirSql = '';
@@ -622,6 +622,21 @@ class EgresoRepository extends BaseRepository
             $excluirSql = " AND e.id <> :excluir";
             $params[':excluir'] = $excluirEgresoId;
         }
+
+        // Filtro de fecha de emisión (opcional): cada rama arma su propio snippet
+        // porque la columna de origen tiene alias distinto (cb./l./u.fecha_emision).
+        $filtroFecha = function (string $col) use ($fechaDesde, $fechaHasta, &$params): string {
+            $sql = '';
+            if ($fechaDesde !== null && $fechaDesde !== '') {
+                $sql .= " AND {$col} >= :fecha_desde";
+                $params[':fecha_desde'] = $fechaDesde;
+            }
+            if ($fechaHasta !== null && $fechaHasta !== '') {
+                $sql .= " AND {$col} <= :fecha_hasta";
+                $params[':fecha_hasta'] = $fechaHasta;
+            }
+            return $sql;
+        };
 
         if ($tipo === 'COMPRA') {
             $filtroBusq = '';
@@ -709,6 +724,7 @@ class EgresoRepository extends BaseRepository
                       AND cb.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (cb.importe_total + COALESCE(cb.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                       $filtroBusq
+                      {$filtroFecha('cb.fecha_emision')}
                     ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
                     LIMIT 301";
         } elseif ($tipo === 'ROL') {
@@ -876,6 +892,8 @@ class EgresoRepository extends BaseRepository
                           AND (dtd.valor - COALESCE(pdt.total_pagado, 0)) > 0.01
                           $filtroDt
                     ) u
+                    WHERE TRUE
+                      {$filtroFecha('u.fecha_emision')}
                     ORDER BY proveedor_nombre ASC, numero_documento ASC
                     LIMIT 301";
         } else {
@@ -953,6 +971,7 @@ class EgresoRepository extends BaseRepository
                       AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (l.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rl.total_retenido, 0)) > 0.01
                       $filtroBusq
+                      {$filtroFecha('l.fecha_emision')}
                     ORDER BY prov.razon_social ASC, l.fecha_emision ASC
                     LIMIT 301";
         }

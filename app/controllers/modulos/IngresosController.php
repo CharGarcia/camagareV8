@@ -436,8 +436,10 @@ class IngresosController extends BaseModuloController
         // 'RECIBO' para Recibo de Venta, 'FACTURA_REEMBOLSO' para Factura de Reembolso, 'FACTURA' por defecto.
         $tipoDocRaw = strtoupper(trim($_GET['tipo'] ?? ''));
         $tipoDoc    = in_array($tipoDocRaw, ['RECIBO', 'FACTURA_REEMBOLSO'], true) ? $tipoDocRaw : 'FACTURA';
+        $fechaDesde = trim($_GET['fecha_desde'] ?? '') ?: null;
+        $fechaHasta = trim($_GET['fecha_hasta'] ?? '') ?: null;
 
-        $result = $this->repository->buscarDocumentosPendientes($idEmpresa, $q, $excluirId, $tipoDoc);
+        $result = $this->repository->buscarDocumentosPendientes($idEmpresa, $q, $excluirId, $tipoDoc, $fechaDesde, $fechaHasta);
         echo json_encode(['ok' => true, 'data' => $result['data'], 'has_more' => $result['has_more']]);
         exit;
     }

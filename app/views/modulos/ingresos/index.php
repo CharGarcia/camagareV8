@@ -873,6 +873,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         modal.show();
         document.getElementById('inp-docs-buscar').value = '';
+        const inpFDesde = document.getElementById('inp-docs-fecha-desde');
+        const inpFHasta = document.getElementById('inp-docs-fecha-hasta');
+        if (inpFDesde) inpFDesde.value = '';
+        if (inpFHasta) inpFHasta.value = '';
         _modoItems = false;
         _selItems = {};
         _itemsModal = [];
@@ -888,8 +892,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         const tipoIng = document.getElementById('m-input-tipo-ingreso').value;
         const tipoDoc = (tipoIng === 'RECIBO_VENTA') ? 'RECIBO' : (tipoIng === 'FACTURA_REEMBOLSO') ? 'FACTURA_REEMBOLSO' : 'FACTURA';
+        const fDesde = document.getElementById('inp-docs-fecha-desde')?.value || '';
+        const fHasta = document.getElementById('inp-docs-fecha-hasta')?.value || '';
+
         let uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDocumentosPendientesAjax?q=${encodeURIComponent(q)}&tipo=${tipoDoc}`;
         if (excluirId) uri += `&excluir_ingreso_id=${excluirId}`;
+        if (fDesde) uri += `&fecha_desde=${encodeURIComponent(fDesde)}`;
+        if (fHasta) uri += `&fecha_hasta=${encodeURIComponent(fHasta)}`;
 
         fetch(uri)
             .then(r => r.json())
@@ -2629,6 +2638,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('inp-docs-buscar').value=''; buscarEnModalDocsPendientes('')" title="Limpiar">
                             <i class="bi bi-x-lg"></i>
                         </button>
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="date" id="inp-docs-fecha-desde" class="form-control form-control-sm" style="width:135px;" title="Fecha desde"
+                               onchange="buscarEnModalDocsPendientes(document.getElementById('inp-docs-buscar').value.trim())">
+                        <span class="text-muted small">a</span>
+                        <input type="date" id="inp-docs-fecha-hasta" class="form-control form-control-sm" style="width:135px;" title="Fecha hasta"
+                               onchange="buscarEnModalDocsPendientes(document.getElementById('inp-docs-buscar').value.trim())">
                     </div>
                     <div class="form-check form-switch mb-0 text-nowrap" title="Desglosa los ítems de cada documento para cobrar por ítem">
                         <input class="form-check-input" type="checkbox" role="switch" id="sdp-modo-items" onchange="toggleModoItems(this.checked)">
