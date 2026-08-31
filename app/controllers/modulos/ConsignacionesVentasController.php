@@ -24,29 +24,6 @@ class ConsignacionesVentasController extends BaseModuloController
     public function __construct()
     {
         parent::__construct();
-        try {
-            $db = \App\Core\Database::getConnection();
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS nup VARCHAR(100)");
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS lote VARCHAR(100)");
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS fecha_caducidad DATE");
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS id_pedido_detalle INTEGER NULL");
-            $db->exec("ALTER TABLE consignaciones_ventas ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER NULL");
-
-            // Tablas puente de Facturación desde consignación (auto-fallback si no se corrió la migración).
-            $db->exec("CREATE TABLE IF NOT EXISTS consignaciones_facturas (
-                id SERIAL PRIMARY KEY, id_empresa INTEGER NOT NULL, id_consignacion INTEGER NOT NULL,
-                id_factura INTEGER, numero_factura VARCHAR(50),
-                subtotal NUMERIC(15,6) DEFAULT 0, impuesto NUMERIC(15,6) DEFAULT 0, total NUMERIC(15,6) DEFAULT 0,
-                id_asiento_reingreso INTEGER, estado VARCHAR(20) DEFAULT 'activa',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_by INTEGER, updated_by INTEGER, eliminado BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP, deleted_by INTEGER)");
-            $db->exec("CREATE TABLE IF NOT EXISTS consignaciones_facturas_detalles (
-                id SERIAL PRIMARY KEY, id_consignacion_factura INTEGER NOT NULL, id_empresa INTEGER NOT NULL,
-                id_consignacion INTEGER NOT NULL, id_consignacion_detalle INTEGER NOT NULL, id_producto INTEGER NOT NULL,
-                cantidad NUMERIC(15,6) NOT NULL, precio_unitario NUMERIC(15,6) DEFAULT 0, id_bodega INTEGER,
-                lote VARCHAR(100), nup VARCHAR(100), fecha_caducidad DATE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, eliminado BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP, deleted_by INTEGER)");
-        } catch (\Throwable $e) {}
 
         $repository = new ConsignacionVentaRepository();
         $rules = new ConsignacionVentaRules();
@@ -338,14 +315,6 @@ class ConsignacionesVentasController extends BaseModuloController
     {
         $this->requireCrear();
         header('Content-Type: application/json');
-
-        try {
-            $db = \App\Core\Database::getConnection();
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS nup VARCHAR(100)");
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS lote VARCHAR(100)");
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS fecha_caducidad DATE");
-            $db->exec("ALTER TABLE consignaciones_ventas_detalles ADD COLUMN IF NOT EXISTS id_pedido_detalle INTEGER NULL");
-        } catch (\Throwable $e) {}
 
         try {
             $input = json_decode(file_get_contents('php://input'), true);
