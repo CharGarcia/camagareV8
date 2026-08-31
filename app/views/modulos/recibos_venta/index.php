@@ -4145,9 +4145,16 @@ $totalPages = $totalPagesOriginal;
         const countItems = document.getElementById('m-count-items');
         if (countItems) countItems.textContent = document.querySelectorAll('.row-detalle').length;
 
-        // Sincronizar monto si hay un solo pago registrado
-        const pagosValores = document.querySelectorAll('input[name="f_pago_valor[]"]');
-        if (pagosValores.length === 1) pagosValores[0].value = totalFactura.toFixed(2);
+        // Sincronizar monto si hay un solo pago registrado — SOLO en borrador/nuevo.
+        // En un recibo autorizado/anulado esto pisaba el monto REAL ya guardado
+        // (cargado desde json.pagos[].total al reabrir) con el total recién
+        // recalculado en vivo, que puede diferir en centavos si el modo de cálculo
+        // de IVA de la empresa cambió después de emitido — corrompiendo en pantalla
+        // el monto de un pago que ya es historia y no debería tocarse.
+        if (RV_ES_BORRADOR) {
+            const pagosValores = document.querySelectorAll('input[name="f_pago_valor[]"]');
+            if (pagosValores.length === 1) pagosValores[0].value = totalFactura.toFixed(2);
+        }
 
         // Regenerar asiento contable con los valores actuales del recibo (siempre, con debounce)
         if (typeof window.fvDebouncedRecalcularAsiento === 'function') {
