@@ -1491,6 +1491,29 @@ class MigracionMysqlService
         return $cache[$oldRespId] = (int) $ins->fetchColumn();
     }
 
+    /**
+     * Precarga el detalle de consignación SOLO de los códigos dados (los de las cabeceras ya
+     * filtradas por rango de fechas), en lotes por `codigo_unico IN (...)` — que usa el índice
+     * `codigo_unico`. Antes se traía TODO el historial del RUC con `ruc_empresa LIKE 'base%'`, y
+     * `detalle_consignacion` tiene cientos de miles de filas (p. ej. 458k para un RUC de 8 años):
+     * armar ese arreglo desde el MySQL remoto colgaba la migración aunque solo se pidiera 1 mes.
+     * Devuelve [codigo_unico => filas[]].
+     */
+    private function precargarDetalleConsignacion(\PDO $mysql, string $base, string $columnas, array $codigos): array
+    {
+        $out = [];
+        $codigos = array_values(array_unique(array_filter(array_map('strval', $codigos), 'strlen')));
+        if (!$codigos) { return $out; }
+        $qBase = $mysql->quote($base . '%');
+        foreach (array_chunk($codigos, 800) as $chunk) {
+            $in = implode(',', array_map([$mysql, 'quote'], $chunk));
+            foreach ($mysql->query("SELECT $columnas FROM detalle_consignacion WHERE ruc_empresa LIKE $qBase AND codigo_unico IN ($in)") as $d) {
+                $out[(string) $d['codigo_unico']][] = $d;
+            }
+        }
+        return $out;
+    }
+
     /** Migra las consignaciones de venta base (operacion=ENTRADA) → consignaciones_ventas + detalles. */
     private function migrarConsignaciones(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
@@ -1514,7 +1537,9 @@ class MigracionMysqlService
         $qmd = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'consignaciones'");
         $qmd->execute([$idEmpresa]);
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
-        $updEntrega = $pg->prepare("UPDATE consignaciones_ventas SET fecha_entrega = :fe, hora_entrega_desde = :hd, hora_entrega_hasta = :hh, updated_at = now(), updated_by = :u WHERE id = :id");
+        // Reconcile de estado: solo APLICA un estado definido (Entregada/Anulada); nunca degrada a Emitida
+        // (una consignación ya facturada quedó 'Entregada' por el paso de facturación y no se debe pisar).
+        $updEntrega = $pg->prepare("UPDATE consignaciones_ventas SET fecha_entrega = :fe, hora_entrega_desde = :hd, hora_entrega_hasta = :hh, estado = CASE WHEN :aplica_est = 'S' THEN :est_val ELSE estado END, updated_at = now(), updated_by = :u WHERE id = :id");
         // Reconcile de la caducidad por línea (re-migrar rellena fecha_caducidad sin "Eliminar migrados").
         // Match ROBUSTO: si el producto es único en la consignación, casa SOLO por (consignación, producto)
         // —independiente del lote, que a veces no coincide entre viejo y nuevo—; si el mismo producto aparece
@@ -1534,19 +1559,12 @@ class MigracionMysqlService
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, fecha_entrega, hora_entrega_desde, hora_entrega_hasta
                   FROM encabezado_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
-        // PRE-CARGA del detalle en UNA consulta (evita N+1 contra el MySQL viejo remoto, que con muchas
-        // consignaciones provoca timeout / "Failed to fetch"). Se agrupa por codigo_unico.
-        // OJO: se filtra con `ruc_empresa LIKE 'base%'` (usa el índice de ruc_empresa), NO con
-        // LEFT(ruc_empresa,10) (una función sobre la columna NO usa índice → escanea toda la tabla de
-        // TODAS las empresas y se cuelga). detalle_consignacion es grande (cientos de miles de filas).
-        $detByCod = [];
-        foreach ($mysql->query("SELECT codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento
-                                  FROM detalle_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
-            $detByCod[(string) $d['codigo_unico']][] = $d;
-        }
-        $stmt = $mysql->query($sql);
+        // Cabeceras del rango PRIMERO; el detalle se precarga SOLO de esas cabeceras (por codigo_unico IN),
+        // no todo el historial del RUC — evita traer cientos de miles de filas y colgar la migración.
+        $cabs = $mysql->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        $detByCod = $this->precargarDetalleConsignacion($mysql, $base, "codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento", array_column($cabs, 'codigo_unico'));
 
-        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        foreach ($cabs as $ec) {
             $res['total']++;
             $old = (int) $ec['id_consignacion'];
             if (isset($mapDest[(string) $old])) { // ya migrada: reconciliar fecha/hora de entrega + caducidad del detalle (solo insertadas)
@@ -1554,8 +1572,10 @@ class MigracionMysqlService
                     $dest = $mapDest[(string) $old]['id'];
                     $hd = self::nz($ec['hora_entrega_desde']); if ($hd === '00:00:00') { $hd = null; }
                     $hh = self::nz($ec['hora_entrega_hasta']); if ($hh === '00:00:00') { $hh = null; }
+                    $estR = self::estadoConsignacion($ec['status'], $ec['fecha_entrega']);
+                    $aplicaEst = in_array($estR, ['Entregada', 'Anulada'], true) ? 'S' : 'N';
                     try {
-                        $updEntrega->execute([':fe' => self::fechaCorta($ec['fecha_entrega']), ':hd' => $hd, ':hh' => $hh, ':u' => $idUsuario, ':id' => $dest]);
+                        $updEntrega->execute([':fe' => self::fechaCorta($ec['fecha_entrega']), ':hd' => $hd, ':hh' => $hh, ':aplica_est' => $aplicaEst, ':est_val' => $estR, ':u' => $idUsuario, ':id' => $dest]);
                         // Caducidad: se agrupa el detalle viejo por producto resuelto. Producto único →
                         // match sin lote (robusto); repetido → por lote. (Sin crear productos.)
                         $porProd = [];
@@ -1597,7 +1617,7 @@ class MigracionMysqlService
                 $dets = $detByCod[(string) $ec['codigo_unico']] ?? [];
                 $sub = 0.0;
                 foreach ($dets as $d) { $sub += (float) $d['cant_consignacion'] * (float) $d['precio']; }
-                $est = ((int) $ec['status'] === 0) ? 'Anulada' : 'Emitida';
+                $est = self::estadoConsignacion($ec['status'], $ec['fecha_entrega']); // status/fecha_entrega → Anulada/Entregada/Emitida
 
                 $hd = self::nz($ec['hora_entrega_desde']); if ($hd === '00:00:00') { $hd = null; } // hora vacía → null (no medianoche)
                 $hh = self::nz($ec['hora_entrega_hasta']); if ($hh === '00:00:00') { $hh = null; }
@@ -1655,13 +1675,11 @@ class MigracionMysqlService
         $insMap     = $this->stmtMap($pg,$entidad);
         $respCache  = [];
 
-        // numero_consignacion (ENTRADA) → id consignación nueva
+        // numero_consignacion (ENTRADA) → id consignación nueva. Se llena MÁS ABAJO, acotado a las
+        // entradas realmente referenciadas por el detalle del rango (una factura de este mes puede
+        // consumir una ENTRADA de meses previos, por eso no se limita por fecha sino por referencia).
         $mapCons = $this->mapaDe($pg, $idEmpresa, 'consignaciones');
         $mapEntrada = [];
-        foreach ($mysql->query("SELECT id_consignacion, numero_consignacion FROM encabezado_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'") as $e) {
-            $nid = $mapCons[(string) (int) $e['id_consignacion']] ?? null;
-            if ($nid) { $mapEntrada[(string) (int) $e['numero_consignacion']] = $nid; }
-        }
         $lineLookup = $pg->prepare("SELECT id FROM consignaciones_ventas_detalles WHERE id_consignacion = ? AND id_producto = ? AND eliminado = false LIMIT 1");
         $lineCache = [];
         // Bodega del ítem (old id_bodega → nueva) + una por defecto; y el número de la factura vieja.
@@ -1698,20 +1716,44 @@ class MigracionMysqlService
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, factura_venta
                   FROM encabezado_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND " . $opFilter . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
-        // PRE-CARGA para evitar N+1 contra el MySQL viejo remoto (causa de timeout / "Failed to fetch"):
-        // el detalle por codigo_unico, y (si es factura) las facturas del RUC por serie|secuencial.
-        // `ruc_empresa LIKE 'base%'` usa el índice (LEFT(ruc_empresa,10) NO → escanea toda la tabla).
-        $detByCod = [];
-        foreach ($mysql->query("SELECT codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup
-                                  FROM detalle_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
-            $detByCod[(string) $d['codigo_unico']][] = $d;
+        // Cabeceras del rango PRIMERO; el resto de precargas se acotan a lo realmente referenciado por
+        // esas cabeceras — no todo el historial del RUC (que cuelga la migración: detalle ~cientos de
+        // miles de filas, facturas decenas de miles).
+        $cabs = $mysql->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+        // Detalle: solo el de estas cabeceras (por codigo_unico IN, índice).
+        $detByCod = $this->precargarDetalleConsignacion($mysql, $base, "codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup", array_column($cabs, 'codigo_unico'));
+
+        // mapEntrada: solo las ENTRADAS referenciadas por numero_orden_entrada del detalle (por
+        // numero_consignacion IN, índice) — puede haber entradas de meses previos.
+        $numEnt = [];
+        foreach ($detByCod as $filas) { foreach ($filas as $d) { $n = (int) $d['numero_orden_entrada']; if ($n > 0) { $numEnt[$n] = true; } } }
+        if ($numEnt) {
+            $qBase = $mysql->quote($base . '%');
+            foreach (array_chunk(array_keys($numEnt), 800) as $chunk) {
+                $in = implode(',', array_map([$mysql, 'quote'], $chunk));
+                foreach ($mysql->query("SELECT id_consignacion, numero_consignacion FROM encabezado_consignacion WHERE ruc_empresa LIKE $qBase" . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA' AND numero_consignacion IN ($in)") as $e) {
+                    $nid = $mapCons[(string) (int) $e['id_consignacion']] ?? null;
+                    if ($nid) { $mapEntrada[(string) (int) $e['numero_consignacion']] = $nid; }
+                }
+            }
         }
+
+        // facByKey: solo las facturas referenciadas por factura_venta (por secuencial_factura IN, índice).
         $facByKey = [];
         if ($esFactura) {
-            foreach ($mysql->query("SELECT id_encabezado_factura, serie_factura, secuencial_factura, id_cliente
-                                      FROM encabezado_factura WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " ORDER BY id_encabezado_factura") as $f) {
-                $k = (string) $f['serie_factura'] . '|' . (int) $f['secuencial_factura'];
-                if (!isset($facByKey[$k])) { $facByKey[$k] = $f; } // primera por serie+secuencial (como el LIMIT 1 original)
+            $secs = [];
+            foreach ($cabs as $ec) { $s = (int) $ec['factura_venta']; if ($s > 0) { $secs[$s] = true; } }
+            if ($secs) {
+                $qBase = $mysql->quote($base . '%');
+                foreach (array_chunk(array_keys($secs), 800) as $chunk) {
+                    $in = implode(',', array_map([$mysql, 'quote'], $chunk));
+                    foreach ($mysql->query("SELECT id_encabezado_factura, serie_factura, secuencial_factura, id_cliente
+                                              FROM encabezado_factura WHERE ruc_empresa LIKE $qBase AND secuencial_factura IN ($in) ORDER BY id_encabezado_factura") as $f) {
+                        $k = (string) $f['serie_factura'] . '|' . (int) $f['secuencial_factura'];
+                        if (!isset($facByKey[$k])) { $facByKey[$k] = $f; } // primera por serie+secuencial (como el LIMIT 1 original)
+                    }
+                }
             }
         }
         // Busca la factura vieja por serie+secuencial (factura_venta) — o null.
@@ -1719,9 +1761,8 @@ class MigracionMysqlService
             if ((int) $ec['factura_venta'] <= 0) { return null; }
             return $facByKey[(string) $ec['serie_sucursal'] . '|' . (int) $ec['factura_venta']] ?? null;
         };
-        $stmt = $mysql->query($sql);
 
-        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        foreach ($cabs as $ec) {
             $res['total']++;
             $old = (int) $ec['id_consignacion'];
             if (isset($mapDest[(string) $old])) { // ya migrada: reconciliar número de factura + bodega del detalle (solo insertadas)
@@ -5284,6 +5325,17 @@ class MigracionMysqlService
             return null;
         }
         return substr($v, 0, 10);
+    }
+
+    /**
+     * Estado de una consignación de venta según el sistema viejo: status=0 → Anulada;
+     * si tiene fecha_entrega válida → Entregada ("entregado" en el viejo); si no → Emitida.
+     * El viejo no guarda un estado literal; "entregado" equivale a tener fecha_entrega.
+     */
+    private static function estadoConsignacion($status, $fechaEntrega): string
+    {
+        if ((int) $status === 0) { return 'Anulada'; }
+        return self::fechaCorta($fechaEntrega) ? 'Entregada' : 'Emitida';
     }
 
     /** Cadena vacía -> null (para columnas nullable). */
