@@ -2645,7 +2645,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             <div class="modal-body p-0 d-flex flex-column" style="min-height: 280px; max-height: 60vh;">
                 <!-- Barra de búsqueda -->
-                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap overflow-x-auto">
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap flex-shrink-0">
                     <div class="input-group input-group-sm flex-grow-1" style="min-width:160px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="inp-docs-buscar" class="form-control"
