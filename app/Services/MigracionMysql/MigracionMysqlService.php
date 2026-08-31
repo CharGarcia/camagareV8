@@ -90,7 +90,7 @@ class MigracionMysqlService
                 }
                 $whereF = (!empty($def['ruc_via_empresa'])
                         ? "id_empresa IN (SELECT id FROM empresas WHERE LEFT(ruc, 10) = :b)"
-                        : "LEFT(ruc_empresa, 10) = :b")
+                        : "ruc_empresa LIKE CONCAT(:b, '%')")
                     . (!empty($def['filtro']) ? " AND " . $def['filtro'] : "");
                 $st = $pdo->prepare("SELECT $sel FROM `{$def['tabla']}` WHERE $whereF");
                 $st->execute([':b' => $base]);
@@ -649,7 +649,7 @@ class MigracionMysqlService
 
         $stmt = $mysql->query(
             "SELECT id, nombre, tipo_id, ruc, telefono, email, direccion, plazo, provincia, ciudad, status
-               FROM clientes WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base)
+               FROM clientes WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')
         );
 
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -784,7 +784,7 @@ class MigracionMysqlService
 
         $stmt = $mysql->query(
             "SELECT id, codigo_producto, nombre_producto, codigo_auxiliar, precio_producto, tipo_produccion, tarifa_iva, status, id_unidad_medida
-               FROM productos_servicios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base)
+               FROM productos_servicios WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')
         );
 
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -889,7 +889,7 @@ class MigracionMysqlService
 
         $stmt = $mysql->query(
             "SELECT id_proveedor, razon_social, nombre_comercial, tipo_id_proveedor, ruc_proveedor, mail_proveedor, dir_proveedor, telf_proveedor, tipo_empresa, plazo, unidad_tiempo, relacionado, tipo_cta, numero_cta
-               FROM proveedores WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base)
+               FROM proveedores WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')
         );
 
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -972,7 +972,7 @@ class MigracionMysqlService
         );
         $insMap = $this->stmtMap($pg,'vendedores');
 
-        $stmt = $mysql->query("SELECT id_vendedor, numero_id, nombre, correo, telefono, direccion FROM vendedores WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        $stmt = $mysql->query("SELECT id_vendedor, numero_id, nombre, correo, telefono, direccion FROM vendedores WHERE ruc_empresa LIKE " . $mysql->quote($base . '%'));
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $r['id_vendedor'];
@@ -1014,7 +1014,7 @@ class MigracionMysqlService
         $ins = $pg->prepare("INSERT INTO bodegas (id_empresa, id_usuario, nombre, created_by) VALUES (:e, :u, :nom, :cb) RETURNING id");
         $insMap = $this->stmtMap($pg,'bodegas');
 
-        $stmt = $mysql->query("SELECT id_bodega, nombre_bodega FROM bodega WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        $stmt = $mysql->query("SELECT id_bodega, nombre_bodega FROM bodega WHERE ruc_empresa LIKE " . $mysql->quote($base . '%'));
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $r['id_bodega'];
@@ -1407,7 +1407,7 @@ class MigracionMysqlService
         $done   = $this->idsMigrados($pg, $idEmpresa, 'cuentas_bancarias');
         $insMap = $this->stmtMap($pg, 'cuentas_bancarias');
 
-        $stmt = $mysql->query("SELECT id_cuenta, id_banco, id_tipo_cuenta, numero_cuenta FROM cuentas_bancarias WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        $stmt = $mysql->query("SELECT id_cuenta, id_banco, id_tipo_cuenta, numero_cuenta FROM cuentas_bancarias WHERE ruc_empresa LIKE " . $mysql->quote($base . '%'));
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $r['id_cuenta'];
@@ -1444,7 +1444,7 @@ class MigracionMysqlService
         $insMap = $this->stmtMap($pg, 'formas_pago');
         $chk    = $pg->prepare("SELECT id FROM empresa_formas_pago WHERE id_empresa = :e AND nombre = :n AND eliminado = false LIMIT 1");
 
-        $stmt = $mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        $stmt = $mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%'));
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $r['id'];
@@ -1532,13 +1532,16 @@ class MigracionMysqlService
         );
 
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, fecha_entrega, hora_entrega_desde, hora_entrega_hasta
-                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
+                  FROM encabezado_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         // PRE-CARGA del detalle en UNA consulta (evita N+1 contra el MySQL viejo remoto, que con muchas
         // consignaciones provoca timeout / "Failed to fetch"). Se agrupa por codigo_unico.
+        // OJO: se filtra con `ruc_empresa LIKE 'base%'` (usa el índice de ruc_empresa), NO con
+        // LEFT(ruc_empresa,10) (una función sobre la columna NO usa índice → escanea toda la tabla de
+        // TODAS las empresas y se cuelga). detalle_consignacion es grande (cientos de miles de filas).
         $detByCod = [];
         foreach ($mysql->query("SELECT codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup, vencimiento
-                                  FROM detalle_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
+                                  FROM detalle_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
             $detByCod[(string) $d['codigo_unico']][] = $d;
         }
         $stmt = $mysql->query($sql);
@@ -1655,7 +1658,7 @@ class MigracionMysqlService
         // numero_consignacion (ENTRADA) → id consignación nueva
         $mapCons = $this->mapaDe($pg, $idEmpresa, 'consignaciones');
         $mapEntrada = [];
-        foreach ($mysql->query("SELECT id_consignacion, numero_consignacion FROM encabezado_consignacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'") as $e) {
+        foreach ($mysql->query("SELECT id_consignacion, numero_consignacion FROM encabezado_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND operacion = 'ENTRADA'") as $e) {
             $nid = $mapCons[(string) (int) $e['id_consignacion']] ?? null;
             if ($nid) { $mapEntrada[(string) (int) $e['numero_consignacion']] = $nid; }
         }
@@ -1693,19 +1696,20 @@ class MigracionMysqlService
         }
 
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, factura_venta
-                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND " . $opFilter . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
+                  FROM encabezado_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND " . $opFilter . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         // PRE-CARGA para evitar N+1 contra el MySQL viejo remoto (causa de timeout / "Failed to fetch"):
         // el detalle por codigo_unico, y (si es factura) las facturas del RUC por serie|secuencial.
+        // `ruc_empresa LIKE 'base%'` usa el índice (LEFT(ruc_empresa,10) NO → escanea toda la tabla).
         $detByCod = [];
         foreach ($mysql->query("SELECT codigo_unico, id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup
-                                  FROM detalle_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
+                                  FROM detalle_consignacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)) as $d) {
             $detByCod[(string) $d['codigo_unico']][] = $d;
         }
         $facByKey = [];
         if ($esFactura) {
             foreach ($mysql->query("SELECT id_encabezado_factura, serie_factura, secuencial_factura, id_cliente
-                                      FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " ORDER BY id_encabezado_factura") as $f) {
+                                      FROM encabezado_factura WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " ORDER BY id_encabezado_factura") as $f) {
                 $k = (string) $f['serie_factura'] . '|' . (int) $f['secuencial_factura'];
                 if (!isset($facByKey[$k])) { $facByKey[$k] = $f; } // primera por serie+secuencial (como el LIMIT 1 original)
             }
@@ -1869,7 +1873,7 @@ class MigracionMysqlService
         $insDet = $pg->prepare("INSERT INTO cambios_producto_cv_detalles (id_cambio, id_empresa, tipo_linea, id_producto, cantidad, id_bodega, lote) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_cambio, fecha_cambio, id_cliente, id_producto_anterior, id_nuevo_producto, cant_cambiada, lote_anterior, nuevo_lote, id_bodega_anterior, id_nueva_bodega, observaciones
-                  FROM cambio_productos_facturados WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_cambio', $desde, $hasta, $mysql) . " ORDER BY id_cambio";
+                  FROM cambio_productos_facturados WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_cambio', $desde, $hasta, $mysql) . " ORDER BY id_cambio";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -1940,7 +1944,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_proforma WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
 
         $sql = "SELECT id_encabezado_proforma, fecha_proforma, serie_proforma, secuencial_proforma, id_cliente, total_proforma, estado_proforma, codigo_unico
-                  FROM encabezado_proforma WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_proforma', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_proforma";
+                  FROM encabezado_proforma WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_proforma', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_proforma";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2187,7 +2191,7 @@ class MigracionMysqlService
         foreach ($qn->fetchAll(PDO::FETCH_ASSOC) as $r) { $cuentaPorCod[(string) $r['codigo']] = (int) $r['id']; }
 
         $oldCuentas = [];
-        foreach ($mysql->query("SELECT id_cuenta, codigo_cuenta, nombre_cuenta, nivel_cuenta FROM plan_cuentas WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " ORDER BY codigo_cuenta") as $r) {
+        foreach ($mysql->query("SELECT id_cuenta, codigo_cuenta, nombre_cuenta, nivel_cuenta FROM plan_cuentas WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " ORDER BY codigo_cuenta") as $r) {
             $oldCuentas[(int) $r['id_cuenta']] = ['codigo' => $r['codigo_cuenta'], 'nombre' => $r['nombre_cuenta'], 'nivel' => $r['nivel_cuenta']];
         }
 
@@ -2218,7 +2222,7 @@ class MigracionMysqlService
         $qn->execute([$idEmpresa]);
         foreach ($qn->fetchAll(PDO::FETCH_ASSOC) as $r) { $cuentaPorCod[(string) $r['codigo']] = (int) $r['id']; }
         $oldCuentas = [];
-        foreach ($mysql->query("SELECT id_cuenta, codigo_cuenta, nombre_cuenta, nivel_cuenta FROM plan_cuentas WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $r) {
+        foreach ($mysql->query("SELECT id_cuenta, codigo_cuenta, nombre_cuenta, nivel_cuenta FROM plan_cuentas WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $r) {
             $oldCuentas[(int) $r['id_cuenta']] = ['codigo' => $r['codigo_cuenta'], 'nombre' => $r['nombre_cuenta'], 'nivel' => $r['nivel_cuenta']];
         }
         $mapCuenta = [];
@@ -2256,7 +2260,7 @@ class MigracionMysqlService
 
         // Los asientos ELIMINADOS en el sistema viejo se marcan con estado='Anulado' → NO se migran.
         $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo
-                  FROM encabezado_diario WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
+                  FROM encabezado_diario WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2514,10 +2518,10 @@ class MigracionMysqlService
 
         // Número de pedido más alto del viejo (para renumerar duplicados POR ENCIMA de todos y no pisar
         // a los pedidos que vienen con esos números — evita el efecto cascada al renumerar).
-        $maxOldNumero = (int) $mysql->query("SELECT COALESCE(MAX(CAST(numero_pedido AS UNSIGNED)),0) FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql))->fetchColumn();
+        $maxOldNumero = (int) $mysql->query("SELECT COALESCE(MAX(CAST(numero_pedido AS UNSIGNED)),0) FROM encabezado_pedido WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql))->fetchColumn();
 
         $sql = "SELECT id, ruc_empresa, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
-                  FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
+                  FROM encabezado_pedido WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2678,7 +2682,7 @@ class MigracionMysqlService
             : "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id");
 
         $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote, fecha_vencimiento
-                  FROM inventarios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
+                  FROM inventarios WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2805,7 +2809,7 @@ class MigracionMysqlService
 
         // Formas de cobro: pre-crear desde el catálogo viejo (fuera de transacción) + una por defecto
         $formaCache = [];
-        foreach ($mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $o) {
+        foreach ($mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $o) {
             $formaCache[(string) $o['id']] = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, (string) $o['descripcion'], $pg);
         }
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
@@ -2820,14 +2824,14 @@ class MigracionMysqlService
                                   FROM detalle_ingresos_egresos d
                                   JOIN ingresos_egresos ie ON ie.codigo_documento = d.codigo_documento
                                   LEFT JOIN encabezado_factura ef ON ef.id_encabezado_factura = d.codigo_documento_cv
-                                 WHERE d.tipo_documento = 'INGRESO' AND ie.tipo_ing_egr = 'INGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+                                 WHERE d.tipo_documento = 'INGRESO' AND ie.tipo_ing_egr = 'INGRESO' AND ie.ruc_empresa LIKE " . $mysql->quote($base . '%') . $dateCl) as $r) {
             $detByDoc[(string) $r['cd']][] = $r;
         }
         $formaByDoc = [];
         foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.fecha_entrega, f.estado_pago, f.cheque, f.detalle_pago
                                   FROM formas_pagos_ing_egr f
                                   JOIN ingresos_egresos ie ON ie.codigo_documento = f.codigo_documento
-                                 WHERE f.tipo_documento = 'INGRESO' AND ie.tipo_ing_egr = 'INGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+                                 WHERE f.tipo_documento = 'INGRESO' AND ie.tipo_ing_egr = 'INGRESO' AND ie.ruc_empresa LIKE " . $mysql->quote($base . '%') . $dateCl) as $r) {
             $formaByDoc[(string) $r['cd']][] = $r;
         }
         // Forma de cobro BANCARIA: cuando el pago viejo trae id_cuenta>0 (codigo_forma_pago='0'), enlaza a la
@@ -2871,7 +2875,7 @@ class MigracionMysqlService
         $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'RECIBIDO', ?, ?, ?, 'ingreso', ?, false, now(), now(), ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
-                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+                  FROM ingresos_egresos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -2996,14 +3000,14 @@ class MigracionMysqlService
 
         // codigo_documento (string, viejo) → id compra nueva
         $compraPorCod = [];
-        foreach ($mysql->query("SELECT id_encabezado_compra, codigo_documento FROM encabezado_compra WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $c) {
+        foreach ($mysql->query("SELECT id_encabezado_compra, codigo_documento FROM encabezado_compra WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $c) {
             $nid = $mapCompra[(string) (int) $c['id_encabezado_compra']] ?? null;
             if ($nid) { $compraPorCod[(string) $c['codigo_documento']] = $nid; }
         }
 
         // Formas de pago (mismo catálogo que cobros)
         $formaCache = [];
-        foreach ($mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $o) {
+        foreach ($mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $o) {
             $formaCache[(string) $o['id']] = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, (string) $o['descripcion'], $pg);
         }
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
@@ -3017,25 +3021,25 @@ class MigracionMysqlService
         foreach ($mysql->query("SELECT d.codigo_documento AS cd, d.valor_ing_egr, d.detalle_ing_egr, d.codigo_documento_cv
                                   FROM detalle_ingresos_egresos d
                                   JOIN ingresos_egresos ie ON ie.codigo_documento = d.codigo_documento
-                                 WHERE d.tipo_documento = 'EGRESO' AND ie.tipo_ing_egr = 'EGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+                                 WHERE d.tipo_documento = 'EGRESO' AND ie.tipo_ing_egr = 'EGRESO' AND ie.ruc_empresa LIKE " . $mysql->quote($base . '%') . $dateCl) as $r) {
             $detByDoc[(string) $r['cd']][] = $r;
         }
         $formaByDoc = [];
         foreach ($mysql->query("SELECT f.codigo_documento AS cd, f.valor_forma_pago, f.codigo_forma_pago, f.id_cuenta, f.fecha_pago, f.fecha_entrega, f.estado_pago, f.cheque, f.detalle_pago
                                   FROM formas_pagos_ing_egr f
                                   JOIN ingresos_egresos ie ON ie.codigo_documento = f.codigo_documento
-                                 WHERE f.tipo_documento = 'EGRESO' AND ie.tipo_ing_egr = 'EGRESO' AND LEFT(ie.ruc_empresa,10) = " . $mysql->quote($base) . $dateCl) as $r) {
+                                 WHERE f.tipo_documento = 'EGRESO' AND ie.tipo_ing_egr = 'EGRESO' AND ie.ruc_empresa LIKE " . $mysql->quote($base . '%') . $dateCl) as $r) {
             $formaByDoc[(string) $r['cd']][] = $r;
         }
         $compProvByCod = []; // codigo_documento de la compra → id_proveedor (para el proveedor del egreso desde su compra)
-        foreach ($mysql->query("SELECT codigo_documento, id_proveedor FROM encabezado_compra WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $r) {
+        foreach ($mysql->query("SELECT codigo_documento, id_proveedor FROM encabezado_compra WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $r) {
             $compProvByCod[(string) $r['codigo_documento']] = (int) $r['id_proveedor'];
         }
         // Concepto/tipo del egreso viejo: ingresos_egresos.codigo_contable → opciones_ingresos_egresos.id
         // (descripción como "Sueldos", "Anticípo sueldos", "décimo tercero", "fondos de reserva"...).
         // Sirve para reconocer los egresos de NÓMINA y marcarlos como tipo ROL + sujeto EMPLEADO.
         $opcionById = [];
-        foreach ($mysql->query("SELECT id, descripcion FROM opciones_ingresos_egresos WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $o) {
+        foreach ($mysql->query("SELECT id, descripcion FROM opciones_ingresos_egresos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $o) {
             $opcionById[(int) $o['id']] = (string) $o['descripcion'];
         }
         // Empleados ya migrados de esta empresa, indexados por nombre normalizado (tokens ordenados,
@@ -3084,7 +3088,7 @@ class MigracionMysqlService
         $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'EMITIDO', ?, ?, ?, 'egreso', ?, false, now(), now(), ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro, codigo_contable
-                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+                  FROM ingresos_egresos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -3263,7 +3267,7 @@ class MigracionMysqlService
         $transStmt  = $mysql->prepare("SELECT ruc, nombre, tipo_id FROM clientes WHERE id = :id LIMIT 1");
 
         $sql = "SELECT id_encabezado_gr, ruc_empresa, fecha_gr, fecha_salida, fecha_llegada, serie_gr, secuencial_gr, factura_aplica, origen, destino, id_transportista, id_cliente, placa, estado_sri, ambiente, aut_sri, motivo
-                  FROM encabezado_gr WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_gr', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_gr";
+                  FROM encabezado_gr WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_gr', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_gr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -3361,7 +3365,7 @@ class MigracionMysqlService
         $sustValidos = [];
         foreach ($pg->query("SELECT id FROM sustento_tributario") as $s) { $sustValidos[(int) $s['id']] = true; }
         $sustPorNum = [];
-        foreach ($mysql->query("SELECT numero_documento, id_sustento FROM encabezado_compra WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " AND id_comprobante = 3") as $r) {
+        foreach ($mysql->query("SELECT numero_documento, id_sustento FROM encabezado_compra WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " AND id_comprobante = 3") as $r) {
             $k = preg_replace('/\D/', '', (string) $r['numero_documento']);
             if ($k !== '') { $sustPorNum[$k] = (int) $r['id_sustento']; }
         }
@@ -3380,10 +3384,10 @@ class MigracionMysqlService
         $precargar = function () use ($mysql, $base, &$adicMap, &$pagosMap): void {
             if ($adicMap !== null) { return; }
             $adicMap = []; $pagosMap = [];
-            foreach ($mysql->query("SELECT serie_liquidacion, secuencial_liquidacion, adicional_concepto, adicional_descripcion FROM detalle_adicional_liquidacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " ORDER BY id_detalle") as $r) {
+            foreach ($mysql->query("SELECT serie_liquidacion, secuencial_liquidacion, adicional_concepto, adicional_descripcion FROM detalle_adicional_liquidacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " ORDER BY id_detalle") as $r) {
                 $adicMap[$r['serie_liquidacion'] . '|' . (int) $r['secuencial_liquidacion']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']];
             }
-            foreach ($mysql->query("SELECT serie_liquidacion, secuencial_liquidacion, id_forma_pago, valor_pago FROM formas_pago_liquidacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $r) {
+            foreach ($mysql->query("SELECT serie_liquidacion, secuencial_liquidacion, id_forma_pago, valor_pago FROM formas_pago_liquidacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $r) {
                 $pagosMap[$r['serie_liquidacion'] . '|' . (int) $r['secuencial_liquidacion']][] = ['fp' => $r['id_forma_pago'], 'val' => $r['valor_pago']];
             }
         };
@@ -3411,7 +3415,7 @@ class MigracionMysqlService
         $updCab = $pg->prepare("UPDATE liquidaciones_cabecera SET id_proveedor = ?, fecha_emision = ?, estado = ?, estado_correo = ?, id_sustento_tributario = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_liq, ruc_empresa, fecha_liquidacion, serie_liquidacion, secuencial_liquidacion, id_proveedor, estado_sri, total_liquidacion, ambiente, aut_sri
-                  FROM encabezado_liquidacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_liquidacion', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_liq";
+                  FROM encabezado_liquidacion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_liquidacion', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_liq";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -3567,18 +3571,18 @@ class MigracionMysqlService
         $precargar = function () use ($mysql, $base, &$pagosMap, &$adicMap, &$vendMap): void {
             if ($pagosMap !== null) { return; }
             $pagosMap = []; $adicMap = []; $vendMap = [];
-            $q = $mysql->query("SELECT serie_factura, secuencial_factura, id_forma_pago, valor_pago FROM formas_pago_ventas WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+            $q = $mysql->query("SELECT serie_factura, secuencial_factura, id_forma_pago, valor_pago FROM formas_pago_ventas WHERE ruc_empresa LIKE " . $mysql->quote($base . '%'));
             foreach ($q as $r) {
                 $k = $r['serie_factura'] . '|' . (int) $r['secuencial_factura'];
                 $pagosMap[$k][] = ['fp' => $r['id_forma_pago'], 'val' => $r['valor_pago']];
             }
-            $q = $mysql->query("SELECT serie_factura, secuencial_factura, adicional_concepto, adicional_descripcion FROM detalle_adicional_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_detalle");
+            $q = $mysql->query("SELECT serie_factura, secuencial_factura, adicional_concepto, adicional_descripcion FROM detalle_adicional_factura WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " ORDER BY id_detalle");
             foreach ($q as $r) {
                 $k = $r['serie_factura'] . '|' . (int) $r['secuencial_factura'];
                 $adicMap[$k][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']];
             }
             // Solo las ventas cuyo id_venta es una factura de este tenant (id_venta = id_encabezado_factura).
-            $q = $mysql->query("SELECT vv.id_venta, vv.id_vendedor FROM vendedores_ventas vv JOIN encabezado_factura ef ON ef.id_encabezado_factura = vv.id_venta WHERE LEFT(ef.ruc_empresa, 10) = " . $mysql->quote($base));
+            $q = $mysql->query("SELECT vv.id_venta, vv.id_vendedor FROM vendedores_ventas vv JOIN encabezado_factura ef ON ef.id_encabezado_factura = vv.id_venta WHERE ef.ruc_empresa LIKE " . $mysql->quote($base . '%'));
             foreach ($q as $r) { $vendMap[(int) $r['id_venta']] = (int) $r['id_vendedor']; }
         };
         // Devuelve el id_vendedor NUEVO de una factura vieja (o null). Fuerza la precarga.
@@ -3624,7 +3628,7 @@ class MigracionMysqlService
         $qCliDe  = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = ?");
 
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
-                  FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_factura', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_factura";
+                  FROM encabezado_factura WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_factura', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_factura";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
         }
@@ -3967,7 +3971,7 @@ class MigracionMysqlService
         $precargarAdic = function () use (&$adicByDoc, $mysql, $base): void {
             if ($adicByDoc !== null) { return; }
             $adicByDoc = [];
-            $q = $mysql->query("SELECT codigo_documento, adicional_concepto, adicional_descripcion FROM detalle_adicional_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_detalle");
+            $q = $mysql->query("SELECT codigo_documento, adicional_concepto, adicional_descripcion FROM detalle_adicional_compra WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " ORDER BY id_detalle");
             foreach ($q as $r) {
                 $adicByDoc[(string) $r['codigo_documento']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']];
             }
@@ -3985,7 +3989,7 @@ class MigracionMysqlService
         // Las liquidaciones de compra (id_comprobante = 3, código '03') NO se migran al
         // módulo de compras: tienen su propio módulo (migrarLiquidaciones → liquidaciones_cabecera).
         $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina, id_sustento, `desde`, `hasta`, fecha_caducidad, tipo_comprobante, deducible_en, id_comprobante, factura_aplica_nc_nd
-                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND id_comprobante <> 3" . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
+                  FROM encabezado_compra WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND id_comprobante <> 3" . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
         }
@@ -4152,7 +4156,7 @@ class MigracionMysqlService
         $migrarAdicNc = function (int $idNc, array $ec) use ($mysql, $base, &$adicMapNc, $insAdicNc, $delAdicNc): void {
             if ($adicMapNc === null) {
                 $adicMapNc = [];
-                $q = $mysql->query("SELECT serie_nc, secuencial_nc, adicional_concepto, adicional_descripcion FROM detalle_adicional_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_detalle");
+                $q = $mysql->query("SELECT serie_nc, secuencial_nc, adicional_concepto, adicional_descripcion FROM detalle_adicional_nc WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " ORDER BY id_detalle");
                 foreach ($q as $r) { $adicMapNc[$r['serie_nc'] . '|' . (int) $r['secuencial_nc']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']]; }
             }
             $delAdicNc->execute([$idNc]); // idempotente
@@ -4184,7 +4188,7 @@ class MigracionMysqlService
         $updEstadoNc = $pg->prepare("UPDATE notas_credito_cabecera SET estado = ?, estado_correo = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_nc, ruc_empresa, fecha_nc, serie_nc, secuencial_nc, factura_modificada, id_cliente, estado_sri, total_nc, ambiente, aut_sri, motivo, fecha_factura
-                  FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
+                  FROM encabezado_nc WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4299,7 +4303,7 @@ class MigracionMysqlService
         $delDet  = $pg->prepare("DELETE FROM retencion_compra_detalle WHERE id_retencion = ?");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_proveedor, serie_retencion, secuencial_retencion, total_retencion, aut_sri, fecha_emision, fecha_documento, tipo_comprobante, numero_comprobante, ambiente, estado_sri
-                  FROM encabezado_retencion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
+                  FROM encabezado_retencion WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4404,7 +4408,7 @@ class MigracionMysqlService
         $delDet = $pg->prepare("DELETE FROM retencion_venta_detalle WHERE id_retencion = ?");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_cliente, serie_retencion, secuencial_retencion, aut_sri, fecha_emision, codigo_unico, numero_documento
-                  FROM encabezado_retencion_venta WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
+                  FROM encabezado_retencion_venta WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4512,11 +4516,11 @@ class MigracionMysqlService
             // ruc_empresa → se acota por JOIN al encabezado del tenant.
             $q = $mysql->query("SELECT da.id_encabezado_recibo, da.adicional_concepto, da.adicional_descripcion
                                   FROM detalle_adicional_recibo da JOIN encabezado_recibo er ON er.id_encabezado_recibo = da.id_encabezado_recibo
-                                 WHERE LEFT(er.ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY da.id");
+                                 WHERE er.ruc_empresa LIKE " . $mysql->quote($base . '%') . " ORDER BY da.id");
             foreach ($q as $r) { $adicMapR[(int) $r['id_encabezado_recibo']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']]; }
             $q = $mysql->query("SELECT vr.id_recibo, vr.id_vendedor
                                   FROM vendedores_recibos vr JOIN encabezado_recibo er ON er.id_encabezado_recibo = vr.id_recibo
-                                 WHERE LEFT(er.ruc_empresa, 10) = " . $mysql->quote($base));
+                                 WHERE er.ruc_empresa LIKE " . $mysql->quote($base . '%'));
             foreach ($q as $r) { $vendMapR[(int) $r['id_recibo']] = (int) $r['id_vendedor']; }
         };
         $vendedorRDe = function (int $oldRecibo) use ($precargarR, &$vendMapR, $mapVend): ?int {
@@ -4566,7 +4570,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega FROM cuerpo_recibo WHERE id_encabezado_recibo = :id");
 
         $sql = "SELECT id_encabezado_recibo, fecha_recibo, serie_recibo, secuencial_recibo, id_cliente, total_recibo, propina
-                  FROM encabezado_recibo WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_recibo', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_recibo";
+                  FROM encabezado_recibo WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_recibo', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_recibo";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4677,7 +4681,7 @@ class MigracionMysqlService
         );
 
         $chk = $pg->prepare("SELECT id, estado FROM ventas_cabecera WHERE id_empresa = :e AND establecimiento = :est AND punto_emision = :pto AND secuencial = :sec AND eliminado = false LIMIT 1");
-        $st  = $mysql->query("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");
+        $st  = $mysql->query("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");
 
         while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
             $res['anuladas_en_viejo']++;

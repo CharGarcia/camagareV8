@@ -524,14 +524,22 @@ $base = BASE_URL;
         }
 
         restBase = estDespuesDe(-1); curEst = 0; recalcRestante();
+        let cancelado = false, abortCtrl = null;
         Swal.fire({
             title: 'Migrando información…',
-            html: '<div id="migSwalBody"></div>',
+            html: '<div id="migSwalBody"></div><div class="text-center"><button type="button" id="migCancelBtn" class="btn btn-outline-danger btn-sm mt-3"><i class="bi bi-x-circle me-1"></i>Cancelar migración</button></div>',
             allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false,
             didOpen: async () => {
               pintarSwal();
+              const cancelBtn = document.getElementById('migCancelBtn');
+              cancelBtn.addEventListener('click', () => {
+                  cancelado = true;
+                  cancelBtn.disabled = true; cancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cancelando…';
+                  if (abortCtrl) { try { abortCtrl.abort(); } catch (e) {} }
+              });
               const timer = setInterval(() => { restante = Math.max(0, restante - 1); pintarSwal(); }, 1000);
               for (let i = 0; i < entidades.length; i++) {
+            if (cancelado) break;
             const ent = entidades[i];
             entActual = ent;
             curTotal = totalMap[ent] || 0; curEst = estMap[ent] || 3; restBase = estDespuesDe(i); curDone = 0;
@@ -556,7 +564,8 @@ $base = BASE_URL;
                 const eDest = ($('estabDestino') || {}).value || '';
                 if (eOrig) body.append('estab_origen', eOrig);
                 if (eDest) body.append('estab_destino', eDest);
-                const res = await fetch(base + '/config/migrarMysql?action=migrar', { method: 'POST', body }).then(r => r.json());
+                abortCtrl = new AbortController();
+                const res = await fetch(base + '/config/migrarMysql?action=migrar', { method: 'POST', body, signal: abortCtrl.signal }).then(r => r.json());
                 if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); continue; }
                 const d = res.data;
                 if (d.no_implementado) { logMig(ent, '<span class="text-muted">próximamente</span>'); continue; }
@@ -591,24 +600,39 @@ $base = BASE_URL;
                     html += `<br><span class="text-warning small">ℹ ${fmt(d.serie_omitida)} quedaron sin serie${ej}: ese número ya está usado en el punto de emisión de destino. Revíselos manualmente.</span>`;
                 }
                 logMig(ent, html);
-            } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
-              finally { clearInterval(sondeo); hecho++; if (curTotal) curDone = curTotal; recalcRestante(); pintarSwal(); }
+            } catch (e) {
+                // Si se canceló, el fetch se aborta (AbortError): no es un error real de migración.
+                if (cancelado || e.name === 'AbortError') { logMig(ent, '<span class="text-warning">cancelado</span>'); }
+                else { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
+            }
+              finally { clearInterval(sondeo); if (!cancelado) { hecho++; if (curTotal) curDone = curTotal; } recalcRestante(); pintarSwal(); }
+              if (cancelado) break;
               }
 
               clearInterval(timer);
               btn.disabled = false; btn.innerHTML = '<i class="bi bi-database-down me-1"></i> Migrar seleccionados';
-              Swal.fire({
-                  icon: totals.errores ? 'warning' : 'success',
-                  title: 'Migración finalizada',
-                  html: `<div class="text-start small" style="max-width:280px;margin:0 auto;">
-                          <div><b>${fmt(totals.migrados)}</b> migrados</div>
-                          <div><b>${fmt(totals.vinculados)}</b> vinculados (ya existían)</div>
-                          <div><b>${fmt(totals.ya)}</b> ya estaban</div>
-                          <div><b class="${totals.omitidos ? 'text-warning' : ''}">${fmt(totals.omitidos)}</b> omitidos</div>
-                          <div><b class="${totals.errores ? 'text-danger' : ''}">${fmt(totals.errores)}</b> errores</div>
-                         </div>`,
-                  confirmButtonColor: '#198754'
-              });
+              const resumen = `<div class="text-muted small mt-2">migrados ${fmt(totals.migrados)} · vinculados ${fmt(totals.vinculados)} · ya estaban ${fmt(totals.ya)} · omitidos ${fmt(totals.omitidos)} · errores ${fmt(totals.errores)}</div>`;
+              if (cancelado) {
+                  Swal.fire({
+                      icon: 'info', title: 'Migración cancelada',
+                      html: `Se detuvo el envío de más pasos. El paso en curso puede terminar en el servidor.<br>
+                             <span class="text-muted small">Lo ya procesado quedó guardado. Es idempotente: al volver a migrar continúa donde quedó.</span>${resumen}`,
+                      confirmButtonColor: '#198754'
+                  });
+              } else {
+                  Swal.fire({
+                      icon: totals.errores ? 'warning' : 'success',
+                      title: 'Migración finalizada',
+                      html: `<div class="text-start small" style="max-width:280px;margin:0 auto;">
+                              <div><b>${fmt(totals.migrados)}</b> migrados</div>
+                              <div><b>${fmt(totals.vinculados)}</b> vinculados (ya existían)</div>
+                              <div><b>${fmt(totals.ya)}</b> ya estaban</div>
+                              <div><b class="${totals.omitidos ? 'text-warning' : ''}">${fmt(totals.omitidos)}</b> omitidos</div>
+                              <div><b class="${totals.errores ? 'text-danger' : ''}">${fmt(totals.errores)}</b> errores</div>
+                             </div>`,
+                      confirmButtonColor: '#198754'
+                  });
+              }
             }
         });
     });
