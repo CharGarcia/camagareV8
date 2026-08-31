@@ -62,6 +62,30 @@ bloqueado desde que se abre. Si ya está aprobada y necesita cambiarla, tiene do
 caminos: anularla y crear una nueva, o —cuando el cambio es menor— convertirla a
 factura y corregir en la factura antes de enviarla.
 
+## Decimales y cálculo del IVA
+
+La proforma usa la **misma configuración de la empresa que las facturas de
+venta**, que se define en *Empresa → Establecimientos*:
+
+| Configuración | Qué controla |
+|---|---|
+| **Decimales de cantidad** | Cuántos decimales se muestran y se escriben en la columna *Cant.* |
+| **Decimales de precio** | Cuántos decimales se muestran en *P. Sin Imp.* y *P. Con Imp.* |
+| **Cálculo del IVA** | *Línea por línea* (se redondea el IVA de cada renglón y se suman) o *Al subtotal* (se calcula sobre la base acumulada de cada tarifa) |
+
+Los importes (descuento, subtotal y totales) siempre llevan 2 decimales, y cada
+paso del cálculo se redondea a 2 decimales, exactamente igual que en facturas.
+
+Por eso la pantalla, el **PDF** y el **Excel** muestran las mismas cifras: las
+salidas no recalculan nada, leen los valores guardados de la proforma. El pie de
+totales es el mismo en las tres: **Subtotal** (antes de descuento), un
+**Subtotal por cada tarifa de IVA**, **(-) Descuento**, un **(+) IVA por cada
+tarifa** y el **TOTAL**.
+
+> Si cambia la configuración de decimales o de cálculo del IVA, las proformas ya
+> guardadas conservan los valores con los que se grabaron. Se actualizan cuando
+> se vuelve a abrir y guardar la proforma.
+
 ## Exportar a Excel
 
 Desde la proforma guardada, el botón **Excel** (junto al de PDF, en la barra de
@@ -181,6 +205,19 @@ en Facturas de Venta.
 
 ## Historial de cambios
 
+- **1.8** — La proforma respeta la **configuración de la empresa** (decimales de
+  cantidad, decimales de precio y modo de cálculo del IVA), la misma que usan las
+  facturas de venta; antes usaba decimales fijos y sumaba el IVA siempre línea por
+  línea. Los cálculos redondean a 2 decimales en cada paso, igual que en facturas, y
+  el **PDF** y el **Excel** muestran el mismo pie de totales que la pantalla
+  (Subtotal, subtotales por tarifa, descuento e IVA por tarifa) leyendo los valores
+  guardados en vez de recalcularlos. Nueva sección *Decimales y cálculo del IVA*.
+- **1.7** — El **PDF de la proforma** muestra los valores exactamente como se ven
+  en pantalla: precio unitario con 4 decimales (antes se redondeaba a 2), subtotal
+  de línea calculado igual que el modal (cantidad × precio − descuento) y el bloque
+  de totales con el mismo desglose: **Subtotal**, un **Subtotal por cada tarifa de
+  IVA**, el **(-) Descuento** y un **(+) IVA por cada tarifa**. El IVA ya no se
+  deduce restando totales, se suma por línea.
 - **1.6** — En el **PDF de la proforma** el logo de la empresa ocupa todo el
   espacio superior izquierdo: a lo ancho hasta donde arranca la tarjeta
   "PROFORMA" y a lo alto hasta el nombre de la empresa. La imagen se ajusta

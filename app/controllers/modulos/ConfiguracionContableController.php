@@ -599,6 +599,11 @@ class ConfiguracionContableController extends BaseModuloController
 
         $tipoReferencia = $naturaleza === 'ingreso' ? 'opcion_ingreso' : 'opcion_egreso';
 
+        // Bandera que envía el propio modal cuando este guardado NACE de aceptar una sugerencia:
+        // así el bloque contrario no vuelve a sugerir hacia atrás (evita el ida y vuelta infinito).
+        $omitirSugerencia  = !empty($_POST['sin_sugerencia']);
+        $naturalezaOpuesta = $naturaleza === 'ingreso' ? 'egreso' : 'ingreso';
+
         try {
             $opcRepo = new OpcionIngresoEgresoRepository();
 
@@ -612,6 +617,13 @@ class ConfiguracionContableController extends BaseModuloController
                 echo json_encode(['ok' => false, 'error' => 'Este concepto toma su cuenta directamente de la configuración del módulo (Adquisiciones/Ventas/Recibos/Nómina) — no se puede asignar una cuenta aparte aquí.']);
                 exit;
             }
+
+            // Estado del bloque contrario ANTES de escribir nada: guardar aquí también toca
+            // o.id_cuenta_contable, que es la cuenta que el otro bloque muestra por COALESCE,
+            // así que después ya no se podría saber qué tenía.
+            $contraparteAntes = $omitirSugerencia
+                ? null
+                : $this->repository->getCuentaVigenteOpcion($idEmpresa, $idOpcion, $naturalezaOpuesta);
 
             // 1. Sincronizar la cuenta en el módulo de Opciones de Ingreso/Egreso
             $opcRepo->updateCuentaContable($idOpcion, $idEmpresa, $idCuenta, $idUsuario);
@@ -640,7 +652,11 @@ class ConfiguracionContableController extends BaseModuloController
                 $this->propagarCuentaAnticipoAFormas($idEmpresa, $idUsuario, $comportamientoActual, $idCuenta);
             }
 
-            echo json_encode(['ok' => true, 'msg' => $msg]);
+            // 4. Si la MISMA opción también aparece en el bloque contrario (marcada a la vez en
+            //    Ingresos y en Egresos) y allí la cuenta no coincide, se propone replicarla.
+            $sugerencia = $this->destinosReplicaOpcion($contraparteAntes, $idCuenta, $idOpcion, $naturalezaOpuesta);
+
+            echo json_encode(['ok' => true, 'msg' => $msg, 'sugerencia' => $sugerencia]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -757,7 +773,18 @@ class ConfiguracionContableController extends BaseModuloController
 
         $tipoReferencia = $flujo === 'cobro' ? 'forma_cobro' : 'forma_pago';
 
+        // Igual que en Ingresos/Egresos: cuando el guardado nace de aceptar una sugerencia,
+        // el bloque contrario no vuelve a sugerir hacia atrás.
+        $omitirSugerencia = !empty($_POST['sin_sugerencia']);
+
         try {
+            // Estado ANTES de escribir nada de todas las filas sobre las que tendría sentido
+            // replicar esta cuenta: la propia forma en el bloque contrario y las formas hermanas
+            // que son la misma cuenta bancaria (ver nota en guardarReglaOpcionAjax).
+            $relacionadasAntes = $omitirSugerencia
+                ? []
+                : $this->repository->getDestinosReplicaForma($idEmpresa, $idForma);
+
             // 1. Sincronizar la cuenta en el módulo de Formas de Cobros/Pagos
             $formaRepo = new FormaPagoRepository();
             $formaRepo->updateCuentaContable($idForma, $idEmpresa, $idCuenta, $idUsuario);
@@ -780,12 +807,109 @@ class ConfiguracionContableController extends BaseModuloController
                 $msg = 'Cuenta contable asignada correctamente.';
             }
 
-            echo json_encode(['ok' => true, 'msg' => $msg]);
+            // 3. Proponer replicar la cuenta en las demás filas del mismo dinero: la propia forma
+            //    en el bloque contrario (aplica_en = AMBAS) y las formas hermanas de la misma
+            //    cuenta bancaria, en los dos bloques.
+            $sugerencia = $this->destinosReplicaForma($relacionadasAntes, $idForma, $flujo, $idCuenta);
+
+            echo json_encode(['ok' => true, 'msg' => $msg, 'sugerencia' => $sugerencia]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Filas de Cobros/Pagos donde tendría sentido replicar la cuenta recién asignada: la propia
+     * forma en el bloque contrario (aplica_en = 'AMBAS') y las formas hermanas que son la misma
+     * cuenta bancaria, en los dos bloques. Se descartan la fila que se acaba de guardar y las que
+     * ya tienen exactamente esa cuenta, así que una lista vacía significa "no hay nada que sugerir".
+     *
+     * @param array  $relacionadas Salida de getDestinosReplicaForma(), leída ANTES de guardar.
+     * @param int    $idFormaOrigen Forma sobre la que se acaba de asignar la cuenta.
+     * @param string $flujoOrigen   'cobro' | 'pago' — la fila que ya quedó guardada.
+     * @param int    $idCuenta      Cuenta recién asignada.
+     */
+    private function destinosReplicaForma(array $relacionadas, int $idFormaOrigen, string $flujoOrigen, int $idCuenta): array
+    {
+        $destinos = [];
+
+        foreach ($relacionadas as $forma) {
+            $idFormaDestino = (int) $forma['id_forma'];
+            $aplicaEn       = (string) ($forma['aplica_en'] ?? '');
+
+            foreach (['cobro', 'pago'] as $flujo) {
+                // Una forma solo se lista en el bloque que le corresponde por su "Aplica en".
+                $seLista = $flujo === 'cobro'
+                    ? in_array($aplicaEn, ['INGRESO', 'AMBAS'], true)
+                    : in_array($aplicaEn, ['EGRESO', 'AMBAS'], true);
+                if (!$seLista) {
+                    continue;
+                }
+                // La fila que originó el guardado ya quedó con la cuenta.
+                if ($idFormaDestino === $idFormaOrigen && $flujo === $flujoOrigen) {
+                    continue;
+                }
+
+                $idCuentaActual = (int) ($flujo === 'cobro' ? ($forma['id_cuenta_cobro'] ?? 0) : ($forma['id_cuenta_pago'] ?? 0));
+                if ($idCuentaActual === $idCuenta) {
+                    continue; // Ya tiene exactamente la misma cuenta.
+                }
+
+                $codigo = $flujo === 'cobro' ? ($forma['cobro_codigo'] ?? null) : ($forma['pago_codigo'] ?? null);
+                $nombre = $flujo === 'cobro' ? ($forma['cobro_nombre'] ?? null) : ($forma['pago_nombre'] ?? null);
+
+                $destinos[] = [
+                    'id_referencia'   => $idFormaDestino,
+                    'selector_valor'  => $flujo,
+                    'prefijo'         => $flujo === 'cobro' ? 'forma_cobro' : 'forma_pago',
+                    'bloque'          => $flujo === 'cobro' ? 'Cobros' : 'Pagos',
+                    'concepto'        => (string) ($forma['concepto'] ?? ''),
+                    'cuenta_actual'   => ($idCuentaActual > 0 && $codigo) ? ($codigo . ' - ' . $nombre) : null,
+                    'es_misma_forma'  => $idFormaDestino === $idFormaOrigen,
+                ];
+            }
+        }
+
+        return $destinos;
+    }
+
+    /**
+     * Equivalente para Ingresos/Egresos: la misma opción marcada a la vez en Ingresos y en
+     * Egresos. Aquí no hay "hermanas" — las opciones no representan una cuenta bancaria, así que
+     * la lista tiene como mucho un destino: la misma opción en el bloque contrario.
+     *
+     * @param array|null $contraparte Estado del bloque contrario ANTES de guardar.
+     */
+    private function destinosReplicaOpcion(?array $contraparte, int $idCuenta, int $idOpcion, string $naturalezaOpuesta): array
+    {
+        if ($contraparte === null || (int) ($contraparte['aplica_ambos'] ?? 0) !== 1) {
+            return [];
+        }
+        if ((int) ($contraparte['activo'] ?? 0) !== 1) {
+            return []; // Inactiva: no se lista en el otro bloque.
+        }
+
+        $idCuentaActual = (int) ($contraparte['id_cuenta'] ?? 0);
+        if ($idCuentaActual === $idCuenta) {
+            return []; // Ya tiene exactamente la misma cuenta.
+        }
+
+        $cuentaActual = null;
+        if ($idCuentaActual > 0 && !empty($contraparte['cuenta_codigo'])) {
+            $cuentaActual = $contraparte['cuenta_codigo'] . ' - ' . $contraparte['cuenta_nombre'];
+        }
+
+        return [[
+            'id_referencia'  => $idOpcion,
+            'selector_valor' => $naturalezaOpuesta,
+            'prefijo'        => $naturalezaOpuesta === 'ingreso' ? 'opc_ingreso' : 'opc_egreso',
+            'bloque'         => $naturalezaOpuesta === 'ingreso' ? 'Ingresos'    : 'Egresos',
+            'concepto'       => (string) ($contraparte['concepto'] ?? ''),
+            'cuenta_actual'  => $cuentaActual,
+            'es_misma_forma' => true,
+        ]];
     }
 
     /**

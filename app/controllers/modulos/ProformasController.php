@@ -54,7 +54,7 @@ class ProformasController extends BaseModuloController
         $totalPages = (int) ceil($total / $perPage);
 
         $empresaModel     = new Empresa();
-        $empresaData      = $empresaModel->getPorId($idEmpresa);
+        $empresaData      = $this->empresaConfig($idEmpresa);
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
         $puntos = $this->cargarTodosPuntos($idEmpresa);
         // Series REALMENTE usadas en proformas guardadas, para el filtro "Serie"
@@ -459,12 +459,7 @@ class ProformasController extends BaseModuloController
         $adicional = $this->repository->getInfoAdicional($id);
 
         try {
-            $empresaModel = new Empresa();
-            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-            $estabs       = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($estabs[0]['logo_ruta'])) {
-                $empresa['logo_ruta'] = $estabs[0]['logo_ruta'];
-            }
+            $empresa = $this->empresaConfig($idEmpresa);
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'proforma');
@@ -500,7 +495,7 @@ class ProformasController extends BaseModuloController
         }
 
         $detalles = $this->repository->getDetalles($id);
-        $empresa  = (new Empresa())->getPorId($idEmpresa) ?? [];
+        $empresa  = $this->empresaConfig($idEmpresa);
 
         $pdf = (new \App\Services\modulos\ProformaFichaProductosPdfService())->generar($cabecera, $detalles, $empresa, 'S');
         if ($pdf === '') {
@@ -546,8 +541,7 @@ class ProformasController extends BaseModuloController
 
             $adicional = $this->repository->getInfoAdicional($id);
 
-            $empresaModel = new Empresa();
-            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+            $empresa = $this->empresaConfig($idEmpresa);
 
             $numero = ($cabecera['establecimiento'] ?? '001') . '-'
                     . ($cabecera['punto_emision']   ?? '001') . '-'
@@ -594,10 +588,7 @@ class ProformasController extends BaseModuloController
 
             $row = $headerRow + 1;
             foreach ($detalles as $d) {
-                $ivaPct = 0.0;
-                foreach ($d['impuestos'] ?? [] as $imp) {
-                    if ((string) ($imp['codigo_impuesto'] ?? '2') === '2') { $ivaPct = (float) ($imp['tarifa'] ?? 0); break; }
-                }
+                $ivaPct = \App\Helpers\ProformaTotales::tarifaIva($d);
 
                 $sheet->setCellValueExplicit('A' . $row, (string) ($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('B' . $row, (string) ($d['descripcion'] ?? $d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
@@ -605,31 +596,30 @@ class ProformasController extends BaseModuloController
                 $sheet->setCellValue('D' . $row, (float) ($d['precio_unitario'] ?? 0));
                 $sheet->setCellValue('E' . $row, (float) ($d['descuento'] ?? 0));
                 $sheet->setCellValue('F' . $row, $ivaPct);
-                $sheet->setCellValue('G' . $row, (float) ($d['precio_total_sin_impuesto'] ?? 0));
+                $sheet->setCellValue('G' . $row, \App\Helpers\ProformaTotales::baseLinea($d));
                 $row++;
             }
 
-            $sheet->getStyle('C' . ($headerRow + 1) . ':C' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('D' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+            // Cantidad y precio con los decimales configurados por la empresa, los mismos
+            // que muestran la pantalla y el PDF.
+            $decCant   = max(0, min(6, (int) ($empresa['decimales_cantidad'] ?? 2)));
+            $decPrecio = max(0, min(6, (int) ($empresa['decimales_precio']   ?? 2)));
+            $fmtCant   = '#,##0' . ($decCant   > 0 ? '.' . str_repeat('0', $decCant)   : '');
+            $fmtPrecio = '#,##0' . ($decPrecio > 0 ? '.' . str_repeat('0', $decPrecio) : '');
+            $sheet->getStyle('C' . ($headerRow + 1) . ':C' . ($row - 1))->getNumberFormat()->setFormatCode($fmtCant);
+            $sheet->getStyle('D' . ($headerRow + 1) . ':D' . ($row - 1))->getNumberFormat()->setFormatCode($fmtPrecio);
+            $sheet->getStyle('E' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
             $sheet->getStyle('F' . ($headerRow + 1) . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('0.00');
             $sheet->getStyle('G' . ($headerRow + 1) . ':G' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
 
-            $subtotal = (float) ($cabecera['total_sin_impuestos'] ?? 0);
-            $descuentoTotal = (float) ($cabecera['total_descuento'] ?? 0);
-            $ice = (float) ($cabecera['total_ice'] ?? 0);
-            $total = (float) ($cabecera['importe_total'] ?? 0);
-            $iva = round($total - $subtotal - $ice, 2);
+            // Mismo desglose que la pantalla y el PDF (Subtotal, subtotales por tarifa,
+            // descuento e IVA por tarifa): una sola fuente para las tres salidas.
+            $desglose = \App\Helpers\ProformaTotales::desglosar($cabecera, $detalles);
+            $totales  = \App\Helpers\ProformaTotales::filas($desglose);
+            $totales[] = ['TOTAL', $desglose['total']];
 
             $row += 1;
-            $totales = [
-                'Subtotal sin impuestos' => $subtotal,
-                'Descuento' => $descuentoTotal,
-            ];
-            if ($ice > 0) $totales['ICE'] = $ice;
-            $totales['IVA'] = $iva;
-            $totales['TOTAL'] = $total;
-
-            foreach ($totales as $label => $valor) {
+            foreach ($totales as [$label, $valor]) {
                 $sheet->setCellValue('F' . $row, $label);
                 $sheet->getStyle('F' . $row)->getFont()->setBold(true);
                 $sheet->setCellValue('G' . $row, $valor);
@@ -1041,12 +1031,7 @@ class ProformasController extends BaseModuloController
         unset($d);
         $adicional = $this->repository->getInfoAdicional($id);
 
-        $empresaModel = new Empresa();
-        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-        $estabs       = $empresaModel->getEstablecimientos($idEmpresa);
-        if (!empty($estabs[0]['logo_ruta'])) {
-            $empresa['logo_ruta'] = $estabs[0]['logo_ruta'];
-        }
+        $empresa = $this->empresaConfig($idEmpresa);
 
         try {
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -1280,6 +1265,34 @@ class ProformasController extends BaseModuloController
             <td class=\"text-center\" data-col=\"estado_correo\">{$correo}</td>
             <td class=\"text-truncate text-muted small\" style=\"max-width:200px;\" data-col=\"observaciones\">{$obs}</td>
         </tr>";
+    }
+
+    /**
+     * Datos de la empresa fusionados con la configuración de su primer establecimiento
+     * (decimales de cantidad/precio, modo de cálculo del IVA, logo). Mismo patrón que
+     * FacturaVentaController: la pantalla y el PDF deben usar la misma configuración,
+     * porque de ahí salen los decimales y el redondeo con los que se muestran las cifras.
+     */
+    private function empresaConfig(int $idEmpresa): array
+    {
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+        try {
+            $estabs = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($estabs)) {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int) $estabs[0]['id']);
+                if ($estConfig) {
+                    $empresa = array_merge($empresa, $estConfig);
+                }
+                if (!empty($estabs[0]['logo_ruta'])) {
+                    $empresa['logo_ruta'] = $estabs[0]['logo_ruta'];
+                }
+            }
+        } catch (\Throwable $e) {
+            // Sin config de establecimiento se usan los valores por defecto (2 decimales).
+        }
+        return $empresa;
     }
 
     /** Badge del estado de envío por correo (reutilizable listado inicial + AJAX). */

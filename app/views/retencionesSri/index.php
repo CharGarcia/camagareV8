@@ -41,7 +41,7 @@ $rowsHtml = $rowsHtml ?? '';
 
 <div class="input-group input-group-sm mb-3" style="max-width: 320px;">
     <span class="input-group-text"><i class="bi bi-search"></i></span>
-    <input type="text" id="input-buscar-retenciones" class="form-control" placeholder="Buscar en código, descripción, impuesto..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+    <input type="text" id="input-buscar-retenciones" class="form-control" placeholder="Buscar en código, descripción, porcentaje, impuesto, cód. ATS, estado o vigencia..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
 </div>
 
 <div class="card cmg-table-card">

@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro
-version: 1.1
+version: 1.3
 orden: 40
 estado: activo
 ---
@@ -34,7 +34,12 @@ Por dos motivos, y ambos importan:
 3. Complete **establecimiento**, **punto de emisión** y **secuencial** del
    comprobante que le entregaron.
 4. Indique el **período fiscal** en formato **MM/YYYY** (por ejemplo `07/2026`).
-5. Registre los valores retenidos de IVA y de renta.
+5. Registre los valores retenidos de IVA y de renta. Al buscar el código de
+   retención puede escribir cualquier dato del catálogo —código, concepto,
+   porcentaje (`1.75`, `1,75` o `1.75 %`), impuesto o código del anexo—: se busca
+   en todas esas columnas a la vez y admite varias palabras en cualquier orden.
+   Solo se ofrecen los códigos vigentes a la fecha de emisión; la vigencia se
+   revisa en **Configuración → Retenciones SRI**.
 6. Guarde.
 
 ## Datos obligatorios
@@ -87,6 +92,8 @@ se rechaza. Reabra el período si realmente necesita eliminarla.
 
 ## Historial de cambios
 
+- **1.3** — El buscador del código de retención cubre todas las columnas del
+  catálogo del SRI (código, concepto, porcentaje, impuesto y código del anexo).
 - **1.2** — Eliminar una retención ahora **anula su asiento contable**. Antes el
   asiento sobrevivía a la retención y seguía afectando el Balance. Efecto
   secundario esperado: ya no se puede eliminar una retención cuya fecha esté en un

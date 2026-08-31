@@ -17,24 +17,38 @@ class RetencionSri extends BaseModel
     public const COLUMNAS_ORDEN = ['codigo_ret', 'concepto_ret', 'porcentaje_ret', 'impuesto_ret', 'cod_anexo_ret', 'status', 'desde', 'hasta'];
 
     /**
-     * Lista todas las retenciones con orden y búsqueda
+     * Lista todas las retenciones con orden y búsqueda por TODAS las columnas que
+     * se ven en la tabla (código, descripción, porcentaje, impuesto, cód. ATS,
+     * estado y vigencia). Ver App\Helpers\BusquedaRetencionSri.
      */
     public function getAll(string $ordenCol = 'codigo_ret', string $ordenDir = 'ASC', string $buscar = ''): array
     {
         $col = in_array($ordenCol, self::COLUMNAS_ORDEN, true) ? $ordenCol : 'codigo_ret';
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
-        $where = '';
-        if ($buscar !== '') {
-            $b = $this->escape($buscar);
-            $where = " WHERE (codigo_ret LIKE '%{$b}%' OR concepto_ret LIKE '%{$b}%' OR impuesto_ret LIKE '%{$b}%' OR cod_anexo_ret LIKE '%{$b}%' OR CAST(porcentaje_ret AS CHAR) LIKE '%{$b}%' OR desde LIKE '%{$b}%' OR hasta LIKE '%{$b}%')";
+        $orden = "{$col} {$dir}";
+
+        $where  = '';
+        $params = [];
+        if (trim($buscar) !== '') {
+            $cond = \App\Helpers\BusquedaRetencionSri::condicion(
+                \App\Helpers\BusquedaRetencionSri::COLUMNAS_LISTADO,
+                $buscar,
+                $params
+            );
+            if ($cond !== '') {
+                $where = ' WHERE ' . $cond;
+            }
         }
+
         $queries = [
-            "SELECT id_ret AS id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, cod_anexo_ret, status, desde, hasta FROM retenciones_sri{$where} ORDER BY {$col} {$dir}",
-            "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, cod_anexo_ret, status, desde, hasta FROM retenciones_sri{$where} ORDER BY {$col} {$dir}",
+            "SELECT id_ret AS id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, cod_anexo_ret, status, desde, hasta FROM retenciones_sri{$where} ORDER BY {$orden}",
+            "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, cod_anexo_ret, status, desde, hasta FROM retenciones_sri{$where} ORDER BY {$orden}",
         ];
         foreach ($queries as $sql) {
             try {
-                return $this->query($sql);
+                $st = $this->db->prepare($sql);
+                $st->execute($params);
+                return $st->fetchAll(\PDO::FETCH_ASSOC);
             } catch (\Throwable $e) {
                 continue;
             }

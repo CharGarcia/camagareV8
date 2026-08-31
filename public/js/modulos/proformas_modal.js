@@ -9,6 +9,25 @@
     const tivas    = () => CFG().tarifasIva || [];
     const perm     = () => CFG().perm || {};
 
+    /**
+     * Decimales y modo de cálculo del IVA configurados por la empresa/establecimiento
+     * (los mismos que usa Facturas de Venta). La pantalla, lo que se guarda y el PDF
+     * tienen que mostrar exactamente las mismas cifras, así que todo el módulo formatea
+     * y redondea con estos valores en vez de constantes fijas.
+     */
+    const decPrecio = () => {
+        const n = parseInt(CFG().decimales_precio, 10);
+        return isNaN(n) ? 2 : Math.max(0, Math.min(6, n));
+    };
+    const decCant = () => {
+        const n = parseInt(CFG().decimales_cantidad, 10);
+        return isNaN(n) ? 2 : Math.max(0, Math.min(6, n));
+    };
+    const modoIva = () => CFG().calculo_iva || 'linea_linea';
+
+    /** Redondea a 2 decimales evitando errores de punto flotante (igual que en Facturas). */
+    const r2 = v => Math.round(((parseFloat(v) || 0) + Number.EPSILON) * 100) / 100;
+
     /* ── Shortcuts DOM ───────────────────────────────────────── */
     const $id = id => document.getElementById(id);
     const fmt2 = v => parseFloat(v || 0).toFixed(2);
@@ -403,7 +422,7 @@
         const precioSinImp = parseFloat(data.precio_unitario || 0);
         const cant         = parseFloat(data.cantidad || 1);
         const desc         = parseFloat(data.descuento || 0);
-        const base         = Math.max(0, cant * precioSinImp - desc);
+        const base         = Math.max(0, r2(r2(cant * precioSinImp) - desc));
         const precioConImp = precioSinImp * (1 + tasa / 100);
 
         const tr = document.createElement('tr');
@@ -424,7 +443,7 @@
         </td>
         <td>
             <input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad"
-                value="${parseFloat(data.cantidad || 1).toFixed(2)}" step="any" min="0">
+                value="${parseFloat(data.cantidad || 1).toFixed(decCant())}" step="any" min="0">
         </td>
         <td>
             <select class="form-select form-select-sm input-detalle input-lista-precios">
@@ -433,11 +452,11 @@
         </td>
         <td>
             <input type="number" class="form-control form-control-sm input-detalle text-end input-precio"
-                value="${precioSinImp.toFixed(4)}" step="any" min="0">
+                value="${precioSinImp.toFixed(decPrecio())}" step="any" min="0">
         </td>
         <td>
             <input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva"
-                value="${precioConImp.toFixed(4)}" step="any" min="0">
+                value="${precioConImp.toFixed(decPrecio())}" step="any" min="0">
         </td>
         <td>
             <div class="d-flex align-items-center">
@@ -548,18 +567,18 @@
 
         inpPrecio.addEventListener('input', () => {
             const t = parseFloat(selIva.value || 0);
-            inpPrecIva.value = (parseFloat(inpPrecio.value || 0) * (1 + t / 100)).toFixed(4);
+            inpPrecIva.value = (parseFloat(inpPrecio.value || 0) * (1 + t / 100)).toFixed(decPrecio());
             _recalcFila(tr);
         });
         inpPrecIva.addEventListener('input', () => {
             const t = parseFloat(selIva.value || 0);
             const pCon = parseFloat(inpPrecIva.value || 0);
-            inpPrecio.value = t > 0 ? (pCon / (1 + t / 100)).toFixed(4) : pCon.toFixed(4);
+            inpPrecio.value = t > 0 ? (pCon / (1 + t / 100)).toFixed(decPrecio()) : pCon.toFixed(decPrecio());
             _recalcFila(tr);
         });
         selIva.addEventListener('change', () => {
             const t = parseFloat(selIva.value || 0);
-            inpPrecIva.value = (parseFloat(inpPrecio.value || 0) * (1 + t / 100)).toFixed(4);
+            inpPrecIva.value = (parseFloat(inpPrecio.value || 0) * (1 + t / 100)).toFixed(decPrecio());
             _recalcFila(tr);
         });
         tr.querySelector('.input-cantidad').addEventListener('input', () => _recalcFila(tr));
@@ -570,8 +589,8 @@
         selLista.addEventListener('change', () => {
             const precioSel = parseFloat(selLista.selectedOptions[0]?.dataset.precio || 0);
             const t = parseFloat(selIva.value || 0);
-            inpPrecio.value  = precioSel.toFixed(4);
-            inpPrecIva.value = (precioSel * (1 + t / 100)).toFixed(4);
+            inpPrecio.value  = precioSel.toFixed(decPrecio());
+            inpPrecIva.value = (precioSel * (1 + t / 100)).toFixed(decPrecio());
             _recalcFila(tr);
         });
 
@@ -600,9 +619,9 @@
         tr.querySelector('.input-descripcion').value = p.nombre || '';
         const inpImg = tr.querySelector('.input-imagen');
         if (inpImg) inpImg.value = p.imagen || '';
-        tr.querySelector('.input-cantidad').value    = '1.00';
-        tr.querySelector('.input-precio').value      = pSin.toFixed(4);
-        tr.querySelector('.input-precio-iva').value  = pCon.toFixed(4);
+        tr.querySelector('.input-cantidad').value    = (1).toFixed(decCant());
+        tr.querySelector('.input-precio').value      = pSin.toFixed(decPrecio());
+        tr.querySelector('.input-precio-iva').value  = pCon.toFixed(decPrecio());
         tr.querySelector('.input-desc').value        = '0.00';
 
         // Asignar IVA (priorizar porcentaje_iva_final como en FV)
@@ -650,8 +669,8 @@
         const cant = parseFloat(tr.querySelector('.input-cantidad').value || 0);
         const pSin = parseFloat(tr.querySelector('.input-precio').value || 0);
         const desc = parseFloat(tr.querySelector('.input-desc').value || 0);
-        const tasa = parseFloat(tr.querySelector('.input-iva').value || 0);
-        const base = Math.max(0, cant * pSin - desc);
+        // Igual que Facturas de Venta: se redondea el bruto y luego el neto, no al final.
+        const base = Math.max(0, r2(r2(cant * pSin) - desc));
 
         tr.querySelector('.subtotal-line').textContent = base.toFixed(2);
 
@@ -664,8 +683,17 @@
         $id('pf_countItems').textContent = i - 1;
     }
 
+    /**
+     * Totales del pie, con el MISMO algoritmo que Facturas de Venta (calcTotales):
+     *  - se redondea a 2 decimales en cada paso (bruto, neto y acumulados);
+     *  - "Subtotal" es el bruto (antes de descuento), coherente con la línea "(-) Descuento";
+     *  - el IVA respeta la configuración de la empresa: 'linea_linea' acumula el IVA
+     *    redondeado de cada renglón, 'subtotal' lo calcula sobre la base de cada tarifa.
+     */
     function _calcularTotales() {
+        const modo   = modoIva();
         const grupos = {};  // { idTarifa: { tasa, base, iva } }
+        let subtotalBrutoTotal = 0;
         let totalDesc = 0;
 
         document.querySelectorAll('#pf_tbodyDetalle .row-detalle').forEach(tr => {
@@ -675,21 +703,34 @@
             const sel   = tr.querySelector('.input-iva');
             const tasa  = parseFloat(sel.value || 0);                  // value = porcentaje
             const idTar = sel.selectedOptions[0]?.dataset.id || '0';   // data-id = id tarifa
-            const base  = Math.max(0, cant * pSin - desc);
-            totalDesc += desc;
+            const bruto = r2(cant * pSin);
+            const base  = Math.max(0, r2(bruto - desc));
+
+            subtotalBrutoTotal = r2(subtotalBrutoTotal + bruto);
+            totalDesc          = r2(totalDesc + desc);
 
             if (!grupos[idTar]) grupos[idTar] = { tasa, base: 0, iva: 0 };
-            grupos[idTar].base += base;
-            grupos[idTar].iva  += base * (tasa / 100);
+            grupos[idTar].base = r2(grupos[idTar].base + base);
+            if (modo === 'linea_linea') {
+                grupos[idTar].iva = r2(grupos[idTar].iva + r2(base * tasa / 100));
+            }
         });
 
-        const subtotalTotal = Object.values(grupos).reduce((s, g) => s + g.base, 0);
-        const ivaTotal      = Object.values(grupos).reduce((s, g) => s + g.iva,  0);
-        const total         = subtotalTotal + ivaTotal;
+        if (modo === 'subtotal') {
+            Object.values(grupos).forEach(g => { g.iva = r2(g.base * g.tasa / 100); });
+        }
 
-        // Subtotal general
+        let ivaTotal = 0;
+        Object.values(grupos).forEach(g => { ivaTotal = r2(ivaTotal + g.iva); });
+        const total = r2((subtotalBrutoTotal - totalDesc) + ivaTotal);
+
+        // Se listan por tarifa ascendente (el PDF hace lo mismo, así ambos coinciden
+        // también en el orden de las líneas, no sólo en los importes).
+        const ordenados = Object.values(grupos).sort((a, b) => a.tasa - b.tasa);
+
+        // Subtotal general (bruto, antes de descuento)
         const elSub = $id('pf_subtotalGeneral');
-        if (elSub) elSub.textContent = fmt2(subtotalTotal);
+        if (elSub) elSub.textContent = fmt2(subtotalBrutoTotal);
 
         // Descuento
         const elDesc = $id('pf_totalDescuento');
@@ -698,7 +739,7 @@
         // Subtotales por tarifa
         const elSubIvas = $id('pf_subtotalesIva');
         if (elSubIvas) {
-            elSubIvas.innerHTML = Object.entries(grupos).map(([, g]) =>
+            elSubIvas.innerHTML = ordenados.map(g =>
                 `<div class="d-flex justify-content-between mb-1">
                     <span class="text-muted">Subtotal ${g.tasa}%</span>
                     <span>${fmt2(g.base)}</span>
@@ -709,7 +750,7 @@
         // IVA por tarifa
         const elIvas = $id('pf_ivasGrupo');
         if (elIvas) {
-            elIvas.innerHTML = Object.entries(grupos).filter(([,g]) => g.tasa > 0).map(([, g]) =>
+            elIvas.innerHTML = ordenados.filter(g => g.tasa > 0).map(g =>
                 `<div class="d-flex justify-content-between mb-1">
                     <span class="text-muted">(+) IVA ${g.tasa}%</span>
                     <span class="fw-bold">${fmt2(g.iva)}</span>
@@ -745,10 +786,13 @@
         const selPunto = $id('pf_punto');
         const optPunto = selPunto?.selectedOptions[0];
 
+        // Mismos redondeos y mismo modo de cálculo del IVA que Facturas de Venta, para que
+        // lo guardado coincida exactamente con lo que muestra la pantalla (y luego el PDF).
+        const modo     = modoIva();
         const detalles = [];
+        const grupos   = {};   // idTarifa => { tasa, base, iva }
         let totalSinImpuestos = 0;
         let totalDescuento    = 0;
-        let totalIva          = 0;
         document.querySelectorAll('#pf_tbodyDetalle .row-detalle').forEach(tr => {
             const sel      = tr.querySelector('.input-iva');
             const tasa     = parseFloat(sel?.value || 0);                          // value = porcentaje
@@ -756,22 +800,28 @@
             const idTarIva = parseInt(sel?.selectedOptions[0]?.dataset.id || 0);   // data-id = id tarifa
             const cant     = parseFloat(tr.querySelector('.input-cantidad').value || 0);
             const pSin     = parseFloat(tr.querySelector('.input-precio').value   || 0);
-            const desc     = parseFloat(tr.querySelector('.input-desc').value     || 0);
-            const base     = Math.max(0, cant * pSin - desc);
-            const valIva   = base * (tasa / 100);
+            const desc     = r2(tr.querySelector('.input-desc').value             || 0);
+            const base     = Math.max(0, r2(r2(cant * pSin) - desc));
+            const valIva   = r2(base * (tasa / 100));
 
             // Saltar filas vacías (sin descripción)
             const descripcion = tr.querySelector('.input-descripcion').value.trim();
             if (!descripcion) return;
 
-            totalSinImpuestos += base;
-            totalDescuento    += desc;
-            totalIva          += valIva;
+            totalSinImpuestos = r2(totalSinImpuestos + base);
+            totalDescuento    = r2(totalDescuento + desc);
 
-            const imp = [];
-            if (tasa > 0) {
-                imp.push({ codigo_impuesto: '2', codigo_porcentaje: codPct, tarifa: tasa, base_imponible: base, valor: valIva });
-            }
+            const kTar = String(idTarIva || tasa);
+            if (!grupos[kTar]) grupos[kTar] = { tasa, base: 0, iva: 0 };
+            grupos[kTar].base = r2(grupos[kTar].base + base);
+            grupos[kTar].iva  = r2(grupos[kTar].iva + valIva);
+
+            // El impuesto se guarda SIEMPRE (también con tarifa 0), igual que en Facturas:
+            // así el PDF puede desglosar "Subtotal 0%" sin tener que deducirlo.
+            const imp = [{
+                codigo_impuesto: '2', codigo_porcentaje: codPct, tarifa: tasa,
+                base_imponible: base, valor: valIva,
+            }];
 
             detalles.push({
                 id:                        parseInt(tr.dataset.id || 0),
@@ -788,7 +838,14 @@
             });
         });
 
-        const importeTotal = totalSinImpuestos + totalIva;
+        // En modo 'subtotal' el IVA se recalcula sobre la base acumulada de cada tarifa.
+        if (modo === 'subtotal') {
+            Object.values(grupos).forEach(g => { g.iva = r2(g.base * g.tasa / 100); });
+        }
+        let totalIva = 0;
+        Object.values(grupos).forEach(g => { totalIva = r2(totalIva + g.iva); });
+
+        const importeTotal = r2(totalSinImpuestos + totalIva);
 
         const adicional = [];
         document.querySelectorAll('#pf_tbodyAdicional tr').forEach(tr => {
@@ -1005,11 +1062,11 @@
         </td>
         <td>
             <input type="number" class="form-control form-control-sm input-detalle text-center plt-input-cantidad"
-                value="${parseFloat(data.cantidad || 1).toFixed(2)}" step="any" min="0">
+                value="${parseFloat(data.cantidad || 1).toFixed(decCant())}" step="any" min="0">
         </td>
         <td>
             <input type="number" class="form-control form-control-sm input-detalle text-end plt-input-precio"
-                value="${parseFloat(data.precio_unitario || 0).toFixed(4)}" step="any" min="0">
+                value="${parseFloat(data.precio_unitario || 0).toFixed(decPrecio())}" step="any" min="0">
         </td>
         <td>
             <input type="number" class="form-control form-control-sm input-detalle text-end plt-input-desc"
@@ -1103,8 +1160,8 @@
         tr.querySelector('.plt-input-id-producto').value = p.id     || '';
         tr.querySelector('.plt-input-codigo').value      = p.codigo || '';
         tr.querySelector('.plt-input-descripcion').value = p.nombre || '';
-        tr.querySelector('.plt-input-cantidad').value    = '1.00';
-        tr.querySelector('.plt-input-precio').value      = parseFloat(p.precio_base || 0).toFixed(4);
+        tr.querySelector('.plt-input-cantidad').value    = (1).toFixed(decCant());
+        tr.querySelector('.plt-input-precio').value      = parseFloat(p.precio_base || 0).toFixed(decPrecio());
         tr.querySelector('.plt-input-desc').value        = '0.00';
 
         let pctFinal = null;
@@ -2112,7 +2169,7 @@
 
             const valActual = parseFloat(tr.querySelector('.input-desc').value) || 0;
             $id('pf_inputDescVal').value  = valActual;
-            $id('pf_inputDescCalc').value = valActual.toFixed(4);
+            $id('pf_inputDescCalc').value = valActual.toFixed(2);
 
             // Si hay valor previo → modo valor; si no → porcentaje
             if (valActual > 0) {
@@ -2136,7 +2193,7 @@
             const cant   = parseFloat(tr.querySelector('.input-cantidad').value) || 1;
             const precio = parseFloat(tr.querySelector('.input-precio').value) || 0;
             const sub    = precio * cant;
-            $id('pf_inputDescCalc').value = (tipo === 'P' ? sub * (val / 100) : val).toFixed(4);
+            $id('pf_inputDescCalc').value = r2(tipo === 'P' ? sub * (val / 100) : val).toFixed(2);
         },
 
         _confirmarDescuento() {
@@ -2179,7 +2236,7 @@
                 const c = parseFloat(tr.querySelector('.input-cantidad').value) || 1;
                 const finalDesc = tipo === 'P' ? (p * c) * (val / 100) : val;
                 const inp = tr.querySelector('.input-desc');
-                inp.value = finalDesc.toFixed(4);
+                inp.value = r2(finalDesc).toFixed(2);
                 inp.dispatchEvent(new Event('input', { bubbles: true }));
             });
 

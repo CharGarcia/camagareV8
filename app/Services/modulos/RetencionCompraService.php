@@ -113,7 +113,7 @@ class RetencionCompraService
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
             error_log("RetencionCompraService::crear ERROR: " . $e->getMessage());
-            throw $e;
+            throw $this->traducirChoqueDocSustento($e, $idEmpresa, $data);
         }
     }
 
@@ -136,6 +136,12 @@ class RetencionCompraService
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['id_usuario'] ?? 0);
+
+        // Misma unicidad que al crear, excluyendo la propia retención: si no, editando
+        // un borrador se podía dejar dos retenciones sobre el mismo documento.
+        if (!empty($data['num_doc_sustento']) && !empty($data['tipo_doc_sustento'])) {
+            $this->validarUnicidadDocSustento($idEmpresa, $data, $id);
+        }
 
         // Calcular totales
         $data = $this->calcularTotales($data);
@@ -174,7 +180,7 @@ class RetencionCompraService
             return $id;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
-            throw $e;
+            throw $this->traducirChoqueDocSustento($e, $idEmpresa, $data, $id);
         }
     }
 
@@ -430,21 +436,93 @@ class RetencionCompraService
         }
     }
 
+    /**
+     * Nombre del índice único que respalda la unicidad en la base
+     * (database/migrations/20260831_unique_retencion_compra_doc_sustento.sql).
+     */
+    private const INDICE_UNICO_DOC_SUSTENTO = 'uq_retencion_compra_doc_sustento_activo';
+
+    /**
+     * Traduce el choque del índice único a un mensaje de negocio.
+     *
+     * La validación en PHP se hace antes de escribir, así que dos peticiones
+     * simultáneas la pasan las dos y una revienta contra el índice al insertar. Sin
+     * esto el usuario vería un SQLSTATE 23505 en crudo; con esto ve el mismo mensaje
+     * que si hubiera llegado un segundo más tarde.
+     */
+    private function traducirChoqueDocSustento(
+        \Throwable $e,
+        int $idEmpresa,
+        array $data,
+        ?int $excluirId = null
+    ): \Throwable {
+        if (strpos($e->getMessage(), self::INDICE_UNICO_DOC_SUSTENTO) === false) {
+            return $e;
+        }
+
+        try {
+            // Ahora la otra retención ya está confirmada: esto arma el mensaje con su número.
+            $this->validarUnicidadDocSustento($idEmpresa, $data, $excluirId);
+        } catch (\Throwable $mensaje) {
+            return $mensaje;
+        }
+
+        return new \Exception(
+            'Otra operación acaba de registrar la retención del documento ' .
+            ($data['num_doc_sustento'] ?? '') . ' para este proveedor. Recargue el listado.'
+        );
+    }
+
+    /**
+     * Solo una retención viva por documento de sustento **de un mismo proveedor**:
+     * la identidad de una factura de compra es proveedor + tipo + número, porque cada
+     * proveedor numera por su cuenta y el mismo "001-001-000000123" se repite entre
+     * proveedores distintos sin ser un duplicado.
+     */
     private function validarUnicidadDocSustento(int $idEmpresa, array $data, ?int $excluirId = null): void
     {
-        $existe = $this->repository->existeRetencionParaDocSustento(
+        $idProveedor = (int) ($data['id_proveedor'] ?? 0);
+        if ($idProveedor <= 0) {
+            return; // sin proveedor no hay identidad que comparar; ya lo exigen las Rules
+        }
+
+        $existente = $this->repository->buscarRetencionParaDocSustento(
             $idEmpresa,
-            (string)$data['tipo_doc_sustento'],
-            (string)$data['num_doc_sustento'],
+            $idProveedor,
+            (string) $data['tipo_doc_sustento'],
+            (string) $data['num_doc_sustento'],
             $excluirId
         );
 
-        if ($existe) {
-            throw new \Exception(
-                'Ya existe una retención registrada para el documento de sustento ' .
-                $data['num_doc_sustento'] . '. Solo se permite una retención por documento.'
-            );
+        if ($existente === null) {
+            return;
         }
+
+        // Decir CUÁL es la retención que bloquea: sin esto el usuario no tiene cómo
+        // encontrarla (puede ser un borrador, o de otro usuario).
+        $numero = trim(implode('-', array_filter([
+            $existente['establecimiento'] ?? '',
+            $existente['punto_emision'] ?? '',
+            $existente['secuencial'] ?? '',
+        ])), '-');
+        $fecha  = !empty($existente['fecha_emision'])
+            ? date('d-m-Y', strtotime((string) $existente['fecha_emision']))
+            : '';
+
+        $detalle = $numero !== '' ? "la retención {$numero}" : 'otra retención';
+        if ($fecha !== '') {
+            $detalle .= " del {$fecha}";
+        }
+        if (!empty($existente['estado'])) {
+            $detalle .= " (estado: {$existente['estado']})";
+        }
+
+        throw new \Exception(
+            'El documento de sustento ' . $data['num_doc_sustento'] .
+            ' del proveedor ' . ($existente['proveedor'] ?? '') .
+            ' ya está retenido en ' . $detalle .
+            '. Solo se permite una retención por documento y proveedor.'
+        );
     }
 
     // ── XML en base de datos ──────────────────────────────────────────────────

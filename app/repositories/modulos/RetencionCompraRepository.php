@@ -8,6 +8,22 @@ use PDO;
 
 class RetencionCompraRepository extends BaseRepository
 {
+    /**
+     * Desglose por impuesto para el buscador (`renta:`, `iva:`, `isd:`).
+     *
+     * La cabecera de una retención de compra solo guarda `total_retenido`; el reparto
+     * entre renta, IVA e ISD está en el detalle, así que se suma desde ahí. El código
+     * del impuesto convive en dos formatos —numérico del SRI ('1','2','6') y literal
+     * ('RENTA','IVA','ISD'), según si el documento se capturó a mano o se importó—,
+     * y hay que aceptar ambos; mismo criterio que ReporteRetencionesController.
+     */
+    private const SUMA_DETALLE_RENTA = "(SELECT COALESCE(SUM(dr.valor_retenido), 0) FROM retencion_compra_detalle dr
+                                          WHERE dr.id_retencion = r.id AND UPPER(COALESCE(dr.codigo_impuesto, '')) IN ('1', 'RENTA'))";
+    private const SUMA_DETALLE_IVA   = "(SELECT COALESCE(SUM(dr.valor_retenido), 0) FROM retencion_compra_detalle dr
+                                          WHERE dr.id_retencion = r.id AND UPPER(COALESCE(dr.codigo_impuesto, '')) IN ('2', 'IVA'))";
+    private const SUMA_DETALLE_ISD   = "(SELECT COALESCE(SUM(dr.valor_retenido), 0) FROM retencion_compra_detalle dr
+                                          WHERE dr.id_retencion = r.id AND UPPER(COALESCE(dr.codigo_impuesto, '')) IN ('6', 'ISD'))";
+
     public function __construct()
     {
         parent::__construct('retencion_compra_cabecera');
@@ -74,11 +90,16 @@ class RetencionCompraRepository extends BaseRepository
             ],
             'fecha'    => [ 'fecha' => 'r.fecha_emision', 'fecha_emision' => 'r.fecha_emision' ],
             'numerico' => [
-                'monto' => '(r.total_renta + r.total_iva + r.total_isd)',
-                'total' => '(r.total_renta + r.total_iva + r.total_isd)',
-                'renta' => 'r.total_renta',
-                'iva'   => 'r.total_iva',
-                'isd'   => 'r.total_isd',
+                // La cabecera de una retención de COMPRA guarda un único importe
+                // (total_retenido); el desglose por impuesto vive en el detalle. Ojo
+                // al copiar de RetencionVentaRepository: retencion_venta_cabecera sí
+                // tiene total_renta/total_iva/total_isd y esta tabla no — usarlas aquí
+                // rompía el listado entero con «no existe la columna r.total_renta».
+                'monto' => 'r.total_retenido',
+                'total' => 'r.total_retenido',
+                'renta' => self::SUMA_DETALLE_RENTA,
+                'iva'   => self::SUMA_DETALLE_IVA,
+                'isd'   => self::SUMA_DETALLE_ISD,
                 // Comparación numérica: "298" encuentra "000000298" sin que el
                 // usuario tenga que escribir los ceros a la izquierda, y sigue
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
@@ -721,8 +742,19 @@ class RetencionCompraRepository extends BaseRepository
 
     // ── Obtener retenciones_sri activas ──────────────────────────
 
-    public function getRetencionesSri(?string $tipo = null, ?string $buscar = null, ?string $fecha = null): array
-    {
+    /**
+     * Catálogo de códigos de retención del SRI para el selector del modal.
+     *
+     * @param string|null $campoBusqueda Columna del modal desde la que se escribió:
+     *                                   'porcentaje' busca solo por porcentaje;
+     *                                   cualquier otro valor busca en todas las columnas.
+     */
+    public function getRetencionesSri(
+        ?string $tipo = null,
+        ?string $buscar = null,
+        ?string $fecha = null,
+        ?string $campoBusqueda = null
+    ): array {
         $sql    = "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret
                    FROM retenciones_sri WHERE status = 1";
         $params = [];
@@ -730,9 +762,20 @@ class RetencionCompraRepository extends BaseRepository
             $sql          .= ' AND impuesto_ret = :tipo';
             $params[':tipo'] = $tipo;
         }
-        if ($buscar !== null) {
-            $sql            .= ' AND (codigo_ret ILIKE :b OR concepto_ret ILIKE :b)';
-            $params[':b']    = '%' . $buscar . '%';
+        if ($buscar !== null && trim($buscar) !== '') {
+            // Busca en TODAS las columnas del catálogo (código, concepto,
+            // porcentaje, impuesto y código del anexo), palabra por palabra y sin
+            // distinguir mayúsculas ni tildes.
+            $cond = $campoBusqueda === 'porcentaje'
+                ? \App\Helpers\BusquedaRetencionSri::condicionPorcentaje($buscar, $params)
+                : \App\Helpers\BusquedaRetencionSri::condicion(
+                    \App\Helpers\BusquedaRetencionSri::COLUMNAS_CATALOGO,
+                    $buscar,
+                    $params
+                );
+            if ($cond !== '') {
+                $sql .= ' AND ' . $cond;
+            }
         }
         if ($fecha !== null) {
             $sql .= ' AND (desde IS NULL OR desde <= :f) AND (hasta IS NULL OR hasta >= :f)';
@@ -747,23 +790,56 @@ class RetencionCompraRepository extends BaseRepository
 
     // ── Verificar si ya existe una retención para un documento de sustento ──
 
-    public function existeRetencionParaDocSustento(
+    /**
+     * Devuelve la retención que ya cubre ese documento de sustento, o null si no hay
+     * ninguna. Sirve para bloquear duplicados diciendo CUÁL es el documento que choca.
+     *
+     * La identidad de un documento de compra es **proveedor + tipo + número**: cada
+     * proveedor numera sus facturas por su cuenta, así que dos proveedores distintos
+     * pueden emitir la misma "001-001-000000123" y ninguna de las dos duplica a la
+     * otra. Por eso el proveedor forma parte de la condición.
+     *
+     * Se acota además al ambiente actual de la empresa (mismo criterio que
+     * getListado): si no, una retención de pruebas —invisible en el listado— seguiría
+     * bloqueando en producción.
+     */
+    public function buscarRetencionParaDocSustento(
         int $idEmpresa,
+        int $idProveedor,
         string $tipoDocSustento,
         string $numDocSustento,
         ?int $excluirId = null
-    ): bool {
-        $sql    = "SELECT COUNT(*) FROM retencion_compra_cabecera
-                   WHERE id_empresa = :ie AND tipo_doc_sustento = :tds AND num_doc_sustento = :nds
-                     AND eliminado = false AND estado <> 'anulada'";
-        $params = [':ie' => $idEmpresa, ':tds' => $tipoDocSustento, ':nds' => $numDocSustento];
+    ): ?array {
+        $sql = "SELECT r.id, r.establecimiento, r.punto_emision, r.secuencial,
+                       r.fecha_emision, r.estado, p.razon_social AS proveedor
+                FROM retencion_compra_cabecera r
+                LEFT JOIN proveedores p ON p.id = r.id_proveedor
+                WHERE r.id_empresa = :ie
+                  AND r.id_proveedor = :ip
+                  AND r.tipo_doc_sustento = :tds
+                  AND r.num_doc_sustento = :nds
+                  AND r.eliminado = false
+                  AND r.estado <> 'anulada'
+                  AND COALESCE(r.tipo_ambiente, '1') = COALESCE(
+                        (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie),
+                        COALESCE(r.tipo_ambiente, '1'))";
+        $params = [
+            ':ie'  => $idEmpresa,
+            ':ip'  => $idProveedor,
+            ':tds' => $tipoDocSustento,
+            ':nds' => $numDocSustento,
+        ];
         if ($excluirId !== null) {
-            $sql            .= ' AND id <> :eid';
+            $sql            .= ' AND r.id <> :eid';
             $params[':eid']  = $excluirId;
         }
+        $sql .= ' ORDER BY r.id LIMIT 1';
+
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return (int) $st->fetchColumn() > 0;
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+
+        return $row !== false ? $row : null;
     }
 
     // ── Verificar si ya existe una retención para una compra ─────

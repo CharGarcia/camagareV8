@@ -193,6 +193,12 @@ window.BASE_URL   = '<?= $base ?>';
 window.PF_CONFIG  = {
     urlBase:    '<?= $urlBase ?>',
     tarifasIva: <?= json_encode(array_values($tarifasIva ?? [])) ?>,
+    // Configuración de la empresa/establecimiento: los mismos decimales y el mismo
+    // modo de cálculo del IVA que usa Facturas de Venta, para que la pantalla, lo
+    // que se guarda y el PDF muestren exactamente las mismas cifras.
+    decimales_precio:   <?= (int) ($empresa['decimales_precio']   ?? 2) ?>,
+    decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
+    calculo_iva:        '<?= $empresa['calculo_iva_facturacion'] ?? 'linea_linea' ?>',
     storageKey: 'pf_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>',
     perm: {
         ver:        <?= json_encode(!empty($perm['ver'])) ?>,

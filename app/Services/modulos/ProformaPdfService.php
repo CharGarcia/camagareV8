@@ -18,10 +18,19 @@ class ProformaPdfService
     private array $grisLinea = [210, 214, 220];
     private array $grisTexto = [110, 116, 124];
 
+    /** Decimales configurados por la empresa/establecimiento (igual que el RIDE de factura). */
+    private int $decCantidad = 2;
+    private int $decPrecio   = 2;
+
     public function generar(array $cabecera, array $detalles, array $adicional, array $empresa, string $outputDest = 'D'): string
     {
         $numero = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
                 . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+        // Decimales configurados por la empresa (los mismos que usa la pantalla y el RIDE
+        // de Facturas de Venta), acotados a 0..6 igual que el XML.
+        $this->decCantidad = max(0, min(6, (int) ($empresa['decimales_cantidad'] ?? 2)));
+        $this->decPrecio   = max(0, min(6, (int) ($empresa['decimales_precio']   ?? 2)));
 
         $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('CaMaGaRe');
@@ -36,7 +45,7 @@ class ProformaPdfService
         $this->encabezado($pdf, $cabecera, $empresa, $numero);
         $this->cajaCliente($pdf, $cabecera);
         $this->tablaDetalle($pdf, $detalles, $empresa);
-        $this->totales($pdf, $cabecera);
+        $this->totales($pdf, $cabecera, $detalles);
         $this->pieAdicional($pdf, $cabecera, $adicional);
         $this->pieDocumento($pdf, $empresa);
 
@@ -188,18 +197,18 @@ class ProformaPdfService
         $pdf->SetFont('helvetica', '', 8);
         $fill = false;
         foreach ($detalles as $i => $d) {
-            $ivaPct = 0.0;
-            foreach ($d['impuestos'] ?? [] as $imp) {
-                if ((string) ($imp['codigo_impuesto'] ?? '2') === '2') { $ivaPct = (float) ($imp['tarifa'] ?? 0); break; }
-            }
+            // Cantidad y precio con los decimales configurados por la empresa (los mismos
+            // que muestra el modal); el subtotal es el valor guardado de la línea, no se
+            // recalcula, igual que hace el RIDE de Facturas de Venta.
+            $ivaPct = $this->tarifaIva($d);
             $rowData = [
                 (string) ($i + 1),
                 (string) ($d['descripcion'] ?? ''),
-                $this->num((float) ($d['cantidad'] ?? 0)),
-                '$' . $this->num((float) ($d['precio_unitario'] ?? 0)),
+                number_format((float) ($d['cantidad'] ?? 0), $this->decCantidad, '.', ','),
+                '$' . number_format((float) ($d['precio_unitario'] ?? 0), $this->decPrecio, '.', ','),
                 '$' . $this->num((float) ($d['descuento'] ?? 0)),
-                ($ivaPct > 0 ? rtrim(rtrim(number_format($ivaPct, 2, '.', ''), '0'), '.') . '%' : '0%'),
-                '$' . $this->num((float) ($d['precio_total_sin_impuesto'] ?? 0)),
+                $this->pct($ivaPct) . '%',
+                '$' . $this->num($this->baseLinea($d)),
             ];
 
             // Alto dinámico según la descripción
@@ -251,22 +260,31 @@ class ProformaPdfService
     }
 
     // ── Totales (caja a la derecha) ─────────────────────────────────────────────
-    private function totales(TCPDF $pdf, array $cabecera): void
+    /**
+     * Mismo bloque de totales que muestra el modal (proformas_modal.js → _calcularTotales):
+     * Subtotal (bruto), un "Subtotal {tarifa}%" por cada tarifa de IVA presente, el
+     * descuento y un "(+) IVA {tarifa}%" por cada tarifa mayor a cero.
+     *
+     * Los valores NO se recalculan: salen de los impuestos guardados en cada línea y de
+     * los totales de la cabecera —que la pantalla calculó con el modo de IVA configurado
+     * por la empresa (línea por línea o al subtotal)—, igual que hace el RIDE de Facturas
+     * de Venta. Así el PDF no puede divergir de la proforma.
+     */
+    private function totales(TCPDF $pdf, array $cabecera, array $detalles = []): void
     {
         $mL = 14; $w = 182;
         $boxW = 76;
         $x = $mL + $w - $boxW;
+
+        $des   = \App\Helpers\ProformaTotales::desglosar($cabecera, $detalles);
+        $filas = \App\Helpers\ProformaTotales::filas($des);
+        $total = $des['total'];
+        // La caja creció con el desglose: si ya no cabe en la página, se pasa a la siguiente.
+        $altoCaja = count($filas) * 6 + 14;
+        if ($pdf->GetY() + $altoCaja > $pdf->getPageHeight() - 20) {
+            $pdf->AddPage();
+        }
         $y = $pdf->GetY();
-
-        $subtotal  = (float) ($cabecera['total_sin_impuestos'] ?? 0);
-        $descuento = (float) ($cabecera['total_descuento'] ?? 0);
-        $ice       = (float) ($cabecera['total_ice'] ?? 0);
-        $total     = (float) ($cabecera['importe_total'] ?? 0);
-        $iva       = round($total - $subtotal - $ice, 2);
-
-        $filas = [['Subtotal', $subtotal], ['Descuento', $descuento]];
-        if ($ice > 0) $filas[] = ['ICE', $ice];
-        $filas[] = ['IVA', $iva];
 
         $pdf->SetFont('helvetica', '', 9);
         foreach ($filas as $f) {
@@ -347,6 +365,25 @@ class ProformaPdfService
     private function num(float $v): string
     {
         return number_format($v, 2, '.', ',');
+    }
+
+
+    /** Porcentaje sin ceros sobrantes: 15 → "15", 12.50 → "12.5". */
+    private function pct(float $v): string
+    {
+        return \App\Helpers\ProformaTotales::pct($v);
+    }
+
+    /** Tarifa de IVA de una línea (código de impuesto 2); 0 si la línea no la tiene. */
+    private function tarifaIva(array $d): float
+    {
+        return \App\Helpers\ProformaTotales::tarifaIva($d);
+    }
+
+    /** Base imponible de la línea, tal como se guardó. */
+    private function baseLinea(array $d): float
+    {
+        return \App\Helpers\ProformaTotales::baseLinea($d);
     }
 
     private function resolverLogo(array $empresa): string

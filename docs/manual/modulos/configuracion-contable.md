@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes
-version: 1.3
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta
+version: 1.7
 orden: 5
 estado: activo
 ---
@@ -143,6 +143,68 @@ campo *Cuenta por cobrar* de un producto o un cliente. Como esa regla gana a la
 general, todas las facturas de ese producto o cliente pasan a debitar ingresos en
 lugar de cartera, y el error solo se nota al revisar el balance.
 
+## Cobros y Pagos, Ingresos y Egresos: la misma cuenta en los dos bloques
+
+Estos dos tipos de asiento se muestran en **dos bloques** — Cobros y Pagos, o
+Ingresos y Egresos — y un mismo concepto puede salir en los dos a la vez:
+
+- una **forma de cobro/pago** cuyo campo *Aplica en* está en **Ambas** (el caso
+  normal de una cuenta bancaria, del efectivo o de una tarjeta: el mismo dinero
+  entra y sale por ahí);
+- una **opción de ingreso/egreso** marcada a la vez para Ingresos y para Egresos.
+
+Cuando se asigna la cuenta contable en uno de los bloques y ese mismo concepto
+aparece en el otro con **otra cuenta o sin cuenta**, el sistema lo avisa y
+propone aplicar allí la misma:
+
+> *Banco Pichincha Cta. Cte. también se usa en Pagos y aún no tiene cuenta
+> contable. ¿Aplicar ahí también 1.1.02.01 - Bancos?*
+
+Si el otro bloque ya tenía una cuenta distinta, el aviso muestra **cuál es** y
+pregunta si se reemplaza. Nada se cambia sin aceptar: al responder que no, cada
+bloque conserva su cuenta.
+
+### Formas distintas sobre la misma cuenta bancaria
+
+La propuesta también alcanza a las **formas hermanas**: dos formas de pago
+distintas que representan la misma cuenta del banco, como *Transferencias
+Pichincha* y *Cheques Pichincha*. Son registros separados porque son dos medios
+de cobro/pago, pero el dinero es el mismo y la cuenta contable debería ser una
+sola.
+
+Para que el sistema las reconozca como la misma cuenta, las dos formas deben
+tener:
+
+- **Tipo** *Banco* o *Cheque* (una puede ser Banco y la otra Cheque);
+- el **mismo banco**;
+- el **mismo número de cuenta**. Da igual cómo esté escrito — `3380-2300-04` y
+  `33802300 04` se toman como el mismo número, porque se comparan solo las letras
+  y los dígitos.
+
+**El número de cuenta es obligatorio para el emparejamiento.** Dos formas del
+mismo banco con el número vacío no se emparejan: podrían ser la cuenta corriente
+y la de ahorros, y el sistema no tiene cómo distinguirlas.
+
+Cuando hay varias filas que actualizar, el aviso las lista todas — el bloque, el
+nombre y la cuenta que tiene hoy cada una — y se aplican de una sola vez al
+aceptar:
+
+> Este mismo dinero se registra en otras filas que hoy no tienen
+> **1.1.02.01 - Bancos**:
+> - **Pagos** · Transferencias Pichincha — *sin cuenta*
+> - **Cobros** · Cheques Pichincha — 1.1.01.02 - Caja
+> - **Pagos** · Cheques Pichincha — 1.1.01.02 - Caja
+>
+> ¿Aplicarla en todas?
+
+El efectivo, las tarjetas y las demás formas no bancarias solo se emparejan
+consigo mismas (su propia fila en el otro bloque): al no haber banco ni número de
+cuenta, dos formas de efectivo distintas son cajas distintas.
+
+Lo habitual es aceptar: una cuenta bancaria es la misma cuenta contable cobre o
+pague y sea cual sea el medio, y tenerla distinta en cada fila descuadra la
+conciliación de esa cuenta en Control Bancario.
+
 ## Filtrar los listados por año
 
 En las reglas por **Proveedor**, **Cliente**, **Producto**, **Categoría** y
@@ -184,6 +246,13 @@ documento o en la ficha de la entidad implicada.
 - **Un documento no genera asiento**: falta configurar su tipo de operación.
 - **El asiento va a una cuenta que no corresponde**: revise primero la ficha del
   producto, cliente o forma de pago; su cuenta manda sobre la general.
+- **La misma cuenta bancaria contabiliza distinto al cobrar que al pagar**: la
+  forma de pago tiene una cuenta en el bloque de Cobros y otra en el de Pagos.
+  Vuelva a asignar la cuenta correcta en uno de los dos y acepte la propuesta de
+  aplicarla también en el otro.
+- **El sistema no propone copiar la cuenta entre dos formas del mismo banco**:
+  revise en *Formas de Cobros y Pagos* que las dos tengan el número de cuenta
+  escrito y que su tipo sea Banco o Cheque. Sin número de cuenta no se emparejan.
 - **Todas las facturas debitan una cuenta de ventas en lugar de la cartera**:
   hay una regla por Cliente o por Producto con la cuenta de ingresos puesta en el
   concepto *Cuenta por cobrar*. Corríjala en la pestaña de esa dimensión (o
@@ -192,6 +261,14 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.7** — En Cobros y Pagos y en Ingresos y Egresos, al asignar la cuenta de un
+  concepto que también aparece en el bloque contrario (forma con *Aplica en:
+  Ambas*, u opción marcada para ingresos y egresos), el sistema propone aplicar
+  allí la misma cuenta. La propuesta alcanza además a las **formas hermanas**:
+  otras formas de tipo Banco o Cheque con el mismo banco y el mismo número de
+  cuenta, en los dos bloques, que se actualizan de una sola vez. Si alguna fila
+  ya tenía otra cuenta, el aviso la muestra y pregunta si se reemplaza; no cambia
+  nada sin confirmación.
 - **1.6** — El alta de reglas por entidad se divide en dos pasos: primero se
   agrega la entidad y luego se asignan las cuentas dentro de su tarjeta, que se
   guardan una a una al elegirlas. Cada tarjeta incorpora *Copiar cuentas de

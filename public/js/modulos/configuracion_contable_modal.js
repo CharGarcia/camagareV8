@@ -761,6 +761,12 @@
             if (res.ok) {
                 inputElement.classList.remove('is-invalid', 'border-danger');
                 ASIENTOPROG_toast('success', res.msg);
+                // El backend devuelve las demás filas del mismo dinero (el mismo concepto en el
+                // bloque contrario, y las formas hermanas de la misma cuenta bancaria) que hoy no
+                // tienen esta cuenta.
+                if (res.sugerencia && res.sugerencia.length) {
+                    ASIENTOPROG_sugerirReplica(res.sugerencia, idCuenta, inputElement.value, cfg);
+                }
             } else {
                 inputElement.classList.remove('is-valid');
                 inputElement.classList.add('is-invalid', 'border-danger');
@@ -779,6 +785,109 @@
                 inputElement.style.backgroundColor = origBg;
             }, 2000);
         }
+    }
+
+    /**
+     * Texto del aviso: una frase cuando hay un solo destino, y una lista cuando son varios.
+     */
+    function ASIENTOPROG_htmlReplica(destinos, cuentaTexto) {
+        const cuenta = ASIENTOPROG_esc(cuentaTexto);
+
+        if (destinos.length === 1) {
+            const d        = destinos[0];
+            const concepto = ASIENTOPROG_esc(d.concepto);
+            const bloque   = ASIENTOPROG_esc(d.bloque);
+            const tambien  = d.es_misma_forma
+                ? `<b>${concepto}</b> también se usa en <b>${bloque}</b>`
+                : `<b>${concepto}</b> (<b>${bloque}</b>) es la misma cuenta bancaria`;
+            return d.cuenta_actual
+                ? `${tambien} y tiene asignada <b>${ASIENTOPROG_esc(d.cuenta_actual)}</b>.<br>¿Reemplazarla por <b>${cuenta}</b>?`
+                : `${tambien} y aún no tiene cuenta contable.<br>¿Aplicar ahí también <b>${cuenta}</b>?`;
+        }
+
+        const items = destinos.map(d => {
+            const actual = d.cuenta_actual
+                ? ASIENTOPROG_esc(d.cuenta_actual)
+                : '<i class="text-muted">sin cuenta</i>';
+            return `<li><b>${ASIENTOPROG_esc(d.bloque)}</b> · ${ASIENTOPROG_esc(d.concepto)} — ${actual}</li>`;
+        }).join('');
+
+        return `Este mismo dinero se registra en otras filas que hoy no tienen <b>${cuenta}</b>:
+                <ul class="text-start small mt-2 mb-2">${items}</ul>
+                ¿Aplicarla en todas?`;
+    }
+
+    /**
+     * Propone replicar la cuenta recién asignada en las demás filas que representan el mismo
+     * dinero. El backend manda la lista: el mismo concepto en el bloque contrario (forma con
+     * aplica_en = AMBAS, u opción marcada en Ingresos y Egresos) y las formas hermanas que son la
+     * misma cuenta bancaria — mismo banco y mismo número — en los dos bloques. Nada se toca sin
+     * que el usuario acepte; cada guardado lleva sin_sugerencia para no volver a sugerir en cadena.
+     */
+    async function ASIENTOPROG_sugerirReplica(destinos, idCuenta, cuentaTexto, cfg) {
+        if (!window.Swal || !Array.isArray(destinos) || destinos.length === 0) return;
+
+        const varios = destinos.length > 1;
+        const conf = await Swal.fire({
+            title: 'Aplicar la misma cuenta',
+            html: ASIENTOPROG_htmlReplica(destinos, cuentaTexto),
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: varios ? `Sí, aplicar en las ${destinos.length}` : 'Sí, aplicar',
+            cancelButtonText: 'No, dejar como está'
+        });
+        if (!conf.isConfirmed) return;
+
+        let aplicados = 0;
+        const fallos = [];
+
+        for (const d of destinos) {
+            const fd = new FormData();
+            fd.append(cfg.refParam, String(d.id_referencia));
+            fd.append('id_cuenta', String(idCuenta));
+            fd.append(cfg.selectorParam, d.selector_valor);
+            fd.append('sin_sugerencia', '1');
+
+            try {
+                const resp = await fetch(`${API_PROG}/${cfg.endpointGuardar}`, { method: 'POST', body: fd });
+                const res = await resp.json();
+
+                if (!res.ok) {
+                    fallos.push(`${d.bloque} · ${d.concepto}: ${res.error || 'error al guardar'}`);
+                    continue;
+                }
+
+                // Reflejar el cambio en esa fila, sin recargar todo el modal.
+                const suffix = `${d.prefijo}_${d.id_referencia}`;
+                const inputDestino  = document.getElementById(`cuenta_search_${suffix}`);
+                const hiddenDestino = document.getElementById(`cuenta_hidden_${suffix}`);
+                if (inputDestino) {
+                    inputDestino.value = cuentaTexto;
+                    inputDestino.classList.remove('is-invalid', 'border-danger');
+                }
+                if (hiddenDestino) hiddenDestino.value = String(idCuenta);
+                aplicados++;
+            } catch (e) {
+                console.error(e);
+                fallos.push(`${d.bloque} · ${d.concepto}: no se pudo contactar al servidor`);
+            }
+        }
+
+        if (fallos.length) {
+            Swal.fire({
+                title: aplicados ? 'Aplicada solo en parte' : 'No se pudo aplicar',
+                html: `${aplicados} de ${destinos.length} filas quedaron con la cuenta.
+                       <ul class="text-start small mt-2 mb-0">${fallos.map(f => `<li>${ASIENTOPROG_esc(f)}</li>`).join('')}</ul>`,
+                icon: aplicados ? 'warning' : 'error'
+            });
+            return;
+        }
+
+        ASIENTOPROG_toast('success', varios
+            ? `Cuenta aplicada en ${aplicados} filas más.`
+            : `Cuenta aplicada también en ${destinos[0].bloque}.`);
     }
 
     /**
@@ -1622,7 +1731,7 @@
                 else alert(res.error || 'Error al guardar la cuenta.');
                 return;
             }
-            ASIENTOPROG_toast('Cuenta guardada.');
+            ASIENTOPROG_toastOk('Cuenta guardada.');
             delete ASIENTOPROG_dimNueva[tipo];          // ya tiene reglas: sale de la lista del backend
             ASIENTOPROG_cargarDim(tipo, input.dataset.idx);
         } catch (err) { console.error(err); }
@@ -1635,7 +1744,7 @@
         try {
             const res = await (await fetch(`${API_PROG}/eliminarReglaDimensionAjax`, { method: 'POST', body: fd })).json();
             if (res.ok) {
-                ASIENTOPROG_toast('Cuenta quitada.');
+                ASIENTOPROG_toastOk('Cuenta quitada.');
                 ASIENTOPROG_cargarDim(tipo);
             }
         } catch (err) { console.error(err); }
@@ -1676,7 +1785,7 @@
         try {
             const res = await (await fetch(`${API_PROG}/eliminarReglasEntidadAjax`, { method: 'POST', body: fd })).json();
             if (res.ok) {
-                ASIENTOPROG_toast(res.msg || 'Configuración eliminada.');
+                ASIENTOPROG_toastOk(res.msg || 'Configuración eliminada.');
                 delete ASIENTOPROG_dimNueva[tipo];
                 ASIENTOPROG_cargarDim(tipo);
             } else {
@@ -1687,7 +1796,7 @@
     };
 
     /** Aviso breve, no bloqueante (mismo estilo que el resto del módulo). */
-    function ASIENTOPROG_toast(titulo) {
+    function ASIENTOPROG_toastOk(titulo) {
         if (!window.Swal) return;
         Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1600, timerProgressBar: true })
             .fire({ icon: 'success', title: titulo });

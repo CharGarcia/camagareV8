@@ -604,10 +604,17 @@
         if (!lineasData[idx]) return;
         lineasData[idx][campo] = valor;
 
-        if (campo === 'codigo_retencion' || campo === 'concepto') {
+        // El catálogo SRI se puede buscar desde cualquiera de las tres columnas
+        // (código, concepto o porcentaje); el backend busca en todas las columnas.
+        const CAMPO_BUSQUEDA = {
+            codigo_retencion:   'codigo',
+            concepto:           'concepto',
+            porcentaje_retener: 'porcentaje',
+        };
+        if (CAMPO_BUSQUEDA[campo]) {
             clearTimeout(searchTimer);
             searchTimer = setTimeout(() => {
-                window.RET_buscarCodigoSri(idx, campo === 'codigo_retencion' ? 'codigo' : 'concepto');
+                window.RET_buscarCodigoSri(idx, CAMPO_BUSQUEDA[campo]);
             }, 300);
         }
 
@@ -637,38 +644,68 @@
         if (campo === 'base_imponible' || campo === 'codigo_impuesto') autollenarDocSustento();
     };
 
+    // Campo de la línea que alimenta la búsqueda, según la columna desde la que se dispara
+    const CAMPO_POR_TIPO_BUSQUEDA = {
+        codigo:     'codigo_retencion',
+        concepto:   'concepto',
+        porcentaje: 'porcentaje_retener',
+    };
+
     window.RET_buscarCodigoSri = async (idx, tipoBusqueda) => {
-        const q = tipoBusqueda === 'codigo' ? (lineasData[idx]?.codigo_retencion || '') : (lineasData[idx]?.concepto || '');
+        const campo = CAMPO_POR_TIPO_BUSQUEDA[tipoBusqueda] || 'codigo_retencion';
+        const q = String(lineasData[idx]?.[campo] ?? '');
         const fEmision = document.getElementById('ret_fecha_emision').value || '';
-        const url = `${BASE}/getRetencionesSriAjax?q=${encodeURIComponent(q)}&fecha=${fEmision}`;
+        const url = `${BASE}/getRetencionesSriAjax?q=${encodeURIComponent(q)}&fecha=${fEmision}`
+            + `&campo=${encodeURIComponent(tipoBusqueda)}`;
         try {
             const res  = await fetch(url);
             const data = await res.json();
+            // Códigos que coinciden pero no están vigentes a la fecha de emisión
+            // (columnas Desde/Hasta del catálogo). Se avisa siempre: si no, la lista
+            // parece incompleta —o vacía— sin explicar por qué.
+            const avisoVigencia = (data.ok && data.fuera_vigencia > 0)
+                ? `${data.fuera_vigencia} código(s) más coinciden, pero no están vigentes al `
+                  + `${fmtFechaCorta(fEmision)} (Configuración → Retenciones SRI).`
+                : '';
+
             if (data.ok && data.data.length > 0) {
-                mostrarDropdownCodigos(idx, data.data, tipoBusqueda);
+                mostrarDropdownCodigos(idx, data.data, tipoBusqueda, avisoVigencia);
+            } else if (avisoVigencia) {
+                mostrarAvisoCodigos(idx, tipoBusqueda, avisoVigencia);
+            } else {
+                // Sin coincidencias: cerrar la lista anterior para no dejarla desfasada
+                document.querySelector('.ret-cod-dropdown')?.remove();
             }
         } catch (e) {
             console.error(e);
         }
     };
 
-    function mostrarDropdownCodigos(idx, items, tipoBusqueda) {
+    // Fecha ISO (aaaa-mm-dd) → dd-mm-aaaa, para los mensajes al usuario
+    function fmtFechaCorta(iso) {
+        const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}` : (iso || '');
+    }
+
+    /**
+     * Crea el panel flotante bajo el input de la columna desde la que se buscó
+     * (1=código, 2=concepto, 5=% retención) y devuelve {drop, input}.
+     */
+    function crearPanelCodigos(idx, tipoBusqueda) {
         const tr = document.getElementById('ret_lineas_body').querySelectorAll('tr')[idx];
-        if (!tr) return;
-        
-        // Determinar el input objetivo
-        const input = tipoBusqueda === 'codigo' 
-            ? tr.querySelector('td:nth-child(1) input') 
-            : tr.querySelector('td:nth-child(2) input');
-        if (!input) return;
+        if (!tr) return null;
 
-        // Eliminar dropdown previo si existe
-        let drop = document.querySelector('.ret-cod-dropdown');
-        if (drop) drop.remove();
+        const COLUMNA_POR_TIPO = { codigo: 1, concepto: 2, porcentaje: 5 };
+        const nCol = COLUMNA_POR_TIPO[tipoBusqueda] || 1;
+        const input = tr.querySelector(`td:nth-child(${nCol}) input`);
+        if (!input) return null;
 
-        drop = document.createElement('div');
+        // Eliminar panel previo si existe
+        document.querySelector('.ret-cod-dropdown')?.remove();
+
+        const drop = document.createElement('div');
         drop.className = 'list-group shadow position-fixed ret-cod-dropdown';
-        
+
         // Calcular posición
         const rect = input.getBoundingClientRect();
         drop.style.cssText = `
@@ -680,6 +717,25 @@
             left: ${rect.left}px;
         `;
         document.body.appendChild(drop);
+
+        return { drop, input };
+    }
+
+    // Panel informativo (sin opciones que elegir), p. ej. códigos fuera de vigencia
+    function mostrarAvisoCodigos(idx, tipoBusqueda, mensaje) {
+        const panel = crearPanelCodigos(idx, tipoBusqueda);
+        if (!panel) return;
+        panel.drop.innerHTML = `<div class="list-group-item small py-2 text-muted">
+            <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>${escHtml(mensaje)}
+        </div>`;
+        registrarCierrePanel(panel.drop, panel.input);
+    }
+
+    function mostrarDropdownCodigos(idx, items, tipoBusqueda, avisoVigencia = '') {
+        const panel = crearPanelCodigos(idx, tipoBusqueda);
+        if (!panel) return;
+        const drop  = panel.drop;
+        const input = panel.input;
 
         drop.innerHTML = '';
         items.forEach(item => {
@@ -740,13 +796,31 @@
             drop.appendChild(btn);
         });
 
-        const closeDrop = (e) => {
-            if (!input.contains(e.target) && !drop.contains(e.target)) {
-                drop.remove();
-                document.removeEventListener('click', closeDrop);
-            }
+        if (avisoVigencia) {
+            const pie = document.createElement('div');
+            pie.className = 'list-group-item small py-1 text-muted bg-light';
+            pie.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>${escHtml(avisoVigencia)}`;
+            drop.appendChild(pie);
+        }
+
+        registrarCierrePanel(drop, input);
+    }
+
+    // Cierra el panel al hacer clic fuera o al presionar Escape (útil al teclear el % a mano)
+    function registrarCierrePanel(drop, input) {
+        const cerrar = () => {
+            drop.remove();
+            document.removeEventListener('click', closeDrop);
+            document.removeEventListener('keydown', closeEsc);
         };
-        setTimeout(() => document.addEventListener('click', closeDrop), 10);
+        const closeDrop = (e) => {
+            if (!input.contains(e.target) && !drop.contains(e.target)) cerrar();
+        };
+        const closeEsc = (e) => { if (e.key === 'Escape') cerrar(); };
+        setTimeout(() => {
+            document.addEventListener('click', closeDrop);
+            document.addEventListener('keydown', closeEsc);
+        }, 10);
     }
 
     // Nombre del impuesto a partir del código SRI (1=Renta, 2=IVA, 6=ISD)
@@ -805,7 +879,8 @@
                 <input type="number" class="form-control form-control-sm border-0 bg-transparent text-center"
                        style="padding:0 4px;height:28px;font-size:0.78rem;" placeholder="0" step="0.01" min="0" max="100"
                        value="${l.porcentaje_retener}"
-                       oninput="window.RET_onLineCambio(${i},'porcentaje_retener',this.value)">
+                       oninput="window.RET_onLineCambio(${i},'porcentaje_retener',this.value)"
+                       onfocus="window.RET_buscarCodigoSri(${i},'porcentaje')">
             </td>
             <!-- Valor Retenido -->
             <td class="p-0 text-end">

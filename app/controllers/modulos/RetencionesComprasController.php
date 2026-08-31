@@ -762,9 +762,20 @@ class RetencionesComprasController extends BaseModuloController
         $impuesto = $_GET['impuesto'] ?? null;
         $buscar   = trim($_GET['q'] ?? '');
         $fecha    = $_GET['fecha'] ?? null;
+        $campo    = $_GET['campo'] ?? null;
 
-        $data = $this->repository->getRetencionesSri($impuesto, $buscar ?: null, $fecha);
-        echo json_encode(['ok' => true, 'data' => $data]);
+        $data = $this->repository->getRetencionesSri($impuesto, $buscar ?: null, $fecha, $campo);
+
+        // Códigos que coinciden pero quedaron fuera por su vigencia (desde/hasta).
+        // Hay que decirlo: si no, el modal parece "no encontrar" un código que sí
+        // existe, o muestra unos y calla otros sin explicar por qué.
+        $fueraVigencia = 0;
+        if (!empty($fecha)) {
+            $totalSinFecha = count($this->repository->getRetencionesSri($impuesto, $buscar ?: null, null, $campo));
+            $fueraVigencia = max(0, $totalSinFecha - count($data));
+        }
+
+        echo json_encode(['ok' => true, 'data' => $data, 'fuera_vigencia' => $fueraVigencia]);
         exit;
     }
 

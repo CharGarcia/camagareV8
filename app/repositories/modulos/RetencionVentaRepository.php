@@ -447,8 +447,19 @@ class RetencionVentaRepository extends BaseRepository
 
     // ── Catálogo retenciones SRI ─────────────────────────────────
 
-    public function getRetencionesSri(?string $tipo = null, ?string $buscar = null, ?string $fecha = null): array
-    {
+    /**
+     * Catálogo de códigos de retención del SRI para el selector del modal.
+     *
+     * @param string|null $campoBusqueda Columna del modal desde la que se escribió:
+     *                                   'porcentaje' busca solo por porcentaje;
+     *                                   cualquier otro valor busca en todas las columnas.
+     */
+    public function getRetencionesSri(
+        ?string $tipo = null,
+        ?string $buscar = null,
+        ?string $fecha = null,
+        ?string $campoBusqueda = null
+    ): array {
         $sql    = "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret
                    FROM retenciones_sri WHERE status = 1";
         $params = [];
@@ -456,9 +467,19 @@ class RetencionVentaRepository extends BaseRepository
             $sql          .= ' AND impuesto_ret = :tipo';
             $params[':tipo'] = $tipo;
         }
-        if ($buscar !== null) {
-            $sql          .= ' AND (codigo_ret ILIKE :b OR concepto_ret ILIKE :b)';
-            $params[':b']  = '%' . $buscar . '%';
+        if ($buscar !== null && trim($buscar) !== '') {
+            // Busca en TODAS las columnas del catálogo (código, concepto,
+            // porcentaje, impuesto y código del anexo).
+            $cond = $campoBusqueda === 'porcentaje'
+                ? \App\Helpers\BusquedaRetencionSri::condicionPorcentaje($buscar, $params)
+                : \App\Helpers\BusquedaRetencionSri::condicion(
+                    \App\Helpers\BusquedaRetencionSri::COLUMNAS_CATALOGO,
+                    $buscar,
+                    $params
+                );
+            if ($cond !== '') {
+                $sql .= ' AND ' . $cond;
+            }
         }
         if ($fecha !== null) {
             $sql .= ' AND (desde IS NULL OR desde <= :f) AND (hasta IS NULL OR hasta >= :f)';

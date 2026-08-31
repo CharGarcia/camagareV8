@@ -605,6 +605,121 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Formas de Cobro/Pago sobre las que tendría sentido replicar la cuenta que se acaba de
+     * asignar a $idForma: la propia forma (que puede salir en los dos bloques si aplica_en =
+     * 'AMBAS') y las formas hermanas que representan LA MISMA CUENTA BANCARIA — mismo banco y
+     * mismo número de cuenta, ambas de tipo BANCO/CHEQUE (p. ej. "Cheques Pichincha" y
+     * "Transferencias Pichincha": dos medios sobre la misma cuenta física). El número se compara
+     * normalizado (sin guiones ni espacios) y debe existir: dos formas del mismo banco sin número
+     * NO se emparejan, porque pueden ser cuentas distintas (corriente y ahorros).
+     *
+     * Devuelve, por cada forma, la cuenta vigente en cada flujo con el mismo COALESCE que usa el
+     * listado (asiento programado si existe; si no, la cuenta del propio módulo de Formas). Debe
+     * llamarse ANTES de guardar: al escribir se toca f.id_cuenta_contable, que es justamente lo
+     * que el otro bloque muestra cuando no hay asiento programado propio.
+     */
+    public function getDestinosReplicaForma(int $idEmpresa, int $idForma): array
+    {
+        $sql = "WITH origen AS (
+                    SELECT f.id,
+                           UPPER(COALESCE(f.tipo, '')) AS tipo,
+                           f.id_banco,
+                           NULLIF(regexp_replace(COALESCE(f.numero_cuenta, ''), '[^0-9A-Za-z]', '', 'g'), '') AS cuenta_bancaria
+                    FROM empresa_formas_pago f
+                    WHERE f.id = :id_forma
+                      AND f.id_empresa = :id_empresa_origen
+                      AND f.eliminado = FALSE
+                )
+                SELECT f.id AS id_forma,
+                       f.nombre AS concepto,
+                       UPPER(COALESCE(f.aplica_en, '')) AS aplica_en,
+                       CASE WHEN f.id = o.id THEN 1 ELSE 0 END AS es_misma_forma,
+                       COALESCE(apc.id_cuenta, f.id_cuenta_contable) AS id_cuenta_cobro,
+                       pcc.codigo AS cobro_codigo,
+                       pcc.nombre AS cobro_nombre,
+                       COALESCE(app.id_cuenta, f.id_cuenta_contable) AS id_cuenta_pago,
+                       pcp.codigo AS pago_codigo,
+                       pcp.nombre AS pago_nombre
+                FROM origen o
+                JOIN empresa_formas_pago f
+                       ON f.id_empresa = :id_empresa_formas
+                      AND f.eliminado = FALSE
+                      AND f.activo = TRUE
+                      AND (
+                            f.id = o.id
+                            OR (
+                                 o.tipo IN ('BANCO', 'CHEQUE')
+                             AND UPPER(COALESCE(f.tipo, '')) IN ('BANCO', 'CHEQUE')
+                             AND o.id_banco IS NOT NULL
+                             AND f.id_banco = o.id_banco
+                             AND o.cuenta_bancaria IS NOT NULL
+                             AND NULLIF(regexp_replace(COALESCE(f.numero_cuenta, ''), '[^0-9A-Za-z]', '', 'g'), '') = o.cuenta_bancaria
+                               )
+                          )
+                LEFT JOIN {$this->table} apc ON apc.id_referencia = f.id
+                                            AND apc.tipo_referencia = 'forma_cobro'
+                                            AND apc.id_empresa = :id_empresa_ap_cobro
+                                            AND apc.eliminado = false
+                LEFT JOIN plan_cuentas pcc ON pcc.id = COALESCE(apc.id_cuenta, f.id_cuenta_contable)
+                LEFT JOIN {$this->table} app ON app.id_referencia = f.id
+                                            AND app.tipo_referencia = 'forma_pago'
+                                            AND app.id_empresa = :id_empresa_ap_pago
+                                            AND app.eliminado = false
+                LEFT JOIN plan_cuentas pcp ON pcp.id = COALESCE(app.id_cuenta, f.id_cuenta_contable)
+                ORDER BY CASE WHEN f.id = o.id THEN 0 ELSE 1 END, f.nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_forma'            => $idForma,
+            ':id_empresa_origen'   => $idEmpresa,
+            ':id_empresa_formas'   => $idEmpresa,
+            ':id_empresa_ap_cobro' => $idEmpresa,
+            ':id_empresa_ap_pago'  => $idEmpresa
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cuenta vigente de una opción de Ingreso/Egreso en una naturaleza concreta: la que el
+     * usuario ve hoy en esa fila del modal (mismo COALESCE que getReglasOpcionesIngresoEgreso).
+     * Se lee ANTES de guardar, por el mismo motivo que getDestinosReplicaForma. Aquí no hay
+     * "hermanas" que valgan: una opción no representa una cuenta bancaria, así que el único
+     * destino posible es la misma opción en el bloque contrario.
+     *
+     * @param string $naturaleza 'ingreso' | 'egreso'
+     */
+    public function getCuentaVigenteOpcion(int $idEmpresa, int $idOpcion, string $naturaleza): ?array
+    {
+        $tipoRef = $naturaleza === 'ingreso' ? 'opcion_ingreso' : 'opcion_egreso';
+
+        $sql = "SELECT o.id AS id_opcion,
+                       o.nombre AS concepto,
+                       UPPER(COALESCE(o.comportamiento, '')) AS comportamiento,
+                       CASE WHEN o.aplica_ingresos AND o.aplica_egresos THEN 1 ELSE 0 END AS aplica_ambos,
+                       CASE WHEN UPPER(o.estado) = 'ACTIVO' THEN 1 ELSE 0 END AS activo,
+                       COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS id_cuenta,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre
+                FROM empresa_opciones_ingreso_egreso o
+                LEFT JOIN {$this->table} ap ON ap.id_referencia = o.id
+                                           AND ap.tipo_referencia = :tipo_ref
+                                           AND ap.id_empresa = :id_empresa_ap
+                                           AND ap.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap.id_cuenta, o.id_cuenta_contable)
+                WHERE o.id = :id_opcion
+                  AND o.id_empresa = :id_empresa
+                  AND o.eliminado = FALSE
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':tipo_ref'      => $tipoRef,
+            ':id_empresa_ap' => $idEmpresa,
+            ':id_opcion'     => $idOpcion,
+            ':id_empresa'    => $idEmpresa
+        ]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
      * Obtiene la regla (asiento programado) asociada a una referencia concreta
      * (opción de Ingreso/Egreso, forma de cobro/pago, etc.) por su tipo de referencia.
      */
