@@ -181,6 +181,11 @@ en Facturas de Venta.
 
 ## Historial de cambios
 
+- **1.6** — En el **PDF de la proforma** el logo de la empresa ocupa todo el
+  espacio superior izquierdo: a lo ancho hasta donde arranca la tarjeta
+  "PROFORMA" y a lo alto hasta el nombre de la empresa. La imagen se ajusta
+  dentro de ese recuadro sin deformarse, así que un logo horizontal (proporción
+  ancha) es el que mejor aprovecha el espacio.
 - **1.5** — Se documenta la **serie y el secuencial**: solo se ofrecen series con
   numeración de proformas configurada, y el sistema avisa y bloquea el guardado
   cuando no la hay (incluido el caso de no tener ninguna serie disponible).

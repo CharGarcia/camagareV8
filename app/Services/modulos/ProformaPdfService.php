@@ -51,14 +51,20 @@ class ProformaPdfService
         $izqW = $w * 0.58;
         $derW = $w - $izqW;
 
-        // ── Logo ──
+        // Alto de la tarjeta PROFORMA (se usa también como alto del logo).
+        $boxH = 30;
+
+        // ── Logo: ocupa todo el espacio de la izquierda — a lo ancho hasta donde arranca
+        //    la tarjeta PROFORMA, y a lo alto desde el borde superior hasta el nombre de la
+        //    empresa. Fitbox 'LM' = contain (no deforma), pegado a la izquierda y centrado
+        //    verticalmente dentro de esa caja.
         $logoPath = $this->resolverLogo($empresa);
-        $logoW = 44; $logoH = 22;
+        $logoW = $izqW - 4; $logoH = $boxH;
         if ($logoPath) {
-            $pdf->Image($logoPath, $mL, $y0, $logoW, $logoH, '', '', '', false, 300, '', false, false, 0, 'LT');
+            $pdf->Image($logoPath, $mL, $y0, $logoW, $logoH, '', '', '', false, 300, '', false, false, 0, 'LM');
         }
 
-        // ── Datos de la empresa (debajo/al lado del logo) ──
+        // ── Datos de la empresa (debajo del logo) ──
         $xTexto = $mL;
         $yTexto = $y0 + ($logoPath ? $logoH + 1.5 : 0);
         $pdf->SetXY($xTexto, $yTexto);
@@ -97,7 +103,6 @@ class ProformaPdfService
 
         // ── Bloque PROFORMA (derecha) ──
         $xDer = $mL + $izqW;
-        $boxH = 30;
         $pdf->SetFillColor(...$this->accent);
         $pdf->RoundedRect($xDer, $y0, $derW, $boxH, 2.2, '1111', 'F');
 
