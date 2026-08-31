@@ -121,6 +121,20 @@ Desde la retención guardada están disponibles el **PDF** del comprobante, su
 **Excel**, su **XML** y el envío por **correo**, en la barra de acciones al
 inicio del formulario.
 
+### Envío automático del correo
+
+Cuando el SRI autoriza la retención, el sistema envía el comprobante al correo
+del proveedor y la columna **Correo** del listado pasa a **Enviado**. Esto
+también ocurre cuando la autorización no se resuelve en el primer intento: si al
+volver a enviar la retención el SRI responde que ya estaba autorizada, el correo
+sale igual y el asiento contable se genera en ese momento.
+
+El envío automático requiere que la empresa lo tenga activado en su
+configuración de correo y que el proveedor tenga un correo válido en su ficha.
+Si el proveedor no tiene correo, la columna se queda en **Pendiente**; puede
+enviarlo a mano desde el botón de correo del formulario indicando el
+destinatario.
+
 ## Errores frecuentes
 
 - **"El tipo de documento de sustento no es válido"**: use uno de los códigos
@@ -139,6 +153,11 @@ inicio del formulario.
 
 ## Historial de cambios
 
+- **1.5** — Corregido el envío automático del correo al autorizar. Cuando el SRI
+  ya tenía la retención autorizada de un intento anterior (el caso típico: el
+  primer envío queda "en procesamiento" y el segundo la encuentra resuelta), la
+  retención quedaba autorizada pero sin correo enviado y sin asiento contable.
+  Ahora ese camino hace lo mismo que una autorización directa.
 - **1.4** — Corregido el buscador del listado: los filtros `monto:`, `total:`, `renta:`,
   `iva:` e `isd:` apuntaban a columnas que no existen en la tabla y rompían la búsqueda
   con un error de base de datos. Ahora `monto:` y `total:` usan el total retenido, y

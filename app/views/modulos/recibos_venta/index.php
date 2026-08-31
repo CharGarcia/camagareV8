@@ -4858,10 +4858,82 @@ $totalPages = $totalPagesOriginal;
             // después.
             calcTotales();
             if (cab.importe_total !== undefined && cab.importe_total !== null && cab.importe_total !== '') {
-                const totSinImp = parseFloat(cab.total_sin_impuestos) || 0;
-                const totDesc   = parseFloat(cab.total_descuento) || 0;
-                const totIce    = parseFloat(cab.total_ice) || 0;
-                const totFinal  = parseFloat(cab.importe_total) || 0;
+                const totSinImp  = parseFloat(cab.total_sin_impuestos) || 0;
+                const totDesc    = parseFloat(cab.total_descuento) || 0;
+                const totIce     = parseFloat(cab.total_ice) || 0;
+                const totFinal   = parseFloat(cab.importe_total) || 0;
+                const propinaVal = parseFloat(cab.propina) || 0;
+
+                // Desglose de IVA por tarifa: se reconstruye desde los impuestos
+                // REALMENTE guardados por línea (json.detalles[].impuestos), no desde
+                // lo que calcTotales() acaba de recalcular en modo actual — así el
+                // desglose (Subtotal X% + IVA X%) siempre suma EXACTO con el total de
+                // arriba, sea cual sea el modo de cálculo de IVA vigente ahora.
+                const tarifaPorCodigo = {};
+                (typeof TARIFAS_IVA !== 'undefined' ? TARIFAS_IVA : []).forEach(t => {
+                    tarifaPorCodigo[String(t.codigo)] = t;
+                });
+                const gruposPersistidos = {};
+                (json.detalles || []).forEach(d => {
+                    // base_imponible del IVA incluye el ICE de la línea (así lo exige el
+                    // SRI: el IVA se calcula sobre subtotal+ICE). Para que "Subtotal X%"
+                    // siga significando lo mismo que en la edición en vivo (neto, SIN
+                    // ICE) y que la suma de estas filas cuadre con "Subtotal" - "Descuento"
+                    // de arriba, se resta aquí el ICE de esa misma línea, si tiene.
+                    const iceLinea = (d.impuestos || []).find(i => String(i.codigo_impuesto) === '3');
+                    const iceValLinea = iceLinea ? (parseFloat(iceLinea.valor) || 0) : 0;
+
+                    (d.impuestos || []).forEach(imp => {
+                        if (String(imp.codigo_impuesto) !== '2') return; // solo IVA
+                        const key = String(imp.codigo_porcentaje ?? imp.tarifa ?? '0');
+                        if (!gruposPersistidos[key]) {
+                            gruposPersistidos[key] = {
+                                pct: parseFloat(imp.tarifa) || 0,
+                                label: tarifaPorCodigo[key]?.tarifa || ((parseFloat(imp.tarifa) || 0) + '%'),
+                                base: 0,
+                                iva: 0,
+                            };
+                        }
+                        const baseNetaLinea = (parseFloat(imp.base_imponible) || 0) - iceValLinea;
+                        gruposPersistidos[key].base = r2(gruposPersistidos[key].base + baseNetaLinea);
+                        gruposPersistidos[key].iva  = r2(gruposPersistidos[key].iva  + (parseFloat(imp.valor) || 0));
+                    });
+                });
+
+                // Igual que el PDF: absorber en el grupo de mayor IVA el desfase de
+                // redondeo (1-5 centavos) entre el IVA sumado por línea y el que
+                // realmente exige el total guardado.
+                const ivaObjetivo   = r2(totFinal - totSinImp - totIce - propinaVal);
+                const sumaIvaActual = r2(Object.values(gruposPersistidos).reduce((s, g) => s + g.iva, 0));
+                const desfaseIva    = r2(ivaObjetivo - sumaIvaActual);
+                if (Math.abs(desfaseIva) >= 0.01 && Math.abs(desfaseIva) <= 0.05) {
+                    let keyMax = null, ivaMax = -Infinity;
+                    Object.entries(gruposPersistidos).forEach(([k, g]) => { if (g.iva > ivaMax) { ivaMax = g.iva; keyMax = k; } });
+                    if (keyMax !== null) gruposPersistidos[keyMax].iva = r2(gruposPersistidos[keyMax].iva + desfaseIva);
+                }
+
+                const contSubIva = document.getElementById('m-lbl-subtotales-iva');
+                if (contSubIva) {
+                    contSubIva.innerHTML = '';
+                    Object.values(gruposPersistidos).forEach(g => {
+                        const div = document.createElement('div');
+                        div.className = 'd-flex justify-content-between align-items-center mb-1 text-muted';
+                        div.innerHTML = `<span>Subtotal ${g.label}</span><span>${g.base.toFixed(2)}</span>`;
+                        contSubIva.appendChild(div);
+                    });
+                }
+                const contIvas = document.getElementById('m-lbl-ivas-grupo');
+                if (contIvas) {
+                    contIvas.innerHTML = '';
+                    Object.values(gruposPersistidos).forEach(g => {
+                        if (g.pct > 0 && g.iva > 0) {
+                            const div = document.createElement('div');
+                            div.className = 'd-flex justify-content-between align-items-center mb-1';
+                            div.innerHTML = `<span class="text-muted">(+) IVA ${g.pct}%</span><span>${g.iva.toFixed(2)}</span>`;
+                            contIvas.appendChild(div);
+                        }
+                    });
+                }
 
                 const lblSub = document.getElementById('m-lbl-subtotal');
                 if (lblSub) lblSub.textContent = (totSinImp + totDesc).toFixed(2);

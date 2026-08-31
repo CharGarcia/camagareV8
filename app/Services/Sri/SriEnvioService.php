@@ -545,6 +545,25 @@ class SriEnvioService
         }
     }
 
+    private function procesarAsientoRetencionCompra(int $idRetencion, int $idEmpresa, int $idUsuario): void
+    {
+        try {
+            $repo    = new \App\repositories\modulos\RetencionCompraRepository();
+            $service = new \App\Services\modulos\RetencionCompraService(
+                $repo,
+                new \App\Rules\modulos\RetencionCompraRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $cab = $repo->getPorIdSri($idRetencion, $idEmpresa);
+            if ($cab) {
+                $cab['id_usuario'] = $idUsuario;
+                $service->procesarAsientoContable($idRetencion, $cab);
+            }
+        } catch (\Throwable $e) {
+            error_log('[SRI] Asiento no generado para retención #' . $idRetencion . ': ' . $e->getMessage());
+        }
+    }
+
     public function enviarNotaCredito(int $idNC, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\NotaCreditoRepository();
@@ -1395,6 +1414,17 @@ class SriEnvioService
 
         $onAutorizado($numAut, $fechaAut, $xmlDetalle);
 
+        // El comprobante se cerró por esta vía, así que el método que llamó a la
+        // pre-verificación retorna aquí mismo y NUNCA ejecuta su bloque
+        // «if (estado === autorizado)» —el que genera el asiento y manda el correo
+        // al cliente/proveedor—. Sin esto, el caso más común (primer clic deja el
+        // comprobante en procesamiento, segundo clic lo encuentra ya autorizado)
+        // dejaba el documento autorizado pero con estado_correo en 'pendiente' y
+        // sin correo enviado.
+        $this->cerrarAutorizacionPorPreVerificacion(
+            $tipoComprobante, $tabla, $id, $idEmpresa, $idUsuario, $numAut, $fechaAut, $xmlDetalle
+        );
+
         return [
             'ok'                  => true,
             'estado'              => $estadoAutorizado,
@@ -1403,6 +1433,259 @@ class SriEnvioService
             'mensaje'             => 'El comprobante ya se encontraba autorizado en el SRI.',
             'errores'             => [],
         ];
+    }
+
+    /**
+     * Cierre post-autorización cuando el comprobante se resolvió por
+     * pre-verificación (ya estaba autorizado en el SRI antes de enviarlo, o venía
+     * en procesamiento de un envío anterior).
+     *
+     * Replica lo que la ruta normal de envío hace tras la autorización: asiento
+     * contable —solo donde la ruta normal lo genera en ese punto— y envío del
+     * comprobante por correo, marcando `estado_correo = 'enviado'`.
+     *
+     * Es best-effort: cualquier fallo se registra y se ignora, porque el
+     * comprobante YA está autorizado y no debe reportarse como error al usuario.
+     */
+    private function cerrarAutorizacionPorPreVerificacion(
+        string  $tipoComprobante,
+        string  $tabla,
+        int     $id,
+        int     $idEmpresa,
+        int     $idUsuario,
+        string  $numAut,
+        ?string $fechaAut,
+        string  $xmlDetalle
+    ): void {
+        // Asiento contable: solo los documentos cuya ruta normal lo genera al autorizar.
+        try {
+            if ($tipoComprobante === 'retencion_compra') {
+                $this->procesarAsientoRetencionCompra($id, $idEmpresa, $idUsuario);
+            } elseif ($tipoComprobante === 'factura_reembolso') {
+                $this->procesarAsientoFacturaReembolso($id, $idEmpresa, $idUsuario);
+            }
+        } catch (\Throwable $eAs) {
+            error_log("[SRI preVerificar] Asiento no generado ({$tipoComprobante} #{$id}): " . $eAs->getMessage());
+        }
+
+        try {
+            $preparado = $this->prepararCorreoDocumento($tipoComprobante, $id, $idEmpresa, $numAut, $fechaAut);
+            if ($preparado === null) {
+                return;
+            }
+            [$cabecera, $pdfString] = $preparado;
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarSiAplica($idEmpresa, $tipoComprobante, $cabecera, $xmlDetalle, $pdfString, $numAut);
+
+            if ($enviado) {
+                $db = Database::getConnection();
+                $cols = $this->columnasExistentes($db, $tabla);
+                if (in_array('estado_correo', $cols, true)) {
+                    $db->prepare("UPDATE {$tabla} SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$id]);
+                }
+            }
+        } catch (\Throwable $eEmail) {
+            error_log("[SRI preVerificar] Error al enviar correo ({$tipoComprobante} #{$id}): " . $eEmail->getMessage());
+        }
+    }
+
+    /**
+     * Carga la cabecera del documento y genera su PDF, tal como lo hace la ruta
+     * normal de envío antes de mandar el correo.
+     *
+     * @return array{0: array, 1: string}|null [cabecera, pdf] o null si el tipo no
+     *         envía correo o el documento ya no existe.
+     */
+    private function prepararCorreoDocumento(
+        string  $tipoComprobante,
+        int     $id,
+        int     $idEmpresa,
+        string  $numAut,
+        ?string $fechaAut
+    ): ?array {
+        // El estado que la ruta normal deja en la cabecera antes de armar el PDF:
+        // la retención usa 'autorizada' (femenino) y el resto 'autorizado'.
+        $estadoDoc = $tipoComprobante === 'retencion_compra' ? 'autorizada' : 'autorizado';
+
+        switch ($tipoComprobante) {
+            case 'factura_venta':
+                $repo     = new FacturaVentaRepository();
+                $cabecera = $repo->getPorId($id);
+                if (!$cabecera) return null;
+                $detalles = $repo->getDetalles($id);
+                foreach ($detalles as &$d) { $d['impuestos'] = $repo->getImpuestosDetalle((int)$d['id']); }
+                unset($d);
+                $pagos         = $repo->getPagos($id);
+                $infoAdicional = $repo->getInfoAdicional($id);
+                $empresa       = $this->empresaConEstablecimiento($idEmpresa, $cabecera);
+                $this->completarAutorizacionCabecera($cabecera, $estadoDoc, $numAut, $fechaAut);
+
+                $renderer     = new \App\Services\PlantillasPdfRendererService();
+                $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
+                $pdfString    = $plantillaPdf
+                    ? $renderer->generar($plantillaPdf, $cabecera, $detalles, $pagos, $infoAdicional, $empresa, 'S')
+                    : (new \App\Services\modulos\FacturaVentaPdfService())
+                        ->generar($cabecera, $detalles, $pagos, $infoAdicional, $empresa, 'S');
+                return [$cabecera, $pdfString];
+
+            case 'factura_reembolso':
+                $repo     = new \App\repositories\modulos\FacturaReembolsoRepository();
+                $cabecera = $repo->getPorId($id);
+                if (!$cabecera) return null;
+                $detalles = $repo->getDetalles($id);
+                foreach ($detalles as &$d) { $d['impuestos'] = $repo->getImpuestosDetalle((int)$d['id']); }
+                unset($d);
+                $terceros = $repo->getTerceros($id);
+                foreach ($terceros as &$t) { $t['impuestos'] = $repo->getImpuestosTercero((int)$t['id']); }
+                unset($t);
+                $pagos         = $repo->getPagos($id);
+                $infoAdicional = $repo->getInfoAdicional($id);
+                $empresa       = $this->empresaConEstablecimiento($idEmpresa, $cabecera);
+                $this->completarAutorizacionCabecera($cabecera, $estadoDoc, $numAut, $fechaAut);
+
+                $pdfString = (new \App\Services\modulos\FacturaReembolsoPdfService())
+                    ->generarBytes($cabecera, $detalles, $terceros, $pagos, $infoAdicional, $empresa);
+                return [$cabecera, $pdfString];
+
+            case 'nota_credito':
+                $repo     = new \App\repositories\modulos\NotaCreditoRepository();
+                $cabecera = $repo->getPorId($id);
+                if (!$cabecera) return null;
+                $detalles = $repo->getDetalles($id);
+                foreach ($detalles as &$d) { $d['impuestos'] = $repo->getImpuestosDetalle((int)$d['id']); }
+                unset($d);
+                $infoAdicional = $repo->getInfoAdicional($id);
+                $empresa       = $this->empresaConEstablecimiento($idEmpresa, $cabecera);
+                $this->completarAutorizacionCabecera($cabecera, $estadoDoc, $numAut, $fechaAut);
+
+                $pdfString = (new \App\Services\modulos\NotaCreditoPdfService())
+                    ->generarBytes($cabecera, $detalles, $empresa, $infoAdicional);
+                return [$cabecera, $pdfString];
+
+            case 'nota_debito':
+                $repo     = new \App\repositories\modulos\NotaDebitoRepository();
+                $cabecera = $repo->getPorId($id);
+                if (!$cabecera) return null;
+                $motivos       = $repo->getMotivos($id);
+                $impuestos     = $repo->getImpuestos($id);
+                $pagos         = $repo->getPagos($id);
+                $infoAdicional = $repo->getInfoAdicional($id);
+                $empresa       = $this->empresaConEstablecimiento($idEmpresa, $cabecera);
+                $this->completarAutorizacionCabecera($cabecera, $estadoDoc, $numAut, $fechaAut);
+
+                $pdfString = (new \App\Services\modulos\NotaDebitoPdfService())
+                    ->generarBytes($cabecera, $motivos, $impuestos, $pagos, $empresa, $infoAdicional);
+                return [$cabecera, $pdfString];
+
+            case 'retencion_compra':
+                $repo     = new \App\repositories\modulos\RetencionCompraRepository();
+                $cabecera = $repo->getPorIdSri($id, $idEmpresa);
+                if (!$cabecera) return null;
+                $lineas  = $repo->getDetalle($id);
+                $empresa = $this->empresaConEstablecimiento($idEmpresa, $cabecera);
+                $this->completarAutorizacionCabecera($cabecera, $estadoDoc, $numAut, $fechaAut);
+
+                $pdfString = (new \App\Services\modulos\RetencionCompraPdfService())
+                    ->generarBytes($cabecera, $lineas, $empresa);
+                return [$cabecera, $pdfString];
+
+            case 'guia_remision':
+                $repo     = new \App\repositories\modulos\GuiaRemisionRepository();
+                $cabecera = $repo->getPorId($id);
+                if (!$cabecera) return null;
+                $detalles      = $repo->getDetalles($id);
+                $infoAdicional = $repo->getInfoAdicional($id);
+                $empresa       = $this->empresaConEstablecimiento($idEmpresa, $cabecera);
+                $this->completarAutorizacionCabecera($cabecera, $estadoDoc, $numAut, $fechaAut);
+
+                $renderer     = new \App\Services\PlantillasPdfRendererService();
+                $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'guia_remision');
+                $pdfString    = $plantillaPdf
+                    ? $renderer->generar($plantillaPdf, $cabecera, $detalles, [], $infoAdicional, $empresa, 'S')
+                    : (new \App\Services\modulos\GuiaRemisionPdfService())
+                        ->generarBytes($cabecera, $detalles, $infoAdicional, $empresa);
+                return [$cabecera, $pdfString];
+
+            case 'liquidacion_compra':
+                $repo     = new \App\repositories\modulos\LiquidacionCompraRepository();
+                $cabecera = $repo->getPorId($id);
+                if (!$cabecera) return null;
+                $detalles = $repo->getDetalles($id);
+                foreach ($detalles as &$d) { $d['impuestos'] = $repo->getImpuestosDetalle((int)$d['id']); }
+                unset($d);
+                $pagos         = $repo->getPagos($id);
+                $infoAdicional = $repo->getInfoAdicional($id);
+                $empresa       = $this->empresaConEstablecimiento($idEmpresa, $cabecera);
+                $this->completarAutorizacionCabecera($cabecera, $estadoDoc, $numAut, $fechaAut);
+
+                $renderer     = new \App\Services\PlantillasPdfRendererService();
+                $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'liquidacion_compra');
+                $pdfString    = $plantillaPdf
+                    ? $renderer->generar($plantillaPdf, $cabecera, $detalles, $pagos, $infoAdicional, $empresa, 'S')
+                    : (new \App\Services\modulos\LiquidacionCompraPdfService())
+                        ->generarBytes($cabecera, $detalles, $pagos, $infoAdicional, $empresa);
+                return [$cabecera, $pdfString];
+        }
+
+        return null;
+    }
+
+    /**
+     * La cabecera se lee de BD antes de que la autorización quede escrita, así que
+     * el PDF saldría sin número ni fecha de autorización. Se completa en memoria,
+     * igual que hace cada ruta normal antes de armar el correo.
+     */
+    private function completarAutorizacionCabecera(
+        array   &$cabecera,
+        string  $estado,
+        string  $numAut,
+        ?string $fechaAut
+    ): void {
+        $cabecera['estado']              = $estado;
+        $cabecera['numero_autorizacion'] = $numAut;
+        $cabecera['fecha_autorizacion']  = $fechaAut;
+    }
+
+    /**
+     * Datos de la empresa enriquecidos con los del establecimiento del documento
+     * (dirección, logo y leyendas del RIDE), tal como los arma cada ruta normal
+     * antes de generar el PDF.
+     */
+    private function empresaConEstablecimiento(int $idEmpresa, array $cabecera): array
+    {
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+
+        try {
+            $estRepo = new \App\repositories\modulos\EmpresaRepository();
+            foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
+                $esElEstablecimiento = !empty($cabecera['id_establecimiento'])
+                    ? (int)$est['id'] === (int)$cabecera['id_establecimiento']
+                    : true; // sin id_establecimiento, se usa el primero
+                if (!$esElEstablecimiento) {
+                    continue;
+                }
+
+                if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+                if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+                if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+                $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                if ($estConfig) {
+                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
+                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+                    $empresa = array_merge($empresa, $estConfig);
+                }
+                break;
+            }
+        } catch (\Throwable) {}
+
+        return $empresa;
     }
 
     private function actualizarEstadoSri(
@@ -1896,8 +2179,11 @@ class SriEnvioService
                 }
 
                 $emailSvc = new \App\Services\EnvioDocumentosSRIService();
-                // liquidaciones_cabecera no tiene columna estado_correo; se envía sin marcar estado.
-                $emailSvc->enviarSiAplica($idEmpresa, 'liquidacion_compra', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'liquidacion_compra', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                if ($enviado) {
+                    $db->prepare("UPDATE liquidaciones_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$idLiq]);
+                }
             } catch (\Throwable $eEmail) {
                 error_log('[SRI] Error al enviar correo de liquidación #' . $idLiq . ': ' . $eEmail->getMessage());
             }
