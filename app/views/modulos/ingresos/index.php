@@ -2626,8 +2626,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             <div class="modal-body p-0 d-flex flex-column" style="min-height: 280px; max-height: 60vh;">
                 <!-- Barra de búsqueda -->
-                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-wrap">
-                    <div class="input-group input-group-sm flex-grow-1" style="min-width:240px;">
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap overflow-auto">
+                    <div class="input-group input-group-sm flex-grow-1" style="min-width:160px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="inp-docs-buscar" class="form-control"
                                placeholder="Buscar por Nº documento, nombre de cliente o RUC..."
@@ -2639,14 +2639,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
-                    <div class="d-flex align-items-center gap-1">
+                    <div class="d-flex align-items-center gap-1 flex-shrink-0">
                         <input type="date" id="inp-docs-fecha-desde" class="form-control form-control-sm" style="width:135px;" title="Fecha desde"
                                onchange="buscarEnModalDocsPendientes(document.getElementById('inp-docs-buscar').value.trim())">
                         <span class="text-muted small">a</span>
                         <input type="date" id="inp-docs-fecha-hasta" class="form-control form-control-sm" style="width:135px;" title="Fecha hasta"
                                onchange="buscarEnModalDocsPendientes(document.getElementById('inp-docs-buscar').value.trim())">
                     </div>
-                    <div class="form-check form-switch mb-0 text-nowrap" title="Desglosa los ítems de cada documento para cobrar por ítem">
+                    <div class="form-check form-switch mb-0 text-nowrap flex-shrink-0" title="Desglosa los ítems de cada documento para cobrar por ítem">
                         <input class="form-check-input" type="checkbox" role="switch" id="sdp-modo-items" onchange="toggleModoItems(this.checked)">
                         <label class="form-check-label small fw-bold text-secondary" for="sdp-modo-items"><i class="bi bi-list-check me-1"></i>Cobrar por ítems</label>
                     </div>

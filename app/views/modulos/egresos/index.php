@@ -3075,8 +3075,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             <div class="modal-body p-0 d-flex flex-column" style="min-height: 280px; max-height: 60vh;">
                 <!-- Barra de búsqueda única -->
-                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-wrap">
-                    <div class="input-group input-group-sm flex-grow-1" style="min-width:240px;">
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap overflow-auto">
+                    <div class="input-group input-group-sm flex-grow-1" style="min-width:160px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="eg-sdp-buscar" class="form-control"
                                placeholder="Buscar por Nº documento, proveedor o RUC..."
@@ -3092,14 +3092,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
-                    <div class="d-flex align-items-center gap-1">
+                    <div class="d-flex align-items-center gap-1 flex-shrink-0">
                         <input type="date" id="eg-sdp-fecha-desde" class="form-control form-control-sm" style="width:135px;" title="Fecha desde"
                                onchange="buscarEnModalEgDocsPendientes(document.getElementById('eg-sdp-buscar').value.trim())">
                         <span class="text-muted small">a</span>
                         <input type="date" id="eg-sdp-fecha-hasta" class="form-control form-control-sm" style="width:135px;" title="Fecha hasta"
                                onchange="buscarEnModalEgDocsPendientes(document.getElementById('eg-sdp-buscar').value.trim())">
                     </div>
-                    <div class="form-check form-switch mb-0 text-nowrap d-none" id="eg-sdp-modo-items-wrap" title="Desglosa los ítems de cada documento para pagar por ítem">
+                    <div class="form-check form-switch mb-0 text-nowrap flex-shrink-0 d-none" id="eg-sdp-modo-items-wrap" title="Desglosa los ítems de cada documento para pagar por ítem">
                         <input class="form-check-input" type="checkbox" role="switch" id="eg-sdp-modo-items" onchange="toggleEgModoItems(this.checked)">
                         <label class="form-check-label small fw-bold text-secondary" for="eg-sdp-modo-items"><i class="bi bi-list-check me-1"></i>Pagar por ítems</label>
                     </div>
