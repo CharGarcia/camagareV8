@@ -1648,6 +1648,22 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+
+        // Estado 'Entregada' en LOTE (set-based, una sola vez): toda consignación migrada por esta
+        // migración (vinculado=false) de la empresa que tenga fecha_entrega y siga en 'Emitida' pasa a
+        // 'Entregada' — en el viejo "entregado" = tener fecha_entrega. Así una sola re-migración corrige
+        // el estado de TODA la empresa en segundos, sin depender del recorrido fila por fila (que solo
+        // toca el rango de fechas seleccionado). No degrada Anuladas ni pisa las ya Entregadas/facturadas.
+        try {
+            $stEnt = $pg->prepare("UPDATE consignaciones_ventas cv SET estado = 'Entregada', updated_at = now(), updated_by = :u
+                WHERE cv.id_empresa = :e AND cv.eliminado = false AND cv.estado = 'Emitida' AND cv.fecha_entrega IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = cv.id_empresa AND m.entidad = 'consignaciones' AND m.id_destino = cv.id AND m.vinculado = false)");
+            $stEnt->execute([':u' => $idUsuario, ':e' => $idEmpresa]);
+            $res['estado_entregada'] = $stEnt->rowCount();
+        } catch (Throwable $ex) {
+            if (empty($res['error_muestra'])) { $res['error_muestra'] = 'estado lote: ' . substr($ex->getMessage(), 0, 150); }
+        }
+
         return $res;
     }
 
