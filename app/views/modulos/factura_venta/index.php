@@ -3914,7 +3914,7 @@ $totalPages = $totalPagesOriginal;
         tr.className = 'row-detalle';
         tr.innerHTML = `
             <td class="ps-3">
-                <input type="text" class="form-control form-control-sm input-detalle input-codigo" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'C\u00f3digo (opcional)' : 'C\u00f3digo'}"
+                <input type="text" class="form-control form-control-sm input-detalle input-codigo" placeholder="C\u00f3digo"
                     title="${EMPRESA_CONFIG.facturacion_libre ? 'Si el c\u00f3digo ya existe en el cat\u00e1logo, se autocompleta la descripci\u00f3n' : 'Buscar por c\u00f3digo'}">
             </td>
             <td class="position-relative">
