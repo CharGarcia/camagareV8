@@ -13,24 +13,6 @@ class NotaDebitoRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('nota_debito_cabecera');
-        try {
-            $this->db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-        } catch (\Throwable $e) {}
-        try {
-            $this->db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS estado_correo VARCHAR(20) DEFAULT 'pendiente';");
-        } catch (\Throwable $e) {}
-        try {
-            $this->db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS detalle_xml TEXT;");
-        } catch (\Throwable $e) {}
-        try {
-            $this->db->exec("CREATE TABLE IF NOT EXISTS nota_debito_adicional (
-                id SERIAL PRIMARY KEY,
-                id_nota_debito INTEGER NOT NULL,
-                nombre VARCHAR(300) NOT NULL,
-                valor VARCHAR(500)
-            );");
-            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_nd_adicional_nd ON nota_debito_adicional(id_nota_debito);");
-        } catch (\Throwable $e) {}
     }
 
     /**

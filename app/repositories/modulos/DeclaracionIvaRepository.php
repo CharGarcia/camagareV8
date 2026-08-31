@@ -25,9 +25,6 @@ class DeclaracionIvaRepository extends BaseRepository
      */
     public function getDocumentosPeriodo(int $idEmpresa, string $tabla, string $fechaDesde, string $fechaHasta): array
     {
-        // Parche en caliente para la columna tipo_ambiente y concepto
-        $this->db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN IF NOT EXISTS tipo_ambiente VARCHAR(1) DEFAULT '1'");
-        $this->db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN IF NOT EXISTS concepto VARCHAR(255)");
 
         $estadoFilter = "AND estado = 'autorizado'";
         $fechaCol = 'fecha_emision';

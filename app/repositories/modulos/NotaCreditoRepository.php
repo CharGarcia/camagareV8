@@ -13,21 +13,6 @@ class NotaCreditoRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('notas_credito_cabecera');
-        try {
-            $this->db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-        } catch (\Throwable $e) {}
-        try {
-            $this->db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS estado_correo VARCHAR(20) DEFAULT 'pendiente';");
-        } catch (\Throwable $e) {}
-        try {
-            $this->db->exec("CREATE TABLE IF NOT EXISTS notas_credito_adicional (
-                id SERIAL PRIMARY KEY,
-                id_nota_credito INTEGER NOT NULL,
-                nombre VARCHAR(300) NOT NULL,
-                valor VARCHAR(500)
-            );");
-            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_nc_adicional_nc ON notas_credito_adicional(id_nota_credito);");
-        } catch (\Throwable $e) {}
     }
 
     /**

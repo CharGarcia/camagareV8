@@ -20,17 +20,6 @@ class EgresoRepository extends BaseRepository
                 $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN numero_cheque VARCHAR(50) NULL");
                 $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN fecha_cobro DATE NULL");
             }
-            // Nombre a imprimir en el cheque (override del beneficiario del egreso).
-            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS beneficiario_cheque VARCHAR(255) NULL");
-            // Beneficiario de texto libre (egresos de otros conceptos sin proveedor/empleado;
-            // p. ej. documentos migrados). Espejo del recibo_de de ingresos.
-            $this->db->exec("ALTER TABLE egresos_cabecera ADD COLUMN IF NOT EXISTS beneficiario_nombre VARCHAR(255) NULL");
-            // Anular cheque puntual dejando rastro (sin borrar la fila ni afectar el resto
-            // del egreso). Ver database/migrations/20260811_add_estado_cheque_egresos_pagos.sql.
-            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS estado_cheque VARCHAR(20) NOT NULL DEFAULT 'vigente'");
-            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS motivo_anulacion_cheque VARCHAR(255) NULL");
-            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS anulado_cheque_at TIMESTAMP NULL");
-            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS anulado_cheque_by INTEGER NULL");
         } catch (\Exception $e) {
             // Silenciar en caso de no poseer permisos DDL
         }

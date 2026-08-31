@@ -27,10 +27,6 @@ class CambioProductoCvController extends BaseModuloController
     public function __construct()
     {
         parent::__construct();
-        try {
-            $db = \App\Core\Database::getConnection();
-            $db->exec("ALTER TABLE cambios_producto_cv ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER NULL");
-        } catch (\Throwable $e) {}
 
         $repository = new CambioProductoCvRepository();
         $rules      = new CambioProductoCvRules();

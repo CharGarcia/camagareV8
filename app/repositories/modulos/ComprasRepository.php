@@ -12,19 +12,17 @@ class ComprasRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('compras_cabecera');
-        try {
-            $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-        } catch (\Throwable $e) {}
-        try {
-            $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS id_orden_compra INTEGER REFERENCES ordenes_compra(id);");
-        } catch (\Throwable $e) {}
         // Valores recaudados por cuenta de terceros en planillas de servicios básicos
         // (bomberos, tasa de basura). Cuentas por Pagar y Egresos leen esta columna en
         // su SQL, así que debe existir aunque todavía no se haya corrido
-        // database/migrations/20260827_compras_total_terceros.sql (que además trae el
-        // comentario de la columna y el backfill).
+        // database/migrations/20260827_compras_total_terceros.sql. Chequeada primero
+        // (lectura barata) para no pagar el ALTER (lock exclusivo) en cada request una
+        // vez migrada la columna.
         try {
-            $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS total_terceros NUMERIC(12,2) NOT NULL DEFAULT 0;");
+            $existe = $this->db->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'compras_cabecera' AND column_name = 'total_terceros'")->fetchColumn();
+            if ($existe === false) {
+                $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS total_terceros NUMERIC(12,2) NOT NULL DEFAULT 0;");
+            }
         } catch (\Throwable $e) {}
     }
 

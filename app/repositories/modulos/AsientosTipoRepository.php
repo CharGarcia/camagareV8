@@ -7,15 +7,6 @@ use App\core\Database;
 
 class AsientosTipoRepository
 {
-    public function __construct()
-    {
-        try {
-            $pdo = Database::getConnection();
-            $pdo->exec("ALTER TABLE asientos_tipo ADD COLUMN IF NOT EXISTS debe_haber VARCHAR(10) DEFAULT 'debe' NOT NULL");
-        } catch (\Throwable $e) {
-            // Silently catch exceptions
-        }
-    }
     /**
      * Obtiene el listado de asientos tipo con paginación y filtros.
      */

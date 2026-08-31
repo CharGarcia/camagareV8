@@ -17,9 +17,6 @@ class EstadosFinancierosRepository
     public function __construct()
     {
         $this->db = Database::getConnection();
-        try {
-            $this->db->exec("ALTER TABLE asientos_contables_cabecera ADD COLUMN IF NOT EXISTS tipo_ambiente VARCHAR(1) DEFAULT '1'");
-        } catch (\Throwable $e) {}
     }
 
     /**

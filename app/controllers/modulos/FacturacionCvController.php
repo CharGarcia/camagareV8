@@ -26,47 +26,6 @@ class FacturacionCvController extends BaseModuloController
     public function __construct()
     {
         parent::__construct();
-        try {
-            $db = \App\Core\Database::getConnection();
-            $db->exec("CREATE TABLE IF NOT EXISTS consignaciones_facturas (
-                id SERIAL PRIMARY KEY, id_empresa INTEGER NOT NULL, fecha_emision DATE,
-                serie VARCHAR(7), secuencial VARCHAR(20), id_punto_emision INTEGER,
-                establecimiento VARCHAR(3), punto_emision VARCHAR(3), tipo_ambiente VARCHAR(1) DEFAULT '1',
-                id_cliente INTEGER, id_vendedor INTEGER, observaciones TEXT,
-                id_factura INTEGER, numero_factura VARCHAR(50),
-                subtotal NUMERIC(15,6) DEFAULT 0, impuesto NUMERIC(15,6) DEFAULT 0, total NUMERIC(15,6) DEFAULT 0,
-                id_asiento_reingreso INTEGER, estado VARCHAR(20) DEFAULT 'borrador',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_by INTEGER, updated_by INTEGER, eliminado BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP, deleted_by INTEGER)");
-            foreach ([
-                "fecha_emision DATE", "serie VARCHAR(7)", "secuencial VARCHAR(20)", "id_punto_emision INTEGER",
-                "establecimiento VARCHAR(3)", "punto_emision VARCHAR(3)", "tipo_ambiente VARCHAR(1)",
-                "id_cliente INTEGER", "id_vendedor INTEGER", "observaciones TEXT", "numero_factura VARCHAR(50)",
-                "subtotal NUMERIC(15,6)", "impuesto NUMERIC(15,6)", "total NUMERIC(15,6)", "id_asiento_reingreso INTEGER",
-                "info_adicional TEXT", "dias_credito INTEGER DEFAULT 0", "forma_pago_sri VARCHAR(10)",
-                "pagos_sri TEXT", "plazo_unidad VARCHAR(10) DEFAULT 'dias'"
-            ] as $col) {
-                $db->exec("ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS $col");
-            }
-            $db->exec("CREATE TABLE IF NOT EXISTS consignaciones_facturas_detalles (
-                id SERIAL PRIMARY KEY, id_consignacion_factura INTEGER NOT NULL, id_empresa INTEGER NOT NULL,
-                id_consignacion INTEGER NOT NULL, id_consignacion_detalle INTEGER NOT NULL, id_producto INTEGER NOT NULL,
-                cantidad NUMERIC(15,6) NOT NULL, precio_unitario NUMERIC(15,6) DEFAULT 0,
-                id_impuesto INTEGER, porcentaje_impuesto NUMERIC(5,2) DEFAULT 0, valor_impuesto NUMERIC(15,6) DEFAULT 0,
-                subtotal NUMERIC(15,6) DEFAULT 0, total NUMERIC(15,6) DEFAULT 0, id_bodega INTEGER,
-                lote VARCHAR(100), nup VARCHAR(100), fecha_caducidad DATE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, eliminado BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP, deleted_by INTEGER)");
-            foreach (["id_impuesto INTEGER", "porcentaje_impuesto NUMERIC(5,2)", "valor_impuesto NUMERIC(15,6)", "subtotal NUMERIC(15,6)", "total NUMERIC(15,6)", "descuento NUMERIC(15,6) DEFAULT 0"] as $col) {
-                $db->exec("ALTER TABLE consignaciones_facturas_detalles ADD COLUMN IF NOT EXISTS $col");
-            }
-        } catch (\Throwable $e) {}
-
-        // La cabecera del DOCUMENTO no usa id_consignacion (la relación con la(s)
-        // consignación(es) vive en el detalle). Si una versión previa creó la tabla
-        // con id_consignacion NOT NULL, se relaja para no romper el INSERT del documento.
-        try {
-            \App\Core\Database::getConnection()->exec("ALTER TABLE consignaciones_facturas ALTER COLUMN id_consignacion DROP NOT NULL");
-        } catch (\Throwable $e) {}
 
         $this->service = new ConsignacionFacturaService(
             new ConsignacionFacturaRepository(),

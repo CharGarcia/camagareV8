@@ -14,32 +14,9 @@ class ProveedorRepository extends BaseRepository
         'nombre_tipo_empresa', 'nombre_banco', 'nombre_provincia', 'nombre_ciudad'
     ];
 
-    private static bool $geoMigrated = false;
-
     public function __construct()
     {
         parent::__construct('proveedores');
-        $this->ensureColumnasOpcionales();
-    }
-
-    /**
-     * Agrega las columnas de geolocalización y el límite inferior del rango de
-     * auto pago si aún no existen (ver database/migrations/
-     * 20260725_proveedores_monto_minimo_auto_pago.sql).
-     * Seguro de ejecutar múltiples veces gracias a IF NOT EXISTS.
-     */
-    private function ensureColumnasOpcionales(): void
-    {
-        if (self::$geoMigrated) return;
-        self::$geoMigrated = true;
-        try {
-            $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS latitud         DECIMAL(10,8) DEFAULT NULL");
-            $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS longitud         DECIMAL(11,8) DEFAULT NULL");
-            $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS geocodificado_en TIMESTAMP     DEFAULT NULL");
-            $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS monto_minimo_auto_pago NUMERIC(14,2) DEFAULT NULL");
-        } catch (\Throwable) {
-            // Las columnas ya existen o el motor no soporta IF NOT EXISTS — se ignora
-        }
     }
 
     /**

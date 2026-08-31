@@ -12,34 +12,6 @@ class AsientoProgramadoRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('asientos_programados');
-        try {
-            $this->db->exec("CREATE TABLE IF NOT EXISTS asientos_preferencia_empresa (
-                id SERIAL PRIMARY KEY,
-                id_empresa INTEGER NOT NULL,
-                tipo_asiento VARCHAR(100) NOT NULL,
-                metodo VARCHAR(50) DEFAULT 'general' NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_by INTEGER,
-                updated_by INTEGER,
-                eliminado BOOLEAN DEFAULT FALSE,
-                deleted_at TIMESTAMP,
-                deleted_by INTEGER
-            )");
-        } catch (\Throwable $e) {
-            // Catch exceptions silently
-        }
-
-        // Override de cuenta de IVA por dimensión (cliente/proveedor/producto/categoria/marca):
-        // una fila de asientos_programados con id_asiento_tipo=0, tipo_referencia=dimensión y estas
-        // dos columnas informadas identifica "cuenta de IVA de esta tarifa para esta entidad puntual".
-        // NULL en todas las filas normales (reglas de concepto y regla general de IVA) — no rompe nada.
-        try {
-            $this->db->exec("ALTER TABLE asientos_programados ADD COLUMN IF NOT EXISTS codigo_tarifa_iva VARCHAR(10) NULL");
-            $this->db->exec("ALTER TABLE asientos_programados ADD COLUMN IF NOT EXISTS direccion_iva VARCHAR(10) NULL");
-        } catch (\Throwable $e) {
-            // Catch exceptions silently
-        }
     }
 
     /**

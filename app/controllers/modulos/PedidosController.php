@@ -30,12 +30,6 @@ class PedidosController extends BaseModuloController {
     }
 
     public function index() {
-        try {
-            $db = \App\core\Database::getConnection();
-            $db->exec("ALTER TABLE responsables_traslado ADD COLUMN IF NOT EXISTS email VARCHAR(150)");
-            $db->exec("ALTER TABLE pedidos_detalle DROP COLUMN IF EXISTS id_empresa");
-        } catch (\Throwable $e) {}
-
         $this->requireLeer();
 
         $perm = $this->getPermisos();

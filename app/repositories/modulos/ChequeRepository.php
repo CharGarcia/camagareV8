@@ -21,41 +21,6 @@ class ChequeRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('cheques_impresos');
-
-        // Auto-migración transparente (por si aún no se ha desplegado el SQL).
-        try {
-            $this->db->exec("
-                CREATE TABLE IF NOT EXISTS cheques_impresos (
-                    id                  SERIAL PRIMARY KEY,
-                    id_empresa          INTEGER      NOT NULL,
-                    id_egreso_pago      INTEGER      NOT NULL,
-                    id_egreso           INTEGER,
-                    id_forma_pago       INTEGER,
-                    numero_cheque       VARCHAR(50),
-                    beneficiario        VARCHAR(255),
-                    beneficiario_ident  VARCHAR(50),
-                    monto               NUMERIC(18,6) DEFAULT 0,
-                    fecha_cheque        DATE,
-                    banco_nombre        VARCHAR(150),
-                    cuenta_numero       VARCHAR(50),
-                    es_reimpresion      BOOLEAN      NOT NULL DEFAULT FALSE,
-                    fecha_impresion     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    impreso_por         INTEGER,
-                    anulado             BOOLEAN      NOT NULL DEFAULT FALSE,
-                    anulado_at          TIMESTAMP,
-                    anulado_by          INTEGER,
-                    eliminado           BOOLEAN      NOT NULL DEFAULT FALSE,
-                    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    created_by          INTEGER,
-                    deleted_at          TIMESTAMP,
-                    deleted_by          INTEGER
-                )
-            ");
-            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_cheques_impresos_empresa ON cheques_impresos (id_empresa, eliminado)");
-            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_cheques_impresos_pago ON cheques_impresos (id_egreso_pago) WHERE anulado = FALSE AND eliminado = FALSE");
-        } catch (\Throwable $e) {
-            // Silenciar si no hay permisos DDL.
-        }
     }
 
     private function query(string $sql, array $params = []): \PDOStatement

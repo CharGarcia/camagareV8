@@ -16,10 +16,6 @@ class AsientoContableRepository
     {
         $this->modelCabecera = new AsientoContableCabecera();
         $this->modelDetalle = new AsientoContableDetalle();
-        try {
-            $pdo = \App\core\Database::getConnection();
-            $pdo->exec("ALTER TABLE asientos_contables_cabecera ADD COLUMN IF NOT EXISTS tipo_ambiente VARCHAR(1) DEFAULT '1'");
-        } catch (\Throwable $e) {}
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array

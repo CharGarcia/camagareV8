@@ -32,9 +32,6 @@ class ClienteRepository extends BaseRepository
             if (!$check->fetch()) {
                 $this->db->exec("ALTER TABLE clientes ADD COLUMN id_ingreso_concepto_predeterminado INT NULL");
             }
-            // Límite inferior del rango de auto cobro
-            // (database/migrations/20260725_clientes_monto_minimo_auto_cobro.sql)
-            $this->db->exec("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS monto_minimo_auto_cobro NUMERIC(14,2) NULL");
         } catch (\Throwable $e) {}
     }
 
