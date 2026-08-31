@@ -2470,11 +2470,14 @@ class MigracionMysqlService
         $precioProd = [];
         foreach ($pg->query("SELECT id, COALESCE(precio_base, 0) pb FROM productos WHERE id_empresa = " . (int) $idEmpresa) as $p) { $precioProd[(int) $p['id']] = (float) $p['pb']; }
 
-        // El viejo (encabezado_pedido) no guarda establecimiento/punto: solo numero_pedido. La serie se
-        // completa con la activa de la empresa (serieDefecto), no con un '001-001' fijo — así el pedido
-        // queda enlazado a un punto real y el generador de secuenciales lo cuenta.
-        $serie   = $this->serieDefecto($idEmpresa, $idUsuario);
-        $buscar  = $pg->prepare("SELECT id FROM pedidos_cabecera WHERE id_empresa = :e AND establecimiento = :est AND punto_emision = :pto AND secuencial = :sec ORDER BY eliminado, id LIMIT 1");
+        // El viejo (encabezado_pedido) no guarda establecimiento/punto en el número, pero SÍ trae el
+        // establecimiento real en ruc_empresa (13 díg.). Cada pedido se numera en el punto '001' de SU
+        // propio establecimiento (o en el destino elegido) — así dos establecimientos con el mismo
+        // numero_pedido NO chocan en uq_pedidos_secuencial (cada uno en su punto).
+        // Detección de duplicado alineada con uq_pedidos_secuencial (id_empresa, id_punto_emision,
+        // secuencial, tipo_ambiente): así se vincula al pedido que ya ocupa ese número en el punto en
+        // vez de chocar con la constraint (el viejo numera por establecimiento y puede repetir).
+        $buscar  = $pg->prepare("SELECT id FROM pedidos_cabecera WHERE id_empresa = :e AND id_punto_emision = :ipto AND secuencial = :sec AND tipo_ambiente = :amb ORDER BY eliminado, id LIMIT 1");
         $insCab  = $pg->prepare("INSERT INTO pedidos_cabecera (id_empresa, id_cliente, fecha_pedido, estado, observaciones, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total) VALUES (?, ?, ?, ?, ?, 0, ?)");
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, producto, cantidad FROM detalle_pedido WHERE id_pedido = :id");
@@ -2492,7 +2495,11 @@ class MigracionMysqlService
                                          punto_emision      = COALESCE(NULLIF(punto_emision, ''), :pto)
                                    WHERE id = :id AND id_punto_emision IS NULL");
 
-        $sql = "SELECT id, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
+        // Número de pedido más alto del viejo (para renumerar duplicados POR ENCIMA de todos y no pisar
+        // a los pedidos que vienen con esos números — evita el efecto cascada al renumerar).
+        $maxOldNumero = (int) $mysql->query("SELECT COALESCE(MAX(CAST(numero_pedido AS UNSIGNED)),0) FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql))->fetchColumn();
+
+        $sql = "SELECT id, ruc_empresa, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
                   FROM encabezado_pedido WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -2503,6 +2510,9 @@ class MigracionMysqlService
             // status viejo → estado nuevo (confirmado por el usuario): 1=Pendiente, 2=Procesado, 3=Anulado.
             $est  = ['1' => 'Pendiente', '2' => 'Procesado', '3' => 'Anulado'][(string) $ep['status']] ?? 'Pendiente';
             $sec  = str_pad(preg_replace('/\D+/', '', (string) $ep['numero_pedido']), 9, '0', STR_PAD_LEFT);
+            // Serie del pedido: su propio establecimiento (del ruc_empresa de 13 díg.), o el destino elegido.
+            $estabPed = str_pad(substr(preg_replace('/\D/', '', (string) $ep['ruc_empresa']), 10, 3) ?: '001', 3, '0', STR_PAD_LEFT);
+            $serie = $this->serieParaEstab($idEmpresa, $estabPed, $idUsuario);
             if (isset($mapDest[(string) $old])) { // ya migrado: reconciliar estado + entrega (solo insertados)
                 if (!$mapDest[(string) $old]['vin']) {
                     try { $updCab->execute([':est' => $est, ':fent' => self::fechaCorta($ep['fecha_entrega']), ':hi' => self::nz($ep['hora_entrega_desde']), ':hm' => self::nz($ep['hora_entrega_hasta']), ':obs' => self::nz($ep['observaciones_cliente']), ':obsi' => self::nz($ep['observaciones_interna']), ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
@@ -2524,14 +2534,28 @@ class MigracionMysqlService
 
             try {
                 $pg->beginTransaction();
-                $buscar->execute([':e' => $idEmpresa, ':est' => $serie['establecimiento'], ':pto' => $serie['punto_emision'], ':sec' => $sec]);
-                $exId = $buscar->fetchColumn();
-                if ($exId !== false) {
-                    $idPed = (int) $exId; $vin = true; $res['vinculados']++;
-                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = self::numeroDoc($serie, $sec); }
-                } else {
-                    $insCab->execute([$idEmpresa, $idCliente, $fped, $est, self::nz($ep['observaciones_cliente']), self::nz($ep['observaciones_interna']), $fent, self::nz($ep['hora_entrega_desde']), self::nz($ep['hora_entrega_hasta']), $serie['id_establecimiento'], $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], $sec, $amb, $idUsuario]);
-                    $idPed = (int) $insCab->fetchColumn(); $vin = false; $res['migrados']++;
+                // Si el número del viejo ya está ocupado en el punto (numero_pedido repetido dentro del
+                // mismo establecimiento = dato duplicado del viejo), se RENUMERA al siguiente libre para
+                // NO perder el pedido (los pedidos son internos, no documentos SRI: renumerar es válido).
+                $secFinal = $sec; $vin = false;
+                $buscar->execute([':e' => $idEmpresa, ':ipto' => $serie['id_punto_emision'], ':sec' => $secFinal, ':amb' => $amb]);
+                if ($buscar->fetchColumn() !== false) {
+                    $secFinal = $this->siguienteSecuencialLibre($pg, $idEmpresa, (int) $serie['id_punto_emision'], (string) $amb, $maxOldNumero);
+                    $res['renumerados'] = ($res['renumerados'] ?? 0) + 1;
+                    if (count($res['renumerados_muestra'] ?? []) < 8) { $res['renumerados_muestra'][] = self::numeroDoc($serie, $sec) . ' → ' . self::numeroDoc($serie, $secFinal); }
+                }
+                // Red de seguridad: si aun así choca (imposible en un solo hilo), se OMITE sin abortar.
+                $pg->exec('SAVEPOINT sp_ped');
+                try {
+                    $insCab->execute([$idEmpresa, $idCliente, $fped, $est, self::nz($ep['observaciones_cliente']), self::nz($ep['observaciones_interna']), $fent, self::nz($ep['hora_entrega_desde']), self::nz($ep['hora_entrega_hasta']), $serie['id_establecimiento'], $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], $secFinal, $amb, $idUsuario]);
+                    $idPed = (int) $insCab->fetchColumn(); $res['migrados']++;
+                    $pg->exec('RELEASE SAVEPOINT sp_ped');
+                } catch (Throwable $exI) {
+                    $pg->exec('ROLLBACK TO SAVEPOINT sp_ped');
+                    $res['serie_omitida']++;
+                    if (empty($res['serie_omitida_muestra'])) { $res['serie_omitida_muestra'] = self::numeroDoc($serie, $secFinal); }
+                    $pg->commit();
+                    continue;
                 }
 
                 if (!$vin) { // no tocar el detalle de un pedido nativo enlazado
@@ -5166,6 +5190,43 @@ class MigracionMysqlService
 
     /** Cache de serieDefecto() por empresa + establecimiento destino. */
     private array $serieDefectoCache = [];
+
+    /**
+     * Serie (punto '001') de un establecimiento dado. Respeta el destino (estabDestino) si está fijado;
+     * si no, usa el establecimiento propio del documento. Crea el establecimiento/punto si faltan.
+     */
+    private array $serieEstabCache = [];
+    private function serieParaEstab(int $idEmpresa, string $estab, int $idUsuario): array
+    {
+        $estab = str_pad(preg_replace('/\D/', '', $estab) ?: '001', 3, '0', STR_PAD_LEFT);
+        $key = $idEmpresa . '|' . $estab . '|' . ($this->estabDestino ?? '');
+        if (isset($this->serieEstabCache[$key])) { return $this->serieEstabCache[$key]; }
+        // getEstablecimientoId/getPuntoEmisionId aplican estabDestino cuando está fijado.
+        $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+        $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, '001', $idUsuario);
+        $estabField = $this->estabDestino ?? $estab; // dónde queda atribuido el pedido
+        return $this->serieEstabCache[$key] = [
+            'establecimiento'    => $estabField,
+            'punto_emision'      => '001',
+            'id_establecimiento' => $idEst,
+            'id_punto_emision'   => $idPto,
+        ];
+    }
+
+    /**
+     * Siguiente secuencial LIBRE (9 díg.) de un punto de pedidos: MAX numérico existente + 1. Como el
+     * máximo es el más alto, max+1 está garantizado libre (incluso frente al índice único). Se usa para
+     * RENUMERAR un pedido cuyo número del viejo ya está ocupado, sin perderlo.
+     */
+    private function siguienteSecuencialLibre(PDO $pg, int $idEmpresa, int $idPunto, string $amb, int $piso = 0): string
+    {
+        $q = $pg->prepare("SELECT COALESCE(MAX(NULLIF(regexp_replace(secuencial, '[^0-9]', '', 'g'), '')::bigint), 0)
+                             FROM pedidos_cabecera WHERE id_empresa = ? AND id_punto_emision = ? AND tipo_ambiente = ?");
+        $q->execute([$idEmpresa, $idPunto, $amb]);
+        // max(secuencial ya existente en el punto, número más alto del viejo) + 1: así el renumerado
+        // queda por encima de todos los números originales y no colisiona con los que faltan por migrar.
+        return str_pad((string) (max((int) $q->fetchColumn(), $piso) + 1), 9, '0', STR_PAD_LEFT);
+    }
 
     /** Número de documento completo "EEE-PPP-SSSSSSSSS" a partir de una serie y un secuencial. */
     private static function numeroDoc(array $serie, string $secuencial): string
