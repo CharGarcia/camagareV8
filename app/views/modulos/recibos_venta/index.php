@@ -4847,7 +4847,40 @@ $totalPages = $totalPagesOriginal;
             if (inputPropina) inputPropina.value = parseFloat(cab.propina || 0).toFixed(2);
 
             // â”€â”€ Recalcular totales con todos los datos cargados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // calcTotales() hace falta igual (deja consistentes los subtotales por
+            // línea, dispara la vista previa del asiento contable, etc.), pero su
+            // recálculo puede diferir en 1-2 centavos de lo realmente guardado si
+            // el modo de cálculo de IVA de la empresa (línea a línea / por subtotal)
+            // cambió después de que este recibo se guardó — el mismo desfase que ya
+            // reconcilia el PDF. Para que el modal NUNCA muestre un total distinto
+            // al de la vista general o al del PDF mientras no se edite nada, se
+            // fuerzan los renglones principales al valor realmente persistido justo
+            // después.
             calcTotales();
+            if (cab.importe_total !== undefined && cab.importe_total !== null && cab.importe_total !== '') {
+                const totSinImp = parseFloat(cab.total_sin_impuestos) || 0;
+                const totDesc   = parseFloat(cab.total_descuento) || 0;
+                const totIce    = parseFloat(cab.total_ice) || 0;
+                const totFinal  = parseFloat(cab.importe_total) || 0;
+
+                const lblSub = document.getElementById('m-lbl-subtotal');
+                if (lblSub) lblSub.textContent = (totSinImp + totDesc).toFixed(2);
+
+                const lblDescElem = document.getElementById('m-lbl-descuento');
+                if (lblDescElem) lblDescElem.textContent = totDesc.toFixed(2);
+
+                const iceRowElem = document.getElementById('m-lbl-ice-row');
+                const lblIceElem = document.getElementById('m-lbl-ice');
+                if (totIce > 0) {
+                    iceRowElem?.classList.remove('d-none');
+                    if (lblIceElem) lblIceElem.textContent = totIce.toFixed(2);
+                } else {
+                    iceRowElem?.classList.add('d-none');
+                }
+
+                const lblTotalElem = document.getElementById('m-lbl-total');
+                if (lblTotalElem) lblTotalElem.textContent = totFinal.toFixed(2);
+            }
 
             // â”€â”€ Cargar Asiento Contable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (typeof window.fvCargarAsiento === 'function') {

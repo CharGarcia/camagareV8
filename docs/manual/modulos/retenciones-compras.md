@@ -108,9 +108,6 @@ Detalles que conviene conocer:
   quedar libre.
 - Las retenciones de **otro ambiente** (las de pruebas cuando la empresa ya está en
   producción) tampoco bloquean, igual que no aparecen en el listado.
-- La regla la sostiene también la base de datos, así que dos personas guardando la
-  misma retención a la vez no pueden colar un duplicado: la segunda recibe el mismo
-  aviso.
 
 ## Relación con la compra
 
@@ -150,8 +147,7 @@ inicio del formulario.
   antes bastaba con que otro proveedor tuviera una factura con el mismo número para
   que el sistema bloqueara la retención. Se aplica también al editar un borrador, no
   bloquean ya las retenciones de otro ambiente, y el mensaje dice cuál es la retención
-  que ocupa el documento. La regla queda respaldada además por un índice único en la
-  base, para que dos guardados simultáneos tampoco puedan duplicarla.
+  que ocupa el documento.
 - **1.2** — El código de retención se puede buscar desde las columnas Código,
   Concepto o % Ret., y la búsqueda cubre todas las columnas del catálogo. La lista
   avisa cuando hay códigos que coinciden pero no están vigentes a la fecha de emisión.

@@ -12,6 +12,18 @@
 -- sus facturas por su cuenta, así que la misma "001-001-000000123" de dos proveedores
 -- distintos son dos documentos distintos y ambas se pueden retener.
 --
+-- ESTADO (31-08-2026): NO APLICADO EN PRODUCCIÓN.
+--   La comprobación previa encontró 1 documento con dos retenciones vivas del mismo
+--   proveedor, de un ejercicio ya cerrado. Se decidió no tocar ese histórico, así que
+--   el índice queda pendiente: la única defensa activa en producción es la validación
+--   en PHP (RetencionCompraService::validarUnicidadDocSustento), que cubre el uso
+--   normal pero no dos guardados simultáneos.
+--   Para aplicarlo sin tocar el histórico, se puede acotar el índice a los documentos
+--   nuevos añadiendo al WHERE (y a la comprobación previa) un corte por fecha, p. ej.:
+--       AND fecha_emision >= DATE '2026-01-01'
+--   Antes de hacerlo hay que confirmar la fecha del duplicado histórico con
+--   20260831_diagnostico_duplicados_retencion_doc_sustento.sql.
+--
 -- ORDEN DE EJECUCIÓN:
 --   1. 20260831_diagnostico_duplicados_retencion_doc_sustento.sql  ← ¿hay choques?
 --   2. resolver los choques que aparezcan (anular o eliminar la retención sobrante)
