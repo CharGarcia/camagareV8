@@ -519,7 +519,7 @@ $base = BASE_URL;
                     <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:${pct}%">${hecho}/${totalEnt} etapas</div>
                  </div>
                  ${fino}
-                 <div class="mt-3"><i class="bi bi-clock me-1"></i>Tiempo restante estimado: <b>${fmtTiempo(restante)}</b></div>
+                 <div class="mt-3"><i class="bi bi-clock me-1"></i>Tiempo restante estimado: <b>${(restante > 0.5) ? fmtTiempo(restante) : (entActual ? 'finalizando…' : fmtTiempo(0))}</b></div>
                  <div class="text-muted small mt-1">migrados ${fmt(totals.migrados)} · vinculados ${fmt(totals.vinculados)} · omitidos ${fmt(totals.omitidos)} · errores ${fmt(totals.errores)}</div>`;
         }
 

@@ -20,9 +20,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="modal-body p-0">
+                <div class="modal-body p-0 position-relative">
+                    <!-- Loader mientras carga la información completa de la consignación vía AJAX -->
+                    <div id="cons-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div class="small text-muted">Cargando información de la consignación...</div>
+                    </div>
                     <input type="hidden" id="cons_id" name="id" value="">
-                    
+
                     <!-- Pestañas -->
                     <style>
                         #tabsCons .nav-link {
@@ -569,54 +574,66 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (row.id_bodega) document.getElementById('cons_id_bodega').value = row.id_bodega;
         if (row.id_responsable_traslado) document.getElementById('cons_id_responsable_traslado').value = row.id_responsable_traslado;
 
-        await cargarDetallesCons(row.id);
-
-        // Selector de estado: visible al ver una consignación existente. Los estados legado
-        // ('Emitida'/'Nueva') se muestran como 'Borrador' en el selector.
-        const wrapEstado = document.getElementById('cons_estado_wrapper');
-        const selEstado  = document.getElementById('cons_estado_selector');
-        if (selEstado) {
-            const estOpts = ['Emitida', 'Borrador', 'Entregada', 'Anulada'];
-            const estActual = estOpts.includes(row.estado) ? row.estado : 'Emitida';
-            selEstado.value = estActual;
-            selEstado.dataset.prev = estActual;
-        }
-        if (wrapEstado) wrapEstado.classList.remove('d-none');
-
-        // Si la consignación tiene una factura asociada, no se puede cambiar el estado.
-        // Excepción: consignaciones migradas (la factura es histórica, del bridge de
-        // migración, sin efecto real en inventario/contabilidad) sí permiten corregir el estado.
-        if (selEstado) {
-            const conFactura = !!window._CONS_TIENE_FACTURA && !window._CONS_ES_MIGRADA;
-            selEstado.disabled = conFactura;
-            selEstado.title = conFactura ? 'La consignación tiene una factura asociada: no se puede cambiar el estado.' : '';
-        }
-
-        // Modo edición/lectura y visibilidad de botones según el estado (editable solo en Borrador).
-        consAplicarEditable(row.estado);
-
-        if (typeof consCargarAsiento === 'function') consCargarAsiento(row.id);
-
-        await cargarCatalogosConsignacion();
-        
-        // Asignar punto de emision (que es dinámico)
-        if (row.id_punto_emision) {
-            document.getElementById('cons_id_punto_emision').value = row.id_punto_emision;
-        }
-
-        if (typeof EMPRESA_CONFIG !== 'undefined') {
-            if (EMPRESA_CONFIG.obligatorio_lotes) {
-                document.querySelectorAll('.th-lote').forEach(e => e.classList.remove('d-none'));
-            }
-            if (EMPRESA_CONFIG.obligatorio_caducidad) {
-                document.querySelectorAll('.th-caducidad').forEach(e => e.classList.remove('d-none'));
-            }
-            if (EMPRESA_CONFIG.obligatorio_nup) {
-                document.querySelectorAll('.th-nup').forEach(e => e.classList.remove('d-none'));
-            }
-        }
-
+        // Mostrar el modal YA, con los datos básicos del listado (rápidos, sin red) ya
+        // cargados, y tapar el resto con un loader mientras se completa vía AJAX (detalles,
+        // catálogos, asiento). Antes se hacía todo esto ANTES de mostrar el modal, y el
+        // usuario se quedaba mirando la pantalla sin nada varios segundos.
         new bootstrap.Modal(document.getElementById('modalConsignacion'), { focus: false }).show();
+        document.getElementById('cons-modal-loader')?.classList.remove('d-none');
+
+        try {
+            await cargarDetallesCons(row.id);
+
+            // Selector de estado: visible al ver una consignación existente. Los estados legado
+            // ('Emitida'/'Nueva') se muestran como 'Borrador' en el selector.
+            const wrapEstado = document.getElementById('cons_estado_wrapper');
+            const selEstado  = document.getElementById('cons_estado_selector');
+            if (selEstado) {
+                const estOpts = ['Emitida', 'Borrador', 'Entregada', 'Anulada'];
+                const estActual = estOpts.includes(row.estado) ? row.estado : 'Emitida';
+                selEstado.value = estActual;
+                selEstado.dataset.prev = estActual;
+            }
+            if (wrapEstado) wrapEstado.classList.remove('d-none');
+
+            // Si la consignación tiene una factura asociada, no se puede cambiar el estado.
+            // Excepción: consignaciones migradas (la factura es histórica, del bridge de
+            // migración, sin efecto real en inventario/contabilidad) sí permiten corregir el estado.
+            if (selEstado) {
+                const conFactura = !!window._CONS_TIENE_FACTURA && !window._CONS_ES_MIGRADA;
+                selEstado.disabled = conFactura;
+                selEstado.title = conFactura ? 'La consignación tiene una factura asociada: no se puede cambiar el estado.' : '';
+            }
+
+            // Modo edición/lectura y visibilidad de botones según el estado (editable solo en Borrador).
+            consAplicarEditable(row.estado);
+
+            if (typeof consCargarAsiento === 'function') consCargarAsiento(row.id);
+
+            await cargarCatalogosConsignacion();
+
+            // Asignar punto de emision (que es dinámico)
+            if (row.id_punto_emision) {
+                document.getElementById('cons_id_punto_emision').value = row.id_punto_emision;
+            }
+
+            if (typeof EMPRESA_CONFIG !== 'undefined') {
+                if (EMPRESA_CONFIG.obligatorio_lotes) {
+                    document.querySelectorAll('.th-lote').forEach(e => e.classList.remove('d-none'));
+                }
+                if (EMPRESA_CONFIG.obligatorio_caducidad) {
+                    document.querySelectorAll('.th-caducidad').forEach(e => e.classList.remove('d-none'));
+                }
+                if (EMPRESA_CONFIG.obligatorio_nup) {
+                    document.querySelectorAll('.th-nup').forEach(e => e.classList.remove('d-none'));
+                }
+            }
+        } catch (e) {
+            console.error('Error cargando consignación:', e);
+            Swal.fire({ icon: 'error', title: 'No se pudo cargar la consignación', text: 'Ocurrió un error. Intenta cerrar y volver a abrir esta consignación.' });
+        } finally {
+            document.getElementById('cons-modal-loader')?.classList.add('d-none');
+        }
     }
 
     async function cargarCatalogosConsignacion() {
@@ -716,9 +733,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 if(data.ok && data.data && data.data.detalles) {
                     const tbody = document.getElementById('cons_detalles_body');
                     tbody.innerHTML = '';
-                    
+
                     const bodegaId = document.getElementById('cons_id_bodega').value || 0;
 
+                    // 1) Construir todas las filas primero (nada de esto depende de red).
+                    const filas = [];
                     for (const d of data.data.detalles) {
                         const tr = agregarFilaConsignacion();
                         tr.dataset.idBodega = d.id_bodega || '';
@@ -726,12 +745,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         const inputCant = tr.querySelector('.input-cantidad');
                         const inputPrecio = tr.querySelector('.input-precio');
                         const selLista = tr.querySelector('.input-lista-precios');
-                        
+
                         tr.querySelector('.input-id-producto').value = d.id_producto;
                         tr.querySelector('.input-codigo').value = d.producto_codigo || '';
-                        inputDesc.value = d.producto_nombre || ''; 
+                        inputDesc.value = d.producto_nombre || '';
                         tr.querySelector('.input-id-pedido-detalle').value = d.id_pedido_detalle || '';
-                        
+
                         tr.dataset.idProducto = d.id_producto;
                         tr.dataset.tipoProduccion = d.tipo_produccion || '01';
                         tr.dataset.inventariable = d.inventariable;
@@ -740,14 +759,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
                         inputCant.value = parseFloat(d.cantidad) || 0;
                         inputPrecio.value = parseFloat(d.precio_unitario).toFixed(2);
-                        
+
                         selLista.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
                         if (d.precios_lista && d.precios_lista.length > 0) {
                             d.precios_lista.forEach(pl => {
                                 selLista.innerHTML += `<option value="${pl.precio}">${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(2)})</option>`;
                             });
                         }
-                        
+
                         const precioGuardado = parseFloat(d.precio_unitario);
                         const matchPrice = Array.from(selLista.options).some(opt => parseFloat(opt.value).toFixed(2) === precioGuardado.toFixed(2));
                         if (!matchPrice) {
@@ -765,68 +784,78 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(2);
                             consCalcFila(selLista);
                         };
-                        
-                        let esInv = (d.inventariable == true || d.inventariable == 'true' || d.inventariable == 1) && d.tipo_produccion !== '02';
-                        if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
-                            try {
-                                const rowBodegaId = d.id_bodega || bodegaId;
-                                const resLote = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${d.id_producto}&id_bodega=${rowBodegaId}`);
-                                const dataLote = await resLote.json();
-                                const fLote = tr.querySelector('.input-lote');
-                                const fCad = tr.querySelector('.input-caducidad');
-                                const fNup = tr.querySelector('.input-nup');
-                                
-                                if (fLote) fLote.classList.remove('d-none');
-                                if (fCad) fCad.classList.remove('d-none');
-                                if (fNup) {
-                                    fNup.classList.remove('d-none');
-                                    fNup.value = d.nup || '';
-                                }
-
-                                if (dataLote.ok && dataLote.data.length > 0) {
-                                    let opts = dataLote.data;
-                                    if (d.lote && !opts.some(l => l.numero_lote === d.lote)) {
-                                        opts.push({numero_lote: d.lote, fecha_caducidad: d.fecha_caducidad});
-                                    }
-                                    
-                                    if (fLote) {
-                                        fLote.innerHTML = '<option value="">Lote...</option>';
-                                        opts.forEach(l => {
-                                            const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
-                                            fLote.innerHTML += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
-                                        });
-                                        // Garantiza que el lote guardado de la línea se muestre aunque no esté en el inventario disponible.
-                                        if (d.lote && !Array.from(fLote.options).some(o => o.value === d.lote)) {
-                                            fLote.insertAdjacentHTML('beforeend', `<option value="${d.lote}">${d.lote}</option>`);
-                                        }
-                                        fLote.value = d.lote || '';
-                                    }
-                                    if (fCad) {
-                                        fCad.innerHTML = '<option value="">Vencimiento...</option>';
-                                        opts.forEach(l => {
-                                            const c = l.fecha_caducidad || '';
-                                            fCad.innerHTML += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
-                                        });
-                                        // Garantiza que la caducidad guardada de la línea se muestre aunque no coincida con un lote del inventario.
-                                        if (d.fecha_caducidad && !Array.from(fCad.options).some(o => o.value === d.fecha_caducidad)) {
-                                            fCad.insertAdjacentHTML('beforeend', `<option value="${d.fecha_caducidad}">${d.fecha_caducidad}</option>`);
-                                        }
-                                        fCad.value = d.fecha_caducidad || '';
-                                    }
-                                } else {
-                                    if (fLote) fLote.innerHTML = `<option value="${d.lote || ''}">${d.lote || 'Sin Lote'}</option>`;
-                                    if (fCad) fCad.innerHTML = `<option value="${d.fecha_caducidad || ''}">${d.fecha_caducidad || 'Sin Fecha'}</option>`;
-                                }
-                            } catch(e) {}
-                        }
 
                         consCalcFila(inputCant);
+                        filas.push({ tr, d });
                     }
+
+                    // 2) Lotes/caducidad/NUP de cada línea EN PARALELO (antes se pedía una por
+                    // una, en serie: con varias líneas eso hacía sentir lento el abrir la
+                    // consignación). Cada llamada solo toca su propia fila, así que no hay
+                    // orden que respetar entre ellas.
+                    await Promise.all(filas.map(({ tr, d }) => cargarLotesFilaGuardada(tr, d, bodegaId)));
+
                     consCalcTotales();
                 }
             } catch(e) {
                 console.error(e);
             }
+        }
+
+        /** Trae lote/caducidad/NUP disponibles para UNA línea ya guardada y los aplica a su fila. */
+        async function cargarLotesFilaGuardada(tr, d, bodegaId) {
+            let esInv = (d.inventariable == true || d.inventariable == 'true' || d.inventariable == 1) && d.tipo_produccion !== '02';
+            if (!(esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario)) return;
+            try {
+                const rowBodegaId = d.id_bodega || bodegaId;
+                const resLote = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${d.id_producto}&id_bodega=${rowBodegaId}`);
+                const dataLote = await resLote.json();
+                const fLote = tr.querySelector('.input-lote');
+                const fCad = tr.querySelector('.input-caducidad');
+                const fNup = tr.querySelector('.input-nup');
+
+                if (fLote) fLote.classList.remove('d-none');
+                if (fCad) fCad.classList.remove('d-none');
+                if (fNup) {
+                    fNup.classList.remove('d-none');
+                    fNup.value = d.nup || '';
+                }
+
+                if (dataLote.ok && dataLote.data.length > 0) {
+                    let opts = dataLote.data;
+                    if (d.lote && !opts.some(l => l.numero_lote === d.lote)) {
+                        opts.push({numero_lote: d.lote, fecha_caducidad: d.fecha_caducidad});
+                    }
+
+                    if (fLote) {
+                        fLote.innerHTML = '<option value="">Lote...</option>';
+                        opts.forEach(l => {
+                            const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
+                            fLote.innerHTML += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
+                        });
+                        // Garantiza que el lote guardado de la línea se muestre aunque no esté en el inventario disponible.
+                        if (d.lote && !Array.from(fLote.options).some(o => o.value === d.lote)) {
+                            fLote.insertAdjacentHTML('beforeend', `<option value="${d.lote}">${d.lote}</option>`);
+                        }
+                        fLote.value = d.lote || '';
+                    }
+                    if (fCad) {
+                        fCad.innerHTML = '<option value="">Vencimiento...</option>';
+                        opts.forEach(l => {
+                            const c = l.fecha_caducidad || '';
+                            fCad.innerHTML += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
+                        });
+                        // Garantiza que la caducidad guardada de la línea se muestre aunque no coincida con un lote del inventario.
+                        if (d.fecha_caducidad && !Array.from(fCad.options).some(o => o.value === d.fecha_caducidad)) {
+                            fCad.insertAdjacentHTML('beforeend', `<option value="${d.fecha_caducidad}">${d.fecha_caducidad}</option>`);
+                        }
+                        fCad.value = d.fecha_caducidad || '';
+                    }
+                } else {
+                    if (fLote) fLote.innerHTML = `<option value="${d.lote || ''}">${d.lote || 'Sin Lote'}</option>`;
+                    if (fCad) fCad.innerHTML = `<option value="${d.fecha_caducidad || ''}">${d.fecha_caducidad || 'Sin Fecha'}</option>`;
+                }
+            } catch(e) {}
         }
 
     window.consCalcFila = function(el) {
