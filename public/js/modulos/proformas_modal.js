@@ -108,7 +108,14 @@
             selPunto.disabled = false;
             selPunto.selectedIndex = 0;   // primer punto (no hay opción vacía)
             _syncEstab(selPunto);
-            if (selPunto.value) _cargarSecuencial(selPunto.value);
+            // Se llama SIEMPRE (igual que cargarSecuencial() en factura de venta),
+            // incluso con el select vacío: si la empresa no tiene ninguna serie con el
+            // secuencial de "Proformas" configurado, el valor es '' y _cargarSecuencial
+            // avisa y deja _secuencialConfigurado en false, que es lo que después
+            // bloquea el guardado. Con el antiguo `if (selPunto.value)` ese caso pasaba
+            // en silencio y el flag se quedaba en true (se guardaba sin numeración).
+            _secuencialConfigurado = true;   // se recalcula en _cargarSecuencial
+            _cargarSecuencial(selPunto.value);
         }
 
         // Cliente
@@ -175,7 +182,7 @@
     /* ── Aviso de secuencial no configurado (igual que factura de venta) ── */
     function _avisarSecuencialNoConfigurado(motivo) {
         const txt = (motivo === 'serie')
-            ? 'Seleccione una serie (punto de emisión) para numerar la proforma.'
+            ? 'No hay una serie / punto de emisión disponible.<br>Configure los puntos de emisión y sus secuenciales en <strong>Empresa → Puntos de emisión</strong> antes de emitir la proforma.'
             : 'No está configurado el secuencial para esta serie.<br>Configúrelo en <strong>Empresa → Puntos de emisión</strong> antes de emitir la proforma.';
         Swal.fire({
             icon: 'warning',
@@ -1508,14 +1515,17 @@
         async guardar() {
             const payload = _buildPayload();
 
-            if (!payload.id_punto_emision)   { toast('Seleccione el punto de emisión', 'error'); return; }
-
             // Bloqueo: secuencial no configurado para la serie (solo al CREAR una nueva).
+            // Va ANTES del chequeo de id_punto_emision: si la empresa no tiene ninguna
+            // serie con secuencial de "Proformas", el select está vacío y el aviso útil
+            // es este ("configure los puntos de emisión"), no "seleccione el punto".
             const _esNuevaProforma = !$id('pf_id')?.value;
             if (_esNuevaProforma && _secuencialConfigurado === false) {
-                _avisarSecuencialNoConfigurado('secuencial');
+                _avisarSecuencialNoConfigurado(payload.id_punto_emision ? 'secuencial' : 'serie');
                 return;
             }
+
+            if (!payload.id_punto_emision)   { toast('Seleccione el punto de emisión', 'error'); return; }
 
             if (!payload.secuencial)         { toast('Ingrese el secuencial', 'error'); return; }
             if (!payload.fecha_emision)      { toast('Ingrese la fecha de emisión', 'error'); return; }

@@ -6,7 +6,7 @@ ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
 etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla
-version: 1.4
+version: 1.5
 orden: 15
 estado: activo
 ---
@@ -150,6 +150,23 @@ Con **acceso total** se ven las proformas de toda la empresa; sin él, cada
 vendedor ve solo las suyas — que suele ser justo lo que se quiere en un equipo
 comercial.
 
+## Serie y secuencial
+
+La proforma se numera con la **serie** (establecimiento + punto de emisión) y su
+**secuencial**. En el selector *Serie* del modal solo aparecen los puntos de
+emisión que ya tienen configurado el secuencial del documento **Proformas** en
+*Empresa → Puntos de emisión*; el resto se oculta porque no podrían numerar.
+
+Al abrir una **proforma nueva** el sistema pide el siguiente número disponible de
+esa serie y lo muestra en *Secuencial* (campo de solo lectura). Si detecta un
+número faltante (hueco) en la numeración lo recupera y marca el campo en
+**amarillo**; al pasar el cursor se indica el motivo.
+
+Si la serie elegida **no tiene secuencial configurado**, o la empresa no tiene
+ninguna serie disponible para proformas, el sistema **avisa apenas se abre el
+modal** y **no deja guardar** hasta configurarlo. Es el mismo comportamiento que
+en Facturas de Venta.
+
 ## Errores frecuentes
 
 - **"La proforma debe estar aprobada para generar una factura"**: cámbiela a
@@ -157,10 +174,16 @@ comercial.
 - **"Solo se pueden editar proformas en estado borrador"**: ya fue aprobada;
   anúlela y cree una nueva, o corrija en la factura resultante.
 - **"No se puede eliminar una proforma ya convertida a factura"**: use anular.
+- **"Secuencial no configurado"**: la serie elegida no tiene numeración para
+  proformas, o no hay ninguna serie disponible. Configúrela en *Empresa → Puntos
+  de emisión* antes de emitir.
 - **El cliente no aparece**: regístrelo primero en Clientes, en esta misma empresa.
 
 ## Historial de cambios
 
+- **1.5** — Se documenta la **serie y el secuencial**: solo se ofrecen series con
+  numeración de proformas configurada, y el sistema avisa y bloquea el guardado
+  cuando no la hay (incluido el caso de no tener ninguna serie disponible).
 - **1.4** — Pestaña **Plantillas**: guarda detalle + información adicional +
   vigencia como plantilla reutilizable y la aplica para armar proformas más
   rápido.

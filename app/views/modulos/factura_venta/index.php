@@ -663,7 +663,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <table class="table table-sm table-detalle mb-0 text-nowrap">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 34%;">Descripción</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 9%;">Código</th>
+                                                    <th class="py-2 small fw-bold text-muted" style="width: 26%;">Descripción</th>
                                                     <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
                                                     <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
@@ -3912,11 +3913,14 @@ $totalPages = $totalPagesOriginal;
         const tr = document.createElement('tr');
         tr.className = 'row-detalle';
         tr.innerHTML = `
-            <td class="ps-3 position-relative">
+            <td class="ps-3">
+                <input type="text" class="form-control form-control-sm input-detalle input-codigo" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'C\u00f3digo (opcional)' : 'C\u00f3digo'}"
+                    title="${EMPRESA_CONFIG.facturacion_libre ? 'Si el c\u00f3digo ya existe en el cat\u00e1logo, se autocompleta la descripci\u00f3n' : 'Buscar por c\u00f3digo'}">
+            </td>
+            <td class="position-relative">
                 <textarea rows="2" class="form-control form-control-sm input-detalle input-descripcion" style="resize:none; overflow:auto; line-height:1.15;" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'Escribe o busca un producto/servicio...' : 'Buscar producto o escanee c\u00f3digo...'}"
                     title="${EMPRESA_CONFIG.facturacion_libre ? 'Modo libre: puedes escribir directamente o seleccionar del cat\u00e1logo' : ''}"></textarea>
                 <input type="hidden" class="input-id-producto">
-                <input type="hidden" class="input-codigo">
                 <input type="hidden" class="input-casillero">
                 <input type="hidden" class="input-id-variante">
                 <input type="hidden" class="input-es-libre" value="0">
@@ -3996,6 +4000,7 @@ $totalPages = $totalPagesOriginal;
         tbody.appendChild(tr);
 
         const inputDesc = tr.querySelector('.input-descripcion');
+        const inputCodigoVisible = tr.querySelector('.input-codigo');
         // Concepto libre: no permitir Enter (evita saltos de línea) y, al salir del campo,
         // colapsar espacios dobles y recortar los extremos.
         inputDesc.addEventListener('keydown', (e) => {
@@ -4338,6 +4343,7 @@ $totalPages = $totalPagesOriginal;
             // carácter como en cualquier campo — no vaciar la celda ni la fila.
             if ((e.key === 'Delete' || e.key === 'Backspace') && !EMPRESA_CONFIG.facturacion_libre) {
                 e.target.value = '';
+                inputCodigoVisible.value = '';
                 dropdownGlobal.classList.add('d-none');
                 tr.querySelector('.input-id-producto').value = '';
             }
@@ -4363,6 +4369,32 @@ $totalPages = $totalPagesOriginal;
                 seleccionarItemLibre(desc, tr);
             }
         });
+
+        // Columna "Código": mismo buscador de catálogo que la descripción. Si el
+        // código escrito ya existe en el catálogo, buscarProducto() lo detecta como
+        // coincidencia única y llama a seleccionarProductoEnFila(), autocompletando
+        // la descripción y demás datos del producto — aplica también en modo libre,
+        // que es justo el caso pedido: no crear un ítem libre si el código ya existe.
+        inputCodigoVisible.addEventListener('input', debounce((e) => buscarProducto(e.target.value, inputCodigoVisible), 400));
+
+        inputCodigoVisible.addEventListener('keydown', (e) => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && !EMPRESA_CONFIG.facturacion_libre) {
+                e.target.value = '';
+                inputDesc.value = '';
+                dropdownGlobal.classList.add('d-none');
+                tr.querySelector('.input-id-producto').value = '';
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const firstBtn = dropdownGlobal.querySelector('button');
+                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) {
+                    if (firstBtn.onmousedown) firstBtn.onmousedown(new MouseEvent('mousedown'));
+                } else {
+                    inputDesc.focus();
+                }
+            }
+        });
+        inputCodigoVisible.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
     }
 
     async function cargarLotesFila(row) {
@@ -4543,7 +4575,14 @@ $totalPages = $totalPagesOriginal;
     function seleccionarItemLibre(descripcion, row) {
         row.querySelector('.input-descripcion').value = descripcion;
         row.querySelector('.input-id-producto').value = ''; // Sin ID de producto
-        row.querySelector('.input-codigo').value = '__LIBRE__'; // Bandera para el backend
+        // Si el usuario ya escribió un código propio en la columna "Código" (que no
+        // coincidió con ningún producto existente, o si coincidiera ya se habría
+        // autoseleccionado), se respeta y se usa como código del nuevo producto al
+        // guardar. Solo se manda la bandera "__LIBRE__" cuando el campo quedó vacío,
+        // para que el backend genere uno automático (S001, S002...).
+        const inputCod = row.querySelector('.input-codigo');
+        const codTecleado = (inputCod.value || '').trim();
+        inputCod.value = (codTecleado !== '' && codTecleado.toUpperCase() !== '__LIBRE__') ? codTecleado : '__LIBRE__';
         row.querySelector('.input-es-libre').value = '1';
         row.dataset.tipoProduccion = '02'; // Los ítems libres se tratan como servicios ad-hoc
         row.dataset.inventariable = 'false';

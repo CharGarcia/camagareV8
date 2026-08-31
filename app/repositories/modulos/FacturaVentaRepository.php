@@ -779,10 +779,26 @@ class FacturaVentaRepository extends BaseRepository
      *         codigo_principal del detalle, o el PDF/listados quedan mostrando
      *         ese literal en vez del código del catálogo.
      */
-    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null, ?string $codigoPorcentaje = null): array
+    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null, ?string $codigoPorcentaje = null, ?string $codigoDeseado = null): array
     {
         $productoRepo = new ProductoRepository();
-        $codigo = $productoRepo->getSiguienteCodigo($idEmpresa, '02'); // Genera S001, S002, etc.
+
+        // Si el usuario escribió su propio código en la columna "Código" del detalle
+        // (y no coincidió con ningún producto existente al buscar, o ya se habría
+        // autoseleccionado ese producto en vez de llegar aquí), se respeta ese código
+        // en vez de generar uno automático — validando que siga libre justo antes de
+        // insertar, por si cambió entre que se buscó y que se guardó la factura.
+        $codigoDeseado = trim((string) $codigoDeseado);
+        if ($codigoDeseado !== '' && strtoupper($codigoDeseado) !== '__LIBRE__') {
+            if ($productoRepo->existeCodigo($idEmpresa, $codigoDeseado)) {
+                throw new \InvalidArgumentException(
+                    "El código \"{$codigoDeseado}\" ya existe en el catálogo de productos. Usa otro código o deja el campo vacío para que se genere uno automático."
+                );
+            }
+            $codigo = $codigoDeseado;
+        } else {
+            $codigo = $productoRepo->getSiguienteCodigo($idEmpresa, '02'); // Genera S001, S002, etc.
+        }
 
         // Resolver la tarifa de IVA por el codigoPorcentaje del SRI cuando venga (distingue
         // 0% / Exento / No objeto, que comparten porcentaje 0); si no, por el porcentaje.

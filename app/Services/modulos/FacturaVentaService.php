@@ -734,7 +734,8 @@ class FacturaVentaService
                             $d['nombre'] ?? ($d['descripcion'] ?? ''),
                             (float) ($d['precio_unitario'] ?? 0),
                             isset($d['porcentaje_iva']) ? (float) $d['porcentaje_iva'] : null,
-                            isset($d['codigo_porcentaje']) ? (string) $d['codigo_porcentaje'] : null
+                            isset($d['codigo_porcentaje']) ? (string) $d['codigo_porcentaje'] : null,
+                            isset($d['codigo_principal']) ? (string) $d['codigo_principal'] : null
                         );
                         $d['id_producto']     = $servicioLibre['id'];
                         // El frontend manda "__LIBRE__" como bandera en codigo_principal;
@@ -999,7 +1000,8 @@ class FacturaVentaService
                             $d['nombre'] ?? ($d['descripcion'] ?? ''),
                             (float) ($d['precio_unitario'] ?? 0),
                             isset($d['porcentaje_iva']) ? (float) $d['porcentaje_iva'] : null,
-                            isset($d['codigo_porcentaje']) ? (string) $d['codigo_porcentaje'] : null
+                            isset($d['codigo_porcentaje']) ? (string) $d['codigo_porcentaje'] : null,
+                            isset($d['codigo_principal']) ? (string) $d['codigo_principal'] : null
                         );
                         $d['id_producto']     = $servicioLibre['id'];
                         // El frontend manda "__LIBRE__" como bandera en codigo_principal;
