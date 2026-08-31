@@ -95,7 +95,16 @@ class MigrarMysqlController extends Controller
             // Liberar el lock de la sesión: así el endpoint de progreso puede consultarse en
             // paralelo mientras esta migración (potencialmente larga) sigue corriendo.
             if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
-            $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario, 0, $desde, $hasta, $estabOrigen, $estabDestino);
+            // Resiliencia ante caída de la conexión al MySQL viejo ("server has gone away"): si se corta,
+            // se reconecta y se reintenta UNA vez el paso completo. La migración es idempotente (lo ya
+            // insertado queda mapeado y en el reintento se salta), así que reintentar es seguro.
+            try {
+                $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario, 0, $desde, $hasta, $estabOrigen, $estabDestino);
+            } catch (Throwable $e) {
+                if (!LegacyMysqlConnection::isGoneAway($e)) { throw $e; }
+                LegacyMysqlConnection::reconnect();
+                $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario, 0, $desde, $hasta, $estabOrigen, $estabDestino);
+            }
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
