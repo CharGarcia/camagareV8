@@ -4852,12 +4852,17 @@ $totalPages = $totalPagesOriginal;
             // recálculo puede diferir en 1-2 centavos de lo realmente guardado si
             // el modo de cálculo de IVA de la empresa (línea a línea / por subtotal)
             // cambió después de que este recibo se guardó — el mismo desfase que ya
-            // reconcilia el PDF. Para que el modal NUNCA muestre un total distinto
-            // al de la vista general o al del PDF mientras no se edite nada, se
-            // fuerzan los renglones principales al valor realmente persistido justo
-            // después.
+            // reconcilia el PDF.
+            //
+            // Esto SOLO debe forzarse en recibos autorizados/anulados: ahí el total
+            // ya es inmutable y el modal nunca debe mostrar un número distinto al del
+            // PDF. Un borrador no está "congelado" — si la configuración de cálculo
+            // de IVA cambió después de la última vez que se guardó, reabrirlo debe
+            // recalcular con la configuración ACTUAL (lo que calcTotales() ya hace
+            // arriba), no repetir un total viejo con una configuración que ya no rige.
             calcTotales();
-            if (cab.importe_total !== undefined && cab.importe_total !== null && cab.importe_total !== '') {
+            const fvEsInmutable = (cab.estado || '').toLowerCase().trim() !== 'borrador';
+            if (fvEsInmutable && cab.importe_total !== undefined && cab.importe_total !== null && cab.importe_total !== '') {
                 const totSinImp  = parseFloat(cab.total_sin_impuestos) || 0;
                 const totDesc    = parseFloat(cab.total_descuento) || 0;
                 const totIce     = parseFloat(cab.total_ice) || 0;
