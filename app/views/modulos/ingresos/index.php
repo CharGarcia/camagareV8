@@ -917,6 +917,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const tbody = document.getElementById('sdp-tbody');
         setHeadersModo('doc');
         tbody.innerHTML = '';
+        const chkTodos = document.getElementById('sdp-chk-todos');
+        if (chkTodos) chkTodos.checked = false;
 
         if (docs.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-inbox fs-4 d-block mb-1"></i>No hay documentos pendientes.</td></tr>';
@@ -1021,6 +1023,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         actualizarResumenModal();
     }
 
+    // Checkbox "Seleccionar todos" del encabezado: marca/desmarca todas las filas visibles.
+    function toggleSeleccionarTodosModal(checked) {
+        if (_modoItems) {
+            document.querySelectorAll('#sdp-tbody .sdp-item-chk').forEach(chk => {
+                chk.checked = checked;
+                toggleItemModal(chk.dataset.iuid, checked);
+            });
+        } else {
+            document.querySelectorAll('#sdp-tbody .sdp-chk').forEach(chk => {
+                chk.checked = checked;
+                toggleDocModal(chk.dataset.id, checked, parseFloat(chk.dataset.saldo));
+            });
+        }
+    }
+
     function actualizarMontoModal(uid, input) {
         const saldo = parseFloat(input.dataset.saldo);
         let val = parseFloat(input.value);
@@ -1098,6 +1115,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function renderItemsModal() {
         const tbody = document.getElementById('sdp-tbody');
         tbody.innerHTML = '';
+        const chkTodosIt = document.getElementById('sdp-chk-todos');
+        if (chkTodosIt) chkTodosIt.checked = false;
         if (_itemsModal.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-inbox fs-4 d-block mb-1"></i>No hay ítems pendientes.</td></tr>';
             actualizarResumenModal();
@@ -2626,7 +2645,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             <div class="modal-body p-0 d-flex flex-column" style="min-height: 280px; max-height: 60vh;">
                 <!-- Barra de búsqueda -->
-                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap overflow-auto">
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap overflow-x-auto">
                     <div class="input-group input-group-sm flex-grow-1" style="min-width:160px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="inp-docs-buscar" class="form-control"
@@ -2657,7 +2676,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
                         <thead class="table-light sticky-top" style="top:0; z-index:1;">
                             <tr>
-                                <th class="text-center ps-2" style="width:42px;"></th>
+                                <th class="text-center ps-2" style="width:42px;">
+                                    <input type="checkbox" class="form-check-input" id="sdp-chk-todos" title="Seleccionar todos" onchange="toggleSeleccionarTodosModal(this.checked)">
+                                </th>
                                 <th id="sdp-th-doc" style="min-width:130px;">Nº Documento</th>
                                 <th style="min-width:150px;">Cliente</th>
                                 <th style="min-width:90px;">Fecha</th>

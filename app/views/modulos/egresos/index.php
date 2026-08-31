@@ -2436,6 +2436,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const tbody = document.getElementById('eg-sdp-tbody');
         setHeadersModoEg('doc');
         tbody.innerHTML = '';
+        const chkTodosEg = document.getElementById('eg-sdp-chk-todos');
+        if (chkTodosEg) chkTodosEg.checked = false;
 
         if (docs.length === 0) {
             const tipo = _egTipoDocActual === 'COMPRA' ? 'facturas de compra' : _egTipoDocActual === 'LIQUIDACION' ? 'liquidaciones de compras' : _egTipoDocActual === 'ROL' ? 'roles de pago' : 'documentos';
@@ -2482,7 +2484,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <td class="text-center ps-2">
                     ${yaAgregado
                         ? '<i class="bi bi-check-circle-fill text-success" title="Ya agregado"></i>'
-                        : `<input type="checkbox" class="form-check-input eg-sdp-chk" data-id="${uid}"
+                        : `<input type="checkbox" class="form-check-input eg-sdp-chk" data-id="${uid}" data-saldo="${saldo}"
                                ${checked ? 'checked' : ''}
                                onchange="toggleEgDocModal('${uid}', this.checked, ${saldo})">`
                     }
@@ -2558,6 +2560,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         actualizarResumenModalEg();
     }
 
+    // Checkbox "Seleccionar todos" del encabezado: marca/desmarca todas las filas visibles.
+    function toggleSeleccionarTodosModalEg(checked) {
+        if (_egModoItems) {
+            document.querySelectorAll('#eg-sdp-tbody .eg-item-chk').forEach(chk => {
+                chk.checked = checked;
+                toggleEgItemModal(chk.dataset.iuid, checked);
+            });
+        } else {
+            document.querySelectorAll('#eg-sdp-tbody .eg-sdp-chk').forEach(chk => {
+                chk.checked = checked;
+                toggleEgDocModal(chk.dataset.id, checked, parseFloat(chk.dataset.saldo));
+            });
+        }
+    }
+
     function actualizarMontoEgModal(uid, input) {
         const saldo = parseFloat(input.dataset.saldo);
         let val = parseFloat(input.value);
@@ -2614,6 +2631,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function renderEgItemsModal() {
         const tbody = document.getElementById('eg-sdp-tbody');
         tbody.innerHTML = '';
+        const chkTodosEgIt = document.getElementById('eg-sdp-chk-todos');
+        if (chkTodosEgIt) chkTodosEgIt.checked = false;
         if (_egItemsModal.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-inbox fs-4 d-block mb-1"></i>No hay ítems pendientes.</td></tr>';
             actualizarResumenModalEg();
@@ -3075,7 +3094,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             <div class="modal-body p-0 d-flex flex-column" style="min-height: 280px; max-height: 60vh;">
                 <!-- Barra de búsqueda única -->
-                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap overflow-auto">
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-nowrap overflow-x-auto">
                     <div class="input-group input-group-sm flex-grow-1" style="min-width:160px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="eg-sdp-buscar" class="form-control"
@@ -3110,7 +3129,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
                         <thead class="table-light sticky-top" style="top:0; z-index:1;">
                             <tr>
-                                <th class="text-center ps-2" style="width:42px;"></th>
+                                <th class="text-center ps-2" style="width:42px;">
+                                    <input type="checkbox" class="form-check-input" id="eg-sdp-chk-todos" title="Seleccionar todos" onchange="toggleSeleccionarTodosModalEg(this.checked)">
+                                </th>
                                 <th style="min-width:140px;" id="eg-sdp-th-doc">Nº Documento</th>
                                 <th style="min-width:160px;" id="eg-sdp-th-suj">Proveedor</th>
                                 <th style="min-width:90px;">Fecha</th>
