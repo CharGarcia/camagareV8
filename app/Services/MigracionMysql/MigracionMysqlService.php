@@ -1260,9 +1260,12 @@ class MigracionMysqlService
         // tipo_ambiente = el de la empresa (el default '1' de la columna ocultaría las novedades migradas
         // si la empresa opera en ambiente '2'). Mismo criterio que el resto de la migración.
         $amb    = $this->ambienteEmpresa($pg, $idEmpresa);
+        // Anticipo (3) y Préstamo Empresa (9): en el viejo se registraban YA pagados/desembolsados
+        // (sin egreso). Se marca `desembolsado_migrado=true` para que el módulo de nómina los trate
+        // como desembolsados (no los muestre pendientes ni los vuelva a pedir por egreso). Ver Camino 1.
         $insNov = $pg->prepare(
-            "INSERT INTO novedades (id_empresa, id_empleado, tipo_codigo, tipo_nombre, fecha, periodo_mes, periodo_anio, valor, motivo_codigo, motivo_nombre, observacion, aplica_en, estado, tipo_ambiente, created_by)
-             VALUES (:e, :emp, :tc, :tn, :fe, :pm, :pa, :val, :mc, :mn, :obs, :ap, 'activo', :amb, :cb) RETURNING id"
+            "INSERT INTO novedades (id_empresa, id_empleado, tipo_codigo, tipo_nombre, fecha, periodo_mes, periodo_anio, valor, motivo_codigo, motivo_nombre, observacion, aplica_en, estado, tipo_ambiente, desembolsado_migrado, created_by)
+             VALUES (:e, :emp, :tc, :tn, :fe, :pm, :pa, :val, :mc, :mn, :obs, :ap, 'activo', :amb, :dm, :cb) RETURNING id"
         );
 
         $stmt = $mysql->query("SELECT id, id_empleado, id_novedad, fecha_novedad, mes_ano, valor, detalle, motivo_salida, aplica_en FROM novedades WHERE status = 1 AND id_empresa IN ($inList) ORDER BY id");
@@ -1297,7 +1300,8 @@ class MigracionMysqlService
                 $insNov->execute([
                     ':e' => $idEmpresa, ':emp' => $idEmp, ':tc' => $tipoCod, ':tn' => $tipoNom, ':fe' => $fecha,
                     ':pm' => $mes, ':pa' => $anio, ':val' => $valor, ':mc' => $motCod, ':mn' => $motNom,
-                    ':obs' => $obs, ':ap' => $aplica, ':amb' => $amb, ':cb' => $idUsuario,
+                    ':obs' => $obs, ':ap' => $aplica, ':amb' => $amb,
+                    ':dm' => in_array($tipoCod, ['3', '9'], true) ? 't' : 'f', ':cb' => $idUsuario,
                 ]);
                 $idNv = (int) $insNov->fetchColumn();
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idNv, ':cn' => "$tipoCod-$mes/$anio", ':vin' => 'f', ':cb' => $idUsuario]);
@@ -1323,6 +1327,19 @@ class MigracionMysqlService
             $res['ambiente_corregido'] = $updAmb->rowCount();
         } catch (Throwable $ex) {
             if (empty($res['error_muestra'])) { $res['error_muestra'] = 'ambiente lote: ' . substr($ex->getMessage(), 0, 150); }
+        }
+
+        // Reconcile en LOTE del flag de desembolso: marca desembolsado_migrado=true en anticipos (3) y
+        // préstamos empresa (9) migrados que aún estén en false (las ya migradas que el loop salta). Así
+        // una re-migración deja saldadas las que quedaron pendientes. Solo las insertadas por la migración.
+        try {
+            $updDes = $pg->prepare("UPDATE novedades nv SET desembolsado_migrado = true, updated_at = now()
+                WHERE nv.id_empresa = :e AND nv.eliminado = false AND nv.tipo_codigo IN ('3','9') AND nv.desembolsado_migrado = false
+                  AND EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = nv.id_empresa AND m.entidad = 'novedades' AND m.id_destino = nv.id AND m.vinculado = false)");
+            $updDes->execute([':e' => $idEmpresa]);
+            $res['desembolso_marcado'] = $updDes->rowCount();
+        } catch (Throwable $ex) {
+            if (empty($res['error_muestra'])) { $res['error_muestra'] = 'desembolso lote: ' . substr($ex->getMessage(), 0, 150); }
         }
 
         return $res;

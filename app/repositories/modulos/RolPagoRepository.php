@@ -430,6 +430,19 @@ class RolPagoRepository extends BaseRepository
         } catch (\Throwable $e) {
             // egresos no disponible → nada pagado
         }
+        // Anticipos migrados marcados como desembolsados (sin egreso): cuentan como pagados por su valor.
+        try {
+            $st2 = $this->db->prepare("SELECT id, valor FROM novedades
+                WHERE id_empresa = :emp AND id IN ($in) AND tipo_codigo = '3'
+                  AND desembolsado_migrado = true AND eliminado = false");
+            $st2->execute([':emp' => $idEmpresa]);
+            foreach ($st2->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $id = (int) $r['id'];
+                $map[$id] = max($map[$id] ?? 0.0, (float) $r['valor']);
+            }
+        } catch (\Throwable $e) {
+            // columna desembolsado_migrado ausente (BD sin migrar) → sin efecto
+        }
         return $map;
     }
 
@@ -447,13 +460,25 @@ class RolPagoRepository extends BaseRepository
                 WHERE ed.tipo_documento = :td AND ed.id_referencia_documento = :emp2
                   AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false
                   AND ec.id_empresa = :emp";
+        $desembolsado = 0.0;
         try {
             $st = $this->db->prepare($sql);
             $st->execute([':td' => 'PRESTAMO' . $tipoCodigo, ':emp2' => $idEmpleado, ':emp' => $idEmpresa]);
-            return (float) $st->fetchColumn();
+            $desembolsado = (float) $st->fetchColumn();
         } catch (\Throwable $e) {
             return 0.0; // egresos no disponible → sin desembolso
         }
+        // Cuotas migradas marcadas como desembolsadas (sin egreso): también cuentan como desembolsado.
+        try {
+            $st2 = $this->db->prepare("SELECT COALESCE(SUM(valor), 0) FROM novedades
+                WHERE id_empresa = :emp AND id_empleado = :ide AND tipo_codigo = :tc
+                  AND desembolsado_migrado = true AND estado = 'activo' AND eliminado = false");
+            $st2->execute([':emp' => $idEmpresa, ':ide' => $idEmpleado, ':tc' => $tipoCodigo]);
+            $desembolsado += (float) $st2->fetchColumn();
+        } catch (\Throwable $e) {
+            // columna ausente → sin efecto
+        }
+        return $desembolsado;
     }
 
     /**
@@ -476,9 +501,13 @@ class RolPagoRepository extends BaseRepository
                               FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                              WHERE ed.tipo_documento = ('PRESTAMO' || n.tipo_codigo)
                                AND ed.id_referencia_documento = n.id_empleado
-                               AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false) AS desembolsado
+                               AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false)
+                           + (SELECT COALESCE(SUM(n3.valor), 0) FROM novedades n3
+                               WHERE n3.id_empresa = n.id_empresa AND n3.id_empleado = n.id_empleado
+                                 AND n3.tipo_codigo = n.tipo_codigo AND n3.desembolsado_migrado = true
+                                 AND n3.eliminado = false AND n3.estado = 'activo') AS desembolsado
                     FROM novedades n
-                    WHERE n.id IN ($in)
+                    WHERE n.id IN ($in) AND n.desembolsado_migrado = false
                 ) x
                 WHERE x.desembolsado < x.total_cuotas - 0.01";
         $set = [];
@@ -554,6 +583,7 @@ class RolPagoRepository extends BaseRepository
                                 GROUP BY ed.id_referencia_documento) pa ON pa.id_referencia_documento = n.id
                      WHERE n.id_empresa = :emp AND n.periodo_anio = :a AND n.periodo_mes = :m AND n.aplica_en = :ap
                        AND n.tipo_codigo = '3' AND n.estado = 'activo' AND n.eliminado = false
+                       AND n.desembolsado_migrado = false
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
                        AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
                      ORDER BY emp.nombres_apellidos";
@@ -570,6 +600,7 @@ class RolPagoRepository extends BaseRepository
                      FROM novedades n JOIN empleados emp ON emp.id = n.id_empleado
                      WHERE n.id_empresa = :emp AND n.periodo_anio = :a AND n.periodo_mes = :m AND n.aplica_en = :ap
                        AND n.tipo_codigo = '9' AND n.estado = 'activo' AND n.eliminado = false
+                       AND n.desembolsado_migrado = false
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
                        AND (SELECT COALESCE(SUM(n2.valor), 0) FROM novedades n2
                              WHERE n2.id_empresa = n.id_empresa AND n2.id_empleado = n.id_empleado

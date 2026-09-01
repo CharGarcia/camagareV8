@@ -380,6 +380,7 @@ class EgresoRepository extends BaseRepository
                 LEFT JOIN pagado_ant pa ON pa.id_referencia_documento = n.id
                 WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '3'
+                  AND n.desembolsado_migrado = FALSE
                   AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
                 UNION ALL
                 -- Solo el préstamo tipo 9 (Préstamo Empresa) requiere desembolso por egreso:
@@ -397,6 +398,7 @@ class EgresoRepository extends BaseRepository
                 LEFT JOIN pagado_pre pp ON pp.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND pp.id_referencia_documento = n.id_empleado
                 WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '9'
+                  AND n.desembolsado_migrado = FALSE
                 GROUP BY n.id_empleado, n.tipo_codigo, pp.total_pagado
                 HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
                 UNION ALL
