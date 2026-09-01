@@ -34,6 +34,11 @@ class MigracionMysqlService
         // Novedades de nómina del viejo → tabla `novedades` nueva. Filtra por id_empresa (id viejo) vía
         // empresas, igual que empleados. DEBE ir DESPUÉS de Empleados (enlaza al empleado ya migrado).
         'novedades'         => ['label' => 'Novedades de nómina',              'tabla' => 'novedades',                  'fecha' => 'fecha_novedad',  'tipo' => 'catalogo', 'ruc_via_empresa' => true],
+        // Roles de pago y quincenas del viejo (agregados por empleado/mes) → rol_cabecera/rol_detalle/
+        // rol_detalle_rubro (resumen). DESPUÉS de Empleados y Novedades: enlazan al empleado y concilian
+        // las novedades de su período (aplica_en) como pagadas.
+        'roles_pago'        => ['label' => 'Roles de pago (mensual)',           'tabla' => 'rolespago',                  'fecha' => 'datecreated',    'tipo' => 'catalogo', 'ruc_via_empresa' => true],
+        'quincenas'         => ['label' => 'Quincenas',                        'tabla' => 'quincenas',                  'fecha' => 'datecreated',    'tipo' => 'catalogo', 'ruc_via_empresa' => true],
         // Formas de cobro/pago (opciones: efectivo, caja chica…) y cuentas bancarias → empresa_formas_pago.
         // DEBEN ir antes de ingresos/egresos: sus pagos enlazan a estas formas.
         'formas_pago'       => ['label' => 'Formas de cobro/pago (efectivo, caja…)', 'tabla' => 'opciones_cobros_pagos', 'fecha' => null,             'tipo' => 'catalogo'],
@@ -182,6 +187,10 @@ class MigracionMysqlService
                 return $this->migrarEmpleados($idEmpresa, $ruc, $idUsuario);
             case 'novedades':
                 return $this->migrarNovedades($idEmpresa, $ruc, $idUsuario);
+            case 'roles_pago':
+                return $this->migrarRolesPago($idEmpresa, $ruc, $idUsuario);
+            case 'quincenas':
+                return $this->migrarQuincenas($idEmpresa, $ruc, $idUsuario);
             case 'cuentas_bancarias':
                 return $this->migrarCuentasBancarias($idEmpresa, $ruc, $idUsuario);
             case 'formas_pago':
@@ -278,6 +287,12 @@ class MigracionMysqlService
             'nietos' => [], 'hijos' => [['cambios_producto_cv_detalles', 'id_cambio']]],
         'pedidos' => ['cab' => 'pedidos_cabecera', 'fecha' => 'fecha_pedido',
             'nietos' => [], 'hijos' => [['pedidos_detalle', 'id_pedido']]],
+        'roles_pago' => ['cab' => 'rol_cabecera', 'fecha' => 'fecha_pago',
+            'nietos' => [['rol_detalle_rubro', 'id_detalle', 'rol_detalle', 'id_rol']],
+            'hijos'  => [['rol_detalle', 'id_rol']]],
+        'quincenas' => ['cab' => 'rol_cabecera', 'fecha' => 'fecha_pago',
+            'nietos' => [['rol_detalle_rubro', 'id_detalle', 'rol_detalle', 'id_rol']],
+            'hijos'  => [['rol_detalle', 'id_rol']]],
     ];
 
     /** Cabecera + columna de fecha de las entidades con manejador especial (para acotar por rango). */
@@ -290,6 +305,7 @@ class MigracionMysqlService
     private const DESTINO_TABLA = [
         'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos',
         'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados', 'novedades' => 'novedades',
+        'roles_pago' => 'rol_cabecera', 'quincenas' => 'rol_cabecera',
         'cuentas_bancarias' => 'empresa_formas_pago', 'formas_pago' => 'empresa_formas_pago',
         'facturas' => 'ventas_cabecera', 'notas_credito' => 'notas_credito_cabecera',
         'retenciones_venta' => 'retencion_venta_cabecera', 'retenciones_compra' => 'retencion_compra_cabecera',
@@ -1343,6 +1359,187 @@ class MigracionMysqlService
         }
 
         return $res;
+    }
+
+    /**
+     * Roles de pago MENSUALES del viejo (rolespago + detalle_rolespago, agregados por empleado/mes) →
+     * rol_cabecera (MENSUAL) + rol_detalle + rol_detalle_rubro (resumen). El viejo no guarda el detalle
+     * línea por línea, así que se arma un resumen que cuadra con los totales (a_recibir verificado).
+     * Al final concilia por período las novedades aplica_en='rol' (Pieza B). Requiere Empleados migrado.
+     */
+    private function migrarRolesPago(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        return $this->migrarRolGenerico($idEmpresa, $ruc, $idUsuario, 'roles_pago');
+    }
+
+    /** Quincenas del viejo (quincenas + detalle_quincena) → rol_cabecera (QUINCENA). Ver migrarRolesPago. */
+    private function migrarQuincenas(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        return $this->migrarRolGenerico($idEmpresa, $ruc, $idUsuario, 'quincenas');
+    }
+
+    /**
+     * Núcleo común de la migración de roles/quincenas. $modo = 'roles_pago' (MENSUAL, tabla rolespago) o
+     * 'quincenas' (QUINCENA, tabla quincenas). Mapea el agregado viejo al rol granular nuevo (resumen).
+     */
+    private function migrarRolGenerico(int $idEmpresa, string $ruc, int $idUsuario, string $modo): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $esQuincena = ($modo === 'quincenas');
+        $tipoRol   = $esQuincena ? 'QUINCENA' : 'MENSUAL';
+        $numPeriodo = $esQuincena ? 1 : 0;
+        $aplicaEn  = $esQuincena ? 'quincena' : 'rol';
+        $tablaCab  = $esQuincena ? 'quincenas' : 'rolespago';
+        $tablaDet  = $esQuincena ? 'detalle_quincena' : 'detalle_rolespago';
+        $fkDet     = $esQuincena ? 'id_quincena' : 'id_rol';
+
+        $res = ['entidad' => $modo, 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'empleado(s) no migrado(s) o período inválido', 'errores' => 0];
+
+        // Empresas viejas que comparten el RUC base (todos los establecimientos).
+        $empIds = [];
+        $qe = $mysql->prepare("SELECT id FROM empresas WHERE LEFT(ruc, 10) = :b");
+        $qe->execute([':b' => $base]);
+        foreach ($qe->fetchAll(PDO::FETCH_COLUMN) as $eid) { $empIds[] = (int) $eid; }
+        if (empty($empIds)) { return $res; }
+        $inList = implode(',', array_map('intval', $empIds));
+
+        $mapEmp = $this->mapaDe($pg, $idEmpresa, 'empleados');
+        $done   = $this->idsMigrados($pg, $idEmpresa, $modo);
+        $insMap = $this->stmtMap($pg, $modo);
+
+        $insCab = $pg->prepare("INSERT INTO rol_cabecera (id_empresa, tipo_rol, periodo_anio, periodo_mes, numero_periodo, descripcion, estado, total_ingresos, total_egresos, total_neto, total_aporte_patronal, created_by)
+                                VALUES (:e, :tr, :pa, :pm, :np, :desc, :est, :ti, :teg, :tn, :tap, :cb) RETURNING id");
+        $insDet = $pg->prepare("INSERT INTO rol_detalle (id_rol, id_empresa, id_empleado, dias_trabajados, sueldo_base, total_ingresos, total_egresos, aporte_iess, aporte_patronal, neto)
+                                VALUES (:r, :e, :emp, :dias, :sb, :ti, :teg, :ai, :ap, :neto) RETURNING id");
+        $insRub = $pg->prepare("INSERT INTO rol_detalle_rubro (id_detalle, id_empresa, tipo, concepto, codigo, origen, valor, aporta_iess, id_novedad)
+                                VALUES (:d, :e, :tipo, :con, :cod, :ori, :val, :ai, :idn)");
+        $buscar = $pg->prepare("SELECT id FROM rol_cabecera WHERE id_empresa = :e AND tipo_rol = :tr AND periodo_anio = :pa AND periodo_mes = :pm AND numero_periodo = :np AND eliminado = false ORDER BY id LIMIT 1");
+        $updTot = $pg->prepare("UPDATE rol_cabecera SET total_ingresos = :ti, total_egresos = :teg, total_neto = :tn, total_aporte_patronal = :tap, updated_at = now(), updated_by = :cb WHERE id = :id");
+
+        foreach ($mysql->query("SELECT id, mes_ano, status FROM $tablaCab WHERE id_empresa IN ($inList) ORDER BY id") as $rc) {
+            $res['total']++;
+            $old = (int) $rc['id'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if (!preg_match('/^(\d{1,2})-(\d{4})$/', trim((string) $rc['mes_ano']), $mm)) { $res['omitidos']++; continue; }
+            $mes = (int) $mm[1]; $anio = (int) $mm[2];
+            if ($mes < 1 || $mes > 12 || $anio < 1900) { $res['omitidos']++; continue; }
+            $estado = ((int) $rc['status'] === 0) ? 'anulado' : 'pagado';
+
+            // Construir las líneas (empleados) del rol; omitir las de empleados no migrados.
+            $lineas = [];
+            $stD = $mysql->prepare("SELECT * FROM $tablaDet WHERE $fkDet = :id");
+            $stD->execute([':id' => $old]);
+            foreach ($stD->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                $idEmp = (int) ($mapEmp[(string) (int) $d['id_empleado']] ?? 0);
+                if ($idEmp <= 0) { continue; }
+                $lineas[] = $esQuincena ? $this->lineaRolQuincena($d, $idEmp) : $this->lineaRolMensual($d, $idEmp);
+            }
+            if (empty($lineas)) { $res['omitidos']++; continue; }
+
+            // Si ya existe un rol de ese período (nativo o previo), se vincula (no duplica por el índice único).
+            $buscar->execute([':e' => $idEmpresa, ':tr' => $tipoRol, ':pa' => $anio, ':pm' => $mes, ':np' => $numPeriodo]);
+            $yaId = $buscar->fetchColumn();
+            if ($yaId) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, (int) $yaId, "$tipoRol $mes/$anio", $idUsuario); continue; }
+
+            try {
+                $pg->beginTransaction();
+                $descripcion = ($esQuincena ? 'Quincena ' : 'Rol ') . $mes . '/' . $anio . ' (migrado)';
+                $insCab->execute([':e' => $idEmpresa, ':tr' => $tipoRol, ':pa' => $anio, ':pm' => $mes, ':np' => $numPeriodo,
+                    ':desc' => $descripcion, ':est' => $estado, ':ti' => 0, ':teg' => 0, ':tn' => 0, ':tap' => 0, ':cb' => $idUsuario]);
+                $idRol = (int) $insCab->fetchColumn();
+                $tot = ['ti' => 0.0, 'teg' => 0.0, 'tn' => 0.0, 'tap' => 0.0];
+                foreach ($lineas as $ln) {
+                    $insDet->execute([':r' => $idRol, ':e' => $idEmpresa, ':emp' => $ln['id_empleado'], ':dias' => $ln['dias'],
+                        ':sb' => $ln['sueldo_base'], ':ti' => $ln['ingresos'], ':teg' => $ln['egresos'], ':ai' => $ln['aporte_iess'], ':ap' => $ln['aporte_patronal'], ':neto' => $ln['neto']]);
+                    $idDet = (int) $insDet->fetchColumn();
+                    foreach ($ln['rubros'] as $rb) {
+                        $insRub->execute([':d' => $idDet, ':e' => $idEmpresa, ':tipo' => $rb[0], ':con' => $rb[1], ':cod' => $rb[2], ':ori' => $rb[3], ':val' => $rb[4], ':ai' => $rb[5] ? 't' : 'f', ':idn' => null]);
+                    }
+                    $tot['ti'] += $ln['ingresos']; $tot['teg'] += $ln['egresos']; $tot['tn'] += $ln['neto']; $tot['tap'] += $ln['aporte_patronal'];
+                }
+                $updTot->execute([':ti' => round($tot['ti'], 2), ':teg' => round($tot['teg'], 2), ':tn' => round($tot['tn'], 2), ':tap' => round($tot['tap'], 2), ':cb' => $idUsuario, ':id' => $idRol]);
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idRol, ':cn' => "$tipoRol $mes/$anio", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+
+        // Conciliación por período: toda novedad de aplica_en correspondiente cuyo (empleado, mes, año)
+        // tenga un rol migrado de este tipo pasa a conciliada_migrada=true → se ve "Pagada" (el viejo
+        // consideraba pagada = estar en el rol de ese período). Set-based, idempotente.
+        try {
+            $conc = $pg->prepare("UPDATE novedades nv SET conciliada_migrada = true, updated_at = now()
+                WHERE nv.id_empresa = :e AND nv.eliminado = false AND nv.aplica_en = :ap AND nv.conciliada_migrada = false
+                  AND EXISTS (SELECT 1 FROM rol_detalle rd JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                              JOIN migracion_mysql_map m ON m.id_destino = rc.id AND m.entidad = :ent AND m.id_empresa = rc.id_empresa
+                              WHERE rc.id_empresa = nv.id_empresa AND rc.eliminado = false
+                                AND rd.id_empleado = nv.id_empleado
+                                AND rc.periodo_anio = nv.periodo_anio AND rc.periodo_mes = nv.periodo_mes)");
+            $conc->execute([':e' => $idEmpresa, ':ap' => $aplicaEn, ':ent' => $modo]);
+            $res['novedades_conciliadas'] = $conc->rowCount();
+        } catch (Throwable $ex) {
+            if (empty($res['error_muestra'])) { $res['error_muestra'] = 'conciliación: ' . substr($ex->getMessage(), 0, 150); }
+        }
+
+        return $res;
+    }
+
+    /** Arma una línea de rol_detalle (+ rubros resumen) desde una fila de detalle_rolespago (MENSUAL). */
+    private function lineaRolMensual(array $d, int $idEmp): array
+    {
+        $sueldo = (float) ($d['sueldo'] ?? 0);
+        $ig = (float) ($d['ingresos_gravados'] ?? 0);
+        $ie = (float) ($d['ingresos_excentos'] ?? 0);
+        $fr = (float) ($d['fondo_reserva'] ?? 0);
+        $d3 = (float) ($d['tercero'] ?? 0);
+        $d4 = (float) ($d['cuarto'] ?? 0);
+        $ap = (float) ($d['aporte_personal'] ?? 0);
+        $app = (float) ($d['aporte_patronal'] ?? 0);
+        $pr = (float) ($d['prestamos'] ?? 0);
+        $de = (float) ($d['descuentos'] ?? 0);
+        $qn = (float) ($d['quincena'] ?? 0);
+        $totEgr = (float) ($d['total_egresos'] ?? 0);
+        $neto   = (float) ($d['a_recibir'] ?? 0);
+        $ingresos = round($sueldo + $ig + $ie + $fr + $d3 + $d4, 2);
+        $rubros = [['ingreso', 'Sueldo', null, 'sueldo', round($sueldo, 2), false]];
+        if ($fr > 0) { $rubros[] = ['ingreso', 'Fondo de reserva', null, 'fondos', round($fr, 2), false]; }
+        if ($d3 > 0) { $rubros[] = ['ingreso', 'Décimo tercero', null, 'decimo', round($d3, 2), false]; }
+        if ($d4 > 0) { $rubros[] = ['ingreso', 'Décimo cuarto', null, 'decimo', round($d4, 2), false]; }
+        if ($ig > 0) { $rubros[] = ['ingreso', 'Ingresos gravados', null, 'rubro_fijo', round($ig, 2), true]; }
+        if ($ie > 0) { $rubros[] = ['ingreso', 'Ingresos exentos', null, 'rubro_fijo', round($ie, 2), false]; }
+        if ($ap > 0) { $rubros[] = ['egreso', 'Aporte IESS personal', null, 'iess', round($ap, 2), false]; }
+        if ($pr > 0) { $rubros[] = ['egreso', 'Préstamos', null, 'novedad', round($pr, 2), false]; }
+        if ($de > 0) { $rubros[] = ['egreso', 'Descuentos', null, 'novedad', round($de, 2), false]; }
+        if ($qn > 0) { $rubros[] = ['egreso', 'Quincena (adelanto)', null, 'neteo', round($qn, 2), false]; }
+        return [
+            'id_empleado' => $idEmp, 'dias' => (float) ($d['dias_laborados'] ?? 30), 'sueldo_base' => round($sueldo, 2),
+            'ingresos' => $ingresos, 'egresos' => round($totEgr, 2), 'aporte_iess' => round($ap, 2),
+            'aporte_patronal' => round($app, 2), 'neto' => round($neto, 2), 'rubros' => $rubros,
+        ];
+    }
+
+    /** Arma una línea de rol_detalle (+ rubros resumen) desde una fila de detalle_quincena. */
+    private function lineaRolQuincena(array $d, int $idEmp): array
+    {
+        $quincena = (float) ($d['quincena'] ?? 0);
+        $adic = (float) ($d['adicional'] ?? 0);
+        $desc = (float) ($d['descuento'] ?? 0);
+        $neto = (float) ($d['arecibir'] ?? 0);
+        $rubros = [['ingreso', 'Quincena', null, 'sueldo', round($quincena, 2), false]];
+        if ($adic > 0) { $rubros[] = ['ingreso', 'Adicional', null, 'rubro_fijo', round($adic, 2), false]; }
+        if ($desc > 0) { $rubros[] = ['egreso', 'Descuento', null, 'novedad', round($desc, 2), false]; }
+        return [
+            'id_empleado' => $idEmp, 'dias' => 15.0, 'sueldo_base' => round($quincena, 2),
+            'ingresos' => round($quincena + $adic, 2), 'egresos' => round($desc, 2), 'aporte_iess' => 0.0,
+            'aporte_patronal' => 0.0, 'neto' => round($neto, 2), 'rubros' => $rubros,
+        ];
     }
 
     /**

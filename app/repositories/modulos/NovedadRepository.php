@@ -86,7 +86,9 @@ class NovedadRepository extends BaseRepository
             // "Pagada" (ya estaban saldados en el sistema anterior) aunque aún no exista el rol.
             // OJO: en pgsql el booleano llega como 't'/'f' y 'f' es truthy en PHP → comparar explícito.
             $desembMig = in_array($r['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true);
-            $r['pagada'] = isset($pagadas[(int) $r['id']]) || $desembMig;
+            // Conciliada por rol migrado (Pieza B): novedad de un período con rol/quincena migrado → "Pagada".
+            $concMig = in_array($r['conciliada_migrada'] ?? null, ['t', true, 1, '1', 'true'], true);
+            $r['pagada'] = isset($pagadas[(int) $r['id']]) || $desembMig || $concMig;
             $cod = (string) ($r['tipo_codigo'] ?? '');
             $porDesembolso = ($cod === '3' && (isset($desembolsadas['a' . (int) $r['id']]) || $desembMig))
                 || ($cod === '9' && (isset($desembolsadas['p' . (int) $r['id_empleado']]) || $desembMig));
