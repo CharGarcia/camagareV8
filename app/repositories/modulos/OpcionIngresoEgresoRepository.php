@@ -10,6 +10,33 @@ use Exception;
 
 class OpcionIngresoEgresoRepository extends BaseRepository
 {
+    /**
+     * Cuenta contable que Configuración Contable tiene programada para la opción en cada
+     * naturaleza ('opcion_ingreso' / 'opcion_egreso'). Es la que esa pantalla muestra —y la que
+     * manda sobre la columna del módulo— con el mismo COALESCE que usa
+     * AsientoProgramadoRepository::getReglasOpcionesIngresoEgreso().
+     */
+    private const SELECT_CUENTAS_PROGRAMADAS = "
+                       COALESCE(api.id_cuenta, t.id_cuenta_contable) AS id_cuenta_ingreso,
+                       pci.codigo AS cuenta_ingreso_codigo,
+                       pci.nombre AS cuenta_ingreso_nombre,
+                       COALESCE(ape.id_cuenta, t.id_cuenta_contable) AS id_cuenta_egreso,
+                       pce.codigo AS cuenta_egreso_codigo,
+                       pce.nombre AS cuenta_egreso_nombre";
+
+    /** Joins que alimentan SELECT_CUENTAS_PROGRAMADAS (placeholders distintos: PDO/pgsql no repite). */
+    private const JOIN_CUENTAS_PROGRAMADAS = "
+                LEFT JOIN asientos_programados api ON api.id_referencia = t.id
+                                                 AND api.tipo_referencia = 'opcion_ingreso'
+                                                 AND api.id_empresa = :emp_ap_ing
+                                                 AND api.eliminado = false
+                LEFT JOIN plan_cuentas pci ON pci.id = COALESCE(api.id_cuenta, t.id_cuenta_contable)
+                LEFT JOIN asientos_programados ape ON ape.id_referencia = t.id
+                                                 AND ape.tipo_referencia = 'opcion_egreso'
+                                                 AND ape.id_empresa = :emp_ap_egr
+                                                 AND ape.eliminado = false
+                LEFT JOIN plan_cuentas pce ON pce.id = COALESCE(ape.id_cuenta, t.id_cuenta_contable)";
+
     public function __construct()
     {
         parent::__construct('empresa_opciones_ingreso_egreso');
@@ -85,19 +112,23 @@ class OpcionIngresoEgresoRepository extends BaseRepository
         }
         $ordenDir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
 
-        $sql = "SELECT t.*, 
-                       pc.codigo AS cuenta_codigo, 
-                       pc.nombre AS cuenta_nombre
+        $sql = "SELECT t.*,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre,
+                       " . self::SELECT_CUENTAS_PROGRAMADAS . "
                 FROM empresa_opciones_ingreso_egreso t
                 LEFT JOIN plan_cuentas pc ON t.id_cuenta_contable = pc.id
+                " . self::JOIN_CUENTAS_PROGRAMADAS . "
                 $where
                 ORDER BY t.$ordenCol $ordenDir
                 LIMIT :limit OFFSET :offset";
-        
+
         $st = $this->db->prepare($sql);
         foreach ($params as $key => $val) {
             $st->bindValue($key, $val);
         }
+        $st->bindValue(':emp_ap_ing', $idEmpresa, PDO::PARAM_INT);
+        $st->bindValue(':emp_ap_egr', $idEmpresa, PDO::PARAM_INT);
         $st->bindValue(':limit', $perPage, PDO::PARAM_INT);
         $st->bindValue(':offset', $offset, PDO::PARAM_INT);
         $st->execute();
@@ -108,14 +139,21 @@ class OpcionIngresoEgresoRepository extends BaseRepository
 
     public function getById(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT t.*, 
-                       pc.codigo AS cuenta_codigo, 
-                       pc.nombre AS cuenta_nombre
+        $sql = "SELECT t.*,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre,
+                       " . self::SELECT_CUENTAS_PROGRAMADAS . "
                 FROM empresa_opciones_ingreso_egreso t
                 LEFT JOIN plan_cuentas pc ON t.id_cuenta_contable = pc.id
+                " . self::JOIN_CUENTAS_PROGRAMADAS . "
                 WHERE t.id = :id AND t.id_empresa = :id_empresa AND t.eliminado = FALSE";
         $st = $this->db->prepare($sql);
-        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $st->execute([
+            ':id'          => $id,
+            ':id_empresa'  => $idEmpresa,
+            ':emp_ap_ing'  => $idEmpresa,
+            ':emp_ap_egr'  => $idEmpresa
+        ]);
         $res = $st->fetch(PDO::FETCH_ASSOC);
         return $res ?: null;
     }

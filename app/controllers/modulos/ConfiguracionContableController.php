@@ -17,6 +17,7 @@ class ConfiguracionContableController extends BaseModuloController
     private AsientoProgramadoRepository $repository;
     private AsientoProgramadoService $service;
     private ?\App\Services\modulos\FormaPagoService $formaPagoService = null;
+    private ?\App\Services\modulos\OpcionIngresoEgresoService $opcionService = null;
     private const RUTA_MODULO = 'modulos/configuracion-contable';
 
     public function __construct()
@@ -626,26 +627,14 @@ class ConfiguracionContableController extends BaseModuloController
                 ? null
                 : $this->repository->getCuentaVigenteOpcion($idEmpresa, $idOpcion, $naturalezaOpuesta);
 
-            // 1. Sincronizar la cuenta en el módulo de Opciones de Ingreso/Egreso
-            $opcRepo->updateCuentaContable($idOpcion, $idEmpresa, $idCuenta, $idUsuario);
-
-            // 2. Crear o actualizar el asiento programado asociado
+            // 1 y 2. Sincronizar la cuenta en los dos lugares donde vive (módulo de Opciones y
+            // asiento programado de la naturaleza). La lógica es la misma que aplica el propio
+            // módulo de Opciones al guardar, así que vive en su Service.
             $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idOpcion, $tipoReferencia);
-            $dataRule = [
-                'id_asiento_tipo' => 0,
-                'id_cuenta'       => $idCuenta,
-                'id_referencia'   => $idOpcion,
-                'tipo_referencia' => $tipoReferencia
-            ];
-
-            if ($reglaExistente) {
-                $dataRule['updated_by'] = $idUsuario;
-                $this->service->actualizar((int) $reglaExistente['id'], $dataRule, $idEmpresa, $idUsuario);
-                $msg = 'Cuenta contable actualizada correctamente.';
-            } else {
-                $this->service->registrar($dataRule, $idEmpresa, $idUsuario);
-                $msg = 'Cuenta contable asignada correctamente.';
-            }
+            $this->getOpcionService()->sincronizarCuentaNaturaleza($idEmpresa, $idUsuario, $idOpcion, $naturaleza, $idCuenta);
+            $msg = $reglaExistente
+                ? 'Cuenta contable actualizada correctamente.'
+                : 'Cuenta contable asignada correctamente.';
 
             // 3. Si la opción es de anticipo (cliente/proveedor), propagar la misma cuenta a la
             //    forma de Cobro/Pago de anticipo correspondiente, si aún no tiene cuenta asignada.
@@ -706,6 +695,15 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Service del módulo de Opciones de Ingreso/Egreso: dueño de la misma regla para los
+     * conceptos (cuenta del módulo + asiento programado de la naturaleza).
+     */
+    private function getOpcionService(): \App\Services\modulos\OpcionIngresoEgresoService
+    {
+        return $this->opcionService ??= new \App\Services\modulos\OpcionIngresoEgresoService();
+    }
+
+    /**
      * Quita la cuenta contable de una opción de Ingreso/Egreso (en ambos lugares).
      */
     public function eliminarReglaOpcionAjax(): void
@@ -724,18 +722,10 @@ class ConfiguracionContableController extends BaseModuloController
             exit;
         }
 
-        $tipoReferencia = $naturaleza === 'ingreso' ? 'opcion_ingreso' : 'opcion_egreso';
-
         try {
-            // 1. Limpiar la cuenta en el módulo de Opciones
-            $opcRepo = new OpcionIngresoEgresoRepository();
-            $opcRepo->updateCuentaContable($idOpcion, $idEmpresa, null, $idUsuario);
-
-            // 2. Eliminar lógicamente el asiento programado asociado, si existe
-            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idOpcion, $tipoReferencia);
-            if ($reglaExistente) {
-                $this->service->eliminar((int) $reglaExistente['id'], $idEmpresa, $idUsuario);
-            }
+            // Limpia la cuenta en los dos lugares: el módulo de Opciones y el asiento programado
+            // de la naturaleza (que se elimina lógicamente si existía).
+            $this->getOpcionService()->sincronizarCuentaNaturaleza($idEmpresa, $idUsuario, $idOpcion, $naturaleza, null);
 
             echo json_encode(['ok' => true, 'msg' => 'Cuenta contable desvinculada correctamente.']);
         } catch (\Throwable $e) {

@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta
-version: 1.8
+version: 1.9
 orden: 5
 estado: activo
 ---
@@ -267,6 +267,11 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.9** — Las cuentas del bloque Ingresos y Egresos también se administran desde
+  el módulo Opciones de ingreso y egreso, en la ficha de cada concepto libre: es
+  la misma configuración, sincronizada en las dos pantallas. Los conceptos atados
+  a un módulo (Compras, Liquidaciones, Facturas y Recibos de Venta, Nómina) siguen
+  tomando su cuenta de la sección de ese módulo.
 - **1.8** — Las cuentas del bloque Cobros y Pagos se pueden administrar también
   desde el módulo Formas de cobro y pago, en la ficha de cada forma: es la misma
   configuración, sincronizada en las dos pantallas.

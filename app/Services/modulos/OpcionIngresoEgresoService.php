@@ -16,6 +16,7 @@ class OpcionIngresoEgresoService
     private AsientoProgramadoRepository $programadoRepo;
     private OpcionIngresoEgresoRules $rules;
     private LogSistemaService $logService;
+    private ?AsientoProgramadoService $asientoService = null;
 
     public function __construct()
     {
@@ -68,8 +69,48 @@ class OpcionIngresoEgresoService
             $row['id_cuenta_contable'] = null;
             $row['cuenta_codigo']      = '';
             $row['cuenta_nombre']      = '';
+        } else {
+            $row = $this->aplicarCuentaProgramada($row);
         }
         return $row;
+    }
+
+    /**
+     * Conceptos LIBRES (los que no toman su cuenta de un módulo): su cuenta vive en dos sitios
+     * —la columna de este módulo y el asiento programado de su naturaleza— y Configuración
+     * Contable muestra el asiento programado cuando existe. Aquí se muestra lo mismo, para que
+     * las dos pantallas no puedan decir cosas distintas sobre el mismo concepto.
+     */
+    private function aplicarCuentaProgramada(array $row): array
+    {
+        $naturaleza = $this->naturalezaDe($row);
+        if ($naturaleza === null) {
+            return $row;
+        }
+
+        $idCuenta = $row["id_cuenta_{$naturaleza}"] ?? null;
+        $row['id_cuenta_contable'] = $idCuenta !== null ? (int) $idCuenta : null;
+        $row['cuenta_codigo']      = $row["cuenta_{$naturaleza}_codigo"] ?? '';
+        $row['cuenta_nombre']      = $row["cuenta_{$naturaleza}_nombre"] ?? '';
+        return $row;
+    }
+
+    /**
+     * Naturaleza que gobierna la cuenta del concepto: la pantalla obliga a elegir una sola
+     * (Ingreso o Egreso). Si un registro antiguo trae las dos marcadas, manda Ingresos, que es
+     * el orden en que Configuración Contable presenta los bloques.
+     *
+     * @return string|null 'ingreso' | 'egreso' | null (no aplica a ninguna)
+     */
+    private function naturalezaDe(array $row): ?string
+    {
+        if (!empty($row['aplica_ingresos'])) {
+            return 'ingreso';
+        }
+        if (!empty($row['aplica_egresos'])) {
+            return 'egreso';
+        }
+        return null;
     }
 
     /**
@@ -86,13 +127,97 @@ class OpcionIngresoEgresoService
         return $data;
     }
 
+    /**
+     * Deja el asiento programado del concepto ('opcion_ingreso' / 'opcion_egreso') igual a la
+     * cuenta que se acaba de guardar aquí, y retira el de la naturaleza contraria. Es el mismo
+     * registro que edita Configuración Contable y el que esa pantalla muestra por encima de la
+     * columna del módulo: sin esto, cambiar la cuenta aquí no se vería allá.
+     *
+     * Solo aplica a conceptos LIBRES: los atados a un módulo (Compras, Liquidaciones, Facturas
+     * y Recibos de Venta, Nómina) no tienen cuenta propia ni aparecen en Configuración Contable.
+     */
+    private function sincronizarCuentaProgramada(array $data, int $id, ?int $idCuenta): void
+    {
+        if ($this->programadoRepo->tieneCuentaOficialPorComportamiento((string) ($data['comportamiento'] ?? ''))) {
+            return;
+        }
+
+        $naturaleza = $this->naturalezaDe($data);
+        $idEmpresa  = (int) $data['id_empresa'];
+        $idUsuario  = (int) $data['id_usuario'];
+
+        foreach (['ingreso', 'egreso'] as $nat) {
+            // La naturaleza que no aplica pierde su regla; la que aplica queda con esta cuenta
+            // (o también sin regla, si el concepto se dejó sin cuenta).
+            $cuenta = ($nat === $naturaleza) ? $idCuenta : null;
+            $this->sincronizarCuentaNaturaleza($idEmpresa, $idUsuario, $id, $nat, $cuenta, false);
+        }
+    }
+
+    /**
+     * Asigna (o quita) la cuenta contable de un concepto en una naturaleza, en los DOS lugares
+     * donde vive: el asiento programado y —si $actualizarCuentaBase— la columna del propio
+     * módulo. Lo usan este módulo y Configuración Contable, para que no haya dos
+     * implementaciones que puedan divergir.
+     *
+     * @param string $naturaleza 'ingreso' | 'egreso'
+     */
+    public function sincronizarCuentaNaturaleza(
+        int $idEmpresa,
+        int $idUsuario,
+        int $idOpcion,
+        string $naturaleza,
+        ?int $idCuenta,
+        bool $actualizarCuentaBase = true
+    ): void {
+        $tipoReferencia = $naturaleza === 'ingreso' ? 'opcion_ingreso' : 'opcion_egreso';
+        $idCuenta = ($idCuenta !== null && $idCuenta > 0) ? $idCuenta : null;
+
+        if ($actualizarCuentaBase) {
+            $this->repo->updateCuentaContable($idOpcion, $idEmpresa, $idCuenta, $idUsuario);
+        }
+
+        $asientoService = $this->getAsientoService();
+        $reglaExistente = $this->programadoRepo->getReglaPorReferencia($idEmpresa, $idOpcion, $tipoReferencia);
+
+        if ($idCuenta === null) {
+            if ($reglaExistente) {
+                $asientoService->eliminar((int) $reglaExistente['id'], $idEmpresa, $idUsuario);
+            }
+            return;
+        }
+
+        $dataRule = [
+            'id_asiento_tipo' => 0,
+            'id_cuenta'       => $idCuenta,
+            'id_referencia'   => $idOpcion,
+            'tipo_referencia' => $tipoReferencia
+        ];
+
+        if ($reglaExistente) {
+            if ((int) $reglaExistente['id_cuenta'] === $idCuenta) {
+                return; // Ya apunta a esa cuenta: no se toca (evita ruido en la auditoría).
+            }
+            $dataRule['updated_by'] = $idUsuario;
+            $asientoService->actualizar((int) $reglaExistente['id'], $dataRule, $idEmpresa, $idUsuario);
+        } else {
+            $asientoService->registrar($dataRule, $idEmpresa, $idUsuario);
+        }
+    }
+
+    private function getAsientoService(): AsientoProgramadoService
+    {
+        return $this->asientoService ??= new AsientoProgramadoService();
+    }
+
     public function registrar(array $data): int
     {
         $this->rules->validar($data);
         $data = $this->normalizarCuentaBloqueada($data);
 
         $id = $this->repo->create($data);
-        
+        $this->sincronizarCuentaProgramada($data, $id, !empty($data['id_cuenta_contable']) ? (int) $data['id_cuenta_contable'] : null);
+
         $this->logService->registrar(
             (int)$data['id_usuario'],
             (int)$data['id_empresa'],
@@ -116,6 +241,7 @@ class OpcionIngresoEgresoService
 
         $ok = $this->repo->update($id, $idEmpresa, $data);
         if ($ok) {
+            $this->sincronizarCuentaProgramada($data, $id, !empty($data['id_cuenta_contable']) ? (int) $data['id_cuenta_contable'] : null);
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 (int)$idEmpresa,

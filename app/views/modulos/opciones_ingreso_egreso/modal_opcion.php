@@ -79,6 +79,9 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                             <div id="oie-cuenta-bloqueada-nota" class="form-text text-muted d-none" style="font-size: 0.7rem;">
                                 <i class="bi bi-lock-fill me-1"></i>Esta cuenta se configura en <strong>Contabilidad → Configuración Contable</strong>, no aquí.
                             </div>
+                            <div id="oie-cuenta-libre-nota" class="form-text text-muted" style="font-size: 0.7rem;">
+                                <i class="bi bi-info-circle me-1"></i>Es la misma cuenta que <strong>Configuración Contable → Ingresos y Egresos</strong>: lo que se cambie aquí se actualiza allá, y al revés.
+                            </div>
                             <div id="oie-cuentas-multiples" class="mt-1 d-none"></div>
                         </div>
 
@@ -91,38 +94,9 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                             </div>
                         </div>
 
-                        <!-- Tipo de cuenta esperado: restringe el buscador de cuenta en Configuración Contable -->
-                        <div class="col-12">
-                            <label class="form-label small fw-bold d-block">Tipo de cuenta esperado (opcional):</label>
-                            <div class="d-flex flex-wrap gap-3 mt-1">
-                                <div class="form-check form-check-inline mb-0">
-                                    <input class="form-check-input tc-oie-checkbox shadow-none" type="checkbox" id="oie-tc-activo" value="activo">
-                                    <label class="form-check-label small fw-medium" for="oie-tc-activo">Activo</label>
-                                </div>
-                                <div class="form-check form-check-inline mb-0">
-                                    <input class="form-check-input tc-oie-checkbox shadow-none" type="checkbox" id="oie-tc-pasivo" value="pasivo">
-                                    <label class="form-check-label small fw-medium" for="oie-tc-pasivo">Pasivo</label>
-                                </div>
-                                <div class="form-check form-check-inline mb-0">
-                                    <input class="form-check-input tc-oie-checkbox shadow-none" type="checkbox" id="oie-tc-patrimonio" value="patrimonio">
-                                    <label class="form-check-label small fw-medium" for="oie-tc-patrimonio">Patrimonio</label>
-                                </div>
-                                <div class="form-check form-check-inline mb-0">
-                                    <input class="form-check-input tc-oie-checkbox shadow-none" type="checkbox" id="oie-tc-ingreso" value="ingreso">
-                                    <label class="form-check-label small fw-medium" for="oie-tc-ingreso">Ingreso</label>
-                                </div>
-                                <div class="form-check form-check-inline mb-0">
-                                    <input class="form-check-input tc-oie-checkbox shadow-none" type="checkbox" id="oie-tc-costo" value="costo">
-                                    <label class="form-check-label small fw-medium" for="oie-tc-costo">Costo</label>
-                                </div>
-                                <div class="form-check form-check-inline mb-0">
-                                    <input class="form-check-input tc-oie-checkbox shadow-none" type="checkbox" id="oie-tc-gasto" value="gasto">
-                                    <label class="form-check-label small fw-medium" for="oie-tc-gasto">Gasto</label>
-                                </div>
-                            </div>
-                            <input type="hidden" id="oie-tipo-cuenta" value="">
-                            <div class="form-text text-muted" style="font-size: 0.7rem;">Seleccione uno o más tipos para restringir la selección contable en Configuración Contable. Si no marca ninguno, se permitirán todos.</div>
-                        </div>
+                        <!-- Tipo de cuenta esperado: ya no se edita aquí, pero el valor guardado
+                             se conserva (restringe el buscador de cuenta en Configuración Contable). -->
+                        <input type="hidden" name="tipo_cuenta_contable" id="oie-tipo-cuenta" value="">
 
                     </div>
                 </div>
@@ -165,6 +139,10 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
         }
         if (btnClear) btnClear.disabled = bloqueada;
         if (nota) nota.classList.toggle('d-none', !bloqueada);
+        // La nota de "misma cuenta que Configuración Contable" solo aplica a los conceptos
+        // libres: los atados a un módulo ni siquiera aparecen en esa pantalla.
+        const notaLibre = document.getElementById('oie-cuenta-libre-nota');
+        if (notaLibre) notaLibre.classList.toggle('d-none', bloqueada);
         // El valor de oie-idcuenta no se limpia aquí: el servidor ignora este campo por
         // completo para estos comportamientos (ver OpcionIngresoEgresoService::registrar/
         // actualizar), así que da igual qué traiga cuando el form se envía.
@@ -288,10 +266,8 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                 formData.append('aplica_ingresos', isIng ? '1' : '0');
                 formData.append('aplica_egresos', isEgr ? '1' : '0');
 
-                const tcChecked = Array.from(document.querySelectorAll('.tc-oie-checkbox:checked')).map(cb => cb.value);
-                const tcStr = tcChecked.join(',');
-                document.getElementById('oie-tipo-cuenta').value = tcStr;
-                formData.set('tipo_cuenta_contable', tcStr);
+                // tipo_cuenta_contable viaja en su hidden con el valor que ya tenía el concepto:
+                // no se edita en este modal, pero tampoco se pierde al guardar.
 
                 fetch(`<?= $urlBase ?>/guardarAjax`, {
                         method: 'POST',
@@ -366,7 +342,6 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
         if (btnElim) btnElim.classList.add('d-none');
 
         selectCuentaOIE(null);
-        document.querySelectorAll('.tc-oie-checkbox').forEach(cb => cb.checked = false);
         document.getElementById('oie-tipo-cuenta').value = '';
 
         document.getElementById('oie-rdo-ingreso').checked = true;
@@ -417,10 +392,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                             });
                         }
 
-                        const tcParts = (d.tipo_cuenta_contable || '').split(',').map(p => p.trim().toLowerCase());
-                        document.querySelectorAll('.tc-oie-checkbox').forEach(cb => {
-                            cb.checked = tcParts.includes(cb.value);
-                        });
+                        // Se conserva tal cual: el modal ya no lo edita, pero lo devuelve al guardar.
                         document.getElementById('oie-tipo-cuenta').value = d.tipo_cuenta_contable || '';
 
                         if (btnElim) btnElim.classList.remove('d-none');
