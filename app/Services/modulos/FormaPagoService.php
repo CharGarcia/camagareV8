@@ -50,10 +50,7 @@ class FormaPagoService
         $cuentaPago  = null;
         if ($sincronizarFlujos) {
             [$cuentaCobro, $cuentaPago] = $this->cuentasPorFlujo($data);
-            // Cuenta base de la forma: la que Control Bancario y el resto del sistema leen
-            // cuando la forma no tiene asiento programado propio. Manda la de Cobros; si la
-            // forma no aplica a ingresos (o quedó vacía), se usa la de Pagos.
-            $data['id_cuenta_contable'] = $cuentaCobro ?? $cuentaPago;
+            $data['id_cuenta_contable'] = $this->cuentaBase($data, $cuentaCobro, $cuentaPago);
         }
 
         $this->validar($data);
@@ -94,6 +91,29 @@ class FormaPagoService
             in_array($aplica, ['INGRESO', 'AMBAS'], true) && $cobro > 0 ? $cobro : null,
             in_array($aplica, ['EGRESO',  'AMBAS'], true) && $pago  > 0 ? $pago  : null,
         ];
+    }
+
+    /**
+     * Cuenta base de la forma (empresa_formas_pago.id_cuenta_contable): la que lee el resto del
+     * sistema —Control Bancario entre otros— y la que rellena el flujo que no tiene asiento
+     * programado propio.
+     *
+     * Por eso, si un flujo al que la forma SÍ aplica se deja sin cuenta, la base tiene que
+     * quedar vacía: si no, ese flujo heredaría la cuenta del otro y "quitar la cuenta de Pagos"
+     * no tendría ningún efecto visible. Cuando los dos flujos tienen cuenta, cada uno manda por
+     * su propio asiento programado y la base solo sirve de valor de referencia.
+     */
+    private function cuentaBase(array $data, ?int $cuentaCobro, ?int $cuentaPago): ?int
+    {
+        $aplica      = strtoupper((string)($data['aplica_en'] ?? 'AMBAS'));
+        $aplicaCobro = in_array($aplica, ['INGRESO', 'AMBAS'], true);
+        $aplicaPago  = in_array($aplica, ['EGRESO',  'AMBAS'], true);
+
+        if ($aplicaCobro && $aplicaPago) {
+            return ($cuentaCobro !== null && $cuentaPago !== null) ? $cuentaCobro : null;
+        }
+
+        return $aplicaCobro ? $cuentaCobro : $cuentaPago;
     }
 
     /**

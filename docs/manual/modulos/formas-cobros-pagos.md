@@ -54,6 +54,11 @@ flujo, se propone la misma en el otro si allí todavía no hay ninguna — lo no
 es que el dinero entre y salga por la misma cuenta —, y basta cambiarla si en su
 empresa no es así.
 
+Cada flujo es independiente: cambiar la cuenta de Cobros no cambia la de Pagos.
+Y **dejar un flujo sin cuenta lo deja realmente sin cuenta** — no hereda la del
+otro —, así que un cobro por esa forma quedará sin la contrapartida del dinero
+mientras siga vacía.
+
 **Es la misma cuenta que se administra en
 [Configuración Contable](configuracion-contable.md), en el bloque *Cobros y
 Pagos*.** No son dos configuraciones distintas: lo que se cambia aquí se ve allá
