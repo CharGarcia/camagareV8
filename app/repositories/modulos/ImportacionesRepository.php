@@ -128,7 +128,7 @@ class ImportacionesRepository extends BaseRepository
                 LEFT  JOIN bodegas   b ON b.id = i.id_bodega_destino
                 LEFT  JOIN usuarios  u ON u.id = i.created_by
                 $where
-                ORDER BY $ordenExpr $ordenDir
+                ORDER BY $ordenExpr $ordenDir, i.id DESC
                 LIMIT $perPage OFFSET $offset";
 
         $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);

@@ -59,15 +59,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="retTabs" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" data-bs-toggle="tab" data-bs-target="#tab-ret-principal" href="#tab-ret-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Retención</a></li>
+                            <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-asiento-btn" data-bs-toggle="tab" data-bs-target="#tab-ret-asiento" href="#tab-ret-asiento" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                            <?php endif; ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-sri-btn" data-bs-toggle="tab" data-bs-target="#tab-ret-sri" href="#tab-ret-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
-                            $pestanasRet = [
-                                'tab-ret-asiento' => 'Asiento contable',
-                                'tab-ret-sri' => 'SRI',
-                            ];
+                            $pestanasRet = ['tab-ret-sri' => 'SRI'];
+                            // La pestaña del asiento solo es configurable si el usuario la ve.
+                            if (\App\Helpers\AsientoPestana::puedeVer()) {
+                                $pestanasRet = ['tab-ret-asiento' => 'Asiento contable'] + $pestanasRet;
+                            }
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasRet, $vistaConfigRet ?? [], $rutaModulo);
                             ?>
                         </div>
@@ -291,35 +294,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                         </div>
 
                         <!-- ── PESTAÑA ASIENTO CONTABLE ──────────────────────────────────── -->
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                         <div class="tab-pane fade" id="tab-ret-asiento" role="tabpanel">
                             <div class="px-3 py-3">
-                                <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                    <div class="table-responsive" style="max-height:350px;">
-                                        <table class="table table-sm table-detalle mb-0 text-nowrap">
-                                            <thead>
-                                                <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:14%;">Código</th>
-                                                    <th class="py-2 small fw-bold text-muted">Cuenta</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:16%;">Debe</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:16%;">Haber</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="ret_asiento_body">
-                                                <tr><td colspan="4" class="text-center py-4 text-muted">Guarde la retención para generar el asiento contable.</td></tr>
-                                            </tbody>
-                                            <tfoot>
-                                                <tr class="table-light border-top fw-bold">
-                                                    <td colspan="2" class="text-end pe-2">Totales</td>
-                                                    <td class="text-end" id="ret_asiento_total_debe">0.00</td>
-                                                    <td class="text-end pe-3" id="ret_asiento_total_haber">0.00</td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
-                                    <div class="px-3 py-2 border-top bg-light small" id="ret_asiento_aviso"></div>
-                                </div>
+                                <?php $prefijo = 'retc'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                             </div>
                         </div><!-- /tab-ret-asiento -->
+                        <?php endif; ?>
 
                         <!-- ── PESTAÑA SRI ──────────────────────────────────────────────── -->
                         <div class="tab-pane fade px-3 py-2" id="tab-ret-sri" role="tabpanel">

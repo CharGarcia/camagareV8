@@ -74,7 +74,7 @@ class CargaInventarioRepository extends BaseRepository
                 LEFT JOIN usuarios u  ON u.id = c.created_by
                 LEFT JOIN usuarios ua ON ua.id = c.aprobada_por
                 $where
-                ORDER BY c.$ordenCol $dir
+                ORDER BY c.$ordenCol $dir, c.id DESC
                 $limit";
         $st = $this->db->prepare($sql);
         $st->execute($params);

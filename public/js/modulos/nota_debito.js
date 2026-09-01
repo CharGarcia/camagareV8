@@ -1582,20 +1582,16 @@
 (function () {
     let _ndAsientoTab = null;
     function ndAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('nd-asiento-tbody')) return null;
         if (!_ndAsientoTab && typeof window.crearAsientoTab === 'function') {
             _ndAsientoTab = window.crearAsientoTab({
-                tbodyId: 'nd-asiento-tbody',
-                debeId:  'nd-asiento-debe',
-                haberId: 'nd-asiento-haber',
-                difId:   'nd-asiento-dif',
-                badgeId: 'nd-asiento-badge',
-                countId: 'nd-asiento-count',
-                statusId: 'nd-asiento-status',
+                prefijo: 'nd',
+                moduloOrigen: 'nota_debito',
                 previewUrl: `${BASE_URL}/modulos/nota_debito/getAsientoSugeridoAjax`,
-                cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`
+                cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${BASE_URL}/modulos/asientos-contables`
             });
-            const addBtn = document.getElementById('nd-asiento-add');
-            if (addBtn) addBtn.addEventListener('click', () => _ndAsientoTab.agregarLinea());
         }
         return _ndAsientoTab;
     }

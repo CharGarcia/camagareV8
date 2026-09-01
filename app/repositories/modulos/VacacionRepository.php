@@ -46,7 +46,7 @@ class VacacionRepository extends BaseRepository
         $total = (int) $stTotal->fetchColumn();
 
         $sql = "SELECT v.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion
-                {$from} ORDER BY {$orderExpr} {$ordenDir}";
+                {$from} ORDER BY {$orderExpr} {$ordenDir}, v.id DESC";
         if ($perPage > 0) $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
         $st = $this->db->prepare($sql);
         $st->execute($params);

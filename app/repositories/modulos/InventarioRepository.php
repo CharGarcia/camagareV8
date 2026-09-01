@@ -553,7 +553,7 @@ class InventarioRepository extends BaseRepository
                 INNER JOIN productos_bodegas pb ON pb.id_producto = p.id AND pb.id_empresa = p.id_empresa AND pb.eliminado = false
                 INNER JOIN bodegas b ON b.id = pb.id_bodega AND b.eliminado = false
                 $where
-                ORDER BY $sort $dir, b.nombre" . ($perPage > 0 ? " LIMIT $perPage OFFSET $offset" : "");
+                ORDER BY $sort $dir, b.nombre, p.id DESC" . ($perPage > 0 ? " LIMIT $perPage OFFSET $offset" : "");
 
         $st = $this->db->prepare($sql);
         $st->execute($params);

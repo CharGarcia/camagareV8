@@ -18,6 +18,61 @@ class OrdenCompraService
         private LogSistemaService     $logService
     ) {}
 
+    /**
+     * Totales de una orden a partir de su detalle, agrupados por tarifa de IVA.
+     * Punto único de cálculo: lo usan el PDF, el Excel y la página de aprobación del
+     * proveedor (el modal replica esta misma fórmula en JS para el cálculo en vivo).
+     *
+     * Se redondea a centavos en cada paso — base de cada línea, IVA de cada línea sobre
+     * esa base ya redondeada y acumulados — para que la suma de los subtotales que se ven
+     * impresos coincida siempre con el TOTAL, sin arrastrar decimales invisibles.
+     *
+     * Devuelve:
+     *   subtotal   → suma de las bases (sin impuestos)
+     *   grupos     → por código de tarifa: ['label', 'porcentaje', 'base', 'iva']
+     *   total_iva  → suma del IVA de todos los grupos
+     *   total      → subtotal + total_iva
+     */
+    public static function calcularTotales(array $detalles): array
+    {
+        $r2 = static fn(float $v): float => round($v, 2);
+
+        $subtotal = 0.0;
+        $grupos   = [];
+
+        foreach ($detalles as $d) {
+            $base = $r2(((float) ($d['cantidad'] ?? 0)) * ((float) ($d['precio_unitario'] ?? 0)));
+            $pct  = (float) ($d['porcentaje_iva'] ?? 0);
+            // El código distingue tarifas que comparten porcentaje (0%, Exento, No objeto);
+            // si la línea es anterior a la tarifa por línea, cae en el grupo del 0%.
+            $cod  = (string) ($d['codigo_iva'] ?? '');
+            if ($cod === '') {
+                $cod = 'p' . number_format($pct, 2, '.', '');
+            }
+            $label = trim((string) ($d['nombre_tarifa_iva'] ?? '')) ?: (rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.') . '%');
+
+            $subtotal = $r2($subtotal + $base);
+
+            if (!isset($grupos[$cod])) {
+                $grupos[$cod] = ['label' => $label, 'porcentaje' => $pct, 'base' => 0.0, 'iva' => 0.0];
+            }
+            $grupos[$cod]['base'] = $r2($grupos[$cod]['base'] + $base);
+            $grupos[$cod]['iva']  = $r2($grupos[$cod]['iva'] + $r2($base * $pct / 100));
+        }
+
+        $totalIva = 0.0;
+        foreach ($grupos as $g) {
+            $totalIva = $r2($totalIva + $g['iva']);
+        }
+
+        return [
+            'subtotal'  => $subtotal,
+            'grupos'    => $grupos,
+            'total_iva' => $totalIva,
+            'total'     => $r2($subtotal + $totalIva),
+        ];
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,
@@ -105,6 +160,9 @@ class OrdenCompraService
                     'descripcion'     => trim($item['descripcion']),
                     'cantidad'        => (float)$item['cantidad'],
                     'precio_unitario' => (float)$item['precio_unitario'],
+                    'codigo_iva'      => trim((string)($item['codigo_iva'] ?? '')),
+                    'porcentaje_iva'  => (float)($item['porcentaje_iva'] ?? 0),
+                    'notas'           => trim((string)($item['notas'] ?? '')),
                     'created_by'      => $data['created_by'],
                 ]);
             }
@@ -159,6 +217,9 @@ class OrdenCompraService
                     'descripcion'     => trim($item['descripcion']),
                     'cantidad'        => (float)$item['cantidad'],
                     'precio_unitario' => (float)$item['precio_unitario'],
+                    'codigo_iva'      => trim((string)($item['codigo_iva'] ?? '')),
+                    'porcentaje_iva'  => (float)($item['porcentaje_iva'] ?? 0),
+                    'notas'           => trim((string)($item['notas'] ?? '')),
                     'created_by'      => $data['updated_by'],
                 ]);
             }
@@ -274,6 +335,9 @@ class OrdenCompraService
                     'descripcion'     => $l['descripcion'],
                     'cantidad'        => $cantRestante,
                     'precio_unitario' => $l['precio_unitario'],
+                    'codigo_iva'      => $l['codigo_iva'] ?? '',
+                    'porcentaje_iva'  => $l['porcentaje_iva'] ?? 0,
+                    'notas'           => $l['notas'] ?? '',
                 ];
             }
         } else {
@@ -283,6 +347,9 @@ class OrdenCompraService
                     'descripcion'     => $l['descripcion'],
                     'cantidad'        => $l['cantidad'],
                     'precio_unitario' => $l['precio_unitario'],
+                    'codigo_iva'      => $l['codigo_iva'] ?? '',
+                    'porcentaje_iva'  => $l['porcentaje_iva'] ?? 0,
+                    'notas'           => $l['notas'] ?? '',
                 ];
             }
         }

@@ -1401,20 +1401,16 @@
 (function () {
     let _frAsientoTab = null;
     function frAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('fr-asiento-tbody')) return null;
         if (!_frAsientoTab && typeof window.crearAsientoTab === 'function') {
             _frAsientoTab = window.crearAsientoTab({
-                tbodyId: 'fr-asiento-tbody',
-                debeId: 'fr-asiento-debe',
-                haberId: 'fr-asiento-haber',
-                difId: 'fr-asiento-dif',
-                badgeId: 'fr-asiento-badge',
-                countId: 'fr-asiento-count',
-                statusId: 'fr-asiento-status',
+                prefijo: 'fr',
+                moduloOrigen: 'factura_reembolso',
                 previewUrl: `${BASE_URL}/modulos/factura-reembolso/getAsientoSugeridoAjax`,
                 cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${BASE_URL}/modulos/asientos-contables`
             });
-            const addBtn = document.getElementById('fr-asiento-add');
-            if (addBtn) addBtn.addEventListener('click', () => _frAsientoTab.agregarLinea());
         }
         return _frAsientoTab;
     }

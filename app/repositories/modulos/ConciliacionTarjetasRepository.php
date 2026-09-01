@@ -610,7 +610,7 @@ class ConciliacionTarjetasRepository extends BaseRepository
                        (SELECT COUNT(*) FROM conciliacion_tarjetas_cruces cr
                          WHERE cr.id_cabecera = c.id AND cr.eliminado = FALSE) AS cobros_cruzados
                 {$from} {$where}
-                ORDER BY {$orderExpr} {$dir}
+                ORDER BY {$orderExpr} {$dir}, c.id DESC
                 LIMIT {$perPage} OFFSET {$offset}";
         $st = $this->db->prepare($sql);
         $st->execute($params);

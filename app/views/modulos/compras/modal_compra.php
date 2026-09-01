@@ -61,7 +61,9 @@
         <div class="d-flex align-items-center bg-light px-3 pt-2">
           <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="mcTabs" role="tablist">
             <li class="nav-item"><a class="nav-link active" id="tab_compra" data-bs-toggle="tab" data-bs-target="#tabDetalleCompra" href="#tabDetalleCompra" role="tab"><i class="bi bi-receipt me-1"></i>Detalle de Compra</a></li>
+            <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
             <li class="nav-item"><a class="nav-link" id="tab_asiento" data-bs-toggle="tab" data-bs-target="#tabAsiento" href="#tabAsiento" role="tab"><i class="bi bi-calculator me-1"></i>Asiento contable</a></li>
+            <?php endif; ?>
             <li class="nav-item"><a class="nav-link" id="tab_pagos" data-bs-toggle="tab" data-bs-target="#tabPagos" href="#tabPagos" role="tab"><i class="bi bi-credit-card me-1"></i>Pagos</a></li>
             <li class="nav-item"><a class="nav-link" id="tab-inventario-tab" data-bs-toggle="tab" data-bs-target="#tabInventario" href="#tabInventario" role="tab"><i class="bi bi-box-seam me-1"></i>Inventario</a></li>
             <li class="nav-item"><a class="nav-link" id="tab-retenciones-tab" data-bs-toggle="tab" data-bs-target="#tabRetenciones" href="#tabRetenciones" role="tab"><i class="bi bi-file-earmark-text me-1"></i>Retenciones</a></li>
@@ -74,12 +76,15 @@
           <div class="ms-auto pb-1">
             <?php
             $pestanasConfig = [
-              'tabAsiento'      => 'Asiento contable',
               'tabPagos'        => 'Pagos',
               'tabInventario'   => 'Inventario',
               'tabRetenciones'  => 'Retenciones',
               'tabOrdenCompra'  => 'Orden de Compra',
             ];
+            // La pestaña del asiento solo es configurable si el usuario la ve.
+            if (\App\Helpers\AsientoPestana::puedeVer()) {
+              $pestanasConfig = ['tabAsiento' => 'Asiento contable'] + $pestanasConfig;
+            }
             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/compras');
             ?>
           </div>
@@ -438,51 +443,13 @@
           <!-- ════════════════════════════════════════
 
           <!-- ════════════════════════════════════════
-               TAB 3: PAGOS
+               TAB 2: ASIENTO CONTABLE
           ════════════════════════════════════════ -->
-          <!-- ════════════════════════════════════════
-               TAB 2: ASIENTO CONTABLE (placeholder)
-          ════════════════════════════════════════ -->
+          <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
           <div class="tab-pane fade" id="tabAsiento" role="tabpanel">
-            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-              <div class="table-responsive" style="max-height: 350px;">
-                <table class="table table-sm table-detalle mb-0 text-nowrap" id="mc-table-asiento">
-                  <thead>
-                    <tr class="table-light border-bottom">
-                      <th class="ps-3 py-2 small fw-bold text-muted" style="width:45%;">Cuenta Contable</th>
-                      <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">D&eacute;bito / Debe</th>
-                      <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Cr&eacute;dito / Haber</th>
-                      <th class="py-2 small fw-bold text-muted" style="width:15%;">Referencia</th>
-                      <th style="width:40px;"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="mc-asiento-tbody">
-                    <tr><td colspan="5" class="text-center py-4 text-muted">Guarda el documento para generar el asiento contable.</td></tr>
-                  </tbody>
-                  <tfoot class="bg-light fw-bold border-top sticky-bottom">
-                    <tr>
-                      <td class="text-end py-2">Totales:</td>
-                      <td class="text-end pe-3 py-2 text-primary" id="mc-asiento-debe">0.00</td>
-                      <td class="text-end pe-3 py-2 text-primary" id="mc-asiento-haber">0.00</td>
-                      <td colspan="2" class="py-2">
-                        <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
-                          <span class="x-small text-muted">Diferencia: <span id="mc-asiento-dif">0.00</span></span>
-                          <span id="mc-asiento-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
-                        </div>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-              <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" id="mc-asiento-add">
-                  <i class="bi bi-plus-circle me-1"></i> Agregar l&iacute;nea
-                </button>
-                <div class="small fw-bold text-muted pe-3">L&iacute;neas: <span id="mc-asiento-count">0</span></div>
-              </div>
-            </div>
-            <div class="px-1 pt-2 small text-muted" id="mc-asiento-status"></div>
+            <?php $prefijo = 'mc'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
           </div>
+          <?php endif; ?>
 
           <div class="tab-pane fade" id="tabPagos" role="tabpanel">
             <div class="p-3">

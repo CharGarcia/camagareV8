@@ -144,7 +144,7 @@ class VideollamadaRepository extends BaseRepository
                 FROM videollamadas_salas s
                 LEFT JOIN usuarios u ON s.id_anfitrion = u.id
                 $where
-                ORDER BY s.$ordenCol $ordenDir NULLS LAST
+                ORDER BY s.$ordenCol $ordenDir NULLS LAST, s.id DESC
                 LIMIT $perPage OFFSET $offset";
 
         $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);

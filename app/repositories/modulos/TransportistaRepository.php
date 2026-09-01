@@ -79,7 +79,7 @@ class TransportistaRepository extends BaseRepository
                            t.email, t.telefono, t.direccion, t.estado, t.created_at
                     FROM {$this->table} t
                     {$whereSql}
-                    ORDER BY {$col} {$dir}
+                    ORDER BY {$col} {$dir}, t.id DESC
                     LIMIT {$perPage} OFFSET {$offset}";
 
         $stRows = $this->db->prepare($sqlRows);

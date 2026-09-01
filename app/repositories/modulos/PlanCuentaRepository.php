@@ -45,7 +45,7 @@ class PlanCuentaRepository extends BaseRepository
                     LEFT JOIN centro_costos cc ON cc.id = pc.id_centro_costos
                     LEFT JOIN proyectos p ON p.id = pc.id_proyecto 
                     {$whereSql} 
-                    ORDER BY pc.{$ordenCol} {$ordenDir}";
+                    ORDER BY pc.{$ordenCol} {$ordenDir}, pc.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

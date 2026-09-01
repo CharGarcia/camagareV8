@@ -121,7 +121,7 @@ class NotaDebitoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON nd.id_usuario = u.id
                 LEFT JOIN empresas e ON e.id = nd.id_empresa
                 $where
-                ORDER BY $ordenExpr $ordenDir" . ($perPage > 0 ? " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset : "");
+                ORDER BY $ordenExpr $ordenDir, nd.id DESC" . ($perPage > 0 ? " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset : "");
 
         $st = $this->db->prepare($sql);
         $st->execute($params);

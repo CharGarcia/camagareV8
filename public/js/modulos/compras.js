@@ -207,20 +207,18 @@ window.abrirModalCompra = function (el) {
 // ─────────────────────────────────────────────────────────────────────────────
 let _mcAsientoTab = null;
 function mcAsientoTab() {
+    // La pestaña solo existe si el usuario ve Contabilidad → Asientos Contables; si no, no hay
+    // tabla que inicializar. La edición/guardado la habilita el propio componente según el
+    // permiso de actualizar (los botones solo los renderiza la vista con ese permiso).
+    if (!document.getElementById('mc-asiento-tbody')) return null;
     if (!_mcAsientoTab && typeof window.crearAsientoTab === 'function') {
         _mcAsientoTab = window.crearAsientoTab({
-            tbodyId: 'mc-asiento-tbody',
-            debeId:  'mc-asiento-debe',
-            haberId: 'mc-asiento-haber',
-            difId:   'mc-asiento-dif',
-            badgeId: 'mc-asiento-badge',
-            countId: 'mc-asiento-count',
-            statusId: 'mc-asiento-status',
+            prefijo: 'mc',
+            moduloOrigen: 'compra',
             previewUrl: `${window.CMG_urlBase}/getAsientoSugeridoAjax`,
-            cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`
+            cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+            asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
         });
-        const addBtn = document.getElementById('mc-asiento-add');
-        if (addBtn) addBtn.addEventListener('click', () => _mcAsientoTab.agregarLinea());
     }
     return _mcAsientoTab;
 }
@@ -1817,6 +1815,14 @@ window.CMG_guardar = async function() {
     const plazo = parseInt(document.getElementById('mcDiasCredito').value || 0);
     const unidad = document.getElementById('mcPlazoSRI').value || 'dias';
 
+    // El bloque <pagos> solo se exige cuadrado en el registro MANUAL, que es donde lo
+    // captura el usuario y puede corregirlo. En un documento electrónico (o migrado) las
+    // formas de pago se guardan TAL CUAL vienen del XML descargado del SRI: el modal las
+    // muestra deshabilitadas, así que un descuadre del emisor —o el propio recálculo del
+    // total desde el detalle, que puede diferir en centavos del importe declarado— dejaba
+    // el documento imposible de guardar, sin ninguna forma de corregirlo desde la pantalla.
+    const esRegistroManual = (tipoRegistro === 'fisica');
+
     let pagoSinFormaSRI = false;
     document.querySelectorAll('.row-pago-sri').forEach(div => {
         const cod = div.querySelector('.input-pago-sri-id').value;
@@ -1824,6 +1830,13 @@ window.CMG_guardar = async function() {
         // Con placeholder, un monto sin forma de pago seleccionada no es válido.
         if (val > 0 && !cod) pagoSinFormaSRI = true;
         totalPagosSRI += val;
+
+        // Cuando el comprobante electrónico no declaró formas de pago, el modal muestra
+        // una fila de relleno con el importe total y sin código (ver CMG_abrir). Esa fila
+        // no viene del SRI: enviarla guardaría un pago con forma vacía, que el ATS luego
+        // lee como código "00". Se descarta para que el documento quede tal cual llegó.
+        if (!esRegistroManual && !cod) return;
+
         pagos.push({
             forma_pago: cod,
             total: val,
@@ -1832,13 +1845,22 @@ window.CMG_guardar = async function() {
         });
     });
 
-    if (pagoSinFormaSRI) {
+    if (esRegistroManual && pagoSinFormaSRI) {
         Swal.fire('Atención', 'Seleccione la forma de pago SRI para cada monto ingresado.', 'warning');
         return;
     }
 
-    if (Math.abs(totalFactura - totalPagosSRI) >= 0.01) {
-        Swal.fire('Atención', `Las formas de pago SRI ($${totalPagosSRI.toFixed(2)}) no coinciden con el total de la compra ($${totalFactura.toFixed(2)}).`, 'warning');
+    if (esRegistroManual && Math.abs(totalFactura - totalPagosSRI) >= 0.01) {
+        const dif = totalFactura - totalPagosSRI;
+        Swal.fire({
+            icon: 'warning',
+            title: 'Formas de pago SRI',
+            html: `Las formas de pago SRI suman <b>$${totalPagosSRI.toFixed(2)}</b> y el total de la compra es <b>$${totalFactura.toFixed(2)}</b>.<br>` +
+                  `${dif > 0 ? 'Faltan' : 'Sobran'} <b>$${Math.abs(dif).toFixed(2)}</b>. Corrija los montos en la sub-pestaña <b>Formas de pago SRI</b>.`
+        });
+        // Abrir la sub-pestaña del descuadre para que el usuario vea qué corregir.
+        const tabPagosSri = document.querySelector('[data-bs-target="#mc-subtab-pagos-sri"]');
+        if (tabPagosSri && window.bootstrap) bootstrap.Tab.getOrCreateInstance(tabPagosSri).show();
         const firstPagoInput = document.querySelector('.input-pago-sri-valor');
         if (firstPagoInput) firstPagoInput.focus();
         return;

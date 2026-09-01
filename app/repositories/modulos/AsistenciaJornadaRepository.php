@@ -144,7 +144,7 @@ class AsistenciaJornadaRepository extends BaseRepository
         $sql = "SELECT j.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion,
                        p.nombre AS punto_nombre
                 {$from}
-                ORDER BY {$orderExpr} {$ordenDir}, e.nombres_apellidos ASC";
+                ORDER BY {$orderExpr} {$ordenDir}, e.nombres_apellidos ASC, j.id DESC";
         if ($perPage > 0) {
             $offset = ($page - 1) * $perPage;
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;

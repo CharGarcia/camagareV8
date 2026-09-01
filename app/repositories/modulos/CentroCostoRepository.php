@@ -50,7 +50,7 @@ class CentroCostoRepository extends BaseRepository
         // 2. Obtener filas
         $offset = ($page - 1) * $perPage;
         
-        $sqlRows = "SELECT cc.* FROM {$this->table} cc {$whereSql} ORDER BY cc.{$ordenCol} {$dir}";
+        $sqlRows = "SELECT cc.* FROM {$this->table} cc {$whereSql} ORDER BY cc.{$ordenCol} {$dir}, cc.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

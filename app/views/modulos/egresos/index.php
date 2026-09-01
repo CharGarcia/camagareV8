@@ -340,13 +340,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <div class="d-flex align-items-center bg-light px-3 pt-2">
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsModalEgreso" role="tablist">
                         <li class="nav-item"><a class="nav-link active py-2 small fw-bold" id="tab-egreso-gen-btn" data-bs-toggle="tab" data-bs-target="#eg-tab-general" href="#eg-tab-general" role="tab"><i class="bi bi-card-text me-1"></i> General</a></li>
-                        <li class="nav-item"><a class="nav-link py-2 small fw-bold" id="tab-egreso-cnt-btn" data-bs-toggle="tab" data-bs-target="#eg-tab-contable" href="#eg-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
+                        <li class="nav-item" id="tab-egreso-cnt-li"><a class="nav-link py-2 small fw-bold" id="tab-egreso-cnt-btn" data-bs-toggle="tab" data-bs-target="#eg-tab-contable" href="#eg-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                        <?php endif; ?>
                     </ul>
                     <div class="ms-2">
                         <?php
-                        $pestanasConfig = [
-                            'eg-tab-contable' => 'Asiento contable'
-                        ];
+                        // La pestaña del asiento solo es configurable si el usuario la ve.
+                        $pestanasConfig = \App\Helpers\AsientoPestana::puedeVer()
+                            ? ['eg-tab-contable' => 'Asiento contable']
+                            : [];
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'egresos');
                         ?>
                     </div>
@@ -612,22 +615,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         </div>
 
                         <!-- ASIENTO -->
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                         <div class="tab-pane fade p-3" id="eg-tab-contable" role="tabpanel">
-                            <div class="table-responsive border rounded" style="max-height: 380px;">
-                                <table class="table table-sm small mb-0 table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="ps-3 py-2" style="width: 45%;">Cuenta Contable</th>
-                                            <th class="text-end pe-3" style="width: 25%;">Débito</th>
-                                            <th class="text-end pe-3" style="width: 25%;">Crédito</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="eg-tbody-asiento">
-                                        <tr><td colspan="3" class="text-center py-5 text-muted">Visualización activa solo para registros guardados.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                            <?php $prefijo = 'eg'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </form>
             </div>
@@ -1699,9 +1691,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (boxSaldoEgr) { boxSaldoEgr.classList.add('d-none'); boxSaldoEgr.innerHTML = ''; }
 
         // Reset pestaña Asiento contable (placeholder para registros nuevos)
-        const egTbAsientoReset = document.getElementById('eg-tbody-asiento');
-        if (egTbAsientoReset) egTbAsientoReset.innerHTML = '<tr><td colspan="3" class="text-center py-5 text-muted">Visualización activa solo para registros guardados.</td></tr>';
-        
+        if (_egAsientoTab) _egAsientoTab.limpiar();
+
+        // Un egreso nuevo aún no tiene asiento contable: ocultar la pestaña hasta que se guarde.
+        const tabCntLiEg = document.getElementById('tab-egreso-cnt-li');
+        if (tabCntLiEg) tabCntLiEg.classList.toggle('d-none', esNuevo);
+        if (esNuevo) document.getElementById('tab-egreso-gen-btn')?.click();
+
         esEgresoAnulado = false;
         const btnG = document.getElementById('btnGuardarEgreso');
         btnG.classList.remove('d-none');
@@ -2101,37 +2097,29 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         });
     }
 
-    function cargarAsientoContableEgreso(id) {
-        const tbody = document.getElementById('eg-tbody-asiento');
-        if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asiento…</td></tr>';
-        fetch(`${EGR_URL}/getAsientoContableAjax?id=${id}`)
-            .then(r => r.json())
-            .then(res => {
-                if (!res.ok || !res.asiento || !(res.asiento.detalles || []).length) {
-                    tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted"><i class="bi bi-exclamation-circle me-1"></i> Aún no se ha generado el asiento contable. Verifique que el concepto y las formas de pago tengan cuenta contable configurada.</td></tr>';
-                    return;
-                }
-                const a = res.asiento;
-                let html = '';
-                (a.detalles || []).forEach(d => {
-                    const debe = parseFloat(d.debe || 0), haber = parseFloat(d.haber || 0);
-                    html += `<tr>
-                        <td class="ps-3"><code class="text-primary">${d.codigo_cuenta || ''}</code> ${d.nombre_cuenta || ''}</td>
-                        <td class="text-end pe-3">${debe > 0 ? debe.toFixed(2) : ''}</td>
-                        <td class="text-end pe-3">${haber > 0 ? haber.toFixed(2) : ''}</td>
-                    </tr>`;
-                });
-                html += `<tr class="table-light fw-bold">
-                    <td class="ps-3 text-end">TOTALES</td>
-                    <td class="text-end pe-3">${parseFloat(a.total_debe || 0).toFixed(2)}</td>
-                    <td class="text-end pe-3">${parseFloat(a.total_haber || 0).toFixed(2)}</td>
-                </tr>`;
-                tbody.innerHTML = html;
-            })
-            .catch(() => {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-4">Error al cargar el asiento contable.</td></tr>';
+    // ── Pestaña Asiento contable ──────────────────────────────────────────────
+    // Componente compartido (public/js/modulos/asiento_contable_tab.js): muestra el asiento del
+    // egreso y —con permiso de actualizar en Asientos Contables— permite corregirlo y guardarlo,
+    // validando que siga cuadrando contra el monto del egreso.
+    let _egAsientoTab = null;
+
+    function egAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('eg-asiento-tbody')) return null;
+        if (!_egAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _egAsientoTab = window.crearAsientoTab({
+                prefijo: 'eg',
+                moduloOrigen: 'egreso',
+                cuentasUrl: `<?= BASE_URL ?>/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `<?= BASE_URL ?>/modulos/asientos-contables`
             });
+        }
+        return _egAsientoTab;
+    }
+
+    function cargarAsientoContableEgreso(id) {
+        const tab = egAsientoTab();
+        if (tab) tab.cargar(id);
     }
 
     function setControlesGeneralesHabilitados(hab) {
@@ -3279,5 +3267,6 @@ include_once MVC_APP . '/views/modulos/empleados/modal_empleado.php';
 <script>window.BASE_URL = '<?= BASE_URL ?>';</script>
 
 <!-- JS para modales de proveedores y empleados (expone abrirModalProveedorCrear / abrirModalCrear) -->
+<script src="<?= BASE_URL ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/empleados_modal.js?v=<?= time() ?>"></script>

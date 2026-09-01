@@ -452,7 +452,8 @@
     window.rolEmpDetalle = async function (det) {
         $('rolemp_general_body').innerHTML = '<div class="text-center py-4 text-muted">Cargando…</div>';
         $('rolemp_prov_body').innerHTML = '';
-        $('rolemp_asiento_body').innerHTML = '';
+        // La pestaña del asiento solo existe con acceso a Contabilidad → Asientos Contables.
+        if ($('rolemp_asiento_body')) $('rolemp_asiento_body').innerHTML = '';
         if ($('rolemp_asist_body')) $('rolemp_asist_body').innerHTML = '';
         modalEmp()?.show();
         try {
@@ -541,6 +542,8 @@
     }
 
     function renderAsiento(d) {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que pintar.
+        if (!$('rolemp_asiento_body')) return;
         const a = d.asiento;
         if (!a) { $('rolemp_asiento_body').innerHTML = '<div class="text-muted py-3 text-center">El asiento contable solo aplica al rol mensual.</div>'; return; }
 

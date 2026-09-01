@@ -82,7 +82,7 @@ class SuscripcionesRepository extends BaseRepository
                     LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
                     LEFT JOIN nuvei_tarjetas_cliente nt ON nt.id = s.id_nuvei_tarjeta
                     $where
-                    ORDER BY $orderExpr $ordenDir
+                    ORDER BY $orderExpr $ordenDir, s.id DESC
                     $limitOffset";
             $st = $this->db->prepare($sql);
             $st->execute($params);

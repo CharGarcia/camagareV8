@@ -85,7 +85,7 @@ class TransferenciaLoteRepository extends BaseRepository
                 LEFT JOIN usuarios u  ON u.id = l.created_by
                 LEFT JOIN usuarios ua ON ua.id = l.aprobado_por
                 $where
-                ORDER BY l.$ordenCol $dir
+                ORDER BY l.$ordenCol $dir, l.id DESC
                 $limit";
         $st = $this->db->prepare($sql);
         $st->execute($params);

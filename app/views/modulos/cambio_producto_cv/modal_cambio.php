@@ -30,9 +30,11 @@
                     <li class="nav-item" role="presentation">
                         <a class="nav-link active" id="cam-tab-general-btn" data-bs-toggle="tab" href="#cam-tab-general" role="tab"><i class="bi bi-info-circle me-1"></i> General</a>
                     </li>
+                    <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                     <li class="nav-item" role="presentation">
                         <a class="nav-link" id="cam-tab-asiento-btn" data-bs-toggle="tab" href="#cam-tab-asiento" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
                     </li>
+                    <?php endif; ?>
                 </ul>
                 <div class="tab-content" id="tabsCambioContent">
                 <div class="tab-pane fade show active" id="cam-tab-general" role="tabpanel">
@@ -172,39 +174,15 @@
                 </div><!-- /cam-tab-general -->
 
                 <!-- Pestaña Asiento Contable (a costo) -->
+                <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                 <div class="tab-pane fade" id="cam-tab-asiento" role="tabpanel">
                     <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
                         <i class="bi bi-info-circle text-primary"></i>
                         <span>Asiento <strong>a costo</strong>: neto entre el reingreso de lo devuelto y la salida de lo entregado (<em>Inventario</em> contra <em>Costo de ventas</em>).</span>
                     </div>
-                    <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                        <div class="table-responsive" style="max-height: 320px;">
-                            <table class="table table-sm mb-0 text-nowrap">
-                                <thead>
-                                    <tr class="table-light border-bottom">
-                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width:45%;">Cuenta Contable</th>
-                                        <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Débito / Debe</th>
-                                        <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Crédito / Haber</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width:15%;">Referencia</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="cam-tbody-asiento">
-                                    <tr><td colspan="4" class="text-center py-4 text-muted">Guarde el cambio para generar el asiento (se calcula a costo).</td></tr>
-                                </tbody>
-                                <tfoot class="bg-light fw-bold border-top">
-                                    <tr>
-                                        <td class="text-end py-2">Totales:</td>
-                                        <td class="text-end pe-3 py-2 text-primary" id="cam-asiento-total-debe">0.00</td>
-                                        <td class="text-end pe-3 py-2 text-primary" id="cam-asiento-total-haber">0.00</td>
-                                        <td class="py-2">
-                                            <span id="cam-asiento-badge-cuadre" class="badge bg-secondary bg-opacity-10 text-secondary border px-2">—</span>
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
+                    <?php $prefijo = 'cam'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                 </div><!-- /cam-tab-asiento -->
+                <?php endif; ?>
                 </div><!-- /tabsCambioContent -->
             </div>
 
@@ -874,7 +852,11 @@
             motivo: document.getElementById('cam_motivo').value,
             observaciones: document.getElementById('cam_observaciones').value,
             devoluciones,
-            entregas
+            entregas,
+            // Líneas del asiento completadas en la pestaña (vista previa). CambioProductoCvService
+            // las usa solo si vienen completas; si no, arma el asiento con la sugerencia.
+            asiento_detalles: (typeof window.camCapturarDetallesAsiento === 'function')
+                ? window.camCapturarDetallesAsiento() : []
         };
 
         const btn = document.getElementById('btnGuardarCambio');
@@ -961,59 +943,46 @@
     };
 
     // ─── Pestaña Asiento ──────────────────────────────────────────────────────
+    // Componente compartido: public/js/modulos/asiento_contable_tab.js.
+    //  - Sin asiento todavía → vista previa EDITABLE: las cuentas que falten se completan aquí
+    //    y viajan como `asiento_detalles` al guardar el cambio (CambioProductoCvService ya las
+    //    usa; si quedan incompletas cae a la sugerencia automática, como antes).
+    //  - Con asiento registrado → se corrige y se guarda desde la pestaña contra el módulo de
+    //    Asientos Contables, y queda marcado para que el documento no lo regenere.
+    let _camAsientoTab = null;
+    function camAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('cam-asiento-tbody')) return null;
+        if (!_camAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _camAsientoTab = window.crearAsientoTab({
+                prefijo: 'cam',
+                moduloOrigen: 'cambio_producto_cv',
+                previewEditable: true,
+                previewUrl: `${RUTA}/getAsientoSugeridoAjax`,
+                cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
+            });
+        }
+        return _camAsientoTab;
+    }
+
     function camResetTabs() {
         try { new bootstrap.Tab(document.getElementById('cam-tab-general-btn')).show(); } catch (e) {}
-        document.getElementById('cam-tbody-asiento').innerHTML =
-            '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde el cambio para generar el asiento (se calcula a costo).</td></tr>';
-        document.getElementById('cam-asiento-total-debe').textContent = '0.00';
-        document.getElementById('cam-asiento-total-haber').textContent = '0.00';
-        const badge = document.getElementById('cam-asiento-badge-cuadre');
-        badge.textContent = '—'; badge.className = 'badge bg-secondary bg-opacity-10 text-secondary border px-2';
+        if (_camAsientoTab) _camAsientoTab.limpiar();
     }
-    async function camCargarAsiento() {
-        const id = document.getElementById('cam_id').value;
-        const tbody = document.getElementById('cam-tbody-asiento');
-        if (!id) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Guarde el cambio para generar el asiento (se calcula a costo).</td></tr>';
-            return;
-        }
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando asiento contable...</td></tr>';
-        try {
-            const res = await fetch(`${RUTA}/getAsientoSugeridoAjax?id=${id}`);
-            const data = await res.json();
-            const dets = (data.ok && data.detalles) ? data.detalles : [];
-            if (!dets.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Sin asiento: el neto de costos es cero o el cambio no está Emitido.</td></tr>';
-                document.getElementById('cam-asiento-total-debe').textContent = '0.00';
-                document.getElementById('cam-asiento-total-haber').textContent = '0.00';
-                const badge = document.getElementById('cam-asiento-badge-cuadre');
-                badge.textContent = '—'; badge.className = 'badge bg-secondary bg-opacity-10 text-secondary border px-2';
-                return;
-            }
-            let tDebe = 0, tHaber = 0;
-            tbody.innerHTML = dets.map(d => {
-                tDebe += num(d.debe); tHaber += num(d.haber);
-                const cuenta = (d.id_cuenta_contable > 0)
-                    ? `${d.cuenta_codigo ? d.cuenta_codigo + ' · ' : ''}${d.cuenta_nombre || ''}`
-                    : '<span class="text-danger">— Cuenta sin configurar —</span>';
-                return `<tr>
-                    <td class="ps-3 small">${cuenta}</td>
-                    <td class="text-end pe-3 small">${num(d.debe) ? fmt(d.debe, 2) : ''}</td>
-                    <td class="text-end pe-3 small">${num(d.haber) ? fmt(d.haber, 2) : ''}</td>
-                    <td class="small text-muted">${esc(d.referencia_detalle || '')}</td>
-                </tr>`;
-            }).join('');
-            document.getElementById('cam-asiento-total-debe').textContent = fmt(tDebe, 2);
-            document.getElementById('cam-asiento-total-haber').textContent = fmt(tHaber, 2);
-            const cuadrado = Math.abs(tDebe - tHaber) < 0.005;
-            const badge = document.getElementById('cam-asiento-badge-cuadre');
-            badge.textContent = cuadrado ? 'Cuadrado' : 'Descuadrado';
-            badge.className = 'badge px-2 ' + (cuadrado ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25' : 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar el asiento contable.</td></tr>';
-        }
+
+    function camCargarAsiento() {
+        const tab = camAsientoTab();
+        if (tab) tab.cargar(document.getElementById('cam_id').value || 0);
     }
-    document.getElementById('cam-tab-asiento-btn').addEventListener('shown.bs.tab', camCargarAsiento);
+
+    /** Líneas del asiento que viajan con el cambio al guardarlo (vista previa completada). */
+    window.camCapturarDetallesAsiento = function () {
+        return _camAsientoTab ? _camAsientoTab.capturar() : [];
+    };
+
+    // La pestaña solo existe con acceso a Contabilidad → Asientos Contables.
+    document.getElementById('cam-tab-asiento-btn')?.addEventListener('shown.bs.tab', camCargarAsiento);
     window.__camResetTabs = camResetTabs;
 })();
 </script>

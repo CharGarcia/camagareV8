@@ -90,7 +90,7 @@ class LiquidacionCompraRepository extends BaseRepository
                 INNER JOIN proveedores p ON l.id_proveedor = p.id
                 LEFT  JOIN usuarios    u ON l.id_usuario   = u.id
                 $where
-                ORDER BY $ordenExpr $ordenDir
+                ORDER BY $ordenExpr $ordenDir, l.id DESC
                 " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
 
         $rows = $this->query($sql, $params)->fetchAll();

@@ -61,7 +61,7 @@ class NovedadRepository extends BaseRepository
 
         $sql = "SELECT n.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion
                 {$from}
-                ORDER BY {$orderExpr} {$ordenDir}";
+                ORDER BY {$orderExpr} {$ordenDir}, n.id DESC";
         if ($perPage > 0) {
             $offset = ($page - 1) * $perPage;
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;

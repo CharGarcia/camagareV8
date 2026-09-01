@@ -152,7 +152,7 @@ class ProductoRepository extends BaseRepository
                     LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                     LEFT JOIN unidades_medida um ON um.id = p.id_medida
                     {$whereSql}
-                    ORDER BY $orderExpr $dir";
+                    ORDER BY $orderExpr $dir, p.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

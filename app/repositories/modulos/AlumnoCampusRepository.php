@@ -44,7 +44,7 @@ class AlumnoCampusRepository extends BaseRepository
         $total = (int) $stCount->fetchColumn();
 
         $offset = ($page - 1) * $perPage;
-        $sqlRows = "SELECT c.* FROM {$this->table} c {$whereSql} ORDER BY {$col} {$dir}";
+        $sqlRows = "SELECT c.* FROM {$this->table} c {$whereSql} ORDER BY {$col} {$dir}, c.id DESC";
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }

@@ -134,7 +134,7 @@ class CitaAgendaRepository extends BaseRepository
             FROM citas c
             $joins
             $where
-            ORDER BY $orderExpr
+            ORDER BY $orderExpr, c.id DESC
             " . ($perPage > 0 ? "LIMIT :limit OFFSET :offset" : "") . "
         ";
         if ($perPage > 0) {

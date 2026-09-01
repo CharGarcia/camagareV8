@@ -56,7 +56,7 @@ class MesaRepository extends BaseRepository
         $sqlRows = "SELECT m.id, m.nombre, m.estado, m.ubicacion, m.permite_factura, m.permite_recibo, m.created_at
                     FROM {$this->table} m
                     {$whereSql}
-                    ORDER BY {$col} {$dir}";
+                    ORDER BY {$col} {$dir}, m.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

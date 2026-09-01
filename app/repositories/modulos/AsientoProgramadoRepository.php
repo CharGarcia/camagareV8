@@ -67,7 +67,7 @@ class AsientoProgramadoRepository extends BaseRepository
                     LEFT JOIN clientes c ON c.id = ap.id_referencia AND ap.tipo_referencia = 'cliente'
                     LEFT JOIN proveedores p ON p.id = ap.id_referencia AND ap.tipo_referencia = 'proveedor'
                     {$whereSql}
-                    ORDER BY {$orderExpr} {$ordenDir}";
+                    ORDER BY {$orderExpr} {$ordenDir}, ap.id DESC";
 
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

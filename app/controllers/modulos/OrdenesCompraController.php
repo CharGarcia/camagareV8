@@ -93,7 +93,9 @@ class OrdenesCompraController extends BaseModuloController
         // "Serie" del buscador — a diferencia de $puntosEmision (solo sirve para
         // elegir la serie de una orden NUEVA), esto incluye series de cualquier
         // establecimiento y aunque el punto ya no tenga secuencial configurado.
-        $seriesFiltro = (new OrdenCompraRepository())->getSeriesDistintas($idEmpresa);
+        $repoVista    = new OrdenCompraRepository();
+        $seriesFiltro = $repoVista->getSeriesDistintas($idEmpresa);
+        $tarifasIva   = $repoVista->getTarifasIva();
 
         $this->viewWithLayout('layouts.main', 'modulos.ordenes-compra.index', [
             'titulo'          => 'Órdenes de Compra',
@@ -111,6 +113,7 @@ class OrdenesCompraController extends BaseModuloController
             'vistaConfig'     => $prefsVista,
             'establecimientos'=> $establecimientos,
             'puntosEmision'   => $puntosEmision,
+            'tarifasIva'      => $tarifasIva,
             'fullWidth'       => true,
         ]);
     }
@@ -256,11 +259,15 @@ class OrdenesCompraController extends BaseModuloController
             $db  = Database::getConnection();
             // Precio unitario sugerido = precio de COSTO del producto (esto es una compra al
             // proveedor, no una venta): usar precio_base aquí mostraría el precio de venta.
-            $sql = "SELECT id, codigo, nombre AS descripcion, costo_producto AS precio_unitario
-                    FROM productos
-                    WHERE id_empresa = :id_empresa AND eliminado = false AND status = 1
-                      AND (nombre ILIKE :b OR codigo ILIKE :b)
-                    ORDER BY nombre ASC
+            // Se devuelve también la tarifa de IVA del producto para precargar el selector
+            // de IVA de la línea al elegirlo en el detalle.
+            $sql = "SELECT p.id, p.codigo, p.nombre AS descripcion, p.costo_producto AS precio_unitario,
+                           ti.codigo AS codigo_iva, COALESCE(ti.porcentaje_iva, 0) AS porcentaje_iva
+                    FROM productos p
+                    LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+                    WHERE p.id_empresa = :id_empresa AND p.eliminado = false AND p.status = 1
+                      AND (p.nombre ILIKE :b OR p.codigo ILIKE :b)
+                    ORDER BY p.nombre ASC
                     LIMIT 20";
             $st = $db->prepare($sql);
             $st->execute([':id_empresa' => $idEmpresa, ':b' => '%' . $buscar . '%']);
@@ -602,11 +609,11 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             $sheet->setTitle('Orden de Compra');
 
             $sheet->setCellValue('A1', strtoupper((string) ($empresa['nombre'] ?? '')));
-            $sheet->mergeCells('A1:E1');
+            $sheet->mergeCells('A1:G1');
             $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
             $sheet->setCellValue('A2', 'ORDEN DE COMPRA N.° ' . ($numero !== '' ? $numero : '—'));
-            $sheet->mergeCells('A2:E2');
+            $sheet->mergeCells('A2:G2');
             $sheet->getStyle('A2')->getFont()->setBold(true);
 
             $fecha = !empty($cabecera['fecha_orden']) ? date('d-m-Y', strtotime((string) $cabecera['fecha_orden'])) : '';
@@ -616,49 +623,73 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             $sheet->setCellValue('A6', 'Estado: ' . ucfirst((string) ($cabecera['estado'] ?? '')));
 
             $headerRow = 8;
-            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unitario', 'Subtotal'];
+            // En el Excel la nota sí va como columna propia (a diferencia del PDF, donde se
+            // imprime bajo la descripción): es una hoja de cálculo y conviene poder filtrarla.
+            $headers = ['Código', 'Descripción', 'Cantidad', 'P. Unitario', 'IVA', 'Subtotal', 'Notas'];
             $col = 'A';
             foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
             $headerStyle = [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
             ];
-            $sheet->getStyle('A' . $headerRow . ':E' . $headerRow)->applyFromArray($headerStyle);
+            $sheet->getStyle('A' . $headerRow . ':G' . $headerRow)->applyFromArray($headerStyle);
 
-            $row   = $headerRow + 1;
-            $total = 0.0;
+            $row = $headerRow + 1;
             foreach ($detalles as $d) {
                 $cantidad = (float) ($d['cantidad'] ?? 0);
                 $precio   = (float) ($d['precio_unitario'] ?? 0);
-                $subtotal = $cantidad * $precio;
-                $total   += $subtotal;
+                $subtotal = round($cantidad * $precio, 2);
 
                 $sheet->setCellValueExplicit('A' . $row, (string) ($d['codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('B' . $row, (string) ($d['descripcion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValue('C' . $row, $cantidad);
                 $sheet->setCellValue('D' . $row, $precio);
-                $sheet->setCellValue('E' . $row, $subtotal);
+                $sheet->setCellValue('E' . $row, ((float) ($d['porcentaje_iva'] ?? 0)) / 100);
+                $sheet->setCellValue('F' . $row, $subtotal);
+                $sheet->setCellValueExplicit('G' . $row, (string) ($d['notas'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $row++;
             }
             if ($row > $headerRow + 1) {
-                $sheet->getStyle('C' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('C' . ($headerRow + 1) . ':D' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('E' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('0%');
+                $sheet->getStyle('F' . ($headerRow + 1) . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
             }
 
-            $sheet->setCellValue('D' . $row, 'TOTAL');
-            $sheet->getStyle('D' . $row)->getFont()->setBold(true);
-            $sheet->setCellValue('E' . $row, $total);
-            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('E' . $row)->getFont()->setBold(true);
-            $row++;
+            // Mismos totales (y mismo redondeo) que el PDF y el modal.
+            $t     = \App\Services\modulos\OrdenCompraService::calcularTotales($detalles);
+            $lineas = [['SUBTOTAL', $t['subtotal'], false]];
+            foreach ($t['grupos'] as $g) {
+                $lineas[] = ['Subtotal ' . $g['label'], $g['base'], false];
+            }
+            foreach ($t['grupos'] as $g) {
+                if ($g['porcentaje'] > 0) {
+                    $lineas[] = ['IVA ' . rtrim(rtrim(number_format($g['porcentaje'], 2, '.', ''), '0'), '.') . '%', $g['iva'], false];
+                }
+            }
+            if ($t['total_iva'] <= 0) {
+                $lineas[] = ['IVA', 0.0, false];
+            }
+            $lineas[] = ['TOTAL', $t['total'], true];
+
+            foreach ($lineas as [$etiqueta, $valor, $destacada]) {
+                $sheet->setCellValue('E' . $row, $etiqueta);
+                $sheet->getStyle('E' . $row)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
+                $sheet->setCellValue('F' . $row, $valor);
+                $sheet->getStyle('F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                if ($destacada) {
+                    $sheet->getStyle('E' . $row . ':F' . $row)->getFont()->setBold(true);
+                }
+                $row++;
+            }
 
             $obs = trim((string) ($cabecera['observaciones'] ?? ''));
             if ($obs !== '') {
                 $row++;
                 $sheet->setCellValue('A' . $row, 'Observaciones: ' . $obs);
-                $sheet->mergeCells('A' . $row . ':E' . $row);
+                $sheet->mergeCells('A' . $row . ':G' . $row);
             }
 
-            foreach (['A', 'B', 'C', 'D', 'E'] as $c) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G'] as $c) {
                 $sheet->getColumnDimension($c)->setAutoSize(true);
             }
 

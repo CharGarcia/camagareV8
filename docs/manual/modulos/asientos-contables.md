@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera
-version: 1.6
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad
+version: 1.8
 orden: 20
 estado: activo
 ---
@@ -89,10 +89,74 @@ Se aceptan diferencias de hasta **3 centavos**, que son redondeo.
 ## Asientos automáticos frente a asientos de diario
 
 - **Automáticos**: nacen de un documento. Si el documento se modifica, el asiento
-  se regenera; si se anula, el asiento se anula. **No conviene editarlos a mano**:
-  el sistema los vuelve a generar desde el documento.
-- **De diario**: los escribe el contador. Son los únicos que se mantienen tal
-  cual se escribieron.
+  se regenera; si se anula, el asiento se anula.
+- **De diario**: los escribe el contador. No dependen de ningún documento.
+
+**Un asiento automático que usted corrija a mano deja de regenerarse.** Desde el
+momento en que lo guarda —da igual si lo hizo aquí o en la pestaña *Asiento
+contable* del documento— el sistema lo marca como editado a mano y ya no lo
+vuelve a armar cuando el documento se guarde otra vez: manda su corrección. Para
+devolverlo al automático, use **Restaurar automático** en la pestaña del
+documento (ver la sección siguiente).
+
+## Editar el asiento desde el propio documento
+
+Los modales de documento (compras, facturas y recibos de venta, notas de crédito
+y débito, ingresos, egresos, liquidaciones de compra, retenciones, importaciones,
+traspasos, factura de reembolso, consignaciones de venta, retornos y cambios de
+producto) tienen la pestaña **Asiento contable**, y desde ahí se corrige el
+asiento sin pasar por el Libro Diario.
+
+**Quién la ve y quién la puede usar** — la pestaña depende del permiso sobre este
+módulo (*Contabilidad → Asientos Contables*):
+
+| Permiso | Qué ocurre |
+| --- | --- |
+| Sin *Ver* | La pestaña **no aparece** en el modal |
+| Solo *Ver* | La pestaña se muestra en **solo lectura** |
+| *Ver* + *Modificar* | Se puede editar el asiento y guardarlo desde la pestaña |
+
+**Cómo se usa**
+
+1. Abra el documento y vaya a la pestaña **Asiento contable**.
+2. Corrija lo que haga falta: cambiar la cuenta (se busca escribiendo código o
+   nombre), el Debe o el Haber, la referencia, agregar o quitar líneas.
+3. Pulse **Guardar asiento**.
+
+**Lo que se comprueba al guardar** es exactamente lo mismo que en el Libro
+Diario: que el Debe sea igual al Haber, que ninguna línea quede sin cuenta, que
+el período contable no esté cerrado y que **el asiento siga cuadrando con el
+documento** (ver *El asiento de un documento debe reflejar su importe*). El pie
+de la pestaña muestra en vivo el importe del documento y si el asiento lo
+refleja; si al guardar hay diferencia, se avisa y usted decide.
+
+**Cuándo no se puede editar**
+
+- Mientras el documento **no tenga asiento**: la pestaña muestra la vista previa
+  de lo que armarán las reglas contables, y no hay nada que guardar todavía. El
+  asiento se crea al guardar el documento o al generar la contabilidad.
+- En un asiento **anulado** que no sea de tipo Diario.
+
+**Excepción: consignaciones de venta, retornos y cambios de producto.** En estos
+tres, el asiento (que va **a costo**) solo se registra si todas sus líneas tienen
+cuenta; si a la configuración contable le falta alguna, el documento se guardaba
+sin asiento y no había forma de arreglarlo desde la pantalla. Por eso ahí la
+**vista previa sí es editable**: complete la cuenta que falte y el asiento se
+registra al pulsar **Guardar** en el modal del documento — no hay botón *Guardar
+asiento* porque todavía no existe un asiento que actualizar. Una vez registrado,
+la pestaña funciona como en el resto: se corrige y se guarda desde ahí mismo.
+
+**Restaurar automático** — el botón aparece en cuanto el asiento está marcado
+como editado a mano. Descarta las correcciones, vuelve a armar el asiento con la
+configuración contable de la empresa y deja el documento otra vez bajo el
+automático. La operación queda registrada en la auditoría del sistema.
+
+**Roles de pago** — su pestaña *Asiento contable* (dentro del detalle de cada
+empleado) **es de solo lectura**, y también respeta el permiso de ver Asientos
+Contables. No se edita ahí porque lo que muestra es el asiento **calculado de ese
+empleado**, no un asiento registrado: según cómo se contabilice el rol, el
+asiento real puede ser uno solo para toda la nómina o uno por empleado. El
+asiento del rol se corrige desde el Libro Diario.
 
 ## Cada módulo genera lo suyo al abrirlo
 
@@ -163,11 +227,24 @@ tienen un documento individual con tercero que mostrar.
 - **"El asiento no tiene ninguna línea con la cuenta de cartera configurada"**:
   falta la línea de la cuenta por cobrar/pagar del documento. Agréguela y
   vuelva a guardar.
-- **Modifiqué un asiento automático y volvió a cambiar**: es el comportamiento
-  esperado; corrija el documento de origen, no el asiento.
+- **No veo la pestaña "Asiento contable" en el documento**: no tiene permiso de
+  *Ver* sobre Asientos Contables. Se asigna en `/config/permisos-modulos`.
+- **Veo la pestaña pero no puedo escribir en ella**: tiene *Ver* pero no
+  *Modificar* sobre Asientos Contables.
+- **Corregí el asiento y al reguardar el documento volvió a cambiar**: ya no
+  ocurre. Desde que un asiento se guarda a mano queda marcado y el sistema no lo
+  regenera. Si lo que quiere es justo lo contrario, use **Restaurar automático**.
+- **"Aún no se ha generado el asiento contable"**: el documento todavía no está
+  contabilizado. Guárdelo (o genere la contabilidad) y vuelva a la pestaña.
 
 ## Historial de cambios
 
+- **1.8** — La pestaña llega también a consignaciones de venta, retornos y cambios de producto: ahí la vista previa se puede completar a mano para registrar el asiento junto con el documento cuando falta alguna cuenta. En roles de pago la pestaña sigue siendo de solo lectura (muestra el asiento calculado del empleado, no uno registrado).
+- **1.7** — El asiento se puede corregir y guardar desde la pestaña *Asiento
+  contable* del propio documento, con las mismas validaciones del Libro Diario.
+  La pestaña solo aparece con permiso de ver Asientos Contables y solo se edita
+  con permiso de modificar. Un asiento corregido a mano deja de regenerarse al
+  reguardar el documento; se vuelve al automático con **Restaurar automático**.
 - **1.6** — El aviso de cuadre contra el documento se actualiza en vivo al editar
   (montos, cuenta de la línea o líneas quitadas) y también se muestra al abrir el
   asiento de un documento que todavía no se ha contabilizado.

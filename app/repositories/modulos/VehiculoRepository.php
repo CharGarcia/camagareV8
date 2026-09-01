@@ -63,7 +63,7 @@ class VehiculoRepository extends BaseRepository
         $sqlRows = "SELECT v.id, v.marca, v.placa, v.chasis, v.anio, v.propietario, v.estado, v.correo, v.telefono, v.created_at
                     FROM {$this->table} v
                     {$whereSql}
-                    ORDER BY {$col} {$dir}";
+                    ORDER BY {$col} {$dir}, v.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

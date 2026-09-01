@@ -150,7 +150,7 @@ class AprobacionesRepository extends BaseRepository
                        t.codigo, t.nombre, t.descripcion, t.modulo_ruta,
                        " . self::SQL_APROBADORES . " AS aprobadores_nombres
                 {$from}
-                ORDER BY {$orderExpr} {$dir}, t.nombre ASC
+                ORDER BY {$orderExpr} {$dir}, t.nombre ASC, t.id DESC
                 {$limitSql}";
 
         $st = $this->db->prepare($sql);

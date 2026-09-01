@@ -62,7 +62,7 @@ class FirmaSolicitudRepository extends BaseRepository
                 FROM {$this->table} s
                 LEFT JOIN firmas_electronicas f ON f.id = s.id_firma_generada
                 WHERE s.id_empresa = :ie AND s.eliminado = false
-                ORDER BY s.created_at DESC
+                ORDER BY s.created_at DESC, s.id DESC
                 LIMIT :lim OFFSET :off";
         $st = $this->db->prepare($sql);
         $st->bindValue(':ie',  $idEmpresa, PDO::PARAM_INT);

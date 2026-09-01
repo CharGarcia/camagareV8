@@ -47,7 +47,7 @@ class AutomatizacionesRepository extends BaseRepository
             LEFT JOIN empresa_establecimiento e ON e.id = a.id_establecimiento
             WHERE a.id_empresa = :id_empresa AND a.eliminado = false
             {$whereFiltro}
-            ORDER BY a.{$ordenCol} {$ordenDir}
+            ORDER BY a.{$ordenCol} {$ordenDir}, a.id DESC
             " . ($perPage > 0 ? "LIMIT :limit OFFSET :offset" : "") . "
         ";
 
@@ -229,7 +229,7 @@ class AutomatizacionesRepository extends BaseRepository
         $stmt   = $this->db->prepare("
             SELECT * FROM automatizaciones_log
             WHERE id_automatizacion = :id
-            ORDER BY iniciado_en DESC
+            ORDER BY iniciado_en DESC, id DESC
             LIMIT :limit OFFSET :offset
         ");
         $stmt->bindValue(':id',     $idAutomatizacion, \PDO::PARAM_INT);

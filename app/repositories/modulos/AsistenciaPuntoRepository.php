@@ -54,7 +54,7 @@ class AsistenciaPuntoRepository extends BaseRepository
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
 
-        $sql = "SELECT p.* {$from} ORDER BY p.{$ordenCol} {$ordenDir}";
+        $sql = "SELECT p.* {$from} ORDER BY p.{$ordenCol} {$ordenDir}, p.id DESC";
         if ($perPage > 0) {
             $offset = ($page - 1) * $perPage;
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;

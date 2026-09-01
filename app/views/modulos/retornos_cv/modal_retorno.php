@@ -32,9 +32,11 @@
                     <li class="nav-item" role="presentation">
                         <a class="nav-link active" id="ret-tab-general-btn" data-bs-toggle="tab" href="#ret-tab-general" role="tab"><i class="bi bi-info-circle me-1"></i> General</a>
                     </li>
+                    <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                     <li class="nav-item" role="presentation">
                         <a class="nav-link" id="ret-tab-asiento-btn" data-bs-toggle="tab" href="#ret-tab-asiento" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
                     </li>
+                    <?php endif; ?>
                 </ul>
                 <div class="tab-content" id="tabsRetornoContent">
                 <div class="tab-pane fade show active" id="ret-tab-general" role="tabpanel">
@@ -128,39 +130,15 @@
                 </div><!-- /ret-tab-general -->
 
                 <!-- Pestaña Asiento Contable (inverso a la consignación) -->
+                <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                 <div class="tab-pane fade" id="ret-tab-asiento" role="tabpanel">
                     <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
                         <i class="bi bi-info-circle text-primary"></i>
                         <span>Reclasificación <strong>a costo</strong>, inversa a la consignación: <em>Inventario</em> contra <em>Mercadería en consignación</em> (la mercadería vuelve del poder de terceros).</span>
                     </div>
-                    <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                        <div class="table-responsive" style="max-height: 320px;">
-                            <table class="table table-sm mb-0 text-nowrap">
-                                <thead>
-                                    <tr class="table-light border-bottom">
-                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width:45%;">Cuenta Contable</th>
-                                        <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Débito / Debe</th>
-                                        <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Crédito / Haber</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width:15%;">Referencia</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="ret-tbody-asiento">
-                                    <tr><td colspan="4" class="text-center py-4 text-muted">Guarde el retorno para generar el asiento (se calcula a costo).</td></tr>
-                                </tbody>
-                                <tfoot class="bg-light fw-bold border-top">
-                                    <tr>
-                                        <td class="text-end py-2">Totales:</td>
-                                        <td class="text-end pe-3 py-2 text-primary" id="ret-asiento-total-debe">0.00</td>
-                                        <td class="text-end pe-3 py-2 text-primary" id="ret-asiento-total-haber">0.00</td>
-                                        <td class="py-2">
-                                            <span id="ret-asiento-badge-cuadre" class="badge bg-secondary bg-opacity-10 text-secondary border px-2">—</span>
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
+                    <?php $prefijo = 'ret'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                 </div><!-- /ret-tab-asiento -->
+                <?php endif; ?>
                 </div><!-- /tabsRetornoContent -->
             </div>
 
@@ -572,7 +550,11 @@
             punto_emision: (document.getElementById('ret_serie').value.split('-')[1] || ''),
             motivo: document.getElementById('ret_motivo').value,
             observaciones: document.getElementById('ret_observaciones').value,
-            detalles
+            detalles,
+            // Líneas del asiento completadas en la pestaña (vista previa). RetornoCvService las
+            // usa solo si vienen completas; si no, arma el asiento con la sugerencia automática.
+            asiento_detalles: (typeof window.retCapturarDetallesAsiento === 'function')
+                ? window.retCapturarDetallesAsiento() : []
         };
 
         const btn = document.getElementById('btnGuardarRetorno');
@@ -672,62 +654,48 @@
     };
 
     // ─── Pestaña Asiento Contable ─────────────────────────────────────────────
+    // Componente compartido: public/js/modulos/asiento_contable_tab.js.
+    //  - Sin asiento todavía → vista previa EDITABLE: las cuentas que falten se completan aquí
+    //    y viajan como `asiento_detalles` al guardar el retorno (RetornoCvService ya las usa;
+    //    si quedan incompletas cae a la sugerencia automática, como antes).
+    //  - Con asiento registrado → se corrige y se guarda desde la pestaña contra el módulo de
+    //    Asientos Contables, y queda marcado para que el documento no lo regenere.
+    let _retAsientoTab = null;
+    function retAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('ret-asiento-tbody')) return null;
+        if (!_retAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _retAsientoTab = window.crearAsientoTab({
+                prefijo: 'ret',
+                moduloOrigen: 'retorno_cv',
+                previewEditable: true,
+                previewUrl: `${RUTA}/getAsientoSugeridoAjax`,
+                cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
+            });
+        }
+        return _retAsientoTab;
+    }
+
     function retResetTabs() {
         try { new bootstrap.Tab(document.getElementById('ret-tab-general-btn')).show(); } catch (e) {}
-        document.getElementById('ret-tbody-asiento').innerHTML =
-            '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde el retorno para generar el asiento (se calcula a costo).</td></tr>';
-        document.getElementById('ret-asiento-total-debe').textContent = '0.00';
-        document.getElementById('ret-asiento-total-haber').textContent = '0.00';
-        const badge = document.getElementById('ret-asiento-badge-cuadre');
-        badge.textContent = '—'; badge.className = 'badge bg-secondary bg-opacity-10 text-secondary border px-2';
+        if (_retAsientoTab) _retAsientoTab.limpiar();
     }
 
-    async function retCargarAsiento() {
-        const id = document.getElementById('ret_id').value;
-        const tbody = document.getElementById('ret-tbody-asiento');
-        if (!id) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Guarde el retorno para generar el asiento (se calcula a costo).</td></tr>';
-            return;
-        }
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando asiento contable...</td></tr>';
-        try {
-            const res = await fetch(`${RUTA}/getAsientoSugeridoAjax?id=${id}`);
-            const data = await res.json();
-            const dets = (data.ok && data.detalles) ? data.detalles : [];
-            if (!dets.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Sin asiento: el retorno no tiene costo registrado (kardex de la consignación a 0) o no está Emitido.</td></tr>';
-                document.getElementById('ret-asiento-total-debe').textContent = '0.00';
-                document.getElementById('ret-asiento-total-haber').textContent = '0.00';
-                const badge = document.getElementById('ret-asiento-badge-cuadre');
-                badge.textContent = '—'; badge.className = 'badge bg-secondary bg-opacity-10 text-secondary border px-2';
-                return;
-            }
-            let tDebe = 0, tHaber = 0;
-            tbody.innerHTML = dets.map(d => {
-                tDebe += num(d.debe); tHaber += num(d.haber);
-                const cuenta = (d.id_cuenta_contable > 0)
-                    ? `${d.cuenta_codigo ? d.cuenta_codigo + ' · ' : ''}${d.cuenta_nombre || ''}`
-                    : '<span class="text-danger">— Cuenta sin configurar —</span>';
-                return `<tr>
-                    <td class="ps-3 small">${cuenta}</td>
-                    <td class="text-end pe-3 small">${num(d.debe) ? fmt(d.debe, 2) : ''}</td>
-                    <td class="text-end pe-3 small">${num(d.haber) ? fmt(d.haber, 2) : ''}</td>
-                    <td class="small text-muted">${d.referencia_detalle || ''}</td>
-                </tr>`;
-            }).join('');
-            document.getElementById('ret-asiento-total-debe').textContent = fmt(tDebe, 2);
-            document.getElementById('ret-asiento-total-haber').textContent = fmt(tHaber, 2);
-            const cuadrado = Math.abs(tDebe - tHaber) < 0.005;
-            const badge = document.getElementById('ret-asiento-badge-cuadre');
-            badge.textContent = cuadrado ? 'Cuadrado' : 'Descuadrado';
-            badge.className = 'badge px-2 ' + (cuadrado ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25' : 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar el asiento contable.</td></tr>';
-        }
+    function retCargarAsiento() {
+        const tab = retAsientoTab();
+        if (tab) tab.cargar(document.getElementById('ret_id').value || 0);
     }
+
+    /** Líneas del asiento que viajan con el retorno al guardarlo (vista previa completada). */
+    window.retCapturarDetallesAsiento = function () {
+        const tab = _retAsientoTab;
+        return tab ? tab.capturar() : [];
+    };
 
     // Cargar el asiento al mostrar la pestaña.
-    document.getElementById('ret-tab-asiento-btn').addEventListener('shown.bs.tab', retCargarAsiento);
+    // La pestaña solo existe con acceso a Contabilidad → Asientos Contables.
+    document.getElementById('ret-tab-asiento-btn')?.addEventListener('shown.bs.tab', retCargarAsiento);
 
     // Exponer para reset al abrir el modal.
     window.__retResetTabs = retResetTabs;

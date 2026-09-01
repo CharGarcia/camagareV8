@@ -96,7 +96,7 @@
         document.getElementById('btnPdfTraspaso').classList.add('d-none');
         document.getElementById('btnExcelTraspaso').classList.add('d-none');
         setCamposHabilitados(true);
-        document.getElementById('trp-asiento-contenido').innerHTML = '<p class="text-muted small mb-0">El asiento contable se genera automáticamente al guardar el traspaso.</p>';
+        if (_trpAsientoTab) _trpAsientoTab.limpiar();
         window.TRP_onCambioFormas();
     }
 
@@ -238,29 +238,29 @@
     };
 
     // ── Asiento contable (pestaña) ────────────────────────────────────────────
+    // ── Asiento contable (pestaña) ────────────────────────────────────────────
+    // Componente compartido (public/js/modulos/asiento_contable_tab.js): muestra el asiento del
+    // traspaso y —con permiso de actualizar en Asientos Contables— permite corregirlo y guardarlo.
+    let _trpAsientoTab = null;
+    function trpAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('trp-asiento-tbody')) return null;
+        if (!_trpAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _trpAsientoTab = window.crearAsientoTab({
+                prefijo: 'trp',
+                moduloOrigen: 'traspaso',
+                cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
+            });
+        }
+        return _trpAsientoTab;
+    }
 
     function cargarAsientoTraspaso(id) {
-        const cont = document.getElementById('trp-asiento-contenido');
-        cont.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asiento…</div>';
-        fetch(`${TRP_URL}/getAsientoContableAjax?id=${id}`).then(r => r.json()).then(res => {
-            if (!res.ok || !res.asiento || !(res.asiento.detalles || []).length) {
-                cont.innerHTML = '<p class="text-muted small mb-0"><i class="bi bi-exclamation-circle me-1"></i>Aún no se ha generado el asiento contable. Verifique que ambas formas de pago tengan cuenta contable configurada.</p>';
-                return;
-            }
-            const a = res.asiento;
-            let html = '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Cuenta</th><th class="text-end">Debe</th><th class="text-end">Haber</th></tr></thead><tbody>';
-            (a.detalles || []).forEach(d => {
-                const debe = parseFloat(d.debe || 0), haber = parseFloat(d.haber || 0);
-                html += `<tr>
-                    <td><code class="text-primary">${d.codigo_cuenta || ''}</code> ${d.nombre_cuenta || ''}</td>
-                    <td class="text-end">${debe > 0 ? debe.toFixed(2) : ''}</td>
-                    <td class="text-end">${haber > 0 ? haber.toFixed(2) : ''}</td>
-                </tr>`;
-            });
-            html += '</tbody></table>';
-            cont.innerHTML = html;
-        }).catch(() => { cont.innerHTML = '<p class="text-danger small mb-0">Error al cargar el asiento.</p>'; });
+        const tab = trpAsientoTab();
+        if (tab) tab.cargar(id);
     }
+
 
     // ── Guardar / anular ──────────────────────────────────────────────────────
 

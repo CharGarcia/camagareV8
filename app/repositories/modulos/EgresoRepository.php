@@ -125,7 +125,7 @@ class EgresoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON e.created_by = u.id
                 LEFT JOIN empresa_opciones_ingreso_egreso ec ON e.id_egreso_concepto = ec.id
                 $where
-                ORDER BY $ordenExpr $ordenDir";
+                ORDER BY $ordenExpr $ordenDir, e.id DESC";
 
         if ($perPage > 0) {
             $sql .= " LIMIT $perPage OFFSET $offset";
@@ -613,7 +613,7 @@ class EgresoRepository extends BaseRepository
             \App\Helpers\SecuencialFormato::normalizar($secuencial), $idEmpresa])->fetchColumn() > 0;
     }
 
-    public function buscarDocumentosPendientesEgreso(int $idEmpresa, string $q = '', string $tipo = 'COMPRA', ?int $excluirEgresoId = null, ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    public function buscarDocumentosPendientesEgreso(int $idEmpresa, string $q = '', string $tipo = 'COMPRA', ?int $excluirEgresoId = null, ?string $fechaDesde = null, ?string $fechaHasta = null, ?int $soloId = null, ?string $soloTipoDocBd = null): array
     {
         $params     = [':id_empresa' => $idEmpresa];
         $excluirSql = '';
@@ -637,6 +637,26 @@ class EgresoRepository extends BaseRepository
             }
             return $sql;
         };
+
+        // Filtro por un único documento (usado para recalcular su saldo real al
+        // guardar un egreso — ver getSaldoPendienteDocumento): acota la búsqueda a
+        // UN solo id en vez de traer hasta 300 filas para buscar una.
+        $filtroSoloId = function (string $col) use ($soloId, &$params): string {
+            if ($soloId === null) {
+                return '';
+            }
+            $params[':solo_id'] = $soloId;
+            return " AND {$col} = :solo_id";
+        };
+
+        // Solo aplica dentro del envoltorio de la rama ROL (única con varios
+        // tipo_doc_bd mezclados por UNION); en COMPRA/LIQUIDACION el tipo ya
+        // queda fijo por la rama elegida y no hace falta filtrarlo aparte.
+        $filtroSoloTipoDocBd = '';
+        if ($soloTipoDocBd !== null) {
+            $filtroSoloTipoDocBd = " AND u.tipo_doc_bd = :solo_tipo_doc_bd";
+            $params[':solo_tipo_doc_bd'] = $soloTipoDocBd;
+        }
 
         if ($tipo === 'COMPRA') {
             $filtroBusq = '';
@@ -725,6 +745,7 @@ class EgresoRepository extends BaseRepository
                       AND (cb.importe_total + COALESCE(cb.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                       $filtroBusq
                       {$filtroFecha('cb.fecha_emision')}
+                      {$filtroSoloId('cb.id')}
                     ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
                     LIMIT 301";
         } elseif ($tipo === 'ROL') {
@@ -894,6 +915,8 @@ class EgresoRepository extends BaseRepository
                     ) u
                     WHERE TRUE
                       {$filtroFecha('u.fecha_emision')}
+                      {$filtroSoloId('u.id')}
+                      $filtroSoloTipoDocBd
                     ORDER BY proveedor_nombre ASC, numero_documento ASC
                     LIMIT 301";
         } else {
@@ -972,6 +995,7 @@ class EgresoRepository extends BaseRepository
                       AND (l.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rl.total_retenido, 0)) > 0.01
                       $filtroBusq
                       {$filtroFecha('l.fecha_emision')}
+                      {$filtroSoloId('l.id')}
                     ORDER BY prov.razon_social ASC, l.fecha_emision ASC
                     LIMIT 301";
         }
@@ -979,6 +1003,48 @@ class EgresoRepository extends BaseRepository
         $rows    = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
         $hasMore = count($rows) > 300;
         return ['data' => array_slice($rows, 0, 300), 'has_more' => $hasMore];
+    }
+
+    /**
+     * Bloqueo de concurrencia (CLAUDE.md §8) para el documento que un egreso está
+     * a punto de pagar: se libera solo al COMMIT/ROLLBACK de la transacción en
+     * curso. Llamar ANTES de leer el saldo con getSaldoPendienteDocumento(), y
+     * mantener la transacción abierta hasta el INSERT del detalle.
+     */
+    public function lockDocumentoPago(string $tipoDocumento, int $idReferencia, int $idEmpresa): void
+    {
+        $this->query(
+            "SELECT pg_advisory_xact_lock(hashtext('egreso_doc:' || :id_empresa || ':' || :tipo || ':' || :id))",
+            [':id_empresa' => $idEmpresa, ':tipo' => $tipoDocumento, ':id' => $idReferencia]
+        );
+    }
+
+    /**
+     * Saldo pendiente REAL de un documento específico, recalculado en el momento
+     * (no confiar en el "saldo_anterior" que envía el navegador: pudo haberse
+     * pagado desde otro egreso mientras el modal seguía abierto). Reutiliza el
+     * mismo query que el buscador de documentos pendientes, acotado a un solo id,
+     * para no duplicar las fórmulas de retenciones/NC/ND por tipo de documento.
+     * Devuelve 0.0 si el documento ya no tiene saldo pendiente (o no existe).
+     */
+    public function getSaldoPendienteDocumento(string $tipoDocumento, int $idReferencia, int $idEmpresa, ?int $excluirEgresoId = null): float
+    {
+        $categoria = match ($tipoDocumento) {
+            'COMPRA'      => 'COMPRA',
+            'LIQUIDACION' => 'LIQUIDACION',
+            default       => 'ROL', // ROL, ANTICIPO, PRESTAMO7/8/9, DECIMO_CUARTO, DECIMO_TERCERO
+        };
+        $soloTipo = $categoria === 'ROL' ? $tipoDocumento : null;
+
+        $resultado = $this->buscarDocumentosPendientesEgreso(
+            $idEmpresa, '', $categoria, $excluirEgresoId, null, null, $idReferencia, $soloTipo
+        );
+        foreach ($resultado['data'] as $row) {
+            if ($row['tipo_doc_bd'] === $tipoDocumento && (int) $row['id'] === $idReferencia) {
+                return (float) $row['saldo_pendiente'];
+            }
+        }
+        return 0.0;
     }
 
     public function getUltimoNumeroCheque(int $idFormaPago): ?string

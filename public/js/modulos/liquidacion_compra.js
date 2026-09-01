@@ -90,7 +90,32 @@
                 window.LC_cargarRetencionesCompra();
             });
         }
+        // Pestaña «Asiento contable»: solo existe con acceso a Contabilidad → Asientos Contables.
+        const tabAsi = document.getElementById('tab-liq-asiento-btn');
+        if (tabAsi) {
+            tabAsi.addEventListener('shown.bs.tab', () => {
+                const tab = lcAsientoTab();
+                if (tab) tab.cargar(document.getElementById('liq-id')?.value || 0);
+            });
+        }
     });
+
+    // ── Pestaña Asiento contable ─────────────────────────────────────────────
+    // Componente compartido: muestra el asiento de la liquidación y —con permiso de actualizar
+    // en Asientos Contables— permite corregirlo y guardarlo validando el cuadre vs. el documento.
+    let _lcAsientoTab = null;
+    function lcAsientoTab() {
+        if (!document.getElementById('liq-asiento-tbody')) return null;
+        if (!_lcAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _lcAsientoTab = window.crearAsientoTab({
+                prefijo: 'liq',
+                moduloOrigen: 'liquidacion_compra',
+                cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
+            });
+        }
+        return _lcAsientoTab;
+    }
 
 
     function initSortableHeaders() {

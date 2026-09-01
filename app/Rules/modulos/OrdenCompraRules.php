@@ -43,6 +43,15 @@ class OrdenCompraRules
             if ((float)($item['precio_unitario'] ?? -1) < 0) {
                 throw new \InvalidArgumentException("Ítem #{$fila}: el precio unitario no puede ser negativo.");
             }
+            $pctIva = (float)($item['porcentaje_iva'] ?? 0);
+            if ($pctIva < 0 || $pctIva > 100) {
+                throw new \InvalidArgumentException("Ítem #{$fila}: la tarifa de IVA no es válida.");
+            }
+            // Mismo tope que el maxlength del input y que la columna notas VARCHAR(200):
+            // sin esto una nota más larga aborta el guardado con un error de base de datos.
+            if (mb_strlen(trim((string)($item['notas'] ?? ''))) > 200) {
+                throw new \InvalidArgumentException("Ítem #{$fila}: la nota no puede superar los 200 caracteres.");
+            }
         }
     }
 

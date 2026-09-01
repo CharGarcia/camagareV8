@@ -80,7 +80,7 @@ class FirmaElectronicaRepository extends BaseRepository
                     LEFT JOIN ciudad          c ON c.codigo = f.cod_ciudad AND c.cod_prov = f.cod_prov
                     LEFT JOIN ventas_cabecera v ON v.id = f.id_factura
                     {$whereSql}
-                    ORDER BY {$col} {$dir}";
+                    ORDER BY {$col} {$dir}, f.id DESC";
         if ($perPage > 0) {
             $sqlRows .= ' LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
         }

@@ -28,11 +28,16 @@
                 <div class="d-flex align-items-center bg-light px-3 pt-2">
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1" id="tabsModalTraspaso" role="tablist">
                         <li class="nav-item"><a class="nav-link active py-2 small fw-bold" id="tab-trp-gen-btn" data-bs-toggle="tab" data-bs-target="#trp-tab-general" href="#trp-tab-general" role="tab"><i class="bi bi-card-text me-1"></i> General</a></li>
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                         <li class="nav-item"><a class="nav-link py-2 small fw-bold" id="tab-trp-cnt-btn" data-bs-toggle="tab" data-bs-target="#trp-tab-contable" href="#trp-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                        <?php endif; ?>
                     </ul>
                     <div class="ms-2">
                         <?php
-                        $pestanasConfig = ['trp-tab-contable' => 'Asiento contable'];
+                        // La pestaña del asiento solo es configurable si el usuario la ve.
+                        $pestanasConfig = \App\Helpers\AsientoPestana::puedeVer()
+                            ? ['trp-tab-contable' => 'Asiento contable']
+                            : [];
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'traspasos');
                         ?>
                     </div>
@@ -120,11 +125,11 @@
                         </div>
 
                         <!-- PESTAÑA ASIENTO CONTABLE -->
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                         <div class="tab-pane fade p-3" id="trp-tab-contable" role="tabpanel">
-                            <div id="trp-asiento-contenido">
-                                <p class="text-muted small mb-0">El asiento contable se genera automáticamente al guardar el traspaso.</p>
-                            </div>
+                            <?php $prefijo = 'trp'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </form>
             </div>

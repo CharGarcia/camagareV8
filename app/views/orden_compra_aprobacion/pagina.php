@@ -26,6 +26,9 @@ $fmtNum = static fn($v) => number_format((float) $v, 2, '.', ',');
         table.items th { text-align:left; background:#f1f5f9; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:.03em; padding:8px 10px; }
         table.items td { padding:8px 10px; border-top:1px solid #e2e8f0; }
         table.items td.num { text-align:right; }
+        table.items .item-nota { color:#64748b; font-size:11px; margin-top:3px; }
+        table.items tfoot td { color:#475569; }
+        table.items tfoot tr:first-child td { border-top:2px solid #cbd5e1; font-weight:600; color:#1e293b; }
         .total-box { margin: 18px 0 6px; background:#1f4e79; color:#fff; border-radius:10px; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; }
         .total-box .t-lbl { font-size:13px; opacity:.9; }
         .total-box .t-val { font-size:22px; font-weight:800; }
@@ -46,8 +49,10 @@ $fmtNum = static fn($v) => number_format((float) $v, 2, '.', ',');
     <div class="card">
         <?php if (($vista ?? '') === 'detalle'):
             $o = $orden;
-            $total = 0.0;
-            foreach (($detalle ?? []) as $d) { $total += (float) ($d['cantidad'] ?? 0) * (float) ($d['precio_unitario'] ?? 0); }
+            // Mismos totales (y mismo redondeo) que el PDF que recibió el proveedor.
+            $tot   = \App\Services\modulos\OrdenCompraService::calcularTotales($detalle ?? []);
+            $total = $tot['total'];
+            $pctTxt = static fn(float $p): string => rtrim(rtrim(number_format($p, 2, '.', ''), '0'), '.') ?: '0';
         ?>
             <div class="card-head">
                 <h1>Aprobación de Orden de Compra</h1>
@@ -63,20 +68,50 @@ $fmtNum = static fn($v) => number_format((float) $v, 2, '.', ',');
                 </div>
 
                 <table class="items">
-                    <thead><tr><th>Descripción</th><th class="num">Cant.</th><th class="num">P. Unit.</th><th class="num">Subtotal</th></tr></thead>
+                    <thead><tr><th>Descripción</th><th class="num">Cant.</th><th class="num">P. Unit.</th><th class="num">IVA</th><th class="num">Subtotal</th></tr></thead>
                     <tbody>
                         <?php foreach (($detalle ?? []) as $d):
                             $cant = (float) ($d['cantidad'] ?? 0);
                             $pu   = (float) ($d['precio_unitario'] ?? 0);
                         ?>
                         <tr>
-                            <td><?= $e($d['descripcion'] ?? '') ?></td>
+                            <td>
+                                <?= $e($d['descripcion'] ?? '') ?>
+                                <?php $nota = trim((string) ($d['notas'] ?? '')); if ($nota !== ''): ?>
+                                    <div class="item-nota">Nota: <?= $e($nota) ?></div>
+                                <?php endif; ?>
+                            </td>
                             <td class="num"><?= $e($fmtNum($cant)) ?></td>
                             <td class="num"><?= $e($fmtNum($pu)) ?></td>
-                            <td class="num"><?= $e($fmtNum($cant * $pu)) ?></td>
+                            <td class="num"><?= $e($pctTxt((float) ($d['porcentaje_iva'] ?? 0))) ?>%</td>
+                            <td class="num"><?= $e($fmtNum(round($cant * $pu, 2))) ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4" class="num">Subtotal</td>
+                            <td class="num"><?= $e($fmtNum($tot['subtotal'])) ?></td>
+                        </tr>
+                        <?php foreach ($tot['grupos'] as $g): ?>
+                        <tr>
+                            <td colspan="4" class="num">Subtotal <?= $e($g['label']) ?></td>
+                            <td class="num"><?= $e($fmtNum($g['base'])) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php foreach ($tot['grupos'] as $g): if ($g['porcentaje'] <= 0) continue; ?>
+                        <tr>
+                            <td colspan="4" class="num">IVA <?= $e($pctTxt((float) $g['porcentaje'])) ?>%</td>
+                            <td class="num"><?= $e($fmtNum($g['iva'])) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if ($tot['total_iva'] <= 0): ?>
+                        <tr>
+                            <td colspan="4" class="num">IVA</td>
+                            <td class="num"><?= $e($fmtNum(0)) ?></td>
+                        </tr>
+                        <?php endif; ?>
+                    </tfoot>
                 </table>
 
                 <div class="total-box">

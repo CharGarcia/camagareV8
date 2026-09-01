@@ -14,6 +14,19 @@ class OrdenCompraRepository extends BaseRepository
         'estado', 'observaciones', 'created_at'
     ];
 
+    /**
+     * Total de una orden CON IVA, calculado desde su detalle (la cabecera no guarda
+     * totales). Redondea igual que el cálculo en PHP de OrdenCompraService::calcularTotales()
+     * — base de cada línea a centavos y el IVA de cada línea sobre esa base ya redondeada —
+     * para que el importe del listado coincida al centavo con el del PDF y el modal.
+     * Usa el alias `oc` de la tabla ordenes_compra.
+     */
+    private const SQL_TOTAL_ORDEN = "(SELECT COALESCE(SUM(ROUND(d.cantidad * d.precio_unitario, 2)), 0)
+                                           + COALESCE(SUM(ROUND(ROUND(d.cantidad * d.precio_unitario, 2)
+                                                                * COALESCE(d.porcentaje_iva, 0) / 100, 2)), 0)
+                                      FROM ordenes_compra_detalle d
+                                      WHERE d.id_orden = oc.id)";
+
     public function __construct()
     {
         parent::__construct('ordenes_compra');
@@ -25,6 +38,14 @@ class OrdenCompraRepository extends BaseRepository
      * elegir la serie de una orden NUEVA), esto incluye series de cualquier
      * establecimiento y aunque el punto ya no tenga secuencial configurado.
      */
+    /** Catálogo de tarifas de IVA activas, para el selector de IVA de cada línea del detalle. */
+    public function getTarifasIva(): array
+    {
+        return $this->db->query(
+            "SELECT id, codigo, tarifa, porcentaje_iva FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getSeriesDistintas(int $idEmpresa): array
     {
         $sql = "SELECT DISTINCT establecimiento, punto_emision
@@ -88,8 +109,9 @@ class OrdenCompraRepository extends BaseRepository
             ],
             'fecha'    => [ 'fecha' => 'oc.fecha_orden', 'fecha_orden' => 'oc.fecha_orden' ],
             'numerico' => [
-                'monto' => 'oc.total',
-                'total' => 'oc.total',
+                // La cabecera no guarda el total: se calcula desde el detalle (con IVA).
+                'monto' => self::SQL_TOTAL_ORDEN,
+                'total' => self::SQL_TOTAL_ORDEN,
                 // Comparación numérica exacta: "298" encuentra "000000298" sin ceros
                 // a la izquierda, pero nunca hace substring (ver FacturaVentaRepository).
                 'secuencial' => 'oc.secuencial::numeric',
@@ -122,7 +144,7 @@ class OrdenCompraRepository extends BaseRepository
                     LEFT JOIN usuarios u_created ON u_created.id = oc.created_by
                     LEFT JOIN usuarios u_updated ON u_updated.id = oc.updated_by
                     {$whereSql}
-                    ORDER BY {$orderExpr} {$dir}
+                    ORDER BY {$orderExpr} {$dir}, oc.id DESC
                     {$limitSql}";
 
         $stRows = $this->db->prepare($sqlRows);
@@ -239,9 +261,15 @@ class OrdenCompraRepository extends BaseRepository
 
     public function getDetalle(int $idOrden, int $idEmpresa): array
     {
-        $sql = "SELECT d.*, COALESCE(p.codigo, '') AS codigo
+        // nombre_tarifa_iva sale del catálogo por el codigo_iva guardado en la línea (no por
+        // el porcentaje): 0%, Exento y No objeto comparten porcentaje 0 y solo el código los
+        // distingue. Si esa tarifa ya no está en el catálogo, quien muestre el detalle cae al
+        // porcentaje guardado en la propia línea.
+        $sql = "SELECT d.*, COALESCE(p.codigo, '') AS codigo,
+                       ti.tarifa AS nombre_tarifa_iva
                 FROM ordenes_compra_detalle d
                 LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN tarifa_iva ti ON ti.codigo = d.codigo_iva
                 WHERE d.id_orden = :id_orden AND d.id_empresa = :id_empresa
                 ORDER BY d.id ASC";
         $st = $this->db->prepare($sql);
@@ -285,9 +313,11 @@ class OrdenCompraRepository extends BaseRepository
     public function insertarDetalle(array $item): void
     {
         $sql = "INSERT INTO ordenes_compra_detalle
-                    (id_orden, id_empresa, id_producto, descripcion, cantidad, precio_unitario, created_at, created_by)
+                    (id_orden, id_empresa, id_producto, descripcion, cantidad, precio_unitario,
+                     codigo_iva, porcentaje_iva, notas, created_at, created_by)
                 VALUES
-                    (:id_orden, :id_empresa, :id_producto, :descripcion, :cantidad, :precio_unitario, NOW(), :created_by)";
+                    (:id_orden, :id_empresa, :id_producto, :descripcion, :cantidad, :precio_unitario,
+                     :codigo_iva, :porcentaje_iva, :notas, NOW(), :created_by)";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_orden'        => $item['id_orden'],
@@ -296,6 +326,9 @@ class OrdenCompraRepository extends BaseRepository
             ':descripcion'     => $item['descripcion'],
             ':cantidad'        => $item['cantidad'],
             ':precio_unitario' => $item['precio_unitario'],
+            ':codigo_iva'      => (string) ($item['codigo_iva'] ?? '') !== '' ? $item['codigo_iva'] : null,
+            ':porcentaje_iva'  => $item['porcentaje_iva'] ?? 0,
+            ':notas'           => (string) ($item['notas'] ?? '') !== '' ? $item['notas'] : null,
             ':created_by'      => $item['created_by'],
         ]);
     }
@@ -342,9 +375,7 @@ class OrdenCompraRepository extends BaseRepository
     public function getAbiertasPorProveedor(int $idProveedor, int $idEmpresa): array
     {
         $sql = "SELECT oc.id, oc.numero_orden, oc.fecha_orden, oc.fecha_recepcion, oc.estado,
-                       COALESCE((SELECT SUM(d.cantidad * d.precio_unitario)
-                                 FROM ordenes_compra_detalle d
-                                 WHERE d.id_orden = oc.id), 0) AS total
+                       " . self::SQL_TOTAL_ORDEN . " AS total
                 FROM ordenes_compra oc
                 WHERE oc.id_empresa = :id_empresa
                   AND oc.id_proveedor = :id_proveedor

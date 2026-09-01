@@ -56,7 +56,7 @@ class CategoriaRepository extends BaseRepository
                            (SELECT COUNT(*) FROM productos p WHERE p.id_categoria = c.id AND p.id_empresa = c.id_empresa AND p.status = 1) AS productos_count
                     FROM {$this->table} c
                     {$whereSql}
-                    ORDER BY {$col} {$dir}";
+                    ORDER BY {$col} {$dir}, c.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

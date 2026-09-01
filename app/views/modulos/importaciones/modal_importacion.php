@@ -54,7 +54,9 @@
             <li class="nav-item"><a class="nav-link" id="imp-tab-facturas" data-bs-toggle="tab" data-bs-target="#impTabFacturas" href="#impTabFacturas" role="tab"><i class="bi bi-receipt me-1"></i>Facturas del exterior</a></li>
             <li class="nav-item"><a class="nav-link" id="imp-tab-gastos" data-bs-toggle="tab" data-bs-target="#impTabGastos" href="#impTabGastos" role="tab"><i class="bi bi-cash-coin me-1"></i>Gastos de nacionalización</a></li>
             <li class="nav-item"><a class="nav-link" id="imp-tab-prorrateo" data-bs-toggle="tab" data-bs-target="#impTabProrrateo" href="#impTabProrrateo" role="tab"><i class="bi bi-pie-chart me-1"></i>Prorrateo / Resumen</a></li>
+            <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
             <li class="nav-item"><a class="nav-link" id="imp-tab-asiento" data-bs-toggle="tab" data-bs-target="#impTabAsiento" href="#impTabAsiento" role="tab"><i class="bi bi-calculator me-1"></i>Asiento contable</a></li>
+            <?php endif; ?>
           </ul>
           <div class="ms-auto pb-1">
             <?php
@@ -63,8 +65,11 @@
               'impTabFacturas'   => 'Facturas del exterior',
               'impTabGastos'     => 'Gastos de nacionalización',
               'impTabProrrateo'  => 'Prorrateo / Resumen',
-              'impTabAsiento'    => 'Asiento contable',
             ];
+            // La pestaña del asiento solo es configurable si el usuario la ve.
+            if (\App\Helpers\AsientoPestana::puedeVer()) {
+              $pestanasConfigImp['impTabAsiento'] = 'Asiento contable';
+            }
             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigImp, $vistaConfig ?? [], 'modulos/importaciones');
             ?>
           </div>
@@ -416,40 +421,11 @@
           <!-- ════════════════════════════════════════
                TAB 6: ASIENTO CONTABLE
           ════════════════════════════════════════ -->
+          <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
           <div class="tab-pane fade" id="impTabAsiento" role="tabpanel">
-            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-              <div class="table-responsive" style="max-height: 350px;">
-                <table class="table table-sm table-detalle mb-0 text-nowrap" id="imp-table-asiento">
-                  <thead>
-                    <tr class="table-light border-bottom">
-                      <th class="ps-3 py-2 small fw-bold text-muted" style="width:45%;">Cuenta Contable</th>
-                      <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">D&eacute;bito / Debe</th>
-                      <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Cr&eacute;dito / Haber</th>
-                      <th class="py-2 small fw-bold text-muted" style="width:15%;">Referencia</th>
-                      <th style="width:40px;"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="imp-asiento-tbody">
-                    <tr><td colspan="5" class="text-center py-4 text-muted">El asiento se genera al procesar el inventario.</td></tr>
-                  </tbody>
-                  <tfoot class="bg-light fw-bold border-top sticky-bottom">
-                    <tr>
-                      <td class="text-end py-2">Totales:</td>
-                      <td class="text-end pe-3 py-2 text-primary" id="imp-asiento-debe">0.00</td>
-                      <td class="text-end pe-3 py-2 text-primary" id="imp-asiento-haber">0.00</td>
-                      <td colspan="2" class="py-2">
-                        <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
-                          <span class="x-small text-muted">Diferencia: <span id="imp-asiento-dif">0.00</span></span>
-                          <span id="imp-asiento-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
-                        </div>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-            <div class="px-1 pt-2 small text-muted" id="imp-asiento-status"></div>
+            <?php $prefijo = 'imp'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
           </div>
+          <?php endif; ?>
 
         </div><!-- /tab-content -->
       </div><!-- /modal-body -->

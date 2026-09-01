@@ -230,4 +230,5 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.RETV_ordenDir = '<?= $ordenDir ?>';
 </script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/clientes_modal.js?v=<?= time() ?>" defer></script>
-<script src="<?= rtrim($base, '/') ?>/js/modulos/retenciones_ventas.js?v=<?= time() ?>" defer></script>
+<script src="<?= rtrim($base, "/") ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim($base, "/") ?>/js/modulos/retenciones_ventas.js?v=<?= time() ?>" defer></script>

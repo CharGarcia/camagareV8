@@ -76,7 +76,7 @@ class AlumnoRepository extends BaseRepository
                            (per.fecha_salida IS NULL AND per.fecha_ingreso IS NOT NULL) AS matricula_vigente
                     FROM {$this->table} a {$joins}
                     {$whereSql}
-                    ORDER BY {$col} {$dir}";
+                    ORDER BY {$col} {$dir}, a.id DESC";
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }

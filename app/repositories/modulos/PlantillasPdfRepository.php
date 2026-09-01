@@ -31,7 +31,7 @@ class PlantillasPdfRepository extends BaseModel
              LEFT JOIN usuarios u ON u.id = p.created_by
              LEFT JOIN bancos_ecuador b ON b.id = p.id_banco
              {$where}
-             ORDER BY p.tipo_documento ASC, p.nombre ASC
+             ORDER BY p.tipo_documento ASC, p.nombre ASC, p.id DESC
              LIMIT {$perPage} OFFSET {$offset}"
         );
 

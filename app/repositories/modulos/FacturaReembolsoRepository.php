@@ -107,7 +107,7 @@ class FacturaReembolsoRepository extends BaseRepository
                 LEFT JOIN clientes c ON fr.id_cliente = c.id
                 LEFT JOIN usuarios u ON fr.id_usuario = u.id
                 $where
-                ORDER BY $ordenExpr $ordenDir" . ($perPage > 0 ? " LIMIT " . (int) $perPage . " OFFSET " . (int) $offset : "");
+                ORDER BY $ordenExpr $ordenDir, fr.id DESC" . ($perPage > 0 ? " LIMIT " . (int) $perPage . " OFFSET " . (int) $offset : "");
 
         $st = $this->db->prepare($sql);
         $st->execute($params);

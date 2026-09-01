@@ -67,7 +67,7 @@ class MarcacionRepository extends BaseRepository
         $sql = "SELECT m.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion,
                        p.nombre AS punto_nombre
                 {$from}
-                ORDER BY {$orderExpr} {$ordenDir}";
+                ORDER BY {$orderExpr} {$ordenDir}, m.id DESC";
         if ($perPage > 0) {
             $offset = ($page - 1) * $perPage;
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;

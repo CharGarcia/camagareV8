@@ -66,7 +66,9 @@
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1" id="tabsFaccv" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" id="faccv-tab-general-btn" data-bs-toggle="tab" href="#faccv-tab-general" role="tab" style="white-space:nowrap;"><i class="bi bi-receipt me-1"></i> Facturación de consignación</a></li>
+                            <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="faccv-tab-asiento-btn" data-bs-toggle="tab" href="#faccv-tab-asiento" role="tab" style="white-space:nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                            <?php endif; ?>
                         </ul>
                     </div>
                     <div class="border-bottom bg-light mb-0"></div>
@@ -269,6 +271,7 @@
                         </div>
 
                         <!-- Pestaña: Asiento contable (reversa de la consignación: Debe Inventario / Haber Mercadería en Consignación, a costo) -->
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                         <div class="tab-pane fade p-3" id="faccv-tab-asiento" role="tabpanel">
                             <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
                                 <i class="bi bi-info-circle text-primary"></i>
@@ -300,6 +303,7 @@
                                 </div>
                             </div>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </form>
             </div>

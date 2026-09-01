@@ -285,5 +285,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.RET_ordenCol = '<?= $ordenCol ?>';
     window.RET_ordenDir = '<?= $ordenDir ?>';
 </script>
+<script src="<?= rtrim($base, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/retenciones_compras.js?v=<?= time() ?>" defer></script>

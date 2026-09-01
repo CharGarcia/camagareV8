@@ -44,7 +44,7 @@ class AlumnoNivelRepository extends BaseRepository
         $total = (int) $stCount->fetchColumn();
 
         $offset = ($page - 1) * $perPage;
-        $sqlRows = "SELECT n.* FROM {$this->table} n {$whereSql} ORDER BY {$col} {$dir}";
+        $sqlRows = "SELECT n.* FROM {$this->table} n {$whereSql} ORDER BY {$col} {$dir}, n.id DESC";
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }

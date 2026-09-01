@@ -121,7 +121,7 @@ class IngresoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id
                 $where
-                ORDER BY $ordenExpr $ordenDir";
+                ORDER BY $ordenExpr $ordenDir, i.id DESC";
 
         if ($perPage > 0) {
             $sql .= " LIMIT $perPage OFFSET $offset";
@@ -787,16 +787,21 @@ class IngresoRepository extends BaseRepository
         $this->query("DELETE FROM ingresos_pagos WHERE id_ingreso = ?", [$idIngreso]);
     }
 
-    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA', ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA', ?string $fechaDesde = null, ?string $fechaHasta = null, ?int $soloId = null, ?string $soloTipoDocumento = null): array
     {
         // Según el concepto del ingreso: 'RECIBO' muestra solo recibos de venta;
         // 'FACTURA_REEMBOLSO' muestra solo facturas de reembolso; cualquier otro
         // ('FACTURA') muestra facturas de venta + saldos iniciales CXC.
-        $tiposPermitidos = match (strtoupper($tipo)) {
-            'RECIBO'            => '{RECIBO}',
-            'FACTURA_REEMBOLSO' => '{FACTURA_REEMBOLSO}',
-            default             => '{FACTURA,SALDO_INICIAL}',
-        };
+        // Si se pide un documento puntual (getSaldoPendienteDocumento), el tipo
+        // exacto manda sobre el agrupado por concepto ('FACTURA' agrupa también
+        // SALDO_INICIAL, que aquí no aplica).
+        $tiposPermitidos = $soloTipoDocumento !== null
+            ? '{' . $soloTipoDocumento . '}'
+            : match (strtoupper($tipo)) {
+                'RECIBO'            => '{RECIBO}',
+                'FACTURA_REEMBOLSO' => '{FACTURA_REEMBOLSO}',
+                default             => '{FACTURA,SALDO_INICIAL}',
+            };
 
         $params     = [':id_empresa' => $idEmpresa, ':tipos' => $tiposPermitidos];
         $excluirSql = '';
@@ -815,6 +820,14 @@ class IngresoRepository extends BaseRepository
         if ($fechaHasta !== null && $fechaHasta !== '') {
             $filtroFecha .= " AND docs.fecha_emision <= :fecha_hasta";
             $params[':fecha_hasta'] = $fechaHasta;
+        }
+
+        // Filtro por un único documento (usado para recalcular su saldo real al
+        // guardar un ingreso — ver getSaldoPendienteDocumento): acota a UN solo id
+        // en vez de traer hasta 300 filas para buscar una.
+        if ($soloId !== null) {
+            $filtroFecha .= " AND docs.id = :solo_id";
+            $params[':solo_id'] = $soloId;
         }
 
         if ($excluirIngresoId !== null) {
@@ -1074,6 +1087,40 @@ class IngresoRepository extends BaseRepository
         $rows    = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
         $hasMore = count($rows) > 300;
         return ['data' => array_slice($rows, 0, 300), 'has_more' => $hasMore];
+    }
+
+    /**
+     * Bloqueo de concurrencia (CLAUDE.md §8) para el documento que un ingreso está
+     * a punto de cobrar: se libera solo al COMMIT/ROLLBACK de la transacción en
+     * curso. Llamar ANTES de leer el saldo con getSaldoPendienteDocumento(), y
+     * mantener la transacción abierta hasta el INSERT del detalle.
+     */
+    public function lockDocumentoPago(string $tipoDocumento, int $idReferencia, int $idEmpresa): void
+    {
+        $this->query(
+            "SELECT pg_advisory_xact_lock(hashtext('ingreso_doc:' || :id_empresa || ':' || :tipo || ':' || :id))",
+            [':id_empresa' => $idEmpresa, ':tipo' => $tipoDocumento, ':id' => $idReferencia]
+        );
+    }
+
+    /**
+     * Saldo pendiente REAL de un documento específico, recalculado en el momento
+     * (no confiar en el "saldo_anterior" que envía el navegador: pudo haberse
+     * cobrado desde otro ingreso mientras el modal seguía abierto). Reutiliza el
+     * mismo query que el buscador de documentos pendientes, acotado a un solo id.
+     * Devuelve 0.0 si el documento ya no tiene saldo pendiente (o no existe).
+     */
+    public function getSaldoPendienteDocumento(string $tipoDocumento, int $idReferencia, int $idEmpresa, ?int $excluirIngresoId = null): float
+    {
+        $resultado = $this->buscarDocumentosPendientes(
+            $idEmpresa, '', $excluirIngresoId, 'FACTURA', null, null, $idReferencia, $tipoDocumento
+        );
+        foreach ($resultado['data'] as $row) {
+            if ($row['tipo_documento'] === $tipoDocumento && (int) $row['id'] === $idReferencia) {
+                return (float) $row['saldo_pendiente'];
+            }
+        }
+        return 0.0;
     }
 
     public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, ?int $excluirId = null): bool

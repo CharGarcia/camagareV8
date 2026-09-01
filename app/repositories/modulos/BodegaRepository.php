@@ -50,7 +50,7 @@ class BodegaRepository extends BaseRepository
         $sqlRows = "SELECT b.*
                     FROM {$this->table} b
                     {$whereSql}
-                    ORDER BY b.{$ordenCol} {$dir}";
+                    ORDER BY b.{$ordenCol} {$dir}, b.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

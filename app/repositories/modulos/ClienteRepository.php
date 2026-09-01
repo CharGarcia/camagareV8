@@ -274,7 +274,7 @@ class ClienteRepository extends BaseRepository
                     FROM {$this->table} c
                     $joins
                     $where
-                    ORDER BY $orderExpr $ordenDir
+                    ORDER BY $orderExpr $ordenDir, c.id DESC
                     $limitOffset";
             $st = $this->db->prepare($sql);
             $st->execute($params);

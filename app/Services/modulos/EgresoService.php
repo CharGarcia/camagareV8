@@ -219,6 +219,40 @@ class EgresoService
         if (!$inTrans) $db->beginTransaction();
 
         try {
+            // Revalidar, DENTRO de la transacción y con el documento bloqueado, que cada
+            // documento (Compra/Liquidación/Rol/Anticipo/Préstamo/Décimo) todavía tiene
+            // saldo suficiente: el "saldo_anterior" que mandó el navegador puede estar
+            // desactualizado si, mientras el modal seguía abierto, otro egreso ya pagó
+            // parte (o todo) el mismo documento (CLAUDE.md §8). Se agrupa por documento
+            // porque el pago "por ítems" manda varias líneas para un mismo id_referencia
+            // (una por ítem): hay que sumarlas antes de comparar contra el saldo real, no
+            // validar cada línea por separado.
+            $idEmpresaChk = (int) $data['id_empresa'];
+            $montoPorDoc = [];
+            $numeroPorDoc = [];
+            foreach ($data['detalles'] ?? [] as $det) {
+                $tipoDoc = $det['tipo_documento'] ?? '';
+                if ($tipoDoc === 'MANUAL' || empty($det['id_referencia_documento'])) {
+                    continue;
+                }
+                $clave = $tipoDoc . ':' . (int) $det['id_referencia_documento'];
+                $montoPorDoc[$clave] = ($montoPorDoc[$clave] ?? 0) + (float) ($det['monto_pagado'] ?? 0);
+                $numeroPorDoc[$clave] ??= $det['numero_documento'] ?? $det['id_referencia_documento'];
+            }
+            foreach ($montoPorDoc as $clave => $montoTotalDoc) {
+                [$tipoDoc, $idRef] = explode(':', $clave, 2);
+                $idRef = (int) $idRef;
+                $this->repository->lockDocumentoPago($tipoDoc, $idRef, $idEmpresaChk);
+                $saldoReal = $this->repository->getSaldoPendienteDocumento($tipoDoc, $idRef, $idEmpresaChk);
+                if ($montoTotalDoc > $saldoReal + 0.01) {
+                    throw new \Exception(
+                        "El documento " . $numeroPorDoc[$clave] .
+                        " ya no tiene saldo suficiente (disponible: $" . number_format($saldoReal, 2) .
+                        "). Es posible que otro egreso lo haya pagado mientras tanto; cierre y vuelva a abrir la búsqueda de documentos pendientes."
+                    );
+                }
+            }
+
             // Insertar Cabecera
             $idEgreso = $this->repository->insertCabecera($data);
 

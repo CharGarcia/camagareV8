@@ -969,6 +969,10 @@ class ComprasService
         $asientoPrevio = $asientoService->getAsientoPorOrigen('compra', $idCompra, $idEmpresa);
         $idAsiento = $asientoPrevio ? (int)$asientoPrevio['id'] : 0;
 
+        // Nota: si el asiento se corrigió a mano (pestaña «Asiento contable» o Libro Diario),
+        // guardarAsiento() lo detecta y devuelve el asiento intacto — la corrección manda sobre
+        // el builder. La regla vive allí para valer en todos los módulos por igual.
+
         $cabeceraData = [
             'id'                   => $idAsiento > 0 ? $idAsiento : null,
             'fecha_asiento'        => $fechaEmision,

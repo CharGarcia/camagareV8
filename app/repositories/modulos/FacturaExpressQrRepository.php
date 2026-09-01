@@ -47,7 +47,7 @@ class FacturaExpressQrRepository extends BaseRepository
                             WHERE id_plantilla = p.id AND estado = 'pendiente' AND eliminado = false) AS solicitudes_pendientes
                     FROM factura_express_plantillas p
                     $where
-                    ORDER BY p.{$ordenCol} {$ordenDir}
+                    ORDER BY p.{$ordenCol} {$ordenDir}, p.id DESC
                     LIMIT $perPage OFFSET $offset";
             $st = $this->db->prepare($sql);
             $st->execute($params);
@@ -284,7 +284,7 @@ class FacturaExpressQrRepository extends BaseRepository
                     FROM factura_express_solicitudes s
                     LEFT JOIN factura_express_plantillas p ON p.id = s.id_plantilla
                     $where
-                    ORDER BY s.{$ordenCol} {$ordenDir}
+                    ORDER BY s.{$ordenCol} {$ordenDir}, s.id DESC
                     LIMIT $perPage OFFSET $offset";
             $st = $this->db->prepare($sql);
             $st->execute($params);

@@ -30,7 +30,7 @@ class PlantillaContableRepository
         $ordenCol = in_array($ordenCol, $ordenColPermitidas, true) ? $ordenCol : 'nombre';
         $ordenDir = in_array(strtoupper($ordenDir), ['ASC', 'DESC'], true) ? strtoupper($ordenDir) : 'ASC';
 
-        $sql .= " ORDER BY {$ordenCol} {$ordenDir}";
+        $sql .= " ORDER BY {$ordenCol} {$ordenDir}, id DESC";
         
         if ($perPage > 0) {
             $sql .= " LIMIT {$perPage} OFFSET {$offset}";

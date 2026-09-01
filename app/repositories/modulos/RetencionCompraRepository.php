@@ -136,7 +136,7 @@ class RetencionCompraRepository extends BaseRepository
                     p.tipo_id_proveedor AS proveedor_tipo_id,
                     u.nombre AS usuario_nombre
                 {$baseJoin}
-                ORDER BY {$colFinal} {$ordenDir}
+                ORDER BY {$colFinal} {$ordenDir}, r.id DESC
                 {$limit}";
 
         $st = $this->db->prepare($sql);

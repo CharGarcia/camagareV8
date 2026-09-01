@@ -68,9 +68,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link active" id="cons-tab-general-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-general" href="#cons-tab-general" role="tab" title="General"><i class="bi bi-info-circle me-1"></i> General</a>
                             </li>
+                            <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="cons-tab-asiento-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-asiento" href="#cons-tab-asiento" role="tab" title="Asiento Contable"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
                             </li>
+                            <?php endif; ?>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="cons-tab-resumen-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-resumen" href="#cons-tab-resumen" role="tab" title="Resumen"><i class="bi bi-list-columns-reverse me-1"></i> Resumen</a>
                             </li>
@@ -87,12 +89,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         <div class="pb-1 flex-shrink-0">
                             <?php
                             $pestanasConfigCons = [
-                                'cons-tab-asiento'  => 'Asiento contable',
                                 'cons-tab-resumen'  => 'Resumen',
                                 'cons-tab-guias'    => 'Guías Remisión',
                                 'cons-tab-pedidos'  => 'Pedidos',
                                 'cons-tab-entrega'  => 'Entrega'
                             ];
+                            // La pestaña del asiento solo es configurable si el usuario la ve.
+                            if (\App\Helpers\AsientoPestana::puedeVer()) {
+                                $pestanasConfigCons = ['cons-tab-asiento' => 'Asiento contable'] + $pestanasConfigCons;
+                            }
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigCons, $vistaConfigConsignaciones ?? [], $moduloBase);
                             ?>
                         </div>
@@ -289,51 +294,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         </div>
 
                         <!-- Pestaña Asiento Contable -->
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                         <div class="tab-pane fade p-3" id="cons-tab-asiento" role="tabpanel">
                             <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
                                 <i class="bi bi-info-circle text-primary"></i>
                                 <span>Reclasificación de inventario <strong>a costo</strong> (la consignación no es una venta): <em>Mercadería en consignación</em> contra <em>Inventario</em>.</span>
                             </div>
-                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                <div class="table-responsive" style="max-height: 320px;">
-                                    <table class="table table-sm table-detalle mb-0 text-nowrap" id="cons-table-asiento">
-                                        <thead>
-                                            <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width: 45%;">Cuenta Contable</th>
-                                                <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">D&eacute;bito / Debe</th>
-                                                <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">Cr&eacute;dito / Haber</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width: 15%;">Referencia</th>
-                                                <th style="width: 40px;"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="cons-tbody-asiento">
-                                            <tr><td colspan="5" class="text-center py-4 text-muted">Cargando asiento contable...</td></tr>
-                                        </tbody>
-                                        <tfoot class="bg-light fw-bold border-top">
-                                            <tr>
-                                                <td class="text-end py-2">Totales:</td>
-                                                <td class="text-end pe-3 py-2 text-primary" id="cons-asiento-total-debe">0.00</td>
-                                                <td class="text-end pe-3 py-2 text-primary" id="cons-asiento-total-haber">0.00</td>
-                                                <td colspan="2" class="py-2">
-                                                    <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
-                                                        <span class="x-small text-muted">Diferencia: <span id="cons-asiento-diferencia">0.00</span></span>
-                                                        <span id="cons-asiento-badge-cuadre" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                                <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="consAgregarLineaAsiento()">
-                                        <i class="bi bi-plus-circle me-1"></i> Agregar línea
-                                    </button>
-                                    <div class="small fw-bold text-muted pe-3">
-                                        Líneas: <span id="cons-asiento-count">0</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <?php $prefijo = 'cons'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                         </div>
+                        <?php endif; ?>
 
                         <!-- Pestaña Resumen: kardex de la consignación (inicial + retornos + facturaciones, saldo corriente por producto). -->
                         <div class="tab-pane fade p-3" id="cons-tab-resumen" role="tabpanel">
@@ -2676,173 +2645,42 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
     // =====================================================================
     // PESTAÑA ASIENTO CONTABLE (reclasificación de inventario a costo)
-    // Mismo diseño y mecánica que la pestaña Asiento de Factura de Venta.
+    // Componente compartido: public/js/modulos/asiento_contable_tab.js.
+    //
+    // Dos modos, según haya asiento o no:
+    //  - Sin asiento todavía → vista previa EDITABLE (`previewEditable`). Las líneas que se
+    //    completen aquí viajan como `asiento_detalles` al guardar la consignación, que es como
+    //    se rellena una cuenta que la configuración contable no resolvió.
+    //  - Con asiento ya registrado → se edita y se guarda desde la propia pestaña contra el
+    //    módulo de Asientos Contables (permiso de actualizar), y queda marcado para que el
+    //    documento no lo regenere.
     // =====================================================================
-    const CONS_BASE_URL = '<?= rtrim(defined("BASE_URL") ? BASE_URL : "", "/") ?>';
-
-    /** Recalcula totales, diferencia y badge de cuadre del asiento. */
-    window.consRecalcularTotalesAsiento = function() {
-        let totalDebe = 0, totalHaber = 0, faltanCuentas = false;
-        document.querySelectorAll('#cons-tbody-asiento .cons-asiento-row').forEach(tr => {
-            const debe  = parseFloat(tr.querySelector('.input-debe').value)  || 0;
-            const haber = parseFloat(tr.querySelector('.input-haber').value) || 0;
-            const idCta = parseInt(tr.querySelector('.input-id-cuenta-contable')?.value) || 0;
-            totalDebe  += debe;
-            totalHaber += haber;
-            if (idCta <= 0 && (debe > 0 || haber > 0)) faltanCuentas = true;
-        });
-
-        const lblDebe  = document.getElementById('cons-asiento-total-debe');
-        const lblHaber = document.getElementById('cons-asiento-total-haber');
-        const lblDiff  = document.getElementById('cons-asiento-diferencia');
-        const badge    = document.getElementById('cons-asiento-badge-cuadre');
-
-        if (lblDebe)  lblDebe.textContent  = totalDebe.toFixed(2);
-        if (lblHaber) lblHaber.textContent = totalHaber.toFixed(2);
-
-        const diff = Math.abs(totalDebe - totalHaber);
-        if (lblDiff) {
-            lblDiff.textContent = diff.toFixed(2);
-            lblDiff.classList.toggle('text-danger', diff >= 0.005);
-            lblDiff.classList.toggle('text-success', diff < 0.005);
-        }
-        if (badge) {
-            if (faltanCuentas) {
-                badge.className = 'badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-2';
-                badge.textContent = 'Faltan cuentas';
-                badge.title = 'Hay líneas con importe pero sin cuenta contable. Configúrelas en Configuración de Asientos → Consignaciones en Ventas, o selecciónelas aquí. El asiento no se guardará hasta completarlas.';
-            } else if (diff < 0.005 && (totalDebe > 0 || totalHaber > 0)) {
-                badge.className = 'badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2';
-                badge.textContent = 'Cuadrado';
-                badge.title = '';
-            } else {
-                badge.className = 'badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2';
-                badge.textContent = 'Descuadrado';
-                badge.title = '';
-            }
-        }
-        const count = document.getElementById('cons-asiento-count');
-        if (count) count.textContent = document.querySelectorAll('#cons-tbody-asiento .cons-asiento-row').length;
-    };
-
-    /** Agrega una línea editable al asiento (con autocompletado de cuenta contable). */
-    window.consAgregarLineaAsiento = function(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '') {
-        const tbody = document.getElementById('cons-tbody-asiento');
-        if (!tbody) return;
-        if (tbody.querySelector('td[colspan="5"]')) tbody.innerHTML = '';
-
-        const tr = document.createElement('tr');
-        tr.className = 'cons-asiento-row';
-        const dv = parseFloat(debe  || 0), hv = parseFloat(haber || 0);
-        tr.innerHTML = `
-            <td class="ps-3 position-relative align-middle p-0">
-                <input type="text" class="form-control border-0 bg-transparent input-cuenta-nombre" placeholder="Escriba código o cuenta contable..." value="${nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : ''}" style="padding:0 4px;height:20px;font-size:0.78rem;">
-                <input type="hidden" class="input-id-cuenta-contable" value="${idCuenta || ''}">
-                <div class="list-group position-absolute w-100 shadow rounded-3 d-none cons-cuenta-dropdown" style="z-index: 1070; max-height: 200px; overflow-y: auto;"></div>
-            </td>
-            <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-debe text-primary" placeholder="0.00" value="${dv.toFixed(2) === '0.00' ? '' : dv.toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
-            <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-haber text-primary" placeholder="0.00" value="${hv.toFixed(2) === '0.00' ? '' : hv.toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
-            <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" placeholder="Referencia" value="${referencia || ''}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
-            <td class="text-center p-0 align-middle" style="width: 40px;">
-                <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); window.consRecalcularTotalesAsiento();" title="Eliminar línea">
-                    <i class="bi bi-trash3 fs-6"></i>
-                </button>
-            </td>`;
-        tbody.appendChild(tr);
-
-        const inpCuenta = tr.querySelector('.input-cuenta-nombre');
-        const hidden    = tr.querySelector('.input-id-cuenta-contable');
-        const dropdown  = tr.querySelector('.cons-cuenta-dropdown');
-        const inpDebe   = tr.querySelector('.input-debe');
-        const inpHaber  = tr.querySelector('.input-haber');
-
-        inpCuenta.addEventListener('input', debounce(async (e) => {
-            const q = e.target.value.trim();
-            hidden.value = ''; // al reescribir se invalida la cuenta hasta elegir de la lista
-            if (q.length < 2) { dropdown.classList.add('d-none'); return; }
-            try {
-                const resp = await fetch(`${CONS_BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas?q=${encodeURIComponent(q)}`);
-                const json = await resp.json();
-                dropdown.innerHTML = '';
-                if (json.data && json.data.length > 0) {
-                    json.data.forEach(cuenta => {
-                        const btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small text-start';
-                        btn.innerHTML = `<code class="text-secondary me-2">${cuenta.codigo}</code> <span class="fw-medium">${cuenta.nombre}</span>`;
-                        btn.onmousedown = (evt) => {
-                            evt.preventDefault();
-                            inpCuenta.value = cuenta.codigo + ' - ' + cuenta.nombre;
-                            hidden.value = cuenta.id;
-                            dropdown.classList.add('d-none');
-                        };
-                        dropdown.appendChild(btn);
-                    });
-                    dropdown.classList.remove('d-none');
-                } else {
-                    dropdown.classList.add('d-none');
-                }
-            } catch (err) { console.error('Error buscando cuentas:', err); }
-        }, 300));
-
-        inpCuenta.addEventListener('blur', () => setTimeout(() => dropdown.classList.add('d-none'), 200));
-        inpDebe.addEventListener('input',  window.consRecalcularTotalesAsiento);
-        inpHaber.addEventListener('input', window.consRecalcularTotalesAsiento);
-
-        window.consRecalcularTotalesAsiento();
-        return tr;
-    };
-
-    /** Carga el asiento guardado o la sugerencia (reclasificación por costo). */
-    window.consCargarAsiento = async function(idConsignacion = 0) {
-        const tbody = document.getElementById('cons-tbody-asiento');
-        if (!tbody) return;
-
-        if (!idConsignacion) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Guarda la consignación para generar el asiento (se calcula a costo).</td></tr>';
-            window.consRecalcularTotalesAsiento();
-            return;
-        }
-
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Cargando asiento contable...</td></tr>';
-        try {
-            const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getAsientoSugeridoAjax?id=${idConsignacion}`);
-            const json = await resp.json();
-            if (json.ok && json.detalles && json.detalles.length > 0) {
-                tbody.innerHTML = '';
-                json.detalles.forEach(det => window.consAgregarLineaAsiento(
-                    det.id_cuenta_contable,
-                    det.cuenta_codigo || '',
-                    det.cuenta_nombre || '',
-                    parseFloat(det.debe || 0),
-                    parseFloat(det.haber || 0),
-                    det.referencia_detalle || det.documento_referencia || ''
-                ));
-                window.consRecalcularTotalesAsiento();
-            } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Sin asiento: guarda o actualiza la consignación para generarlo.</td></tr>';
-                window.consRecalcularTotalesAsiento();
-            }
-        } catch (err) {
-            console.error('Error al cargar asiento contable:', err);
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar el asiento contable.</td></tr>';
-        }
-    };
-
-    /** Serializa las líneas del asiento para enviarlas al guardar. */
-    window.consCapturarDetallesAsiento = function() {
-        const detalles = [];
-        document.querySelectorAll('#cons-tbody-asiento .cons-asiento-row').forEach(tr => {
-            const idCuenta = parseInt(tr.querySelector('.input-id-cuenta-contable').value) || 0;
-            if (idCuenta <= 0) return;
-            detalles.push({
-                id_cuenta_contable: idCuenta,
-                debe:  parseFloat(tr.querySelector('.input-debe').value)  || 0,
-                haber: parseFloat(tr.querySelector('.input-haber').value) || 0,
-                referencia_detalle: tr.querySelector('.input-referencia').value || ''
+    let _consAsientoTab = null;
+    function consAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('cons-asiento-tbody')) return null;
+        if (!_consAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _consAsientoTab = window.crearAsientoTab({
+                prefijo: 'cons',
+                moduloOrigen: 'consignacion_venta',
+                previewEditable: true,
+                previewUrl: `${RUTA_MODULO_CONSIGNACION}/getAsientoSugeridoAjax`,
+                cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
             });
-        });
-        return detalles;
+        }
+        return _consAsientoTab;
+    }
+
+    window.consCargarAsiento = function(idConsignacion = 0) {
+        const tab = consAsientoTab();
+        if (tab) tab.cargar(idConsignacion);
+    };
+
+    /** Líneas del asiento que viajan con la consignación al guardarla (vista previa completada). */
+    window.consCapturarDetallesAsiento = function() {
+        const tab = consAsientoTab();
+        return tab ? tab.capturar() : [];
     };
 
     // ── Pestaña Resumen: kardex de la consignación (inicial + retornos + facturaciones) ──

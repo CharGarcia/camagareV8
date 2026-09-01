@@ -132,7 +132,7 @@ class ProformaRepository extends BaseRepository
                        u.nombre         AS usuario_nombre
                 FROM proformas_cabecera p $joins
                 $where
-                ORDER BY $ordenExpr $ordenDir
+                ORDER BY $ordenExpr $ordenDir, p.id DESC
                 LIMIT $perPage OFFSET $offset";
 
         $rows = $this->query($sql, $params)->fetchAll();

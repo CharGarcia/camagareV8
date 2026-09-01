@@ -166,7 +166,7 @@ class ProveedorRepository extends BaseRepository
                     LEFT JOIN retenciones_sri rs_iva ON rs_iva.id = p.id_retencion_iva
                     LEFT JOIN sustento_tributario st ON st.id = p.id_sustento_tributario
                     {$whereSql}
-                    ORDER BY $orderExpr $dir";
+                    ORDER BY $orderExpr $dir, p.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

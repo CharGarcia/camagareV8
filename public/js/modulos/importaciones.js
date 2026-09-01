@@ -1258,17 +1258,15 @@ window.IMP_rechazarNacionalizacion = async function () {
 // ─────────────────────────────────────────────────────────────────────────────
 let _impAsientoTab = null;
 function IMP_asientoTab() {
+    // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+    if (!document.getElementById('imp-asiento-tbody')) return null;
     if (!_impAsientoTab && typeof window.crearAsientoTab === 'function') {
         _impAsientoTab = window.crearAsientoTab({
-            tbodyId: 'imp-asiento-tbody',
-            debeId: 'imp-asiento-debe',
-            haberId: 'imp-asiento-haber',
-            difId: 'imp-asiento-dif',
-            badgeId: 'imp-asiento-badge',
-            countId: 'imp-asiento-count',
-            statusId: 'imp-asiento-status',
+            prefijo: 'imp',
+            moduloOrigen: 'importacion',
             previewUrl: `${window.CMG_urlBaseImp}/getAsientoSugeridoAjax`,
             cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+            asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
         });
     }
     return _impAsientoTab;

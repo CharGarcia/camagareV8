@@ -124,7 +124,7 @@ class CitaPagoRepository extends BaseRepository
             FROM citas_pagos cp
             $joins
             $where
-            ORDER BY $orderExpr
+            ORDER BY $orderExpr, cp.id DESC
             " . ($perPage > 0 ? "LIMIT :limit OFFSET :offset" : "") . "
         ";
         if ($perPage > 0) {

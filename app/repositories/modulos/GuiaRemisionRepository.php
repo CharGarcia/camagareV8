@@ -118,7 +118,7 @@ class GuiaRemisionRepository extends BaseRepository
                 INNER JOIN transportistas t ON g.id_transportista = t.id
                 LEFT  JOIN usuarios       u ON g.id_usuario       = u.id
                 {$where}
-                ORDER BY {$ordenExpr} {$ordenDir}
+                ORDER BY {$ordenExpr} {$ordenDir}, g.id DESC
                 LIMIT {$perPage} OFFSET {$offset}";
 
         return ['rows' => $this->query($sql, $params)->fetchAll(), 'total' => (int) $total];

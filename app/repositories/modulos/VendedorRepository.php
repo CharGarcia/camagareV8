@@ -89,7 +89,7 @@ class VendedorRepository extends BaseRepository
             $sql = "SELECT v.* 
                     FROM {$this->table} v
                     $where
-                    ORDER BY v.{$ordenCol} $ordenDir
+                    ORDER BY v.{$ordenCol} $ordenDir, v.id DESC
                     $limitOffset";
             $st = $this->db->prepare($sql);
             $st->execute($params);

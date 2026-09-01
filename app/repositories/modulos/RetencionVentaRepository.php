@@ -121,7 +121,7 @@ class RetencionVentaRepository extends BaseRepository
                     c.identificacion AS cliente_ruc,
                     u.nombre AS usuario_nombre
                 {$baseJoin}
-                ORDER BY {$colFinal} {$ordenDir}
+                ORDER BY {$colFinal} {$ordenDir}, r.id DESC
                 {$limit}";
 
         $st = $this->db->prepare($sql);

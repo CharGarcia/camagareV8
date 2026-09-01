@@ -196,4 +196,5 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.TRP_ORDEN_DIR   = '<?= $ordenDir ?>';
     window.TRP_PAGE        = <?= $page ?>;
 </script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
 <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/traspasos.js?v=<?= time() ?>"></script>

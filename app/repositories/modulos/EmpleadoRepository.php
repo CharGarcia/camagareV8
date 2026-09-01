@@ -57,7 +57,7 @@ class EmpleadoRepository extends BaseRepository
                     FROM {$this->table} e
                     LEFT JOIN bancos_ecuador b ON b.id = e.id_banco_ecuador
                     {$whereSql} 
-                    ORDER BY {$orderExpr} {$ordenDir}";
+                    ORDER BY {$orderExpr} {$ordenDir}, b.id DESC";
         
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

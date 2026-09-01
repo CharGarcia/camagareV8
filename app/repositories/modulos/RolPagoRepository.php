@@ -46,7 +46,7 @@ class RolPagoRepository extends BaseRepository
         $total = (int) $stTotal->fetchColumn();
 
         $sql = "SELECT r.*, (SELECT COUNT(*) FROM rol_detalle d WHERE d.id_rol = r.id) AS num_empleados
-                {$from} ORDER BY r.{$ordenCol} {$ordenDir}";
+                {$from} ORDER BY r.{$ordenCol} {$ordenDir}, r.id DESC";
         if ($perPage > 0) {
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
         }

@@ -137,7 +137,9 @@
                                         <th class="py-2 small fw-bold text-muted">Descripción <span class="text-danger">*</span></th>
                                         <th class="py-2 small fw-bold text-muted text-center" style="width:90px">Cantidad <span class="text-danger">*</span></th>
                                         <th class="py-2 small fw-bold text-muted text-center" style="width:110px">P. Unitario</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width:22%">Notas</th>
+                                        <th class="py-2 small fw-bold text-muted text-center" style="width:120px">Tarifa IVA</th>
+                                        <th class="py-2 small fw-bold text-muted text-end" style="width:100px">Subtotal</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width:16%">Notas</th>
                                         <th style="width:40px"></th>
                                     </tr>
                                 </thead>
@@ -154,6 +156,31 @@
                             </button>
                             <div class="small fw-bold text-muted pe-2">
                                 Ítems: <span id="oc_count_items">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resumen de subtotales por tarifa de IVA (mismo formato que Compras) -->
+                    <div class="row justify-content-end">
+                        <div class="col-md-5">
+                            <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
+                                <div class="d-flex justify-content-between align-items-center mb-1 fw-bold border-bottom pb-1">
+                                    <span class="text-muted">Subtotal</span>
+                                    <span id="oc_label_subtotal">0.00</span>
+                                </div>
+
+                                <!-- Bases por tarifa de IVA (se arma en JS: ocRecalcularTotales) -->
+                                <div id="oc_subtotales_iva" class="mb-1"></div>
+
+                                <!-- IVA por tarifa -->
+                                <div id="oc_ivas_iva" class="mb-1"></div>
+
+                                <hr class="my-1 opacity-25">
+
+                                <div class="d-flex justify-content-between align-items-center bg-light border py-1 px-2 rounded">
+                                    <span class="fw-bold text-dark" style="font-size:0.8rem;">TOTAL</span>
+                                    <span class="fw-bold text-dark" style="font-size:1rem;" id="oc_label_total">0.00</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -201,9 +228,50 @@ function ocDebounce(fn, ms) {
 }
 
 // ── Detalle helpers ───────────────────────────────────────────────────────────
+// Redondeo a centavos usado en TODO el cálculo (base de línea, IVA de línea y
+// acumulados). Debe ser el mismo criterio que OrdenCompraService::calcularTotales()
+// en PHP, para que lo que se ve en el modal coincida al centavo con el PDF/Excel.
+function ocR2(v) { return Math.round((parseFloat(v) || 0) * 100) / 100; }
+
+/** Tarifa de IVA por defecto para una línea nueva: 15% si existe, si no la primera con % > 0. */
+function ocTarifaIvaPorDefecto() {
+    const lista = window.OC_TARIFAS_IVA || [];
+    if (!lista.length) return null;
+    return lista.find(t => parseFloat(t.porcentaje_iva) === 15)
+        || lista.find(t => parseFloat(t.porcentaje_iva) > 0)
+        || lista[0];
+}
+
+/**
+ * <option> del selector de IVA de una línea. Se preselecciona por CÓDIGO (0%, Exento y
+ * No objeto comparten porcentaje 0 y solo el código los distingue); el porcentaje solo
+ * se usa de respaldo cuando la línea no trae código.
+ */
+function ocOpcionesIva(codigoSel, porcentajeSel) {
+    const lista = window.OC_TARIFAS_IVA || [];
+    const cod   = (codigoSel ?? '') !== '' ? String(codigoSel) : '';
+    const pct   = parseFloat(porcentajeSel);
+    let matched = false;
+
+    let html = lista.map(t => {
+        const sel = cod !== '' ? String(t.codigo) === cod : parseFloat(t.porcentaje_iva) === pct;
+        if (sel) matched = true;
+        return `<option value="${ocEscHtml(t.codigo)}" data-tarifa="${parseFloat(t.porcentaje_iva)}" ${sel ? 'selected' : ''}>${ocEscHtml(t.tarifa || (t.porcentaje_iva + '%'))}</option>`;
+    }).join('');
+
+    // Tarifa con la que se guardó la orden pero que ya no está activa en el catálogo
+    // (p. ej. IVA 12% de años anteriores): se agrega solo para ESTE documento, para que
+    // el detalle siga mostrando el IVA real con el que se emitió.
+    if (!matched && !isNaN(pct)) {
+        html += `<option value="${ocEscHtml(cod)}" data-tarifa="${pct}" selected>${pct}%</option>`;
+    }
+    return html;
+}
+
 window.ocLimpiarDetalle = function() {
     document.getElementById('tbodyOcDetalle').innerHTML = '';
     document.getElementById('oc_count_items').textContent = '0';
+    ocRecalcularTotales();
 };
 
 window.ocActualizarContador = function() {
@@ -214,6 +282,74 @@ window.ocActualizarContador = function() {
 window.ocEliminarFila = function(btn) {
     btn.closest('tr').remove();
     ocActualizarContador();
+    ocRecalcularTotales();
+};
+
+/** Subtotal (sin IVA) de una fila; se llama en cada cambio de cantidad/precio/IVA. */
+window.ocRecalcularFila = function(el) {
+    const tr    = el.closest('tr');
+    const cant  = parseFloat(tr.querySelector('.oc-item-cantidad')?.value) || 0;
+    const prec  = parseFloat(tr.querySelector('.oc-item-precio')?.value)   || 0;
+    const base  = ocR2(cant * prec);
+    const celda = tr.querySelector('.oc-item-subtotal');
+    if (celda) celda.textContent = base.toFixed(2);
+    ocRecalcularTotales();
+};
+
+/** Subtotal general, bases e IVA agrupados por tarifa, y TOTAL con impuestos. */
+window.ocRecalcularTotales = function() {
+    const tbody = document.getElementById('tbodyOcDetalle');
+    if (!tbody) return;
+
+    let subtotal = 0;
+    const grupos = {};
+
+    tbody.querySelectorAll('tr').forEach(tr => {
+        const cant = parseFloat(tr.querySelector('.oc-item-cantidad')?.value) || 0;
+        const prec = parseFloat(tr.querySelector('.oc-item-precio')?.value)   || 0;
+        const sel  = tr.querySelector('.oc-item-iva');
+        const pct   = sel ? (parseFloat(sel.selectedOptions[0]?.dataset.tarifa) || 0) : 0;
+        const cod   = sel ? (sel.value || ('p' + pct)) : ('p' + pct);
+        const label = sel ? (sel.selectedOptions[0]?.text || (pct + '%')) : (pct + '%');
+        const base  = ocR2(cant * prec);
+
+        subtotal = ocR2(subtotal + base);
+        if (!grupos[cod]) grupos[cod] = { label, pct, base: 0, iva: 0 };
+        grupos[cod].base = ocR2(grupos[cod].base + base);
+        grupos[cod].iva  = ocR2(grupos[cod].iva + ocR2(base * pct / 100));
+    });
+
+    let htmlBases = '', htmlIvas = '', totalIva = 0;
+    Object.values(grupos).forEach(g => {
+        totalIva += g.iva;
+        htmlBases += `
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-muted">Subtotal ${ocEscHtml(g.label)}</span>
+                <span>${g.base.toFixed(2)}</span>
+            </div>`;
+        if (g.pct > 0) {
+            htmlIvas += `
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="text-muted">(+) IVA ${g.pct}%</span>
+                    <span class="fw-bold text-dark">${g.iva.toFixed(2)}</span>
+                </div>`;
+        }
+    });
+    totalIva = ocR2(totalIva);
+    if (htmlIvas === '') {
+        htmlIvas = `
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-muted">(+) IVA</span>
+                <span class="fw-bold text-dark">0.00</span>
+            </div>`;
+    }
+
+    const elSub = document.getElementById('oc_label_subtotal');
+    if (!elSub) return;
+    elSub.textContent = subtotal.toFixed(2);
+    document.getElementById('oc_subtotales_iva').innerHTML = htmlBases;
+    document.getElementById('oc_ivas_iva').innerHTML       = htmlIvas;
+    document.getElementById('oc_label_total').textContent  = ocR2(subtotal + totalIva).toFixed(2);
 };
 
 window.ocObtenerItems = function() {
@@ -221,11 +357,14 @@ window.ocObtenerItems = function() {
     document.getElementById('tbodyOcDetalle').querySelectorAll('tr').forEach(tr => {
         const desc = tr.querySelector('.oc-item-descripcion')?.value?.trim() ?? '';
         if (!desc) return;
+        const selIva = tr.querySelector('.oc-item-iva');
         items.push({
             id_producto:     tr.querySelector('.oc-item-id-producto')?.value  ?? null,
             descripcion:     desc,
             cantidad:        parseFloat(tr.querySelector('.oc-item-cantidad')?.value)  || 1,
             precio_unitario: parseFloat(tr.querySelector('.oc-item-precio')?.value)    || 0,
+            codigo_iva:      selIva ? (selIva.value ?? '') : '',
+            porcentaje_iva:  selIva ? (parseFloat(selIva.selectedOptions[0]?.dataset.tarifa) || 0) : 0,
             notas:           tr.querySelector('.oc-item-notas')?.value?.trim()         ?? '',
         });
     });
@@ -245,6 +384,13 @@ window.ocAgregarFilaDetalle = function(item = {}) {
     const notas    = item.notas          ?? '';
     const idProd   = item.id_producto    ?? '';
 
+    // Línea existente: su propia tarifa. Línea nueva: la tarifa por defecto del catálogo
+    // (se sobrescribe con la del producto en cuanto se elija uno en el buscador).
+    const _tDef    = ocTarifaIvaPorDefecto();
+    const esNueva  = item.descripcion === undefined;
+    const codIva   = esNueva ? (_tDef ? _tDef.codigo : '')          : (item.codigo_iva     ?? '');
+    const pctIva   = esNueva ? (_tDef ? _tDef.porcentaje_iva : 0)   : (item.porcentaje_iva ?? 0);
+
     tr.innerHTML = `
         <td class="text-center align-middle position-relative" style="width:130px">
             <input type="text" class="form-control form-control-sm input-detalle oc-item-codigo text-center border-primary border-opacity-25"
@@ -257,13 +403,21 @@ window.ocAgregarFilaDetalle = function(item = {}) {
         </td>
         <td class="align-middle text-center" style="width:90px">
             <input type="number" class="form-control form-control-sm input-detalle oc-item-cantidad text-center"
-                   value="${ocEscHtml(cant)}" min="0.000001" step="any">
+                   value="${ocEscHtml(cant)}" min="0.000001" step="any" oninput="ocRecalcularFila(this)">
         </td>
         <td class="align-middle text-center" style="width:110px">
             <input type="number" class="form-control form-control-sm input-detalle oc-item-precio text-end"
-                   value="${ocEscHtml(precio)}" min="0" step="any">
+                   value="${ocEscHtml(precio)}" min="0" step="any" oninput="ocRecalcularFila(this)">
         </td>
-        <td class="align-middle" style="width:22%">
+        <td class="align-middle text-center" style="width:120px">
+            <select class="form-select form-select-sm input-detalle oc-item-iva" onchange="ocRecalcularFila(this)">
+                ${ocOpcionesIva(codIva, pctIva)}
+            </select>
+        </td>
+        <td class="align-middle text-end fw-semibold" style="width:100px">
+            <span class="oc-item-subtotal">0.00</span>
+        </td>
+        <td class="align-middle" style="width:16%">
             <input type="text" class="form-control form-control-sm input-detalle oc-item-notas"
                    placeholder="Notas..." maxlength="200" value="${ocEscHtml(notas)}">
         </td>
@@ -276,6 +430,7 @@ window.ocAgregarFilaDetalle = function(item = {}) {
 
     tbody.appendChild(tr);
     ocActualizarContador();
+    ocRecalcularFila(tr.querySelector('.oc-item-cantidad'));
 
     const inputCod  = tr.querySelector('.oc-item-codigo');
     const inputDesc = tr.querySelector('.oc-item-descripcion');
@@ -289,7 +444,14 @@ window.ocAgregarFilaDetalle = function(item = {}) {
         tr.querySelector('.oc-item-id-producto').value = p.id ?? '';
         const precio_field = tr.querySelector('.oc-item-precio');
         if (precio_field && p.precio_unitario != null) precio_field.value = parseFloat(p.precio_unitario).toFixed(2);
+        // Tarifa de IVA del producto (productos.tarifa_iva). Si el producto no tiene una
+        // configurada, se deja la que ya tenía la línea.
+        const selIva = tr.querySelector('.oc-item-iva');
+        if (selIva && (p.codigo_iva ?? '') !== '') {
+            selIva.innerHTML = ocOpcionesIva(p.codigo_iva, p.porcentaje_iva);
+        }
         dropdown.classList.add('d-none');
+        ocRecalcularFila(tr.querySelector('.oc-item-cantidad'));
         const cant = tr.querySelector('.oc-item-cantidad');
         cant.focus(); cant.select();
     };

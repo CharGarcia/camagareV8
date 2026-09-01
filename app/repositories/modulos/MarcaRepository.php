@@ -55,7 +55,7 @@ class MarcaRepository extends BaseRepository
         $sqlRows = "SELECT m.id, m.nombre, m.status
                     FROM {$this->table} m
                     {$whereSql}
-                    ORDER BY {$col} {$dir}";
+                    ORDER BY {$col} {$dir}, m.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

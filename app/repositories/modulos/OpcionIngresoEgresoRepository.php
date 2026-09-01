@@ -120,7 +120,7 @@ class OpcionIngresoEgresoRepository extends BaseRepository
                 LEFT JOIN plan_cuentas pc ON t.id_cuenta_contable = pc.id
                 " . self::JOIN_CUENTAS_PROGRAMADAS . "
                 $where
-                ORDER BY t.$ordenCol $ordenDir
+                ORDER BY t.$ordenCol $ordenDir, t.id DESC
                 LIMIT :limit OFFSET :offset";
 
         $st = $this->db->prepare($sql);

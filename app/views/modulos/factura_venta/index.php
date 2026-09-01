@@ -499,7 +499,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsFacturaVenta" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" id="tab-fv-venta-btn" data-bs-toggle="tab" href="#m-tab-detalle" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Factura de venta</a></li>
+                            <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-asiento-btn" data-bs-toggle="tab" href="#m-tab-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                            <?php endif; ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-pagos-btn" data-bs-toggle="tab" href="#m-tab-pagos-historial" role="tab" style="white-space: nowrap;"><i class="bi bi-cash-coin me-1"></i> Pagos</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-retenciones-btn" data-bs-toggle="tab" href="#m-tab-retenciones" role="tab" style="white-space: nowrap;"><i class="bi bi-percent me-1"></i> Retenciones</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-notas-btn" data-bs-toggle="tab" href="#m-tab-notas" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-minus me-1"></i> Notas de crédito</a></li>
@@ -510,13 +512,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <div class="ms-auto pb-1">
                             <?php
                             $pestanasConfig = [
-                                'tab-fv-asiento-btn' => 'Asiento contable',
                                 'tab-fv-pagos-btn' => 'Pagos',
                                 'tab-fv-retenciones-btn' => 'Retenciones',
                                 'tab-fv-notas-btn' => 'Notas de crédito',
                                 'tab-fv-guias-btn' => 'Guías de remisión',
                                 'tab-fv-sri-btn' => 'SRI'
                             ];
+                            // La pestaña del asiento solo es configurable si el usuario la ve.
+                            if (\App\Helpers\AsientoPestana::puedeVer()) {
+                                $pestanasConfig = ['tab-fv-asiento-btn' => 'Asiento contable'] + $pestanasConfig;
+                            }
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/factura-venta');
                             ?>
                         </div>
@@ -857,60 +862,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         </div>
 
                         <!-- Pestaña: Asiento Contable -->
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
                         <div class="tab-pane fade p-3" id="m-tab-contable" role="tabpanel">
-                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                <div class="table-responsive" style="max-height: 350px;">
-                                    <table class="table table-sm table-detalle mb-0 text-nowrap" id="table-asiento-contable">
-                                        <thead>
-                                            <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width: 45%;">Cuenta Contable</th>
-                                                <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">D&eacute;bito / Debe</th>
-                                                <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">Cr&eacute;dito / Haber</th>
-                                                <th class="py-2 small fw-bold text-muted pe-3" style="width: 15%;">Referencia</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="tbody-asiento-contable">
-                                            <tr>
-                                                <td colspan="4" class="text-center py-4 text-muted">Cargando asiento contable...</td>
-                                            </tr>
-                                        </tbody>
-                                        <tfoot class="bg-light fw-bold border-top sticky-bottom">
-                                            <tr>
-                                                <td class="text-end py-2">Totales:</td>
-                                                <td class="text-end pe-3 py-2 text-primary" id="lbl-asiento-total-debe">0.00</td>
-                                                <td class="text-end pe-3 py-2 text-primary" id="lbl-asiento-total-haber">0.00</td>
-                                                <td class="py-2">
-                                                    <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
-                                                        <span class="x-small text-muted">Diferencia: <span id="lbl-asiento-diferencia">0.00</span></span>
-                                                        <span id="badge-asiento-cuadre" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <!-- Cuadre contra la factura: se mide sobre la línea de cuenta por cobrar,
-                                                 no sobre el Debe total, porque el Debe también lleva el costo de ventas
-                                                 y el descuento, que no forman parte del total del documento. -->
-                                            <tr class="border-top">
-                                                <td class="text-end py-2 fw-normal small text-muted">Total de la factura:</td>
-                                                <td class="text-end pe-3 py-2 fw-normal" id="lbl-asiento-total-factura">0.00</td>
-                                                <td colspan="2" class="py-2">
-                                                    <div class="d-flex align-items-center justify-content-end pe-3">
-                                                        <span class="x-small fw-normal" id="lbl-asiento-cuadre-factura"></span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                                <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                                    <span class="small text-muted ps-2">
-                                        <i class="bi bi-info-circle me-1"></i> El asiento lo calcula el sistema a partir de la factura.
-                                    </span>
-                                    <div class="small fw-bold text-muted pe-3">
-                                        Líneas: <span id="fv-count-asiento-lineas">0</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <?php $prefijo = 'fv'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                         </div>
+                        <?php endif; ?>
 
                         <!-- Pestaña: Pagos / Cobros -->
                         <div class="tab-pane fade" id="m-tab-pagos-historial" role="tabpanel">
@@ -6675,7 +6631,13 @@ $totalPages = $totalPagesOriginal;
         });
     }
 
-    // â”€â”€ GESTIÃ”N DE ASIENTO CONTABLE INTERACTIVO Y EMULADOR EN CALIENTE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── ASIENTO CONTABLE (componente compartido) ──────────────────────────────
+    // La pestaña usa public/js/modulos/asiento_contable_tab.js: muestra el asiento registrado
+    // de la factura y —con permiso de actualizar en Asientos Contables— permite corregirlo y
+    // guardarlo, comprobando que siga cuadrando con el total de la factura (el cuadre se mide
+    // sobre la línea de cuenta por cobrar, no sobre el Debe total, que además lleva el costo de
+    // ventas y el descuento). Mientras la factura no tenga asiento se muestra la vista previa
+    // que arman las reglas contables con los valores que hay en el formulario.
     function debounce(func, wait) {
         let timeout;
         return function(...args) {
@@ -6684,183 +6646,58 @@ $totalPages = $totalPagesOriginal;
         };
     }
 
-    // Regenera el asiento con los valores actuales de la factura (debounced para no spamear).
-    // Se llama desde calcTotales() cada vez que cambian productos, precios o cantidades.
-    window.fvDebouncedRecalcularAsiento = debounce(function() {
-        window.fvCargarAsiento(window.FV_ID_ACTIVO || 0, false, true);
-    }, 600);
-
-    // El asiento lo calcula SIEMPRE el sistema a partir de la factura: esta pestaña es de
-    // solo lectura. Antes se podía editar, pero el backend regenera el asiento al guardar
-    // (procesarAsientoContable) y descartaba lo editado, así que la edición se retiró.
-    window.fvRenderLineaAsiento = function(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '', esTotalDocumento = false) {
-        const tbody = document.getElementById('tbody-asiento-contable');
-        if (!tbody) return;
-
-        const fmt = v => (parseFloat(v || 0) || 0).toFixed(2);
-
-        const tr = document.createElement('tr');
-        tr.className = 'asiento-linea-row';
-        tr.dataset.debe  = fmt(debe);
-        tr.dataset.haber = fmt(haber);
-        if (esTotalDocumento) tr.dataset.totalDocumento = '1';
-
-        const tdCuenta = document.createElement('td');
-        tdCuenta.className = 'ps-3 align-middle small' + (nombre ? '' : ' text-danger fst-italic');
-        tdCuenta.textContent = nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : '(cuenta sin configurar)';
-
-        const tdDebe = document.createElement('td');
-        tdDebe.className = 'text-end pe-3 align-middle small text-primary fw-medium';
-        tdDebe.textContent = parseFloat(debe || 0) ? fmt(debe) : '';
-
-        const tdHaber = document.createElement('td');
-        tdHaber.className = 'text-end pe-3 align-middle small text-primary fw-medium';
-        tdHaber.textContent = parseFloat(haber || 0) ? fmt(haber) : '';
-
-        const tdRef = document.createElement('td');
-        tdRef.className = 'pe-3 align-middle small text-muted fst-italic';
-        tdRef.textContent = referencia || '';
-
-        tr.append(tdCuenta, tdDebe, tdHaber, tdRef);
-        tbody.appendChild(tr);
-    };
-
-    window.fvRecalcularTotalesAsiento = function() {
-        let totalDebe  = 0;
-        let totalHaber = 0;
-        let debeAncla  = null;   // línea de cuenta por cobrar = total del documento
-
-        const filas = document.querySelectorAll('.asiento-linea-row');
-        filas.forEach(tr => {
-            const debe  = parseFloat(tr.dataset.debe)  || 0;
-            const haber = parseFloat(tr.dataset.haber) || 0;
-            totalDebe  += debe;
-            totalHaber += haber;
-            if (tr.dataset.totalDocumento === '1') debeAncla = (debeAncla || 0) + debe;
-        });
-
-        const lblDebe       = document.getElementById('lbl-asiento-total-debe');
-        const lblHaber      = document.getElementById('lbl-asiento-total-haber');
-        const lblDiferencia = document.getElementById('lbl-asiento-diferencia');
-        const badgeCuadre   = document.getElementById('badge-asiento-cuadre');
-
-        if (lblDebe)  lblDebe.textContent  = totalDebe.toFixed(2);
-        if (lblHaber) lblHaber.textContent = totalHaber.toFixed(2);
-
-        const diff = Math.abs(totalDebe - totalHaber);
-        if (lblDiferencia) {
-            lblDiferencia.textContent = diff.toFixed(2);
-            lblDiferencia.classList.toggle('text-danger',  diff >= 0.005);
-            lblDiferencia.classList.toggle('text-success', diff <  0.005);
-        }
-
-        if (badgeCuadre) {
-            if (diff < 0.005 && (totalDebe > 0 || totalHaber > 0)) {
-                badgeCuadre.className = 'badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2';
-                badgeCuadre.textContent = 'Cuadrado';
-            } else {
-                badgeCuadre.className = 'badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2';
-                badgeCuadre.textContent = 'Descuadrado';
-            }
-        }
-
-        // Cuadre contra el total de la factura. Se mide sobre la línea de cuenta por cobrar,
-        // que es la que el sistema fija en el total del documento. El Debe total NO sirve
-        // como referencia: también incluye el costo de ventas y el descuento.
-        const totalFactura  = parseFloat(document.getElementById('m-lbl-total')?.textContent) || 0;
-        const lblTotalFact  = document.getElementById('lbl-asiento-total-factura');
-        const lblCuadreFact = document.getElementById('lbl-asiento-cuadre-factura');
-
-        if (lblTotalFact) lblTotalFact.textContent = totalFactura.toFixed(2);
-
-        if (lblCuadreFact) {
-            if (filas.length === 0) {
-                lblCuadreFact.textContent = '';
-                lblCuadreFact.className = 'x-small fw-normal';
-            } else if (debeAncla === null) {
-                lblCuadreFact.textContent = 'El asiento no tiene la línea de cuenta por cobrar';
-                lblCuadreFact.className = 'x-small fw-bold text-danger';
-            } else if (Math.abs(debeAncla - totalFactura) < 0.005) {
-                lblCuadreFact.textContent = 'Coincide con la cuenta por cobrar del asiento';
-                lblCuadreFact.className = 'x-small fw-normal text-success';
-            } else {
-                lblCuadreFact.textContent = 'Cuenta por cobrar del asiento: ' + debeAncla.toFixed(2)
-                                          + ' · diferencia: ' + Math.abs(debeAncla - totalFactura).toFixed(2);
-                lblCuadreFact.className = 'x-small fw-bold text-danger';
-            }
-        }
-
-        const countLineas = document.getElementById('fv-count-asiento-lineas');
-        if (countLineas) countLineas.textContent = filas.length;
-    };
-
-
-    window.fvCargarAsiento = async function(idVenta = 0, sugerir = false, forceRecalculate = false) {
-        const tbody = document.getElementById('tbody-asiento-contable');
-        if (!tbody) return;
-
-        try {
-            // Hot values de la factura para propuesta en caliente
-            const subtotal = parseFloat(document.getElementById('m-lbl-subtotal')?.textContent) || 0;
-            const desc = parseFloat(document.getElementById('m-lbl-descuento')?.textContent) || 0;
-            const total = parseFloat(document.getElementById('m-lbl-total')?.textContent) || 0;
-            const propina = parseFloat(document.getElementById('m-input-propina')?.value) || 0;
-
-            // Extraer porcentaje e importes de IVA en caliente
-            const ivas = [];
-            document.querySelectorAll('#m-lbl-ivas-grupo div').forEach(div => {
-                const text = div.querySelector('span:first-child')?.textContent || '';
-                const val = parseFloat(div.querySelector('span:last-child')?.textContent) || 0;
-                const m = text.match(/(\d+)%/);
-                if (m) {
-                    ivas.push({ porcentaje: parseInt(m[1]), valor: val });
+    let _fvAsientoTab = null;
+    function fvAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('fv-asiento-tbody')) return null;
+        if (!_fvAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _fvAsientoTab = window.crearAsientoTab({
+                prefijo: 'fv',
+                moduloOrigen: 'factura_venta',
+                previewUrl: `${B_URL}/${RUTA_MODULO}/getAsientoSugeridoAjax`,
+                cuentasUrl: `${B_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${B_URL}/modulos/asientos-contables`,
+                // La vista previa de la factura se calcula con los importes que hay en pantalla,
+                // no solo con el id: así refleja lo que se está editando antes de guardar.
+                previewParams: (forzada) => {
+                    const ivas = [];
+                    document.querySelectorAll('#m-lbl-ivas-grupo div').forEach(div => {
+                        const text = div.querySelector('span:first-child')?.textContent || '';
+                        const val = parseFloat(div.querySelector('span:last-child')?.textContent) || 0;
+                        const m = text.match(/(\d+)%/);
+                        if (m) ivas.push({ porcentaje: parseInt(m[1]), valor: val });
+                    });
+                    return {
+                        // Al forzar el recálculo se pide la sugerencia con id_venta=0 para que el
+                        // servidor la arme desde los valores del formulario y no devuelva el asiento guardado.
+                        id_venta: forzada ? 0 : (window.FV_ID_ACTIVO || 0),
+                        id_cliente: document.getElementById('m-id-cliente')?.value || '',
+                        subtotal: parseFloat(document.getElementById('m-lbl-subtotal')?.textContent) || 0,
+                        descuento: parseFloat(document.getElementById('m-lbl-descuento')?.textContent) || 0,
+                        total: parseFloat(document.getElementById('m-lbl-total')?.textContent) || 0,
+                        propina: parseFloat(document.getElementById('m-input-propina')?.value) || 0,
+                        ivas: JSON.stringify(ivas),
+                        sugerir: 'false'
+                    };
                 }
             });
-
-            const idCliente = document.getElementById('m-id-cliente')?.value || '';
-
-            // Al forzar recálculo, usar id_venta=0 para obtener una sugerencia fresca
-            // basada en los valores actuales del formulario, ignorando el asiento guardado.
-            const idParaQuery = forceRecalculate ? 0 : idVenta;
-
-            const query = new URLSearchParams({
-                id_venta: idParaQuery,
-                id_cliente: idCliente,
-                subtotal: subtotal,
-                descuento: desc,
-                total: total,
-                propina: propina,
-                ivas: JSON.stringify(ivas),
-                sugerir: sugerir ? 'true' : 'false'
-            });
-
-            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getAsientoSugeridoAjax?${query.toString()}`);
-            const json = await resp.json();
-
-            if (json.ok && json.detalles && json.detalles.length > 0) {
-                tbody.innerHTML = '';
-                json.detalles.forEach(det => {
-                    window.fvRenderLineaAsiento(
-                        det.id_cuenta_contable,
-                        det.cuenta_codigo || det.codigo_cuenta || '',
-                        det.cuenta_nombre || det.nombre_cuenta || '',
-                        parseFloat(det.debe || 0),
-                        parseFloat(det.haber || 0),
-                        det.documento_referencia || det.referencia_detalle || det.referencia || '',
-                        det.es_total_documento === true
-                    );
-                });
-                fvRecalcularTotalesAsiento();
-
-            } else {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Sin asiento contable, guarda o actualiza este documento para generar el asiento.</td></tr>';
-                fvRecalcularTotalesAsiento();
-            }
-        } catch (err) {
-            console.error('Error al cargar asiento contable:', err);
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar datos del asiento contable.</td></tr>';
         }
+        return _fvAsientoTab;
+    }
+
+    // Refresca el asiento con los valores actuales de la factura (debounced para no spamear).
+    // Se llama desde calcTotales() cada vez que cambian productos, precios o cantidades: como
+    // aún se está editando la factura, siempre se pide la VISTA PREVIA.
+    window.fvDebouncedRecalcularAsiento = debounce(function() {
+        const tab = fvAsientoTab();
+        if (tab) tab.cargar(window.FV_ID_ACTIVO || 0, { vistaPrevia: true });
+    }, 600);
+
+    window.fvCargarAsiento = function(idVenta = 0) {
+        const tab = fvAsientoTab();
+        if (tab) tab.cargar(idVenta);
     };
+
 
 
     // ─── Pestaña Pagos / Cobros ────────────────────────────────────────────────

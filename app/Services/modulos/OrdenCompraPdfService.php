@@ -10,7 +10,8 @@ use TCPDF;
  * PDF de una ORDEN DE COMPRA (documento interno, no electrónico ante el SRI).
  * A4 vertical: encabezado con logo + datos de la empresa, caja con los datos
  * de la orden y el proveedor, tabla de ítems (código/descripción/cantidad/
- * precio unitario/subtotal) con total, y observaciones.
+ * precio unitario/IVA/subtotal), resumen de subtotales por tarifa de IVA con el
+ * TOTAL con impuestos, y observaciones.
  */
 class OrdenCompraPdfService
 {
@@ -161,6 +162,7 @@ class OrdenCompraPdfService
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'descripcion'],
             ['t' => 'Cantidad',    'w' => 20, 'a' => 'R', 'k' => 'cantidad'],
             ['t' => 'P. Unitario', 'w' => 25, 'a' => 'R', 'k' => 'precio_unitario'],
+            ['t' => 'IVA',         'w' => 16, 'a' => 'C', 'k' => 'iva'],
             ['t' => 'Subtotal',    'w' => 28, 'a' => 'R', 'k' => 'subtotal'],
         ];
 
@@ -192,7 +194,6 @@ class OrdenCompraPdfService
             return $pdf->GetY();
         }
 
-        $total = 0.0;
         $alt = false;
         foreach ($detalles as $d) {
             $bg = $alt ? [245, 247, 250] : [255, 255, 255];
@@ -201,21 +202,33 @@ class OrdenCompraPdfService
 
             $cantidad  = (float) ($d['cantidad'] ?? 0);
             $precio    = (float) ($d['precio_unitario'] ?? 0);
-            $subtotal  = $cantidad * $precio;
-            $total    += $subtotal;
+            $subtotal  = round($cantidad * $precio, 2);
+            $pctIva    = (float) ($d['porcentaje_iva'] ?? 0);
+
+            // La nota de la línea (instrucción para el proveedor sobre ESE ítem) se imprime
+            // como una línea más dentro de la celda de descripción, no como columna propia:
+            // suele estar vacía y una columna extra restaría ancho a la descripción en todas
+            // las filas.
+            $nota = trim((string) ($d['notas'] ?? ''));
 
             $vals = [];
             foreach ($cols as $c) {
                 $vals[] = match ($c['k']) {
                     'cantidad'        => number_format($cantidad, 2),
                     'precio_unitario' => number_format($precio, 2),
+                    'iva'             => $this->formatearPorcentaje($pctIva) . '%',
                     'subtotal'        => number_format($subtotal, 2),
+                    'descripcion'     => (string) ($d['descripcion'] ?? '')
+                                         . ($nota !== '' ? "\nNota: " . $nota : ''),
                     default           => (string) ($d[$c['k']] ?? ''),
                 };
             }
 
+            // getNumLines() cuenta las líneas reales con la fuente activa, incluidos los
+            // saltos explícitos de la nota; la estimación por GetStringWidth que había antes
+            // ignoraba los "\n" y dejaba la nota fuera del recuadro de la fila.
             $descW = $cols[$descIdx]['w'];
-            $nLin  = max(1, (int) ceil(max(1, $pdf->GetStringWidth((string) $vals[$descIdx])) / max(1, $descW - 2)));
+            $nLin  = max(1, (int) $pdf->getNumLines((string) $vals[$descIdx], $descW));
             $h     = max(5.5, $nLin * 4.2);
 
             $x = $mL;
@@ -232,16 +245,52 @@ class OrdenCompraPdfService
             $pdf->SetXY($mL, $yRow + $h);
         }
 
-        // Fila de total
-        $yRow = $pdf->GetY();
-        $wSinSubtotal = $this->contentW - $cols[count($cols) - 1]['w'];
-        $pdf->SetXY($mL, $yRow);
-        $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->SetFillColor(235, 237, 240);
-        $pdf->Cell($wSinSubtotal, 6, 'TOTAL', 1, 0, 'R', true);
-        $pdf->Cell($cols[count($cols) - 1]['w'], 6, number_format($total, 2), 1, 1, 'R', true);
+        // Resumen de totales: base sin impuestos, bases e IVA por tarifa, y TOTAL.
+        // El cálculo (y su redondeo a centavos) vive en el Service, para que el PDF, el
+        // Excel, el modal y la página de aprobación del proveedor cuadren al centavo.
+        $t       = OrdenCompraService::calcularTotales($detalles);
+        $valW    = $cols[count($cols) - 1]['w'];
+        $lblW    = 52; // holgado: las etiquetas incluyen el nombre de la tarifa ("Subtotal No objeto de impuesto")
+        $lblX    = $mL + $this->contentW - $valW - $lblW;
+
+        $fila = function (string $etiqueta, float $valor, bool $destacada = false) use ($pdf, $lblX, $lblW, $valW): void {
+            $pdf->SetX($lblX);
+            if ($destacada) {
+                $pdf->SetFont('helvetica', 'B', 8.5);
+                $pdf->SetFillColor(235, 237, 240);
+            } else {
+                $pdf->SetFont('helvetica', '', 7.5);
+                $pdf->SetFillColor(255, 255, 255);
+            }
+            // La etiqueta se recorta al ancho de su celda con la fuente ya aplicada:
+            // Cell() no ajusta el texto y una tarifa de nombre largo se saldría del recuadro.
+            $pdf->Cell($lblW, 5, $this->ajustarTexto($etiqueta, $lblW - 2), 1, 0, 'R', true);
+            $pdf->Cell($valW, 5, number_format($valor, 2), 1, 1, 'R', true);
+        };
+
+        $pdf->SetDrawColor(160, 160, 160);
+        $fila('SUBTOTAL', $t['subtotal']);
+        foreach ($t['grupos'] as $g) {
+            $fila('Subtotal ' . $g['label'], $g['base']);
+        }
+        foreach ($t['grupos'] as $g) {
+            if ($g['porcentaje'] > 0) {
+                $fila('IVA ' . $this->formatearPorcentaje($g['porcentaje']) . '%', $g['iva']);
+            }
+        }
+        if ($t['total_iva'] <= 0) {
+            $fila('IVA', 0.0);
+        }
+        $fila('TOTAL', $t['total'], true);
 
         return $pdf->GetY();
+    }
+
+    /** 15.00 → "15"; 0.00 → "0"; 12.50 → "12.5" (para etiquetas de tarifa). */
+    private function formatearPorcentaje(float $pct): string
+    {
+        $txt = number_format($pct, 2, '.', '');
+        return rtrim(rtrim($txt, '0'), '.') ?: '0';
     }
 
     private function dibujarObservaciones(array $c, float $y): void

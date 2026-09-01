@@ -198,6 +198,9 @@ const OC_URL_BASE  = '<?= $urlBaseOc ?>';
 const OC_PERM      = <?= json_encode($perm) ?>;
 const OC_ESTABLECIMIENTOS = <?= json_encode($establecimientos ?? []) ?>;
 const OC_PUNTOS_EMISION   = <?= json_encode($puntosEmision ?? []) ?>;
+// Catálogo de tarifas de IVA para el selector de cada línea del detalle (mismo
+// origen que Compras: tarifa_iva activas).
+window.OC_TARIFAS_IVA     = <?= json_encode(array_values($tarifasIva ?? [])) ?>;
 
 let ocCurrentSort  = '<?= $ordenCol ?>';
 let ocCurrentDir   = '<?= $ordenDir ?>';

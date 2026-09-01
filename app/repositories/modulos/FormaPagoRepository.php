@@ -108,7 +108,7 @@ class FormaPagoRepository extends BaseRepository
                     LEFT JOIN plan_cuentas pc ON fp.id_cuenta_contable = pc.id
                     " . self::JOIN_CUENTAS_FLUJO . "
                     {$whereSql}
-                    ORDER BY $orderExpr $dir
+                    ORDER BY $orderExpr $dir, b.id DESC
                     LIMIT :limit OFFSET :offset";
 
         $stRows = $this->db->prepare($sqlRows);

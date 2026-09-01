@@ -1325,7 +1325,7 @@ class AuditoriaContableRepository extends BaseRepository
                 LEFT JOIN asientos_contables_cabecera ac
                        ON ac.id = i.id_asiento AND ac.id_empresa = i.id_empresa
                 $where
-                ORDER BY i.$ordenCol $ordenDir
+                ORDER BY i.$ordenCol $ordenDir, i.id DESC
                 LIMIT $perPage OFFSET $offset";
 
         return ['rows' => $this->ejecutar($sql, $params), 'total' => $total];

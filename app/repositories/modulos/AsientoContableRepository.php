@@ -76,7 +76,11 @@ class AsientoContableRepository
         $ordenCol = in_array($ordenCol, $ordenColPermitidas, true) ? $ordenCol : 'fecha_asiento';
         $ordenDir = in_array(strtoupper($ordenDir), ['ASC', 'DESC'], true) ? strtoupper($ordenDir) : 'DESC';
 
-        $sql .= " ORDER BY {$ordenCol} {$ordenDir}";
+        // Desempate por id: ninguna columna ordenable es única (varios asientos
+        // comparten fecha_asiento), y sin un criterio estable LIMIT/OFFSET puede
+        // repetir una fila en dos páginas y saltarse otra. La consulta no usa
+        // alias de tabla, por eso la columna va suelta.
+        $sql .= " ORDER BY {$ordenCol} {$ordenDir}, id DESC";
         
         if ($perPage > 0) {
             $sql .= " LIMIT {$perPage} OFFSET {$offset}";
@@ -539,6 +543,48 @@ class AsientoContableRepository
         }
 
         return $numero === false || $numero === null || $numero === '' ? null : (string) $numero;
+    }
+
+    /**
+     * Marca (o desmarca) el asiento como editado a mano. Mientras esté marcado, el service del
+     * módulo dueño del documento NO lo regenera desde AsientoBuilderService al reguardar el
+     * documento: la corrección del usuario manda. Ver database/asientos_editado_manual.sql.
+     *
+     * Si la base todavía no tiene la columna (migración pendiente), no rompe nada: se ignora
+     * en silencio y el sistema se comporta como antes — el asiento se sigue regenerando.
+     */
+    public function setEditadoManual(int $idAsiento, int $idEmpresa, int $updatedBy, bool $valor): void
+    {
+        $sql = "UPDATE asientos_contables_cabecera
+                SET editado_manual = :valor, updated_by = :updated_by, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        try {
+            $stmt = \App\core\Database::getConnection()->prepare($sql);
+            $stmt->execute([
+                ':id' => $idAsiento,
+                ':id_empresa' => $idEmpresa,
+                ':updated_by' => $updatedBy,
+                ':valor' => $valor ? 'true' : 'false',
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[Asientos] editado_manual no disponible (falta la migración): ' . $e->getMessage());
+        }
+    }
+
+    /** ¿El asiento está marcado como editado a mano? false también si falta la columna. */
+    public function esEditadoManual(int $idAsiento): bool
+    {
+        try {
+            $stmt = \App\core\Database::getConnection()->prepare(
+                "SELECT editado_manual FROM asientos_contables_cabecera WHERE id = :id"
+            );
+            $stmt->execute([':id' => $idAsiento]);
+            $v = $stmt->fetchColumn();
+            // PostgreSQL devuelve el boolean como 't'/'f' por PDO: false llega como cadena vacía.
+            return $v === true || $v === 't' || $v === '1' || $v === 1;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     public function updateEstado(int $idAsiento, string $estado, int $updatedBy): void

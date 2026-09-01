@@ -42,7 +42,11 @@ class AsientosTipoRepository
         $ordenCol = in_array($ordenCol, $ordenColPermitidas, true) ? $ordenCol : 'id';
         $ordenDir = in_array(strtoupper($ordenDir), ['ASC', 'DESC'], true) ? strtoupper($ordenDir) : 'ASC';
 
-        $sql .= " ORDER BY {$ordenCol} {$ordenDir}";
+        // Desempate por id para que LIMIT/OFFSET no repita ni se salte filas al
+        // ordenar por una columna no única. Se ordena sobre la subconsulta "q",
+        // cuyas columnas van sin alias; si ya se está ordenando por id, sobra.
+        $desempate = $ordenCol === 'id' ? '' : ', id DESC';
+        $sql .= " ORDER BY {$ordenCol} {$ordenDir}{$desempate}";
         
         if ($perPage > 0) {
             $sql .= " LIMIT {$perPage} OFFSET {$offset}";

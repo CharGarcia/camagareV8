@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica
-version: 2.2
+etiquetas: compras, compra, factura de compra, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica
+version: 2.5
 orden: 20
 estado: activo
 ---
@@ -74,6 +74,33 @@ tipo.
 
 En una **factura de reembolso recibida** el sustento queda fijo en *08 - Valor
 pagado para solicitar Reembolso de Gasto (intermediario)* y no se puede cambiar.
+
+## Formas de pago SRI (no confundir con Pagos)
+
+Son dos cosas distintas dentro del mismo modal:
+
+- **Formas de pago SRI** — sub-pestaña junto a *Info Adicional*. Es un **dato
+  tributario del comprobante**: con qué medio se pactó pagar (efectivo,
+  transferencia, tarjeta…) y a qué plazo. Es lo que viaja en el bloque `<pagos>`
+  del comprobante electrónico y en el ATS. **No mueve dinero.**
+- **Pagos** — pestaña propia, con Saldo Pendiente. Aquí se registra el **egreso
+  real** que abona la deuda al proveedor y baja la cuenta por pagar.
+
+El SRI exige que las formas de pago sumen exactamente el total del comprobante.
+Esa validación se aplica **solo en el registro manual**, que es donde usted
+captura los montos:
+
+| Tipo de registro | Se valida el cuadre |
+|---|---|
+| Manual (físico) | **Sí.** No se guarda hasta que las formas de pago sumen el total |
+| Electrónico (XML del SRI) | **No.** Se guarda tal cual lo declaró el emisor |
+| Migrado | **No.** Se conserva lo que traía el sistema anterior |
+
+Si aparece *"Las formas de pago SRI no coinciden con el total de la compra"*
+—mensaje del botón **Guardar**, no del registro de un pago— abra la sub-pestaña
+*Formas de pago SRI* y cuadre los montos. Con **una sola** forma de pago el
+sistema la rellena sola con el total; en cuanto agrega una segunda, los montos
+quedan a su cargo.
 
 ## No se puede repetir un comprobante
 
@@ -221,10 +248,33 @@ Los botones **Excel** y **PDF** de la parte superior del listado exportan las
 compras que coinciden con el buscador y el orden aplicados en ese momento (no
 solo la página visible).
 
+## Pestaña Asiento contable
+
+La pestaña muestra el asiento que la compra generó en contabilidad y permite
+corregirlo sin salir del modal.
+
+- **Solo se ve** si el usuario tiene permiso de ver *Contabilidad → Asientos
+  Contables*; **solo se edita** si además puede modificar ese módulo.
+- Mientras la compra no tenga asiento, la pestaña muestra la **vista previa** de
+  lo que armarán las reglas contables; no hay nada que guardar todavía.
+- Al pulsar **Guardar asiento** se comprueba que el Debe sea igual al Haber, que
+  todas las líneas tengan cuenta y que **la cuenta por pagar del asiento siga
+  coincidiendo con el total de la compra**. Si hay diferencia, se avisa y usted
+  decide si guardar igual; si falta la línea de la cuenta por pagar, no se puede
+  guardar.
+- Un asiento corregido a mano **ya no se regenera** al volver a guardar la
+  compra. El botón **Restaurar automático** descarta la corrección y lo vuelve a
+  armar desde la configuración contable.
+
+El detalle completo está en el manual de [Asientos contables](modulos/asientos-contables).
+
 ## Permisos
 
 Con **acceso total** se ven las compras de toda la empresa; sin él, cada usuario
 ve solo las que registró.
+
+La pestaña **Asiento contable** no se rige por los permisos de Compras sino por
+los de *Contabilidad → Asientos Contables* (ver la sección anterior).
 
 ## Errores frecuentes
 
@@ -289,6 +339,25 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.5** — La pestaña **Asiento contable** ahora solo aparece si el usuario tiene acceso a Contabilidad → Asientos Contables, y con permiso de modificar permite corregir el asiento y guardarlo desde el propio modal, validando que siga cuadrando con el total de la compra. Un asiento corregido a mano deja de regenerarse al reguardar la compra; se vuelve al automático con **Restaurar automático**.
+
+- **2.4** — Se corrigió la **paginación del listado**: al pasar de página podía
+  repetirse una compra y quedar otra sin mostrarse nunca, porque las compras que
+  comparten fecha de emisión no tenían un orden estable. Ahora el listado ordena
+  de forma determinista y el contador "desde-hasta/total" cuadra siempre con las
+  compras que se recorren. Además el listado se volvió notablemente más rápido:
+  dejó de arrastrar el XML completo de cada comprobante en cada fila y se
+  agregaron índices de base de datos para el filtro por empresa y ambiente. Sin
+  cambios en la forma de usar el módulo.
+
+- **2.3** — El cuadre de las **formas de pago SRI** contra el total ya solo se
+  exige en el **registro manual**. Un comprobante **electrónico** (o migrado) se
+  guarda tal cual viene del XML descargado del SRI, aunque el emisor haya
+  declarado un importe distinto o no haya declarado formas de pago: antes ese
+  descuadre bloqueaba el guardado sin dejar forma de corregirlo, porque esos
+  campos están deshabilitados. El aviso del registro manual ahora dice cuánto
+  falta y abre la sub-pestaña correspondiente. Nueva sección *Formas de pago
+  SRI (no confundir con Pagos)*.
 - **2.2** — El selector **Tipo de Comprobante** del modal se acotó a los
   documentos que se capturan a mano: **02, 08, 11, 12, 15, 16, 19, 20 y 21**.
   Los demás códigos del catálogo (factura 01, liquidación 03, notas 04/05,

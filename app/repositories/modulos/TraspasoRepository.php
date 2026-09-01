@@ -93,7 +93,7 @@ class TraspasoRepository extends BaseRepository
                 INNER JOIN empresa_formas_pago fd ON t.id_forma_destino = fd.id
                 LEFT JOIN usuarios u ON t.created_by = u.id
                 $where
-                ORDER BY t.$ordenCol $ordenDir
+                ORDER BY t.$ordenCol $ordenDir, t.id DESC
                 LIMIT $perPage OFFSET $offset";
 
         $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);

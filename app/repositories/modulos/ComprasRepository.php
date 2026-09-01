@@ -37,6 +37,30 @@ class ComprasRepository extends BaseRepository
     // LISTADO
     // ─────────────────────────────────────────────────────────────────────────
 
+    /** Caché por instancia del tipo de ambiente de cada empresa consultada. */
+    private array $tipoAmbienteCache = [];
+
+    /**
+     * Tipo de ambiente (1 = pruebas, 2 = producción) de la empresa, como el
+     * VARCHAR(1) con el que se compara compras_cabecera.tipo_ambiente. Devuelve
+     * NULL si la empresa no existe, para que el listado no muestre nada — igual
+     * que hacía el sub-SELECT que este método reemplaza.
+     */
+    private function getTipoAmbienteEmpresa(int $idEmpresa): ?string
+    {
+        if (!array_key_exists($idEmpresa, $this->tipoAmbienteCache)) {
+            $st = $this->db->prepare(
+                "SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa"
+            );
+            $st->execute([':id_empresa' => $idEmpresa]);
+            $valor = $st->fetchColumn();
+            $this->tipoAmbienteCache[$idEmpresa] = $valor === false || $valor === null
+                ? null
+                : (string) $valor;
+        }
+        return $this->tipoAmbienteCache[$idEmpresa];
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar = '',
@@ -49,7 +73,15 @@ class ComprasRepository extends BaseRepository
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
 
-        $where = "WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        // El tipo de ambiente de la empresa se resuelve UNA vez en PHP en lugar
+        // de con un sub-SELECT dentro del WHERE. Antes esa subconsulta viajaba
+        // en las dos consultas del listado (COUNT y SELECT), obligaba a repetir
+        // el placeholder :id_empresa y le escondía al planificador el valor
+        // concreto de tipo_ambiente, que es justo una de las columnas del índice
+        // idx_compras_listado. Si la empresa no existe el valor es NULL y la
+        // comparación no calza con ninguna fila — mismo resultado que antes.
+        $where = "WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = :tipo_ambiente";
+        $params[':tipo_ambiente'] = $this->getTipoAmbienteEmpresa($idEmpresa);
 
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $textoLibre = $parsed['texto_libre'];
@@ -122,11 +154,24 @@ class ComprasRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
+        // El COUNT solo arma los JOIN que el WHERE realmente referencia. Los de
+        // usuarios y sustento_tributario cuelgan de la PK de su tabla, así que
+        // son 1:1 como máximo y quitarlos NO cambia el total: solo se agregan
+        // cuando el buscador usa los filtros "usuario:" o "sustento:", que son
+        // los únicos que mencionan esos alias. El INNER JOIN con proveedores sí
+        // se queda siempre porque descarta las compras sin proveedor válido y
+        // por lo tanto sí afecta al conteo.
+        $joinsCount = "INNER JOIN proveedores p ON c.id_proveedor = p.id";
+        if (str_contains($where, 'u.nombre')) {
+            $joinsCount .= " LEFT JOIN usuarios u ON c.created_by = u.id";
+        }
+        if (str_contains($where, 'st.nombre')) {
+            $joinsCount .= " LEFT JOIN sustento_tributario st ON c.id_sustento_tributario = st.id";
+        }
+
         $sqlCount = "SELECT COUNT(*)
                      FROM compras_cabecera c
-                     INNER JOIN proveedores p          ON c.id_proveedor          = p.id
-                     LEFT  JOIN usuarios   u          ON c.created_by             = u.id
-                     LEFT  JOIN sustento_tributario st ON c.id_sustento_tributario = st.id
+                     $joinsCount
                      $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
@@ -154,7 +199,39 @@ class ComprasRepository extends BaseRepository
             default            => "c.$ordenCol",
         };
 
-        $sql = "SELECT c.*,
+        // Desempate OBLIGATORIO por id: ninguna de las columnas ordenables es
+        // única (345 de 515 compras de una misma empresa comparten
+        // fecha_emision, que es el orden por defecto), y con LIMIT/OFFSET
+        // PostgreSQL no garantiza un orden estable entre filas empatadas. Sin
+        // este desempate la paginación repetía una fila en dos páginas y se
+        // saltaba otra por completo: al recorrer las 26 páginas del listado
+        // salían 515 filas pero solo 514 compras distintas.
+        $desempate = $ordenExpr === 'c.id' ? '' : ', c.id DESC';
+
+        // Columnas explícitas en lugar de "c.*" A PROPÓSITO: compras_cabecera
+        // tiene la columna detalle_xml (TEXT con el XML del SRI, ~12 KB de
+        // promedio y hasta 52 KB) y el listado la arrastraba en cada fila para
+        // luego volcarla completa en el atributo data-row de cada <tr>. Eso
+        // multiplicaba por ~8 el peso de cada página del listado (318 KB contra
+        // 37 KB en 20 filas) sin que nadie la use: el modal recibe el XML por
+        // getCompraAjax() y la descarga por descargarXml(), cada uno con su
+        // propia consulta. Al agregar una columna nueva a la tabla, añadirla
+        // aquí si el listado la necesita — pero NUNCA volver a traer detalle_xml.
+        $sql = "SELECT c.id, c.id_empresa, c.id_proveedor, c.id_establecimiento,
+                       c.id_sustento_tributario, c.tipo_comprobante, c.tipo_id_proveedor,
+                       c.parte_relacionada, c.establecimiento_prov, c.punto_emision_prov,
+                       c.secuencial_prov, c.numero_autorizacion, c.fecha_emision,
+                       c.fecha_registro, c.importe_total, c.observaciones,
+                       c.created_at, c.updated_at, c.created_by, c.updated_by,
+                       c.eliminado, c.deleted_at, c.deleted_by,
+                       c.autorizacion_desde, c.autorizacion_hasta, c.fecha_caducidad,
+                       c.tipo_registro, c.deducible, c.documento_modificado, c.motivo,
+                       c.id_usuario, c.total_sin_impuestos, c.total_descuento, c.propina,
+                       c.tipo_ambiente, c.id_asiento_contable, c.cod_doc_reembolso,
+                       c.total_comprobantes_reembolso, c.total_base_imponible_reembolso,
+                       c.total_impuesto_reembolso, c.id_orden_compra, c.estado,
+                       c.token_aprobacion, c.aprobado_by, c.aprobado_at,
+                       c.motivo_rechazo, c.total_terceros,
                        (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0)) AS monto_iva,
                        p.razon_social      AS proveedor_nombre,
                        p.identificacion    AS proveedor_ruc,
@@ -171,7 +248,7 @@ class ComprasRepository extends BaseRepository
                 LEFT  JOIN usuarios u            ON c.created_by = u.id
                 LEFT  JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
                 $where
-                ORDER BY $ordenExpr $ordenDir";
+                ORDER BY $ordenExpr $ordenDir$desempate";
 
 
         if ($perPage > 0) {

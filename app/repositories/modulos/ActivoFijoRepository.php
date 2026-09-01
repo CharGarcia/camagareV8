@@ -84,7 +84,7 @@ class ActivoFijoRepository extends BaseRepository
                 LEFT  JOIN plan_cuentas pd ON pd.id = a.id_cuenta_depreciacion_acumulada
                 LEFT  JOIN plan_cuentas pg ON pg.id = a.id_cuenta_gasto_depreciacion
                 $where
-                ORDER BY $ordenExpr $ordenDir
+                ORDER BY $ordenExpr $ordenDir, a.id DESC
                 " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
 
         $rows = $this->query($sql, $params)->fetchAll();

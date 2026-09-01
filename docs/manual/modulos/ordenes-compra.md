@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden
-version: 1.8
+etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor
+version: 1.10
 orden: 15
 estado: activo
 ---
@@ -34,7 +34,54 @@ inventario. Es un compromiso, no una compra.
    del catálogo, el precio unitario se precarga con su **precio de costo**
    (no el de venta) — es lo que se le paga al proveedor. Si el producto no
    tiene costo configurado se precarga en 0.00 y se escribe a mano.
-4. Guarde. Mientras esté en **Borrador** puede seguir editándola libremente.
+4. Revise la **Tarifa IVA** de cada línea (ver abajo).
+5. Si hace falta, escriba una **Nota** en la línea (ver abajo).
+6. Guarde. Mientras esté en **Borrador** puede seguir editándola libremente.
+
+## Notas de cada línea
+
+Cada línea del detalle tiene un campo **Notas** (hasta 200 caracteres) para la
+instrucción que corresponde a **ese ítem**: "entregar en cajas de 12", "color
+azul", "sin etiqueta del proveedor", "confirmar stock antes de despachar".
+
+La nota se guarda con la línea y **sale impresa**: en el PDF aparece debajo de
+la descripción del ítem (precedida de "Nota:"), en el Excel tiene su propia
+columna, y también se muestra en la pantalla donde el proveedor aprueba la
+orden — es una instrucción para él, no un apunte interno.
+
+Para una observación que aplica a **toda la orden** (no a un ítem), use el
+campo **Observaciones** de la cabecera.
+
+> Antes de la versión 1.10 este campo se podía escribir pero no se guardaba: al
+> reabrir la orden aparecía vacío, sin ningún aviso. Las notas escritas antes de
+> esa corrección no se pueden recuperar — no llegaron a la base de datos.
+
+## IVA y subtotales
+
+Cada línea del detalle tiene su propia **Tarifa IVA**, elegida de las tarifas
+activas del sistema (15%, 0%, Exento, No objeto…):
+
+- Al elegir un producto del catálogo se precarga la tarifa configurada en la
+  ficha de ese producto. Si el producto no tiene tarifa, o la línea se escribe
+  a mano sin producto, se propone la tarifa por defecto (15% si está activa) y
+  se puede cambiar.
+- Debajo del detalle, el modal muestra el resumen: **Subtotal**, el subtotal de
+  cada tarifa por separado, el **IVA** de cada tarifa y el **TOTAL** con
+  impuestos. Se recalcula en vivo al escribir cantidades, precios o cambiar la
+  tarifa.
+- Ese mismo resumen sale en el **PDF**, en el **Excel** y en la pantalla que ve
+  el proveedor cuando aprueba la orden desde el correo, así que el total que
+  aprueba es el total con impuestos.
+
+La orden sigue sin efecto tributario: el IVA aquí es informativo, para que el
+pedido refleje lo que realmente se va a pagar. El IVA que se declara es el de
+la **factura de compra** del proveedor, no el de la orden.
+
+> Las órdenes creadas antes de esta función no tenían tarifa por línea. Las que
+> estaban en **Borrador** tomaron la tarifa del producto vinculado al aplicar la
+> actualización; las ya enviadas o aprobadas se dejaron como estaban (con IVA
+> 0%), para no cambiar el importe de un documento que el proveedor ya aprobó.
+> Si alguna necesita el IVA, se puede duplicar y ajustar la copia.
 
 ## Ciclo de vida y estados
 
@@ -208,6 +255,13 @@ Compras (procesar entradas, retención, etc.).
 
 ## Historial de cambios
 
+- **1.10** — Las **notas de cada línea** del detalle ahora sí se guardan (antes
+  se escribían y se perdían al guardar, en silencio) y salen impresas en el
+  PDF, el Excel y la pantalla de aprobación del proveedor.
+- **1.9** — **Tarifa IVA por línea** en el detalle (se precarga con la del
+  producto) y resumen de **subtotales por tarifa, IVA y TOTAL con impuestos**
+  en el modal, el PDF, el Excel y la pantalla de aprobación del proveedor.
+  Antes todos esos documentos mostraban un único total sin impuestos.
 - **1.8** — Entregas parciales: una orden ahora admite varias compras
   vinculadas (nuevo estado **Recibido parcial**, cierre manual "Cerrar
   orden" cuando el proveedor no entrega el saldo). Botón **Duplicar** para

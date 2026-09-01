@@ -108,14 +108,20 @@ class ComprasRules
             }
         }
 
-        // Al menos una forma de pago
-        if (empty($data['pagos']) || !is_array($data['pagos']) || count($data['pagos']) === 0) {
-            throw new \Exception('Debe ingresar al menos una forma de pago.');
-        }
+        // Formas de pago SRI (bloque <pagos> del comprobante). Solo se exigen en el
+        // registro MANUAL, que es donde las captura el usuario: en un documento
+        // electrónico (o migrado) se guardan tal cual vienen del XML descargado del SRI
+        // —incluso si el emisor no declaró ninguna—, así que exigirlas aquí impedía
+        // guardar un comprobante que el propio SRI ya autorizó.
+        if (($data['tipo_registro'] ?? 'fisica') === 'fisica') {
+            if (empty($data['pagos']) || !is_array($data['pagos']) || count($data['pagos']) === 0) {
+                throw new \Exception('Debe ingresar al menos una forma de pago.');
+            }
 
-        foreach ($data['pagos'] as $idx => $pago) {
-            if ((float)($pago['total'] ?? 0) <= 0) {
-                throw new \Exception('El total de la forma de pago #' . ($idx + 1) . ' debe ser mayor a cero.');
+            foreach ($data['pagos'] as $idx => $pago) {
+                if ((float)($pago['total'] ?? 0) <= 0) {
+                    throw new \Exception('El total de la forma de pago #' . ($idx + 1) . ' debe ser mayor a cero.');
+                }
             }
         }
 

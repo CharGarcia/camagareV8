@@ -236,3 +236,5 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
     }
 </script>
+
+<script src="<?= rtrim(BASE_URL, "/") ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>

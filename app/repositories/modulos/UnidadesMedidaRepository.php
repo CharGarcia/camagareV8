@@ -59,7 +59,7 @@ class UnidadesMedidaRepository extends BaseRepository
                     FROM tipo_medida tm
                     LEFT JOIN usuarios u_crea ON u_crea.id = tm.created_by
                     {$where}
-                    ORDER BY " . ($col === 'total_unidades' ? 'total_unidades' : "tm.{$col}") . " {$dir}";
+                    ORDER BY " . ($col === 'total_unidades' ? 'total_unidades' : "tm.{$col}") . " {$dir}, tm.id DESC";
 
         if ($perPage > 0) {
             $sqlRows .= ' LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
@@ -226,7 +226,7 @@ class UnidadesMedidaRepository extends BaseRepository
                     LEFT JOIN tipo_medida tm ON tm.id = um.id_tipo
                     LEFT JOIN usuarios u_crea ON u_crea.id = um.created_by
                     {$where}
-                    ORDER BY {$orderExpr} {$dir}";
+                    ORDER BY {$orderExpr} {$dir}, um.id DESC";
 
         if ($perPage > 0) {
             $sqlRows .= ' LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;

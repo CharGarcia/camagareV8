@@ -62,7 +62,7 @@ class ProyectoRepository extends BaseRepository
                     FROM {$this->table} p 
                     LEFT JOIN clientes cl ON cl.id = p.id_cliente
                     {$whereSql} 
-                    ORDER BY {$orderExpr} {$dir}";
+                    ORDER BY {$orderExpr} {$dir}, cl.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

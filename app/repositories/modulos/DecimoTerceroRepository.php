@@ -51,7 +51,7 @@ class DecimoTerceroRepository extends BaseRepository
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
 
-        $sql = "SELECT c.* {$from} ORDER BY c.{$ordenCol} {$ordenDir}";
+        $sql = "SELECT c.* {$from} ORDER BY c.{$ordenCol} {$ordenDir}, c.id DESC";
         if ($perPage > 0) {
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
         }

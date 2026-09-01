@@ -31,20 +31,29 @@ $buscar     = $buscar ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
-$pestanasConfigLiqDropdown = [
-    'tab-liq-asiento'     => 'Asiento contable',
-    'tab-liq-pagos'       => 'Pagos',
-    'tab-liq-retenciones' => 'Retenciones',
-    'tab-liq-sri'         => 'SRI',
-];
+// La pestaña «Asiento contable» solo existe con acceso a Contabilidad → Asientos Contables.
+$verAsientoLiq = \App\Helpers\AsientoPestana::puedeVer();
 
-$pestanasConfigLiq = [
-    ['id' => 'tab-liq-compra-btn',      'target' => 'tab-liq-compra',      'label' => 'Liquidación',     'icon' => 'bi-receipt'],
-    ['id' => 'tab-liq-asiento-btn',     'target' => 'tab-liq-asiento',     'label' => 'Asiento contable','icon' => 'bi-calculator'],
-    ['id' => 'tab-liq-pagos-btn',       'target' => 'tab-liq-pagos',       'label' => 'Pagos',           'icon' => 'bi-cash-coin'],
-    ['id' => 'tab-liq-retenciones-btn', 'target' => 'tab-liq-retenciones', 'label' => 'Retenciones',     'icon' => 'bi-percent'],
-    ['id' => 'tab-liq-sri-btn',         'target' => 'tab-liq-sri',         'label' => 'SRI',             'icon' => 'bi-cloud-check'],
-];
+$pestanasConfigLiqDropdown = array_merge(
+    $verAsientoLiq ? ['tab-liq-asiento' => 'Asiento contable'] : [],
+    [
+        'tab-liq-pagos'       => 'Pagos',
+        'tab-liq-retenciones' => 'Retenciones',
+        'tab-liq-sri'         => 'SRI',
+    ]
+);
+
+$pestanasConfigLiq = array_merge(
+    [['id' => 'tab-liq-compra-btn', 'target' => 'tab-liq-compra', 'label' => 'Liquidación', 'icon' => 'bi-receipt']],
+    $verAsientoLiq
+        ? [['id' => 'tab-liq-asiento-btn', 'target' => 'tab-liq-asiento', 'label' => 'Asiento contable', 'icon' => 'bi-calculator']]
+        : [],
+    [
+        ['id' => 'tab-liq-pagos-btn',       'target' => 'tab-liq-pagos',       'label' => 'Pagos',       'icon' => 'bi-cash-coin'],
+        ['id' => 'tab-liq-retenciones-btn', 'target' => 'tab-liq-retenciones', 'label' => 'Retenciones', 'icon' => 'bi-percent'],
+        ['id' => 'tab-liq-sri-btn',         'target' => 'tab-liq-sri',         'label' => 'SRI',         'icon' => 'bi-cloud-check'],
+    ]
+);
 ?>
 
 <style>
@@ -510,7 +519,11 @@ $pestanasConfigLiq = [
                         </div>
 
                         <!-- Otras pestañas -->
-                        <div class="tab-pane fade p-4 text-center text-muted" id="tab-liq-asiento">El asiento se generará al guardar.</div>
+                        <?php if ($verAsientoLiq): ?>
+                        <div class="tab-pane fade p-3" id="tab-liq-asiento" role="tabpanel">
+                            <?php $prefijo = 'liq'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
+                        </div>
+                        <?php endif; ?>
                         <!-- TAB: PAGOS -->
                         <div class="tab-pane fade" id="tab-liq-pagos" role="tabpanel">
                             <div class="p-3">
@@ -862,5 +875,6 @@ $pestanasConfigLiq = [
 </script>
 
 <!-- Scripts -->
+<script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/liquidacion_compra.js?v=<?= time() ?>"></script>

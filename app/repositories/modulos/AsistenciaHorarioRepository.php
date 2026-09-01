@@ -53,7 +53,7 @@ class AsistenciaHorarioRepository extends BaseRepository
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
 
-        $sql = "SELECT h.* {$from} ORDER BY h.{$ordenCol} {$ordenDir}";
+        $sql = "SELECT h.* {$from} ORDER BY h.{$ordenCol} {$ordenDir}, h.id DESC";
         if ($perPage > 0) {
             $offset = ($page - 1) * $perPage;
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;

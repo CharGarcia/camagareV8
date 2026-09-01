@@ -444,7 +444,7 @@ class AsientosContablesController extends BaseModuloController
                 exit;
             }
 
-            $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
+            $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario, true);
             if ($this->hayDescuadreDocumento($cuadre)) {
                 $this->service->registrarDescuadreConfirmado($id, $cuadre, $idEmpresa, $idUsuario);
             }
@@ -484,7 +484,10 @@ class AsientosContablesController extends BaseModuloController
                 exit;
             }
 
-            $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
+            // edicionManual = true: lo guarda una persona, así que queda marcado y el módulo
+            // dueño del documento ya no lo regenera desde el builder al reguardar el documento
+            // (se revierte con restaurarAutomaticoAjax).
+            $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario, true);
             if ($this->hayDescuadreDocumento($cuadre)) {
                 $this->service->registrarDescuadreConfirmado($id, $cuadre, $idEmpresa, $idUsuario);
             }
@@ -532,6 +535,102 @@ class AsientosContablesController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * `modulo_origen` del asiento => clave del trabajo en SincronizadorAsientosService, para
+     * poder pedirle al service dueño del documento que vuelva a armar el asiento.
+     *
+     * Los orígenes que NO están aquí (nota de débito, factura de reembolso, activos fijos,
+     * traspasos, conciliación de tarjetas) no tienen trabajo en el sincronizador: se les quita
+     * la marca igual y el asiento se regenera la próxima vez que se guarde el documento.
+     */
+    private const CLAVE_SINCRONIZADOR = [
+        'factura_venta'      => 'facturas_venta',
+        'recibo_venta'       => 'recibos_venta',
+        'compra'             => 'compras',
+        'liquidacion_compra' => 'liquidaciones_compra',
+        'nota_credito'       => 'notas_credito',
+        'retencion_venta'    => 'retenciones_venta',
+        'retencion_compra'   => 'retenciones_compra',
+        'ingreso'            => 'ingresos',
+        'egreso'             => 'egresos',
+        'consignacion_venta' => 'consignaciones',
+        'retorno_cv'         => 'retornos_cv',
+        'cambio_producto_cv' => 'cambios_producto_cv',
+        'FACTURACION_CV'     => 'facturacion_cv',
+        'importacion'        => 'importaciones',
+    ];
+
+    /**
+     * Descarta la edición manual de un asiento de documento y lo vuelve a armar con las reglas
+     * contables configuradas. Es la salida cuando alguien corrigió el asiento a mano y quiere
+     * volver al automático.
+     */
+    public function restaurarAutomaticoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idAsiento = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $asiento = $this->service->getDetalleAsiento($idAsiento, $idEmpresa);
+            if (!$asiento) {
+                throw new \Exception('No se encontró el asiento.');
+            }
+
+            $modulo = (string) ($asiento['modulo_origen'] ?? 'manual');
+            $idRef  = (int) ($asiento['id_referencia_origen'] ?? 0);
+            if ($modulo === 'manual' || $idRef <= 0) {
+                throw new \Exception('Este asiento no proviene de un documento: no hay reglas desde las cuales regenerarlo.');
+            }
+
+            $this->service->restaurarAsientoAutomatico($idAsiento, $idEmpresa, $idUsuario);
+
+            $regenerado = $this->regenerarDesdeDocumento($modulo, $idRef, $idEmpresa);
+            echo json_encode([
+                'ok' => true,
+                'regenerado' => $regenerado,
+                'msg' => $regenerado
+                    ? 'El asiento se volvió a generar desde las reglas contables.'
+                    : 'Se quitó la edición manual. El asiento se regenerará al guardar nuevamente el documento.',
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Pide al service dueño del documento que vuelva a armar el asiento. Reutiliza las factories
+     * de SincronizadorAsientosService para no repetir aquí cómo se construye cada service.
+     *
+     * @return bool true si el asiento se regeneró en el acto.
+     */
+    private function regenerarDesdeDocumento(string $moduloOrigen, int $idReferencia, int $idEmpresa): bool
+    {
+        $clave = self::CLAVE_SINCRONIZADOR[$moduloOrigen] ?? null;
+        if ($clave === null) {
+            return false;
+        }
+
+        $trabajo = (new \App\Services\modulos\SincronizadorAsientosService())
+            ->getTrabajoPorClave($idEmpresa, $clave);
+        if ($trabajo === null || empty($trabajo['factory'])) {
+            return false;
+        }
+
+        $service = ($trabajo['factory'])();
+        if (!method_exists($service, 'procesarAsientoContablePorSincronizacion')) {
+            return false;
+        }
+
+        $service->procesarAsientoContablePorSincronizacion($idReferencia);
+        return true;
     }
 
     /** ¿El asiento no refleja el importe de su documento origen? (null = no aplica la comprobación) */

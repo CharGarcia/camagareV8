@@ -203,6 +203,38 @@ class AsientoContableService
      * Deja constancia de que el usuario guardó a sabiendas un asiento que no cuadra con su
      * documento (el sistema avisa, pero no lo impide).
      */
+    /**
+     * Quita la marca de edición manual: el asiento vuelve a estar bajo el control de las reglas
+     * contables y el módulo lo regenerará. Queda en la auditoría porque revierte una corrección
+     * que alguien hizo a propósito.
+     */
+    public function restaurarAsientoAutomatico(int $idAsiento, int $idEmpresa, int $idUsuario): void
+    {
+        $this->repository->setEditadoManual($idAsiento, $idEmpresa, $idUsuario, false);
+        $this->logService->registrar(
+            idUsuario: $idUsuario,
+            idEmpresa: $idEmpresa,
+            accion: 'Restaurar Asiento Automático',
+            tabla: 'asientos_contables_cabecera',
+            idRegistro: $idAsiento,
+            antes: ['editado_manual' => true],
+            despues: ['editado_manual' => false]
+        );
+    }
+
+    /**
+     * ¿El asiento vivo de este documento está editado a mano? Lo consultan los services de los
+     * módulos operativos antes de regenerarlo (ver ComprasService::procesarAsientoContable).
+     */
+    public function esAsientoEditadoManual(string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): bool
+    {
+        $previo = $this->repository->getAsientoPorOrigen($moduloOrigen, $idReferenciaOrigen, $idEmpresa);
+        if (!$previo) {
+            return false;
+        }
+        return $this->repository->esEditadoManual((int) $previo['id']);
+    }
+
     public function registrarDescuadreConfirmado(int $idAsiento, array $cuadre, int $idEmpresa, int $idUsuario): void
     {
         $this->logService->registrar(
@@ -223,7 +255,16 @@ class AsientoContableService
         );
     }
 
-    public function guardarAsiento(array $cabeceraData, array $detallesData, int $idEmpresa, int $idUsuario): int
+    /**
+     * @param bool $edicionManual true cuando el asiento lo está guardando una PERSONA desde una
+     *   pantalla (modal del Libro Diario o pestaña «Asiento contable» de un documento). Dos
+     *   efectos, y por eso el flag existe:
+     *   - el asiento queda marcado como editado a mano (`editado_manual`);
+     *   - las regeneraciones automáticas posteriores (los services de los módulos, que llaman
+     *     con `false`) respetan esa marca y no lo vuelven a armar desde el builder.
+     *   Sin esto, reguardar el documento pisaría en silencio la corrección del usuario.
+     */
+    public function guardarAsiento(array $cabeceraData, array $detallesData, int $idEmpresa, int $idUsuario, bool $edicionManual = false): int
     {
         // Ordenar detalles: cuentas con 'debe' > 0 primero
         usort($detallesData, function($a, $b) {
@@ -310,6 +351,18 @@ class AsientoContableService
                 if ($previo !== null) {
                     $idAsiento = (int) $previo['id'];
                 }
+            }
+
+            // ── Asiento corregido a mano: la corrección manda sobre el builder ────────
+            // Regeneración automática (un module service reguardando el documento, o el
+            // sincronizador) sobre un asiento que alguien editó desde una pantalla: se deja
+            // como está y se devuelve su id. Se comprueba acá —dentro del candado y con el id
+            // ya resuelto— para que valga en TODOS los módulos sin repetir el chequeo en cada
+            // service. Se vuelve al automático con «Restaurar asiento automático», que limpia
+            // la marca antes de pedir la regeneración.
+            if (!$edicionManual && $idAsiento > 0 && $this->repository->esEditadoManual($idAsiento)) {
+                if ($managedTransaction) $pdo->commit();
+                return $idAsiento;
             }
 
             $isUpdate = $idAsiento > 0;
@@ -410,6 +463,12 @@ class AsientoContableService
                 }
 
                 $this->repository->insertDetalle($detData);
+            }
+
+            // Lo guardó una persona: queda marcado para que las regeneraciones automáticas
+            // posteriores (ver el corte de arriba) lo respeten.
+            if ($edicionManual) {
+                $this->repository->setEditadoManual($idAsiento, $idEmpresa, $idUsuario, true);
             }
 
             if ($managedTransaction) $pdo->commit();

@@ -37,7 +37,7 @@ class CitaConfiguracionRepository extends BaseRepository
         if ($total > 0) {
             $offset = ($page - 1) * $perPage;
             $limit  = $perPage > 0 ? "LIMIT $perPage OFFSET $offset" : '';
-            $st = $this->db->prepare("SELECT * FROM citas_tipos $where ORDER BY \"$ordenCol\" $ordenDir $limit");
+            $st = $this->db->prepare("SELECT * FROM citas_tipos $where ORDER BY \"$ordenCol\" $ordenDir, id DESC $limit");
             $st->execute($params);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
@@ -179,7 +179,7 @@ class CitaConfiguracionRepository extends BaseRepository
         if ($total > 0) {
             $offset = ($page - 1) * $perPage;
             $limit  = $perPage > 0 ? "LIMIT $perPage OFFSET $offset" : '';
-            $st = $this->db->prepare("SELECT * FROM citas_recursos $where ORDER BY \"$ordenCol\" $ordenDir $limit");
+            $st = $this->db->prepare("SELECT * FROM citas_recursos $where ORDER BY \"$ordenCol\" $ordenDir, id DESC $limit");
             $st->execute($params);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         }

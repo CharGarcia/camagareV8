@@ -65,7 +65,7 @@ class PeriodosContablesRepository
             SELECT id, nombre, fecha_inicial, fecha_final, status, created_at, updated_at
             FROM periodos_contables
             WHERE $where
-            ORDER BY $ordenCol $ordenDir
+            ORDER BY $ordenCol $ordenDir, id DESC
         ";
 
         if ($perPage > 0) {

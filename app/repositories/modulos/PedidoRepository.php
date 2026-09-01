@@ -117,7 +117,7 @@ class PedidoRepository {
                     JOIN clientes c ON p.id_cliente = c.id
                     LEFT JOIN responsables_traslado rt ON p.id_responsable_entrega = rt.id
                     {$whereSql}
-                    ORDER BY $orderExpr $dir";
+                    ORDER BY $orderExpr $dir, p.id DESC";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

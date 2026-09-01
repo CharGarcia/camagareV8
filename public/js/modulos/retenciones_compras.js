@@ -1208,69 +1208,31 @@
         }
     }
 
-    // ── Pestaña Asiento Contable (mismo modelo que retención de venta) ──────────
-    async function cargarAsientoContable(id) {
-        const tbody   = document.getElementById('ret_asiento_body');
-        const tdDebe  = document.getElementById('ret_asiento_total_debe');
-        const tdHaber = document.getElementById('ret_asiento_total_haber');
-        const aviso   = document.getElementById('ret_asiento_aviso');
-        if (!tbody) return;
-
-        const setTot = (d, h) => {
-            if (tdDebe)  tdDebe.textContent  = d.toFixed(2);
-            if (tdHaber) tdHaber.textContent = h.toFixed(2);
-        };
-
-        if (!id) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde la retención para generar el asiento contable.</td></tr>';
-            setTot(0, 0);
-            if (aviso) aviso.innerHTML = '';
-            return;
+    // ── Pestaña Asiento Contable ────────────────────────────────────────────────
+    // Componente compartido (public/js/modulos/asiento_contable_tab.js): muestra el asiento de
+    // la retención y —con permiso de actualizar en Asientos Contables— permite corregirlo y
+    // guardarlo, validando que siga cuadrando con el total retenido.
+    let _retcAsientoTab = null;
+    function retcAsientoTab() {
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que inicializar.
+        if (!document.getElementById('retc-asiento-tbody')) return null;
+        if (!_retcAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _retcAsientoTab = window.crearAsientoTab({
+                prefijo: 'retc',
+                moduloOrigen: 'retencion_compra',
+                previewUrl: `${BASE}/getAsientoContableAjax`,
+                cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
+            });
         }
-
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando asiento...</td></tr>';
-        try {
-            const res  = await fetch(`${BASE}/getAsientoContableAjax?id=${id}`);
-            const resp = await res.json();
-            const dets = (resp.ok && resp.detalles) ? resp.detalles : [];
-
-            if (!dets.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin asiento. Configure las cuentas contables de retenciones en Configuración Contable.</td></tr>';
-                setTot(0, 0);
-                if (aviso) aviso.innerHTML = '';
-                return;
-            }
-
-            let totDebe = 0, totHaber = 0;
-            tbody.innerHTML = dets.map(d => {
-                const debe  = parseFloat(d.debe  || 0);
-                const haber = parseFloat(d.haber || 0);
-                totDebe += debe; totHaber += haber;
-                return `<tr>
-                    <td class="ps-3 small"><code class="text-secondary">${escHtml(d.cuenta_codigo || '')}</code></td>
-                    <td class="small">${escHtml(d.cuenta_nombre || '')}</td>
-                    <td class="small text-end">${debe  > 0 ? debe.toFixed(2)  : ''}</td>
-                    <td class="small text-end pe-3">${haber > 0 ? haber.toFixed(2) : ''}</td>
-                </tr>`;
-            }).join('');
-            setTot(totDebe, totHaber);
-
-            if (aviso) {
-                const descuadre = Math.abs(totDebe - totHaber) > 0.001;
-                if (descuadre) {
-                    aviso.innerHTML = '<span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>El asiento está descuadrado. Revise la configuración de cuentas contables de retenciones.</span>';
-                } else if (resp.registrado) {
-                    const num = resp.numero ? ` N° ${escHtml(resp.numero)}` : '';
-                    aviso.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Asiento registrado en contabilidad${num}.</span>`;
-                } else {
-                    aviso.innerHTML = '<span class="text-warning"><i class="fa-solid fa-circle-info me-1"></i>Asiento sugerido (configure las cuentas para registrarlo).</span>';
-                }
-            }
-        } catch (e) {
-            console.error(e);
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar el asiento contable.</td></tr>';
-        }
+        return _retcAsientoTab;
     }
+
+    function cargarAsientoContable(id) {
+        const tab = retcAsientoTab();
+        if (tab) tab.cargar(id);
+    }
+
 
     function limpiarSriTab() {
         ['ret-sri-clave-acceso','ret-sri-autorizacion','ret-sri-fecha-autorizacion',
