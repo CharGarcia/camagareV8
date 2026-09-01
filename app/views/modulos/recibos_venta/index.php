@@ -1653,6 +1653,10 @@ $totalPages = $totalPagesOriginal;
     // LOCAL STORAGE - Auto-guardado de borrador de factura
     // =====================================================================
     const RV_STORAGE_KEY = 'rv_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>';
+    // Referencia al auto-guardado debounced (ver fvRegistrarAutoGuardado): fvLimpiarBorrador()
+    // necesita poder cancelar un guardado ya programado, o un timer pendiente de la última
+    // tecla ANTES de guardar reescribe el localStorage recién limpiado unos ms después.
+    let RV_debouncedAutoGuardar = null;
 
     /** Serializa el estado actual del modal a un objeto plano (sin secuencial). */
     function fvCapturarEstado() {
@@ -1744,6 +1748,12 @@ $totalPages = $totalPagesOriginal;
         try {
             localStorage.removeItem(RV_STORAGE_KEY);
         } catch (e) {}
+        // Cancelar cualquier auto-guardado ya programado (ej. de la última tecla
+        // presionada justo antes de guardar): si no, dispara ~800ms después de este
+        // limpiado y vuelve a escribir el borrador viejo en localStorage.
+        if (RV_debouncedAutoGuardar && typeof RV_debouncedAutoGuardar.cancel === 'function') {
+            RV_debouncedAutoGuardar.cancel();
+        }
     }
 
     /** Restaura el estado guardado en el modal. */
@@ -1862,17 +1872,19 @@ $totalPages = $totalPagesOriginal;
     function fvRegistrarAutoGuardado() {
         const modal = document.getElementById('formFacturaModal');
         if (!modal) return;
-        const debouncedGuardar = debounce(fvAutoGuardar, 800);
-        modal.addEventListener('input', debouncedGuardar);
-        modal.addEventListener('change', debouncedGuardar);
+        RV_debouncedAutoGuardar = debounce(fvAutoGuardar, 800);
+        modal.addEventListener('input', RV_debouncedAutoGuardar);
+        modal.addEventListener('change', RV_debouncedAutoGuardar);
     }
 
     function debounce(func, wait) {
         let timeout;
-        return function(...args) {
+        const debounced = function(...args) {
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
+        debounced.cancel = () => clearTimeout(timeout);
+        return debounced;
     }
 
     async function cargarSecuencial(idPunto) {
@@ -5712,12 +5724,19 @@ $totalPages = $totalPagesOriginal;
     }
 
     // â”€â”€ GESTIÃ”N DE ASIENTO CONTABLE INTERACTIVO Y EMULADOR EN CALIENTE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Duplicado de la definición de arriba (mismo nombre, mismo cuerpo) — se mantienen
+    // ambos en sync a propósito: por cómo hoisting de "function" resuelve declaraciones
+    // repetidas en el mismo scope, esta versión (la última en el archivo) es la que
+    // realmente queda activa en tiempo de ejecución, incluida la usada por
+    // fvRegistrarAutoGuardado() más arriba.
     function debounce(func, wait) {
         let timeout;
-        return function(...args) {
+        const debounced = function(...args) {
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
+        debounced.cancel = () => clearTimeout(timeout);
+        return debounced;
     }
 
     // Regenera el asiento con los valores actuales del recibo (debounced para no spamear).

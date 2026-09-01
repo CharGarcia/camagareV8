@@ -2081,6 +2081,10 @@ $totalPages = $totalPagesOriginal;
     // LOCAL STORAGE - Auto-guardado de borrador de factura
     // =====================================================================
     const FV_STORAGE_KEY = 'fv_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>';
+    // Referencia al auto-guardado debounced (ver fvRegistrarAutoGuardado): fvLimpiarBorrador()
+    // necesita poder cancelar un guardado ya programado, o un timer pendiente de la última
+    // tecla ANTES de guardar reescribe el localStorage recién limpiado unos ms después.
+    let FV_debouncedAutoGuardar = null;
 
     /** Serializa el estado actual del modal a un objeto plano (sin secuencial). */
     function fvCapturarEstado() {
@@ -2172,6 +2176,12 @@ $totalPages = $totalPagesOriginal;
         try {
             localStorage.removeItem(FV_STORAGE_KEY);
         } catch (e) {}
+        // Cancelar cualquier auto-guardado ya programado (ej. de la última tecla
+        // presionada justo antes de guardar): si no, dispara ~800ms después de este
+        // limpiado y vuelve a escribir el borrador viejo en localStorage.
+        if (FV_debouncedAutoGuardar && typeof FV_debouncedAutoGuardar.cancel === 'function') {
+            FV_debouncedAutoGuardar.cancel();
+        }
     }
 
     /** Restaura el estado guardado en el modal. */
@@ -2290,17 +2300,19 @@ $totalPages = $totalPagesOriginal;
     function fvRegistrarAutoGuardado() {
         const modal = document.getElementById('formFacturaModal');
         if (!modal) return;
-        const debouncedGuardar = debounce(fvAutoGuardar, 800);
-        modal.addEventListener('input', debouncedGuardar);
-        modal.addEventListener('change', debouncedGuardar);
+        FV_debouncedAutoGuardar = debounce(fvAutoGuardar, 800);
+        modal.addEventListener('input', FV_debouncedAutoGuardar);
+        modal.addEventListener('change', FV_debouncedAutoGuardar);
     }
 
     function debounce(func, wait) {
         let timeout;
-        return function(...args) {
+        const debounced = function(...args) {
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
+        debounced.cancel = () => clearTimeout(timeout);
+        return debounced;
     }
 
     function fvAvisarSecuencialNoConfigurado(tipo) {
