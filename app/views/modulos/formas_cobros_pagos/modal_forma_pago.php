@@ -53,17 +53,26 @@ try {
                             <div class="form-text" style="font-size: 0.7rem;">Máx. 50 caracteres para evitar desbordes.</div>
                         </div>
 
-                        <!-- Fila 2: Aplica Para -->
+                        <!-- Fila 2: Aplica Para + Estado -->
                         <div class="col-md-12">
-                            <label class="form-label small fw-bold d-block">Aplica para:</label>
-                            <div class="d-flex gap-4 mt-1">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="fp-chk-ingreso" checked>
-                                    <label class="form-check-label small fw-medium" for="fp-chk-ingreso">Ingreso</label>
+                            <div class="d-flex flex-wrap align-items-end gap-4">
+                                <div>
+                                    <label class="form-label small fw-bold d-block mb-1">Aplica para:</label>
+                                    <div class="d-flex gap-4">
+                                        <div class="form-check mb-0">
+                                            <input class="form-check-input" type="checkbox" id="fp-chk-ingreso" checked>
+                                            <label class="form-check-label small fw-medium" for="fp-chk-ingreso">Ingreso</label>
+                                        </div>
+                                        <div class="form-check mb-0">
+                                            <input class="form-check-input" type="checkbox" id="fp-chk-egreso" checked>
+                                            <label class="form-check-label small fw-medium" for="fp-chk-egreso">Egreso</label>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="fp-chk-egreso" checked>
-                                    <label class="form-check-label small fw-medium" for="fp-chk-egreso">Egreso</label>
+                                <div class="form-check form-switch ms-auto mb-0">
+                                    <input class="form-check-input" type="checkbox" id="fp-activo-sw" checked>
+                                    <input type="hidden" name="activo" id="fp-activo" value="1">
+                                    <label class="form-check-label fw-bold small" for="fp-activo-sw">Estado: Activo</label>
                                 </div>
                             </div>
                             <input type="hidden" name="aplica_en" id="fp-aplica" value="AMBAS">
@@ -130,7 +139,7 @@ try {
                         <!-- Fila 4: Cuenta Contable por flujo (Cobros / Pagos) y Estado.
                              Es la MISMA cuenta que se administra en Configuración Contable →
                              Cobros y Pagos: se lee y se guarda en los dos lugares. -->
-                        <div class="col-md-5 d-none" id="fp-box-cuenta-cobro">
+                        <div class="col-md-6 d-none" id="fp-box-cuenta-cobro">
                             <label class="form-label small fw-bold">Cuenta Contable — Cobros (Opcional)</label>
                             <div class="position-relative">
                                 <div class="input-group input-group-sm">
@@ -145,7 +154,7 @@ try {
                             </div>
                         </div>
 
-                        <div class="col-md-5 d-none" id="fp-box-cuenta-pago">
+                        <div class="col-md-6 d-none" id="fp-box-cuenta-pago">
                             <label class="form-label small fw-bold">Cuenta Contable — Pagos (Opcional)</label>
                             <div class="position-relative">
                                 <div class="input-group input-group-sm">
@@ -157,14 +166,6 @@ try {
                                     <input type="hidden" name="id_cuenta_pago" id="fp-idcuenta-pago">
                                 </div>
                                 <div id="fp-cuenta-drop-pago" class="list-group shadow-sm position-absolute w-100 dropdown-predictivo d-none" style="max-height: 180px; overflow-y:auto; z-index:2000;"></div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-2 d-flex align-items-end pb-1">
-                            <div class="form-check form-switch mb-1">
-                                <input class="form-check-input" type="checkbox" id="fp-activo-sw" checked>
-                                <input type="hidden" name="activo" id="fp-activo" value="1">
-                                <label class="form-check-label fw-bold small" for="fp-activo-sw">Estado: Activo</label>
                             </div>
                         </div>
 
