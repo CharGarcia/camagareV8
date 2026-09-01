@@ -317,6 +317,11 @@ $to         = $to         ?? 0;
     window.CMG_unidadesMedida = <?= json_encode(array_values($unidadesMedida ?? [])) ?>;
     window.CMG_bodegas = <?= json_encode(array_values($bodegas ?? [])) ?>;
     window.CMG_empresa = <?= json_encode($empresa ?? []) ?>;
+    // Catálogo completo de comprobantes (código => nombre). El selector del modal
+    // solo ofrece los tipos capturables a mano; este mapa permite reconstruir la
+    // etiqueta de una compra ya registrada con otro código (p. ej. factura 01
+    // cargada desde el XML del SRI) para que no pierda su tipo al abrirla.
+    window.CMG_tiposComprobanteTodos = <?= json_encode(array_column($tiposComprobanteTodos ?? [], 'comprobante', 'codigo_comprobante')) ?>;
     window.CMG_sucursal = <?= json_encode($sucursal_principal ?? []) ?>;
 </script>
 

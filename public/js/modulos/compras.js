@@ -247,6 +247,7 @@ function CMG_poblarModal(d) {
     document.getElementById('mcId').value                = d.id || '';
     document.getElementById('mcIdProveedor').value       = d.id_proveedor || '';
     document.getElementById('mcBuscarProveedor').value   = d.proveedor_nombre || '';
+    mcAsegurarOpcionComprobante(d.tipo_comprobante);
     document.getElementById('mcTipoComprobante').value   = d.tipo_comprobante || '';
     document.getElementById('mcIdEstablecimiento').value = d.id_establecimiento || '';
     
@@ -673,6 +674,12 @@ function CMG_resetModal() {
         document.getElementById('mcIdEstablecimiento').value = window.CMG_sucursal?.id || '';
     }
 
+    // Quitar el tipo de comprobante que se agregó al vuelo para una compra ya
+    // registrada (ver mcAsegurarOpcionComprobante): en una compra nueva solo
+    // deben ofrecerse los tipos capturables a mano.
+    document.querySelectorAll('#mcTipoComprobante option[data-fuera-de-lista]')
+        .forEach(o => o.remove());
+
     if (document.getElementById('mcSustento')) {
         document.getElementById('mcSustento').innerHTML = '<option value="">-- Seleccione Comprobante primero --</option>';
     }
@@ -866,6 +873,30 @@ document.getElementById('mcDocumentoModificado').addEventListener('blur', functi
     if (parts.length > 2 && parts[2].length > 0) parts[2] = parts[2].padStart(9, '0');
     this.value = parts.join('-');
 });
+
+/**
+ * El selector "Tipo de Comprobante" solo ofrece los códigos capturables a mano
+ * (ver TIPOS_COMPROBANTE_MODAL en ComprasController). Una compra ya registrada
+ * puede tener un código fuera de esa lista — típicamente una factura 01 cargada
+ * desde el XML del SRI. Sin esta función, al abrirla el `select.value = '01'`
+ * no encontraría la opción, el selector quedaría vacío y guardar cambiaría el
+ * tipo del documento. Aquí se agrega la opción faltante al vuelo, marcada, para
+ * que el dato original se conserve.
+ */
+function mcAsegurarOpcionComprobante(codigo) {
+    const cod = String(codigo || '').trim();
+    if (!cod) return;
+
+    const sel = document.getElementById('mcTipoComprobante');
+    if (!sel || sel.querySelector(`option[value="${cod}"]`)) return;
+
+    const nombre = (window.CMG_tiposComprobanteTodos || {})[cod] || 'Documento';
+    const opt    = document.createElement('option');
+    opt.value       = cod;
+    opt.textContent = `${cod} - ${nombre.trim()}`;
+    opt.dataset.fueraDeLista = '1';
+    sel.appendChild(opt);
+}
 
 async function CMG_cargarSustentos(tipo, selectedId = null) {
     const el = document.getElementById('mcSustento');
@@ -2087,6 +2118,7 @@ function mcCheckBorrador() {
 async function mcEjecutarRestauracion(estado) {
     document.getElementById('mcIdProveedor').value = estado.id_proveedor || '';
     document.getElementById('mcBuscarProveedor').value = estado.buscar_proveedor || '';
+    mcAsegurarOpcionComprobante(estado.tipo_comprobante);
     document.getElementById('mcTipoComprobante').value = estado.tipo_comprobante || '';
     
     if (estado.tipo_comprobante) {

@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica
-version: 2.1
+version: 2.2
 orden: 20
 estado: activo
 ---
@@ -29,6 +29,29 @@ Ninguna compra "nace" de una orden de compra — la orden es un pedido interno
 previo (ver [Órdenes de Compra](../modulos/ordenes-compra.md)); cuando llega la
 factura electrónica, se **vincula** con la orden desde la compra ya cargada
 (ver más abajo).
+
+## Tipos de comprobante del registro manual
+
+El selector **Tipo de Comprobante** del modal ofrece únicamente los documentos
+que se capturan a mano:
+
+| Código | Comprobante |
+|---|---|
+| 02 | Nota o boleta de venta |
+| 08 | Boletos o entradas a espectáculos públicos |
+| 11 | Pasajes expedidos por empresas de aviación |
+| 12 | Documentos emitidos por instituciones financieras |
+| 15 | Comprobante de venta emitido en el Exterior |
+| 16 | FUE / DAU / DAV |
+| 19 | Comprobantes de Pago de Cuotas o Aportes |
+| 20 | Documentos por Servicios Administrativos (Inst. del Estado) |
+| 21 | Carta de Porte Aéreo |
+
+Las **facturas (01)**, liquidaciones de compra (03) y notas de crédito/débito
+(04 / 05) entran por su vía propia — la carga del **XML del SRI** — y ya no se
+capturan a mano desde este selector. Una compra ya registrada con uno de esos
+códigos **conserva su tipo**: al abrirla, el modal agrega su opción y la
+muestra normalmente.
 
 ## Sustento tributario y datos de autorización
 
@@ -266,6 +289,12 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.2** — El selector **Tipo de Comprobante** del modal se acotó a los
+  documentos que se capturan a mano: **02, 08, 11, 12, 15, 16, 19, 20 y 21**.
+  Los demás códigos del catálogo (factura 01, liquidación 03, notas 04/05,
+  retenciones, guías, RECAP, etc.) ya no se ofrecen para captura manual; las
+  compras ya registradas con esos códigos conservan su tipo al abrirlas. Nueva
+  sección *Tipos de comprobante del registro manual*.
 - **2.1** — Corregido el registro **manual** en empresas **Persona Natural
   Obligada a llevar contabilidad**: el sistema pedía el sustento tributario
   pero mantenía el campo oculto, así que la compra no se podía guardar. Ahora

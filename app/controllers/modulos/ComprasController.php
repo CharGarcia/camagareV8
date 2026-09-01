@@ -13,6 +13,21 @@ class ComprasController extends BaseModuloController
     private ComprasService    $service;
     private ComprasRepository $repository;
 
+    /**
+     * Códigos del catálogo `comprobantes_autorizados` que se ofrecen en el
+     * selector "Tipo de Comprobante" del modal de Compras. El catálogo completo
+     * trae ~40 códigos (retenciones, guías, RECAP, notas TC, etc.) que no se
+     * capturan a mano desde aquí; esta lista acota el modal a los documentos
+     * que sí se registran manualmente.
+     *
+     * Solo afecta a la vista de este módulo: no toca el catálogo ni a los demás
+     * módulos que lo leen. Una compra ya registrada con un código fuera de esta
+     * lista (p. ej. una factura 01 cargada desde el XML del SRI) conserva su
+     * tipo: el JS agrega esa opción al vuelo al abrirla (ver
+     * mcAsegurarOpcionComprobante en public/js/modulos/compras.js).
+     */
+    private const TIPOS_COMPROBANTE_MODAL = ['02', '08', '11', '12', '15', '16', '19', '20', '21'];
+
     protected function getRutaModulo(): string
     {
         return 'modulos/compras';
@@ -180,7 +195,10 @@ class ComprasController extends BaseModuloController
             'seriesFiltro'       => $seriesFiltro,
             'establecimientos'   => $establecimientos,
             'sucursal_principal' => !empty($establecimientos) ? $establecimientos[0] : null,
-            'tiposComprobante'   => (new \App\models\ComprobanteAutorizado())->getAll(),
+            'tiposComprobante'   => $this->getTiposComprobanteModal(),
+            // Catálogo completo: solo para poder reconstruir la etiqueta de una
+            // compra ya registrada cuyo tipo no esté en la lista acotada.
+            'tiposComprobanteTodos' => (new \App\models\ComprobanteAutorizado())->getAll(),
             'unidadesMedida'     => (new \App\repositories\modulos\UnidadesMedidaRepository())->getActive($idEmpresa),
             'bodegas'            => (new \App\repositories\modulos\BodegaRepository())->getBodegasPermitidas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']),
             'fullWidth'          => true,
@@ -1304,6 +1322,27 @@ class ComprasController extends BaseModuloController
         $data = $this->repository->getRetencionesDisponibles($tipoImpuesto, $buscar);
         echo json_encode(['ok' => true, 'data' => $data]);
         exit;
+    }
+
+    /**
+     * Catálogo de comprobantes acotado a TIPOS_COMPROBANTE_MODAL, en el orden
+     * en que se declara la constante (no el alfabético del catálogo).
+     */
+    private function getTiposComprobanteModal(): array
+    {
+        $todos = (new \App\models\ComprobanteAutorizado())->getAll();
+        $porCodigo = [];
+        foreach ($todos as $t) {
+            $porCodigo[(string) $t['codigo_comprobante']] = $t;
+        }
+
+        $lista = [];
+        foreach (self::TIPOS_COMPROBANTE_MODAL as $cod) {
+            if (isset($porCodigo[$cod])) {
+                $lista[] = $porCodigo[$cod];
+            }
+        }
+        return $lista;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
