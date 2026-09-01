@@ -904,7 +904,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const total = subtotal + totalIva + totalIce + parseFloat(cab.propina || 0);
 
             const logoHtml = EMPRESA_INFO.logo
-                ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="max-width:120px;max-height:60px;margin-bottom:4px;">`
+                ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="margin-bottom:4px;">`
                 : '';
 
             const lineas = detalles.map(d => {
@@ -913,34 +913,20 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 const desc = parseFloat(d.descuento || 0);
                 const tot = parseFloat(d.precio_total_sin_impuesto || 0);
                 const ivaPct = (d.impuestos && d.impuestos[0]) ? parseFloat(d.impuestos[0].tarifa || 0).toFixed(0) : '0';
-                return `<tr><td colspan="2" style="padding:1px 0;">${escapeHtml(d.descripcion)}</td></tr>
-                    <tr><td style="padding:1px 0;color:#555;">${fmt(cant)} x $${fmt(pu)}${desc > 0 ? ` desc.$${fmt(desc)}` : ''} (IVA ${ivaPct}%)</td>
-                    <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(tot)}</td></tr>`;
-            }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
+                return `<tr><td colspan="2">${escapeHtml(d.descripcion)}</td></tr>
+                    <tr><td class="sub">${fmt(cant)} x $${fmt(pu)}${desc > 0 ? ` desc.$${fmt(desc)}` : ''} (IVA ${ivaPct}%)</td>
+                    <td class="num bold">$${fmt(tot)}</td></tr>`;
+            }).join('<tr><td colspan="2"><hr></td></tr>');
 
             const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
-                `<tr><td>${lbl}</td><td style="text-align:right;">$${fmt(val)}</td></tr>`).join('');
+                `<tr><td>${lbl}</td><td class="num">$${fmt(val)}</td></tr>`).join('');
 
             const tituloDoc = tipoDocumento === 'FACTURA' ? 'FACTURA DE VENTA' : 'RECIBO DE VENTA';
 
             const html = `<!DOCTYPE html><html lang="es"><head>
                 <meta charset="UTF-8">
                 <title>Ticket - ${escapeHtml(num)}</title>
-                <style>
-                    @page { size: 80mm auto; margin: 3mm; }
-                    * { box-sizing: border-box; }
-                    body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
-                    .center { text-align: center; }
-                    .bold { font-weight: bold; }
-                    .sep { border: none; border-top: 1px dashed #000; margin: 3px 0; }
-                    table { width: 100%; border-collapse: collapse; }
-                    td { vertical-align: top; font-size: 9px; }
-                    .totales td { padding: 1px 0; }
-                    .totales tr:last-child td { font-weight: bold; font-size: 10px; }
-                    h2 { font-size: 11px; margin: 2px 0; }
-                    h3 { font-size: 9px; margin: 1px 0; font-weight: normal; }
-                    @media print { body { width: 74mm; } button { display: none; } }
-                </style>
+<?php require MVC_APP . "/views/partials/tirilla_estilos.php"; ?>
             </head><body>
                 <div class="center">
                     ${logoHtml}
@@ -950,29 +936,29 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     ${EMPRESA_INFO.telefono ? `<h3>Tel: ${escapeHtml(EMPRESA_INFO.telefono)}</h3>` : ''}
                 </div>
                 <hr class="sep">
-                <div class="center bold" style="font-size:10px;">${tituloDoc}</div>
+                <div class="center bold" style="font-size:12px;">${tituloDoc}</div>
                 <div class="center">No. ${escapeHtml(num)}</div>
                 <div class="center">Fecha: ${escapeHtml(fecha)}</div>
                 <hr class="sep">
-                <table>
+                <table class="t-datos"><colgroup><col style="width:16mm"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${escapeHtml(cab.cliente_nombre)}</td></tr>
                     <tr><td class="bold">RUC/CI:</td><td>${escapeHtml(cab.cliente_ruc)}</td></tr>
                     ${cab.cliente_direccion ? `<tr><td class="bold">Dir:</td><td>${escapeHtml(cab.cliente_direccion)}</td></tr>` : ''}
                 </table>
                 <hr class="sep">
-                <table><tbody>${lineas}</tbody></table>
+                <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
                 <hr class="sep">
-                <table class="totales">
-                    <tr><td>Subtotal sin imp.</td><td style="text-align:right;">$${fmt(subtotal)}</td></tr>
-                    ${totalDescuento > 0 ? `<tr><td>Descuento</td><td style="text-align:right;">-$${fmt(totalDescuento)}</td></tr>` : ''}
+                <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+                    <tr><td>Subtotal sin imp.</td><td class="num">$${fmt(subtotal)}</td></tr>
+                    ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}
-                    ${totalIce > 0 ? `<tr><td>ICE</td><td style="text-align:right;">$${fmt(totalIce)}</td></tr>` : ''}
-                    ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Propina</td><td style="text-align:right;">$${fmt(cab.propina)}</td></tr>` : ''}
-                    <tr><td>TOTAL</td><td style="text-align:right;">$${fmt(total)}</td></tr>
+                    ${totalIce > 0 ? `<tr><td>ICE</td><td class="num">$${fmt(totalIce)}</td></tr>` : ''}
+                    ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Propina</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
+                    <tr><td>TOTAL</td><td class="num">$${fmt(total)}</td></tr>
                 </table>
-                ${cab.observaciones ? `<hr class="sep"><div style="font-size:8px;">${escapeHtml(cab.observaciones)}</div>` : ''}
+                ${cab.observaciones ? `<hr class="sep"><div style="font-size:10px;">${escapeHtml(cab.observaciones)}</div>` : ''}
                 <hr class="sep">
-                <div class="center" style="font-size:8px;">¡Gracias por su compra!</div>
+                <div class="center" style="font-size:10px;">¡Gracias por su compra!</div>
                 <br><br>
                 <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
             </body></html>`;
@@ -1014,38 +1000,25 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
             const extra = (l.lote ? ` — Lote ${l.lote}` : '') + (l.nup ? ` — S/N ${l.nup}` : '')
                         + ((l.descuento || 0) > 0 ? ` — desc. $${fmt(l.descuento)}` : '');
-            return `<tr><td colspan="2" style="padding:1px 0;">${escapeHtml(l.descripcion + extra)}</td></tr>
-                <tr><td style="padding:1px 0;color:#555;">${fmt(l.cantidad)} x $${fmt(l.precio_unitario)} (IVA ${l.pct_iva}%)</td>
-                <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(baseNeta)}</td></tr>`;
-        }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
+            return `<tr><td colspan="2">${escapeHtml(l.descripcion + extra)}</td></tr>
+                <tr><td class="sub">${fmt(l.cantidad)} x $${fmt(l.precio_unitario)} (IVA ${l.pct_iva}%)</td>
+                <td class="num bold">$${fmt(baseNeta)}</td></tr>`;
+        }).join('<tr><td colspan="2"><hr></td></tr>');
 
         const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
-            `<tr><td>${lbl}</td><td style="text-align:right;">$${fmt(val)}</td></tr>`).join('');
+            `<tr><td>${lbl}</td><td class="num">$${fmt(val)}</td></tr>`).join('');
 
         const formaSel = formasPagoCargadas.find(f => String(f.id) === $pagos.value);
         const nombreForma = formaSel ? formaSel.nombre : '';
 
         const logoHtml = EMPRESA_INFO.logo
-            ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="max-width:120px;max-height:60px;margin-bottom:4px;">`
+            ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="margin-bottom:4px;">`
             : '';
 
         const html = `<!DOCTYPE html><html lang="es"><head>
             <meta charset="UTF-8">
             <title>Vista previa</title>
-            <style>
-                @page { size: 80mm auto; margin: 3mm; }
-                * { box-sizing: border-box; }
-                body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
-                .center { text-align: center; }
-                .bold { font-weight: bold; }
-                .sep { border: none; border-top: 1px dashed #000; margin: 3px 0; }
-                table { width: 100%; border-collapse: collapse; }
-                td { vertical-align: top; font-size: 9px; }
-                .totales td { padding: 1px 0; }
-                .totales tr:last-child td { font-weight: bold; font-size: 10px; }
-                h2 { font-size: 11px; margin: 2px 0; }
-                @media print { body { width: 74mm; } button { display: none; } }
-            </style>
+<?php require MVC_APP . "/views/partials/tirilla_estilos.php"; ?>
         </head><body>
             <div class="center">
                 ${logoHtml}
@@ -1054,21 +1027,21 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <hr class="sep">
             <div class="center">Fecha: ${escapeHtml(new Date().toLocaleDateString('es-EC'))}</div>
             <hr class="sep">
-            <table>
+            <table class="t-datos"><colgroup><col style="width:16mm"><col></colgroup>
                 <tr><td class="bold">Cliente:</td><td>${escapeHtml(clienteSeleccionado ? clienteSeleccionado.nombre : 'Consumidor Final')}</td></tr>
             </table>
             <hr class="sep">
-            <table><tbody>${lineas}</tbody></table>
+            <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
             <hr class="sep">
-            <table class="totales">
-                <tr><td>Subtotal</td><td style="text-align:right;">$${fmt(subtotal)}</td></tr>
+            <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+                <tr><td>Subtotal</td><td class="num">$${fmt(subtotal)}</td></tr>
                 ${ivaLineas}
-                ${servicioPrevia > 0 ? `<tr><td>Servicio ${SERVICIO_PCT}%</td><td style="text-align:right;">$${fmt(servicioPrevia)}</td></tr>` : ''}
-                <tr><td>TOTAL A PAGAR</td><td style="text-align:right;">$${fmt(total)}</td></tr>
+                ${servicioPrevia > 0 ? `<tr><td>Servicio ${SERVICIO_PCT}%</td><td class="num">$${fmt(servicioPrevia)}</td></tr>` : ''}
+                <tr><td>TOTAL A PAGAR</td><td class="num">$${fmt(total)}</td></tr>
             </table>
-            ${nombreForma ? `<hr class="sep"><div class="bold" style="font-size:9px;">Forma de pago seleccionada</div><div>${escapeHtml(nombreForma)}</div>` : ''}
+            ${nombreForma ? `<hr class="sep"><div class="bold" style="font-size:10px;">Forma de pago seleccionada</div><div>${escapeHtml(nombreForma)}</div>` : ''}
             <hr class="sep">
-            <div class="center" style="font-size:8px;">Este ticket es solo una vista previa.<br>No tiene validez tributaria.</div>
+            <div class="center" style="font-size:10px;">Este ticket es solo una vista previa.<br>No tiene validez tributaria.</div>
             <br><br>
             <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
         </body></html>`;

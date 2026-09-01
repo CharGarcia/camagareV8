@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision
-version: 1.4
+version: 1.5
 orden: 20
 estado: activo
 ---
@@ -113,6 +113,9 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **1.5** — La tirilla se maqueta para el ancho imprimible real de 72 mm y con
+  columnas de ancho fijo: ya no sale reescalada ni con los importes corridos en
+  impresoras térmicas de 80 mm.
 - **1.4** — Corregido: si la empresa tenía más de un establecimiento y el
   activo no era el que ordenaba primero por código, el selector de Serie
   quedaba vacío (tomaba los puntos de emisión del establecimiento

@@ -726,30 +726,53 @@ class ReporteInventarioRepository extends BaseRepository
     // PESTAÑA 4 — CONSIGNACIONES (saldo vigente en poder de clientes)
     // ════════════════════════════════════════════════════════════════════
 
-    /** Cantidad retornada activa de una línea de consignación (mismo criterio que ConsignacionFacturaRepository). */
+    /** Cantidad retornada activa de una línea de consignación (mismo criterio que ConsignacionFacturaRepository).
+     *  Va como LEFT JOIN LATERAL, no como subconsulta en el SELECT: el saldo se usa dos veces
+     *  (unidades y valor a costo) y, al aplanar la vista, Postgres re-ejecutaba la subconsulta
+     *  una vez por cada uso — el doble de trabajo por cada línea del reporte. */
     private function sqlRetornadoCv(): string
     {
-        return "SELECT SUM(rcd.cantidad)
+        return "SELECT SUM(rcd.cantidad) AS total
                 FROM retornos_cv_detalles rcd
                 INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno
                 WHERE rcd.id_consignacion_detalle = cvd.id
                   AND rcd.eliminado = false AND rc.eliminado = false AND rc.estado = 'Emitida'";
     }
 
-    /** Cantidad facturada (docs 'facturada') de una línea de consignación. */
+    /** Cantidad facturada (docs 'facturada') de una línea de consignación. Ver nota en sqlRetornadoCv(). */
     private function sqlFacturadoCv(): string
     {
-        return "SELECT SUM(cfd.cantidad)
+        return "SELECT SUM(cfd.cantidad) AS total
                 FROM consignaciones_facturas_detalles cfd
                 INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
                 WHERE cfd.id_consignacion_detalle = cvd.id
                   AND cfd.eliminado = false AND cf.eliminado = false AND cf.estado = 'facturada'";
     }
 
+    /** Último costo unitario registrado en el kardex para la línea (documento + producto).
+     *  Depende del índice idx_kardex_referencia (id_empresa, referencia_tipo, referencia_id,
+     *  id_producto) WHERE eliminado = false: sin él cada línea recorre TODOS los movimientos
+     *  del producto en la empresa y el reporte se vuelve inusable. */
+    private function sqlCostoKardexCv(): string
+    {
+        return "SELECT k.costo_unitario
+                FROM inventario_kardex k
+                WHERE k.id_empresa = cv.id_empresa AND k.referencia_tipo = 'CONSIGNACION_VENTA'
+                  AND k.referencia_id = cv.id AND k.id_producto = cvd.id_producto
+                  AND k.eliminado = false
+                ORDER BY k.fecha_movimiento DESC, k.id DESC
+                LIMIT 1";
+    }
+
     private function buildWhereConsignaciones(int $idEmpresa, array $filtros): array
     {
-        $where = "cv.id_empresa = :id_empresa AND cv.eliminado = false AND cvd.eliminado = false";
-        $params = [':id_empresa' => $idEmpresa];
+        // El filtro de empresa se repite en el detalle (no solo en la cabecera): sin él,
+        // Postgres arranca leyendo TODOS los detalles de consignación de la base (de todas
+        // las empresas) para luego cruzarlos contra la cabecera ya filtrada. Con el filtro
+        // en cvd puede entrar directo por el índice de (id_empresa, ...) del detalle.
+        $where = "cv.id_empresa = :id_empresa AND cvd.id_empresa = :id_empresa_det
+                  AND cv.eliminado = false AND cvd.eliminado = false";
+        $params = [':id_empresa' => $idEmpresa, ':id_empresa_det' => $idEmpresa];
 
         $estado = $filtros['estado'] ?? 'TODOS';
         if ($estado !== '' && strtoupper($estado) !== 'TODOS') {
@@ -818,29 +841,31 @@ class ReporteInventarioRepository extends BaseRepository
         return "
             SELECT * FROM (
                 SELECT cv.id AS id_consignacion, cv.secuencial, cv.fecha_emision, cv.estado,
-                       cv.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                       cv.id_cliente, COALESCE(c.nombre, '-') AS cliente_nombre,
+                       COALESCE(c.identificacion, '') AS cliente_identificacion,
                        cv.id_vendedor, COALESCE(v.nombre, '-') AS vendedor_nombre,
                        cv.id_responsable_traslado, COALESCE(rt.nombre, '-') AS responsable_traslado_nombre,
                        cvd.id AS id_detalle, cvd.id_producto,
-                       p.codigo AS producto_codigo, p.nombre AS producto_nombre,
+                       COALESCE(p.codigo, '') AS producto_codigo, COALESCE(p.nombre, '-') AS producto_nombre,
                        cvd.id_bodega, COALESCE(bo.nombre, '-') AS bodega_nombre,
                        COALESCE(cvd.lote, '-') AS numero_lote, COALESCE(cvd.nup, '-') AS nup,
                        cvd.cantidad AS cantidad_consignada,
-                       COALESCE((" . $this->sqlRetornadoCv() . "), 0) AS cantidad_retornada,
-                       COALESCE((" . $this->sqlFacturadoCv() . "), 0) AS cantidad_facturada,
-                       COALESCE((
-                           SELECT k.costo_unitario FROM inventario_kardex k
-                           WHERE k.referencia_tipo = 'CONSIGNACION_VENTA' AND k.referencia_id = cv.id
-                             AND k.id_producto = cvd.id_producto AND k.id_empresa = cv.id_empresa AND k.eliminado = false
-                           ORDER BY k.fecha_movimiento DESC, k.id DESC LIMIT 1
-                       ), 0) AS costo_unitario
+                       COALESCE(ret.total, 0) AS cantidad_retornada,
+                       COALESCE(fac.total, 0) AS cantidad_facturada,
+                       COALESCE(kar.costo_unitario, 0) AS costo_unitario
                 FROM consignaciones_ventas_detalles cvd
                 INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
-                INNER JOIN productos p ON p.id = cvd.id_producto
+                -- productos y clientes van con LEFT JOIN a propósito: con INNER, una
+                -- consignación cuyo producto o cliente ya no exista en su tabla desaparecía
+                -- del reporte sin ningún aviso (y su saldo dejaba de sumar en los totales).
+                LEFT JOIN productos p ON p.id = cvd.id_producto
                 LEFT JOIN bodegas bo ON bo.id = cvd.id_bodega
-                INNER JOIN clientes c ON c.id = cv.id_cliente
+                LEFT JOIN clientes c ON c.id = cv.id_cliente
                 LEFT JOIN vendedores v ON v.id = cv.id_vendedor
                 LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+                LEFT JOIN LATERAL (" . $this->sqlRetornadoCv() . ") ret ON true
+                LEFT JOIN LATERAL (" . $this->sqlFacturadoCv() . ") fac ON true
+                LEFT JOIN LATERAL (" . $this->sqlCostoKardexCv() . ") kar ON true
                 WHERE {$where}
             ) base
         ";
@@ -892,8 +917,9 @@ class ReporteInventarioRepository extends BaseRepository
     /** Líneas de producto de UNA consignación puntual (para el modal de detalle del listado). */
     public function getConsignacionDetalleLineas(int $idEmpresa, int $idConsignacion): array
     {
-        $where = "cv.id_empresa = :id_empresa AND cv.eliminado = false AND cvd.eliminado = false AND cv.id = :id_consignacion";
-        $params = [':id_empresa' => $idEmpresa, ':id_consignacion' => $idConsignacion];
+        $where = "cv.id_empresa = :id_empresa AND cvd.id_empresa = :id_empresa_det
+                  AND cv.eliminado = false AND cvd.eliminado = false AND cv.id = :id_consignacion";
+        $params = [':id_empresa' => $idEmpresa, ':id_empresa_det' => $idEmpresa, ':id_consignacion' => $idConsignacion];
 
         $sql = "SELECT * FROM (" . $this->wrapSaldoConsignacion($this->baseConsignaciones($where)) . ") s
                 ORDER BY s.producto_nombre ASC";
@@ -962,6 +988,9 @@ class ReporteInventarioRepository extends BaseRepository
         return $this->getConsignacionesAgrupado($idEmpresa, $filtros, 'id_producto', "producto_codigo || ' - ' || producto_nombre");
     }
 
+    /** Indicadores del saldo vigente. Hoy la pestaña no los pinta, así que el controlador NO
+     *  la llama (repetía entera la consulta de saldos por cada "Mostrar"). Si en algún momento
+     *  se agregan tarjetas de KPI a la pestaña, este es el método que las alimenta. */
     public function getConsignacionesKpis(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);

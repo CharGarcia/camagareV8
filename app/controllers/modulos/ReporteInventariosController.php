@@ -271,12 +271,12 @@ class ReporteInventariosController extends BaseModuloController
             'PRODUCTO' => $this->repository->getConsignacionesAgrupadoProducto($idEmpresa, $filtros),
             default    => $this->repository->getConsignacionesCabeceras($idEmpresa, $filtros),
         };
-        $kpis = $this->repository->getConsignacionesKpis($idEmpresa, $filtros);
 
+        // Sin KPIs ni rawData a propósito: la pestaña no muestra tarjetas de indicadores y el
+        // front-end nunca lee `rawData`. Calcularlos obligaba a repetir entera la consulta de
+        // saldos (la más cara del módulo) y a serializar dos veces el mismo resultado.
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 7 : 3),
-            'rawData'    => $rows,
-            'kpis'       => $kpis,
             'agrupacion' => $modo,
         ];
     }

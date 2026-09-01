@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado
-version: 1.13
+etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada
+version: 1.14
 orden: 20
 estado: activo
 ---
@@ -291,6 +291,33 @@ Una comanda vacía se anula sin más.
 | Recargo por servicio | Máximo 10% del subtotal; solo se puede quitar si el establecimiento lo tiene como opcional |
 | Propina voluntaria | No puede ser negativa; no tiene tope. Requiere el producto configurado en Empresa → Facturación |
 
+## Cómo sale la tirilla en la impresora térmica
+
+Tanto la **cuenta** (el botón de vista previa, antes de cobrar) como la
+**factura o el recibo** que se imprime al cobrar salen por la impresora térmica
+del salón: se abre una ventana aparte y se lanza la impresión directamente, sin
+generar un PDF intermedio.
+
+La tirilla está maquetada para un **ancho imprimible de 72 mm**, que es lo que
+realmente imprime un equipo "de 80 mm" (los otros 8 mm son borde físico del
+papel, donde el cabezal no marca). Para que salga a escala 1:1, en el diálogo de
+impresión del navegador conviene dejar:
+
+| Opción | Valor |
+| --- | --- |
+| Márgenes | Ninguno |
+| Escala | 100 % (no *Ajustar al área de impresión*) |
+| Encabezados y pies de página | Desactivado |
+
+En el driver de la impresora (Windows → *Dispositivos e impresoras* →
+propiedades), el tamaño de papel debe ser el de 80 mm que trae el fabricante
+—normalmente listado como **80 × 297 mm** o **72,1 mm × recibo**—. Si ahí está
+seleccionado un papel de 58 mm o una hoja A4, la tirilla sale reescalada aunque
+el sistema la genere bien.
+
+Marcando *Recordar* / *Establecer como predeterminado* en esas opciones, el
+navegador las reutiliza en las siguientes impresiones y el cajero no tiene que
+tocarlas cada vez.
 ## Errores frecuentes
 
 - **"La mesa no está disponible"**: ya tiene una comanda abierta.
@@ -312,12 +339,19 @@ Una comanda vacía se anula sin más.
   usted tenía el salón en pantalla. Vuelva a Cajas y elija su punto de emisión.
 - **"Esta mesa la está atendiendo …"**: otro usuario tiene la comanda abierta.
   Puede seguir tomando el pedido; para cobrar, espere a que salga.
+- **La tirilla sale descuadrada, con el texto encogido o los valores en otro
+  renglón**: el navegador está reescalando la página. Revise el tamaño de papel
+  del driver y ponga *Márgenes: Ninguno* y *Escala: 100 %* en el diálogo de
+  impresión (ver *Cómo sale la tirilla en la impresora térmica*).
 - **"Esta cuenta se está cobrando en otro dispositivo"**: dos cobros a la vez, o
   un doble clic. Espere unos segundos y **revise la comanda antes de reintentar**:
   es probable que el cobro ya se haya emitido.
 
 ## Historial de cambios
 
+- **1.14** — La tirilla (cuenta y factura/recibo del cobro) se maqueta para el
+  ancho imprimible real de 72 mm y con columnas de ancho fijo, así que ya no sale
+  reescalada ni con los importes corridos en impresoras térmicas de 80 mm.
 - **1.13** — La comanda se ata al turno del punto de emisión que eligió el mesero
   (antes tomaba cualquier turno abierto del local, así que podía facturarse por
   otro punto) y no se abre sin turno. Aviso cuando otra persona atiende la misma

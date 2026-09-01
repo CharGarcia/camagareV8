@@ -6,7 +6,7 @@ ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
 etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema
-version: 1.2
+version: 1.3
 orden: 25
 estado: activo
 ---
@@ -105,6 +105,9 @@ permite detectar faltantes el mismo día, no a fin de mes.
 
 ## Historial de cambios
 
+- **1.3** — La tirilla se maqueta para el ancho imprimible real de 72 mm y con
+  columnas de ancho fijo: ya no sale reescalada ni con los importes corridos en
+  impresoras térmicas de 80 mm.
 - **1.2** — El establecimiento y el punto de emisión se seleccionan solos cuando
   hay uno solo de cada uno. Botón *Volver al sistema* para salir sin abrir caja.
   Quien tiene permiso sobre Mesas puede abrir y cerrar el turno aunque no tenga

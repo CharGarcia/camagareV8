@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones
-version: 1.5
+version: 1.6
 orden: 40
 estado: activo
 ---
@@ -105,6 +105,15 @@ siguen apareciendo aquí hasta que se corrigen manualmente.
 
 ## Historial de cambios
 
+- **1.6** — Pestaña **Consignaciones** mucho más rápida. El cálculo del saldo
+  vigente repetía por cada línea la búsqueda del costo en el kardex sin ningún
+  índice que la sostuviera, y además ejecutaba dos veces la consulta completa
+  en cada "Mostrar" (una para la tabla y otra para unos indicadores que la
+  pantalla no muestra). Se notaba sobre todo al filtrar por **Responsable
+  traslado**. Requiere ejecutar `database/indices_reporte_consignaciones.sql`.
+  Corrección relacionada: una consignación cuyo producto o cliente ya no
+  existiera en su tabla desaparecía del listado sin aviso y su saldo no sumaba
+  en los totales; ahora se muestra igual, con el nombre en blanco.
 - **1.5** — Quitado el check **Todas las empresas** de Auditoría (era solo
   para Nivel 3): cada empresa audita y corrige únicamente su propio
   inventario, sin excepción de nivel.

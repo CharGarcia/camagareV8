@@ -3423,36 +3423,22 @@ $totalPages = $totalPagesOriginal;
                 const tot = parseFloat(d.precio_total_sin_impuesto || 0);
                 const ivaPct = (d.impuestos && d.impuestos[0]) ? parseFloat(d.impuestos[0].tarifa || 0).toFixed(0) : '0';
                 return `<tr>
-                    <td colspan="2" style="padding:1px 0;">${esc(d.descripcion)}</td>
+                    <td colspan="2">${esc(d.descripcion)}</td>
                 </tr>
                 <tr>
-                    <td style="padding:1px 0;color:#555;">${fmt(cant)} x $${fmt(pu)}${desc > 0 ? ` desc.$${fmt(desc)}` : ''} (IVA ${ivaPct}%)</td>
-                    <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(tot)}</td>
+                    <td class="sub">${fmt(cant)} x $${fmt(pu)}${desc > 0 ? ` desc.$${fmt(desc)}` : ''} (IVA ${ivaPct}%)</td>
+                    <td class="num bold">$${fmt(tot)}</td>
                 </tr>`;
-            }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
+            }).join('<tr><td colspan="2"><hr></td></tr>');
 
             const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
-                `<tr><td>${lbl}</td><td style="text-align:right;">$${fmt(val)}</td></tr>`
+                `<tr><td>${lbl}</td><td class="num">$${fmt(val)}</td></tr>`
             ).join('');
 
             const html = `<!DOCTYPE html><html lang="es"><head>
                 <meta charset="UTF-8">
                 <title>Ticket - ${esc(num)}</title>
-                <style>
-                    @page { size: 80mm auto; margin: 3mm; }
-                    * { box-sizing: border-box; }
-                    body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
-                    .center { text-align: center; }
-                    .bold { font-weight: bold; }
-                    .sep { border: none; border-top: 1px dashed #000; margin: 3px 0; }
-                    table { width: 100%; border-collapse: collapse; }
-                    td { vertical-align: top; font-size: 9px; }
-                    .totales td { padding: 1px 0; }
-                    .totales tr:last-child td { font-weight: bold; font-size: 10px; }
-                    h2 { font-size: 11px; margin: 2px 0; }
-                    h3 { font-size: 9px; margin: 1px 0; font-weight: normal; }
-                    @media print { body { width: 74mm; } button { display: none; } }
-                </style>
+<?php require MVC_APP . "/views/partials/tirilla_estilos.php"; ?>
             </head><body>
                 <div class="center">
                     ${logoHtml}
@@ -3462,29 +3448,29 @@ $totalPages = $totalPagesOriginal;
                     ${EMPRESA_INFO.telefono  ? `<h3>Tel: ${esc(EMPRESA_INFO.telefono)}</h3>` : ''}
                 </div>
                 <hr class="sep">
-                <div class="center bold" style="font-size:10px;">FACTURA DE VENTA</div>
+                <div class="center bold" style="font-size:12px;">FACTURA DE VENTA</div>
                 <div class="center">No. ${esc(num)}</div>
                 <div class="center">Fecha: ${esc(fecha)}</div>
                 <hr class="sep">
-                <table>
+                <table class="t-datos"><colgroup><col style="width:16mm"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${esc(cab.cliente_nombre)}</td></tr>
                     <tr><td class="bold">RUC/CI:</td><td>${esc(cab.cliente_ruc)}</td></tr>
                     ${cab.cliente_direccion ? `<tr><td class="bold">Dir:</td><td>${esc(cab.cliente_direccion)}</td></tr>` : ''}
                 </table>
                 <hr class="sep">
-                <table><tbody>${lineas}</tbody></table>
+                <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
                 <hr class="sep">
-                <table class="totales">
-                    <tr><td>Subtotal sin imp.</td><td style="text-align:right;">$${fmt(subtotal)}</td></tr>
-                    ${totalDescuento > 0 ? `<tr><td>Descuento</td><td style="text-align:right;">-$${fmt(totalDescuento)}</td></tr>` : ''}
+                <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+                    <tr><td>Subtotal sin imp.</td><td class="num">$${fmt(subtotal)}</td></tr>
+                    ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}
-                    ${totalIce > 0 ? `<tr><td>ICE</td><td style="text-align:right;">$${fmt(totalIce)}</td></tr>` : ''}
-                    ${parseFloat(cab.propina||0) > 0 ? `<tr><td>Propina</td><td style="text-align:right;">$${fmt(cab.propina)}</td></tr>` : ''}
-                    <tr><td>TOTAL</td><td style="text-align:right;">$${fmt(total)}</td></tr>
+                    ${totalIce > 0 ? `<tr><td>ICE</td><td class="num">$${fmt(totalIce)}</td></tr>` : ''}
+                    ${parseFloat(cab.propina||0) > 0 ? `<tr><td>Propina</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
+                    <tr><td>TOTAL</td><td class="num">$${fmt(total)}</td></tr>
                 </table>
-                ${cab.observaciones ? `<hr class="sep"><div style="font-size:8px;">${esc(cab.observaciones)}</div>` : ''}
+                ${cab.observaciones ? `<hr class="sep"><div style="font-size:10px;">${esc(cab.observaciones)}</div>` : ''}
                 <hr class="sep">
-                <div class="center" style="font-size:8px;">¡Gracias por su compra!</div>
+                <div class="center" style="font-size:10px;">¡Gracias por su compra!</div>
                 <br><br>
                 <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
             </body></html>`;

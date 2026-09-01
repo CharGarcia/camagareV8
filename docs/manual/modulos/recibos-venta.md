@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos
-version: 1.1
+version: 1.2
 orden: 35
 estado: activo
 ---
@@ -63,6 +63,9 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
 
 ## Historial de cambios
 
+- **1.2** — La tirilla se maqueta para el ancho imprimible real de 72 mm y con
+  columnas de ancho fijo: ya no sale reescalada ni con los importes corridos en
+  impresoras térmicas de 80 mm.
 - **1.1** — Botón **Excel** en la barra de acciones del modal, para exportar
   el detalle, totales y forma de pago de un recibo puntual.
 - **1.0** — Versión inicial.
