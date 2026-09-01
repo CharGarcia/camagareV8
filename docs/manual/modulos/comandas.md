@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva
-version: 1.12
+etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado
+version: 1.13
 orden: 20
 estado: activo
 ---
@@ -21,6 +21,40 @@ cierra al cobrar.
 2. Añada los ítems: productos del catálogo o platos del menú.
 3. Envíe a cocina lo que corresponda.
 4. Al terminar, cierre la comanda y cobre.
+
+## Hace falta un turno de caja abierto
+
+No se abre una mesa sin **turno de caja abierto**. Al abrir la comanda, el
+sistema la ata al turno del **punto de emisión que eligió ese usuario** al abrir
+su caja, y es por ese punto de emisión que se emitirá el comprobante al cobrar.
+
+Por eso, si el salón trabaja con varios puntos de emisión, la mesa se factura por
+el del mesero que la abrió, no por el de quien pase después. Si no hay ningún
+turno abierto, el sistema avisa —*"No hay un turno de caja abierto. Abre la caja
+en Punto de Venta antes de abrir mesas"*— y la mesa no se abre: es preferible eso
+a descubrir el problema recién al cobrar, con la mesa ya servida.
+
+Si la comanda se abre desde el **QR de la mesa** (el cliente pidiendo por su
+cuenta), el turno se resuelve solo, tomando el que esté abierto en el local: el
+cliente no elige punto de emisión.
+
+## Cuando dos personas atienden la misma mesa
+
+Varios usuarios pueden entrar a la vez a una comanda. Al segundo se le muestra un
+aviso: *"Esta mesa la está atendiendo …"*.
+
+- **Se puede seguir tomando el pedido**: los dos agregan ítems. Un ítem de más se
+  corrige anulando la línea.
+- **No se puede cobrar**: mientras otro tenga la mesa abierta, el cobro se
+  rechaza. Cobrar emite un comprobante electrónico, y dos cobros de la misma
+  cuenta serían dos documentos por el mismo consumo.
+
+El aviso desaparece cuando el otro usuario sale de la comanda, y como máximo a
+los tres minutos sin actividad suya (por si cerró la tablet o perdió la red).
+
+Aparte de eso, el propio cobro está protegido contra el doble clic y contra dos
+cajas cobrando a la vez: la segunda recibe *"Esta cuenta se está cobrando en otro
+dispositivo"* en lugar de emitir un segundo documento.
 
 ## Solo se modifica si está abierta
 
@@ -247,6 +281,8 @@ Una comanda vacía se anula sin más.
 
 | Regla | Detalle |
 |-------|---------|
+| Turno de caja | Debe haber uno abierto para abrir la mesa y para cobrarla |
+| Mesa libre para cobrar | No se cobra mientras otro usuario tiene la comanda abierta |
 | Mesa disponible | No se abre una comanda sobre una mesa ocupada |
 | Comanda abierta | Solo se modifica mientras está abierta |
 | Ítem | Hay que seleccionar un producto o un ítem del menú |
@@ -269,9 +305,24 @@ Una comanda vacía se anula sin más.
   configurado, o el usuario no tiene permiso para crear en comandas.
 - **"La propina ya forma parte de una cuenta cobrada"**: se cobró junto con esa
   parte de la cuenta; la corrección va sobre el documento emitido.
+- **"No hay un turno de caja abierto. Abre la caja en Punto de Venta antes de
+  abrir mesas"**: no hay caja abierta en el local. Ábrala en *Punto de Venta →
+  Cajas* y vuelva a intentarlo.
+- **"El turno de caja indicado ya no está abierto"**: la caja se cerró mientras
+  usted tenía el salón en pantalla. Vuelva a Cajas y elija su punto de emisión.
+- **"Esta mesa la está atendiendo …"**: otro usuario tiene la comanda abierta.
+  Puede seguir tomando el pedido; para cobrar, espere a que salga.
+- **"Esta cuenta se está cobrando en otro dispositivo"**: dos cobros a la vez, o
+  un doble clic. Espere unos segundos y **revise la comanda antes de reintentar**:
+  es probable que el cobro ya se haya emitido.
 
 ## Historial de cambios
 
+- **1.13** — La comanda se ata al turno del punto de emisión que eligió el mesero
+  (antes tomaba cualquier turno abierto del local, así que podía facturarse por
+  otro punto) y no se abre sin turno. Aviso cuando otra persona atiende la misma
+  mesa, con el cobro bloqueado mientras tanto, y protección contra el doble cobro
+  simultáneo de una misma cuenta.
 - **1.12** — El tablero avisa cuando el cliente confirma un pedido desde el QR
   (se apaga al entrar el mesero a la comanda). Los ítems sin estación vuelven a
   nacer pendientes: el cliente puede quitarlos y confirmarlos, y al confirmar

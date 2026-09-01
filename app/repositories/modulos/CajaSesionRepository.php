@@ -17,9 +17,15 @@ class CajaSesionRepository extends BaseRepository
 
     public function getAbiertaPorPuntoEmision(int $idEmpresa, int $idPuntoEmision): ?array
     {
-        $sql = "SELECT cs.*, u.nombre AS cajero_nombre
+        // El punto de emisión (código y establecimiento) viaja con el turno: el
+        // salón puede tener varios y el mesero necesita ver por cuál trabaja.
+        $sql = "SELECT cs.*, u.nombre AS cajero_nombre,
+                       pe.codigo_punto, pe.id_establecimiento,
+                       est.codigo AS codigo_establecimiento
                 FROM {$this->table} cs
                 LEFT JOIN usuarios u ON u.id = cs.id_usuario
+                LEFT JOIN empresa_punto_emision pe ON pe.id = cs.id_punto_emision
+                LEFT JOIN empresa_establecimiento est ON est.id = pe.id_establecimiento
                 WHERE cs.id_empresa = :id_empresa
                   AND cs.id_punto_emision = :id_punto_emision
                   AND cs.estado = 'abierta'
@@ -36,23 +42,53 @@ class CajaSesionRepository extends BaseRepository
 
     /**
      * Cualquier turno abierto de la empresa, sin importar el punto de emisión
-     * — usado por el portal público QR (modulos/comandas no exige que el
-     * cliente sepa el punto de emisión, solo que el restaurante esté
-     * operando; el punto de emisión real se resuelve normal al cobrar).
+     * — usado por el portal público QR (el cliente que escanea no elige punto
+     * de emisión, solo necesita que el restaurante esté operando) y como último
+     * recurso al cobrar comandas antiguas que quedaron sin turno.
+     *
+     * NO es la vía del salón: ahí cada usuario elige su punto de emisión al
+     * abrir el turno en Cajas y la comanda se ata a ESE turno (ver
+     * ComandasController::abrirAjax). Una empresa puede tener varios puntos
+     * abiertos a la vez, así que aquí el orden es explícito —el turno abierto
+     * más reciente— y no lo que devuelva el motor: sin ORDER BY, dos llamadas
+     * seguidas podían resolver puntos de emisión distintos.
      */
     public function getAbiertaPorEmpresa(int $idEmpresa): ?array
     {
-        $sql = "SELECT cs.*, u.nombre AS cajero_nombre
+        $sql = "SELECT cs.*, u.nombre AS cajero_nombre,
+                       pe.codigo_punto, pe.id_establecimiento,
+                       est.codigo AS codigo_establecimiento
                 FROM {$this->table} cs
                 LEFT JOIN usuarios u ON u.id = cs.id_usuario
+                LEFT JOIN empresa_punto_emision pe ON pe.id = cs.id_punto_emision
+                LEFT JOIN empresa_establecimiento est ON est.id = pe.id_establecimiento
                 WHERE cs.id_empresa = :id_empresa
                   AND cs.estado = 'abierta'
                   AND cs.eliminado = false
+                ORDER BY cs.fecha_apertura DESC, cs.id DESC
                 LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * ¿Ese turno existe, sigue abierto y es de esta empresa? Lo usa quien recibe
+     * un id_caja_sesion de afuera (abrir comanda) antes de atarle un documento:
+     * de ese turno sale el punto de emisión con el que se factura.
+     */
+    public function esAbiertaDeEmpresa(int $id, int $idEmpresa): bool
+    {
+        $sql = "SELECT 1 FROM {$this->table}
+                WHERE id = :id
+                  AND id_empresa = :id_empresa
+                  AND estado = 'abierta'
+                  AND eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
     }
 
     public function create(array $data): int

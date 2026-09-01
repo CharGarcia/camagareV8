@@ -16,6 +16,7 @@ class ConfiguracionContableController extends BaseModuloController
 {
     private AsientoProgramadoRepository $repository;
     private AsientoProgramadoService $service;
+    private ?\App\Services\modulos\FormaPagoService $formaPagoService = null;
     private const RUTA_MODULO = 'modulos/configuracion-contable';
 
     public function __construct()
@@ -675,11 +676,11 @@ class ConfiguracionContableController extends BaseModuloController
     {
         $comportamiento = strtoupper(trim($comportamiento));
         if ($comportamiento === 'ANTICIPO_CLIENTE') {
-            $flujoDir       = 'INGRESO';
-            $tipoReferencia = 'forma_cobro';
+            $flujoDir = 'INGRESO';
+            $flujo    = 'cobro';
         } elseif ($comportamiento === 'ANTICIPO_PROVEEDOR') {
-            $flujoDir       = 'EGRESO';
-            $tipoReferencia = 'forma_pago';
+            $flujoDir = 'EGRESO';
+            $flujo    = 'pago';
         } else {
             return; // La opción no es de anticipo: no hay nada que propagar.
         }
@@ -688,26 +689,20 @@ class ConfiguracionContableController extends BaseModuloController
         $formas = $formaRepo->getFormasAnticipoSinCuenta($idEmpresa, $flujoDir);
 
         foreach ($formas as $forma) {
-            $idForma = (int) $forma['id'];
-
-            // 1. Cuenta en el módulo de Formas de Cobros/Pagos
-            $formaRepo->updateCuentaContable($idForma, $idEmpresa, $idCuenta, $idUsuario);
-
-            // 2. Asiento programado asociado a la forma
-            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idForma, $tipoReferencia);
-            $dataRule = [
-                'id_asiento_tipo' => 0,
-                'id_cuenta'       => $idCuenta,
-                'id_referencia'   => $idForma,
-                'tipo_referencia' => $tipoReferencia,
-            ];
-            if ($reglaExistente) {
-                $dataRule['updated_by'] = $idUsuario;
-                $this->service->actualizar((int) $reglaExistente['id'], $dataRule, $idEmpresa, $idUsuario);
-            } else {
-                $this->service->registrar($dataRule, $idEmpresa, $idUsuario);
-            }
+            $this->getFormaPagoService()->sincronizarCuentaFlujo(
+                $idEmpresa, $idUsuario, (int) $forma['id'], $flujo, $idCuenta
+            );
         }
+    }
+
+    /**
+     * Service del módulo de Formas de Cobros/Pagos: es el dueño de la regla "la cuenta de una
+     * forma vive en dos sitios" (cuenta base del módulo + asiento programado del flujo), y
+     * este módulo la reutiliza para que ambos lados no puedan divergir.
+     */
+    private function getFormaPagoService(): \App\Services\modulos\FormaPagoService
+    {
+        return $this->formaPagoService ??= new \App\Services\modulos\FormaPagoService(new FormaPagoRepository());
     }
 
     /**
@@ -785,27 +780,14 @@ class ConfiguracionContableController extends BaseModuloController
                 ? []
                 : $this->repository->getDestinosReplicaForma($idEmpresa, $idForma);
 
-            // 1. Sincronizar la cuenta en el módulo de Formas de Cobros/Pagos
-            $formaRepo = new FormaPagoRepository();
-            $formaRepo->updateCuentaContable($idForma, $idEmpresa, $idCuenta, $idUsuario);
-
-            // 2. Crear o actualizar el asiento programado asociado
+            // 1 y 2. Sincronizar la cuenta en los dos lugares donde vive (módulo de Formas y
+            // asiento programado del flujo). La lógica es la misma que aplica el propio módulo
+            // de Formas de Cobros/Pagos al guardar, así que vive en su Service.
             $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idForma, $tipoReferencia);
-            $dataRule = [
-                'id_asiento_tipo' => 0,
-                'id_cuenta'       => $idCuenta,
-                'id_referencia'   => $idForma,
-                'tipo_referencia' => $tipoReferencia
-            ];
-
-            if ($reglaExistente) {
-                $dataRule['updated_by'] = $idUsuario;
-                $this->service->actualizar((int) $reglaExistente['id'], $dataRule, $idEmpresa, $idUsuario);
-                $msg = 'Cuenta contable actualizada correctamente.';
-            } else {
-                $this->service->registrar($dataRule, $idEmpresa, $idUsuario);
-                $msg = 'Cuenta contable asignada correctamente.';
-            }
+            $this->getFormaPagoService()->sincronizarCuentaFlujo($idEmpresa, $idUsuario, $idForma, $flujo, $idCuenta);
+            $msg = $reglaExistente
+                ? 'Cuenta contable actualizada correctamente.'
+                : 'Cuenta contable asignada correctamente.';
 
             // 3. Proponer replicar la cuenta en las demás filas del mismo dinero: la propia forma
             //    en el bloque contrario (aplica_en = AMBAS) y las formas hermanas de la misma
@@ -931,18 +913,10 @@ class ConfiguracionContableController extends BaseModuloController
             exit;
         }
 
-        $tipoReferencia = $flujo === 'cobro' ? 'forma_cobro' : 'forma_pago';
-
         try {
-            // 1. Limpiar la cuenta en el módulo de Formas
-            $formaRepo = new FormaPagoRepository();
-            $formaRepo->updateCuentaContable($idForma, $idEmpresa, null, $idUsuario);
-
-            // 2. Eliminar lógicamente el asiento programado asociado, si existe
-            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idForma, $tipoReferencia);
-            if ($reglaExistente) {
-                $this->service->eliminar((int) $reglaExistente['id'], $idEmpresa, $idUsuario);
-            }
+            // Limpia la cuenta en los dos lugares: el módulo de Formas y el asiento programado
+            // del flujo (que se elimina lógicamente si existía).
+            $this->getFormaPagoService()->sincronizarCuentaFlujo($idEmpresa, $idUsuario, $idForma, $flujo, null);
 
             echo json_encode(['ok' => true, 'msg' => 'Cuenta contable desvinculada correctamente.']);
         } catch (\Throwable $e) {

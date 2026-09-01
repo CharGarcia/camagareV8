@@ -2172,6 +2172,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const id = document.getElementById('eg-input-id').value;
         if (!id) return;
 
+        const inputFecEdit = document.getElementById('eg-input-fecha').value;
+        if (inputFecEdit > CMG_fechaLocal()) {
+            Swal.fire('Fecha Inválida', 'La fecha de emisión no puede ser posterior a la fecha actual.', 'warning');
+            return;
+        }
+
         const sumPag = pagosEgreso.reduce((a, b) => a + b.monto, 0);
         const totalEg = parseFloat(document.getElementById('eg-final-total').innerText.replace('$ ', '')) || 0;
         

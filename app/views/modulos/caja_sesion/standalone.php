@@ -122,6 +122,18 @@ $volverA = $volverA ?? null;
                 </div>
             </div>
 
+            <!--
+                Salida sin abrir caja. Esta pantalla es standalone (sin navbar ni
+                menú), así que quien entra y decide no operar no tiene por dónde
+                irse: queda con el botón "atrás" o cerrando la pestaña. Siempre
+                visible, no depende del panel de turno.
+            -->
+            <div class="pt-3 mt-3 border-top">
+                <a href="<?= $base ?>/home/index" class="btn btn-link btn-sm text-muted w-100 text-decoration-none">
+                    <i class="bi bi-box-arrow-left me-1"></i>Volver al sistema
+                </a>
+            </div>
+
         </div>
     </div>
 </div>
@@ -167,13 +179,22 @@ $volverA = $volverA ?? null;
     async function cargarEstablecimientos() {
         const res = await fetch(AJAX + '/getEstablecimientosAjax', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const json = await res.json();
+        const lista = json.data || [];
         $est.innerHTML = '<option value="">Seleccione...</option>';
-        (json.data || []).forEach(e => {
+        lista.forEach(e => {
             const opt = document.createElement('option');
             opt.value = e.id;
             opt.textContent = e.codigo + ' — ' + e.nombre;
             $est.appendChild(opt);
         });
+        // Con un solo establecimiento no hay nada que elegir: se selecciona y se
+        // encadena la carga de sus puntos (que a su vez se autoselecciona si es
+        // uno solo). La mayoría de locales tiene un establecimiento y un punto;
+        // hacerlos elegir dos veces lo obvio solo estorba al abrir el turno.
+        if (lista.length === 1) {
+            $est.value = lista[0].id;
+            await cargarPuntos($est.value);
+        }
     }
 
     async function cargarPuntos(idEstablecimiento) {
@@ -184,14 +205,22 @@ $volverA = $volverA ?? null;
 
         const res = await fetch(AJAX + '/getPuntosEmisionAjax?id_establecimiento=' + idEstablecimiento, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const json = await res.json();
+        const lista = json.data || [];
         $pto.innerHTML = '<option value="">Seleccione...</option>';
-        (json.data || []).forEach(p => {
+        lista.forEach(p => {
             const opt = document.createElement('option');
             opt.value = p.id;
             opt.textContent = p.codigo_punto + ' — ' + (p.nombre || 'Punto de emisión');
             $pto.appendChild(opt);
         });
         $pto.disabled = false;
+        // Un solo punto de emisión: se selecciona y se consulta su turno, así se
+        // llega directo a "abrir caja" o a "continuar". Con varios NO se elige
+        // por el usuario: en el salón cada quien decide por cuál trabaja.
+        if (lista.length === 1) {
+            $pto.value = lista[0].id;
+            await consultarEstado($pto.value);
+        }
     }
 
     async function consultarEstado(idPuntoEmision) {

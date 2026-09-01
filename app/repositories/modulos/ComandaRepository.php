@@ -202,6 +202,33 @@ class ComandaRepository extends BaseRepository
                   ->execute([':e' => $idEmpresa]);
     }
 
+    /**
+     * Candado del cobro de un grupo. A diferencia del resto de candados del
+     * sistema NO es `_xact`: la sección crítica del cobro (validar que el grupo
+     * siga pendiente → emitir el documento → marcarlo cobrado) atraviesa VARIAS
+     * transacciones, porque PosVentaService::cobrar() abre la suya para emitir
+     * el comprobante fiscal. Un `pg_advisory_xact_lock` se soltaría en ese
+     * primer COMMIT y dejaría el hueco abierto justo donde importa.
+     *
+     * Es `try`, no bloqueante, a propósito: si otro dispositivo ya está cobrando
+     * esta cuenta, el segundo debe recibir un error inmediato — no quedarse
+     * esperando para acabar emitiendo un documento duplicado. Se libera siempre
+     * en el `finally` del cobro (y, si el proceso muriera antes, al cerrarse la
+     * conexión del request).
+     */
+    public function intentarLockCobroGrupo(int $idGrupo, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare("SELECT pg_try_advisory_lock(hashtext('comanda_cobro:' || :e || ':' || :g))");
+        $st->execute([':e' => $idEmpresa, ':g' => $idGrupo]);
+        return (bool) $st->fetchColumn();
+    }
+
+    public function liberarLockCobroGrupo(int $idGrupo, int $idEmpresa): void
+    {
+        $this->db->prepare("SELECT pg_advisory_unlock(hashtext('comanda_cobro:' || :e || ':' || :g))")
+                  ->execute([':e' => $idEmpresa, ':g' => $idGrupo]);
+    }
+
     public function getSiguienteNumero(int $idEmpresa): string
     {
         $sql = "SELECT COALESCE(MAX(CAST(regexp_replace(numero_comanda, '\\D', '', 'g') AS INTEGER)), 0) + 1

@@ -27,12 +27,13 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
                     <?php foreach ($mod['submodulos'] as $sub): ?>
                     <?php
                     $href = $sub['ruta'] ?? '#';
+                    $nuevaPestana = rutaAbrePestanaNueva($sub['ruta'] ?? '');
                     if ($href !== '#' && !preg_match('#^https?://#', $href) && !str_starts_with($href, '/')) {
                         $href = rtrim($base, '/') . '/' . ltrim($href, '/');
                     }
                     ?>
                     <li>
-                        <a class="dropdown-item" href="<?= htmlspecialchars($href) ?>">
+                        <a class="dropdown-item" href="<?= htmlspecialchars($href) ?>"<?= $nuevaPestana ? ' target="_blank" rel="noopener"' : '' ?>>
                             <i class="<?= htmlspecialchars(iconoClase($sub['icono_submodulo'] ?? '')) ?> me-2"></i>
                             <?= htmlspecialchars($sub['nombre_submodulo'] ?? '') ?>
                         </a>

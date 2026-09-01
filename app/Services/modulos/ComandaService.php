@@ -29,6 +29,9 @@ use Throwable;
  */
 class ComandaService
 {
+    /** Tabla con la que la comanda se registra en `registros_en_uso` (bloqueo de edición concurrente). */
+    public const TABLA_BLOQUEO = 'comandas';
+
     private ComandaRepository $repository;
     private ComandaRules $rules;
     private MesaRepository $mesaRepo;
@@ -105,12 +108,19 @@ class ComandaService
             $servicio = $this->getConfigServicio($idEmpresa);
 
             // Turno de caja de la comanda: de él sale el punto de emisión con el
-            // que se factura al cobrar. El tablero de mesas no lo manda (el
-            // mesero no elige caja), así que se resuelve aquí el turno abierto de
-            // la empresa. Sin esto la comanda nace huérfana y recién al cobrar
-            // salta "la mesa se abrió sin un turno de caja asociado", cuando ya
-            // no hay forma cómoda de arreglarlo.
+            // que se factura al cobrar. Lo manda quien abre la mesa —el salón
+            // envía el turno del punto de emisión que eligió el mesero, ver
+            // ComandasController::abrirAjax—; se valida aquí que siga abierto y
+            // que sea de esta empresa, porque de ese id depende por dónde se
+            // emite el documento.
             $idCajaSesion = (int) ($data['id_caja_sesion'] ?? 0);
+            if ($idCajaSesion > 0 && !$this->ventaService->esSesionAbiertaDeEmpresa($idCajaSesion, $idEmpresa)) {
+                throw new Exception('El turno de caja indicado ya no está abierto. Vuelve a Cajas y elige tu punto de emisión.');
+            }
+            // Sin turno indicado: solo llega así el portal público QR, donde el
+            // cliente que escanea no elige punto de emisión. Ahí sí se toma el
+            // turno abierto de la empresa (el más reciente, ver
+            // CajaSesionRepository::getAbiertaPorEmpresa).
             if ($idCajaSesion <= 0) {
                 $idCajaSesion = (int) ($this->ventaService->getSesionAbiertaEmpresa($idEmpresa)['id'] ?? 0);
             }
@@ -1109,8 +1119,51 @@ class ComandaService
      * aquí). Cuando ya no queda nada pendiente de cobro en la comanda, la
      * cierra y libera la mesa.
      */
+    /**
+     * ¿Otro usuario tiene abierta esta comanda ahora mismo?
+     *
+     * En el salón varios meseros pueden estar en la misma mesa: agregar ítems se
+     * deja pasar (agregar de más se corrige quitando la línea), pero COBRAR no
+     * — de ahí sale un documento electrónico que no se puede "quitar". Por eso
+     * esta verificación se llama solo desde el cobro interactivo del salón, y
+     * NO desde el cobro que dispara Payphone: ahí el cliente ya pagó con
+     * tarjeta y negarse dejaría el pago aprobado sin comprobante.
+     *
+     * @throws Exception si la tiene otro usuario (con su nombre).
+     */
+    public function verificarComandaLibre(int $idComanda, int $idEmpresa, int $idUsuario): void
+    {
+        $enUso = (new \App\Services\BloqueoEdicionService())
+            ->verificarLibreOPropio(self::TABLA_BLOQUEO, $idComanda, $idEmpresa, $idUsuario);
+        if ($enUso !== null) {
+            throw new Exception("Esta mesa la está atendiendo ahora mismo {$enUso['usuario']}. Pídele que cierre la comanda antes de cobrarla.");
+        }
+    }
+
     public function cobrarGrupo(int $idGrupo, int $idEmpresa, int $idUsuario, array $datosPago, array $empresaConfig): array
     {
+        // Candado ANTES de leer el estado del grupo. Sin él, "verificar que está
+        // pendiente" y "marcarlo cobrado" quedan separados por toda la emisión
+        // del documento: dos cobros simultáneos de la misma cuenta —dos meseros,
+        // o un doble clic— pasaban ambos la verificación y emitían DOS
+        // comprobantes del mismo consumo. Ver ComandaRepository::
+        // intentarLockCobroGrupo() para por qué no es un lock de transacción.
+        if (!$this->repository->intentarLockCobroGrupo($idGrupo, $idEmpresa)) {
+            throw new Exception('Esta cuenta se está cobrando en otro dispositivo. Espera unos segundos y vuelve a intentarlo.');
+        }
+
+        try {
+            return $this->_cobrarGrupoBloqueado($idGrupo, $idEmpresa, $idUsuario, $datosPago, $empresaConfig);
+        } finally {
+            $this->repository->liberarLockCobroGrupo($idGrupo, $idEmpresa);
+        }
+    }
+
+    /** Cuerpo del cobro; solo se entra aquí con el candado del grupo ya tomado. */
+    private function _cobrarGrupoBloqueado(int $idGrupo, int $idEmpresa, int $idUsuario, array $datosPago, array $empresaConfig): array
+    {
+        // Estado releído YA con el candado: es esta lectura la que decide, no la
+        // que pudo hacer otro proceso un instante antes de tomarlo.
         $grupo = $this->repository->getGrupo($idGrupo, $idEmpresa);
         if (!$grupo) {
             throw new Exception('Grupo de cobro no encontrado.');

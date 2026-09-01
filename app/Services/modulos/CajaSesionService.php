@@ -41,6 +41,12 @@ class CajaSesionService
         return $this->repository->getAbiertaPorEmpresa($idEmpresa);
     }
 
+    /** ¿Ese turno sigue abierto y es de esta empresa? (validación de un id recibido de afuera). */
+    public function esSesionAbiertaDeEmpresa(int $idCajaSesion, int $idEmpresa): bool
+    {
+        return $this->repository->esAbiertaDeEmpresa($idCajaSesion, $idEmpresa);
+    }
+
     public function abrir(array $data): array
     {
         $this->rules->validarApertura($data);

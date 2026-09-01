@@ -242,7 +242,16 @@ class AsientosContablesController extends BaseModuloController
         }
 
         if (!$data) {
-            echo json_encode(['ok' => false, 'error' => 'No se encontró el asiento.']);
+            // Sin asiento todavía (se abrió desde un documento que aún no se contabilizó): se
+            // devuelve igual el importe del documento para que el modal pueda mostrar el cuadre
+            // en vivo mientras el usuario arma las líneas a mano.
+            echo json_encode([
+                'ok' => false,
+                'error' => 'No se encontró el asiento.',
+                'cuadre_documento' => $modulo !== '' && $idRef > 0
+                    ? $this->service->getContextoCuadreDocumento($modulo, $idRef, $idEmpresa)
+                    : null,
+            ]);
         } else {
             // Importe del documento origen: el modal lo muestra y avisa en vivo si el asiento
             // deja de reflejarlo mientras se edita.

@@ -12,6 +12,10 @@ class IngresoRules
             throw new \Exception('La fecha de emisión es obligatoria.');
         }
 
+        if (strtotime($data['fecha_emision']) > strtotime(date('Y-m-d'))) {
+            throw new \Exception('La fecha de emisión no puede ser posterior a la fecha actual.');
+        }
+
         // Igual que FacturaVentaRules: validar el punto de emisión además del secuencial
         // (IngresosController::guardarAjax compone numero_ingreso con '001' por defecto,
         // así que solo el chequeo de secuencial en crudo evita que se cuele un valor sin

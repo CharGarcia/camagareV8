@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera
-version: 1.5
+version: 1.6
 orden: 20
 estado: activo
 ---
@@ -45,6 +45,12 @@ muestra en una fila al pie del detalle, junto a los totales:
 | *Coincide con la cartera del asiento* | Todo en orden |
 | *Cartera del asiento: … · diferencia: …* | El asiento ya no refleja el documento |
 | *Falta la línea de la cuenta por cobrar / pagar* | El asiento perdió la línea de cartera |
+
+Esa fila se **actualiza sola mientras edita**: al cambiar un valor del Debe o del
+Haber, al cambiar la cuenta de una línea o al quitar una línea, el aviso vuelve a
+calcularse en el momento, sin esperar a guardar. También aparece cuando abre el
+asiento de un documento que **todavía no se ha contabilizado** (formulario en
+blanco), para armar las líneas sabiendo con qué importe tienen que cerrar.
 
 **Contra qué se compara.** En facturas y recibos de venta, notas de débito,
 facturas de reembolso, compras y liquidaciones se mide sobre la línea de la
@@ -162,6 +168,9 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.6** — El aviso de cuadre contra el documento se actualiza en vivo al editar
+  (montos, cuenta de la línea o líneas quitadas) y también se muestra al abrir el
+  asiento de un documento que todavía no se ha contabilizado.
 - **1.5** — Al editar el asiento de un documento, el modal muestra el total de ese
   documento y avisa si el asiento deja de reflejarlo; se puede guardar igual
   confirmando, salvo que falte la línea de la cuenta por cobrar/pagar.

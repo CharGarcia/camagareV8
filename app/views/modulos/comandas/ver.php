@@ -96,6 +96,16 @@ $rutaAjax = $base . '/' . $rutaModulo;
 </head>
 <body>
 <div class="cm-wrap">
+    <!--
+        Aviso de mesa compartida. Varios meseros pueden estar en la misma mesa a
+        la vez: agregar ítems se permite (una línea de más se anula), pero el
+        cobro queda bloqueado mientras otro la tiene abierta — ahí se emitiría un
+        comprobante duplicado. Lo llena CMG_Bloqueo.onBloqueado (ver más abajo).
+    -->
+    <div id="cm-aviso-en-uso" class="alert alert-warning border-0 rounded-0 mb-0 py-2 px-3 d-none" role="alert">
+        <i class="bi bi-people-fill me-1"></i>
+        <span id="cm-aviso-en-uso-texto"></span>
+    </div>
     <div class="cm-header d-flex align-items-center justify-content-between gap-2 px-3 py-2 bg-primary text-white shadow-sm">
         <div class="d-flex align-items-center gap-2">
             <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-sm btn-outline-light"><i class="bi bi-arrow-left"></i></a>
@@ -415,6 +425,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="<?= $base ?>/js/bloqueo-edicion.js?v=<?= time() ?>"></script>
 <script>
 // Igual que el tablero de mesas: si el navegador restaura esta comanda desde el
 // bfcache al ir "atrás", se recarga contra el servidor — el turno de caja pudo
@@ -426,6 +437,34 @@ window.addEventListener('pageshow', function (e) {
     const BASE = "<?= $base ?>";
     const AJAX = BASE + '/modulos/comandas';
     const ID_COMANDA = <?= (int) $comanda['id'] ?>;
+
+    // Mesa compartida: se toma el bloqueo de la comanda al abrirla y se suelta al
+    // salir. NO deja la pantalla en solo lectura (en el salón dos meseros pueden
+    // atender la misma mesa); solo avisa quién está dentro. Lo que sí queda
+    // vetado es el cobro, y eso lo decide el servidor
+    // (ComandasController::cobrarGrupoAjax), no este aviso.
+    function mostrarEnUso(texto) {
+        const $aviso = document.getElementById('cm-aviso-en-uso');
+        const $texto = document.getElementById('cm-aviso-en-uso-texto');
+        if (!$aviso || !$texto) return;
+        $texto.textContent = texto;
+        $aviso.classList.remove('d-none');
+    }
+    if (window.CMG_Bloqueo && ID_COMANDA > 0) {
+        CMG_Bloqueo.iniciar({
+            urlBase: AJAX,
+            idRegistro: ID_COMANDA,
+            moduloContexto: 'comandas',
+            onBloqueado: (info) => mostrarEnUso(
+                'Esta mesa la está atendiendo ' + ((info && info.usuario) ? info.usuario : 'otro usuario') +
+                '. Puedes seguir tomando el pedido, pero el cobro lo hace quien la tiene abierta.'
+            ),
+            onPerdido: () => mostrarEnUso('Se perdió el control de esta mesa por inactividad. Recarga antes de cobrar.'),
+        });
+        // Soltar el lock al salir (volver al tablero, cerrar la pestaña): si no,
+        // la mesa queda "ocupada" para los demás hasta que expire el TTL.
+        window.addEventListener('pagehide', () => { CMG_Bloqueo.detener(); });
+    }
     // Mismos datos que EMPRESA_INFO en caja_sesion/venta.php — para armar el
     // encabezado de la tirilla de impresión (imprimirTicketPos), sin llamada extra.
     const EMPRESA_INFO = {

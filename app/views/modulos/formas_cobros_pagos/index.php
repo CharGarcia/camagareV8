@@ -60,7 +60,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                     'tipo' => 'Tipo',
                     'aplica_en' => 'Aplica en',
                     'banco_cuenta' => 'Banco / Cuenta',
-                    'cuenta_contable' => 'Cta. Contable',
+                    'cuenta_cobro' => 'Cta. Contable (Cobros)',
+                    'cuenta_pago' => 'Cta. Contable (Pagos)',
                     'activo' => 'Estado'
                 ];
                 ?>
@@ -104,13 +105,35 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                         <?php $renderHeader('tipo', 'Tipo'); ?>
                         <?php $renderHeader('aplica_en', 'Aplica en'); ?>
                         <th data-col="banco_cuenta">Banco / Cuenta</th>
-                        <th data-col="cuenta_contable">Cta. Contable</th>
+                        <th data-col="cuenta_cobro" title="Cuenta con la que se contabiliza un COBRO por esta forma (Configuración Contable → Cobros)">Cta. Contable (Cobros)</th>
+                        <th data-col="cuenta_pago" title="Cuenta con la que se contabiliza un PAGO por esta forma (Configuración Contable → Pagos)">Cta. Contable (Pagos)</th>
                         <?php $renderHeader('activo', 'Estado', true); ?>
                     </tr>
                 </thead>
                 <tbody id="tbodyFP">
+                    <?php
+                    // Cuenta VIGENTE de cada flujo (asiento programado de Configuración Contable y,
+                    // en su defecto, la cuenta base de la forma). Un flujo al que la forma no aplica
+                    // no tiene cuenta que mostrar.
+                    $celdaCuenta = function (array $r, string $flujo) {
+                        $aplica = strtoupper((string) $r['aplica_en']);
+                        $aplicaFlujo = $flujo === 'cobro'
+                            ? in_array($aplica, ['INGRESO', 'AMBAS'], true)
+                            : in_array($aplica, ['EGRESO', 'AMBAS'], true);
+                        if (!$aplicaFlujo) {
+                            echo '<span class="text-muted">-</span>';
+                            return;
+                        }
+                        if (!empty($r["cuenta_{$flujo}_codigo"])) {
+                            echo '<code>' . htmlspecialchars($r["cuenta_{$flujo}_codigo"]) . '</code> '
+                               . htmlspecialchars($r["cuenta_{$flujo}_nombre"]);
+                            return;
+                        }
+                        echo '<span class="text-muted italic small">Sin asignar</span>';
+                    };
+                    ?>
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-credit-card-2-front fs-2 d-block mb-2"></i> No se encontraron formas de pago.</td></tr>
+                        <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-credit-card-2-front fs-2 d-block mb-2"></i> No se encontraron formas de pago.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): 
                             $tipoCls = match($r['tipo']) {
@@ -141,13 +164,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                         <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="small" data-col="cuenta_contable">
-                                    <?php if (!empty($r['cuenta_contable_codigo'])): ?>
-                                        <code><?= $r['cuenta_contable_codigo'] ?></code> <?= htmlspecialchars($r['cuenta_contable_nombre']) ?>
-                                    <?php else: ?>
-                                        <span class="text-muted italic small">Sin asignar</span>
-                                    <?php endif; ?>
-                                </td>
+                                <td class="small" data-col="cuenta_cobro"><?php $celdaCuenta($r, 'cobro'); ?></td>
+                                <td class="small" data-col="cuenta_pago"><?php $celdaCuenta($r, 'pago'); ?></td>
                                 <td class="text-center" data-col="activo">
                                     <?php if (!empty($r['activo']) && $r['activo']): ?>
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success">Activo</span>

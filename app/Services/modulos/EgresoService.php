@@ -379,6 +379,10 @@ class EgresoService
         if (!$egreso) throw new \Exception("Egreso no encontrado.");
         if ($egreso['estado'] === 'anulado') throw new \Exception("No se pueden modificar los pagos de un egreso anulado.");
 
+        if ($fechaEmision && strtotime($fechaEmision) > strtotime(date('Y-m-d'))) {
+            throw new \Exception("La fecha de emisión no puede ser posterior a la fecha actual.");
+        }
+
         // 1. Validar Periodo Contable de la fecha original
         $this->periodosService->validarFechaPermitida(
             $egreso['fecha_emision'], 

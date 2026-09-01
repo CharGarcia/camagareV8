@@ -50,6 +50,16 @@ class PosVentaService
     }
 
     /**
+     * ¿Ese turno sigue abierto y es de esta empresa? Se valida antes de atarle
+     * una comanda: de ese turno sale el punto de emisión con el que se factura,
+     * y el salón puede tener varios puntos abiertos al mismo tiempo.
+     */
+    public function esSesionAbiertaDeEmpresa(int $idCajaSesion, int $idEmpresa): bool
+    {
+        return $this->cajaService->esSesionAbiertaDeEmpresa($idCajaSesion, $idEmpresa);
+    }
+
+    /**
      * Recargo por servicio configurado para la empresa, resuelto ya con sus
      * reglas. Vive aquí porque lo comparten los dos puntos de venta: el salón
      * (comandas) y el mostrador (caja-pos).

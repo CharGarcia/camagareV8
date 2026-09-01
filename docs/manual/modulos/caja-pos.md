@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
-etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo
-version: 1.1
+etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema
+version: 1.2
 orden: 25
 estado: activo
 ---
@@ -19,11 +19,24 @@ completo.
 
 Antes de vender hay que **abrir la sesión de caja**:
 
-1. Elija el **punto de emisión**.
+1. Elija el **establecimiento** y el **punto de emisión**.
 2. Indique el **fondo inicial** (el efectivo con el que arranca el turno).
 3. Abra la sesión.
 
 El fondo inicial debe ser numérico y no puede ser negativo. Puede ser cero.
+
+Si la empresa tiene **un solo establecimiento con un solo punto de emisión**, la
+pantalla los selecciona sola y se llega directo a abrir el turno (o a continuar
+el que ya esté abierto). Cuando hay varios, hay que elegir: el punto de emisión
+determina por dónde se emite, así que el sistema no elige por usted.
+
+Si en ese punto de emisión **ya hay un turno abierto**, no se abre otro: la
+pantalla muestra el turno vigente, con su cajero y su fondo, y el botón
+**Continuar**. Un mismo local puede tener varios turnos abiertos a la vez, uno
+por punto de emisión.
+
+Esta pantalla se abre en ventana propia, sin el menú del sistema. Si entró y no
+va a operar, use **Volver al sistema**, al pie de la tarjeta.
 
 ## Vender
 
@@ -53,6 +66,21 @@ porcentaje no paga IVA. Quien decide el porcentaje —y si se puede quitar— es
 configuración, no la pantalla: aunque alguien manipule la petición, el servidor
 vuelve a resolverlo antes de emitir.
 
+## El turno que usa el salón
+
+El **restaurante** comparte esta misma pantalla: el tablero de mesas no opera sin
+un turno abierto, y cuando falta, su aviso trae aquí. Al llegar desde el salón,
+**Continuar** devuelve al tablero de mesas en lugar de ir al mostrador.
+
+Por eso, **quien tenga permiso sobre Mesas puede abrir y cerrar el turno aquí
+aunque no tenga asignado el submódulo Cajas**: sin turno el salón no trabaja, y
+el camino no puede depender de un permiso que el mesero no necesita para nada
+más. Ese acceso alcanza solo al turno — la pantalla de **venta** del mostrador
+sigue requiriendo permiso propio sobre el Punto de Venta.
+
+Cada usuario elige su punto de emisión al abrir su turno, y las mesas que abra
+después se facturan por ese punto.
+
 ## Cerrar la caja
 
 Al terminar el turno se cierra la sesión declarando el **monto contado**: el
@@ -70,9 +98,17 @@ permite detectar faltantes el mismo día, no a fin de mes.
   ponga cero.
 - **El arqueo no cuadra**: revise las ventas cobradas en efectivo del turno y si
   hubo salidas de dinero no registradas.
+- **"Este punto de emisión ya tiene una caja abierta"**: hay un turno vigente ahí.
+  Contínuelo, o ciérrelo antes de abrir uno nuevo.
+- **Entré a la caja y no sé cómo volver**: use **Volver al sistema**, al pie de la
+  tarjeta; la pantalla se abre sin el menú habitual.
 
 ## Historial de cambios
 
+- **1.2** — El establecimiento y el punto de emisión se seleccionan solos cuando
+  hay uno solo de cada uno. Botón *Volver al sistema* para salir sin abrir caja.
+  Quien tiene permiso sobre Mesas puede abrir y cerrar el turno aunque no tenga
+  asignado el submódulo Cajas (solo el turno, no la venta de mostrador).
 - **1.1** — Recargo por servicio (el 10%) también en el mostrador, cobrado como
   propina y con la misma configuración que el salón.
 - **1.0** — Versión inicial.

@@ -369,7 +369,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <!-- Fila: Fecha, Serie, Secuencial y Recibo de -->
                                     <div class="col-md-2">
                                         <label class="form-label small fw-bold">Fecha de Emisión</label>
-                                        <input type="date" name="fecha_emision" id="m-input-fecha" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required>
+                                        <input type="date" name="fecha_emision" id="m-input-fecha" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>" required>
                                     </div>
                                     <div class="col-md-2">
                                         <label class="form-label small fw-bold d-flex align-items-center">Serie <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-select-punto', 'id_punto_emision') ?></label>
@@ -1872,6 +1872,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             detalles:           [],
             pagos:              formasPagoData
         };
+
+        if (data.fecha_emision > CMG_fechaLocal()) {
+            Swal.fire('Fecha Inválida', 'La fecha de emisión no puede ser posterior a la fecha actual.', 'warning');
+            return;
+        }
 
         if (!reciboDe) {
             Swal.fire('Campo Obligatorio', 'El campo "Recibo de" es obligatorio.', 'warning');

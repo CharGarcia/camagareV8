@@ -89,7 +89,20 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <i class="bi bi-grid-3x3-gap-fill fs-5"></i>
             <div>
                 <div class="fw-semibold lh-1">Mesas</div>
-                <small class="text-white-50">Cajero: <?= htmlspecialchars($sesion['cajero_nombre'] ?? '—') ?></small>
+                <?php
+                // El salón puede tener varios puntos de emisión abiertos a la vez y
+                // cada usuario elige el suyo al abrir caja: las mesas que abra aquí
+                // se facturan por ESTE punto, así que se muestra junto al cajero.
+                $codEstab = trim((string) ($sesion['codigo_establecimiento'] ?? ''));
+                $codPunto = trim((string) ($sesion['codigo_punto'] ?? ''));
+                $etiquetaPunto = ($codEstab !== '' && $codPunto !== '') ? $codEstab . '-' . $codPunto : $codPunto;
+                ?>
+                <small class="text-white-50">
+                    Cajero: <?= htmlspecialchars($sesion['cajero_nombre'] ?? '—') ?>
+                    <?php if ($etiquetaPunto !== ''): ?>
+                        · Punto de emisión: <?= htmlspecialchars($etiquetaPunto) ?>
+                    <?php endif; ?>
+                </small>
             </div>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">

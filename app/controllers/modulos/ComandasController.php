@@ -27,6 +27,13 @@ use Exception;
  */
 class ComandasController extends BaseModuloController
 {
+    // Bloqueo de edición concurrente sobre la comanda (tabla `comandas` en
+    // `registros_en_uso`). En el salón NO impide que otro mesero agregue ítems
+    // —eso se corrige quitando la línea—; sirve para avisar quién está en la
+    // mesa y para impedir el cobro mientras otro la tiene abierta, que es lo
+    // que sí generaría un documento electrónico de más.
+    use \App\Traits\BloqueoEdicionTrait;
+
     private const RUTA_MODULO = 'modulos/comandas';
     private ComandaService $service;
     /** Para comprobar que el salón tiene turno de caja abierto antes de trabajar la comanda. */
@@ -100,6 +107,27 @@ class ComandasController extends BaseModuloController
         ]);
     }
 
+    // ─── Bloqueo de edición concurrente (tabla fija: la comanda) ──────────────
+    // El id de tabla se fija aquí, nunca llega del cliente (ver BloqueoEdicionTrait).
+
+    public function bloquearAjax(): void
+    {
+        $this->requireLeer();
+        $this->tomarBloqueoAjax(ComandaService::TABLA_BLOQUEO);
+    }
+
+    public function renovarBloqueoAjax(): void
+    {
+        $this->requireLeer();
+        $this->renovarBloqueoAjaxTrait(ComandaService::TABLA_BLOQUEO);
+    }
+
+    public function liberarBloqueoAjax(): void
+    {
+        $this->requireLeer();
+        $this->liberarBloqueoAjaxTrait(ComandaService::TABLA_BLOQUEO);
+    }
+
     public function verAjax(): void
     {
         $this->requireLeer();
@@ -125,11 +153,22 @@ class ComandasController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
+            // El turno sale del punto de emisión que ESTE usuario eligió al abrir
+            // caja (pos_id_punto_emision, el mismo con el que entró al tablero):
+            // el salón puede tener varios puntos abiertos a la vez y la comanda
+            // debe facturarse por el suyo, no por el primero que esté abierto en
+            // la empresa. Se resuelve aquí y no se lee del POST — el cliente no
+            // debe poder atar su mesa al turno de otra caja.
+            $idPuntoEmision = (int) ($_SESSION['pos_id_punto_emision'] ?? 0);
+            $sesionCaja = $idPuntoEmision > 0
+                ? $this->cajaService->getSesionAbierta($idEmpresa, $idPuntoEmision)
+                : null;
+
             $idComanda = $this->service->abrir([
                 'id_empresa'     => $idEmpresa,
                 'id_usuario'     => $idUsuario,
                 'id_mesa'        => (int) ($_POST['id_mesa'] ?? 0),
-                'id_caja_sesion' => (int) ($_POST['id_caja_sesion'] ?? 0),
+                'id_caja_sesion' => (int) ($sesionCaja['id'] ?? 0),
                 'comensales'     => (int) ($_POST['comensales'] ?? 0),
                 'observaciones'  => trim($_POST['observaciones'] ?? ''),
             ]);
@@ -624,6 +663,15 @@ class ComandasController extends BaseModuloController
         try {
             $idGrupo = (int) ($_POST['id_grupo'] ?? 0);
             if ($idGrupo <= 0) throw new Exception('Grupo no válido.');
+
+            // Si otro usuario tiene la mesa abierta, no se cobra: dos cobros de
+            // la misma cuenta emiten dos comprobantes. Va aquí (cobro
+            // interactivo del salón) y no dentro del Service, para no afectar al
+            // cobro que dispara Payphone, donde el cliente ya pagó.
+            $idComandaSesion = (int) ($_SESSION['pos_id_comanda'] ?? 0);
+            if ($idComandaSesion > 0) {
+                $this->service->verificarComandaLibre($idComandaSesion, $idEmpresa, $idUsuario);
+            }
 
             $tipoDocumento = strtoupper(trim($_POST['tipo_documento'] ?? 'RECIBO'));
             $rutaDocumento = $tipoDocumento === 'FACTURA' ? 'modulos/factura-venta' : 'modulos/recibo-venta';

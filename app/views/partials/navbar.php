@@ -602,13 +602,16 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <div id="<?= $collapseId ?>" class="accordion-collapse collapse" aria-labelledby="<?= $headingId ?>" data-bs-parent="#accordionMobileMenu">
                         <div class="accordion-body">
                             <div class="list-group list-group-flush">
-                                <?php foreach ($mod['submodulos'] as $sub): 
+                                <?php foreach ($mod['submodulos'] as $sub):
                                     $href = $sub['ruta'] ?? '#';
+                                    // Pantallas standalone del POS: pestaña nueva, igual que
+                                    // los botones de arriba (ver rutaAbrePestanaNueva()).
+                                    $nuevaPestana = rutaAbrePestanaNueva($sub['ruta'] ?? '');
                                     if ($href !== '#' && !preg_match('#^https?://#', $href) && !str_starts_with($href, '/')) {
                                         $href = rtrim($base, '/') . '/' . ltrim($href, '/');
                                     }
                                 ?>
-                                <a href="<?= htmlspecialchars($href) ?>" class="list-group-item list-group-item-action">
+                                <a href="<?= htmlspecialchars($href) ?>"<?= $nuevaPestana ? ' target="_blank" rel="noopener"' : '' ?> class="list-group-item list-group-item-action">
                                     <i class="<?= htmlspecialchars(iconoClase($sub['icono_submodulo'] ?? '')) ?> me-2"></i>
                                     <?= htmlspecialchars($sub['nombre_submodulo'] ?? '') ?>
                                 </a>

@@ -127,27 +127,52 @@ try {
                             </div>
                         </div>
 
-                        <!-- Fila 4: Cuenta Contable y Estado -->
-                        <div class="col-md-8">
-                            <label class="form-label small fw-bold">Cuenta Contable (Opcional)</label>
+                        <!-- Fila 4: Cuenta Contable por flujo (Cobros / Pagos) y Estado.
+                             Es la MISMA cuenta que se administra en Configuración Contable →
+                             Cobros y Pagos: se lee y se guarda en los dos lugares. -->
+                        <div class="col-md-5 d-none" id="fp-box-cuenta-cobro">
+                            <label class="form-label small fw-bold">Cuenta Contable — Cobros (Opcional)</label>
                             <div class="position-relative">
                                 <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-light"><i class="bi bi-calculator"></i></span>
-                                    <input type="text" id="fp-src-cuenta" class="form-control" placeholder="Buscar por código o nombre..." autocomplete="off">
-                                    <button class="btn btn-outline-secondary d-none" type="button" id="fp-btn-clear-cuenta" onclick="selectCuenta(null)">
+                                    <span class="input-group-text bg-light"><i class="bi bi-box-arrow-in-down text-success"></i></span>
+                                    <input type="text" id="fp-src-cuenta-cobro" class="form-control" placeholder="Buscar por código o nombre..." autocomplete="off">
+                                    <button class="btn btn-outline-secondary d-none" type="button" id="fp-btn-clear-cuenta-cobro" onclick="selectCuenta(null, 'cobro')">
                                         <i class="bi bi-x-lg"></i>
                                     </button>
-                                    <input type="hidden" name="id_cuenta_contable" id="fp-idcuenta">
+                                    <input type="hidden" name="id_cuenta_cobro" id="fp-idcuenta-cobro">
                                 </div>
-                                <div id="fp-cuenta-drop" class="list-group shadow-sm position-absolute w-100 dropdown-predictivo d-none" style="max-height: 180px; overflow-y:auto; z-index:2000;"></div>
+                                <div id="fp-cuenta-drop-cobro" class="list-group shadow-sm position-absolute w-100 dropdown-predictivo d-none" style="max-height: 180px; overflow-y:auto; z-index:2000;"></div>
                             </div>
                         </div>
 
-                        <div class="col-md-4 d-flex align-items-end pb-1">
+                        <div class="col-md-5 d-none" id="fp-box-cuenta-pago">
+                            <label class="form-label small fw-bold">Cuenta Contable — Pagos (Opcional)</label>
+                            <div class="position-relative">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light"><i class="bi bi-box-arrow-up text-danger"></i></span>
+                                    <input type="text" id="fp-src-cuenta-pago" class="form-control" placeholder="Buscar por código o nombre..." autocomplete="off">
+                                    <button class="btn btn-outline-secondary d-none" type="button" id="fp-btn-clear-cuenta-pago" onclick="selectCuenta(null, 'pago')">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                    <input type="hidden" name="id_cuenta_pago" id="fp-idcuenta-pago">
+                                </div>
+                                <div id="fp-cuenta-drop-pago" class="list-group shadow-sm position-absolute w-100 dropdown-predictivo d-none" style="max-height: 180px; overflow-y:auto; z-index:2000;"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-2 d-flex align-items-end pb-1">
                             <div class="form-check form-switch mb-1">
                                 <input class="form-check-input" type="checkbox" id="fp-activo-sw" checked>
                                 <input type="hidden" name="activo" id="fp-activo" value="1">
                                 <label class="form-check-label fw-bold small" for="fp-activo-sw">Estado: Activo</label>
+                            </div>
+                        </div>
+
+                        <div class="col-12 mt-1">
+                            <div class="form-text text-muted" style="font-size: 0.7rem;">
+                                <i class="bi bi-info-circle me-1"></i> Es la misma cuenta que se administra en
+                                <strong>Configuración Contable → Cobros y Pagos</strong>: lo que se cambie aquí se
+                                actualiza allá, y al revés. Solo se pide la cuenta de los flujos marcados en "Aplica para".
                             </div>
                         </div>
 
@@ -213,12 +238,13 @@ try {
             modalInstanciaFP = new bootstrap.Modal(modalEl);
         }
 
-        // Listener Buscador Predictivo Cuentas
-        const inpCta = document.getElementById('fp-src-cuenta');
-        const dropCta = document.getElementById('fp-cuenta-drop');
-        let tmoCta = null;
+        // Listener Buscador Predictivo Cuentas (uno por flujo: Cobros y Pagos)
+        ['cobro', 'pago'].forEach((flujo) => {
+            const inpCta = document.getElementById(`fp-src-cuenta-${flujo}`);
+            const dropCta = document.getElementById(`fp-cuenta-drop-${flujo}`);
+            if (!inpCta || !dropCta) return;
+            let tmoCta = null;
 
-        if (inpCta) {
             inpCta.addEventListener('input', (e) => {
                 clearTimeout(tmoCta);
                 const val = e.target.value.trim();
@@ -237,7 +263,7 @@ try {
                                     btn.type = 'button';
                                     btn.className = 'list-group-item list-group-item-action py-2 small';
                                     btn.innerHTML = `<strong>${item.codigo}</strong> - ${item.nombre}`;
-                                    btn.onclick = () => selectCuenta(item);
+                                    btn.onclick = () => selectCuenta(item, flujo);
                                     dropCta.appendChild(btn);
                                 });
                                 dropCta.classList.remove('d-none');
@@ -251,13 +277,19 @@ try {
 
             inpCta.addEventListener('keydown', (e) => {
                 if (e.key === 'Backspace' || e.key === 'Delete') {
-                    if (!inpCta.readOnly && inpCta.value === '') selectCuenta(null);
+                    if (!inpCta.readOnly && inpCta.value === '') selectCuenta(null, flujo);
                 }
             });
-        }
 
-        document.addEventListener('click', (e) => {
-            if (dropCta && !dropCta.contains(e.target) && e.target !== inpCta) dropCta.classList.add('d-none');
+            document.addEventListener('click', (e) => {
+                if (!dropCta.contains(e.target) && e.target !== inpCta) dropCta.classList.add('d-none');
+            });
+        });
+
+        // La cuenta solo se pide para los flujos marcados en "Aplica para"
+        ['fp-chk-ingreso', 'fp-chk-egreso'].forEach((idChk) => {
+            const chk = document.getElementById(idChk);
+            if (chk) chk.addEventListener('change', fpToggleCajasCuenta);
         });
 
         // Enviar Formulario
@@ -362,11 +394,16 @@ try {
         }
     });
 
-    function selectCuenta(item) {
-        const inpId = document.getElementById('fp-idcuenta');
-        const inpSrc = document.getElementById('fp-src-cuenta');
-        const drop = document.getElementById('fp-cuenta-drop');
-        const btnClear = document.getElementById('fp-btn-clear-cuenta');
+    /**
+     * Fija (o limpia) la cuenta contable de un flujo: 'cobro' o 'pago'.
+     * Son dos cuentas distintas porque así las administra Configuración Contable.
+     */
+    function selectCuenta(item, flujo = 'cobro', propagar = true) {
+        const inpId = document.getElementById(`fp-idcuenta-${flujo}`);
+        const inpSrc = document.getElementById(`fp-src-cuenta-${flujo}`);
+        const drop = document.getElementById(`fp-cuenta-drop-${flujo}`);
+        const btnClear = document.getElementById(`fp-btn-clear-cuenta-${flujo}`);
+        if (!inpId) return;
 
         if (item) {
             inpId.value = item.id;
@@ -386,6 +423,28 @@ try {
             if (btnClear) btnClear.classList.add('d-none');
         }
         if (drop) drop.classList.add('d-none');
+
+        // Lo normal es que cobros y pagos usen la misma cuenta: al elegirla en un flujo se
+        // propone en el otro solo si allí no hay ninguna todavía (nunca pisa una elección).
+        if (item && propagar) {
+            const otro = flujo === 'cobro' ? 'pago' : 'cobro';
+            const otroId = document.getElementById(`fp-idcuenta-${otro}`);
+            if (otroId && !otroId.value) selectCuenta(item, otro, false);
+        }
+    }
+
+    /**
+     * Muestra la caja de cuenta contable de cada flujo según "Aplica para": si la forma no
+     * aplica a ese flujo, allí no hay cuenta que configurar (Configuración Contable tampoco
+     * la lista) y el guardado retira el asiento programado que hubiera quedado.
+     */
+    function fpToggleCajasCuenta() {
+        const chkIng = document.getElementById('fp-chk-ingreso');
+        const chkEgr = document.getElementById('fp-chk-egreso');
+        const boxCobro = document.getElementById('fp-box-cuenta-cobro');
+        const boxPago  = document.getElementById('fp-box-cuenta-pago');
+        if (boxCobro) boxCobro.classList.toggle('d-none', !(chkIng && chkIng.checked));
+        if (boxPago)  boxPago.classList.toggle('d-none', !(chkEgr && chkEgr.checked));
     }
 
     function toggleCamposBanco(tipo) {
@@ -448,6 +507,9 @@ try {
             chkIng.disabled = false;
             chkEgr.disabled = false;
         }
+
+        // El tipo puede haber cambiado los flujos aplicables (Payphone/Nuvei/Anticipo)
+        fpToggleCajasCuenta();
     }
 
     function abrirModalFP(id = null) {
@@ -456,15 +518,16 @@ try {
         frm.reset();
         document.getElementById('fp-id').value = '';
         document.getElementById('btnEliminarFP').classList.add('d-none');
-        selectCuenta(null);
+        selectCuenta(null, 'cobro');
+        selectCuenta(null, 'pago');
         document.querySelectorAll('.tc-fp-checkbox').forEach(cb => cb.checked = false);
         document.getElementById('fp-tipo-cuenta-contable').value = '';
         document.getElementById('fp-tipo').value = 'EFECTIVO';
-        toggleCamposBanco('EFECTIVO');
 
         document.getElementById('fp-chk-ingreso').checked = true;
         document.getElementById('fp-chk-egreso').checked = true;
-        
+        toggleCamposBanco('EFECTIVO');
+
         const swAct = document.getElementById('fp-activo-sw');
         if (swAct) {
             swAct.checked = true;
@@ -510,13 +573,18 @@ try {
                             document.getElementById('fp-modalidad-tarjeta').value = mod;
                         }
 
-                        if (d.id_cuenta_contable) {
-                            selectCuenta({
-                                id: d.id_cuenta_contable,
-                                codigo: d.cuenta_contable_codigo,
-                                nombre: d.cuenta_contable_nombre
-                            });
-                        }
+                        // Cuenta VIGENTE de cada flujo: la que manda hoy en la contabilidad
+                        // (asiento programado de la forma; en su defecto, la cuenta base).
+                        selectCuenta(d.id_cuenta_cobro ? {
+                            id: d.id_cuenta_cobro,
+                            codigo: d.cuenta_cobro_codigo,
+                            nombre: d.cuenta_cobro_nombre
+                        } : null, 'cobro', false);
+                        selectCuenta(d.id_cuenta_pago ? {
+                            id: d.id_cuenta_pago,
+                            codigo: d.cuenta_pago_codigo,
+                            nombre: d.cuenta_pago_nombre
+                        } : null, 'pago', false);
 
                         const tcParts = (d.tipo_cuenta_contable || '').split(',').map(p => p.trim().toLowerCase());
                         document.querySelectorAll('.tc-fp-checkbox').forEach(cb => {

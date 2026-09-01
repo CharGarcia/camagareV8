@@ -12,6 +12,34 @@ class FormaPagoRepository extends BaseRepository
         'nombre', 'tipo', 'aplica_en', 'activo', 'banco_nombre'
     ];
 
+    /**
+     * Cuenta contable VIGENTE de cada flujo, con el mismo criterio que usa la contabilidad
+     * (AsientoBuilderService::lineasFormas) y Configuración Contable: manda el asiento
+     * programado de la forma en ese flujo ('forma_cobro' / 'forma_pago') y, si no existe,
+     * se cae a la cuenta base del propio módulo (empresa_formas_pago.id_cuenta_contable).
+     * Sin esto el módulo mostraría la cuenta base aunque el asiento la esté sobrescribiendo.
+     */
+    private const SELECT_CUENTAS_FLUJO = "
+                           COALESCE(apc.id_cuenta, fp.id_cuenta_contable) AS id_cuenta_cobro,
+                           pcc.codigo AS cuenta_cobro_codigo,
+                           pcc.nombre AS cuenta_cobro_nombre,
+                           COALESCE(app.id_cuenta, fp.id_cuenta_contable) AS id_cuenta_pago,
+                           pcp.codigo AS cuenta_pago_codigo,
+                           pcp.nombre AS cuenta_pago_nombre";
+
+    /** Joins que alimentan SELECT_CUENTAS_FLUJO (placeholders distintos: PDO/pgsql no repite). */
+    private const JOIN_CUENTAS_FLUJO = "
+                    LEFT JOIN asientos_programados apc ON apc.id_referencia = fp.id
+                                                     AND apc.tipo_referencia = 'forma_cobro'
+                                                     AND apc.id_empresa = :emp_ap_cobro
+                                                     AND apc.eliminado = false
+                    LEFT JOIN plan_cuentas pcc ON pcc.id = COALESCE(apc.id_cuenta, fp.id_cuenta_contable)
+                    LEFT JOIN asientos_programados app ON app.id_referencia = fp.id
+                                                     AND app.tipo_referencia = 'forma_pago'
+                                                     AND app.id_empresa = :emp_ap_pago
+                                                     AND app.eliminado = false
+                    LEFT JOIN plan_cuentas pcp ON pcp.id = COALESCE(app.id_cuenta, fp.id_cuenta_contable)";
+
     public function __construct()
     {
         parent::__construct('empresa_formas_pago');
@@ -70,13 +98,15 @@ class FormaPagoRepository extends BaseRepository
             default        => "fp.{$ordenCol}"
         };
 
-        $sqlRows = "SELECT fp.*, 
+        $sqlRows = "SELECT fp.*,
                            b.nombre_banco AS banco_nombre,
                            pc.codigo AS cuenta_contable_codigo,
-                           pc.nombre AS cuenta_contable_nombre
+                           pc.nombre AS cuenta_contable_nombre,
+                           " . self::SELECT_CUENTAS_FLUJO . "
                     FROM {$this->table} fp
                     LEFT JOIN bancos_ecuador b ON fp.id_banco = b.id
                     LEFT JOIN plan_cuentas pc ON fp.id_cuenta_contable = pc.id
+                    " . self::JOIN_CUENTAS_FLUJO . "
                     {$whereSql}
                     ORDER BY $orderExpr $dir
                     LIMIT :limit OFFSET :offset";
@@ -86,6 +116,8 @@ class FormaPagoRepository extends BaseRepository
         foreach ($params as $key => $val) {
             $stRows->bindValue($key, $val);
         }
+        $stRows->bindValue(':emp_ap_cobro', $idEmpresa, PDO::PARAM_INT);
+        $stRows->bindValue(':emp_ap_pago', $idEmpresa, PDO::PARAM_INT);
         $stRows->bindValue(':limit', $perPage, PDO::PARAM_INT);
         $stRows->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stRows->execute();
@@ -98,17 +130,24 @@ class FormaPagoRepository extends BaseRepository
 
     public function getPorId(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT fp.*, 
+        $sql = "SELECT fp.*,
                        b.nombre_banco AS banco_nombre,
                        pc.codigo AS cuenta_contable_codigo,
-                       pc.nombre AS cuenta_contable_nombre
+                       pc.nombre AS cuenta_contable_nombre,
+                       " . self::SELECT_CUENTAS_FLUJO . "
                 FROM {$this->table} fp
                 LEFT JOIN bancos_ecuador b ON fp.id_banco = b.id
                 LEFT JOIN plan_cuentas pc ON fp.id_cuenta_contable = pc.id
+                " . self::JOIN_CUENTAS_FLUJO . "
                 WHERE fp.id = :id AND fp.id_empresa = :id_empresa AND fp.eliminado = FALSE";
-        
+
         $st = $this->db->prepare($sql);
-        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $st->execute([
+            ':id'           => $id,
+            ':id_empresa'   => $idEmpresa,
+            ':emp_ap_cobro' => $idEmpresa,
+            ':emp_ap_pago'  => $idEmpresa
+        ]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }

@@ -46,6 +46,35 @@ if (!function_exists('url_absoluta')) {
     }
 }
 
+if (!function_exists('rutaAbrePestanaNueva')) {
+    /**
+     * ¿Ese submódulo del menú debe abrirse en una pestaña nueva?
+     *
+     * Son las pantallas STANDALONE del Punto de Venta: se dibujan sin el layout
+     * del sistema (sin navbar ni menú), así que abiertas en la misma pestaña
+     * dejan al usuario sin manera de volver. El botón "Restaurante" del navbar
+     * ya las abre con target="_blank"; esto hace que el menú se comporte igual.
+     *
+     * Ojo con 'modulos/comandas': su index redirige al tablero de mesas
+     * (modulos/mesas/tablero), que es standalone — por eso entra en la lista
+     * aunque la ruta del submódulo no lo parezca. 'modulos/mesas' NO está: ese
+     * es el listado administrativo de mesas, con layout normal.
+     */
+    function rutaAbrePestanaNueva(?string $ruta): bool
+    {
+        $r = strtolower(trim((string) $ruta));
+        $r = ltrim($r, '/');
+        $r = preg_replace('#^(sistema/)+#', '', $r);
+        $r = str_replace('_', '-', ltrim($r, '/'));
+
+        return in_array($r, [
+            'modulos/comandas',   // redirige al tablero de mesas (standalone)
+            'modulos/kds',        // pantalla de preparación (standalone)
+            'modulos/caja-pos',   // apertura/cierre de caja (standalone)
+        ], true);
+    }
+}
+
 if (!function_exists('iconoClase')) {
     function iconoClase(?string $nombre): string
     {

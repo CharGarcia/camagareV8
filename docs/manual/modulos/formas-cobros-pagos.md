@@ -6,7 +6,7 @@ ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
 etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque
-version: 1.2
+version: 1.3
 orden: 70
 estado: activo
 ---
@@ -46,6 +46,21 @@ no sirve como origen de un traspaso.
 Cada forma de pago apunta a una cuenta contable. Es lo que hace que un cobro en
 efectivo y uno por banco terminen en cuentas distintas sin que nadie lo indique
 en cada documento.
+
+La cuenta se pide **separada por flujo**: *Cuenta Contable — Cobros* y *Cuenta
+Contable — Pagos*. Solo aparece la de los flujos marcados en **Aplica para**: una
+forma que solo aplica a Ingresos pide una sola cuenta. Al elegir la cuenta de un
+flujo, se propone la misma en el otro si allí todavía no hay ninguna — lo normal
+es que el dinero entre y salga por la misma cuenta —, y basta cambiarla si en su
+empresa no es así.
+
+**Es la misma cuenta que se administra en
+[Configuración Contable](configuracion-contable.md), en el bloque *Cobros y
+Pagos*.** No son dos configuraciones distintas: lo que se cambia aquí se ve allá
+y al revés, y la columna del listado muestra siempre la cuenta que la
+contabilidad va a usar de verdad. Antes esta pantalla mostraba y guardaba una
+cuenta propia que Configuración Contable podía estar sobrescribiendo, así que
+podía verse una cuenta y contabilizarse otra.
 
 Al crear una empresa, las formas por defecto nacen **sin cuenta**, porque en ese
 momento todavía no existe el plan de cuentas. Se les asigna sola al pulsar
@@ -88,6 +103,13 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
+- **1.3** — La cuenta contable de la forma pasa a pedirse **separada por flujo**
+  (Cobros y Pagos) y es la misma que administra Configuración Contable: lo que se
+  cambia en una pantalla se ve en la otra. El listado muestra ahora dos columnas
+  —*Cta. Contable (Cobros)* y *Cta. Contable (Pagos)*— con la cuenta que la
+  contabilidad usa de verdad. Antes esta pantalla mostraba y guardaba una cuenta
+  propia que la configuración contable podía estar sobrescribiendo: se podía ver
+  una cuenta y contabilizarse otra, y el cambio hecho aquí no tenía efecto.
 - **1.2** — La carga del plan modelo ahora asigna sola la cuenta de las formas
   por defecto (Efectivo y las dos de Anticipos). Tarjeta, Payphone y Nuvei
   siguen sin cuenta a propósito.

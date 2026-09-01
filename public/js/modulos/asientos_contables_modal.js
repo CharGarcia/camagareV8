@@ -150,6 +150,9 @@
             } else {
                 // No existe asiento aún para este origen: formulario en blanco, sin cuentas ni
                 // valores sugeridos — el usuario arma las líneas a mano con "Agregar línea".
+                // El backend manda igual el importe del documento, así que el pie del modal
+                // puede ir avisando en vivo si lo que se está armando lo refleja o no.
+                cuadreDocumento = res.cuadre_documento || null;
                 document.getElementById('asientoModalTitle').textContent = `Nuevo Asiento - ${modulo.replace('_', ' ').toUpperCase()}`;
                 document.getElementById('asiento_tipo').value = modulo;
                 document.getElementById('asiento_tipo_label').value = modulo.replace(/_/g, ' ');
@@ -262,7 +265,7 @@
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end input-debe" value="${debe}" onfocus="this.select()"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end input-haber" value="${haber}" onfocus="this.select()"></td>
             <td class="text-center">
-                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1 border-0" onclick="this.closest('tr').remove(); calcularTotales();"><i class="bi bi-x"></i></button>
+                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1 border-0 btn-eliminar-linea" title="Quitar línea"><i class="bi bi-x"></i></button>
             </td>
         `;
 
@@ -272,6 +275,15 @@
         const inputDebe = tr.querySelector('.input-debe');
         const inputHaber = tr.querySelector('.input-haber');
         const searchInput = tr.querySelector('.cuenta-search');
+
+        // Quitar la línea. El listener va acá y no como onclick en el HTML porque los
+        // manejadores en línea se evalúan en el ámbito global: calcularTotales() vive dentro
+        // de este IIFE, así que desde el atributo daba ReferenceError y la fila se borraba
+        // dejando los totales, la diferencia y el cuadre contra el documento sin actualizar.
+        tr.querySelector('.btn-eliminar-linea').addEventListener('click', function () {
+            tr.remove();
+            calcularTotales();
+        });
 
         inputDebe.addEventListener('input', function() {
             if (parseFloat(this.value) > 0) inputHaber.value = '0.00';
@@ -304,7 +316,11 @@
             const q = this.value.trim();
             if (q.length < 2) {
                 resultsDiv.style.display = 'none';
+                // La cuenta es la que decide si el asiento tiene su línea de cartera, así que
+                // al quedarse sin cuenta hay que repintar el cuadre contra el documento.
+                const teniaCuenta = hiddenInput.value !== '';
                 hiddenInput.value = '';
+                if (teniaCuenta) calcularTotales();
                 return;
             }
 
@@ -324,13 +340,18 @@
                                 input.value = `${item.codigo} - ${item.nombre}`;
                                 hiddenInput.value = item.id;
                                 resultsDiv.style.display = 'none';
+                                // Cambiar de cuenta puede poner o quitar la línea de cartera
+                                // del documento: hay que reevaluar el cuadre en vivo.
+                                calcularTotales();
                             });
                             resultsDiv.appendChild(a);
                         });
                         resultsDiv.style.display = 'block';
                     } else {
                         resultsDiv.style.display = 'none';
+                        const teniaCuenta = hiddenInput.value !== '';
                         hiddenInput.value = '';
+                        if (teniaCuenta) calcularTotales();
                     }
                 } catch (e) { }
             }, 300);

@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta
-version: 1.7
+version: 1.8
 orden: 5
 estado: activo
 ---
@@ -164,6 +164,12 @@ Si el otro bloque ya tenía una cuenta distinta, el aviso muestra **cuál es** y
 pregunta si se reemplaza. Nada se cambia sin aceptar: al responder que no, cada
 bloque conserva su cuenta.
 
+Las cuentas del bloque **Cobros y Pagos** también se pueden ver y cambiar desde
+[Formas de cobro y pago](formas-cobros-pagos.md), en la ficha de cada forma
+(*Cuenta Contable — Cobros* y *Cuenta Contable — Pagos*). Es la misma
+configuración vista desde las dos pantallas: lo que se cambie en una aparece en
+la otra.
+
 ### Formas distintas sobre la misma cuenta bancaria
 
 La propuesta también alcanza a las **formas hermanas**: dos formas de pago
@@ -261,6 +267,9 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.8** — Las cuentas del bloque Cobros y Pagos se pueden administrar también
+  desde el módulo Formas de cobro y pago, en la ficha de cada forma: es la misma
+  configuración, sincronizada en las dos pantallas.
 - **1.7** — En Cobros y Pagos y en Ingresos y Egresos, al asignar la cuenta de un
   concepto que también aparece en el bloque contrario (forma con *Aplica en:
   Ambas*, u opción marcada para ingresos y egresos), el sistema propone aplicar
