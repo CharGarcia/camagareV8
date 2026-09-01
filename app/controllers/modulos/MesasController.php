@@ -62,6 +62,14 @@ class MesasController extends BaseModuloController
         $idPuntoEmision = (int) ($_SESSION['pos_id_punto_emision'] ?? 0);
         $sesion = $idPuntoEmision > 0 ? $this->cajaService->getSesionAbierta($idEmpresa, $idPuntoEmision) : null;
 
+        // Sin turno para el punto de emisión elegido se cae al aviso, que devuelve
+        // a Cajas con ?volver=mesas: ahí se elige establecimiento/punto de emisión
+        // y se abre (o se continúa) el turno, y "Continuar" regresa al tablero.
+        // Es el MISMO recorrido para todos — el punto de emisión no se hereda a
+        // ciegas del primer turno abierto de la empresa, porque es el que factura.
+        // Que ese recorrido no dependa de tener asignado el submódulo Cajas lo
+        // resuelve CajaPosController, que acepta el permiso del salón para las
+        // acciones del turno (ver requirePermisoTurno allí).
         if (!$sesion) {
             $this->view('modulos.caja_sesion.venta_placeholder', [
                 'titulo'         => 'Punto de Venta — Restaurante',

@@ -23,6 +23,8 @@ use App\Services\modulos\PosVentaService;
 class CajaPosController extends BaseModuloController
 {
     private const RUTA_MODULO = 'modulos/caja-pos';
+    /** POS Restaurantes: el salón entra aquí a operar su turno (ver requirePermisoTurno). */
+    private const RUTA_SALON = 'modulos/mesas';
     private CajaSesionService $service;
     private PosVentaService $ventaService;
 
@@ -41,9 +43,41 @@ class CajaPosController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /**
+     * Guard de las acciones del TURNO (esta pantalla standalone y sus AJAX):
+     * vale el permiso sobre modulos/caja-pos O el equivalente sobre
+     * modulos/mesas.
+     *
+     * El turno de caja es requisito operativo del salón: el tablero de mesas no
+     * abre sin él y su aviso devuelve aquí con ?volver=mesas, de donde
+     * "Continuar" regresa al tablero. Exigiendo solo el submódulo Cajas, un
+     * usuario con el restaurante asignado pero sin Cajas quedaba encerrado: el
+     * guard lo mandaba al dashboard y no tenía por dónde abrir el turno, cuando
+     * el superadmin sí completa ese recorrido. Aceptar aquí el permiso del salón
+     * le da exactamente el mismo camino.
+     *
+     * Alcance deliberado: SOLO el turno. El mostrador (venta, productos, cobro)
+     * sigue exigiendo modulos/caja-pos, así que esto no le abre el POS de
+     * mostrador a nadie.
+     *
+     * @param string $letra r (ver), w (crear/abrir), u (actualizar/cerrar)
+     */
+    private function requirePermisoTurno(string $letra): void
+    {
+        $this->requireEmpresaSesion();
+
+        $key = ['r' => 'ver', 'w' => 'crear', 'u' => 'actualizar'][$letra] ?? 'ver';
+        if (!empty(\App\Helpers\Permisos::porRuta(self::RUTA_SALON)[$key])) {
+            return;
+        }
+
+        // Sin permiso del salón, el guard normal del módulo (redirige o 403 AJAX).
+        $this->requirePermisoModulo(self::RUTA_MODULO, $letra);
+    }
+
     public function index(): void
     {
-        $this->requireLeer();
+        $this->requirePermisoTurno('r');
 
         // De dónde vino: si llegó desde el tablero de mesas (POS Restaurantes,
         // módulo independiente), "Continuar al Punto de Venta" debe devolverlo
@@ -504,7 +538,7 @@ class CajaPosController extends BaseModuloController
 
     public function getEstablecimientosAjax(): void
     {
-        $this->requireLeer();
+        $this->requirePermisoTurno('r');
         $empresaModel = new Empresa();
         // Solo activos: abrir una caja es emitir desde ese establecimiento, y no
         // tiene sentido ofrecer uno dado de baja. getEstablecimientos() devuelve
@@ -519,7 +553,7 @@ class CajaPosController extends BaseModuloController
 
     public function getPuntosEmisionAjax(): void
     {
-        $this->requireLeer();
+        $this->requirePermisoTurno('r');
         $idEstablecimiento = (int) ($_GET['id_establecimiento'] ?? 0);
         $empresaModel = new Empresa();
         $data = $idEstablecimiento > 0 ? $empresaModel->getPuntosEmision($idEstablecimiento) : [];
@@ -528,7 +562,7 @@ class CajaPosController extends BaseModuloController
 
     public function estadoActualAjax(): void
     {
-        $this->requireLeer();
+        $this->requirePermisoTurno('r');
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idPuntoEmision = (int) ($_GET['id_punto_emision'] ?? 0);
 
@@ -546,7 +580,7 @@ class CajaPosController extends BaseModuloController
 
     public function abrirAjax(): void
     {
-        $this->requireCrear();
+        $this->requirePermisoTurno('w');
 
         $data = [
             'id_empresa' => (int) $_SESSION['id_empresa'],
@@ -566,7 +600,7 @@ class CajaPosController extends BaseModuloController
 
     public function cerrarAjax(): void
     {
-        $this->requireActualizar();
+        $this->requirePermisoTurno('u');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $id = (int) ($_POST['id'] ?? 0);
