@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden
-version: 1.9
+etiquetas: compras, compra, factura de compra, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica
+version: 2.1
 orden: 20
 estado: activo
 ---
@@ -29,6 +29,28 @@ Ninguna compra "nace" de una orden de compra — la orden es un pedido interno
 previo (ver [Órdenes de Compra](../modulos/ordenes-compra.md)); cuando llega la
 factura electrónica, se **vincula** con la orden desde la compra ya cargada
 (ver más abajo).
+
+## Sustento tributario y datos de autorización
+
+En el registro **manual** el modal pide, además del comprobante, el **sustento
+tributario** (Tabla 5 del SRI), el **N° de autorización**, el rango **Desde /
+Hasta** y la **fecha de caducidad**. Que esos campos aparezcan o no depende del
+**Tipo de Contribuyente** configurado en la empresa (Configuración → Empresa):
+
+| Tipo de contribuyente | Sustento y datos de autorización |
+|---|---|
+| Persona Natural (no obligada a llevar contabilidad) | **No aparecen.** El sistema los completa solo, porque este contribuyente no presenta ATS |
+| Persona Natural Obligada a llevar contabilidad | **Aparecen y son obligatorios** |
+| Sociedad | **Aparecen y son obligatorios** |
+| Contribuyente especial | **Aparecen y son obligatorios** |
+| Sector público | **Aparecen y son obligatorios** |
+
+El sustento tributario se filtra por el **tipo de comprobante** elegido: primero
+seleccione el comprobante y recién ahí se cargan los sustentos válidos para ese
+tipo.
+
+En una **factura de reembolso recibida** el sustento queda fijo en *08 - Valor
+pagado para solicitar Reembolso de Gasto (intermediario)* y no se puede cambiar.
 
 ## No se puede repetir un comprobante
 
@@ -244,6 +266,13 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.1** — Corregido el registro **manual** en empresas **Persona Natural
+  Obligada a llevar contabilidad**: el sistema pedía el sustento tributario
+  pero mantenía el campo oculto, así que la compra no se podía guardar. Ahora
+  la única exenta de sustento y datos de autorización es la **Persona Natural
+  no obligada a llevar contabilidad** (la única que no presenta ATS); los
+  demás tipos de contribuyente ven esos campos y son obligatorios. Nueva
+  sección *Sustento tributario y datos de autorización*.
 - **2.0** — Las facturas de **servicios básicos** (luz, agua) que descargan del
   SRI ahora reconocen los **valores recaudados para terceros** (contribución
   bomberos, tasa de recolección de basura) que viajan en la información

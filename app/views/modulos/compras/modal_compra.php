@@ -140,8 +140,13 @@
               <!-- Fila 2 -->
               <?php
               $tipoEmp = (string) ($empresa['tipo'] ?? '1');
-              // Catálogo tipo_empresa: 1 = Persona Natural, 2 = Persona Natural Obligada a llevar contabilidad.
-              $esPersonaNatural = in_array($tipoEmp, ['1', '2'], true);
+              // Catálogo tipo_empresa: 1 = Persona Natural (NO obligada a llevar contabilidad),
+              // 2 = Persona Natural Obligada a llevar contabilidad, 3 = Sociedad,
+              // 4 = Contribuyente especial, 5 = Sector público.
+              // Solo el tipo 1 no presenta ATS: es el único que oculta el sustento tributario
+              // y los datos de autorización. Los tipos 2 a 5 los ven y son obligatorios.
+              // Debe coincidir con _esPersonaNatural en public/js/modulos/compras.js.
+              $esPersonaNatural = in_array($tipoEmp, ['1', '01'], true);
               $dNonePN = $esPersonaNatural ? 'd-none' : '';
               ?>
               <!-- Sustento Tributario -->

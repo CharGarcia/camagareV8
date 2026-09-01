@@ -36,8 +36,13 @@ class ComprasRules
         $idEmpresa = (int)($data['id_empresa'] ?? 0);
         $empModel  = new \App\models\Empresa();
         $empData   = $empModel->getPorId($idEmpresa);
-        // Catálogo tipo_empresa: 1 = Persona Natural, 2 = Persona Natural Obligada a llevar contabilidad.
-        $esPersonaNatural = in_array((string) ($empData['tipo'] ?? '1'), ['1', '2'], true);
+        // Catálogo tipo_empresa: 1 = Persona Natural (NO obligada a llevar contabilidad),
+        // 2 = Persona Natural Obligada a llevar contabilidad, 3 = Sociedad,
+        // 4 = Contribuyente especial, 5 = Sector público.
+        // Solo el tipo 1 está exento de sustento tributario y de los datos de autorización:
+        // es el único que no presenta ATS. Los tipos 2 a 5 sí lo presentan y por tanto
+        // requieren sustento tributario, autorización y fecha de caducidad.
+        $esPersonaNatural = in_array((string) ($empData['tipo'] ?? '1'), ['1', '01'], true);
 
         if (!$esPersonaNatural) {
             if (empty($data['id_sustento_tributario'])) {

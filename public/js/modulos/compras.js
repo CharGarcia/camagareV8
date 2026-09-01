@@ -15,8 +15,14 @@ function _codigoIvaPorPct(pct) {
 }
 const CMG_TIPOS_MASCARA = ['01', '03', '04', '05', '06', '09', '11', '12', '15', '16', '18', '19', '20', '21', '41', '42', '43', '47', '48'];
 
-// Verificar si la empresa es Persona Natural
-// Verificar si la empresa es Persona Natural (Acepta '1' o '01')
+// Catálogo tipo_empresa: 1 = Persona Natural (NO obligada a llevar contabilidad),
+// 2 = Persona Natural Obligada a llevar contabilidad, 3 = Sociedad,
+// 4 = Contribuyente especial, 5 = Sector público.
+// Solo el tipo 1 está exento: es el único que no presenta ATS, así que es el único al que se
+// le ocultan y autocompletan el sustento tributario y los datos de autorización. Los tipos 2 a 5
+// deben elegir sustento y llenar autorización/caducidad.
+// Debe coincidir con $esPersonaNatural en app/views/modulos/compras/modal_compra.php y en
+// app/Rules/modulos/ComprasRules.php (si divergen, el campo queda oculto pero igual se exige).
 const _esPersonaNatural = (window.CMG_empresa?.tipo == '1' || window.CMG_empresa?.tipo == '01');
 
 // Precio sugerido al elegir un producto del catálogo (no viene de un XML, es una entrada manual):
