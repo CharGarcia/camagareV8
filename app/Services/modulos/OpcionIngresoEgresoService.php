@@ -6,6 +6,7 @@ namespace App\Services\modulos;
 
 use App\repositories\modulos\OpcionIngresoEgresoRepository;
 use App\repositories\modulos\AsientoProgramadoRepository;
+use App\repositories\modulos\FormaPagoRepository;
 use App\Rules\modulos\OpcionIngresoEgresoRules;
 use App\Services\LogSistemaService;
 use Exception;
@@ -151,6 +152,44 @@ class OpcionIngresoEgresoService
             // (o también sin regla, si el concepto se dejó sin cuenta).
             $cuenta = ($nat === $naturaleza) ? $idCuenta : null;
             $this->sincronizarCuentaNaturaleza($idEmpresa, $idUsuario, $id, $nat, $cuenta, false);
+        }
+
+        if ($idCuenta !== null) {
+            $this->propagarCuentaAnticipoAFormas(
+                $idEmpresa, $idUsuario, (string) ($data['comportamiento'] ?? ''), $idCuenta
+            );
+        }
+    }
+
+    /**
+     * La cuenta de un anticipo vive en dos módulos: el CONCEPTO (aquí y en Configuración
+     * Contable → Ingresos y Egresos) y la FORMA de cobro/pago de anticipo, que es la que aplica
+     * ese saldo a los documentos. Para que un anticipo no acabe registrándose en dos cuentas
+     * distintas, al asignar la cuenta del concepto se lleva también a la forma correspondiente:
+     *   - ANTICIPO_CLIENTE   (ingreso) → formas de anticipo de cobro.
+     *   - ANTICIPO_PROVEEDOR (egreso)  → formas de anticipo de pago.
+     *
+     * Solo alcanza a las formas que aún NO tienen cuenta: una cuenta ya elegida a mano nunca se
+     * pisa. Es la misma propagación que aplica Configuración Contable al guardar ahí.
+     */
+    public function propagarCuentaAnticipoAFormas(int $idEmpresa, int $idUsuario, string $comportamiento, int $idCuenta): void
+    {
+        $comportamiento = strtoupper(trim($comportamiento));
+        if ($comportamiento === 'ANTICIPO_CLIENTE') {
+            $flujoDir = 'INGRESO';
+            $flujo    = 'cobro';
+        } elseif ($comportamiento === 'ANTICIPO_PROVEEDOR') {
+            $flujoDir = 'EGRESO';
+            $flujo    = 'pago';
+        } else {
+            return; // El concepto no es de anticipo: no hay nada que propagar.
+        }
+
+        $formaRepo    = new FormaPagoRepository();
+        $formaService = new FormaPagoService($formaRepo);
+
+        foreach ($formaRepo->getFormasAnticipoSinCuenta($idEmpresa, $flujoDir) as $forma) {
+            $formaService->sincronizarCuentaFlujo($idEmpresa, $idUsuario, (int) $forma['id'], $flujo, $idCuenta);
         }
     }
 

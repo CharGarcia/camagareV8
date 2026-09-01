@@ -57,6 +57,9 @@ Un concepto **sin cuenta** genera un asiento incompleto: el dinero entra o sale
 por la cuenta de la forma de pago, pero la contrapartida se queda sin cuenta y el
 documento se reporta como pendiente al contabilizar.
 
+La cuenta que se ve aquí es exactamente la que usa el asiento del ingreso o del
+egreso, sin intermediarios.
+
 Si el concepto cambia de naturaleza (de Ingreso a Egreso o al revés), la
 configuración contable de la naturaleza anterior se retira: ese concepto ya no
 aparece en ese bloque.
@@ -105,8 +108,12 @@ empresa; sin él, solo los creados por el propio usuario.
 - **Configuración Contable**: comparte con este módulo la cuenta de los conceptos
   libres, en el bloque *Ingresos y Egresos*.
 - **Anticipos**: los conceptos con comportamiento de anticipo (cliente o
-  proveedor) alimentan el saldo de anticipos y, al asignarles cuenta, esta se
-  propone también a la forma de cobro/pago de anticipo que aún no tenga cuenta.
+  proveedor) alimentan el saldo de anticipos. Al asignarles cuenta —desde aquí o
+  desde Configuración Contable— esa misma cuenta pasa automáticamente a las
+  **formas de cobro/pago de anticipo** que aún no tengan una: el anticipo de un
+  cliente se registra por el concepto y se aplica después por la forma, y con
+  cuentas distintas quedaría partido en dos cuentas. Una forma que ya tenga su
+  cuenta elegida a mano no se toca.
 
 ## Errores frecuentes
 

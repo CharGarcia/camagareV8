@@ -271,7 +271,11 @@ documento o en la ficha de la entidad implicada.
   el módulo Opciones de ingreso y egreso, en la ficha de cada concepto libre: es
   la misma configuración, sincronizada en las dos pantallas. Los conceptos atados
   a un módulo (Compras, Liquidaciones, Facturas y Recibos de Venta, Nómina) siguen
-  tomando su cuenta de la sección de ese módulo.
+  tomando su cuenta de la sección de ese módulo. Además, el asiento del ingreso o
+  del egreso usa ahora exactamente la cuenta que muestra esta pantalla: antes leía
+  solo la cuenta guardada en el módulo de conceptos, así que una cuenta cargada
+  por la importación de configuración contable se veía puesta pero no llegaba al
+  asiento.
 - **1.8** — Las cuentas del bloque Cobros y Pagos se pueden administrar también
   desde el módulo Formas de cobro y pago, en la ficha de cada forma: es la misma
   configuración, sincronizada en las dos pantallas.

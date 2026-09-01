@@ -3864,16 +3864,27 @@ class AsientoBuilderService
         $this->motivosFaltantes = [];
         $db = \App\core\Database::getConnection();
 
+        // La cuenta del concepto vive en DOS sitios y manda el asiento programado de su
+        // naturaleza; la columna del módulo es el respaldo. Mismo COALESCE que usan
+        // Configuración Contable (getReglasOpcionesIngresoEgreso), el módulo de Opciones de
+        // Ingreso/Egreso y el aviso del sincronizador: así el asiento usa exactamente la cuenta
+        // que esas pantallas muestran. Antes se leía solo la columna, de modo que una regla
+        // creada por la importación de configuración contable (que escribe únicamente en
+        // asientos_programados) se veía configurada pero no llegaba al asiento.
         $sqlCab = "SELECT i.id,
                           i.id_cliente,
-                          o.id_cuenta_contable AS concepto_id_cuenta,
+                          COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
                           o.comportamiento     AS concepto_comportamiento
                    FROM ingresos_cabecera i
                    LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = i.id_ingreso_concepto
+                   LEFT JOIN asientos_programados ap ON ap.id_referencia = o.id
+                                                    AND ap.tipo_referencia = 'opcion_ingreso'
+                                                    AND ap.id_empresa = :emp_ap
+                                                    AND ap.eliminado = false
                    WHERE i.id = :id AND i.id_empresa = :emp AND i.eliminado = false";
         $stCab = $db->prepare($sqlCab);
-        $stCab->execute([':id' => $idIngreso, ':emp' => $idEmpresa]);
+        $stCab->execute([':id' => $idIngreso, ':emp' => $idEmpresa, ':emp_ap' => $idEmpresa]);
         $ingreso = $stCab->fetch(\PDO::FETCH_ASSOC);
         if (!$ingreso) {
             return [];
@@ -3968,16 +3979,22 @@ class AsientoBuilderService
         $this->motivosFaltantes = [];
         $db = \App\core\Database::getConnection();
 
+        // Misma resolución que en generarAsientoIngreso: manda el asiento programado del
+        // concepto ('opcion_egreso') y la columna del módulo queda de respaldo.
         $sqlCab = "SELECT e.id,
                           e.id_proveedor,
-                          o.id_cuenta_contable AS concepto_id_cuenta,
+                          COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
                           o.comportamiento     AS concepto_comportamiento
                    FROM egresos_cabecera e
                    LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = e.id_egreso_concepto
+                   LEFT JOIN asientos_programados ap ON ap.id_referencia = o.id
+                                                    AND ap.tipo_referencia = 'opcion_egreso'
+                                                    AND ap.id_empresa = :emp_ap
+                                                    AND ap.eliminado = false
                    WHERE e.id = :id AND e.id_empresa = :emp AND e.eliminado = false";
         $stCab = $db->prepare($sqlCab);
-        $stCab->execute([':id' => $idEgreso, ':emp' => $idEmpresa]);
+        $stCab->execute([':id' => $idEgreso, ':emp' => $idEmpresa, ':emp_ap' => $idEmpresa]);
         $egreso = $stCab->fetch(\PDO::FETCH_ASSOC);
         if (!$egreso) {
             return [];

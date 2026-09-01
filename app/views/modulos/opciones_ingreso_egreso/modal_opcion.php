@@ -85,9 +85,13 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                             <div id="oie-cuentas-multiples" class="mt-1 d-none"></div>
                         </div>
 
-                        <!-- Col 3: Switch de Estado -->
-                        <div class="col-md-3 d-flex align-items-end pb-1">
-                            <div class="form-check form-switch mb-1">
+                        <!-- Col 3: Switch de Estado. Etiqueta invisible (d-block) para que el
+                             switch arranque a la altura de los radios y del buscador de cuenta:
+                             alinearlo abajo lo dejaba caído, porque la columna de la cuenta
+                             crece con sus notas al pie. -->
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold d-block">&nbsp;</label>
+                            <div class="form-check form-switch mt-1">
                                 <input class="form-check-input" type="checkbox" id="oie-sw-activo" checked>
                                 <input type="hidden" name="estado" id="oie-input-estado" value="ACTIVO">
                                 <label class="form-check-label fw-bold small" for="oie-sw-activo">Estado: Activo</label>

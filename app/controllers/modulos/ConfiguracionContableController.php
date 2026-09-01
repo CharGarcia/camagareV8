@@ -663,25 +663,9 @@ class ConfiguracionContableController extends BaseModuloController
      */
     private function propagarCuentaAnticipoAFormas(int $idEmpresa, int $idUsuario, string $comportamiento, int $idCuenta): void
     {
-        $comportamiento = strtoupper(trim($comportamiento));
-        if ($comportamiento === 'ANTICIPO_CLIENTE') {
-            $flujoDir = 'INGRESO';
-            $flujo    = 'cobro';
-        } elseif ($comportamiento === 'ANTICIPO_PROVEEDOR') {
-            $flujoDir = 'EGRESO';
-            $flujo    = 'pago';
-        } else {
-            return; // La opción no es de anticipo: no hay nada que propagar.
-        }
-
-        $formaRepo = new FormaPagoRepository();
-        $formas = $formaRepo->getFormasAnticipoSinCuenta($idEmpresa, $flujoDir);
-
-        foreach ($formas as $forma) {
-            $this->getFormaPagoService()->sincronizarCuentaFlujo(
-                $idEmpresa, $idUsuario, (int) $forma['id'], $flujo, $idCuenta
-            );
-        }
+        // La propagación vive en el Service del módulo de Opciones, que también la aplica cuando
+        // la cuenta del anticipo se asigna desde su propia pantalla.
+        $this->getOpcionService()->propagarCuentaAnticipoAFormas($idEmpresa, $idUsuario, $comportamiento, $idCuenta);
     }
 
     /**
