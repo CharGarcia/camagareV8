@@ -114,6 +114,15 @@ class ComandaService
             if ($idCajaSesion <= 0) {
                 $idCajaSesion = (int) ($this->ventaService->getSesionAbiertaEmpresa($idEmpresa)['id'] ?? 0);
             }
+            // Y si NO hay ningún turno abierto, no se abre la mesa. La pantalla
+            // del salón se sirve sin caché justamente para no llegar aquí, pero
+            // el guard real vive en el servidor: una pestaña vieja, el botón
+            // "atrás" del navegador o un POST directo llegaban igual y creaban la
+            // comanda con id_caja_sesion = null. El problema aparecía recién al
+            // cobrar, con la mesa ya servida.
+            if ($idCajaSesion <= 0) {
+                throw new Exception('No hay un turno de caja abierto. Abre la caja en Punto de Venta antes de abrir mesas.');
+            }
 
             $cabecera = [
                 'id_empresa'          => $idEmpresa,

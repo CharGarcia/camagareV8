@@ -416,6 +416,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+// Igual que el tablero de mesas: si el navegador restaura esta comanda desde el
+// bfcache al ir "atrás", se recarga contra el servidor — el turno de caja pudo
+// cerrarse y la pantalla se veía operativa.
+window.addEventListener('pageshow', function (e) {
+    if (e.persisted) { window.location.reload(); }
+});
 (function () {
     const BASE = "<?= $base ?>";
     const AJAX = BASE + '/modulos/comandas';

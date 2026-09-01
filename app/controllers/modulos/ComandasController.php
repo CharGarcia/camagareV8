@@ -29,6 +29,8 @@ class ComandasController extends BaseModuloController
 {
     private const RUTA_MODULO = 'modulos/comandas';
     private ComandaService $service;
+    /** Para comprobar que el salón tiene turno de caja abierto antes de trabajar la comanda. */
+    private CajaSesionService $cajaService;
 
     public function __construct()
     {
@@ -38,6 +40,7 @@ class ComandasController extends BaseModuloController
         $mesaRepo = new MesaRepository();
         $logService = new LogSistemaService();
         $cajaService = new CajaSesionService(new CajaSesionRepository(), new CajaSesionRules(), $logService);
+        $this->cajaService = $cajaService;
         $ventaService = new PosVentaService($cajaService, $logService);
         $this->service = new ComandaService($repo, $rules, $mesaRepo, $logService, $ventaService, new MenuRepository());
     }
@@ -60,6 +63,14 @@ class ComandasController extends BaseModuloController
     {
         $this->requireLeer();
 
+        // Sin caché, igual que el tablero de mesas: la comanda vive contra un
+        // turno de caja que puede cerrarse mientras la pantalla está abierta, y
+        // el botón "atrás" del navegador la restauraba desde el bfcache como si
+        // siguiera vigente.
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
         $idEmpresa = (int) $_SESSION['id_empresa'];
         // URL limpia (sin id): la comanda "actual" viaja en sesión, mismo
         // patrón que pos_id_punto_emision en caja-pos — así nadie cambia el
@@ -68,6 +79,14 @@ class ComandasController extends BaseModuloController
 
         $comanda = $id > 0 ? $this->service->getDetalle($id, $idEmpresa) : null;
         if (!$comanda) {
+            $this->redirect(rtrim(BASE_URL ?? '', '/') . '/modulos/mesas/tablero');
+        }
+
+        // Sin turno abierto no se trabaja la comanda: se devuelve al tablero, que
+        // es el único que decide qué ve el salón (entra, o muestra el aviso con
+        // "Volver a caja"). Cerrada la caja, esta pantalla seguía sirviéndose y
+        // dejaba seguir cargando ítems a una cuenta que después no se puede cobrar.
+        if (!$this->cajaService->getSesionAbiertaEmpresa($idEmpresa)) {
             $this->redirect(rtrim(BASE_URL ?? '', '/') . '/modulos/mesas/tablero');
         }
 

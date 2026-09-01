@@ -173,6 +173,14 @@ $rutaAjax = $base . '/' . $rutaModulo;
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+// Volver con el botón "atrás" no debe devolver este tablero tal como quedó: el
+// turno de caja pudo cerrarse mientras tanto. Las cabeceras no-store del
+// controlador no bastan — Safari/iOS (la tablet típica del salón) restaura la
+// página desde el bfcache igual — así que si viene de ahí (persisted) se pide
+// de nuevo al servidor, que decide si hay salón o el aviso de caja.
+window.addEventListener('pageshow', function (e) {
+    if (e.persisted) { window.location.reload(); }
+});
 (function () {
     const BASE = "<?= $base ?>";
     const AJAX = "<?= $rutaAjax ?>";

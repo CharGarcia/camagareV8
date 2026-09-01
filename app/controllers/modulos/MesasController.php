@@ -58,6 +58,14 @@ class MesasController extends BaseModuloController
     {
         $this->requireLeer();
 
+        // Sin caché: el salón depende del turno de caja, que puede cerrarse
+        // mientras esta pantalla está abierta. Sin esto el navegador restaura el
+        // tablero ya renderizado al pulsar "atrás" (bfcache) y el mesero sigue
+        // abriendo mesas contra una caja cerrada, sin pasar de nuevo por aquí.
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idPuntoEmision = (int) ($_SESSION['pos_id_punto_emision'] ?? 0);
         $sesion = $idPuntoEmision > 0 ? $this->cajaService->getSesionAbierta($idEmpresa, $idPuntoEmision) : null;
