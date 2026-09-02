@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante
-version: 1.21
+version: 1.22
 orden: 20
 estado: activo
 ---
@@ -327,6 +327,18 @@ Una comanda vacía se anula sin más.
 El botón del recibo, junto a *Cobrar*, imprime la **cuenta** para que el cliente
 la revise antes de pagar. No es un documento válido: es la previa.
 
+Debajo de la fecha van los datos de facturación: **Nombre**, **RUC/CI** y
+**Correo**.
+
+- Si el cliente **ya se identificó** —llenó sus datos desde el QR de la mesa al
+  pedir su factura, o el mesero le asignó un cliente— salen ya impresos y no
+  tiene que escribir nada.
+- Si **todavía no**, salen como líneas en blanco para que las llene a mano y se
+  las entregue al mesero.
+
+Cuando hay una cuenta pedida desde el QR, manda ese cliente: es quien acaba de
+dar sus datos, y puede no ser el mismo que el mesero asignó a la mesa.
+
 Sale con **los mismos valores que muestra la pantalla**: cada ítem con su precio
 unitario y su importe **con IVA incluido**, y al pie el subtotal, el IVA
 desglosado por tarifa, el recargo por servicio si aplica y el total. Así el
@@ -483,6 +495,9 @@ tocarlas cada vez.
   la configurada en la ficha del cliente y, si no tiene, la de Empresa →
   Facturación. Antes se emitía siempre *01* en esos casos. Si el cobro no puede
   generar su Ingreso, ahora se avisa en pantalla en vez de quedar solo en el log.
+- **1.22** — La cuenta impresa lleva los datos de facturación: ya escritos si el
+  cliente se identificó desde el QR (o el mesero le asignó un cliente), y como
+  líneas en blanco para llenar a mano si todavía no.
 - **1.21** — Corregido el ticket que salía cortado y cuyo final aparecía al
   principio de la impresión siguiente: la ventana de impresión ya no se cierra
   antes de que el trabajo llegue completo a la impresora, y el ticket termina

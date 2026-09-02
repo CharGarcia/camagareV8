@@ -299,7 +299,8 @@ class ComandaRepository extends BaseRepository
     public function find(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT c.*, m.nombre AS mesa_nombre, m.estado AS mesa_estado,
-                       cl.nombre AS cliente_nombre, u.nombre AS mesero_nombre
+                       cl.nombre AS cliente_nombre, cl.identificacion AS cliente_identificacion,
+                       cl.email AS cliente_email, u.nombre AS mesero_nombre
                 FROM comandas c
                 JOIN mesas m ON m.id = c.id_mesa
                 LEFT JOIN clientes cl ON cl.id = c.id_cliente
@@ -747,7 +748,8 @@ class ComandaRepository extends BaseRepository
         // sigue siendo suya.
         $selFps  = $this->tieneColumnaFormaPagoSugerida() ? ", fps.nombre AS forma_pago_sugerida_nombre" : ", NULL AS forma_pago_sugerida_nombre";
         $joinFps = $this->tieneColumnaFormaPagoSugerida() ? "LEFT JOIN empresa_formas_pago fps ON fps.id = g.id_forma_pago_sugerida" : "";
-        $sql = "SELECT g.*, cl.nombre AS cliente_nombre{$selFps}
+        $sql = "SELECT g.*, cl.nombre AS cliente_nombre,
+                       cl.identificacion AS cliente_identificacion, cl.email AS cliente_email{$selFps}
                 FROM comanda_grupos_cobro g
                 LEFT JOIN clientes cl ON cl.id = g.id_cliente
                 {$joinFps}

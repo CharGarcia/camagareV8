@@ -95,6 +95,10 @@ $fPie    = $esAngosta ?  9 : 11;
     h3 { font-size: <?= $fPie ?>px; margin: 1px 0; font-weight: normal; }
     img { max-width: 45%; max-height: 16mm; }
 
+    /* Campo que el cliente rellena a mano sobre el papel (nombre, RUC, correo
+       en la cuenta previa). Punteado y con alto suficiente para escribir. */
+    .dato-manual { border-bottom: 1px dotted #000; height: 5mm; }
+
     /* Avance de papel al final del ticket. Sin esto la térmica deja la
        última parte dentro del cabezal, sin imprimir, y la suelta al
        principio del ticket siguiente: el usuario ve que le falta el final

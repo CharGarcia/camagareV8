@@ -529,6 +529,13 @@ window.addEventListener('pageshow', function (e) {
     let buscarTimer = null;
     // La mesa quedó libre y hay que volver al tablero, pero solo cuando el mesero
     // termine con el diálogo del cobro: ahí es donde imprime su tirilla.
+    // Cliente que el mesero asignó a la mesa (si lo hay): la precuenta imprime
+    // sus datos en vez de dejar las líneas en blanco.
+    const CLIENTE_COMANDA = {
+        nombre:         <?= json_encode($comanda['cliente_nombre'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        identificacion: <?= json_encode($comanda['cliente_identificacion'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        correo:         <?= json_encode($comanda['cliente_email'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+    };
     let volverAlTableroPendiente = false;
     const volverAlTablero = () => { window.location.href = BASE + '/modulos/mesas/tablero'; };
     let formasPago = null;
@@ -2032,6 +2039,24 @@ window.addEventListener('pageshow', function (e) {
         }
     });
 
+    /**
+     * Cliente al que se le va a facturar, si ya se conoce. Se busca primero en
+     * las cuentas pendientes —ahí queda el que se identificó desde el QR al
+     * pedir su factura— y, si no hay, en la propia comanda, que es donde queda
+     * el cliente que le asignó el mesero al abrir la mesa.
+     */
+    function clienteParaFactura() {
+        const g = grupos.find(x => x.id_cliente && x.estado !== 'anulado' && x.cliente_nombre);
+        if (g) {
+            return { nombre: g.cliente_nombre, identificacion: g.cliente_identificacion, correo: g.cliente_email };
+        }
+        return {
+            nombre: CLIENTE_COMANDA.nombre,
+            identificacion: CLIENTE_COMANDA.identificacion,
+            correo: CLIENTE_COMANDA.correo,
+        };
+    }
+
     // ─── Vista previa de la cuenta (ANTES de cobrar) ────────────────────────
     // Para que el cliente vea qué debe antes de decidir cómo pagar/dividir.
     // Se arma 100% con lo que ya está cargado en pantalla (detalles), sin
@@ -2044,6 +2069,16 @@ window.addEventListener('pageshow', function (e) {
         const fmt = (n) => parseFloat(n || 0).toFixed(2);
 
         const { subtotal, impuestos: impMap, servicio, total } = calcularTotales(vivas);
+
+        // Datos de facturación. Si el cliente ya se identificó —desde el QR de la
+        // mesa, o porque el mesero le asignó un cliente— salen impresos y no hay
+        // nada que escribir; si no, van las líneas en blanco para llenarlas a
+        // mano. Manda el del grupo de cobro: es el que acaba de dar sus datos al
+        // pedir la cuenta, y puede no ser el titular de la mesa.
+        const cli = clienteParaFactura();
+        const filaDato = (etiqueta, valor) => valor
+            ? `<tr><td>${escapeHtml(etiqueta)}</td><td>${escapeHtml(valor)}</td></tr>`
+            : `<tr><td>${escapeHtml(etiqueta)}</td><td class="dato-manual"></td></tr>`;
 
         const lineas = vivas.map(d => {
             const pct = parseFloat(d.porcentaje_iva || 0);
@@ -2081,6 +2116,12 @@ window.addEventListener('pageshow', function (e) {
             <hr class="sep">
             <div class="center bold" style="font-size:12px;">CUENTA — MESA <?= htmlspecialchars($comanda['mesa_nombre'] ?? '') ?></div>
             <div class="center">Fecha: ${escapeHtml(new Date().toLocaleDateString('es-EC'))}</div>
+            <hr class="sep">
+            <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
+                ${filaDato('Nombre:', cli.nombre)}
+                ${filaDato('RUC/CI:', cli.identificacion)}
+                ${filaDato('Correo:', cli.correo)}
+            </table>
             <hr class="sep">
             <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup><tbody>${lineas}</tbody></table>
             <hr class="sep">
