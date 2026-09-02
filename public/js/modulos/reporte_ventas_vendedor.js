@@ -119,6 +119,7 @@ window.RVV_generarReporte = function () {
                 document.getElementById('rvv-stat-base-iva').textContent = parseFloat(res.stats.total_base_iva).toFixed(2);
                 document.getElementById('rvv-stat-iva').textContent = parseFloat(res.stats.total_iva).toFixed(2);
                 document.getElementById('rvv-stat-total').textContent = parseFloat(res.stats.gran_total).toFixed(2);
+                document.getElementById('rvv-stat-saldo').textContent = parseFloat(res.stats.total_saldo || 0).toFixed(2);
             }
             if (res.estados) {
                 document.getElementById('rvv-stat-documentos').textContent = res.estados.autorizados;
@@ -140,8 +141,8 @@ window.RVV_generarReporte = function () {
 function RVV_colSpanPara(agruparPor) {
     if (agruparPor === 'PRODUCTO') return 10;
     if (agruparPor === 'MARCA' || agruparPor === 'CATEGORIA') return 6;
-    if (agruparPor === 'NINGUNO') return 9;
-    return 6; // VENDEDOR, MES
+    if (agruparPor === 'NINGUNO') return 10;
+    return 7; // VENDEDOR, MES
 }
 
 function RVV_dibujarCabecera(agruparPor) {
@@ -185,7 +186,8 @@ function RVV_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
+            <th class="text-end">Gran Total</th>
+            <th class="text-end pe-4">Saldo</th>
         `;
     } else if (agruparPor === 'NINGUNO') {
         theadHtml += `
@@ -197,7 +199,8 @@ function RVV_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
+            <th class="text-end">Gran Total</th>
+            <th class="text-end pe-4">Saldo</th>
         `;
     } else {
         // VENDEDOR
@@ -207,7 +210,8 @@ function RVV_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
+            <th class="text-end">Gran Total</th>
+            <th class="text-end pe-4">Saldo</th>
         `;
     }
 
@@ -337,25 +341,30 @@ window.RVV_abrirDetalleVendedor = function (idVendedor, nombreVendedor) {
         content.classList.remove('d-none');
 
         if (!data.ok) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${data.error || 'Error al cargar el detalle.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${data.error || 'Error al cargar el detalle.'}</td></tr>`;
             document.getElementById('rvv-dv-total').textContent = '0.00';
+            document.getElementById('rvv-dv-saldo').textContent = '0.00';
             return;
         }
 
         const docs = data.documentos || [];
         if (docs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin documentos en el período filtrado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Sin documentos en el período filtrado.</td></tr>';
             document.getElementById('rvv-dv-total').textContent = '0.00';
+            document.getElementById('rvv-dv-saldo').textContent = '0.00';
             return;
         }
 
         let totalNeto = 0;
+        let totalSaldo = 0;
         let html = '';
         docs.forEach(d => {
             const subtotal = parseFloat(d.subtotal || 0);
             const nc = parseFloat(d.nc || 0);
             const total = parseFloat(d.total || 0);
+            const saldo = parseFloat(d.saldo || 0);
             totalNeto += total;
+            totalSaldo += saldo;
 
             html += `<tr>
                 <td class="ps-3">${d.fecha_emision ? d.fecha_emision.split('-').reverse().join('/') : ''}</td>
@@ -363,16 +372,18 @@ window.RVV_abrirDetalleVendedor = function (idVendedor, nombreVendedor) {
                 <td>${d.cliente_nombre || ''}</td>
                 <td class="text-end">$${subtotal.toFixed(2)}</td>
                 <td class="text-end ${nc > 0 ? 'text-danger' : 'text-muted'}">${nc > 0 ? '-$' + nc.toFixed(2) : '—'}</td>
-                <td class="text-end pe-3 fw-bold text-success">$${total.toFixed(2)}</td>
+                <td class="text-end fw-bold text-success">$${total.toFixed(2)}</td>
+                <td class="text-end pe-3 fw-bold ${saldo > 0.01 ? 'text-danger' : 'text-success'}">$${saldo.toFixed(2)}</td>
             </tr>`;
         });
 
         tbody.innerHTML = html;
         document.getElementById('rvv-dv-total').textContent = totalNeto.toFixed(2);
+        document.getElementById('rvv-dv-saldo').textContent = totalSaldo.toFixed(2);
     })
     .catch(err => {
         loading.classList.add('d-none');
         content.classList.remove('d-none');
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Error de conexión: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Error de conexión: ${err.message}</td></tr>`;
     });
 };

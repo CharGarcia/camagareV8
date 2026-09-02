@@ -278,9 +278,20 @@ class MenuRepository extends BaseRepository
 
     // ─── Estaciones de impresión (catálogo compartido: Productos + Menú + KDS) ────
 
+    /**
+     * Catálogo de estaciones, solo LECTURA (selector "Preparar en", KDS y
+     * tablero de mesas). El CRUD vive en ConfiguracionRestauranteRepository.
+     */
     public function getEstaciones(int $idEmpresa): array
     {
-        $sql = "SELECT id, nombre, tipo, orden, activo
+        // Las columnas de impresora llegaron después que la tabla: si el SQL
+        // no está aplicado todavía en este servidor, el catálogo se sirve igual
+        // (el tablero de mesas y el KDS dependen de él para arrancar).
+        $colsImpresion = $this->tablaExiste('comandas_impresiones')
+            ? ', imprime_ordenes, imprimir_auto, ancho_papel, copias'
+            : '';
+
+        $sql = "SELECT id, nombre, tipo, orden, activo{$colsImpresion}
                 FROM estaciones_impresion
                 WHERE id_empresa = :e AND eliminado = false
                 ORDER BY orden ASC, nombre ASC";
@@ -289,65 +300,4 @@ class MenuRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function existeEstacionNombre(int $idEmpresa, string $nombre, ?int $excluirId = null): bool
-    {
-        $sql = "SELECT 1 FROM estaciones_impresion WHERE id_empresa = :e AND UPPER(nombre) = UPPER(:n) AND eliminado = false";
-        $params = [':e' => $idEmpresa, ':n' => $nombre];
-        if ($excluirId !== null) {
-            $sql .= " AND id != :id";
-            $params[':id'] = $excluirId;
-        }
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return (bool) $st->fetchColumn();
-    }
-
-    public function crearEstacion(array $d): int
-    {
-        $sql = "INSERT INTO estaciones_impresion (id_empresa, nombre, tipo, orden, created_by, updated_by)
-                VALUES (:e, :nombre, :tipo, :orden, :cb, :cb) RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
-            ':e'      => $d['id_empresa'],
-            ':nombre' => $d['nombre'],
-            ':tipo'   => $d['tipo'] ?? 'cocina',
-            ':orden'  => $d['orden'] ?? 0,
-            ':cb'     => $d['created_by'],
-        ]);
-        return (int) $st->fetchColumn();
-    }
-
-    public function actualizarEstacion(int $id, int $idEmpresa, array $d): void
-    {
-        $sql = "UPDATE estaciones_impresion SET nombre = :nombre, tipo = :tipo, orden = :orden,
-                    updated_by = :ub, updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND id_empresa = :e AND eliminado = false";
-        $this->db->prepare($sql)->execute([
-            ':nombre' => $d['nombre'],
-            ':tipo'   => $d['tipo'] ?? 'cocina',
-            ':orden'  => $d['orden'] ?? 0,
-            ':ub'     => $d['updated_by'],
-            ':id'     => $id,
-            ':e'      => $idEmpresa,
-        ]);
-    }
-
-    public function eliminarEstacion(int $id, int $idEmpresa, int $idUsuario): void
-    {
-        $sql = "UPDATE estaciones_impresion SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
-                WHERE id = :id AND id_empresa = :e AND eliminado = false";
-        $this->db->prepare($sql)->execute([':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
-    }
-
-    public function contarUsosEstacion(int $idEstacion, int $idEmpresa): int
-    {
-        // Quién puede estar enrutando a esta estación: un ítem del menú (la fija
-        // en el propio ítem) o una categoría de Productos.
-        $sql = "SELECT
-                    (SELECT COUNT(*) FROM menu_items WHERE id_estacion_impresion = :est AND id_empresa = :e AND eliminado = false) +
-                    (SELECT COUNT(*) FROM categorias WHERE id_estacion_impresion = :est AND id_empresa = :e AND eliminado = false)";
-        $st = $this->db->prepare($sql);
-        $st->execute([':est' => $idEstacion, ':e' => $idEmpresa]);
-        return (int) $st->fetchColumn();
-    }
 }

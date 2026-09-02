@@ -940,15 +940,15 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 <div class="center">No. ${escapeHtml(num)}</div>
                 <div class="center">Fecha: ${escapeHtml(fecha)}</div>
                 <hr class="sep">
-                <table class="t-datos"><colgroup><col style="width:16mm"><col></colgroup>
+                <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${escapeHtml(cab.cliente_nombre)}</td></tr>
                     <tr><td class="bold">RUC/CI:</td><td>${escapeHtml(cab.cliente_ruc)}</td></tr>
                     ${cab.cliente_direccion ? `<tr><td class="bold">Dir:</td><td>${escapeHtml(cab.cliente_direccion)}</td></tr>` : ''}
                 </table>
                 <hr class="sep">
-                <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
+                <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup><tbody>${lineas}</tbody></table>
                 <hr class="sep">
-                <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+                <table class="t-totales"><colgroup><col><col class="col-num"></colgroup>
                     <tr><td>Subtotal sin imp.</td><td class="num">$${fmt(subtotal)}</td></tr>
                     ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}
@@ -1027,13 +1027,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <hr class="sep">
             <div class="center">Fecha: ${escapeHtml(new Date().toLocaleDateString('es-EC'))}</div>
             <hr class="sep">
-            <table class="t-datos"><colgroup><col style="width:16mm"><col></colgroup>
+            <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
                 <tr><td class="bold">Cliente:</td><td>${escapeHtml(clienteSeleccionado ? clienteSeleccionado.nombre : 'Consumidor Final')}</td></tr>
             </table>
             <hr class="sep">
-            <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
+            <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup><tbody>${lineas}</tbody></table>
             <hr class="sep">
-            <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+            <table class="t-totales"><colgroup><col><col class="col-num"></colgroup>
                 <tr><td>Subtotal</td><td class="num">$${fmt(subtotal)}</td></tr>
                 ${ivaLineas}
                 ${servicioPrevia > 0 ? `<tr><td>Servicio ${SERVICIO_PCT}%</td><td class="num">$${fmt(servicioPrevia)}</td></tr>` : ''}
@@ -1656,13 +1656,18 @@ $rutaAjax = $base . '/' . $rutaModulo;
     }
 
     function renderFormasPago(formas) {
-        // Si la empresa no tiene ninguna forma de pago configurada para
-        // Ingresos, se cae a un "Efectivo" genérico para que el POS siga
-        // siendo usable.
-        if (!formas.length) {
-            formas = [{ id: 0, nombre: 'Efectivo', codigo_sri: '01', tipo: 'EFECTIVO' }];
-        }
+        // Sin formas de pago configuradas para Ingresos NO se inventa un
+        // "Efectivo" genérico con id 0: ese id no existe en
+        // empresa_formas_pago, así que la venta se emitía pero su Ingreso no
+        // podía registrarse y la factura quedaba con la Cuenta por Cobrar
+        // abierta, en silencio. Mejor no dejar cobrar y decir qué falta.
         formasPagoCargadas = formas;
+        if (!formas.length) {
+            $pagos.innerHTML = '<option value="">Sin formas de pago configuradas</option>';
+            $pagos.disabled = true;
+            idFormaPagoEmpresa = 0;
+            return;
+        }
         $pagos.disabled = false;
         $pagos.innerHTML = '';
         formas.forEach(f => {
@@ -1993,6 +1998,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
     $btnCobrar.addEventListener('click', async () => {
         if (!cart.length) return;
+
+        // El cobro necesita una forma de pago real de la empresa: de ella sale
+        // el Ingreso que cancela la Cuenta por Cobrar del documento.
+        if (!formasPagoCargadas.length || !idFormaPagoEmpresa) {
+            swalWarning('Esta empresa no tiene formas de pago configuradas para cobros. Configúrelas en Formas de Cobros y Pagos antes de vender.');
+            return;
+        }
 
         const bancoVisible = !$pagoBancoExtra.classList.contains('d-none');
         if (bancoVisible && $tipoOpBanco.value === 'CHEQUE' && !$fechaCheque.value) {

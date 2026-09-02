@@ -103,10 +103,52 @@ permite detectar faltantes el mismo día, no a fin de mes.
 - **Entré a la caja y no sé cómo volver**: use **Volver al sistema**, al pie de la
   tarjeta; la pantalla se abre sin el menú habitual.
 
+## Qué forma de pago SRI sale en el comprobante
+
+La forma de pago que elige el cajero (Efectivo, un banco, Tarjeta, Payphone) es la
+**forma de cobro de tesorería**: dice a qué caja o cuenta entra el dinero. El
+comprobante electrónico necesita además un **código de forma de pago del SRI**, y
+ese lo decide el sistema solo, con este orden:
+
+1. **El tipo de la forma cobrada**, cuando ya no deja lugar a dudas:
+
+   | Forma cobrada | Código SRI |
+   |---------------|------------|
+   | Banco (transferencia, depósito, débito, cheque) | 20 — Otros con utilización del sistema financiero |
+   | Tarjeta de crédito | 19 — Tarjeta de crédito |
+   | Tarjeta de débito | 16 — Tarjeta de débito |
+   | Payphone | 19 — Tarjeta de crédito |
+   | Nuvei | 19 — Tarjeta de crédito (16 si la forma se configuró como débito) |
+
+2. **La forma de pago SRI de la ficha del cliente** (Clientes → pestaña
+   Comercial → *Forma de Pago SRI (Predeterminada)*).
+3. **La configurada en la empresa**: Empresa → Facturación → *Forma de Pago SRI
+   por defecto*.
+4. Si no hay ninguna, **01 — Sin utilización del sistema financiero**.
+
+Es decir: cobrar con tarjeta o por banco manda siempre, porque el medio de pago ya
+está determinado. Cobrar en **efectivo** (o con una forma de tipo *Otro*) es lo que
+abre la cascada: ahí sí se respeta lo configurado en el cliente y, si el cliente no
+tiene nada, lo configurado en la empresa.
+
+Es la misma precedencia que aplican la pantalla de **Facturas de Venta** y la
+**Carga de Facturas por Excel**, así que un mismo cliente se declara igual se le
+facture desde donde se le facture.
+Si la empresa **no tiene ninguna forma de pago configurada** para cobros, el punto de
+venta no deja cobrar y lo dice: hay que crearlas antes en **Formas de Cobros y
+Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba sin
+su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
 
-- **1.3** — La tirilla se maqueta para el ancho imprimible real de 72 mm y con
-  columnas de ancho fijo: ya no sale reescalada ni con los importes corridos en
+- **1.4** — La forma de pago SRI del comprobante ya no sale solo del tipo de la
+  forma cobrada: cuando ese tipo no la determina (efectivo u *Otro*), se toma la
+  configurada en la ficha del cliente y, si no tiene, la de Empresa →
+  Facturación. Antes se emitía siempre *01* en esos casos. Sin formas de pago
+  configuradas el POS ya no cobra con un *Efectivo* inventado: avisa y no deja
+  cerrar la venta, porque esa venta quedaba sin su Ingreso.
+- **1.3** — La tirilla se adapta al ancho de papel del driver en vez de imponer el
+  suyo, con columnas de ancho proporcional y tipografía sans-serif: ya no sale
+  reescalada, con los importes corridos ni con la letra entrecortada en
   impresoras térmicas de 80 mm.
 - **1.2** — El establecimiento y el punto de emisión se seleccionan solos cuando
   hay uno solo de cada uno. Botón *Volver al sistema* para salir sin abrir caja.

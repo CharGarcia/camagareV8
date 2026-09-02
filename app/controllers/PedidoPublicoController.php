@@ -239,7 +239,10 @@ class PedidoPublicoController extends Controller
                 'id_menu_item'     => $idMenuItem,
                 'cantidad'         => (float) ($_POST['cantidad'] ?? 1),
                 'observacion_item' => trim($_POST['observacion_item'] ?? ''),
-            ]);
+            // desdeQr: la línea nace 'pendiente' aunque el local no trabaje con
+            // preparación, porque el cliente todavía tiene que confirmar el
+            // pedido y esa confirmación es la que avisa al salón.
+            ], [], true);
             $this->json(['ok' => true, 'msg' => 'Agregado.']);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => $e->getMessage()]);

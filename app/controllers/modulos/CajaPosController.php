@@ -119,6 +119,10 @@ class CajaPosController extends BaseModuloController
         $toBool = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
 
         $this->view('modulos.caja_sesion.venta', [
+            // Ancho del papel de la tirilla (Configuración Restaurante): lo lee
+            // el partial de estilos para ajustar el tamaño de letra.
+            'anchoTirilla' => (new \App\Services\modulos\ConfiguracionRestauranteService())
+                ->getAnchoTirilla((int) $_SESSION['id_empresa']),
             'titulo' => 'Punto de Venta',
             'rutaModulo' => self::RUTA_MODULO,
             'idPuntoEmision' => $idPuntoEmision,
@@ -263,33 +267,18 @@ class CajaPosController extends BaseModuloController
         $formas = $repo->getFormasFiltradas($idEmpresa, 'INGRESO');
         $formas = array_values(array_filter($formas, fn($f) => strtoupper((string) ($f['tipo'] ?? '')) !== 'ANTICIPO'));
 
+        // Etiqueta informativa para la pantalla. El código que termina en el
+        // comprobante NO sale de aquí: lo resuelve el servidor al cobrar
+        // (PosVentaService::resolverCodigoSriPago), que además consulta la
+        // ficha del cliente y la configuración del establecimiento.
         foreach ($formas as &$f) {
-            $f['codigo_sri'] = $this->mapearCodigoSriFormaPago($f);
+            $f['codigo_sri'] = PosVentaService::codigoSriDeterminante($f) ?? '01';
         }
         unset($f);
 
         $this->json(['ok' => true, 'data' => $formas]);
     }
 
-    /**
-     * Traduce el tipo de forma de pago de la empresa al código del catálogo
-     * SRI que exige el documento (Factura/Recibo). No hay columna de mapeo
-     * en empresa_formas_pago, así que se resuelve por tipo/modalidad.
-     */
-    private function mapearCodigoSriFormaPago(array $f): string
-    {
-        $tipo = strtoupper((string) ($f['tipo'] ?? ''));
-        if ($tipo === 'BANCO') {
-            return '20'; // Otros con utilización del sistema financiero (transferencia)
-        }
-        if ($tipo === 'TARJETA') {
-            return strtoupper((string) ($f['modalidad_tarjeta'] ?? '')) === 'DEBITO' ? '16' : '19';
-        }
-        if ($tipo === 'PAYPHONE') {
-            return '19'; // Payphone no distingue modalidad; se asume tarjeta de crédito
-        }
-        return '01'; // Efectivo / sin utilización del sistema financiero
-    }
 
     /**
      * Genera un enlace de pago con tarjeta (Payphone, "cajita") por el total

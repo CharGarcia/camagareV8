@@ -144,69 +144,13 @@ class MenuService
         return $this->repository->getCategorias($idEmpresa);
     }
 
-    // ─── Estaciones de impresión (catálogo compartido: Productos + Menú + KDS) ────
+    // ─── Estaciones de impresión ─────────────────────────────────────────────
+    // Solo LECTURA: alimenta el selector "Preparar en" de la carta. El catálogo
+    // se administra en modulos/configuracion-restaurante.
 
     public function getEstaciones(int $idEmpresa): array
     {
         return $this->repository->getEstaciones($idEmpresa);
     }
 
-    public function crearEstacion(array $data): int
-    {
-        $idEmpresa = (int) $data['id_empresa'];
-        $nombre = trim((string) ($data['nombre'] ?? ''));
-        if ($nombre === '') {
-            throw new Exception('El nombre de la estación es obligatorio.');
-        }
-        if ($this->repository->existeEstacionNombre($idEmpresa, $nombre)) {
-            throw new Exception("Ya existe una estación con el nombre '{$nombre}'.");
-        }
-
-        $insert = [
-            'id_empresa' => $idEmpresa,
-            'nombre'     => mb_strtoupper($nombre, 'UTF-8'),
-            'tipo'       => $this->normalizarTipoEstacion($data['tipo'] ?? 'cocina'),
-            'orden'      => (int) ($data['orden'] ?? 0),
-            'created_by' => (int) $data['id_usuario'],
-        ];
-        $id = $this->repository->crearEstacion($insert);
-        $this->logService->registrar((int) $data['id_usuario'], $idEmpresa, 'crear', 'estaciones_impresion', $id, null, $insert);
-        return $id;
-    }
-
-    public function actualizarEstacion(int $id, int $idEmpresa, array $data): void
-    {
-        $nombre = trim((string) ($data['nombre'] ?? ''));
-        if ($nombre === '') {
-            throw new Exception('El nombre de la estación es obligatorio.');
-        }
-        if ($this->repository->existeEstacionNombre($idEmpresa, $nombre, $id)) {
-            throw new Exception("Ya existe otra estación con el nombre '{$nombre}'.");
-        }
-
-        $update = [
-            'nombre'     => mb_strtoupper($nombre, 'UTF-8'),
-            'tipo'       => $this->normalizarTipoEstacion($data['tipo'] ?? 'cocina'),
-            'orden'      => (int) ($data['orden'] ?? 0),
-            'updated_by' => (int) $data['id_usuario'],
-        ];
-        $this->repository->actualizarEstacion($id, $idEmpresa, $update);
-        $this->logService->registrar((int) $data['id_usuario'], $idEmpresa, 'actualizar', 'estaciones_impresion', $id, null, $update);
-    }
-
-    public function eliminarEstacion(int $id, int $idEmpresa, int $idUsuario): void
-    {
-        $usos = $this->repository->contarUsosEstacion($id, $idEmpresa);
-        if ($usos > 0) {
-            throw new Exception("No se puede eliminar: {$usos} categoría(s) usan esta estación.");
-        }
-        $this->repository->eliminarEstacion($id, $idEmpresa, $idUsuario);
-        $this->logService->registrar($idUsuario, $idEmpresa, 'eliminar', 'estaciones_impresion', $id, null, ['eliminado' => true]);
-    }
-
-    /** Solo informativo (ícono/agrupación); no restringe a cuántas estaciones se pueden crear. */
-    private function normalizarTipoEstacion(string $tipo): string
-    {
-        return in_array($tipo, ['cocina', 'barra', 'otro'], true) ? $tipo : 'cocina';
-    }
 }

@@ -755,7 +755,10 @@ class RolPagoRepository extends BaseRepository
         if ($detalle) {
             $ids = array_column($detalle, 'id');
             $in = implode(',', array_map('intval', $ids));
-            $rub = $this->db->query("SELECT * FROM rol_detalle_rubro WHERE id_detalle IN ($in) ORDER BY tipo DESC, id");
+            $rub = $this->db->query("SELECT r.*, n.observacion AS novedad_observacion
+                                      FROM rol_detalle_rubro r
+                                      LEFT JOIN novedades n ON n.id = r.id_novedad
+                                      WHERE r.id_detalle IN ($in) ORDER BY r.tipo DESC, r.id");
             $rubros = $rub->fetchAll(PDO::FETCH_ASSOC);
             $pagos = $this->getPagadoPorDetalle($idRol);
             foreach ($detalle as &$d) {
@@ -781,7 +784,10 @@ class RolPagoRepository extends BaseRepository
         $st->execute([':d' => $idDetalle, ':emp' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
-        $rub = $this->db->prepare("SELECT * FROM rol_detalle_rubro WHERE id_detalle = :d ORDER BY tipo DESC, id");
+        $rub = $this->db->prepare("SELECT r.*, n.observacion AS novedad_observacion
+                                   FROM rol_detalle_rubro r
+                                   LEFT JOIN novedades n ON n.id = r.id_novedad
+                                   WHERE r.id_detalle = :d ORDER BY r.tipo DESC, r.id");
         $rub->execute([':d' => $idDetalle]);
         $row['rubros'] = $rub->fetchAll(PDO::FETCH_ASSOC);
         return $row;
@@ -802,7 +808,10 @@ class RolPagoRepository extends BaseRepository
         $st->execute([':r' => $idRol, ':emp2' => $idEmpleado, ':emp' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
-        $rub = $this->db->prepare("SELECT * FROM rol_detalle_rubro WHERE id_detalle = :d ORDER BY tipo DESC, id");
+        $rub = $this->db->prepare("SELECT r.*, n.observacion AS novedad_observacion
+                                   FROM rol_detalle_rubro r
+                                   LEFT JOIN novedades n ON n.id = r.id_novedad
+                                   WHERE r.id_detalle = :d ORDER BY r.tipo DESC, r.id");
         $rub->execute([':d' => $row['id']]);
         $row['rubros'] = $rub->fetchAll(PDO::FETCH_ASSOC);
         return $row;

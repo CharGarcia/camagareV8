@@ -113,8 +113,9 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
-- **1.5** — La tirilla se maqueta para el ancho imprimible real de 72 mm y con
-  columnas de ancho fijo: ya no sale reescalada ni con los importes corridos en
+- **1.5** — La tirilla se adapta al ancho de papel del driver en vez de imponer el
+  suyo, con columnas de ancho proporcional y tipografía sans-serif: ya no sale
+  reescalada, con los importes corridos ni con la letra entrecortada en
   impresoras térmicas de 80 mm.
 - **1.4** — Corregido: si la empresa tenía más de un establecimiento y el
   activo no era el que ordenaba primero por código, el selector de Serie

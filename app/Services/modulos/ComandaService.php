@@ -40,6 +40,9 @@ class ComandaService
     private MenuRepository $menuRepo;
     private ProductoRepository $productoRepo;
     private ClienteRepository $clienteRepo;
+    private ImpresionComandaService $impresionService;
+    /** Resuelve la estación predeterminada del local (último eslabón de la cascada). */
+    private ConfiguracionRestauranteService $configRestauranteService;
     private PDO $db;
 
     public function __construct(
@@ -50,7 +53,8 @@ class ComandaService
         PosVentaService $ventaService,
         ?MenuRepository $menuRepo = null,
         ?ProductoRepository $productoRepo = null,
-        ?ClienteRepository $clienteRepo = null
+        ?ClienteRepository $clienteRepo = null,
+        ?ImpresionComandaService $impresionService = null
     ) {
         $this->repository   = $repository;
         $this->rules        = $rules;
@@ -60,6 +64,8 @@ class ComandaService
         $this->menuRepo     = $menuRepo ?? new MenuRepository();
         $this->productoRepo = $productoRepo ?? new ProductoRepository();
         $this->clienteRepo  = $clienteRepo ?? new ClienteRepository();
+        $this->impresionService = $impresionService ?? new ImpresionComandaService();
+        $this->configRestauranteService = new ConfiguracionRestauranteService();
         $this->db            = Database::getConnection();
     }
 
@@ -214,7 +220,7 @@ class ComandaService
      * exigir lote/caducidad/NUP aquí mismo si la empresa los requiere, en vez
      * de descubrirlo recién al cobrar (donde ya no hay forma de corregirlo).
      */
-    public function agregarLinea(int $idComanda, int $idEmpresa, int $idUsuario, array $item, array $empresaConfig = []): int
+    public function agregarLinea(int $idComanda, int $idEmpresa, int $idUsuario, array $item, array $empresaConfig = [], bool $desdeQr = false): int
     {
         $this->rules->validarLinea($item);
 
@@ -240,6 +246,12 @@ class ComandaService
             $idEstacion = $this->repository->getEstacionImpresionProducto($idProducto, $idEmpresa);
         }
 
+        // La estación de la línea sale SOLO de la carta o de la categoría. La
+        // predeterminada del local no entra aquí a propósito: dice a qué
+        // impresora sale la orden, no que el ítem tenga que pasar por cocina —
+        // si entrara, un local que no prepara nada vería todos sus ítems
+        // esperando en el KDS.
+
         // Lote/caducidad/NUP: solo aplica a productos inventariables reales
         // (no compuestos/kits) — mismo criterio que ya usa el POS mostrador.
         $esInventariableControlado = $idProducto > 0 && $this->productoRepo->isInventariable($idProducto, $idEmpresa);
@@ -250,11 +262,23 @@ class ComandaService
         $subtotal  = round($precio * $cantidad - $descuento, 2);
         if ($subtotal < 0) $subtotal = 0.0;
 
-        // Toda línea nace 'pendiente', tenga estación o no: hasta confirmarla, el
-        // cliente del QR debe poder quitarla y el botón "Confirmar pedido" tiene
-        // que contarla. Lo que cambia es a dónde va al confirmar: las que tienen
-        // estación pasan a 'enviado' (cocina/barra) y las que no, directo a
-        // 'entregado' — ver ComandaRepository::enviarLineasACocina.
+        // Estado inicial. La regla general es 'pendiente', tenga estación o no:
+        // hasta confirmarla, el cliente del QR debe poder quitarla y el botón
+        // "Confirmar pedido" tiene que contarla. Lo que cambia es a dónde va al
+        // confirmar: las que tienen estación pasan a 'enviado' (cocina/barra) y
+        // las que no, directo a 'entregado' — ver enviarLineasACocina.
+        //
+        // La excepción es el local que NO trabaja con preparación (ninguna
+        // estación activa): ahí la comanda ni siquiera muestra el botón de
+        // enviar, así que una línea 'pendiente' se quedaría así para siempre —
+        // figurando en los avisos y bloqueando el pago por QR, que exige que
+        // todo esté entregado. En ese caso nace ya entregada.
+        //
+        // Desde el QR se respeta siempre 'pendiente': el cliente arma su pedido
+        // y lo confirma, y esa confirmación es la que avisa al salón.
+        $estadoInicial = (!$desdeQr && !$this->configRestauranteService->usaPreparacion($idEmpresa))
+            ? 'entregado'
+            : 'pendiente';
         $this->db->beginTransaction();
         try {
             $idLinea = $this->repository->insertLinea([
@@ -269,6 +293,7 @@ class ComandaService
                 'subtotal'              => $subtotal,
                 'observacion_item'      => trim((string) ($item['observacion_item'] ?? '')) ?: null,
                 'id_estacion_impresion' => $idEstacion,
+                'estado_linea'          => $estadoInicial,
                 'lote'                  => trim((string) ($item['lote'] ?? '')) ?: null,
                 'caducidad'             => trim((string) ($item['caducidad'] ?? '')) ?: null,
                 'nup'                   => trim((string) ($item['nup'] ?? '')) ?: null,
@@ -497,7 +522,15 @@ class ComandaService
 
         $this->db->beginTransaction();
         try {
-            $n = $this->repository->enviarLineasACocina($idComanda, $idEmpresa, $idsLineas);
+            $lineasEnviadas = $this->repository->enviarLineasACocina($idComanda, $idEmpresa, $idsLineas);
+            $n = count($lineasEnviadas);
+
+            // Órdenes de cocina en papel: se encolan dentro de ESTA transacción
+            // para que un envío revertido no deje tickets fantasma esperando en
+            // la pantalla de cocina. Solo encola lo de estaciones con impresora
+            // en modo automático; el resto no genera nada.
+            $this->impresionService->encolarPorEnvio($idComanda, $idEmpresa, $idUsuario, $lineasEnviadas);
+
             // Confirmado desde el celular del cliente: se enciende el aviso del
             // tablero para que alguien del salón se entere. Los ítems se van
             // solos a cocina (o quedan entregados si no pasan por estación), así
@@ -582,6 +615,9 @@ class ComandaService
         try {
             $this->repository->actualizarEstadoComanda($idComanda, $idEmpresa, 'anulada', $idUsuario, true);
             $this->repository->anularLineasDeComanda($idComanda, $idEmpresa);
+            // Sin esto, un ticket que quedó encolado saldría igual en cuanto la
+            // pantalla de cocina recuperara la red, para una mesa ya anulada.
+            $this->impresionService->anularPendientes($idComanda, $idEmpresa);
             $this->mesaRepo->actualizarEstado((int) $comanda['id_mesa'], $idEmpresa, 'disponible');
             $this->invalidarKds($idEmpresa);
 
@@ -1263,7 +1299,9 @@ class ComandaService
                 'tipo_documento'   => $res['tipo_documento'],
                 'id_documento'     => $res['id_documento'],
                 'numero_documento' => $res['numero_documento'],
-                'forma_pago'       => $datosPago['forma_pago'] ?? '01',
+                // El código SRI lo resuelve PosVentaService (ficha del cliente y
+                // configuración del establecimiento incluidas), no la pantalla.
+                'forma_pago'       => $res['forma_pago'] ?? '01',
                 'updated_by'       => $idUsuario,
             ]);
 
@@ -1331,7 +1369,9 @@ class ComandaService
         return $this->cobrarGrupo($idGrupo, $idEmpresa, (int) $comanda['id_usuario_mesero'], [
             'id_cliente'            => (int) ($grupo['id_cliente'] ?? 0),
             'tipo_documento'        => $grupo['tipo_documento_solicitado'] ?: 'RECIBO',
-            'forma_pago'            => '19', // TARJETA DE CRÉDITO — mismo código SRI que ComandasController::mapearCodigoSriFormaPago() usa para tipo PAYPHONE
+            // El código SRI ya no viaja desde aquí: lo resuelve el servidor a
+            // partir de la forma de cobro (PosVentaService::resolverCodigoSriPago).
+            // Una forma tipo PAYPHONE da 19 — TARJETA DE CRÉDITO.
             'id_forma_pago_empresa' => (int) $formaCobro['id'],
         ], $this->getEmpresaConfigParaCobro($idEmpresa));
     }

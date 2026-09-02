@@ -337,6 +337,22 @@ class RolesPagoController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Concepto del rubro con la observación de la novedad que lo originó, para las
+     * celdas "Concepto" de los Excel: va en la misma celda (no se agregan columnas).
+     * Si el rubro no viene de una novedad o esta no tiene observación, devuelve el
+     * concepto tal cual.
+     */
+    private function conceptoConObservacion(array $r): string
+    {
+        $concepto = trim((string) ($r['concepto'] ?? ''));
+        $obs = trim((string) ($r['novedad_observacion'] ?? ''));
+        if ($obs === '') return $concepto;
+        // Las observaciones son texto libre: aplanar saltos de línea para no romper la fila.
+        $obs = trim(preg_replace('/\s+/u', ' ', $obs));
+        return $concepto . ' — ' . $obs;
+    }
+
     /** Excel general del rol: una fila por empleado con su desglose de totales. */
     public function excelGeneral(): void
     {
@@ -379,7 +395,7 @@ class RolesPagoController extends BaseModuloController
 
                 // Hoja 2 (Novedades) y Hoja 3 (Otros Detalles): todos los rubros de cada empleado.
                 foreach (($d['rubros'] ?? []) as $r) {
-                    $fila = [$d['nombres_apellidos'], $d['identificacion'], $r['concepto'] ?? '', ($r['tipo'] ?? '') === 'ingreso' ? 'Ingreso' : 'Egreso', (float) ($r['valor'] ?? 0)];
+                    $fila = [$d['nombres_apellidos'], $d['identificacion'], $this->conceptoConObservacion($r), ($r['tipo'] ?? '') === 'ingreso' ? 'Ingreso' : 'Egreso', (float) ($r['valor'] ?? 0)];
                     if (($r['origen'] ?? '') === 'novedad') {
                         $novedades[] = $fila;
                     } elseif (($r['origen'] ?? '') !== 'sueldo') {
@@ -516,7 +532,7 @@ class RolesPagoController extends BaseModuloController
             $rubros = $lin['rubros'] ?? [];
             $row = $headerRow + 1;
             foreach ($rubros as $r) {
-                $sheet->setCellValueExplicit('A' . $row, (string) ($r['concepto'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('A' . $row, $this->conceptoConObservacion($r), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 if (($r['tipo'] ?? '') === 'ingreso') {
                     $sheet->setCellValue('B' . $row, (float) ($r['valor'] ?? 0));
                 } else {
@@ -551,9 +567,9 @@ class RolesPagoController extends BaseModuloController
             foreach ($rubros as $r) {
                 $tipoRubro = ($r['tipo'] ?? '') === 'ingreso' ? 'Ingreso' : 'Egreso';
                 if (($r['origen'] ?? '') === 'novedad') {
-                    $novedades[] = [$r['concepto'] ?? '', $tipoRubro, (float) ($r['valor'] ?? 0)];
+                    $novedades[] = [$this->conceptoConObservacion($r), $tipoRubro, (float) ($r['valor'] ?? 0)];
                 } elseif (($r['origen'] ?? '') !== 'sueldo') {
-                    $otros[] = [$r['concepto'] ?? '', (string) ($r['origen'] ?? ''), $tipoRubro, (float) ($r['valor'] ?? 0)];
+                    $otros[] = [$this->conceptoConObservacion($r), (string) ($r['origen'] ?? ''), $tipoRubro, (float) ($r['valor'] ?? 0)];
                 }
             }
             $reportSvc = new \App\Services\ReportService();

@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada
-version: 1.14
+etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante
+version: 1.19
 orden: 20
 estado: activo
 ---
@@ -263,6 +263,37 @@ usa habitualmente: queda preseleccionada cada vez que se abre el modal. Es por
 usuario y por empresa, igual que el resto de los favoritos del sistema. Se quita
 pulsando la estrella de nuevo sobre la misma forma.
 
+## Qué forma de pago SRI sale en el comprobante
+
+La forma de pago que elige el cajero (Efectivo, un banco, Tarjeta, Payphone) es la
+**forma de cobro de tesorería**: dice a qué caja o cuenta entra el dinero. El
+comprobante electrónico necesita además un **código de forma de pago del SRI**, y
+ese lo decide el sistema solo, con este orden:
+
+1. **El tipo de la forma cobrada**, cuando ya no deja lugar a dudas:
+
+   | Forma cobrada | Código SRI |
+   |---------------|------------|
+   | Banco (transferencia, depósito, débito, cheque) | 20 — Otros con utilización del sistema financiero |
+   | Tarjeta de crédito | 19 — Tarjeta de crédito |
+   | Tarjeta de débito | 16 — Tarjeta de débito |
+   | Payphone | 19 — Tarjeta de crédito |
+   | Nuvei | 19 — Tarjeta de crédito (16 si la forma se configuró como débito) |
+
+2. **La forma de pago SRI de la ficha del cliente** (Clientes → pestaña
+   Comercial → *Forma de Pago SRI (Predeterminada)*).
+3. **La configurada en la empresa**: Empresa → Facturación → *Forma de Pago SRI
+   por defecto*.
+4. Si no hay ninguna, **01 — Sin utilización del sistema financiero**.
+
+Es decir: cobrar con tarjeta o por banco manda siempre, porque el medio de pago ya
+está determinado. Cobrar en **efectivo** (o con una forma de tipo *Otro*) es lo que
+abre la cascada: ahí sí se respeta lo configurado en el cliente y, si el cliente no
+tiene nada, lo configurado en la empresa.
+
+Es la misma precedencia que aplican la pantalla de **Facturas de Venta** y la
+**Carga de Facturas por Excel**, así que un mismo cliente se declara igual se le
+facture desde donde se le facture.
 ## El cobro siempre emite Factura
 
 El modal **Registrar cobro** ya no pregunta el tipo de documento: toda cuenta del
@@ -291,6 +322,53 @@ Una comanda vacía se anula sin más.
 | Recargo por servicio | Máximo 10% del subtotal; solo se puede quitar si el establecimiento lo tiene como opcional |
 | Propina voluntaria | No puede ser negativa; no tiene tope. Requiere el producto configurado en Empresa → Facturación |
 
+## Locales que no trabajan con preparación
+
+Si **ningún ítem de la carta ni ninguna categoría está enrutado a una estación**
+(*Menú → Preparar en*), el sistema entiende que el local entrega todo directo: no
+aparece el botón *Enviar a preparación* ni el aviso de "por enviar" del tablero de
+mesas. El pedido se toma y se cobra, sin cocina de por medio.
+
+**El botón de imprimir sí sigue apareciendo**, y ahí funciona sin restricciones:
+no hay que enviar nada primero, y saca la comanda entera. La imprime **este mismo
+equipo** —el del mesero o el de caja—, no una pantalla de cocina: en un local que
+no prepara nada, esa pantalla no tiene por qué estar abierta. De la **estación
+predeterminada** se toma el formato: el ancho del papel y cuántas copias.
+
+En ese caso los ítems que agrega el mesero **quedan entregados de una vez**: no
+hay ningún paso posterior que los mueva de estado, y dejarlos pendientes los haría
+figurar en los avisos y bloquearía que el cliente pidiera su cuenta desde el QR
+—que exige que todo esté entregado—.
+
+Lo que se pide **desde el QR sí sigue naciendo pendiente**, incluso sin
+preparación: el cliente arma su pedido y lo confirma, y esa confirmación es la
+que avisa al salón. Al confirmarlo, esos ítems pasan directo a entregados.
+
+Basta crear una estación y activarla para que el flujo vuelva a aparecer.
+## Imprimir la orden de cocina
+
+Si la estación tiene impresora configurada (*Configuración Restaurante*), al pulsar
+**Enviar a preparación** la orden sale además en papel, en la impresora de cada
+estación involucrada: cocina recibe lo suyo y la barra lo suyo, cada una en su
+propio ticket, sin precios.
+
+El botón de **impresora** junto a *Enviar a preparación* vuelve a sacar esa
+orden, marcada como **COPIA**. Sirve para cuando el papel se atascó, la pantalla
+de cocina estaba apagada en ese momento, o la estación está configurada para
+imprimir solo a pedido.
+
+### Todo se configura en Configuración Restaurante
+
+Esta pantalla no decide nada de la impresión: **qué estación imprime, con qué
+papel y cuántas copias** se define en *Configuración Restaurante*. Por eso el
+botón no pregunta nada — manda la orden y ya.
+
+Un local puede trabajar **solo con el stock general**, sin cargar la carta en
+Menú. Para que esos ítems lleguen igual a la cocina, en *Configuración
+Restaurante* se marca una **estación predeterminada**: recoge todo lo que no
+tiene estación propia. Sin ella, esos ítems se dan por entregados al enviarlos y
+no aparecen en ninguna pantalla ni se imprimen.
+
 ## Cómo sale la tirilla en la impresora térmica
 
 Tanto la **cuenta** (el botón de vista previa, antes de cobrar) como la
@@ -298,9 +376,10 @@ Tanto la **cuenta** (el botón de vista previa, antes de cobrar) como la
 del salón: se abre una ventana aparte y se lanza la impresión directamente, sin
 generar un PDF intermedio.
 
-La tirilla está maquetada para un **ancho imprimible de 72 mm**, que es lo que
-realmente imprime un equipo "de 80 mm" (los otros 8 mm son borde físico del
-papel, donde el cabezal no marca). Para que salga a escala 1:1, en el diálogo de
+La tirilla **no impone un ancho propio**: se adapta al papel que tenga
+configurado el driver de la impresora. Eso es lo que evita que el navegador
+reescale la página —que es lo que hacía que el texto saliera encogido y los
+importes se corrieran de renglón—. Para que salga a escala 1:1, en el diálogo de
 impresión del navegador conviene dejar:
 
 | Opción | Valor |
@@ -309,11 +388,16 @@ impresión del navegador conviene dejar:
 | Escala | 100 % (no *Ajustar al área de impresión*) |
 | Encabezados y pies de página | Desactivado |
 
-En el driver de la impresora (Windows → *Dispositivos e impresoras* →
-propiedades), el tamaño de papel debe ser el de 80 mm que trae el fabricante
-—normalmente listado como **80 × 297 mm** o **72,1 mm × recibo**—. Si ahí está
-seleccionado un papel de 58 mm o una hoja A4, la tirilla sale reescalada aunque
-el sistema la genere bien.
+El **ancho del papel** (58 u 80 mm) se elige en *Configuración Restaurante*, y
+ajusta el tamaño de letra de la tirilla.
+
+Como el tamaño de página lo manda el driver, **ahí es donde hay que dejarlo
+bien**: Windows
+→ *Dispositivos e impresoras* → propiedades de la impresora → tamaño de papel, y
+elegir el de 80 mm que trae el fabricante —normalmente listado como
+**80 × 297 mm** o **72,1 mm × recibo**—. Si ahí quedó un papel de 58 mm o una
+hoja A4, la tirilla sale con el ancho equivocado por más que el sistema la genere
+bien.
 
 Marcando *Recordar* / *Establecer como predeterminado* en esas opciones, el
 navegador las reutiliza en las siguientes impresiones y el cajero no tiene que
@@ -339,6 +423,21 @@ tocarlas cada vez.
   usted tenía el salón en pantalla. Vuelva a Cajas y elija su punto de emisión.
 - **"Esta mesa la está atendiendo …"**: otro usuario tiene la comanda abierta.
   Puede seguir tomando el pedido; para cobrar, espere a que salga.
+- **El catálogo aparece vacío al abrir la comanda**: el selector de la izquierda
+  arranca en **Menú** —el salón trabaja con la carta— y esa empresa todavía no
+  tiene ítems cargados en *Menú*. Los productos siguen ahí: cambie el filtro a
+  **Todos** o **Stock general**. Si hay productos y ninguna carta, la pantalla ya
+  cambia sola a *Todos*.
+- **"No hay nada que imprimir todavía: primero pulse Enviar a preparación"**:
+  la orden de cocina es lo que se mandó a preparar, así que hasta que no se envíe
+  no hay ticket que sacar.
+- **"Ninguna estación tiene impresora configurada"**: ninguna estación tiene
+  activada la impresión de órdenes. Se activa en *Configuración Restaurante*.
+- **"Esta comanda no tiene ítems enviados a preparación para imprimir"**: todavía
+  no se envió nada a cocina, o lo enviado no va a ninguna estación con impresora.
+- **Se envió a preparación pero no salió el papel**: la pantalla de esa estación
+  no está abierta en el equipo de la impresora. La orden no se pierde: sale en
+  cuanto se abra (ver el manual del KDS).
 - **La tirilla sale descuadrada, con el texto encogido o los valores en otro
   renglón**: el navegador está reescalando la página. Revise el tamaño de papel
   del driver y ponga *Márgenes: Ninguno* y *Escala: 100 %* en el diálogo de
@@ -349,9 +448,29 @@ tocarlas cada vez.
 
 ## Historial de cambios
 
-- **1.14** — La tirilla (cuenta y factura/recibo del cobro) se maqueta para el
-  ancho imprimible real de 72 mm y con columnas de ancho fijo, así que ya no sale
-  reescalada ni con los importes corridos en impresoras térmicas de 80 mm.
+- **1.18** — La forma de pago SRI del comprobante ya no sale solo del tipo de
+  la forma cobrada: cuando ese tipo no la determina (efectivo u *Otro*), se toma
+  la configurada en la ficha del cliente y, si no tiene, la de Empresa →
+  Facturación. Antes se emitía siempre *01* en esos casos. Si el cobro no puede
+  generar su Ingreso, ahora se avisa en pantalla en vez de quedar solo en el log.
+- **1.19** — La comanda esconde el botón *Enviar a preparación* (y el aviso del
+  tablero) cuando ningún ítem está enrutado a una estación: ahí los ítems del
+  mesero nacen entregados y el botón de imprimir saca la comanda entera desde el
+  propio equipo, con el formato de la estación predeterminada y sin exigir envío. Y la estación predeterminada se aplica también al enviar, así
+  que configurarla arregla las mesas que ya estaban abiertas.
+- **1.18** — El botón de imprimir ya no pregunta a dónde mandar la orden: las
+  impresoras se configuran en *Configuración Restaurante*, incluida la estación
+  predeterminada que recoge los ítems del stock general.
+- **1.16** — Si la empresa no tiene carta cargada, el catálogo de la comanda ya
+  no aparece vacío: cae solo al filtro *Todos* y el mensaje explica dónde están
+  los ítems.
+- **1.15** — La orden de cocina se puede imprimir en papel: sale sola al enviar a
+  preparación (si la estación tiene impresora configurada) y hay un botón para
+  volver a imprimirla marcada como copia.
+- **1.14** — La tirilla (cuenta y factura/recibo del cobro) se adapta al ancho de
+  papel del driver en vez de imponer el suyo, con columnas de ancho proporcional
+  y tipografía sans-serif: ya no sale reescalada, con los importes corridos ni
+  con la letra entrecortada en impresoras térmicas de 80 mm.
 - **1.13** — La comanda se ata al turno del punto de emisión que eligió el mesero
   (antes tomaba cualquier turno abierto del local, así que podía facturarse por
   otro punto) y no se abre sin turno. Aviso cuando otra persona atiende la misma

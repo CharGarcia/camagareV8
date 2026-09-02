@@ -55,7 +55,7 @@ a él cerrando la pestaña.
 Dos detalles a tener en cuenta:
 
 - Los botones solo aparecen si el local tiene **estaciones creadas** (se crean en
-  Menú → pestaña *Estaciones*).
+  *Configuración Restaurante*).
 - Solo los ve quien tenga permiso de lectura sobre la **pantalla de preparación**.
   Si un mesero no los ve y sus compañeros sí, es cuestión de permisos, no del
   tablero.

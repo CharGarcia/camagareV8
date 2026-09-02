@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito
-version: 1.0
+etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -51,12 +51,34 @@ incluye Recibos de Venta.
 6. Exportar a **PDF** o **Excel**, o usar **Correo** para enviar el PDF del
    reporte (con los filtros actuales) a un destinatario.
 7. En la vista Por Vendedor, hacer clic sobre una fila abre un panel a la
-   derecha con el detalle documento por documento (factura, subtotal, NC y
-   total neto) de ese vendedor. En el modo Detallado, el clic sobre una fila
-   abre el detalle del documento (factura o nota de crédito).
+   derecha con el detalle documento por documento (factura, subtotal, NC,
+   total neto y saldo) de ese vendedor. En el modo Detallado, el clic sobre una
+   fila abre el detalle del documento (factura o nota de crédito).
 8. Al exportar a Excel agrupando **Por Vendedor**, el archivo incluye una
    segunda hoja ("Detalle Documentos") con esa misma información documento
-   por documento, de todos los vendedores o solo del filtrado.
+   por documento —incluido el **Saldo** de cada factura—, de todos los
+   vendedores o solo del filtrado.
+
+## Columna Saldo (lo que falta por cobrar)
+
+Las agrupaciones que trabajan a nivel de documento —**Por Vendedor**, **Por
+Mes** y **Detallado**— muestran una columna **Saldo** al final, y la tarjeta
+superior resume el **Saldo Pendiente por Cobrar** de todo el reporte. El saldo
+se calcula igual que en Facturas de Venta y en Cuentas por Cobrar:
+
+> Saldo = Total de la factura + Notas de débito − Cobros − Retenciones − Notas de crédito
+
+- En **Por Vendedor** y **Por Mes** es la suma de los saldos de las facturas de
+  ese grupo: sirve para ver cuánta cartera dejó pendiente cada asesor.
+- En **Detallado** y en el panel de detalle es el saldo de cada factura.
+- Nunca es negativo: si una factura quedó sobrecobrada se muestra en 0, igual
+  que en el listado de Facturas de Venta.
+- Las notas de crédito no tienen saldo propio (una NC no se cobra), así que
+  aportan 0: su efecto ya está descontado dentro del saldo de la factura que
+  modifican. Por eso el saldo no cambia entre *Ventas Netas* y *Solo Facturas*,
+  y en *Solo Notas de Crédito* la columna sale en 0.
+- Las columnas Saldo aparecen también en el **PDF** y en el **Excel** (en ambas
+  hojas), con el total general al pie.
 
 ## Campos del formulario
 
@@ -105,9 +127,19 @@ Para vincular un usuario a un vendedor: editar el registro en **Vendedores**
   Borradores/Anulados) de las tarjetas superiores sí refleja los tres estados.
 - El envío por correo genera el mismo PDF que la descarga, con los filtros
   vigentes en el formulario al momento de enviar.
+- El **Saldo** se mide a hoy, no a la fecha de corte del filtro: si se consulta
+  un mes pasado, la columna muestra lo que sigue pendiente hoy de esas
+  facturas, no lo que estaba pendiente al cierre de ese mes. Para un corte a
+  una fecha concreta se usa **Cuentas por Cobrar**.
+- El saldo solo cuenta cobros, retenciones y notas de crédito/débito que no
+  estén anulados.
 
 ## Integraciones con otros módulos
 
+- **Cuentas por Cobrar** (`modulos/cuentas_por_cobrar`): usa exactamente la
+  misma fórmula de saldo, con corte por fecha y antigüedad de cartera.
+- **Ingresos / Cobros**, **Retenciones en Ventas** y **Notas de Débito**:
+  alimentan el saldo pendiente de cada factura.
 - **Vendedores** (`modulos/vendedores`): catálogo de asesores.
 - **Facturas de Venta** y **Notas de Crédito** (ventas): fuente de los datos.
 - **Productos, Marcas y Categorías**: catálogos usados para filtrar/agrupar.
@@ -127,5 +159,12 @@ Para vincular un usuario a un vendedor: editar el registro en **Vendedores**
 
 ## Historial de cambios
 
+- **1.1** — Se agrega la columna **Saldo** (lo pendiente de cobro) en las
+  agrupaciones Por Vendedor, Por Mes y Detallado, en el panel de detalle por
+  vendedor, en el PDF y en las dos hojas del Excel, más la tarjeta "Saldo
+  Pendiente por Cobrar". Además se reescribieron las consultas del reporte para
+  que filtren el período ANTES de agregar el detalle (antes sumaban todo el
+  histórico de la empresa en cada consulta), lo que reduce mucho el tiempo de
+  generación. Requiere ejecutar `database/reporte_ventas_vendedor_indices.sql`.
 - **1.0** — Versión inicial: filtros por vendedor/producto/marca/categoría/
   fecha, cálculo de ventas netas, exportación a PDF/Excel y envío por correo.

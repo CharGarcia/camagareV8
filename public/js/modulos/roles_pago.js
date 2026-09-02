@@ -494,13 +494,19 @@
         const ing = (d.rubros || []).filter(r => r.tipo === 'ingreso');
         const egr = (d.rubros || []).filter(r => r.tipo === 'egreso');
         const filas = Math.max(ing.length, egr.length);
+        // Observación de la novedad que originó el rubro: va bajo el concepto, en la
+        // misma celda (no se agregan columnas al desglose).
+        const obs = (r) => {
+            const t = (r && r.novedad_observacion ? String(r.novedad_observacion) : '').trim();
+            return t ? `<div class="text-muted fst-italic" style="font-size:0.72rem;white-space:pre-wrap;">${esc(t)}</div>` : '';
+        };
         let body = '';
         for (let k = 0; k < filas; k++) {
             const a = ing[k], b = egr[k];
             body += `<tr>
-                <td class="ps-3 small text-success">${a ? esc(a.concepto) : ''}</td>
+                <td class="ps-3 small text-success">${a ? esc(a.concepto) + obs(a) : ''}</td>
                 <td class="small text-success text-end">${a ? money(a.valor) : ''}</td>
-                <td class="small text-danger">${b ? esc(b.concepto) : ''}</td>
+                <td class="small text-danger">${b ? esc(b.concepto) + obs(b) : ''}</td>
                 <td class="small text-danger text-end pe-3">${b ? money(b.valor) : ''}</td></tr>`;
         }
         $('rolemp_general_body').innerHTML = `

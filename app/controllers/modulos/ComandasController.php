@@ -12,6 +12,7 @@ use App\Rules\modulos\ComandaRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\CajaSesionService;
 use App\Services\modulos\ComandaService;
+use App\Services\modulos\ImpresionComandaService;
 use App\Services\modulos\PosVentaService;
 use App\models\Empresa;
 use Exception;
@@ -38,6 +39,8 @@ class ComandasController extends BaseModuloController
     private ComandaService $service;
     /** Para comprobar que el salón tiene turno de caja abierto antes de trabajar la comanda. */
     private CajaSesionService $cajaService;
+    /** Cola de impresión de órdenes de cocina/barra (el papel lo saca la pantalla de la estación). */
+    private ImpresionComandaService $impresionService;
 
     public function __construct()
     {
@@ -50,6 +53,7 @@ class ComandasController extends BaseModuloController
         $this->cajaService = $cajaService;
         $ventaService = new PosVentaService($cajaService, $logService);
         $this->service = new ComandaService($repo, $rules, $mesaRepo, $logService, $ventaService, new MenuRepository());
+        $this->impresionService = new ImpresionComandaService();
     }
 
     protected function getRutaModulo(): string
@@ -98,12 +102,24 @@ class ComandasController extends BaseModuloController
         }
 
         $this->view('modulos.comandas.ver', [
+            // Ancho del papel de la tirilla (Configuración Restaurante): lo lee
+            // el partial de estilos para ajustar el tamaño de letra.
+            'anchoTirilla' => (new \App\Services\modulos\ConfiguracionRestauranteService())
+                ->getAnchoTirilla((int) $_SESSION['id_empresa']),
             'titulo'        => 'Comanda ' . ($comanda['numero_comanda'] ?? ''),
             'rutaModulo'    => self::RUTA_MODULO,
             'perm'          => $this->getPermisos(),
             'comanda'       => $comanda,
             'bodegas'       => (new Empresa())->getBodegas($idEmpresa),
             'empresaConfig' => $this->getEmpresaConfig($idEmpresa),
+            // Sin ninguna estación activa el local no trabaja con preparación: la
+            // pantalla esconde ese flujo entero (enviar a cocina, avisos e
+            // impresión de órdenes) en vez de ofrecer botones que no harían nada.
+            'usaPreparacion' => (new \App\Services\modulos\ConfiguracionRestauranteService())->usaPreparacion($idEmpresa),
+            // El botón de imprimir no depende de la preparación: un local que
+            // entrega todo directo igual imprime su orden, por la estación
+            // predeterminada. Solo se esconde si no hay ninguna impresora.
+            'hayImpresoras'  => $this->impresionService->hayImpresoras($idEmpresa),
         ]);
     }
 
@@ -422,6 +438,62 @@ class ComandasController extends BaseModuloController
         }
     }
 
+    /**
+     * "Imprimir orden": vuelve a encolar el ticket de cocina/barra de esta
+     * comanda. Es el respaldo de la impresión automática (papel atascado,
+     * pantalla de cocina apagada al momento del envío) y la única vía para las
+     * estaciones configuradas en modo manual.
+     *
+     * No imprime aquí: encola. Quien saca el papel es la pantalla de esa
+     * estación, que recoge la cola en su siguiente poll — por eso responde
+     * "enviada a la impresora" y no "impresa".
+     */
+    public function imprimirOrdenAjax(): void
+    {
+        $this->requireCrear();
+
+        try {
+            $idComanda  = (int) ($_POST['id_comanda'] ?? 0);
+            $idEstacion = (int) ($_POST['id_estacion'] ?? 0);
+            if ($idComanda <= 0) {
+                throw new Exception('Comanda no válida.');
+            }
+
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            // Local sin preparación: no hay ninguna pantalla de cocina abierta
+            // que pueda sacar el papel de la cola —esa pantalla no mostraría
+            // nada, porque ningún ítem va a preparación—, así que el ticket se
+            // devuelve para que lo imprima ESTE navegador, con el formato de la
+            // estación predeterminada.
+            if (!(new \App\Services\modulos\ConfiguracionRestauranteService())->usaPreparacion($idEmpresa)) {
+                $this->json([
+                    'ok'     => true,
+                    'ticket' => $this->impresionService->getOrdenParaImprimir($idComanda, $idEmpresa),
+                ]);
+                return;
+            }
+
+            $n = $this->impresionService->encolarAPedido(
+                $idComanda,
+                $idEmpresa,
+                (int) $_SESSION['id_usuario'],
+                $idEstacion
+            );
+
+            $this->json([
+                'ok'      => true,
+                'tickets' => $n,
+                'msg'     => $n === 1
+                    ? 'Orden enviada a la impresora de la estación.'
+                    : "Órdenes enviadas a {$n} estaciones.",
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
     /** El mesero marca un ítem 'listo' como entregado al cliente. */
     public function marcarEntregadoAjax(): void
     {
@@ -572,21 +644,15 @@ class ComandasController extends BaseModuloController
         $repo = new \App\repositories\modulos\FormaPagoRepository();
         $formas = $repo->getFormasFiltradas($idEmpresa, 'INGRESO');
         $formas = array_values(array_filter($formas, fn($f) => strtoupper((string) ($f['tipo'] ?? '')) !== 'ANTICIPO'));
+        // Etiqueta informativa para la pantalla. El código que termina en el
+        // comprobante NO sale de aquí: lo resuelve el servidor al cobrar
+        // (PosVentaService::resolverCodigoSriPago), que además consulta la
+        // ficha del cliente y la configuración del establecimiento.
         foreach ($formas as &$f) {
-            $f['codigo_sri'] = $this->mapearCodigoSriFormaPago($f);
+            $f['codigo_sri'] = PosVentaService::codigoSriDeterminante($f) ?? '01';
         }
         unset($f);
         $this->json(['ok' => true, 'data' => $formas]);
-    }
-
-    /** Mismo criterio que CajaPosController::mapearCodigoSriFormaPago — traduce el tipo de forma de pago al código SRI. */
-    private function mapearCodigoSriFormaPago(array $f): string
-    {
-        $tipo = strtoupper((string) ($f['tipo'] ?? ''));
-        if ($tipo === 'BANCO') return '20';
-        if ($tipo === 'TARJETA') return strtoupper((string) ($f['modalidad_tarjeta'] ?? '')) === 'DEBITO' ? '16' : '19';
-        if ($tipo === 'PAYPHONE') return '19';
-        return '01';
     }
 
     // ─── Cobro / división de cuenta ────────────────────────────────────────────

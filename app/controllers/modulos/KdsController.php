@@ -12,6 +12,7 @@ use App\Rules\modulos\ComandaRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\CajaSesionService;
 use App\Services\modulos\ComandaService;
+use App\Services\modulos\ImpresionComandaService;
 use App\Services\modulos\KdsService;
 use App\Services\modulos\PosVentaService;
 use Exception;
@@ -30,6 +31,7 @@ class KdsController extends BaseModuloController
     private const RUTA_MODULO = 'modulos/kds';
     private KdsService $kdsService;
     private ComandaService $comandaService;
+    private ImpresionComandaService $impresionService;
 
     public function __construct()
     {
@@ -40,6 +42,7 @@ class KdsController extends BaseModuloController
         $cajaService = new CajaSesionService(new CajaSesionRepository(), new CajaSesionRules(), $logService);
         $ventaService = new PosVentaService($cajaService, $logService);
         $this->comandaService = new ComandaService($comandaRepo, new ComandaRules(), new MesaRepository(), $logService, $ventaService);
+        $this->impresionService = new ImpresionComandaService();
     }
 
     protected function getRutaModulo(): string
@@ -74,6 +77,11 @@ class KdsController extends BaseModuloController
             // Decimales de cantidad del establecimiento: las cantidades llegan de
             // Postgres como numeric ("1.000000") y cocina vería eso en la tarjeta.
             'decimalesCantidad' => $this->getDecimalesCantidad($idEmpresa),
+            // Configuración de impresora de ESTA estación (null si es solo
+            // pantalla): decide si el navegador imprime y si se ofrece el botón
+            // de reimprimir en cada tarjeta.
+            'estacionImpresora' => $this->impresionService->configEstacion($idEmpresa, $idEstacion),
+            'empresaNombre'     => $this->getNombreEmpresa($idEmpresa),
         ]);
     }
 
@@ -82,6 +90,17 @@ class KdsController extends BaseModuloController
      * que cocina vea "1" y no "1.000000". Si no se puede leer la configuración
      * se usan 2: la pantalla de preparación no puede caerse por esto.
      */
+    /** Nombre para la cabecera del ticket de cocina; vacío si no se puede leer. */
+    private function getNombreEmpresa(int $idEmpresa): string
+    {
+        try {
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            return (string) ($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? '');
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
     private function getDecimalesCantidad(int $idEmpresa): int
     {
         try {
@@ -103,6 +122,8 @@ class KdsController extends BaseModuloController
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idEstacion = (int) ($_GET['id_estacion'] ?? 0);
+        // Se resuelve ANTES de soltar la sesión: getPermisos() la lee.
+        $puedeImprimir = !empty($this->getPermisos()['actualizar']);
 
         // Solo lectura y de alta frecuencia (polling): liberar el lock de
         // sesión cuanto antes, mismo criterio que ContadoresController::navbarAjax.
@@ -110,7 +131,71 @@ class KdsController extends BaseModuloController
             session_write_close();
         }
 
-        $this->json(['ok' => true, 'data' => $idEstacion ? $this->kdsService->getComandas($idEmpresa, $idEstacion) : []]);
+        // Las órdenes por imprimir viajan en el MISMO poll que las tarjetas: son
+        // la misma pantalla y el mismo intervalo, así que una segunda petición
+        // cada 5 s solo gastaría conexiones (el cuello de botella conocido de la
+        // BD administrada). Van vacías si la estación no tiene impresora.
+        $impresiones = [];
+        if ($idEstacion && $puedeImprimir) {
+            $impresiones = $this->impresionService->pendientes($idEmpresa, $idEstacion);
+        }
+
+        $this->json([
+            'ok'          => true,
+            'data'        => $idEstacion ? $this->kdsService->getComandas($idEmpresa, $idEstacion) : [],
+            'impresiones' => $impresiones,
+        ]);
+    }
+
+    /**
+     * El navegador de la estación confirma que el ticket salió por la impresora.
+     * Pide permiso de actualizar (igual que avanzar el estado de una línea):
+     * sin él la pantalla no puede cerrar el ciclo y por eso tampoco imprime —
+     * si no, cada poll reimprimiría lo mismo indefinidamente.
+     */
+    public function marcarImpresoAjax(): void
+    {
+        $this->requireActualizar();
+
+        try {
+            $id = (int) ($_POST['id'] ?? 0);
+            if ($id <= 0) {
+                throw new Exception('Impresión no válida.');
+            }
+
+            // false = otra pantalla de la misma estación se adelantó. No es un
+            // error: el papel ya salió, y devolverlo como fallo haría que esta
+            // pantalla lo reintentara para siempre.
+            $marcado = $this->impresionService->marcarImpreso($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            $this->json(['ok' => true, 'marcado' => $marcado]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Reimprimir desde la propia pantalla de cocina: vuelve a encolar el ticket
+     * completo de esta estación (marcado como COPIA) cuando el papel se atascó
+     * o se perdió.
+     */
+    public function reimprimirAjax(): void
+    {
+        $this->requireActualizar();
+
+        try {
+            $idComanda  = (int) ($_POST['id_comanda'] ?? 0);
+            $idEstacion = (int) ($_POST['id_estacion'] ?? 0);
+            if ($idComanda <= 0 || $idEstacion <= 0) {
+                throw new Exception('Comanda o estación no válida.');
+            }
+
+            $n = $this->impresionService->encolarAPedido($idComanda, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $idEstacion);
+            $this->json(['ok' => true, 'tickets' => $n, 'msg' => 'Orden enviada a la impresora.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
     }
 
     /** Estación pedida por query string si es válida para la empresa, si no la primera configurada. */

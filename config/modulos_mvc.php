@@ -209,6 +209,16 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Configuración Restaurante: estaciones de preparación (antes en una pestaña
+    // del modal de Menú) y la estación predeterminada que recoge los ítems del
+    // stock general. Registrar el submódulo manualmente en submodulos_menu
+    // (menú "Restaurante", ruta = 'modulos/configuracion-restaurante') y poner
+    // aquí su id real — ver database/migrations/20260901_estacion_predeterminada.sql.
+    'modulos/configuracion-restaurante' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // Menú (carta del restaurante): catálogo con fotos, opcionalmente vinculado
     // a productos/combos del sistema. Se usa en modulos/comandas/ver y en el
     // portal público QR (fase siguiente). Registrar el submódulo manualmente

@@ -288,56 +288,8 @@ class MenuController extends BaseModuloController
         $this->json(['ok' => true, 'data' => $this->service->getEstaciones($idEmpresa)]);
     }
 
-    public function crearEstacionAjax(): void
-    {
-        $this->requireCrear();
-        try {
-            $id = $this->service->crearEstacion([
-                'id_empresa' => (int) $_SESSION['id_empresa'],
-                'id_usuario' => (int) $_SESSION['id_usuario'],
-                'nombre'     => trim($_POST['nombre'] ?? ''),
-                'tipo'       => trim($_POST['tipo'] ?? 'cocina'),
-                'orden'      => (int) ($_POST['orden'] ?? 0),
-            ]);
-            $this->json(['ok' => true, 'msg' => 'Estación creada.', 'id' => $id]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'error' => $e->getMessage()]);
-        }
-    }
-
-    public function actualizarEstacionAjax(): void
-    {
-        $this->requireActualizar();
-        try {
-            $id = (int) ($_POST['id'] ?? 0);
-            if ($id <= 0) throw new Exception('Estación no válida.');
-            $this->service->actualizarEstacion($id, (int) $_SESSION['id_empresa'], [
-                'id_usuario' => (int) $_SESSION['id_usuario'],
-                'nombre'     => trim($_POST['nombre'] ?? ''),
-                'tipo'       => trim($_POST['tipo'] ?? 'cocina'),
-                'orden'      => (int) ($_POST['orden'] ?? 0),
-            ]);
-            $this->json(['ok' => true, 'msg' => 'Estación actualizada.']);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'error' => $e->getMessage()]);
-        }
-    }
-
-    public function eliminarEstacionAjax(): void
-    {
-        $this->requireEliminar();
-        try {
-            $id = (int) ($_POST['id'] ?? 0);
-            if ($id <= 0) throw new Exception('Estación no válida.');
-            $this->service->eliminarEstacion($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
-            $this->json(['ok' => true, 'msg' => 'Estación eliminada.']);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'error' => $e->getMessage()]);
-        }
-    }
+    // El CRUD de estaciones vive en modulos/configuracion-restaurante.
+    // Aquí solo queda getEstacionesAjax (lectura) para el selector "Preparar en".
 
     public function exportPdf(): void
     {

@@ -4,7 +4,11 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\core\Database;
+use App\models\FormaPagoSri;
+use App\repositories\modulos\ClienteRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\FacturaVentaRepository;
+use App\repositories\modulos\FormaPagoRepository;
 use App\repositories\modulos\IngresoRepository;
 use App\repositories\modulos\ReciboVentaRepository;
 use App\Rules\modulos\FacturaVentaRules;
@@ -28,6 +32,9 @@ class PosVentaService
     private CajaSesionService $cajaService;
     private LogSistemaService $logService;
     private ReciboVentaRepository $reciboRepo;
+    private FormaPagoRepository $formaPagoRepo;
+    private ClienteRepository $clienteRepo;
+    private FormaPagoSri $formaPagoSri;
     private PDO $db;
 
     public function __construct(CajaSesionService $cajaService, LogSistemaService $logService)
@@ -35,6 +42,9 @@ class PosVentaService
         $this->cajaService = $cajaService;
         $this->logService = $logService;
         $this->reciboRepo = new ReciboVentaRepository();
+        $this->formaPagoRepo = new FormaPagoRepository();
+        $this->clienteRepo = new ClienteRepository();
+        $this->formaPagoSri = new FormaPagoSri();
         $this->db = Database::getConnection();
     }
 
@@ -111,6 +121,98 @@ class PosVentaService
             return $cfg['porcentaje'];
         }
         return $pedidoPorElCajero ? $cfg['porcentaje'] : 0.0;
+    }
+
+    /**
+     * Código SRI del <formaPago> de una forma de pago de la empresa, cuando el
+     * tipo de esa forma YA lo determina sin ambigüedad. Devuelve null para
+     * EFECTIVO/OTRO —tipos que no dicen nada del medio de pago declarado— para
+     * que el llamador siga la cascada de resolverCodigoSriPago().
+     *
+     * Es estática y pública porque el criterio lo comparten los dos puntos de
+     * venta (CajaPosController y ComandasController lo usan para etiquetar el
+     * combo de formas de pago); tenerlo en tres copias privadas ya había hecho
+     * que divergieran.
+     */
+    public static function codigoSriDeterminante(?array $forma): ?string
+    {
+        $tipo = strtoupper((string) ($forma['tipo'] ?? ''));
+        if ($tipo === 'BANCO') {
+            return '20'; // Otros con utilización del sistema financiero (transferencia)
+        }
+        // Nuvei cobra siempre con tarjeta, igual que una forma de tipo TARJETA:
+        // si la forma declara la modalidad se respeta, si no se asume crédito.
+        if ($tipo === 'TARJETA' || $tipo === 'NUVEI') {
+            return strtoupper((string) ($forma['modalidad_tarjeta'] ?? '')) === 'DEBITO' ? '16' : '19';
+        }
+        if ($tipo === 'PAYPHONE') {
+            return '19'; // Payphone no distingue modalidad; se asume tarjeta de crédito
+        }
+        return null; // EFECTIVO, OTRO o sin forma: lo decide la cascada
+    }
+
+    /**
+     * Código SRI con el que se emite el comprobante del POS.
+     *
+     * Se resuelve SIEMPRE en el servidor a partir del id de la forma de pago
+     * (`empresa_formas_pago`), nunca del código que mande el navegador: el
+     * comprobante es fiscal y el dato no puede depender de un campo del DOM.
+     *
+     * Precedencia:
+     *   1. El TIPO de la forma de pago cobrada, cuando ya determina el medio
+     *      (BANCO → 20, TARJETA/NUVEI → 16/19, PAYPHONE → 19). Manda sobre lo
+     *      demás: una venta con tarjeta no puede declararse como efectivo.
+     *   2. La forma de pago SRI de la ficha del CLIENTE
+     *      (`clientes.id_forma_pago_sri`).
+     *   3. La configurada en el ESTABLECIMIENTO
+     *      (`empresa_establecimiento.id_forma_pago_sri_def`, Empresa →
+     *      Facturación).
+     *   4. '01' — sin utilización del sistema financiero.
+     *
+     * Los pasos 2 y 3 son la misma cascada que ya aplican la pantalla de
+     * Factura de Venta y CargaFacturasValidacionService::resolverFormaPago().
+     * Antes el POS no los consultaba: cobrar en efectivo emitía siempre '01',
+     * aunque el cliente o la empresa tuvieran otra forma configurada.
+     */
+    public function resolverCodigoSriPago(
+        int $idEmpresa,
+        int $idFormaPagoEmpresa,
+        int $idCliente,
+        array $empresaConfig,
+        int $idEstablecimiento = 0
+    ): string {
+        $forma = $idFormaPagoEmpresa > 0
+            ? $this->formaPagoRepo->getPorId($idFormaPagoEmpresa, $idEmpresa)
+            : null;
+        $codigo = self::codigoSriDeterminante($forma);
+        if ($codigo !== null) {
+            return $codigo;
+        }
+
+        if ($idCliente > 0) {
+            $cliente = $this->clienteRepo->getPorId($idCliente, $idEmpresa);
+            $codigo = $this->formaPagoSri->getCodigoPorId((int) ($cliente['id_forma_pago_sri'] ?? 0));
+            if ($codigo !== null) {
+                return $codigo;
+            }
+        }
+
+        // La config del establecimiento normalmente ya viaja fusionada en
+        // $empresaConfig (getEmpresaConfig() de los dos controladores del POS).
+        // Se relee solo si el llamador no la trae — p. ej. el cobro que dispara
+        // Payphone desde el portal público.
+        $idDefEst = (int) ($empresaConfig['id_forma_pago_sri_def'] ?? 0);
+        if ($idDefEst <= 0 && !array_key_exists('id_forma_pago_sri_def', $empresaConfig) && $idEstablecimiento > 0) {
+            try {
+                $cfg = (new EmpresaRepository())->getEstablecimientoConfig($idEstablecimiento);
+                $idDefEst = (int) ($cfg['id_forma_pago_sri_def'] ?? 0);
+            } catch (\Throwable $e) {
+                $idDefEst = 0;
+            }
+        }
+        $codigo = $this->formaPagoSri->getCodigoPorId($idDefEst);
+
+        return $codigo ?? '01';
     }
 
     public function cobrar(array $data, array $empresaConfig): array
@@ -277,6 +379,17 @@ class PosVentaService
             $tipoDocumento = 'RECIBO';
         }
 
+        $idFormaPagoEmpresa = (int) ($data['id_forma_pago_empresa'] ?? 0);
+        // El 'forma_pago' que manda la pantalla se ignora a propósito: el código
+        // que va al comprobante lo decide el servidor (ver resolverCodigoSriPago()).
+        $formaPago = $this->resolverCodigoSriPago(
+            $idEmpresa,
+            $idFormaPagoEmpresa,
+            $idCliente,
+            $empresaConfig,
+            (int) $puntoInfo['id_establecimiento']
+        );
+
         // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
         // final (FacturaVentaService::crear() / ReciboVentaService::crear()): el lock de
         // obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
@@ -291,8 +404,6 @@ class PosVentaService
         $secuencial = $sec['formateado'];
         $numeroDoc = $puntoInfo['cod_establecimiento'] . '-' . $puntoInfo['codigo_punto'] . '-' . $secuencial;
 
-        $formaPago = (string) ($data['forma_pago'] ?? '01');
-        $idFormaPagoEmpresa = (int) ($data['id_forma_pago_empresa'] ?? 0);
 
         // Dato informativo (no cambia el código SRI del pago) — mismo campo
         // y catálogo que ya usan Ingresos/Factura de Venta/Recibos de Venta
@@ -424,6 +535,9 @@ class PosVentaService
             'tipo_documento' => $tipoDocumento,
             'numero_documento' => $numeroDoc,
             'importe_total' => $importeTotal,
+            // Código SRI realmente emitido, para que quien llamó registre ESE y
+            // no el que había propuesto la pantalla (ver resolverCodigoSriPago).
+            'forma_pago' => $formaPago,
             'id_ingreso' => $idIngreso,
             'aviso_ingreso' => $avisoIngreso,
         ];
@@ -456,9 +570,16 @@ class PosVentaService
         string $numeroOperacion,
         string $fechaCobro
     ): ?int {
+        // Sin forma de cobro no hay dónde registrar el dinero. Se lanza en vez de
+        // devolver null en silencio: el llamador lo convierte en 'aviso_ingreso'
+        // y la pantalla lo muestra. Devolver null dejaba facturas cobradas con su
+        // Cuenta por Cobrar abierta sin que nadie se enterara — solo quedaba
+        // rastro en error_log (pasó con 001-101-000000130 y 000000131).
         if ($idFormaPagoEmpresa <= 0) {
-            error_log('[PosVentaService] Ingreso no generado para ' . $numeroDoc . ': no hay una forma de pago de la empresa asociada al cobro.');
-            return null;
+            throw new Exception(
+                'no hay una forma de pago seleccionada para el cobro ' .
+                '(configúrelas en Formas de Cobros y Pagos).'
+            );
         }
 
         $stCli = $this->db->prepare("SELECT nombre FROM clientes WHERE id = :id AND id_empresa = :id_empresa");

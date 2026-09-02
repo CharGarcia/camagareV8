@@ -110,6 +110,10 @@ class MesasController extends BaseModuloController
             'mesas'          => $this->comandaService->getTablero($idEmpresa),
             'empresaNombre'  => $empresa['nombre_comercial'] ?? $empresa['nombre'] ?? '',
             'estacionesKds'  => $estacionesKds,
+            // Sin estaciones activas el local no trabaja con preparación: el aviso
+            // de "por enviar a preparación" quedaría encendido para siempre, porque
+            // esas líneas nunca cambian de estado.
+            'usaPreparacion' => (new \App\Services\modulos\ConfiguracionRestauranteService())->usaPreparacion($idEmpresa),
             'rutaKds'        => self::RUTA_KDS,
         ]);
     }

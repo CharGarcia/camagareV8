@@ -2876,15 +2876,15 @@ $totalPages = $totalPagesOriginal;
                 <div class="center">No. ${esc(num)}</div>
                 <div class="center">Fecha: ${esc(fecha)}</div>
                 <hr class="sep">
-                <table class="t-datos"><colgroup><col style="width:16mm"><col></colgroup>
+                <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${esc(cab.cliente_nombre)}</td></tr>
                     <tr><td class="bold">RUC/CI:</td><td>${esc(cab.cliente_ruc)}</td></tr>
                     ${cab.cliente_direccion ? `<tr><td class="bold">Dir:</td><td>${esc(cab.cliente_direccion)}</td></tr>` : ''}
                 </table>
                 <hr class="sep">
-                <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
+                <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup><tbody>${lineas}</tbody></table>
                 <hr class="sep">
-                <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+                <table class="t-totales"><colgroup><col><col class="col-num"></colgroup>
                     <tr><td>Subtotal sin imp.</td><td class="num">$${fmt(subtotal)}</td></tr>
                     ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}

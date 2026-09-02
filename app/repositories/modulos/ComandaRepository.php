@@ -391,13 +391,23 @@ class ComandaRepository extends BaseRepository
         // prepara ni se sirve, y dejarla pendiente la haría figurar en el aviso
         // de ítems por entregar y bloquearía el pago desde el QR del cliente
         // (ComandaRules::validarLineaCobrableQr exige que todo esté entregado).
+        // Lo mismo pasa con el local que no trabaja con preparación (ninguna
+        // estación activa): sus líneas nacen entregadas, porque no hay ningún
+        // paso posterior que las mueva de estado.
         $estado = (string) ($d['estado_linea'] ?? 'pendiente');
+
+        // Una línea que nace entregada se sella con su fecha: si no, quedaría
+        // como entregada pero sin cuándo, y los reportes de tiempos la contarían
+        // como si nunca hubiera salido.
+        $colEntregado = $estado === 'entregado' ? ', entregado_at' : '';
+        $valEntregado = $estado === 'entregado' ? ', CURRENT_TIMESTAMP' : '';
+
         $sql = "INSERT INTO comanda_detalle (
                     id_empresa, id_comanda, id_producto, id_menu_item, descripcion, cantidad, precio_unitario,
-                    descuento, subtotal, observacion_item, id_estacion_impresion, lote, caducidad, nup, estado_linea, created_by
+                    descuento, subtotal, observacion_item, id_estacion_impresion, lote, caducidad, nup, estado_linea, created_by{$colEntregado}
                 ) VALUES (
                     :e, :ic, :prod, :menu, :desc, :cant, :pu,
-                    :dscto, :sub, :obs, :est, :lote, :cad, :nup, :estado, :cb
+                    :dscto, :sub, :obs, :est, :lote, :cad, :nup, :estado, :cb{$valEntregado}
                 ) RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -539,8 +549,15 @@ class ComandaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Marca como 'enviado' las líneas pendientes de la comanda (todas, o solo las indicadas). */
-    public function enviarLineasACocina(int $idComanda, int $idEmpresa, array $idsLineas = []): int
+    /**
+     * Marca como 'enviado' las líneas pendientes de la comanda (todas, o solo
+     * las indicadas). Devuelve las filas movidas —no un contador— porque la
+     * impresión de órdenes necesita saber QUÉ líneas y a qué estación fue cada
+     * una para armar un ticket por estación (ImpresionComandaService).
+     *
+     * @return array<int, array{id:int, id_estacion_impresion:?int}>
+     */
+    public function enviarLineasACocina(int $idComanda, int $idEmpresa, array $idsLineas = []): array
     {
         $params = [':ic' => $idComanda, ':e' => $idEmpresa];
         $filtroIds = '';
@@ -554,19 +571,20 @@ class ComandaRepository extends BaseRepository
             $filtroIds = " AND id IN (" . implode(',', $ph) . ")";
         }
         // Cada línea va a donde le corresponde: la que tiene estación pasa a
-        // 'enviado' y espera a cocina/barra; la que no tiene ("Preparar en:
-        // Ninguna") queda 'entregado' de una vez, porque no hay nada que preparar
-        // ni confirmación que esperar. Marcarla 'enviado' la dejaría colgada,
-        // sin poder entregarse ni pagarse desde el QR.
+        // 'enviado' y espera a cocina/barra; la que no tiene ninguna queda
+        // 'entregado' de una vez, porque no hay nada que preparar ni
+        // confirmación que esperar. Marcarla 'enviado' la dejaría colgada, sin
+        // poder entregarse ni pagarse desde el QR.
         $sql = "UPDATE comanda_detalle
                 SET estado_linea = CASE WHEN id_estacion_impresion IS NULL THEN 'entregado' ELSE 'enviado' END,
                     enviado_at = CURRENT_TIMESTAMP,
                     entregado_at = CASE WHEN id_estacion_impresion IS NULL THEN CURRENT_TIMESTAMP ELSE entregado_at END
                 WHERE id_comanda = :ic AND id_empresa = :e AND eliminado = false
-                  AND estado_linea = 'pendiente' $filtroIds";
+                  AND estado_linea = 'pendiente' $filtroIds
+                RETURNING id, id_estacion_impresion";
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->rowCount();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Transición de estado de una línea (KDS: preparando/listo; mesero: entregado). */

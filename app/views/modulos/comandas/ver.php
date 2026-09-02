@@ -116,10 +116,23 @@ $rutaAjax = $base . '/' . $rutaModulo;
             </div>
         </div>
         <div class="d-flex gap-2">
-            <?php if (!empty($perm['crear']) && ($comanda['estado'] ?? '') === 'abierta'): ?>
+            <?php // "Enviar a preparación" solo si hay algo que preparar: al menos un
+                  // ítem de la carta o una categoría enrutados a una estación. Si el
+                  // local entrega todo directo, ese botón no haría nada y no se pinta. ?>
+            <?php if (!empty($usaPreparacion) && !empty($perm['crear']) && ($comanda['estado'] ?? '') === 'abierta'): ?>
                 <button type="button" class="btn btn-sm btn-warning position-relative" id="cm-btn-enviar-cocina" disabled>
                     <i class="bi bi-send me-1"></i>Enviar a preparación
                     <span class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle d-none" id="cm-badge-pendientes">0</span>
+                </button>
+            <?php endif; ?>
+            <?php // El de imprimir NO depende de la preparación: donde se prepara es el
+                  // respaldo de la impresión automática (papel atascado, pantalla
+                  // apagada, estación en modo manual), y donde no, es la única forma de
+                  // sacar la orden — sale entera por la estación predeterminada. ?>
+            <?php if (!empty($hayImpresoras) && !empty($perm['crear']) && ($comanda['estado'] ?? '') === 'abierta'): ?>
+                <button type="button" class="btn btn-sm btn-outline-light" id="cm-btn-imprimir-orden"
+                        title="Imprimir la orden en la impresora de cocina/barra">
+                    <i class="bi bi-printer"></i>
                 </button>
             <?php endif; ?>
             <?php if (!empty($perm['eliminar']) && ($comanda['estado'] ?? '') === 'abierta'): ?>
@@ -1098,9 +1111,92 @@ window.addEventListener('pageshow', function (e) {
         });
     }
 
+    // ─── Imprimir la orden de cocina ─────────────────────────────────────────
+    // Dos caminos, y los decide el servidor según si el local trabaja con
+    // preparación (hay ítems enrutados a una estación):
+    //
+    //  · CON preparación → el servidor encola el ticket y lo saca la pantalla
+    //    del KDS de esa estación, que es la que tiene la impresora al lado.
+    //  · SIN preparación → no hay ninguna pantalla de cocina abierta que pueda
+    //    sacarlo, así que el servidor devuelve el ticket y lo imprime ESTE
+    //    navegador. La estación predeterminada aporta el formato (ancho y
+    //    copias); la impresora es la que tenga configurada este equipo.
+
+    /** Ticket de preparación: sin precios, letra grande, se lee de un vistazo. */
+    function imprimirOrdenAqui(t) {
+        const esAngosto = parseInt(t.ancho_papel, 10) === 58;
+        const filas = (t.lineas || []).map(l => `
+            <tr><td class="cant">${cantidad(l.cantidad)}</td>
+                <td class="desc">${escapeHtml(l.descripcion)}
+                    ${l.observacion_item ? `<div class="obs">▸ ${escapeHtml(l.observacion_item)}</div>` : ''}
+                </td></tr>`).join('');
+
+        const html = `<!DOCTYPE html><html lang="es"><head>
+            <meta charset="UTF-8">
+            <title>Orden ${escapeHtml(t.numero_comanda)}</title>
+            <?php require MVC_APP . "/views/partials/tirilla_estilos.php"; ?>
+            <style>
+                body { font-size: ${esAngosto ? 13 : 15}px; line-height: 1.25; }
+                .est { font-size: ${esAngosto ? 17 : 20}px; font-weight: bold; text-align: center; }
+                .mesa { font-size: ${esAngosto ? 20 : 24}px; font-weight: bold; text-align: center; margin: 2px 0; }
+                .meta { font-size: ${esAngosto ? 11 : 12}px; text-align: center; }
+                table.items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 4px; }
+                table.items td { padding: 4px 0; vertical-align: top; border-bottom: 1px dashed #000; }
+                td.cant { width: 20%; font-size: ${esAngosto ? 18 : 21}px; font-weight: bold; }
+                td.desc { font-size: ${esAngosto ? 15 : 17}px; font-weight: bold; }
+                .obs { font-size: ${esAngosto ? 13 : 14}px; font-weight: normal; margin-top: 2px; }
+            </style>
+        </head><body>
+            ${t.estacion_nombre ? `<div class="est">${escapeHtml(t.estacion_nombre)}</div>` : ''}
+            ${EMPRESA_INFO.nombre_comercial || EMPRESA_INFO.nombre ? `<div class="meta">${escapeHtml(EMPRESA_INFO.nombre_comercial || EMPRESA_INFO.nombre)}</div>` : ''}
+            <hr class="sep">
+            <div class="mesa">${escapeHtml(t.mesa_nombre)}</div>
+            <div class="meta">${escapeHtml(t.numero_comanda)} &middot; ${escapeHtml(new Date().toLocaleString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }))}</div>
+            ${t.mesero_nombre ? `<div class="meta">Mesero: ${escapeHtml(t.mesero_nombre)}</div>` : ''}
+            <table class="items"><colgroup><col style="width:20%"><col></colgroup><tbody>${filas}</tbody></table>
+            ${t.observaciones ? `<hr class="sep"><div>${escapeHtml(t.observaciones)}</div>` : ''}
+            <br><br>
+        </body></html>`;
+
+        const copias = Math.min(5, Math.max(1, parseInt(t.copias, 10) || 1));
+        for (let i = 0; i < copias; i++) {
+            const win = window.open('', '_blank', 'width=380,height=600,scrollbars=yes');
+            if (!win) { swalWarning('Permite ventanas emergentes para imprimir la orden.'); return; }
+            win.document.write(html + '<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>');
+            win.document.close();
+        }
+    }
+
+    const $btnImprimirOrden = document.getElementById('cm-btn-imprimir-orden');
+    if ($btnImprimirOrden) {
+        $btnImprimirOrden.addEventListener('click', async () => {
+            const fd = new FormData();
+            fd.append('id_comanda', ID_COMANDA);
+            $btnImprimirOrden.disabled = true;
+            try {
+                const r = await fetch(AJAX + '/imprimirOrdenAjax', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (!d.ok) { swalError(d.error || 'No se pudo imprimir la orden.'); return; }
+
+                if (d.ticket) { imprimirOrdenAqui(d.ticket); return; }
+                swalToast('success', d.msg || 'Orden enviada a la impresora.');
+            } catch (e) {
+                swalError('Error de conexión.');
+            } finally {
+                $btnImprimirOrden.disabled = false;
+            }
+        });
+    }
+
     function renderGrid(rows) {
         if (!rows.length) {
-            $grid.innerHTML = '<div class="text-center py-4 cm-empty" style="grid-column: 1 / -1;"><i class="bi bi-box-seam fs-3 d-block mb-2"></i>Sin resultados.</div>';
+            // El vacío se explica distinto según el filtro: "Sin resultados" a
+            // secas hacía parecer que la empresa no tiene nada cargado cuando lo
+            // que pasaba era que la carta está vacía y el stock sí tiene ítems.
+            const msg = filtroOrigen === 'menu'
+                ? '<i class="bi bi-book fs-3 d-block mb-2"></i>No hay ítems en la carta.<div class="small mt-1">Cárgalos en <b>Menú</b>, o cambia el filtro a <b>Stock general</b>.</div>'
+                : '<i class="bi bi-box-seam fs-3 d-block mb-2"></i>Sin resultados.';
+            $grid.innerHTML = '<div class="text-center py-4 cm-empty" style="grid-column: 1 / -1;">' + msg + '</div>';
             return;
         }
         $grid.innerHTML = '';
@@ -1149,6 +1245,18 @@ window.addEventListener('pageshow', function (e) {
             const r = await fetch(AJAX + '/getProductosAjax?q=' + encodeURIComponent(q || '') + '&id_bodega=' + (getIdBodega() || ''));
             const d = await r.json();
             catalogoCompleto = d.ok ? d.data : [];
+
+            // El filtro arranca en "Menú" porque el salón trabaja con la carta,
+            // pero un restaurante que todavía no la cargó veía el catálogo vacío
+            // aunque tuviera productos: en ese caso se cae a "Todos" y se marca
+            // el radio, para que el mesero vea con qué trabajar. Con carta
+            // cargada no cambia nada.
+            if (filtroOrigen === 'menu' && catalogoCompleto.length && !catalogoCompleto.some(p => p.origen === 'menu')) {
+                filtroOrigen = 'todos';
+                const radioTodos = document.getElementById('cm-origen-todos');
+                if (radioTodos) radioTodos.checked = true;
+            }
+
             aplicarFiltroOrigen();
         } catch (e) { $grid.innerHTML = '<div class="text-center py-4 text-danger" style="grid-column: 1 / -1;">Error al buscar.</div>'; }
     }
@@ -1959,9 +2067,9 @@ window.addEventListener('pageshow', function (e) {
             <div class="center bold" style="font-size:12px;">CUENTA — MESA <?= htmlspecialchars($comanda['mesa_nombre'] ?? '') ?></div>
             <div class="center">Fecha: ${escapeHtml(new Date().toLocaleDateString('es-EC'))}</div>
             <hr class="sep">
-            <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
+            <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup><tbody>${lineas}</tbody></table>
             <hr class="sep">
-            <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+            <table class="t-totales"><colgroup><col><col class="col-num"></colgroup>
                 <tr><td>Subtotal</td><td class="num">$${fmt(subtotal)}</td></tr>
                 ${ivaLineas}
                 ${servicio > 0 ? `<tr><td>Servicio ${porcentajeServicio}%</td><td class="num">$${fmt(servicio)}</td></tr>` : ''}
@@ -2062,15 +2170,15 @@ window.addEventListener('pageshow', function (e) {
                 <div class="center">No. ${escapeHtml(num)}</div>
                 <div class="center">Fecha: ${escapeHtml(fecha)}</div>
                 <hr class="sep">
-                <table class="t-datos"><colgroup><col style="width:16mm"><col></colgroup>
+                <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${escapeHtml(cab.cliente_nombre)}</td></tr>
                     <tr><td class="bold">RUC/CI:</td><td>${escapeHtml(cab.cliente_ruc)}</td></tr>
                     ${cab.cliente_direccion ? `<tr><td class="bold">Dir:</td><td>${escapeHtml(cab.cliente_direccion)}</td></tr>` : ''}
                 </table>
                 <hr class="sep">
-                <table class="t-detalle"><colgroup><col><col style="width:19mm"></colgroup><tbody>${lineas}</tbody></table>
+                <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup><tbody>${lineas}</tbody></table>
                 <hr class="sep">
-                <table class="t-totales"><colgroup><col><col style="width:22mm"></colgroup>
+                <table class="t-totales"><colgroup><col><col class="col-num"></colgroup>
                     <tr><td>Subtotal sin imp.</td><td class="num">$${fmt(subtotal)}</td></tr>
                     ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}

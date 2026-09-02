@@ -41,6 +41,65 @@ class FormaPagoSri extends BaseModel
     }
 
     /**
+     * Código SRI (01, 16, 19, 20…) de una forma del catálogo, por su id.
+     *
+     * Lo necesitan los flujos que guardan un ID —la ficha del cliente
+     * (`clientes.id_forma_pago_sri`) y la configuración del establecimiento
+     * (`empresa_establecimiento.id_forma_pago_sri_def`)— pero emiten el
+     * comprobante con el CÓDIGO. No filtra por `status`: si la forma quedó
+     * inactiva después de haberse configurado, se usa igual antes que dejar el
+     * comprobante sin forma de pago (mismo criterio que
+     * CargaFacturasValidacionService::resolverFormaPago()).
+     */
+    public function getCodigoPorId(int $id): ?string
+    {
+        $id = (int) $id;
+        if ($id <= 0) {
+            return null;
+        }
+        $col = $this->columnaId();
+        if ($col === null) {
+            return null;
+        }
+        try {
+            $rows = $this->query("SELECT codigo FROM formas_pago_sri WHERE {$col} = {$id}");
+        } catch (\Throwable $e) {
+            return null;
+        }
+        $codigo = trim((string) ($rows[0]['codigo'] ?? ''));
+        return $codigo !== '' ? $codigo : null;
+    }
+
+    /**
+     * Nombre real de la PK del catálogo ('id' o 'id_forma_pago', según de qué
+     * versión venga la base). Se resuelve consultando el esquema, NO probando
+     * un SELECT y capturando el error: en PostgreSQL una consulta fallida
+     * aborta la transacción en curso (25P02) y todo lo que venga después del
+     * catch revienta. getCodigoPorId() se invoca desde el cobro del POS, que
+     * puede correr dentro de la transacción del llamador.
+     */
+    private function columnaId(): ?string
+    {
+        static $col = false;
+        if ($col !== false) {
+            return $col;
+        }
+        try {
+            $rows = $this->query(
+                "SELECT column_name FROM information_schema.columns
+                  WHERE table_name = 'formas_pago_sri'
+                    AND column_name IN ('id', 'id_forma_pago')
+                  ORDER BY column_name = 'id' DESC
+                  LIMIT 1"
+            );
+            $col = $rows[0]['column_name'] ?? null;
+        } catch (\Throwable $e) {
+            $col = null;
+        }
+        return $col;
+    }
+
+    /**
      * Verifica si ya existe una forma de pago con el código dado.
      */
     public function existeCodigo(string $codigo, ?int $excluirId = null): bool

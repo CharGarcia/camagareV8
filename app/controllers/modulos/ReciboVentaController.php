@@ -85,6 +85,10 @@ class ReciboVentaController extends BaseModuloController
         $total = $result['total'];
 
         $this->viewWithLayout('layouts.main', 'modulos/recibos_venta/index', [
+            // Ancho del papel de la tirilla (Configuración Restaurante): lo lee
+            // el partial de estilos para ajustar el tamaño de letra.
+            'anchoTirilla' => (new \App\Services\modulos\ConfiguracionRestauranteService())
+                ->getAnchoTirilla((int) $_SESSION['id_empresa']),
             'titulo'      => 'Recibos de Venta',
             'perm'        => $perm,
             'rows'        => $result['rows'],

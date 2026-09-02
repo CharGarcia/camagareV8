@@ -102,6 +102,60 @@ abstract class BaseRepository
     /**
      * Expone la conexión PDO para uso directo en Services cuando sea necesario.
      */
+    /**
+     * ¿Existe esta tabla en la base? Sirve para que una función nueva no rompa
+     * el módulo cuando el código ya se desplegó pero su SQL todavía no (en este
+     * proyecto el SQL se aplica a mano, así que esa ventana existe de verdad).
+     *
+     * Se resuelve con to_regclass —no lanza si la tabla falta, devuelve NULL—,
+     * así que es seguro llamarlo DENTRO de una transacción: una consulta que
+     * fallara la abortaría entera (25P02) y arrastraría al resto del flujo.
+     * El resultado se cachea por proceso: no tiene sentido preguntarlo en cada
+     * poll.
+     */
+    protected function tablaExiste(string $tabla): bool
+    {
+        static $cache = [];
+        if (isset($cache[$tabla])) {
+            return $cache[$tabla];
+        }
+
+        try {
+            $st = $this->db->prepare("SELECT to_regclass(:t) IS NOT NULL");
+            $st->execute([':t' => 'public.' . $tabla]);
+            $cache[$tabla] = (bool) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            $cache[$tabla] = false;
+        }
+        return $cache[$tabla];
+    }
+
+    /**
+     * ¿Existe esta columna? Mismo propósito y mismas garantías que
+     * tablaExiste(): sirve cuando el código nuevo se despliega antes que su SQL,
+     * consulta el catálogo (no lanza si falta) y cachea por proceso.
+     */
+    protected function columnaExiste(string $tabla, string $columna): bool
+    {
+        static $cache = [];
+        $clave = $tabla . '.' . $columna;
+        if (isset($cache[$clave])) {
+            return $cache[$clave];
+        }
+
+        try {
+            $st = $this->db->prepare(
+                "SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = :t AND column_name = :c"
+            );
+            $st->execute([':t' => $tabla, ':c' => $columna]);
+            $cache[$clave] = (bool) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            $cache[$clave] = false;
+        }
+        return $cache[$clave];
+    }
+
     public function getDb(): \PDO
     {
         return $this->db;

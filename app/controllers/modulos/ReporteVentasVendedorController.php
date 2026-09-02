@@ -161,8 +161,8 @@ class ReporteVentasVendedorController extends BaseModuloController
         return match ($agruparPor) {
             'PRODUCTO'  => 10,
             'MARCA', 'CATEGORIA' => 6,
-            'NINGUNO'   => 9,
-            default     => 6, // VENDEDOR, MES
+            'NINGUNO'   => 10,
+            default     => 7, // VENDEDOR, MES
         };
     }
 
@@ -189,6 +189,10 @@ class ReporteVentasVendedorController extends BaseModuloController
         $baseIva = number_format((float) ($r['base_iva'] ?? 0), 2);
         $iva     = number_format((float) ($r['valor_iva'] ?? 0), 2);
         $total   = number_format((float) ($r['total'] ?? 0), 2);
+        $saldo   = number_format((float) ($r['saldo'] ?? 0), 2);
+        // Saldo pendiente del documento (o suma de saldos del grupo): rojo si queda
+        // algo por cobrar, verde si ya está cancelado.
+        $saldoCls = (float) ($r['saldo'] ?? 0) > 0.01 ? 'text-danger' : 'text-success';
 
         if ($agruparPor === 'PRODUCTO') {
             $tarifa = (float) ($r['tarifa_iva'] ?? 0);
@@ -223,6 +227,7 @@ class ReporteVentasVendedorController extends BaseModuloController
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $html .= "<td class='text-end fw-bold {$saldoCls}'>$saldo</td>";
         } elseif ($agruparPor === 'NINGUNO') {
             $estado = strtolower($r['estado'] ?? '');
             $badgeColor = match ($estado) {
@@ -240,6 +245,7 @@ class ReporteVentasVendedorController extends BaseModuloController
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $html .= "<td class='text-end fw-bold {$saldoCls}'>$saldo</td>";
         } else {
             // VENDEDOR (vista principal)
             $html .= "<td class='fw-bold'>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
@@ -248,6 +254,7 @@ class ReporteVentasVendedorController extends BaseModuloController
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $html .= "<td class='text-end fw-bold {$saldoCls}'>$saldo</td>";
         }
 
         $html .= '</tr>';
@@ -285,6 +292,16 @@ class ReporteVentasVendedorController extends BaseModuloController
     }
 
     /**
+     * ¿La agrupación trabaja a nivel de documento y por lo tanto lleva columna
+     * "Saldo"? Producto/Marca/Categoría agrupan por línea de detalle, donde el
+     * saldo (que es de la factura completa) no aplica.
+     */
+    private static function agrupacionConSaldo(string $agruparPor): bool
+    {
+        return !in_array($agruparPor, ['PRODUCTO', 'MARCA', 'CATEGORIA'], true);
+    }
+
+    /**
      * Encabezados de columnas y "row mapper" para Excel/PDF, según la agrupación.
      * @return array{headers: string[], rows: array<int, array>}
      */
@@ -310,23 +327,26 @@ class ReporteVentasVendedorController extends BaseModuloController
                 (float) $r['base_0'], (float) $r['base_iva'], (float) $r['valor_iva'], (float) $r['total'],
             ], $rows);
         } elseif ($agruparPor === 'MES') {
-            $headers = ['Mes', 'Nro Documentos', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+            $headers = ['Mes', 'Nro Documentos', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Saldo'];
             $data = array_map(fn($r) => [
                 self::formatearMes($r['mes'] ?? ''), (int) $r['cantidad_documentos'],
                 (float) $r['base_0'], (float) $r['base_iva'], (float) $r['valor_iva'], (float) $r['total'],
+                (float) ($r['saldo'] ?? 0),
             ], $rows);
         } elseif ($agruparPor === 'NINGUNO') {
-            $headers = ['Fecha', 'Documento', 'Cliente', 'RUC/Cédula', 'Estado', 'Vendedor', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+            $headers = ['Fecha', 'Documento', 'Cliente', 'RUC/Cédula', 'Estado', 'Vendedor', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Saldo'];
             $data = array_map(fn($r) => [
                 date('d/m/Y', strtotime($r['fecha_emision'])), $r['numero_factura'], $r['cliente_nombre'], $r['cliente_ruc'],
                 strtoupper($r['estado'] ?? ''), $r['vendedor_nombre'] ?? '',
                 (float) ($r['base_0'] ?? 0), (float) ($r['base_iva'] ?? 0), (float) ($r['valor_iva'] ?? 0), (float) ($r['total'] ?? 0),
+                (float) ($r['saldo'] ?? 0),
             ], $rows);
         } else {
-            $headers = ['Vendedor', 'Nro Documentos', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+            $headers = ['Vendedor', 'Nro Documentos', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Saldo'];
             $data = array_map(fn($r) => [
                 $r['vendedor_nombre'], (int) $r['cantidad_documentos'],
                 (float) $r['base_0'], (float) $r['base_iva'], (float) $r['valor_iva'], (float) $r['total'],
+                (float) ($r['saldo'] ?? 0),
             ], $rows);
         }
 
@@ -350,10 +370,11 @@ class ReporteVentasVendedorController extends BaseModuloController
             $spreadsheet = $reportService->construirSpreadsheet($export['headers'], $export['rows'], 'Ventas por Vendedor', $nombreEmpresa);
 
             // Agrupando por Vendedor se agrega una segunda hoja con el detalle
-            // documento por documento (factura, subtotal, NC, total) de cada asesor.
+            // documento por documento (factura, subtotal, NC, total y saldo pendiente)
+            // de cada asesor.
             if (($filtros['agrupar_por'] ?? 'VENDEDOR') === 'VENDEDOR') {
                 $detalle = $this->repository->getDetalleDocumentosVendedor($idEmpresa, $filtros);
-                $headersDetalle = ['Vendedor', 'Fecha', 'Factura', 'Cliente', 'Subtotal', 'NC', 'Total'];
+                $headersDetalle = ['Vendedor', 'Fecha', 'Factura', 'Cliente', 'Subtotal', 'NC', 'Total', 'Saldo'];
                 $filasDetalle = array_map(fn($d) => [
                     $d['vendedor_nombre'],
                     date('d/m/Y', strtotime($d['fecha_emision'])),
@@ -362,6 +383,7 @@ class ReporteVentasVendedorController extends BaseModuloController
                     (float) $d['subtotal'],
                     (float) $d['nc'],
                     (float) $d['total'],
+                    (float) ($d['saldo'] ?? 0),
                 ], $detalle);
                 $reportService->agregarHoja($spreadsheet, $headersDetalle, $filasDetalle, 'Detalle Documentos');
             }
@@ -416,12 +438,16 @@ class ReporteVentasVendedorController extends BaseModuloController
                 <?php endforeach; ?>
             </tbody>
             <tfoot>
+                <?php $conSaldo = self::agrupacionConSaldo($agruparPor); ?>
                 <tr style="background-color: #e9ecef;">
-                    <th colspan="<?= max(count($export['headers']) - 4, 1) ?>" class="text-center">TOTALES GENERALES:</th>
+                    <th colspan="<?= max(count($export['headers']) - ($conSaldo ? 5 : 4), 1) ?>" class="text-center">TOTALES GENERALES:</th>
                     <th class="text-end"><?= number_format((float) $totales['total_base_0'], 2) ?></th>
                     <th class="text-end"><?= number_format((float) $totales['total_base_iva'], 2) ?></th>
                     <th class="text-end"><?= number_format((float) $totales['total_iva'], 2) ?></th>
                     <th class="text-end" style="font-weight:bold;color:#198754;">$<?= number_format((float) $totales['gran_total'], 2) ?></th>
+                    <?php if ($conSaldo): ?>
+                        <th class="text-end" style="font-weight:bold;color:#dc3545;">$<?= number_format((float) ($totales['total_saldo'] ?? 0), 2) ?></th>
+                    <?php endif; ?>
                 </tr>
             </tfoot>
         </table>

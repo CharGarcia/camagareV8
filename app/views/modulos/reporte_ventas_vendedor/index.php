@@ -194,6 +194,13 @@
                         <div class="cmg-control-card__stat-label">Ventas Netas (Gran Total)</div>
                     </div>
                 </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-wallet2 bg-danger bg-opacity-10 text-danger"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-danger">$<span id="rvv-stat-saldo">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Saldo Pendiente por Cobrar</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -237,7 +244,7 @@
 <!-- ═══════════════════════════════════════════════════════════
      OFFCANVAS: Detalle de documentos por vendedor (drill-down)
 ═══════════════════════════════════════════════════════════ -->
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasDetalleVendedor" aria-labelledby="offcanvasDetalleVendedorLabel" style="width: 480px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasDetalleVendedor" aria-labelledby="offcanvasDetalleVendedorLabel" style="width: 580px;">
     <div class="offcanvas-header bg-light border-bottom py-2 px-3">
         <div>
             <h6 class="offcanvas-title fw-bold text-primary mb-0" id="offcanvasDetalleVendedorLabel">
@@ -262,7 +269,8 @@
                             <th>Cliente</th>
                             <th class="text-end">Subtotal</th>
                             <th class="text-end">NC</th>
-                            <th class="text-end pe-3">Total</th>
+                            <th class="text-end">Total</th>
+                            <th class="text-end pe-3">Saldo</th>
                         </tr>
                     </thead>
                     <tbody id="rvv-dv-tbody"></tbody>
@@ -271,6 +279,10 @@
             <div class="border-top bg-light py-2 px-3 d-flex justify-content-between align-items-center">
                 <span class="small fw-bold text-muted text-uppercase" style="font-size: 0.65rem;">Total Neto</span>
                 <span class="fw-bold text-success fs-6">$<span id="rvv-dv-total">0.00</span></span>
+            </div>
+            <div class="border-top bg-light py-2 px-3 d-flex justify-content-between align-items-center">
+                <span class="small fw-bold text-muted text-uppercase" style="font-size: 0.65rem;">Saldo Pendiente</span>
+                <span class="fw-bold text-danger fs-6">$<span id="rvv-dv-saldo">0.00</span></span>
             </div>
         </div>
     </div>

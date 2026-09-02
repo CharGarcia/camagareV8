@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir
-version: 1.1
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, observacion, observaciones, detalle de novedad, motivo del descuento
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -50,6 +50,18 @@ modal tiene un botón rojo para el **PDF** del rol individual y, junto a él, un
 verde para el **Excel**: una tabla Concepto/Ingreso/Egreso con los mismos
 rubros del PDF, más el neto a recibir.
 
+En el desglose de ingresos y egresos, cuando el rubro proviene de una novedad
+(hora extra, anticipo, cuota de préstamo, falta, etc.) se muestra debajo del
+concepto la **observación** que se escribió al registrar esa novedad, en letra
+pequeña. Así se ve el motivo sin salir del rol. Si la novedad se guardó sin
+observación, no aparece nada adicional. Lo mismo se imprime en el **PDF** del
+rol individual del empleado.
+
+En los **Excel** (el del rol completo y el de la ficha individual) la observación
+se agrega dentro de la misma celda del concepto, separada por un guion:
+`Horas extra 50% (6h) — cobertura del feriado`. Aplica tanto a la hoja principal
+como a las hojas *Novedades* y *Otros Detalles*.
+
 ## Errores frecuentes
 
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
@@ -61,5 +73,6 @@ rubros del PDF, más el neto a recibir.
 
 ## Historial de cambios
 
+- **1.2** — El desglose de ingresos/egresos del empleado (modal, PDF individual y Excel) muestra la observación de la novedad que originó cada rubro.
 - **1.1** — Botón para exportar a Excel la ficha individual del empleado, junto al de PDF.
 - **1.0** — Versión inicial.

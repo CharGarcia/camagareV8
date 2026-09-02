@@ -186,16 +186,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <div class="modal-body pb-0">
                     <input type="hidden" name="id" id="menu_id" value="">
 
-                    <ul class="nav nav-tabs mb-3" role="tablist">
-                        <li class="nav-item">
-                            <button class="nav-link active" id="tab-menu-general-btn" data-bs-toggle="tab" data-bs-target="#tab-menu-general" type="button">General</button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" id="tab-menu-estaciones-btn" data-bs-toggle="tab" data-bs-target="#tab-menu-estaciones" type="button" onclick="cargarListaEstaciones()">
-                                <i class="bi bi-printer me-1"></i>Estaciones
-                            </button>
-                        </li>
-                    </ul>
 
                     <div class="tab-content">
                     <div class="tab-pane fade show active" id="tab-menu-general">
@@ -288,33 +278,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <select class="form-select form-select-sm" name="id_estacion_impresion" id="menu_id_estacion">
                                 <option value="">Ninguna</option>
                             </select>
-                            <div class="form-text mt-0" style="font-size:0.65rem;">Cocina o barra donde se prepara el plato. Con "Ninguna" no pasa por preparación: se entrega directo. Las estaciones se crean en la pestaña "Estaciones".</div>
+                            <div class="form-text mt-0" style="font-size:0.65rem;">Cocina o barra donde se prepara el plato. Con "Ninguna" no pasa por preparación: se entrega directo. Las estaciones se crean en <b>Configuración Restaurante</b>.</div>
                         </div>
                     </div>
                     </div>
 
-                    <div class="tab-pane fade" id="tab-menu-estaciones">
-                        <div class="row g-2 align-items-end mb-3">
-                            <div class="col-5">
-                                <label class="form-label small fw-bold">Nombre</label>
-                                <input type="text" class="form-control form-control-sm" id="est_nombre" maxlength="60" placeholder="Ej. Barra 1, Cocina Caliente...">
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small fw-bold">Tipo</label>
-                                <select class="form-select form-select-sm" id="est_tipo">
-                                    <option value="cocina">Cocina</option>
-                                    <option value="barra">Barra</option>
-                                    <option value="otro">Otro</option>
-                                </select>
-                            </div>
-                            <div class="col-3">
-                                <button type="button" class="btn btn-primary btn-sm w-100" id="btnAgregarEstacion"><i class="bi bi-plus-lg"></i> Agregar</button>
-                            </div>
-                        </div>
-                        <div class="form-text mt-0 mb-2" style="font-size:0.65rem;">"Tipo" solo define el ícono/color en el tablero — puedes crear tantas estaciones de cada tipo como necesites (ej. 5 barras, 3 cocinas).</div>
-                        <input type="hidden" id="est_id_editando" value="">
-                        <div id="est_lista" class="list-group" style="max-height:220px; overflow-y:auto;"></div>
-                    </div>
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between bg-light mt-3">
@@ -437,87 +405,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
-    // ─── Pestaña "Estaciones" (catálogo compartido: Productos + Menú + KDS) ───
-
-    const TIPO_ESTACION_LABEL = { cocina: ['Cocina', 'warning'], barra: ['Barra', 'info'], otro: ['Otro', 'secondary'] };
-
-    window.cargarListaEstaciones = async function () {
-        const cont = document.getElementById('est_lista');
-        cont.innerHTML = '<div class="text-center text-muted small py-3"><span class="spinner-border spinner-border-sm"></span></div>';
-        try {
-            const r = await fetch(`${urlBase}/getEstacionesAjax`);
-            const d = await r.json();
-            const rows = d.ok ? (d.data || []) : [];
-            if (!rows.length) {
-                cont.innerHTML = '<div class="text-center text-muted small py-3">Aún no hay estaciones. Crea, por ejemplo, "Cocina" y "Barra".</div>';
-                return;
-            }
-            cont.innerHTML = rows.map(e => {
-                const [lbl, color] = TIPO_ESTACION_LABEL[e.tipo] || TIPO_ESTACION_LABEL.otro;
-                return `<div class="list-group-item d-flex justify-content-between align-items-center py-2">
-                            <div>
-                                <span class="fw-medium">${escapeHtmlMcat(e.nombre)}</span>
-                                <span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25 ms-2">${lbl}</span>
-                            </div>
-                            <div class="d-flex gap-1">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="editarEstacion(${e.id}, '${escapeHtmlMcat(e.nombre)}', '${e.tipo}')"><i class="bi bi-pencil"></i></button>
-                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarEstacion(${e.id})"><i class="bi bi-trash"></i></button>
-                            </div>
-                        </div>`;
-            }).join('');
-        } catch (e) {
-            cont.innerHTML = '<div class="text-center text-danger small py-3">Error al cargar.</div>';
-        }
-    };
-
-    window.editarEstacion = function (id, nombre, tipo) {
-        document.getElementById('est_id_editando').value = id;
-        document.getElementById('est_nombre').value = nombre;
-        document.getElementById('est_tipo').value = tipo;
-        document.getElementById('btnAgregarEstacion').innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
-    };
-
-    function resetFormEstacion() {
-        document.getElementById('est_id_editando').value = '';
-        document.getElementById('est_nombre').value = '';
-        document.getElementById('est_tipo').value = 'cocina';
-        document.getElementById('btnAgregarEstacion').innerHTML = '<i class="bi bi-plus-lg"></i> Agregar';
-    }
-
-    document.getElementById('btnAgregarEstacion').addEventListener('click', async () => {
-        const nombre = document.getElementById('est_nombre').value.trim();
-        if (!nombre) { swalErrorCat('Ingresa un nombre para la estación.'); return; }
-        const id = document.getElementById('est_id_editando').value;
-        const fd = new FormData();
-        fd.append('nombre', nombre);
-        fd.append('tipo', document.getElementById('est_tipo').value);
-        if (id) fd.append('id', id);
-
-        try {
-            const r = await fetch(`${urlBase}/${id ? 'actualizarEstacionAjax' : 'crearEstacionAjax'}`, { method: 'POST', body: fd });
-            const d = await r.json();
-            if (!d.ok) { swalErrorCat(d.error || 'No se pudo guardar la estación.'); return; }
-            resetFormEstacion();
-            await Promise.all([cargarListaEstaciones(), cargarEstacionesEnSelect()]);
-        } catch (e) { swalErrorCat('Error de conexión.'); }
-    });
-
-    window.eliminarEstacion = async function (id) {
-        const { isConfirmed } = await Swal.fire({
-            title: '¿Eliminar esta estación?', icon: 'warning', showCancelButton: true,
-            confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545',
-        });
-        if (!isConfirmed) return;
-        const fd = new FormData();
-        fd.append('id', id);
-        try {
-            const r = await fetch(`${urlBase}/eliminarEstacionAjax`, { method: 'POST', body: fd });
-            const d = await r.json();
-            if (!d.ok) { swalErrorCat(d.error || 'No se pudo eliminar.'); return; }
-            await Promise.all([cargarListaEstaciones(), cargarEstacionesEnSelect()]);
-        } catch (e) { swalErrorCat('Error de conexión.'); }
-    };
-
     function getModal() {
         if (!modalInst && typeof bootstrap !== 'undefined') {
             modalInst = new bootstrap.Modal(document.getElementById('modalMenu'));
@@ -547,18 +434,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         setPreciosEditables(true);
     }
 
-    function volverATabGeneral() {
-        resetFormEstacion();
-        if (typeof bootstrap !== 'undefined') {
-            const tabEl = document.getElementById('tab-menu-general-btn');
-            (bootstrap.Tab.getInstance(tabEl) || new bootstrap.Tab(tabEl)).show();
-        }
-    }
-
     window.abrirModalMenuCrear = function () {
         form.reset();
         resetBotonesModal();
-        volverATabGeneral();
         document.getElementById('menu_id').value = '';
         document.getElementById('menu_imagen').value = '';
         document.getElementById('menuImagePreview').innerHTML = '<i class="bi bi-image text-muted" style="font-size:2.5rem;opacity:0.25"></i>';
@@ -578,7 +456,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const d = JSON.parse(row.dataset.row);
         form.reset();
         resetBotonesModal();
-        volverATabGeneral();
         document.getElementById('menu_id').value = d.id;
         document.getElementById('menu_nombre').value = d.nombre || '';
         document.getElementById('menu_descripcion').value = d.descripcion || '';

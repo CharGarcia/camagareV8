@@ -133,6 +133,10 @@ class FacturaVentaController extends BaseModuloController
         }
 
         $this->viewWithLayout('layouts.main', 'modulos/factura_venta/index', [
+            // Ancho del papel de la tirilla (Configuración Restaurante): lo lee
+            // el partial de estilos para ajustar el tamaño de letra.
+            'anchoTirilla' => (new \App\Services\modulos\ConfiguracionRestauranteService())
+                ->getAnchoTirilla((int) $_SESSION['id_empresa']),
             'titulo'      => 'Facturas de Venta',
             'perm'        => $perm,
             'permNC'      => $permNC,
@@ -1541,13 +1545,24 @@ class FacturaVentaController extends BaseModuloController
             }
 
             $headers = ['Nº Factura', 'Fecha', 'Cliente', 'Identificación', 'Subtotal', 'Descuento',
-                        'IVA', 'ICE', 'Propina', 'Total', 'Vendedor', 'Usuario', 'Observaciones',
+                        'IVA', 'ICE', 'Propina', 'Total', 'Saldo', 'Vendedor', 'Usuario', 'Observaciones',
                         'Correo', 'Pago', 'Estado'];
 
             $exportData = [];
             foreach ($rows as $r) {
                 $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
                 $iva = max(0, (float) ($r['importe_total'] ?? 0) - (float) ($r['total_sin_impuestos'] ?? 0) + (float) ($r['total_descuento'] ?? 0) - (float) ($r['total_ice'] ?? 0) - (float) ($r['propina'] ?? 0));
+
+                // Mismo cálculo que la columna "Saldo" del listado principal: anulada
+                // siempre muestra 0 (no tiene saldo pendiente que cobrar).
+                $importeTotal = (float) ($r['importe_total'] ?? 0);
+                $cobrado      = (float) ($r['total_cobrado'] ?? 0);
+                $nc           = (float) ($r['total_nc'] ?? 0);
+                $retencion    = (float) ($r['total_retencion'] ?? 0);
+                $saldo        = ((string) ($r['estado'] ?? '')) === 'anulado'
+                    ? 0.0
+                    : max(0, $importeTotal - $cobrado - $nc - $retencion);
+
                 $exportData[] = [
                     $numero,
                     !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-',
@@ -1558,7 +1573,8 @@ class FacturaVentaController extends BaseModuloController
                     number_format($iva, 2, '.', ''),
                     number_format((float) ($r['total_ice'] ?? 0), 2, '.', ''),
                     number_format((float) ($r['propina'] ?? 0), 2, '.', ''),
-                    number_format((float) ($r['importe_total'] ?? 0), 2, '.', ''),
+                    number_format($importeTotal, 2, '.', ''),
+                    number_format($saldo, 2, '.', ''),
                     (string) ($r['vendedor_nombre'] ?? '-'),
                     (string) ($r['usuario_nombre'] ?? '-'),
                     (string) ($r['observaciones'] ?? ''),

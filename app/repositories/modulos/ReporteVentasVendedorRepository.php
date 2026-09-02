@@ -43,6 +43,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
                                         AND CONCAT(vorig.establecimiento,'-',vorig.punto_emision,'-',vorig.secuencial) = {alias}.num_doc_modificado
                                      LEFT JOIN vendedores vend ON vend.id = vorig.id_vendedor",
                 'vendedor_col'  => 'vorig.id_vendedor',
+                'es_factura'    => false,
             ];
         }
 
@@ -56,6 +57,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
             'vendedor'      => true,
             'vendedor_join' => "LEFT JOIN vendedores vend ON vend.id = {alias}.id_vendedor",
             'vendedor_col'  => '{alias}.id_vendedor',
+            'es_factura'    => true,
         ];
     }
 
@@ -131,140 +133,51 @@ class ReporteVentasVendedorRepository extends BaseRepository
         return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [(int)date('Y')];
     }
 
+    /* ═══════════════════════════════════════════════════════════════════
+       CTEs base del reporte
+       ───────────────────────────────────────────────────────────────────
+       Toda consulta que trabaje a nivel de DOCUMENTO arranca por la CTE
+       "docs": los documentos que ya pasaron TODOS los filtros del reporte
+       (empresa, ambiente, estado, fechas, vendedor, producto/marca/categoría).
+       El resto de CTEs (bases e impuestos, cobros, retenciones, NC, ND) se
+       unen CONTRA docs, así solo agregan el detalle del período consultado.
+
+       Antes, la CTE de bases agregaba el detalle de TODOS los documentos de
+       la empresa (todo el histórico) y recién después se descartaba con un
+       LEFT JOIN: pedir un mes costaba lo mismo que pedir cinco años, y el
+       reporte ejecuta esa consulta hasta cuatro veces por pantalla (filas +
+       estadísticas, × 2 cuando el tipo es "Facturas − NC"). Ese era el origen
+       de la lentitud.
+       ═══════════════════════════════════════════════════════════════════ */
+
     /**
-     * Detalle documento por documento (facturas) de un vendedor: cada factura
-     * con su subtotal, la NC que la afecta (si tiene) y el total neto. Es el
-     * "drill-down" que se abre al hacer clic en una fila de la agrupación
-     * Vendedor. $idVendedor > 0 filtra a ese vendedor; 0 significa "Sin
-     * vendedor asignado" (id_vendedor IS NULL); cualquier otro valor (p. ej.
-     * el sentinel -1 de un usuario restringido sin vendedor vinculado) no
-     * devuelve nada.
+     * CTE de documentos que cumplen los filtros. Expone lo mínimo que necesitan
+     * las consultas de arriba, incluido el vendedor ya resuelto y el número de
+     * comprobante (la llave de cruce con NC/ND).
      */
-    public function getDocumentosPorVendedor(int $idEmpresa, int $idVendedor, array $filtros): array
+    private function cteDocs(array $f, string $where, string $vendedorJoin, string $vendedorCol): string
     {
-        $condVendedor = $idVendedor > 0
-            ? 'v.id_vendedor = :id_vendedor'
-            : ($idVendedor === 0 ? 'v.id_vendedor IS NULL' : '1 = 0');
-
-        $where = "v.id_empresa = :id_empresa
-                  AND v.eliminado = false
-                  AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND v.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')
-                  AND {$condVendedor}";
-
-        $params = [':id_empresa' => $idEmpresa];
-        if ($idVendedor > 0) {
-            $params[':id_vendedor'] = $idVendedor;
-        }
-
-        if (!empty($filtros['fecha_desde'])) {
-            $where .= " AND v.fecha_emision >= :fecha_desde";
-            $params[':fecha_desde'] = $filtros['fecha_desde'] . ' 00:00:00';
-        }
-        if (!empty($filtros['fecha_hasta'])) {
-            $where .= " AND v.fecha_emision <= :fecha_hasta";
-            $params[':fecha_hasta'] = $filtros['fecha_hasta'] . ' 23:59:59';
-        }
-        if (!empty($filtros['id_producto'])) {
-            $where .= " AND EXISTS (SELECT 1 FROM ventas_detalle vd WHERE vd.id_venta = v.id AND vd.id_producto = :id_producto)";
-            $params[':id_producto'] = (int) $filtros['id_producto'];
-        }
-        if (!empty($filtros['id_marca'])) {
-            $where .= " AND EXISTS (SELECT 1 FROM ventas_detalle vdm JOIN productos pm ON pm.id = vdm.id_producto WHERE vdm.id_venta = v.id AND pm.id_marca = :id_marca)";
-            $params[':id_marca'] = (int) $filtros['id_marca'];
-        }
-        if (!empty($filtros['id_categoria'])) {
-            $where .= " AND EXISTS (SELECT 1 FROM ventas_detalle vdc JOIN productos pc ON pc.id = vdc.id_producto WHERE vdc.id_venta = v.id AND pc.id_categoria = :id_categoria)";
-            $params[':id_categoria'] = (int) $filtros['id_categoria'];
-        }
-
-        $sql = "
+        return "
             SELECT
                 v.id,
                 v.fecha_emision,
-                CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) as numero_factura,
-                c.nombre as cliente_nombre,
-                v.importe_total as subtotal,
-                COALESCE(ncs.total_nc, 0) as nc,
-                v.importe_total - COALESCE(ncs.total_nc, 0) as total
-            FROM ventas_cabecera v
-            JOIN clientes c ON c.id = v.id_cliente
-            LEFT JOIN (
-                SELECT num_doc_modificado, SUM(importe_total) as total_nc
-                FROM notas_credito_cabecera
-                WHERE id_empresa = :id_empresa_nc AND eliminado = false
-                  AND estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')
-                  AND cod_doc_modificado = '01'
-                GROUP BY num_doc_modificado
-            ) ncs ON ncs.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
-            WHERE {$where}
-            ORDER BY v.fecha_emision DESC, v.secuencial DESC
-        ";
-
-        $params[':id_empresa_nc'] = $idEmpresa;
-
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Detalle documento por documento (facturas), con vendedor resuelto y el
-     * neteo por su propia NC, respetando los filtros vigentes del reporte
-     * (fecha, vendedor, producto, marca, categoría). Se usa para la segunda
-     * hoja de Excel ("Detalle Documentos") cuando se agrupa por Vendedor: si
-     * el filtro Vendedor está en "Todos", trae los documentos de todos los
-     * vendedores ordenados por vendedor; si hay uno seleccionado, solo los de
-     * ese vendedor.
-     */
-    public function getDetalleDocumentosVendedor(int $idEmpresa, array $filtros): array
-    {
-        $fFiltros = array_merge($filtros, ['tipo_documento' => 'FACTURA']);
-        $f = $this->fuente($fFiltros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $fFiltros, 'v');
-        list($vendedorJoin, ) = $this->vendedorJoinYCol($f, 'v');
-
-        $sql = "
-            SELECT
-                v.id,
-                v.fecha_emision,
-                CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) as numero_factura,
-                c.nombre as cliente_nombre,
-                COALESCE(vend.nombre, 'Sin vendedor asignado') as vendedor_nombre,
-                v.importe_total as subtotal,
-                COALESCE(ncs.total_nc, 0) as nc,
-                v.importe_total - COALESCE(ncs.total_nc, 0) as total
+                v.estado,
+                v.importe_total,
+                v.id_cliente,
+                v.secuencial,
+                CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS numero_factura,
+                {$vendedorCol} AS id_vendedor,
+                vend.nombre AS vendedor_nombre
             FROM {$f['cab']} v
-            JOIN clientes c ON c.id = v.id_cliente
             {$vendedorJoin}
-            LEFT JOIN (
-                SELECT num_doc_modificado, SUM(importe_total) as total_nc
-                FROM notas_credito_cabecera
-                WHERE id_empresa = :id_empresa_nc AND eliminado = false
-                  AND estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')
-                  AND cod_doc_modificado = '01'
-                GROUP BY num_doc_modificado
-            ) ncs ON ncs.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
             WHERE {$where}
-            ORDER BY COALESCE(vend.nombre, 'Sin vendedor asignado'), v.fecha_emision DESC
         ";
-
-        $params[':id_empresa_nc'] = $idEmpresa;
-
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
-     * CTE de bases e impuestos para sumatorias (según la fuente).
-     * Se une contra la cabecera y se filtra por id_empresa: sin este JOIN, el GROUP BY
-     * agregaba el detalle de TODOS los documentos del sistema (todas las empresas) en
-     * cada consulta del reporte (mismo problema encontrado y corregido en
-     * ReporteVentasRepository/ReporteComprasRepository). Requiere que el llamador
-     * incluya :id_empresa en sus params (ya lo hace vía buildWhereYParams).
+     * CTE de bases e impuestos, acotada a los documentos de la CTE docs.
      */
-    private function getCteBasesImpuestos(array $f): string
+    private function cteBases(array $f): string
     {
         return "
             SELECT
@@ -273,9 +186,120 @@ class ReporteVentasVendedorRepository extends BaseRepository
                 SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(i.valor) as valor_iva
             FROM {$f['det']} d
-            JOIN {$f['cab']} vcte ON vcte.id = d.{$f['fk_det']} AND vcte.id_empresa = :id_empresa
+            JOIN docs dd ON dd.id = d.{$f['fk_det']}
             LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
             GROUP BY d.{$f['fk_det']}
+        ";
+    }
+
+    /**
+     * CTEs del SALDO PENDIENTE por documento, acotadas a la CTE docs.
+     *
+     * Misma fórmula que Cuentas por Cobrar y que la columna "Saldo" del listado
+     * de Facturas de Venta:
+     *   saldo = importe_total + notas de débito − cobros − retenciones − notas de crédito
+     * Nunca negativo: un sobrecobro se muestra como 0, igual que en el listado
+     * de facturas.
+     *
+     * Solo aplica a facturas: una nota de crédito no tiene cartera propia, así
+     * que en la fuente NOTA_CREDITO el saldo es 0.
+     *
+     * $idEmpresa es int validado por el tipo del parámetro → interpolación
+     * segura (mismo criterio que CuentasPorCobrarRepository).
+     *
+     * @return string bloque de CTEs que termina definiendo "saldos(id_doc, saldo)"
+     */
+    private function ctesSaldo(array $f, int $idEmpresa): string
+    {
+        if (empty($f['es_factura'])) {
+            return "saldos AS (SELECT dd.id AS id_doc, 0::numeric AS saldo FROM docs dd)";
+        }
+
+        return "
+            sal_cob AS (
+                SELECT ind.id_referencia_documento AS id_doc, SUM(ind.monto_cobrado) AS m
+                FROM ingresos_detalle ind
+                JOIN ingresos_cabecera inc ON inc.id = ind.id_ingreso
+                JOIN docs dd ON dd.id = ind.id_referencia_documento
+                WHERE ind.tipo_documento = 'FACTURA'
+                  AND inc.estado != 'anulado'
+                  AND inc.eliminado = false
+                  AND inc.id_empresa = {$idEmpresa}
+                GROUP BY ind.id_referencia_documento
+            ),
+            sal_ret AS (
+                SELECT t.id_doc, SUM(t.monto) AS m
+                FROM (
+                    SELECT r.id_venta AS id_doc,
+                           (r.total_renta + r.total_iva + r.total_isd) AS monto,
+                           r.id AS id_ret
+                    FROM retencion_venta_cabecera r
+                    JOIN docs dd ON dd.id = r.id_venta
+                    WHERE r.eliminado = false AND r.id_empresa = {$idEmpresa}
+
+                    UNION
+
+                    SELECT dd.id AS id_doc,
+                           (r.total_renta + r.total_iva + r.total_isd) AS monto,
+                           r.id AS id_ret
+                    FROM retencion_venta_cabecera r
+                    JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
+                    JOIN docs dd ON dd.numero_factura = rd.num_doc_sustento
+                    WHERE r.eliminado = false AND r.id_empresa = {$idEmpresa}
+                ) t
+                GROUP BY t.id_doc
+            ),
+            sal_nc AS (
+                SELECT dd.id AS id_doc, SUM(nc.importe_total) AS m
+                FROM notas_credito_cabecera nc
+                JOIN docs dd ON dd.numero_factura = nc.num_doc_modificado
+                WHERE nc.estado != 'anulado' AND nc.eliminado = false
+                  AND nc.id_empresa = {$idEmpresa}
+                GROUP BY dd.id
+            ),
+            sal_nd AS (
+                SELECT dd.id AS id_doc, SUM(nd.importe_total) AS m
+                FROM nota_debito_cabecera nd
+                JOIN docs dd ON dd.numero_factura = nd.num_doc_modificado
+                WHERE nd.estado != 'anulado' AND nd.eliminado = false
+                  AND nd.id_empresa = {$idEmpresa}
+                GROUP BY dd.id
+            ),
+            saldos AS (
+                SELECT dd.id AS id_doc,
+                       GREATEST(
+                           dd.importe_total
+                           + COALESCE(nd.m, 0)
+                           - COALESCE(cb.m, 0)
+                           - COALESCE(rt.m, 0)
+                           - COALESCE(nc.m, 0)
+                       , 0) AS saldo
+                FROM docs dd
+                LEFT JOIN sal_cob cb ON cb.id_doc = dd.id
+                LEFT JOIN sal_ret rt ON rt.id_doc = dd.id
+                LEFT JOIN sal_nc  nc ON nc.id_doc = dd.id
+                LEFT JOIN sal_nd  nd ON nd.id_doc = dd.id
+            )
+        ";
+    }
+
+    /**
+     * CTE de la nota de crédito que NETEA la factura (criterio del reporte: NC
+     * autorizada que modifica un documento tipo '01'). Es distinta de la NC que
+     * entra en el saldo (esa toma toda NC no anulada, criterio de cartera), por
+     * eso se calcula aparte.
+     */
+    private function cteNcNeteo(int $idEmpresa): string
+    {
+        return "
+            SELECT dd.id AS id_doc, SUM(nc.importe_total) AS total_nc
+            FROM notas_credito_cabecera nc
+            JOIN docs dd ON dd.numero_factura = nc.num_doc_modificado
+            WHERE nc.id_empresa = {$idEmpresa}
+              AND nc.eliminado = false
+              AND nc.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')
+              AND nc.cod_doc_modificado = '01'
+            GROUP BY dd.id
         ";
     }
 
@@ -284,15 +308,21 @@ class ReporteVentasVendedorRepository extends BaseRepository
      * (no requiere que la consulta que llama agregue joins extra al FROM), incluso
      * para el filtro de vendedor sobre notas de crédito (usa un EXISTS contra la
      * factura original).
+     *
+     * $conEstado = false devuelve el mismo WHERE pero SIN el filtro de estado: lo
+     * usa el resumen de estados, que necesita contar también borradores y anulados.
      */
-    private function buildWhereYParams(int $idEmpresa, array $filtros, string $aliasVenta, ?string $aliasDetalle = null): array
+    private function buildWhereYParams(int $idEmpresa, array $filtros, string $aliasVenta, ?string $aliasDetalle = null, bool $conEstado = true): array
     {
         $f = $this->fuente($filtros);
 
         $where = "{$aliasVenta}.id_empresa = :id_empresa
                   AND {$aliasVenta}.eliminado = false
-                  AND {$aliasVenta}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND " . str_replace('{alias}', $aliasVenta, $f['estado_ok']);
+                  AND {$aliasVenta}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+
+        if ($conEstado) {
+            $where .= " AND " . str_replace('{alias}', $aliasVenta, $f['estado_ok']);
+        }
 
         $params = [':id_empresa' => $idEmpresa];
 
@@ -366,6 +396,115 @@ class ReporteVentasVendedorRepository extends BaseRepository
     }
 
     /**
+     * Piezas comunes de toda consulta a nivel de documento: fuente, CTE docs ya
+     * armada y los params del WHERE.
+     *
+     * @return array{0: array, 1: string, 2: array} [fuente, cteDocs, params]
+     */
+    private function prepararDocs(int $idEmpresa, array $filtros, bool $conEstado = true): array
+    {
+        $f = $this->fuente($filtros);
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', null, $conEstado);
+        list($vendedorJoin, $vendedorCol) = $this->vendedorJoinYCol($f, 'v');
+
+        return [$f, $this->cteDocs($f, $where, $vendedorJoin, $vendedorCol), $params];
+    }
+
+    /**
+     * Detalle documento por documento (facturas) de un vendedor: cada factura con
+     * su subtotal, la NC que la afecta (si tiene), el total neto y el SALDO
+     * pendiente. Es el "drill-down" que se abre al hacer clic en una fila de la
+     * agrupación Vendedor. $idVendedor > 0 filtra a ese vendedor; 0 significa
+     * "Sin vendedor asignado" (id_vendedor IS NULL); cualquier otro valor (p. ej.
+     * el sentinel -1 de un usuario restringido sin vendedor vinculado) no devuelve
+     * nada.
+     */
+    public function getDocumentosPorVendedor(int $idEmpresa, int $idVendedor, array $filtros): array
+    {
+        // Siempre facturas: el drill-down lista documentos y netea su NC dentro de
+        // la misma fila, en vez de agregarla como fila aparte.
+        $fFiltros = array_merge($filtros, ['tipo_documento' => 'FACTURA']);
+        unset($fFiltros['id_vendedor']);
+
+        $f = $this->fuente($fFiltros);
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $fFiltros, 'v');
+        list($vendedorJoin, $vendedorCol) = $this->vendedorJoinYCol($f, 'v');
+
+        if ($idVendedor > 0) {
+            $where .= " AND v.id_vendedor = :id_vendedor";
+            $params[':id_vendedor'] = $idVendedor;
+        } elseif ($idVendedor === 0) {
+            $where .= " AND v.id_vendedor IS NULL";
+        } else {
+            $where .= " AND 1 = 0";
+        }
+
+        $sql = "
+            WITH docs AS (" . $this->cteDocs($f, $where, $vendedorJoin, $vendedorCol) . "),
+                 nc_neteo AS (" . $this->cteNcNeteo($idEmpresa) . "),
+                 " . $this->ctesSaldo($f, $idEmpresa) . "
+            SELECT
+                v.id,
+                v.fecha_emision,
+                v.numero_factura,
+                c.nombre as cliente_nombre,
+                v.importe_total as subtotal,
+                COALESCE(ncs.total_nc, 0) as nc,
+                v.importe_total - COALESCE(ncs.total_nc, 0) as total,
+                COALESCE(s.saldo, 0) as saldo
+            FROM docs v
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN nc_neteo ncs ON ncs.id_doc = v.id
+            LEFT JOIN saldos   s   ON s.id_doc   = v.id
+            ORDER BY v.fecha_emision DESC, v.secuencial DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Detalle documento por documento (facturas), con vendedor resuelto, el neteo
+     * por su propia NC y el SALDO pendiente, respetando los filtros vigentes del
+     * reporte (fecha, vendedor, producto, marca, categoría). Se usa para la
+     * segunda hoja de Excel ("Detalle Documentos") cuando se agrupa por Vendedor:
+     * si el filtro Vendedor está en "Todos", trae los documentos de todos los
+     * vendedores ordenados por vendedor; si hay uno seleccionado, solo los de ese
+     * vendedor.
+     */
+    public function getDetalleDocumentosVendedor(int $idEmpresa, array $filtros): array
+    {
+        $fFiltros = array_merge($filtros, ['tipo_documento' => 'FACTURA']);
+        list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $fFiltros);
+
+        $sql = "
+            WITH docs AS ({$cteDocs}),
+                 nc_neteo AS (" . $this->cteNcNeteo($idEmpresa) . "),
+                 " . $this->ctesSaldo($f, $idEmpresa) . "
+            SELECT
+                v.id,
+                v.fecha_emision,
+                v.numero_factura,
+                c.nombre as cliente_nombre,
+                COALESCE(v.vendedor_nombre, 'Sin vendedor asignado') as vendedor_nombre,
+                v.importe_total as subtotal,
+                COALESCE(ncs.total_nc, 0) as nc,
+                v.importe_total - COALESCE(ncs.total_nc, 0) as total,
+                COALESCE(s.saldo, 0) as saldo
+            FROM docs v
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN nc_neteo ncs ON ncs.id_doc = v.id
+            LEFT JOIN saldos   s   ON s.id_doc   = v.id
+            ORDER BY COALESCE(v.vendedor_nombre, 'Sin vendedor asignado'), v.fecha_emision DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Reporte agrupado por vendedor (vista principal de este módulo).
      */
     public function getReporteAgrupadoVendedor(int $idEmpresa, array $filtros): array
@@ -376,30 +515,109 @@ class ReporteVentasVendedorRepository extends BaseRepository
             // misma fila (columna "nc") en vez de agregarla como fila aparte. Si aquí se
             // sumara el conteo de NC, la columna "Nro Documentos" mostraría más de lo que
             // realmente aparece al hacer clic (p. ej. 4 en la tabla vs 2 en el detalle).
+            // El saldo va en $sumar (no en $restar) porque la NC aporta 0: no tiene
+            // cartera propia y ya está descontada dentro del saldo de la factura.
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoVendedor', ['id_vendedor'],
-                ['base_0', 'base_iva', 'valor_iva', 'total'], []);
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['saldo']);
         }
 
-        $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
-        list($vendedorJoin, $vendedorCol) = $this->vendedorJoinYCol($f, 'v');
+        list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $filtros);
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH docs AS ({$cteDocs}),
+                 bases AS (" . $this->cteBases($f) . "),
+                 " . $this->ctesSaldo($f, $idEmpresa) . "
             SELECT
-                COALESCE({$vendedorCol}, 0) as id_vendedor,
-                COALESCE(vend.nombre, 'Sin vendedor asignado') as vendedor_nombre,
+                COALESCE(v.id_vendedor, 0) as id_vendedor,
+                COALESCE(v.vendedor_nombre, 'Sin vendedor asignado') as vendedor_nombre,
                 COUNT(v.id) as cantidad_documentos,
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(v.importe_total) as total
-            FROM {$f['cab']} v
-            {$vendedorJoin}
-            LEFT JOIN bases b ON b.id_doc = v.id
-            WHERE {$where}
-            GROUP BY COALESCE({$vendedorCol}, 0), COALESCE(vend.nombre, 'Sin vendedor asignado')
+                SUM(v.importe_total) as total,
+                SUM(COALESCE(s.saldo, 0)) as saldo
+            FROM docs v
+            LEFT JOIN bases  b ON b.id_doc = v.id
+            LEFT JOIN saldos s ON s.id_doc = v.id
+            GROUP BY COALESCE(v.id_vendedor, 0), COALESCE(v.vendedor_nombre, 'Sin vendedor asignado')
             ORDER BY total DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Reporte agrupado por mes (año-mes).
+     */
+    public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
+    {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoMes', ['mes'],
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_documentos', 'saldo']);
+        }
+
+        list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $filtros);
+
+        $sql = "
+            WITH docs AS ({$cteDocs}),
+                 bases AS (" . $this->cteBases($f) . "),
+                 " . $this->ctesSaldo($f, $idEmpresa) . "
+            SELECT
+                TO_CHAR(v.fecha_emision, 'YYYY-MM') as mes,
+                COUNT(v.id) as cantidad_documentos,
+                SUM(COALESCE(b.base_0, 0)) as base_0,
+                SUM(COALESCE(b.base_iva, 0)) as base_iva,
+                SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
+                SUM(v.importe_total) as total,
+                SUM(COALESCE(s.saldo, 0)) as saldo
+            FROM docs v
+            LEFT JOIN bases  b ON b.id_doc = v.id
+            LEFT JOIN saldos s ON s.id_doc = v.id
+            GROUP BY TO_CHAR(v.fecha_emision, 'YYYY-MM')
+            ORDER BY mes DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Reporte detallado (por documento).
+     */
+    public function getReporteDetallado(int $idEmpresa, array $filtros): array
+    {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteDetallado', null,
+                ['base_0', 'base_iva', 'valor_iva', 'total']);
+        }
+
+        list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $filtros);
+
+        $sql = "
+            WITH docs AS ({$cteDocs}),
+                 bases AS (" . $this->cteBases($f) . "),
+                 " . $this->ctesSaldo($f, $idEmpresa) . "
+            SELECT
+                v.id,
+                v.fecha_emision,
+                v.numero_factura,
+                c.identificacion as cliente_ruc,
+                c.nombre as cliente_nombre,
+                v.estado,
+                COALESCE(b.base_0, 0)    as base_0,
+                COALESCE(b.base_iva, 0)  as base_iva,
+                COALESCE(b.valor_iva, 0) as valor_iva,
+                v.importe_total          as total,
+                COALESCE(s.saldo, 0)     as saldo,
+                COALESCE(v.vendedor_nombre, 'Sin vendedor asignado') as vendedor_nombre
+            FROM docs v
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN bases  b ON b.id_doc = v.id
+            LEFT JOIN saldos s ON s.id_doc = v.id
+            ORDER BY v.fecha_emision DESC, v.secuencial DESC
         ";
 
         $st = $this->db->prepare($sql);
@@ -524,82 +742,8 @@ class ReporteVentasVendedorRepository extends BaseRepository
     }
 
     /**
-     * Reporte agrupado por mes (año-mes).
-     */
-    public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
-    {
-        if ($this->esNeto($filtros)) {
-            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoMes', ['mes'],
-                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_documentos']);
-        }
-
-        $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
-
-        $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
-            SELECT
-                TO_CHAR(v.fecha_emision, 'YYYY-MM') as mes,
-                COUNT(v.id) as cantidad_documentos,
-                SUM(COALESCE(b.base_0, 0)) as base_0,
-                SUM(COALESCE(b.base_iva, 0)) as base_iva,
-                SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(v.importe_total) as total
-            FROM {$f['cab']} v
-            LEFT JOIN bases b ON b.id_doc = v.id
-            WHERE {$where}
-            GROUP BY TO_CHAR(v.fecha_emision, 'YYYY-MM')
-            ORDER BY mes DESC
-        ";
-
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Reporte detallado (por documento).
-     */
-    public function getReporteDetallado(int $idEmpresa, array $filtros): array
-    {
-        if ($this->esNeto($filtros)) {
-            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteDetallado', null,
-                ['base_0', 'base_iva', 'valor_iva', 'total']);
-        }
-
-        $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
-        list($vendedorJoin, ) = $this->vendedorJoinYCol($f, 'v');
-
-        $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
-            SELECT
-                v.id,
-                v.fecha_emision,
-                CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) as numero_factura,
-                c.identificacion as cliente_ruc,
-                c.nombre as cliente_nombre,
-                v.estado,
-                COALESCE(b.base_0, 0)   as base_0,
-                COALESCE(b.base_iva, 0) as base_iva,
-                COALESCE(b.valor_iva, 0) as valor_iva,
-                v.importe_total          as total,
-                COALESCE(vend.nombre, 'Sin vendedor asignado') as vendedor_nombre
-            FROM {$f['cab']} v
-            JOIN clientes c ON c.id = v.id_cliente
-            LEFT JOIN bases b ON b.id_doc = v.id
-            {$vendedorJoin}
-            WHERE {$where}
-            ORDER BY v.fecha_emision DESC, v.secuencial DESC
-        ";
-
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Estadísticas globales para el rango/filtros dados.
+     * Estadísticas globales para el rango/filtros dados. Incluye el saldo
+     * pendiente total de los documentos que entran al reporte.
      */
     public function getEstadisticas(int $idEmpresa, array $filtros): array
     {
@@ -612,23 +756,28 @@ class ReporteVentasVendedorRepository extends BaseRepository
                 'total_iva'        => $sf['total_iva']      - $sn['total_iva'],
                 'gran_total'       => $sf['gran_total']     - $sn['gran_total'],
                 'total_documentos' => $sf['total_documentos'] + $sn['total_documentos'],
+                // La NC no tiene cartera propia (su saldo es 0) y ya está descontada
+                // dentro del saldo de la factura: no se vuelve a restar aquí.
+                'total_saldo'      => $sf['total_saldo'],
             ];
         }
 
-        $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $filtros);
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH docs AS ({$cteDocs}),
+                 bases AS (" . $this->cteBases($f) . "),
+                 " . $this->ctesSaldo($f, $idEmpresa) . "
             SELECT
                 SUM(COALESCE(b.base_0, 0)) as total_base_0,
                 SUM(COALESCE(b.base_iva, 0)) as total_base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as total_iva,
                 SUM(v.importe_total) as gran_total,
+                SUM(COALESCE(s.saldo, 0)) as total_saldo,
                 COUNT(v.id) as total_documentos
-            FROM {$f['cab']} v
-            LEFT JOIN bases b ON b.id_doc = v.id
-            WHERE {$where}
+            FROM docs v
+            LEFT JOIN bases  b ON b.id_doc = v.id
+            LEFT JOIN saldos s ON s.id_doc = v.id
         ";
 
         $st = $this->db->prepare($sql);
@@ -640,6 +789,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
             'total_base_iva'   => (float)($row['total_base_iva'] ?? 0),
             'total_iva'        => (float)($row['total_iva'] ?? 0),
             'gran_total'       => (float)($row['gran_total'] ?? 0),
+            'total_saldo'      => (float)($row['total_saldo'] ?? 0),
             'total_documentos' => (int)($row['total_documentos'] ?? 0),
         ];
     }
@@ -657,23 +807,20 @@ class ReporteVentasVendedorRepository extends BaseRepository
         }
 
         $f = $this->fuente($filtros);
-        // Reutiliza los mismos filtros de fecha/vendedor/producto/marca/categoría
-        // que buildWhereYParams, pero para este resumen se necesita el desglose de
-        // estado real (incluye borrador/anulado), así que se remueve el estado_ok.
-        list($whereConEstado, $paramsConEstado) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
-        // buildWhereYParams ya incluye estado_ok; para el resumen de estados se
-        // necesita SIN ese filtro, así que se remueve la condición de estado.
-        $whereSinEstado = preg_replace('/AND\s+v\.estado\s+IN\s*\([^)]*\)/i', '', $whereConEstado);
+        // Mismos filtros de fecha/vendedor/producto/marca/categoría que el resto del
+        // reporte, pero SIN el de estado: este resumen necesita el desglose real
+        // (autorizados / anulados / borradores).
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', null, false);
 
         $sql = "
             SELECT LOWER(v.estado) as estado, COUNT(*) as cantidad
             FROM {$f['cab']} v
-            WHERE {$whereSinEstado}
+            WHERE {$where}
             GROUP BY LOWER(v.estado)
         ";
 
         $st = $this->db->prepare($sql);
-        $st->execute($paramsConEstado);
+        $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         $resumen = ['autorizados' => 0, 'anulados' => 0, 'borradores' => 0];

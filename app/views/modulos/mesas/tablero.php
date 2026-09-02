@@ -198,6 +198,9 @@ window.addEventListener('pageshow', function (e) {
     const BASE = "<?= $base ?>";
     const AJAX = "<?= $rutaAjax ?>";
     const PUEDE_CREAR = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
+    // Sin estaciones activas no hay preparación, y el aviso de "por enviar" no
+    // tiene sentido: esas líneas se quedan pendientes porque nadie las envía.
+    const USA_PREPARACION = <?= !empty($usaPreparacion) ? 'true' : 'false' ?>;
     const PUEDE_EDITAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
     const EMPRESA_NOMBRE = <?= json_encode($empresaNombre ?? '', JSON_UNESCAPED_UNICODE) ?>;
     const $canvas = document.getElementById('mt-canvas');
@@ -259,7 +262,7 @@ window.addEventListener('pageshow', function (e) {
                 info = m.capacidad + ' puestos';
             }
 
-            const pendientes = parseInt(m.pendientes_comanda || 0, 10);
+            const pendientes = USA_PREPARACION ? parseInt(m.pendientes_comanda || 0, 10) : 0;
             const listos = parseInt(m.listos_comanda || 0, 10);
             const asistencia = !!m.solicita_asistencia;
             // El cliente confirmó un pedido desde el QR y todavía nadie del salón

@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/menu
 tipo: modulo
 visibilidad: todos
-etiquetas: menu, carta, platos, bebidas, restaurante, precio, iva, tarifa iva, producto vinculado, categoria, categorias, estacion, cocina, barra, preparar en, enviar a, receta, comanda
-version: 1.6
+etiquetas: menu, carta, platos, bebidas, restaurante, precio, iva, tarifa iva, producto vinculado, categoria, categorias, estacion, cocina, barra, preparar en, enviar a, receta, comanda, impresora, imprimir ordenes, impresora de cocina, ancho de papel, copias, 58mm, 80mm
+version: 1.8
 orden: 30
 estado: activo
 ---
@@ -57,6 +57,28 @@ bebida embotellada, por ejemplo.
 
 Las estaciones se crean en la pestaña **Estaciones** de este mismo modal.
 
+## Las estaciones se configuran en Configuración Restaurante
+
+La pestaña *Estaciones* de este modal **ya no existe**: el catálogo se administra
+en **Configuración Restaurante**, junto con la impresora de cada estación y la
+estación predeterminada. Aquí queda el selector *Preparar en*, que sigue siendo
+por ítem.
+
+Lo que se configura allí, por estación:
+
+| Opción | Para qué |
+| --- | --- |
+| Papel | 58 u 80 mm, según la impresora térmica de esa estación. Ajusta el tamaño de letra del ticket. |
+| Copias | Cuántas veces sale cada orden (por ejemplo 2: una para quien prepara y otra para el pase). |
+| Sale sola al enviar a cocina | Marcada, la orden se imprime al enviar la comanda. Sin marcar, solo se imprime cuando alguien la pide desde la comanda. |
+
+Quien saca el papel es la **pantalla de preparación (KDS) de esa estación**, que
+debe estar abierta en un equipo con la impresora conectada: el sistema no puede
+imprimir por su cuenta en la red del restaurante. El detalle está en el manual
+del KDS.
+
+Una estación puede quedarse **solo como pantalla** (es lo que viene por
+defecto): sin marcar esa casilla, nada cambia respecto a como funcionaba antes.
 ## Todo ítem va vinculado a un producto
 
 El **producto vinculado es obligatorio**. La carta es una forma de presentar el
@@ -113,6 +135,11 @@ Solo cuando el ítem **no** tiene tarifa propia se usa la del producto vinculado
 
 ## Historial de cambios
 
+- **1.8** — La pestaña *Estaciones* sale de este modal: el catálogo se administra
+  en el módulo **Configuración Restaurante**. Aquí queda el selector *Preparar en*.
+- **1.7** — Cada estación puede configurar su impresora: si imprime las órdenes
+  en papel, el ancho (58/80 mm), las copias y si la orden sale sola al enviar a
+  cocina o solo a pedido.
 - **1.6** — La columna y el campo de la estación pasan a llamarse "Preparar en".
 - **1.5** — El producto vinculado pasa a ser obligatorio: un ítem de la carta
   siempre apunta a un producto del catálogo.

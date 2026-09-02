@@ -63,6 +63,13 @@ class RolPagoPdfService
             . '<tr><td style="color:#555;">Sueldo Base</td><td>$ ' . $m($lin['sueldo_base'] ?? 0) . '</td>'
             . '<td style="color:#555;">Fecha Pago</td><td>' . $h(!empty($cab['fecha_pago']) ? date('d-m-Y', strtotime((string) $cab['fecha_pago'])) : '—') . '</td></tr></table><br>';
 
+        // Observación de la novedad que originó el rubro: se imprime bajo el concepto,
+        // dentro de la misma celda (no se agregan columnas al desglose).
+        $obs = function (?array $r) use ($h): string {
+            $t = trim((string) ($r['novedad_observacion'] ?? ''));
+            return $t === '' ? '' : '<br><span style="font-size:7px; color:#666;"><i>' . $h($t) . '</i></span>';
+        };
+
         // Tabla de dos columnas: Ingresos | Egresos
         $filas = max(count($ing), count($egr));
         $html .= '<table class="g" cellpadding="0"><tr>'
@@ -71,9 +78,9 @@ class RolPagoPdfService
         for ($k = 0; $k < $filas; $k++) {
             $a = $ing[$k] ?? null; $b = $egr[$k] ?? null;
             $html .= '<tr>'
-                . '<td width="35%">' . ($a ? $h($a['concepto']) : '') . '</td>'
+                . '<td width="35%">' . ($a ? $h($a['concepto']) . $obs($a) : '') . '</td>'
                 . '<td width="15%" align="right">' . ($a ? $m($a['valor']) : '') . '</td>'
-                . '<td width="35%">' . ($b ? $h($b['concepto']) : '') . '</td>'
+                . '<td width="35%">' . ($b ? $h($b['concepto']) . $obs($b) : '') . '</td>'
                 . '<td width="15%" align="right">' . ($b ? $m($b['valor']) : '') . '</td></tr>';
         }
         $html .= '<tr class="tot"><td width="35%">TOTAL INGRESOS</td><td width="15%" align="right">' . $m($lin['total_ingresos']) . '</td>'
