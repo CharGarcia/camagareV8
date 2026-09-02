@@ -165,6 +165,10 @@ destinatario.
   vacía), el aviso y el historial SRI quedaban en "devuelta con errores" sin ningún
   motivo. Ahora siempre se muestra qué respondió el SRI y se indica que se trata de
   una intermitencia del servicio y no de un rechazo del comprobante.
+  Además, el envío ya no sigue la redirección que a veces devuelve el frente del SRI
+  (era lo que terminaba en "No fue posible comunicarse con los servidores del SRI")
+  y reintenta hasta tres veces antes de rendirse; ese mensaje ya no muestra el
+  detalle técnico de la conexión.
 - **1.5** — Corregido el envío automático del correo al autorizar. Cuando el SRI
   ya tenía la retención autorizada de un intento anterior (el caso típico: el
   primer envío queda "en procesamiento" y el segundo la encuentra resuelta), la

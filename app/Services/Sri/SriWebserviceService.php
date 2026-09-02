@@ -327,11 +327,19 @@ SOAP;
             throw new \RuntimeException('La extensión cURL no está habilitada en PHP.');
         }
 
-        $maxIntentos = 2;
+        // El frente del SRI (balanceador/WAF) a veces no procesa la petición y contesta
+        // con un 302 hacia una IP (https://181.113.227.222) que cierra la conexión, o
+        // resetea la conexión directamente. Son fallos transitorios: el siguiente intento
+        // suele responder bien. Por eso: NO se siguen redirecciones (un WS SOAP nunca
+        // redirige legítimamente; seguirla convertía el POST en un GET a esa IP y
+        // terminaba en "Connection was reset"), y se reintenta también cuando la
+        // respuesta es una redirección o no es un sobre SOAP.
+        $maxIntentos = 3;
         $intento = 0;
         $response = false;
         $error = '';
         $httpCode = 0;
+        $motivo = '';
 
         while ($intento < $maxIntentos) {
             $intento++;
@@ -349,25 +357,35 @@ SOAP;
                 CURLOPT_SSL_VERIFYHOST => false,
                 CURLOPT_TIMEOUT        => $this->timeoutSegundos,
                 CURLOPT_CONNECTTIMEOUT => 10,
-                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_FOLLOWLOCATION => false,
             ]);
 
             $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error    = curl_error($ch);
             curl_close($ch);
 
-            if ($response !== false && empty($error)) {
-                break; // Conexión exitosa, salir del bucle
+            if ($response === false || !empty($error)) {
+                $motivo = "cURL: $error";
+            } elseif ($httpCode >= 300 && $httpCode < 400) {
+                $motivo = "HTTP $httpCode (redirección) → " . $this->fragmentoRespuesta($response, 200);
+            } elseif ($httpCode < 500 && !str_contains($response, 'Envelope')) {
+                $motivo = "HTTP $httpCode sin sobre SOAP → " . $this->fragmentoRespuesta($response, 200);
+            } else {
+                $motivo = '';
+                break; // Respuesta SOAP (o un HTTP 5xx que se evalúa abajo)
             }
 
+            error_log("[SRI soapPost] Intento {$intento}/{$maxIntentos} fallido contra $url: $motivo");
             if ($intento < $maxIntentos) {
                 sleep(2); // Esperar 2 segundos antes del siguiente intento
             }
         }
 
-        if ($response === false || !empty($error)) {
-            $mensajeUsuario = "No fue posible comunicarse con los servidores del SRI tras {$maxIntentos} intentos. Es muy probable que los servicios del SRI se encuentren intermitentes o en mantenimiento. Intente nuevamente en unos minutos. (Detalle técnico: $error)";
+        if ($motivo !== '') {
+            // El detalle técnico va solo al log del servidor, no al usuario.
+            error_log("[SRI soapPost] Sin respuesta válida de $url tras {$maxIntentos} intentos: $motivo");
+            $mensajeUsuario = "No fue posible comunicarse con los servidores del SRI tras {$maxIntentos} intentos. Es muy probable que los servicios del SRI se encuentren intermitentes o en mantenimiento. Intente nuevamente en unos minutos.";
             throw new \RuntimeException($mensajeUsuario);
         }
 
