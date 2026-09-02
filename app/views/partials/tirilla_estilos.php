@@ -103,7 +103,11 @@ $fPie    = $esAngosta ?  9 : 11;
        última parte dentro del cabezal, sin imprimir, y la suelta al
        principio del ticket siguiente: el usuario ve que le falta el final
        de una impresión y le sobra al inicio de la otra. */
-    .feed { height: 20mm; }
+    /* 40mm: con drivers genéricos —sin orden de corte— hace falta bastante
+       avance para empujar el final del ticket fuera del cabezal y forzar que la
+       impresora vacíe el buffer. Con el driver propio de la impresora bastaría
+       menos, pero de más no estorba: solo alarga un poco el papel. */
+    .feed { height: 40mm; }
 
     @media print {
         button { display: none; }

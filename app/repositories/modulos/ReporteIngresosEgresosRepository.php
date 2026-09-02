@@ -30,6 +30,16 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     /** Ambiente de la empresa (los documentos filtran por él). */
     private const AMB = "(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
+    /**
+     * Condición de pago vigente en egresos_pagos (alias dado): excluye los pagos
+     * eliminados lógicamente (formas de pago reemplazadas al editar) y los cheques
+     * anulados, que se conservan como historial pero no cuentan.
+     */
+    private static function pagoVigente(string $alias): string
+    {
+        return " AND $alias.eliminado = false AND COALESCE($alias.estado_cheque, 'vigente') <> 'anulado'";
+    }
+
     // ── WHERE por flujo ───────────────────────────────────────────────────────
 
     /** Filtros a nivel cabecera (alias c), comunes a detalle y pagos. */
@@ -73,13 +83,20 @@ class ReporteIngresosEgresosRepository extends BaseRepository
 
         $w = $this->whereCabecera($esIng, $f, $params);
         if (!$esIng) { $w .= " AND d.eliminado = false"; }
+        // egresos_pagos usa eliminación lógica: al editar las formas de pago de un egreso,
+        // las viejas quedan con eliminado = true y no deben seguir cumpliendo el filtro.
+        // ingresos_pagos se borra físicamente, así que no tiene esa columna.
+        // Los cheques anulados (estado_cheque = 'anulado') se conservan como historial
+        // pero tampoco cuentan, igual que en el asiento contable y Control Bancario.
+        $ppVivo = $esIng ? '' : self::pagoVigente('pp');
+        $poVivo = $esIng ? '' : self::pagoVigente('po');
 
         if (!empty($f['id_forma'])) {
-            $w .= " AND EXISTS (SELECT 1 FROM $pagTbl pp WHERE pp.$pagFk = c.id AND pp.$pagForma = :forma)";
+            $w .= " AND EXISTS (SELECT 1 FROM $pagTbl pp WHERE pp.$pagFk = c.id AND pp.$pagForma = :forma$ppVivo)";
             $params[':forma'] = (int)$f['id_forma'];
         }
         if (!empty($f['operacion_bancaria'])) {
-            $w .= " AND EXISTS (SELECT 1 FROM $pagTbl po WHERE po.$pagFk = c.id AND po.tipo_operacion_bancaria = :opbanc)";
+            $w .= " AND EXISTS (SELECT 1 FROM $pagTbl po WHERE po.$pagFk = c.id AND po.tipo_operacion_bancaria = :opbanc$poVivo)";
             $params[':opbanc'] = $f['operacion_bancaria'];
         }
         if (!empty($f['tipo_documento'])) {
@@ -97,7 +114,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $pagForma= $esIng ? 'id_forma_cobro'   : 'id_forma_pago';
 
         $w = $this->whereCabecera($esIng, $f, $params);
-        if (!$esIng) { $w .= " AND p.eliminado = false"; }
+        if (!$esIng) { $w .= self::pagoVigente('p'); }
 
         if (!empty($f['id_forma'])) { $w .= " AND p.$pagForma = :forma"; $params[':forma'] = (int)$f['id_forma']; }
         if (!empty($f['operacion_bancaria'])) { $w .= " AND p.tipo_operacion_bancaria = :opbanc"; $params[':opbanc'] = $f['operacion_bancaria']; }
