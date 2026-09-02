@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri
-version: 1.4
+version: 1.6
 orden: 30
 estado: activo
 ---
@@ -150,9 +150,21 @@ destinatario.
   **vigencia**. Solo se listan los códigos vigentes a la fecha de emisión de la
   retención; la lista avisa cuántos quedaron fuera por ese motivo. Corrija la
   fecha de emisión o la vigencia del código en Configuración → Retenciones SRI.
+- **"El SRI devolvió la retención con errores" con motivo "RESPUESTA INESPERADA DEL
+  SRI" o "ERROR REPORTADO POR EL SERVICIO DEL SRI"**: el SRI no rechazó la
+  retención, su servicio contestó mal (mantenimiento, intermitencia o un error
+  interno) y no llegó a recibirla. Espere unos minutos y vuelva a enviar; el
+  detalle del historial SRI muestra lo que respondió el servicio. Si el motivo es
+  un código del SRI (por ejemplo 35 "ARCHIVO NO CUMPLE ESTRUCTURA XML"), sí es un
+  rechazo real: corrija lo que indica el detalle antes de reenviar.
 
 ## Historial de cambios
 
+- **1.6** — Al enviar al SRI, cuando el servicio del SRI responde algo que no es su
+  formato normal (una falla interna, una página de mantenimiento o una respuesta
+  vacía), el aviso y el historial SRI quedaban en "devuelta con errores" sin ningún
+  motivo. Ahora siempre se muestra qué respondió el SRI y se indica que se trata de
+  una intermitencia del servicio y no de un rechazo del comprobante.
 - **1.5** — Corregido el envío automático del correo al autorizar. Cuando el SRI
   ya tenía la retención autorizada de un intento anterior (el caso típico: el
   primer envío queda "en procesamiento" y el segundo la encuentra resuelta), la

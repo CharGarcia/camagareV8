@@ -80,8 +80,12 @@ SOAP;
         $result = ['estado' => 'ERROR', 'errores' => []];
 
         try {
-            $dom = new \DOMDocument();
-            $dom->loadXML($rawXml);
+            $dom = $this->cargarXmlRespuesta($rawXml);
+            if ($dom === null) {
+                // HTML de mantenimiento, cuerpo vacío, texto plano… no hay nada que parsear.
+                $result['errores'][] = $this->errorRespuestaNoXml($rawXml);
+                return $result;
+            }
             $xpath = new \DOMXPath($dom);
             $xpath->registerNamespace('rec', 'http://ec.gob.sri.ws.recepcion');
 
@@ -103,11 +107,100 @@ SOAP;
                     'info'    => trim($xpath->query('informacionAdicional', $m)->item(0)?->textContent ?? ''),
                 ];
             }
+
+            // Respuesta sin mensajes y que no fue RECIBIDA: SOAP Fault, XML sin el nodo
+            // <estado>, o DEVUELTA sin detalle. Sin esto el usuario ve "devuelta con
+            // errores" y una lista vacía (sri_envio_log.detalle_json = []).
+            if ($result['estado'] !== 'RECIBIDA' && empty($result['errores'])) {
+                $result['errores'][] = $this->errorSinDetalle($xpath, $rawXml, $result['estado']);
+            }
         } catch (\Throwable $e) {
-            $result['errores'][] = ['mensaje' => 'Error al parsear respuesta: ' . $e->getMessage(), 'tipo' => 'ERROR'];
+            $result['errores'][] = ['id' => '', 'mensaje' => 'Error al parsear respuesta: ' . $e->getMessage(), 'tipo' => 'ERROR', 'info' => $this->fragmentoRespuesta($rawXml)];
         }
 
         return $result;
+    }
+
+    // ── Respuestas no estándar del SRI ────────────────────────────────────────
+
+    /**
+     * Carga la respuesta como XML sin emitir warnings de libxml. Devuelve null si el
+     * cuerpo está vacío o no es XML bien formado (p. ej. una página HTML del balanceador).
+     */
+    private function cargarXmlRespuesta(string $rawXml): ?\DOMDocument
+    {
+        if (trim($rawXml) === '') {
+            return null;
+        }
+        $prev = libxml_use_internal_errors(true);
+        try {
+            $dom = new \DOMDocument();
+            $ok  = $dom->loadXML($rawXml);
+            libxml_clear_errors();
+            return $ok ? $dom : null;
+        } finally {
+            libxml_use_internal_errors($prev);
+        }
+    }
+
+    /** Entrada de error para una respuesta que no es XML (o viene vacía). */
+    private function errorRespuestaNoXml(string $rawXml): array
+    {
+        $frag = $this->fragmentoRespuesta($rawXml);
+        return [
+            'id'      => '',
+            'mensaje' => 'RESPUESTA INESPERADA DEL SRI',
+            'tipo'    => 'ERROR',
+            'info'    => 'El servicio del SRI no devolvió una respuesta válida (posible mantenimiento o intermitencia). '
+                       . 'Intente nuevamente en unos minutos. '
+                       . ($frag === '' ? 'Respuesta recibida: (vacía).' : 'Respuesta recibida: ' . $frag),
+        ];
+    }
+
+    /**
+     * Entrada de error cuando el XML es válido pero no trae <mensajes>: SOAP Fault
+     * (se rescata el faultstring), estado DEVUELTA sin detalle, o XML sin <estado>.
+     */
+    private function errorSinDetalle(\DOMXPath $xpath, string $rawXml, string $estado): array
+    {
+        $fault = $xpath->query('//*[local-name()="faultstring"]')->item(0)?->textContent ?? '';
+        $fault = trim($fault);
+        if ($fault !== '') {
+            return [
+                'id'      => '',
+                'mensaje' => 'ERROR REPORTADO POR EL SERVICIO DEL SRI',
+                'tipo'    => 'ERROR',
+                'info'    => $fault . ' — Suele deberse a intermitencia o mantenimiento del SRI; intente nuevamente en unos minutos.',
+            ];
+        }
+
+        if ($estado === 'DEVUELTA') {
+            return [
+                'id'      => '',
+                'mensaje' => 'DEVUELTA SIN DETALLE',
+                'tipo'    => 'ERROR',
+                'info'    => 'El SRI devolvió el comprobante pero no incluyó el motivo. '
+                           . 'Verifique el estado del comprobante en el portal del SRI y reintente el envío.',
+            ];
+        }
+
+        return [
+            'id'      => '',
+            'mensaje' => 'RESPUESTA INESPERADA DEL SRI',
+            'tipo'    => 'ERROR',
+            'info'    => 'La respuesta del SRI no tiene el formato esperado (sin estado ni mensajes). '
+                       . 'Intente nuevamente en unos minutos. Respuesta recibida: ' . $this->fragmentoRespuesta($rawXml),
+        ];
+    }
+
+    /** Fragmento legible (sin etiquetas, acotado) del cuerpo recibido, para el historial. */
+    private function fragmentoRespuesta(string $raw, int $max = 400): string
+    {
+        $txt = trim(preg_replace('/\s+/', ' ', strip_tags($raw)) ?? '');
+        if ($txt === '') {
+            return '';
+        }
+        return mb_strlen($txt) > $max ? mb_substr($txt, 0, $max) . '…' : $txt;
     }
 
     // ── Autorización ──────────────────────────────────────────────────────────
@@ -160,13 +253,22 @@ SOAP;
         ];
 
         try {
-            $dom = new \DOMDocument();
-            $dom->loadXML($rawXml);
+            $dom = $this->cargarXmlRespuesta($rawXml);
+            if ($dom === null) {
+                $result['errores'][] = $this->errorRespuestaNoXml($rawXml);
+                return $result;
+            }
             $xpath = new \DOMXPath($dom);
 
             $autorizaciones = $xpath->query('//autorizacion');
             if (!$autorizaciones || $autorizaciones->length === 0) {
-                $result['errores'][] = ['mensaje' => 'Sin autorizaciones en respuesta', 'tipo' => 'ERROR'];
+                // Un SOAP Fault también cae aquí: rescatar el faultstring para que el
+                // historial diga qué respondió el SRI. Sin fault, se mantiene el
+                // mensaje histórico (SriEnvioService lo trata como "aún sin resolución").
+                $fault = trim($xpath->query('//*[local-name()="faultstring"]')->item(0)?->textContent ?? '');
+                $result['errores'][] = $fault !== ''
+                    ? ['id' => '', 'mensaje' => 'ERROR REPORTADO POR EL SERVICIO DEL SRI', 'tipo' => 'ERROR', 'info' => $fault]
+                    : ['id' => '', 'mensaje' => 'Sin autorizaciones en respuesta', 'tipo' => 'ERROR', 'info' => ''];
                 return $result;
             }
 
@@ -197,8 +299,18 @@ SOAP;
                     'info'    => trim($xpath->query('informacionAdicional', $m)->item(0)?->textContent ?? ''),
                 ];
             }
+
+            // Rechazo explícito sin motivo: dejar constancia en vez de una lista vacía.
+            if (in_array(strtoupper($estado), ['NO AUTORIZADO', 'RECHAZADO'], true) && empty($result['errores'])) {
+                $result['errores'][] = [
+                    'id'      => '',
+                    'mensaje' => 'NO AUTORIZADO SIN DETALLE',
+                    'tipo'    => 'ERROR',
+                    'info'    => 'El SRI no autorizó el comprobante pero no incluyó el motivo. Verifique el comprobante en el portal del SRI.',
+                ];
+            }
         } catch (\Throwable $e) {
-            $result['errores'][] = ['mensaje' => 'Error al parsear respuesta: ' . $e->getMessage(), 'tipo' => 'ERROR'];
+            $result['errores'][] = ['id' => '', 'mensaje' => 'Error al parsear respuesta: ' . $e->getMessage(), 'tipo' => 'ERROR', 'info' => $this->fragmentoRespuesta($rawXml)];
         }
 
         return $result;
