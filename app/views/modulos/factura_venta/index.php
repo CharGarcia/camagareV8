@@ -3416,6 +3416,26 @@ $totalPages = $totalPagesOriginal;
                 `<img src="${B_URL}/${EMPRESA_INFO.logo}" style="max-width:120px;max-height:60px;margin-bottom:4px;">` :
                 '';
 
+            // Datos de autorización SRI: solo si la factura ya está autorizada
+            // (misma fuente que la pestaña SRI del modal: clave_acceso/numero_autorizacion,
+            // con fallback a clave_acceso igual que en el resto del módulo).
+            const claveAcceso = cab.numero_autorizacion || cab.clave_acceso || '';
+            const fechaAutorizacion = cab.fecha_autorizacion ? (() => {
+                const d = new Date(cab.fecha_autorizacion);
+                return isNaN(d) ? cab.fecha_autorizacion : d.toLocaleString('es-EC', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            })() : '';
+            const ambienteAut = parseInt(cab.tipo_ambiente) === 2 ? 'PRODUCCIÓN' : 'PRUEBAS';
+            const autorizacionHtml = claveAcceso ? `
+                <hr class="sep">
+                <div class="center" style="font-size:10px;">NÚMERO DE AUTORIZACIÓN</div>
+                <div class="center" style="font-size:9px;word-break:break-all;">${esc(claveAcceso)}</div>
+                ${fechaAutorizacion ? `<div class="center" style="font-size:10px;">Fecha Aut.: ${esc(fechaAutorizacion)}</div>` : ''}
+                <div class="center" style="font-size:10px;">Ambiente: ${ambienteAut}</div>
+            ` : '';
+
             const lineas = detalles.map(d => {
                 const cant = parseFloat(d.cantidad || 1);
                 const pu = parseFloat(d.precio_unitario || 0);
@@ -3451,6 +3471,7 @@ $totalPages = $totalPagesOriginal;
                 <div class="center bold" style="font-size:12px;">FACTURA DE VENTA</div>
                 <div class="center">No. ${esc(num)}</div>
                 <div class="center">Fecha: ${esc(fecha)}</div>
+                ${autorizacionHtml}
                 <hr class="sep">
                 <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${esc(cab.cliente_nombre)}</td></tr>

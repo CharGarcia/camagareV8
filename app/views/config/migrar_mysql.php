@@ -449,15 +449,28 @@ $base = BASE_URL;
             if (rh.ok) hermana = rh.hermana || null;
         } catch (e) { /* sin verificación: se continúa igual */ }
 
+        // Si se fijó "Establecimiento origen" DISTINTO al ya migrado, la migración trae SOLO ese
+        // establecimiento (clausulaEstabOrigen filtra por ruc_empresa=base+estab): no hay duplicación.
+        const eOrigAviso = ($('estabOrigen') || {}).value || '';
+        const hermanaFuerte = !!hermana && (!eOrigAviso || eOrigAviso === (hermana.establecimiento || ''));
+
         let avisoHtml = '';
-        if (hermana) {
+        if (hermana && !hermanaFuerte) {
+            avisoHtml +=
+                `<div class="alert alert-info text-start small mt-2 mb-0">
+                    <b><i class="bi bi-info-circle me-1"></i>RUC ya migrado en otro establecimiento</b>
+                    Este RUC ya tiene datos bajo el establecimiento <b>${hermana.establecimiento}</b> (${hermana.nombre}),
+                    pero fijaste <b>Establecimiento origen = ${eOrigAviso}</b>: se traerá <b>solo</b> ese establecimiento,
+                    así que <b>no se duplica</b> lo del ${hermana.establecimiento}. Verifica no migrar dos veces el mismo establecimiento.
+                 </div>`;
+        } else if (hermana) {
             avisoHtml +=
                 `<div class="alert alert-danger text-start small mt-2 mb-0">
                     <b><i class="bi bi-exclamation-octagon me-1"></i>¡Atención, RUC ya migrado!</b>
                     Este RUC ya tiene datos migrados bajo el establecimiento <b>${hermana.establecimiento}</b> (${hermana.nombre}).
                     La base anterior se consulta por RUC completo, sin distinguir establecimiento: migrar aquí también
                     <b>traerá y duplicará TODO el histórico</b> que ya se migró en ese otro establecimiento.
-                    Si de verdad quiere continuar, hágalo con conocimiento de causa.
+                    <br><b>Para traer solo un establecimiento</b>, fija arriba <b>«Establecimiento origen»</b> (p. ej. 002) antes de migrar.
                  </div>`;
         }
 
@@ -472,18 +485,18 @@ $base = BASE_URL;
                  </div>`;
         }
 
-        const hayAviso = !!hermana || entExist.length > 0;
+        const hayAviso = hermanaFuerte || entExist.length > 0;
         const ambTxt = ambiente === '2' ? 'PRODUCCIÓN' : (ambiente === '1' ? 'PRUEBAS' : 'desconocido');
         const ambCls = ambiente === '2' ? 'text-danger' : 'text-success';
         const conf = await Swal.fire({
-            title: hermana ? '¿Migrar de todas formas? (RUC ya migrado)' : '¿Migrar los datos seleccionados?',
+            title: hermanaFuerte ? '¿Migrar de todas formas? (RUC ya migrado)' : '¿Migrar los datos seleccionados?',
             html: `Se traerán <b>${entidades.length}</b> tipo(s) de dato desde la base anterior.<br>
                    Ambiente de la empresa (destino): <b class="${ambCls}">${ambTxt}</b>${ambiente ? ' (' + ambiente + ')' : ''}<br>
                    <span class="text-muted small">Es idempotente: no duplica lo ya migrado. Los documentos se marcan con este ambiente.</span>
                    ${avisoHtml}`,
-            icon: hermana ? 'error' : (entExist.length ? 'warning' : 'question'), showCancelButton: true,
+            icon: hermanaFuerte ? 'error' : (entExist.length ? 'warning' : 'question'), showCancelButton: true,
             confirmButtonText: hayAviso ? 'Entiendo, migrar de todas formas' : 'Sí, migrar',
-            cancelButtonText: 'Cancelar', confirmButtonColor: hermana ? '#dc3545' : (entExist.length ? '#fd7e14' : '#198754')
+            cancelButtonText: 'Cancelar', confirmButtonColor: hermanaFuerte ? '#dc3545' : (entExist.length ? '#fd7e14' : '#198754')
         });
         if (!conf.isConfirmed) return;
 
