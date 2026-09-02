@@ -190,7 +190,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             ${t.es_reimpresion ? '<div class="copia">— COPIA —</div>' : ''}
             <table class="items"><colgroup><col style="width:20%"><col></colgroup><tbody>${lineas}</tbody></table>
             ${t.comanda_observaciones ? `<hr class="sep"><div>${escapeHtml(t.comanda_observaciones)}</div>` : ''}
-            <br><br>
+            <div class="feed"></div>
         </body></html>`;
     }
 
@@ -218,7 +218,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     iframe.contentWindow.focus();
                     iframe.contentWindow.print();
                 } catch (e) { /* la impresora resolverá; no se puede hacer más desde aquí */ }
-                setTimeout(() => { iframe.remove(); resolve(); }, 1200);
+                // El iframe no se quita en cuanto vuelve print(): quitarlo antes
+                // de que el navegador termine de mandar el trabajo al spooler
+                // trunca el ticket, y la térmica suelta el tramo que le faltaba
+                // al principio de la impresión siguiente.
+                setTimeout(() => { iframe.remove(); resolve(); }, 2500);
             }, 300);
         });
     }

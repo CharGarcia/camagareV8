@@ -279,6 +279,9 @@ foreach ($departamentos as $d) {
     // apruebe: justamente existe para producir el presupuesto que se aprueba.
     window.TW_ES_DIAGNOSTICO = <?= \App\Helpers\Booleano::es($depActual['es_diagnostico'] ?? false) ? 'true' : 'false' ?>;
     window.TW_ORDENES_INICIALES = <?= json_encode($ordenes ?? []) ?>;
+    window.EMPRESA_CONFIG = {
+        decimales_precio: <?= (int) ($decimalesPrecio ?? 2) ?>
+    };
 </script>
 <script src="<?= $base ?>/js/modulos/taller_estacion.js?v=<?= time() ?>"></script>
 </body>

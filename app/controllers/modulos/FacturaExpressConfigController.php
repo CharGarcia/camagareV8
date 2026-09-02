@@ -57,6 +57,11 @@ class FacturaExpressConfigController extends BaseModuloController
         $stFp->execute();
         $formasPago = $stFp->fetchAll(\PDO::FETCH_ASSOC);
 
+        // Decimales de precio configurados: para que el precio unitario que se
+        // captura al armar una plantilla respete la misma configuración que el
+        // resto del sistema (mismo helper que ya usa FacturaExpressSolicitudesController).
+        $empresaConfig = $this->service->getEmpresaConfig($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos.factura-express-config.index', [
             'titulo'           => 'Configuración QR',
             'perm'             => $perm,
@@ -75,6 +80,7 @@ class FacturaExpressConfigController extends BaseModuloController
             'establecimientos' => $establecimientos,
             'puntosEmision'    => $puntosEmision,
             'formasPago'       => $formasPago,
+            'decimalesPrec'    => (int) ($empresaConfig['decimales_precio'] ?? 2),
             'fullWidth'        => true,
         ]);
     }

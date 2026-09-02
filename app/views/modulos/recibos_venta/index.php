@@ -2895,8 +2895,8 @@ $totalPages = $totalPagesOriginal;
                 ${cab.observaciones ? `<hr class="sep"><div style="font-size:10px;">${esc(cab.observaciones)}</div>` : ''}
                 <hr class="sep">
                 <div class="center" style="font-size:10px;">¡Gracias por su compra!</div>
-                <br><br>
-                <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
+                <div class="feed"></div>
+                <script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>
             </body></html>`;
 
             const win = window.open('', '_blank', 'width=320,height=600,scrollbars=yes');

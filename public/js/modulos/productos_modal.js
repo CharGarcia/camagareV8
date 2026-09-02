@@ -211,7 +211,7 @@
 
         const baseInp = document.getElementById('prod_precio_base');
         if (baseInp) {
-            baseInp.value = (base > 0 ? base : 0).toFixed(Math.max(decP, 4));
+            baseInp.value = (base > 0 ? base : 0).toFixed(decP);
         }
         
         window.calcularPreciosTotales(true);

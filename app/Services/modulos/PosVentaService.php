@@ -637,7 +637,11 @@ class PosVentaService
         ];
 
         $ingresoService = new IngresoService(new IngresoRepository(), new IngresoRules(), $this->logService);
-        $idIngreso = $ingresoService->crear($payload);
+        // true: el documento se acaba de emitir aquí mismo. Sin esto el Ingreso se
+        // rechaza cuando la factura todavía está en 'borrador' (pendiente del SRI),
+        // porque la búsqueda de documentos pendientes solo mira los autorizados y
+        // devuelve saldo 0. Ver IngresoService::crear().
+        $idIngreso = $ingresoService->crear($payload, true);
         if ($managedTransaction) {
             $this->db->commit();
         }

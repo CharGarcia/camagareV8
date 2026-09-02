@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante
-version: 1.20
+version: 1.21
 orden: 20
 estado: activo
 ---
@@ -462,6 +462,12 @@ tocarlas cada vez.
 - **Se envió a preparación pero no salió el papel**: la pantalla de esa estación
   no está abierta en el equipo de la impresora. La orden no se pierde: sale en
   cuanto se abra (ver el manual del KDS).
+- **Sale solo parte de la tirilla, y lo que faltaba aparece al principio de la
+  siguiente**: es el buffer de la impresora, que se queda con el último tramo
+  cuando el trabajo se corta antes de tiempo. Ya se corrigió dejando margen al
+  cerrar la ventana de impresión y añadiendo avance de papel al final del
+  ticket. Si sigue pasando, revise en el driver que el corte de papel esté
+  configurado y que no esté en modo de impresión bidireccional.
 - **La tirilla sale descuadrada, con el texto encogido o los valores en otro
   renglón**: el navegador está reescalando la página. Revise el tamaño de papel
   del driver y ponga *Márgenes: Ninguno* y *Escala: 100 %* en el diálogo de
@@ -477,6 +483,10 @@ tocarlas cada vez.
   la configurada en la ficha del cliente y, si no tiene, la de Empresa →
   Facturación. Antes se emitía siempre *01* en esos casos. Si el cobro no puede
   generar su Ingreso, ahora se avisa en pantalla en vez de quedar solo en el log.
+- **1.21** — Corregido el ticket que salía cortado y cuyo final aparecía al
+  principio de la impresión siguiente: la ventana de impresión ya no se cierra
+  antes de que el trabajo llegue completo a la impresora, y el ticket termina
+  con avance de papel.
 - **1.20** — Cobrada la última cuenta, la pantalla ya no vuelve al tablero a los
   1,5 segundos: espera a que se cierre el aviso del cobro, para que dé tiempo a
   imprimir la tirilla del documento. La cuenta impresa muestra los importes **con IVA**, igual que la

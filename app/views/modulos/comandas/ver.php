@@ -1169,14 +1169,14 @@ window.addEventListener('pageshow', function (e) {
             ${t.mesero_nombre ? `<div class="meta">Mesero: ${escapeHtml(t.mesero_nombre)}</div>` : ''}
             <table class="items"><colgroup><col style="width:20%"><col></colgroup><tbody>${filas}</tbody></table>
             ${t.observaciones ? `<hr class="sep"><div>${escapeHtml(t.observaciones)}</div>` : ''}
-            <br><br>
+            <div class="feed"></div>
         </body></html>`;
 
         const copias = Math.min(5, Math.max(1, parseInt(t.copias, 10) || 1));
         for (let i = 0; i < copias; i++) {
             const win = window.open('', '_blank', 'width=380,height=600,scrollbars=yes');
             if (!win) { swalWarning('Permite ventanas emergentes para imprimir la orden.'); return; }
-            win.document.write(html + '<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>');
+            win.document.write(html + '<script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>');
             win.document.close();
         }
     }
@@ -2090,8 +2090,8 @@ window.addEventListener('pageshow', function (e) {
                 ${servicio > 0 ? `<tr><td>Servicio ${porcentajeServicio}%</td><td class="num">$${fmt(servicio)}</td></tr>` : ''}
                 <tr><td>TOTAL A PAGAR</td><td class="num">$${fmt(total)}</td></tr>
             </table>
-            <br><br>
-            <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
+            <div class="feed"></div>
+            <script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>
         </body></html>`;
 
         const win = window.open('', '_blank', 'width=320,height=600,scrollbars=yes');
@@ -2204,8 +2204,8 @@ window.addEventListener('pageshow', function (e) {
                 ${cab.observaciones ? `<hr class="sep"><div style="font-size:10px;">${escapeHtml(cab.observaciones)}</div>` : ''}
                 <hr class="sep">
                 <div class="center" style="font-size:10px;">¡Gracias por su compra!</div>
-                <br><br>
-                <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
+                <div class="feed"></div>
+                <script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>
             </body></html>`;
 
             const win = window.open('', '_blank', 'width=320,height=600,scrollbars=yes');

@@ -1274,6 +1274,15 @@ class ComandaService
             $idCliente = (int) ($comanda['id_cliente'] ?? 0);
         }
 
+        // La forma de pago se exige ANTES de emitir. Sin ella el documento sale
+        // igual pero su Ingreso no se puede generar (PosVentaService lo rechaza),
+        // y quedaría una factura numerada con la Cuenta por Cobrar abierta — un
+        // comprobante ya emitido no se puede deshacer. Mejor no llegar a emitirlo:
+        // así el cobro del salón siempre deja documento e Ingreso juntos.
+        if ((int) ($datosPago['id_forma_pago_empresa'] ?? 0) <= 0) {
+            throw new Exception('Selecciona la forma de pago antes de cobrar: sin ella no se puede registrar el Ingreso de la venta.');
+        }
+
         $res = $this->ventaService->cobrar([
             'id_empresa'              => $idEmpresa,
             'id_usuario'              => $idUsuario,

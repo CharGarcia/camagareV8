@@ -95,6 +95,12 @@ $fPie    = $esAngosta ?  9 : 11;
     h3 { font-size: <?= $fPie ?>px; margin: 1px 0; font-weight: normal; }
     img { max-width: 45%; max-height: 16mm; }
 
+    /* Avance de papel al final del ticket. Sin esto la térmica deja la
+       última parte dentro del cabezal, sin imprimir, y la suelta al
+       principio del ticket siguiente: el usuario ve que le falta el final
+       de una impresión y le sobra al inicio de la otra. */
+    .feed { height: 20mm; }
+
     @media print {
         button { display: none; }
     }

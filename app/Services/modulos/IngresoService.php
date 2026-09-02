@@ -104,7 +104,20 @@ class IngresoService
         }
     }
 
-    public function crear(array $data): int
+    /**
+     * @param bool $documentoRecienEmitido Cobro automático de un documento que se
+     *   acaba de emitir en esta misma operación (POS mostrador y comandas). En ese
+     *   caso NO se valida el saldo pendiente: el documento nace en 'borrador' —se
+     *   autoriza recién cuando responde el SRI— y la búsqueda de documentos
+     *   pendientes solo mira los 'autorizado', así que devolvería saldo 0 y
+     *   rechazaría el cobro de una venta que sí se cobró. Tampoco hace falta
+     *   validarlo: el documento se acaba de crear, su saldo es su importe total y
+     *   nadie más pudo haberlo cobrado en el intervalo.
+     *   Es un parámetro y no una clave del payload a propósito: los controladores
+     *   pasan $_POST tal cual a este método, y una bandera dentro de $data se
+     *   podría inyectar desde el navegador para saltarse la validación.
+     */
+    public function crear(array $data, bool $documentoRecienEmitido = false): int
     {
         // 1. Validar Secuencial
         $this->validarSecuencial($data);
@@ -133,7 +146,10 @@ class IngresoService
             // saldo suficiente: el "saldo_anterior" que mandó el navegador puede estar
             // desactualizado si, mientras el modal seguía abierto, otro ingreso ya cobró
             // parte (o todo) el mismo documento (CLAUDE.md §8).
-            $this->validarSaldoDocumentos($data, $idEmpresa);
+            // No aplica al cobro automático del POS: ver $documentoRecienEmitido.
+            if (!$documentoRecienEmitido) {
+                $this->validarSaldoDocumentos($data, $idEmpresa);
+            }
 
             // Insert Cabecera
             $idIngreso = $this->repository->insertCabecera($data);

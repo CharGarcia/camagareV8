@@ -376,7 +376,7 @@ class IngresoRepository extends BaseRepository
                     LEFT JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     WHERE v.id_cliente = :id_cliente
                       AND v.id_empresa = :id_empresa
-                      AND v.estado = 'autorizado' -- Solo facturas vigentes/autorizadas
+                      AND v.estado <> 'anulado' -- Vigentes: incluye 'borrador' (aún sin autorizar por el SRI), que igual se puede cobrar
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
@@ -549,7 +549,7 @@ class IngresoRepository extends BaseRepository
                     LEFT JOIN nc_aplic ncf     ON ncf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     LEFT JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     WHERE v.id_empresa = :id_empresa
-                      AND v.estado = 'autorizado'
+                      AND v.estado <> 'anulado' -- incluye 'borrador': una factura sin autorizar del SRI igual se cobra
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
@@ -997,7 +997,7 @@ class IngresoRepository extends BaseRepository
                     LEFT  JOIN nc_aplic ncf     ON ncf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     LEFT  JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     WHERE v.id_empresa = :id_empresa
-                      AND v.estado = 'autorizado'
+                      AND v.estado <> 'anulado' -- incluye 'borrador': una factura sin autorizar del SRI igual se cobra
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01

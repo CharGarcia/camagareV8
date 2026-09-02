@@ -40,6 +40,11 @@
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmt = (n) => num(n).toFixed(2);
+    // Precio unitario: respeta los decimales configurados por la empresa (no
+    // siempre 2) — si no, un precio con más precisión (ej. 109.5650) se trunca
+    // antes de calcular el IVA y el total con impuestos queda 1 centavo distinto
+    // del precio real del catálogo.
+    const DEC_PRECIO = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
 
     function fechaHora(v) {
         if (!v) return '';
@@ -505,7 +510,7 @@
     function seleccionarProducto(p) {
         setVal('tll_l_id_producto', p.id);
         setVal('tll_l_descripcion', p.nombre);
-        setVal('tll_l_precio', fmt(p.precio));
+        setVal('tll_l_precio', num(p.precio).toFixed(DEC_PRECIO));
 
         // El tipo se ajusta a lo que realmente es: un servicio del catálogo es
         // mano de obra, y un bien es repuesto. Solo se corrige cuando la

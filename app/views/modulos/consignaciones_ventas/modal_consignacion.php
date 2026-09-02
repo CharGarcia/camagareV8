@@ -727,7 +727,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         tr.querySelector('.input-precio-base-original').value = pBase;
 
                         inputCant.value = parseFloat(d.cantidad) || 0;
-                        inputPrecio.value = parseFloat(d.precio_unitario).toFixed(2);
+                        inputPrecio.value = parseFloat(d.precio_unitario).toFixed(EMPRESA_CONFIG.decimales_precio);
 
                         selLista.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
                         if (d.precios_lista && d.precios_lista.length > 0) {
@@ -750,7 +750,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         }
 
                         selLista.onchange = () => {
-                            tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(2);
+                            tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(EMPRESA_CONFIG.decimales_precio);
                             consCalcFila(selLista);
                         };
 
@@ -862,7 +862,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         <option value="0">Precios...</option>
                     </select>
                 </td>
-                <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="0.00" step="any" oninput="consCalcFila(this)" onblur="this.value=parseFloat(this.value||0).toFixed(2)"></td>
+                <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="0.00" step="any" oninput="consCalcFila(this)" onblur="this.value=parseFloat(this.value||0).toFixed(EMPRESA_CONFIG.decimales_precio)"></td>
                 <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="consCalcFila(this)"></td>
                 <td class="${typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.obligatorio_lotes ? '' : 'd-none'} th-lote">
                     <select class="form-select form-select-sm input-detalle input-lote d-none"></select>
@@ -896,7 +896,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 
                 const pBase = parseFloat(p.precio_base) || 0;
                 tr.querySelector('.input-precio-base-original').value = pBase;
-                tr.querySelector('.input-precio').value = pBase.toFixed(2);
+                tr.querySelector('.input-precio').value = pBase.toFixed(EMPRESA_CONFIG.decimales_precio);
 
                 const selPrecios = tr.querySelector('.input-lista-precios');
                 selPrecios.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
@@ -906,7 +906,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     });
                 }
                 selPrecios.onchange = () => {
-                    tr.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(2);
+                    tr.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(EMPRESA_CONFIG.decimales_precio);
                     consCalcFila(selPrecios);
                 };
 
@@ -2204,10 +2204,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
 
             // Set price and call calculation AFTER select list is completely built
-            inputPrecio.value = item.precio_unitario.toFixed(2);
+            inputPrecio.value = item.precio_unitario.toFixed(EMPRESA_CONFIG.decimales_precio);
 
             selLista.onchange = () => {
-                tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(2);
+                tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(EMPRESA_CONFIG.decimales_precio);
                 consCalcFila(selLista);
             };
 
@@ -2598,7 +2598,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             tr.querySelector('.input-precio-base-original').value = pBase;
             tr.querySelector('.input-cantidad').value = d.cantidad || 1;
             const precioGuardado = parseFloat(d.precio) || 0;
-            tr.querySelector('.input-precio').value = precioGuardado.toFixed(2);
+            tr.querySelector('.input-precio').value = precioGuardado.toFixed(EMPRESA_CONFIG.decimales_precio);
 
             const selLista = tr.querySelector('.input-lista-precios');
             selLista.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
@@ -2606,7 +2606,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 selLista.innerHTML = `<option value="${precioGuardado}" selected>Precio Guardado ($${precioGuardado.toFixed(2)})</option>` + selLista.innerHTML;
             }
             selLista.onchange = () => {
-                tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(2);
+                tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(EMPRESA_CONFIG.decimales_precio);
                 consCalcFila(selLista);
             };
 

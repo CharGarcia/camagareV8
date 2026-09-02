@@ -28,6 +28,10 @@
     const setVal = (id, v) => { if ($(id)) $(id).value = (v === null || v === undefined) ? '' : v; };
     const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
     const fmt = (n) => num(n).toFixed(2);
+    // Precio unitario: respeta los decimales configurados por la empresa (no
+    // siempre 2) — si no, un precio con más precisión se trunca antes de
+    // calcular el IVA y el total con impuestos queda distinto del real.
+    const DEC_PRECIO = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -294,7 +298,7 @@
                     const p = JSON.parse(b.getAttribute('data-prod'));
                     setVal('tw_l_id_producto', p.id);
                     setVal('tw_l_descripcion', p.nombre);
-                    setVal('tw_l_precio', fmt(p.precio));
+                    setVal('tw_l_precio', num(p.precio).toFixed(DEC_PRECIO));
 
                     // El tipo se corrige solo cuando contradice al catálogo.
                     const tipo = val('tw_l_tipo');

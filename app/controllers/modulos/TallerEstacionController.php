@@ -62,15 +62,38 @@ class TallerEstacionController extends BaseModuloController
         }
 
         $this->view('modulos.taller_estacion.index', [
-            'titulo'         => 'Estación del taller',
-            'rutaModulo'     => self::RUTA_MODULO,
-            'perm'           => $this->getPermisos(),
-            'departamentos'  => $departamentos,
-            'idDepartamento' => $idDepartamento,
-            'ordenes'        => $idDepartamento > 0 ? $this->service->getOrdenesPorDepartamento($idEmpresa, $idDepartamento) : [],
-            'empleados'      => $this->getEmpleados($idEmpresa),
-            'bodegas'        => $this->getBodegas($idEmpresa),
+            'titulo'          => 'Estación del taller',
+            'rutaModulo'      => self::RUTA_MODULO,
+            'perm'            => $this->getPermisos(),
+            'departamentos'   => $departamentos,
+            'idDepartamento'  => $idDepartamento,
+            'ordenes'         => $idDepartamento > 0 ? $this->service->getOrdenesPorDepartamento($idEmpresa, $idDepartamento) : [],
+            'empleados'       => $this->getEmpleados($idEmpresa),
+            'bodegas'         => $this->getBodegas($idEmpresa),
+            'decimalesPrecio' => $this->getDecimalesPrecio($idEmpresa),
         ]);
+    }
+
+    /**
+     * Decimales de precio configurados por la empresa (por establecimiento
+     * principal, igual que el resto del sistema) — para que el precio unitario
+     * que se captura aquí respete la misma configuración que todo lo demás y no
+     * se trunque a 2 decimales fijos antes de calcular el IVA.
+     */
+    private function getDecimalesPrecio(int $idEmpresa): int
+    {
+        try {
+            $empresaModel = new \App\models\Empresa();
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($establecimientos)) {
+                $estConfig = (new \App\repositories\modulos\EmpresaRepository())
+                    ->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                if ($estConfig && isset($estConfig['decimales_precio'])) {
+                    return (int) $estConfig['decimales_precio'];
+                }
+            }
+        } catch (\Throwable $e) {}
+        return 2;
     }
 
     /** Polling de la tablet: las órdenes que hay ahora en el departamento. */

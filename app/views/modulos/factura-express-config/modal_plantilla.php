@@ -278,6 +278,11 @@ $formasPago       = $formasPago       ?? [];
     const urlBase = '<?= $urlBase ?>';
     let itemIdx   = 0;
     let timerProd;
+    // Decimales de precio configurados por la empresa: para que el precio
+    // unitario de cada ítem de la plantilla respete la misma configuración que
+    // el resto del sistema (no siempre 2) y no se trunque antes de calcular el
+    // IVA al facturar.
+    const DEC_PRECIO = <?= (int) ($decimalesPrec ?? 2) ?>;
 
     // ── Serie: filtrar puntos de emisión por establecimiento ─────────────────
     const selEst  = document.getElementById('fexqr_id_establecimiento');
@@ -423,7 +428,7 @@ $formasPago       = $formasPago       ?? [];
         if (!tr) return;
         input.value = p.nombre ?? '';
         const idProd = tr.querySelector('[name*="id_producto"]');   if (idProd) idProd.value = p.id ?? '';
-        const precio = tr.querySelector('[name*="precio_unitario"]'); if (precio) precio.value = parseFloat(p.precio_unitario ?? 0).toFixed(2);
+        const precio = tr.querySelector('[name*="precio_unitario"]'); if (precio) precio.value = parseFloat(p.precio_unitario ?? 0).toFixed(DEC_PRECIO);
         const ivaHid = tr.querySelector('[name*="porcentaje_iva"]');  if (ivaHid) ivaHid.value = parseFloat(p.porcentaje_iva ?? 0).toFixed(2);
         const ivaBdg = tr.querySelector('.fexqr-iva-badge');          if (ivaBdg) ivaBdg.textContent = fexqrIvaLabel(p.nombre_iva, p.porcentaje_iva);
     };
@@ -451,7 +456,7 @@ $formasPago       = $formasPago       ?? [];
             <td class="text-center"><input type="number" class="input-detalle text-center" name="items[${idx}][cantidad_default]"
                 value="${parseFloat(item.cantidad_default ?? 1)}" min="0.001" step="0.001"></td>
             <td><input type="number" class="input-detalle text-end" name="items[${idx}][precio_unitario]"
-                value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01"></td>
+                value="${parseFloat(item.precio_unitario ?? 0).toFixed(DEC_PRECIO)}" min="0" step="0.01"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][cantidad_editable]"
                 value="1" ${item.cantidad_editable ? 'checked' : ''}></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][precio_editable]"
