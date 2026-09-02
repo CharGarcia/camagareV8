@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante
-version: 1.23
+etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante, datos para la factura, precuenta, cuenta previa, llenar a mano, direccion, telefono
+version: 1.24
 orden: 20
 estado: activo
 ---
@@ -327,22 +327,41 @@ Una comanda vacía se anula sin más.
 El botón del recibo, junto a *Cobrar*, imprime la **cuenta** para que el cliente
 la revise antes de pagar. No es un documento válido: es la previa.
 
-Debajo de la fecha van los datos de facturación: **Nombre**, **RUC/CI** y
-**Correo**.
+El papel va en este orden, con una línea de separación entre cada bloque:
 
-- Si el cliente **ya se identificó** —llenó sus datos desde el QR de la mesa al
-  pedir su factura, o el mesero le asignó un cliente— salen ya impresos y no
-  tiene que escribir nada.
-- Si **todavía no**, salen como líneas en blanco para que las llene a mano y se
-  las entregue al mesero.
-
-Cuando hay una cuenta pedida desde el QR, manda ese cliente: es quien acaba de
-dar sus datos, y puede no ser el mismo que el mesero asignó a la mesa.
+1. El **nombre del local**.
+2. **CUENTA — MESA** y la fecha.
+3. El **detalle** de lo consumido.
+4. Los **totales**.
+5. **DATOS PARA LA FACTURA**.
 
 Sale con **los mismos valores que muestra la pantalla**: cada ítem con su precio
 unitario y su importe **con IVA incluido**, y al pie el subtotal, el IVA
 desglosado por tarifa, el recargo por servicio si aplica y el total. Así el
 cliente puede cuadrar el papel con lo que tiene el mesero en pantalla.
+
+### Los datos para la factura van al final
+
+Al pie, después de los totales, va el bloque **DATOS PARA LA FACTURA** con seis
+campos: **Nombre**, **RUC/CI**, **Correo**, **Dirección**, **Teléfono** y
+**Propina**.
+
+- Si el cliente **ya se identificó** —llenó sus datos desde el QR de la mesa al
+  pedir su factura, o el mesero le asignó un cliente— salen ya impresos y no
+  tiene que escribir nada.
+- Si **todavía no**, salen como líneas punteadas para que las llene a mano y le
+  devuelva el papel al mesero.
+
+La línea de **Propina** funciona igual: si ya hay una propina voluntaria en la
+cuenta se imprime su valor; si no, queda en blanco para que el cliente escriba
+cuánto quiere dejar.
+
+Van al final a propósito: el cliente primero mira lo que consumió y lo que debe,
+y recién entonces escribe. Con los datos arriba había que darle la vuelta al
+papel para revisar el detalle mientras se escribía.
+
+Cuando hay una cuenta pedida desde el QR, manda ese cliente: es quien acaba de
+dar sus datos, y puede no ser el mismo que el mesero asignó a la mesa.
 
 ### La tirilla del documento cobrado
 
@@ -523,6 +542,10 @@ tocarlas cada vez.
 
 ## Historial de cambios
 
+- **1.24** — En la cuenta impresa, los datos de facturación pasaron **del
+  encabezado al pie**, bajo el título *DATOS PARA LA FACTURA*, y se sumaron
+  **Dirección**, **Teléfono** y **Propina** a los tres que ya había. Así el
+  cliente lee primero lo que consumió y lo que debe, y escribe al final.
 - **1.23** — El cobro envía la factura al SRI y espera su autorización: la
   tirilla que se imprime desde el aviso del cobro ya sale con el número de
   autorización, sin pasar por *Facturas de Venta*. Si el SRI rechaza o no

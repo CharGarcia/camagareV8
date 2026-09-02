@@ -535,6 +535,8 @@ window.addEventListener('pageshow', function (e) {
         nombre:         <?= json_encode($comanda['cliente_nombre'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
         identificacion: <?= json_encode($comanda['cliente_identificacion'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
         correo:         <?= json_encode($comanda['cliente_email'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        direccion:      <?= json_encode($comanda['cliente_direccion'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        telefono:       <?= json_encode($comanda['cliente_telefono'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
     };
     let volverAlTableroPendiente = false;
     const volverAlTablero = () => { window.location.href = BASE + '/modulos/mesas/tablero'; };
@@ -2067,12 +2069,20 @@ window.addEventListener('pageshow', function (e) {
     function clienteParaFactura() {
         const g = grupos.find(x => x.id_cliente && x.estado !== 'anulado' && x.cliente_nombre);
         if (g) {
-            return { nombre: g.cliente_nombre, identificacion: g.cliente_identificacion, correo: g.cliente_email };
+            return {
+                nombre: g.cliente_nombre,
+                identificacion: g.cliente_identificacion,
+                correo: g.cliente_email,
+                direccion: g.cliente_direccion,
+                telefono: g.cliente_telefono,
+            };
         }
         return {
             nombre: CLIENTE_COMANDA.nombre,
             identificacion: CLIENTE_COMANDA.identificacion,
             correo: CLIENTE_COMANDA.correo,
+            direccion: CLIENTE_COMANDA.direccion,
+            telefono: CLIENTE_COMANDA.telefono,
         };
     }
 
@@ -2087,7 +2097,7 @@ window.addEventListener('pageshow', function (e) {
         if (!vivas.length) return;
         const fmt = (n) => parseFloat(n || 0).toFixed(2);
 
-        const { subtotal, impuestos: impMap, servicio, total } = calcularTotales(vivas);
+        const { subtotal, impuestos: impMap, servicio, propina, total } = calcularTotales(vivas);
 
         // Datos de facturación. Si el cliente ya se identificó —desde el QR de la
         // mesa, o porque el mesero le asignó un cliente— salen impresos y no hay
@@ -2136,12 +2146,6 @@ window.addEventListener('pageshow', function (e) {
             <div class="center bold" style="font-size:12px;">CUENTA — MESA <?= htmlspecialchars($comanda['mesa_nombre'] ?? '') ?></div>
             <div class="center">Fecha: ${escapeHtml(new Date().toLocaleDateString('es-EC'))}</div>
             <hr class="sep">
-            <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
-                ${filaDato('Nombre:', cli.nombre)}
-                ${filaDato('RUC/CI:', cli.identificacion)}
-                ${filaDato('Correo:', cli.correo)}
-            </table>
-            <hr class="sep">
             <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup><tbody>${lineas}</tbody></table>
             <hr class="sep">
             <table class="t-totales"><colgroup><col><col class="col-num"></colgroup>
@@ -2149,6 +2153,20 @@ window.addEventListener('pageshow', function (e) {
                 ${ivaLineas}
                 ${servicio > 0 ? `<tr><td>Servicio ${porcentajeServicio}%</td><td class="num">$${fmt(servicio)}</td></tr>` : ''}
                 <tr><td>TOTAL A PAGAR</td><td class="num">$${fmt(total)}</td></tr>
+            </table>
+            <hr class="sep">
+            <div class="center bold">DATOS PARA LA FACTURA</div>
+            <!-- Columna de etiquetas más ancha que el 26% de .col-etq: aquí las
+                 etiquetas son más largas ("Dirección:", "Teléfono:") y en papel
+                 de 58 mm partirían en dos líneas. Va en línea y no en el partial
+                 de estilos porque ese lo comparten todas las tirillas. -->
+            <table class="t-datos"><colgroup><col style="width:36%"><col></colgroup>
+                ${filaDato('Nombre:', cli.nombre)}
+                ${filaDato('RUC/CI:', cli.identificacion)}
+                ${filaDato('Correo:', cli.correo)}
+                ${filaDato('Dirección:', cli.direccion)}
+                ${filaDato('Teléfono:', cli.telefono)}
+                ${filaDato('Propina:', propina > 0 ? '$' + fmt(propina) : '')}
             </table>
             <div class="feed"></div>
             <script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>
