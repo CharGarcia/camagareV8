@@ -785,8 +785,21 @@ class EgresoService
         try {
             $asientoService = $this->asientoContableService();
             $previo = $asientoService->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa);
-            if ($previo && ($previo['estado'] ?? '') !== 'anulado') {
-                $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
+            $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+            // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion',
+            // así que getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable
+            // del propio egreso (mismo criterio que getAsientoContable()).
+            if ($idAsiento <= 0) {
+                $row = $this->repository->getPorId($idEgreso, $idEmpresa);
+                $idAsiento = (int) ($row['id_asiento_contable'] ?? 0);
+            }
+
+            if ($idAsiento > 0) {
+                $asiento = $asientoService->getDetalleAsiento($idAsiento, $idEmpresa);
+                if ($asiento && ($asiento['estado'] ?? '') !== 'anulado') {
+                    $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
+                }
                 $this->repository->updateAsientoContable($idEgreso, null);
             }
         } catch (\Throwable $e) {

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte-restaurante
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte restaurante, comandas, mesas, platos mas vendidos, anulaciones, consumo, rotacion de mesas
-version: 1.0
+etiquetas: reporte restaurante, comandas, mesas, platos mas vendidos, anulaciones, consumo, rotacion de mesas, forma de pago, filtro forma de pago, tirilla, imprimir tirilla, enviar por correo, pdf, excel
+version: 1.1
 orden: 70
 estado: activo
 ---
@@ -33,7 +33,37 @@ platos que ocupan carta e inventario sin venderse.
 
 ## Filtros
 
-Por rango de fechas, mesa y usuario.
+Por rango de fechas, mesa, mesero, ítem del menú, categoría y **forma de pago**.
+
+La forma de pago es la de la empresa —Efectivo, un banco, Payphone…—, la misma
+que elige quien cobra, no el código del SRI. Sale del **Ingreso** que generó cada
+cobro, así que si una cuenta se cobró y su Ingreso no llegó a registrarse, esa
+cuenta no aparece al filtrar por forma de pago (sí aparece sin ese filtro). Si
+nota que los totales no cuadran al filtrar, revise en *Ingresos* que los cobros
+del periodo estén registrados.
+
+## Sacar el reporte
+
+Cuatro botones, arriba a la derecha. Se habilitan cuando hay resultados en
+pantalla y **todos respetan los filtros aplicados**: lo que sale es exactamente
+lo que se está viendo.
+
+| Botón | Qué hace |
+|---|---|
+| **PDF** | Descarga el reporte en A4 horizontal. |
+| **Excel** | Descarga la tabla para trabajarla en hoja de cálculo. |
+| **Tirilla** | Lo imprime en la **impresora térmica**, en el ancho configurado en *Configuración Restaurante*. Se abre en una ventana que se imprime sola. |
+| **Correo** | Lo envía a uno o varios correos, con el PDF adjunto. |
+
+La **tirilla** resume cada fila en dos líneas —el concepto y, debajo, su dato
+secundario (ubicación, categoría, número de comandas) con el importe a la
+derecha—, porque en 58 u 80 mm no caben las columnas de la pantalla. Al pie van
+las comandas, los documentos y el total. Lleva la leyenda *"Reporte interno — sin
+validez tributaria"*: es para la caja, no para el cliente.
+
+En el **correo** se escriben los destinatarios separados por comas. El cuerpo
+lleva el resumen (periodo, filtros aplicados, comandas, documentos y total) y el
+PDF va adjunto.
 
 ## Errores frecuentes
 
@@ -41,7 +71,17 @@ Por rango de fechas, mesa y usuario.
   las cerradas.
 - **Un plato no aparece**: no se pidió en el periodo, o se registró como producto
   suelto en lugar de ítem del menú.
+- **Al filtrar por forma de pago faltan cuentas**: esas cuentas se cobraron pero
+  su Ingreso no se generó. Revíselas en *Ingresos*.
+- **"No se pudo enviar el correo"**: revise la configuración de correo de la
+  empresa. El reporte no se pierde: se puede descargar en PDF y enviarlo a mano.
 
 ## Historial de cambios
 
+- **1.1** — Nuevo filtro por **forma de pago** y dos salidas más junto a PDF y
+  Excel: **Tirilla** (impresora térmica) y **Correo** (con el PDF adjunto). Las
+  cuatro salidas respetan los filtros aplicados. La pantalla pasó al diseño
+  estándar de los reportes: título, filtros e indicadores en una sola tarjeta que
+  **queda fija arriba** al desplazarse, y la tabla debajo creciendo hacia abajo
+  en vez de dentro de una caja con scroll propio.
 - **1.0** — Versión inicial.

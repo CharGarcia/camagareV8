@@ -48,6 +48,37 @@ class ReporteRestauranteRepository extends BaseRepository
             $params[':fh2'] = $filtros['fecha_hasta'];
         }
 
+        // Forma de pago de la empresa (Efectivo, un banco, Payphone…). La cuenta
+        // cobrada NO la guarda: en `forma_pago` lleva el código SRI ('01', '20'),
+        // que agrupa demasiado —Pichincha y Guayaquil son ambos '20'—. La forma
+        // real vive en el Ingreso que generó ese cobro, así que se llega por
+        // documento → ingresos_detalle → ingresos_pagos.
+        //
+        // Va como EXISTS y no como JOIN a propósito: un ingreso puede tener
+        // varias filas de pago y un documento varios ingresos (cobros
+        // parciales); un JOIN multiplicaría las líneas de venta e inflaría los
+        // totales del reporte. EXISTS filtra sin duplicar nada.
+        $condFp1 = '';
+        $condFp2 = '';
+        if (!empty($filtros['id_forma_pago'])) {
+            $existe = static fn(string $p): string => "
+                  AND EXISTS (
+                      SELECT 1
+                        FROM ingresos_detalle idet
+                        JOIN ingresos_cabecera ic ON ic.id = idet.id_ingreso
+                                                 AND ic.eliminado = false
+                                                 AND ic.estado <> 'anulado'
+                        JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id
+                       WHERE idet.id_referencia_documento = g.id_documento
+                         AND idet.tipo_documento = g.tipo_documento
+                         AND ip.id_forma_cobro = :{$p}
+                  )";
+            $condFp1 = $existe('ifp1');
+            $condFp2 = $existe('ifp2');
+            $params[':ifp1'] = (int) $filtros['id_forma_pago'];
+            $params[':ifp2'] = (int) $filtros['id_forma_pago'];
+        }
+
         $sql = "
             WITH ventas AS (
                 SELECT g.id AS id_grupo, g.id_comanda, g.created_at AS fecha_cobro,
@@ -58,6 +89,7 @@ class ReporteRestauranteRepository extends BaseRepository
                 WHERE g.id_empresa = :e1 AND g.eliminado = false AND g.estado = 'cobrado'
                   AND g.tipo_split = 'items'
                   {$condFecha1}
+                  {$condFp1}
 
                 UNION ALL
 
@@ -71,10 +103,27 @@ class ReporteRestauranteRepository extends BaseRepository
                 WHERE g.id_empresa = :e2 AND g.eliminado = false AND g.estado = 'cobrado'
                   AND g.tipo_split = 'partes_iguales'
                   {$condFecha2}
+                  {$condFp2}
             )
         ";
 
         return [$sql, $params];
+    }
+
+    /**
+     * Formas de cobro de la empresa, para el filtro. Mismo criterio que
+     * IngresoRepository::getFormasCobro(): son las que pueden recibir dinero.
+     */
+    public function getFormasPago(int $idEmpresa): array
+    {
+        $sql = "SELECT id, nombre, tipo
+                FROM empresa_formas_pago
+                WHERE id_empresa = :e AND activo = TRUE AND eliminado = FALSE
+                  AND (aplica_en = 'AMBAS' OR aplica_en = 'INGRESO')
+                ORDER BY nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** WHERE + params comunes de mesa/mesero, aplicados sobre "c" (comandas) tras unir con la CTE. */
