@@ -726,6 +726,12 @@ class ComandasController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
 
+        // El cobro emite el documento y además espera la autorización del SRI
+        // (firma + recepción + consulta con reintentos). Con el max_execution_time
+        // por defecto, un SRI lento cortaría la respuesta a media autorización: la
+        // venta quedaría hecha y la pantalla vería "error de conexión".
+        @set_time_limit(180);
+
         try {
             $idGrupo = (int) ($_POST['id_grupo'] ?? 0);
             if ($idGrupo <= 0) throw new Exception('Grupo no válido.');
@@ -765,6 +771,11 @@ class ComandasController extends BaseModuloController
                 'numero_operacion'        => trim($_POST['numero_operacion'] ?? ''),
                 'fecha_cobro'             => $fechaCobro,
                 'id_bodega'               => (int) ($_POST['id_bodega'] ?? 0),
+                // Cobro del salón: se espera la autorización del SRI antes de
+                // responder, para que la tirilla que imprime el mesero ya salga
+                // con el número de autorización. No lo pide el cobro automático
+                // de Payphone (ver ComandaService::cobrarGrupo).
+                'autorizar_sri'           => true,
             ], $this->getEmpresaConfig($idEmpresa));
 
             $this->json(['ok' => true, 'msg' => 'Cobro registrado: ' . ($res['numero_documento'] ?? ''), 'data' => $res]);

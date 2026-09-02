@@ -1300,6 +1300,8 @@ class ComandaService
             // aplica sobre el subtotal de ESTE documento, así cada parte de una
             // cuenta dividida carga lo suyo. Viaja al comprobante como <propina>.
             'porcentaje_propina'      => $this->porcentajeServicioComanda($comanda),
+            // Sin 'autorizar_sri' a propósito: aquí el envío al SRI NO puede ir
+            // dentro de cobrar(), va después de cerrar el grupo (ver más abajo).
         ], $empresaConfig);
 
         try {
@@ -1335,6 +1337,26 @@ class ComandaService
             // se avisa: el grupo debe marcarse como cobrado a mano si esta escritura falló.
             error_log('[ComandaService::cobrarGrupo] Documento ' . ($res['numero_documento'] ?? '?') . ' generado, pero no se pudo cerrar el grupo/comanda: ' . $e->getMessage());
             throw new Exception('El documento ' . ($res['numero_documento'] ?? '') . ' se generó correctamente, pero hubo un error al cerrar el grupo de cobro. Contacta soporte.');
+        }
+
+        // Autorización del SRI, ya con el grupo cerrado y la comanda liberada:
+        // así el mesero recibe la tirilla con el número de autorización sin un
+        // segundo paso. Va AQUÍ y no dentro de cobrar() a propósito — si el SRI
+        // tarda y PHP corta la petición, lo que se pierde es solo la
+        // autorización, nunca el cierre del grupo; al revés, el grupo quedaría
+        // abierto con la factura emitida y se podría cobrar dos veces.
+        //
+        // Es la misma pieza que usa el POS mostrador, y nunca lanza: la venta ya
+        // está emitida y cobrada. Si falla, la factura queda en 'borrador' y se
+        // reintenta desde Facturas de Venta.
+        if (!empty($datosPago['autorizar_sri'])) {
+            $res['sri'] = $this->ventaService->autorizarDocumentoEnSri(
+                (int) $res['id_documento'],
+                (string) $res['tipo_documento'],
+                (string) ($res['numero_documento'] ?? ''),
+                $idEmpresa,
+                $idUsuario
+            );
         }
 
         return $res;

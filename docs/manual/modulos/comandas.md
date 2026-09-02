@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante
-version: 1.22
+etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante
+version: 1.23
 orden: 20
 estado: activo
 ---
@@ -350,6 +350,33 @@ Al registrar el cobro aparece un aviso con el número del documento y un botón
 **Imprimir tirilla**. Esa tirilla ya no es la cuenta previa: es la **factura o el
 recibo emitido**, con su formato fiscal.
 
+Al confirmar el cobro, la factura **se envía al SRI y se espera su
+autorización** antes de mostrar ese aviso; por eso el botón dice *Cobrando y
+autorizando…* unos segundos más que antes. Mientras dura esa espera la ventana
+de cobro **queda fija**: no se cierra con un clic fuera, con Escape ni con la X.
+Es a propósito — si se cerrara a media petición, la venta se emitiría igual pero
+usted se quedaría sin el aviso y sin el botón de la tirilla. Cuando el SRI responde autorizando,
+el aviso lo confirma en verde con la fecha y la tirilla sale ya con el **número
+de autorización**, la fecha y el ambiente, igual que la de *Facturas de Venta*.
+
+Tres casos en los que no sale autorizada:
+
+- **El local todavía no cargó su certificado de firma electrónica.** No se
+  intenta el envío y no se muestra ningún aviso del SRI: se factura como antes.
+- **El SRI no autorizó la factura.** El aviso explica el motivo que devolvió el
+  SRI. Corríjala y reenvíela desde *Facturas de Venta*.
+- **El SRI no respondió a tiempo.** La factura queda enviada y pendiente; se
+  reenvía desde *Facturas de Venta*. En ambos casos la tirilla se puede imprimir
+  igual, pero el botón avisa que va **sin autorización**.
+
+En los tres, **el cobro ya está hecho**: el documento está emitido y su Ingreso
+registrado. Lo que falta es solo la autorización, y se resuelve después sin
+volver a cobrar.
+
+> Las cuentas que el cliente paga con tarjeta desde el QR de la mesa no esperan
+> al SRI en ese momento: se autorizan después, para no cortar la pantalla de
+> pago del cliente.
+
 Si era la última cuenta de la mesa, la comanda se cierra y la mesa queda libre,
 pero **la pantalla no se va hasta que usted cierre ese aviso**: puede imprimir
 las copias que necesite antes de volver al tablero.
@@ -475,11 +502,17 @@ tocarlas cada vez.
   no está abierta en el equipo de la impresora. La orden no se pierde: sale en
   cuanto se abra (ver el manual del KDS).
 - **Sale solo parte de la tirilla, y lo que faltaba aparece al principio de la
-  siguiente**: es el buffer de la impresora, que se queda con el último tramo
-  cuando el trabajo se corta antes de tiempo. Ya se corrigió dejando margen al
-  cerrar la ventana de impresión y añadiendo avance de papel al final del
-  ticket. Si sigue pasando, revise en el driver que el corte de papel esté
-  configurado y que no esté en modo de impresión bidireccional.
+  siguiente**: casi siempre es el **driver de la impresora**. Compruébelo en
+  *Dispositivos e impresoras → clic derecho → Propiedades de impresora →
+  Opciones avanzadas → Controlador*: si dice **Generic / Text Only**, Windows le
+  puso un driver que solo imprime texto plano y no entiende lo que le manda el
+  navegador. Otra señal: en Preferencias solo ofrece Carta, A4 y oficio, sin
+  tamaños de rollo ni opción de corte.
+
+  La solución es instalar el driver real de la impresora (el del fabricante, o el
+  genérico POS-80, que sirve para casi todas las térmicas). Ya instalado,
+  configure en Preferencias: papel **continuo** de **80 mm** y **corte de papel
+  al final del documento**.
 - **La tirilla sale descuadrada, con el texto encogido o los valores en otro
   renglón**: el navegador está reescalando la página. Revise el tamaño de papel
   del driver y ponga *Márgenes: Ninguno* y *Escala: 100 %* en el diálogo de
@@ -490,6 +523,12 @@ tocarlas cada vez.
 
 ## Historial de cambios
 
+- **1.23** — El cobro envía la factura al SRI y espera su autorización: la
+  tirilla que se imprime desde el aviso del cobro ya sale con el número de
+  autorización, sin pasar por *Facturas de Venta*. Si el SRI rechaza o no
+  responde a tiempo, el aviso lo dice y deja imprimir sin autorización — el
+  cobro no se pierde en ningún caso. Mientras dura la espera, la ventana de
+  cobro no se puede cerrar por accidente.
 - **1.18** — La forma de pago SRI del comprobante ya no sale solo del tipo de
   la forma cobrada: cuando ese tipo no la determina (efectivo u *Otro*), se toma
   la configurada en la ficha del cliente y, si no tiene, la de Empresa →

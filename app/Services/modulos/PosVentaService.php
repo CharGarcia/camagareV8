@@ -530,6 +530,14 @@ class PosVentaService
             error_log('[PosVentaService] No se pudo generar el Ingreso de ' . $numeroDoc . ': ' . $e->getMessage());
         }
 
+        // Autorización del SRI, al final de todo: la venta, su inventario y su
+        // Ingreso ya están firmes, así que nada de lo que pase aquí puede
+        // deshacerlos. Solo cuando el llamador lo pide — ver
+        // autorizarDocumentoEnSri().
+        $sri = !empty($data['autorizar_sri'])
+            ? $this->autorizarDocumentoEnSri($idDoc, $tipoDocumento, $numeroDoc, $idEmpresa, $idUsuario)
+            : null;
+
         return [
             'id_documento' => $idDoc,
             'tipo_documento' => $tipoDocumento,
@@ -540,7 +548,77 @@ class PosVentaService
             'forma_pago' => $formaPago,
             'id_ingreso' => $idIngreso,
             'aviso_ingreso' => $avisoIngreso,
+            'sri' => $sri,
         ];
+    }
+
+    /**
+     * Envía al SRI la factura recién emitida y espera su autorización, para que
+     * la tirilla que se imprime a continuación salga ya con el número de
+     * autorización. Nunca lanza: el documento ya está emitido y cobrado.
+     *
+     * Devuelve null cuando no corresponde intentarlo:
+     *   · Recibo de venta — no es comprobante electrónico.
+     *   · Empresa sin certificado de firma activo — si no, cada cobro terminaría
+     *     con un aviso de error en pantalla en los locales que aún no lo subieron.
+     *
+     * Se invoca de dos maneras, y la diferencia importa:
+     *   · **POS mostrador**: con `autorizar_sri` en el payload de cobrar(), que
+     *     lo llama al final — ahí no queda nada pendiente después de emitir.
+     *   · **Cobro del salón**: ComandaService lo llama por su cuenta DESPUÉS de
+     *     cerrar el grupo de cobro. No puede ir dentro de cobrar(): si el SRI
+     *     tarda y PHP corta la petición, el grupo quedaría abierto con la
+     *     factura ya emitida y el mesero podría cobrarlo por segunda vez.
+     * El cobro que dispara Payphone no lo usa por ninguna de las dos vías: corre
+     * dentro de la página de retorno del cliente, y sumarle la espera del SRI
+     * arriesga que PHP corte esa petición.
+     *
+     * Tiempos de espera cortos a propósito (2/3/2 en vez de los 3/5/3 por
+     * defecto de SriEnvioService): el caso normal resuelve en pocos segundos y,
+     * si el SRI no contesta a tiempo, se devuelve el estado tal cual y la
+     * pantalla deja imprimir sin autorización.
+     */
+    public function autorizarDocumentoEnSri(
+        int $idDocumento,
+        string $tipoDocumento,
+        string $numeroDoc,
+        int $idEmpresa,
+        int $idUsuario
+    ): ?array {
+        if ($tipoDocumento !== 'FACTURA' || $idDocumento <= 0) {
+            return null;
+        }
+
+        try {
+            $svc = new \App\Services\Sri\SriEnvioService(
+                esperaInicial:       2,
+                maxIntentos:         3,
+                intervaloReintentos: 2
+            );
+
+            if (!$svc->getFirmaConfig($idEmpresa)) {
+                return null;
+            }
+
+            $r = $svc->enviarFacturaVenta($idDocumento, $idEmpresa, $idUsuario);
+
+            return [
+                'ok'                  => (bool) ($r['ok'] ?? false),
+                'estado'              => (string) ($r['estado'] ?? 'error'),
+                'mensaje'             => (string) ($r['mensaje'] ?? ''),
+                'numero_autorizacion' => (string) ($r['numero_autorizacion'] ?? ''),
+                'fecha_autorizacion'  => (string) ($r['fecha_autorizacion'] ?? ''),
+                'errores'             => $r['errores'] ?? [],
+            ];
+        } catch (\Throwable $e) {
+            error_log('[PosVentaService] Documento ' . $numeroDoc . ' emitido, pero falló el envío al SRI: ' . $e->getMessage());
+            return [
+                'ok'      => false,
+                'estado'  => 'error',
+                'mensaje' => $e->getMessage(),
+                'errores' => [],
+            ];
+        }
     }
 
     /**

@@ -433,6 +433,13 @@ class CajaPosController extends BaseModuloController
     {
         $this->requireCrear();
 
+        // El cobro emite el documento y además espera la autorización del SRI
+        // (firma + recepción + consulta con reintentos). Con el
+        // max_execution_time por defecto, un SRI lento cortaría la respuesta a
+        // media autorización: la venta quedaría hecha y la pantalla vería
+        // "error de conexión".
+        @set_time_limit(180);
+
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         $idPuntoEmision = (int) ($_POST['id_punto_emision'] ?? 0);
@@ -480,6 +487,11 @@ class CajaPosController extends BaseModuloController
                     $idEmpresa,
                     in_array((string) ($_POST['aplica_servicio'] ?? ''), ['1', 'true', 'on'], true)
                 ),
+                // Cobro de mostrador: se espera la autorización del SRI antes de
+                // responder, para que la tirilla que imprime el cajero ya salga
+                // con el número de autorización. Solo aplica a facturas; el
+                // recibo de venta no es comprobante electrónico.
+                'autorizar_sri' => true,
             ], $this->getEmpresaConfig($idEmpresa));
 
             $this->json(['ok' => true, 'msg' => 'Venta registrada correctamente.', 'data' => $res]);

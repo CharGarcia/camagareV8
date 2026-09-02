@@ -559,12 +559,30 @@ class FacturaVentaRepository extends BaseRepository
         return $this->colsCache[$tabla];
     }
 
+    /**
+     * ¿Ya hay una factura con ese secuencial en el punto de emisión?
+     *
+     * Acotado al AMBIENTE de la empresa (Pruebas / Producción). Pruebas y
+     * Producción son numeraciones independientes en el SRI —la clave de acceso
+     * lleva el ambiente dentro—, así que al pasar a Producción la serie
+     * arranca de nuevo y repite números ya usados en Pruebas. Sin este filtro
+     * el sistema los leía como duplicados y bloqueaba la emisión con "El número
+     * de secuencial ya existe para este punto de emisión", aunque el número que
+     * acababa de calcular SecuencialRepository::getSiguienteDisponible() sí
+     * estuviera libre — esa consulta sí filtra por tipo_ambiente. Mismo criterio
+     * que IngresoRepository y EgresoRepository.
+     *
+     * COALESCE porque la columna admite NULL (facturas viejas anteriores a la
+     * migración del SRI): esas cuentan como Pruebas, igual que en el índice
+     * único uix_ventas_secuencial_activo.
+     */
     public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, ?int $excluirId = null): bool
     {
-        $sql = "SELECT COUNT(*) FROM ventas_cabecera 
-                WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ? 
-                  AND secuencial = ? AND eliminado = FALSE";
-        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial];
+        $sql = "SELECT COUNT(*) FROM ventas_cabecera
+                WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ?
+                  AND secuencial = ? AND eliminado = FALSE
+                  AND COALESCE(tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)";
+        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial, $idEmpresa];
 
         if ($excluirId !== null) {
             $sql .= " AND id <> ?";

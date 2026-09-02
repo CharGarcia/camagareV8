@@ -185,7 +185,13 @@ class SriEnvioService
         // 5. Enviar al WS de recepción
         $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
 
-        if ($recepcion['estado'] !== 'RECIBIDA') {
+        // "CLAVE DE ACCESO EN PROCESAMIENTO" no es un rechazo: el SRI ya tiene el
+        // comprobante en cola de un envío anterior y solo falta su resolución.
+        // Se trata como recibido y se pasa a consultar la autorización — igual
+        // que hace preVerificarAutorizacion() cuando lo detecta ANTES de enviar.
+        $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
+
+        if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
             $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoSri($idVenta, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
@@ -203,7 +209,13 @@ class SriEnvioService
         }
 
         $this->actualizarEstadoSri($idVenta, 'recibida', null, null, null, $idUsuario);
-        $this->log($logBase + ['accion' => 'recibida', 'estado_sri' => 'RECIBIDA', 'mensaje' => 'Comprobante recibido por el SRI. Consultando autorización…']);
+        $this->log($logBase + [
+            'accion'     => 'recibida',
+            'estado_sri' => 'RECIBIDA',
+            'mensaje'    => $enProcesamiento
+                ? 'El SRI ya tenía el comprobante en procesamiento de un envío anterior. Consultando autorización…'
+                : 'Comprobante recibido por el SRI. Consultando autorización…',
+        ]);
 
         // 6. Consultar autorización (con reintentos)
         $autResult   = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
@@ -426,7 +438,11 @@ class SriEnvioService
         // 5. Enviar al WS de recepción
         $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
 
-        if ($recepcion['estado'] !== 'RECIBIDA') {
+        // Error 70 del SRI: ya lo tiene en cola, no es un rechazo. Ver
+        // recepcionEnProcesamiento().
+        $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
+
+        if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
             $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
@@ -444,7 +460,13 @@ class SriEnvioService
         }
 
         $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, 'recibida', null, null, null, $idUsuario);
-        $this->log($logBase + ['accion' => 'recibida', 'estado_sri' => 'RECIBIDA', 'mensaje' => 'Comprobante recibido por el SRI. Consultando autorización…']);
+        $this->log($logBase + [
+            'accion'     => 'recibida',
+            'estado_sri' => 'RECIBIDA',
+            'mensaje'    => $enProcesamiento
+                ? 'El SRI ya tenía el comprobante en procesamiento de un envío anterior. Consultando autorización…'
+                : 'Comprobante recibido por el SRI. Consultando autorización…',
+        ]);
 
         // 6. Consultar autorización (con reintentos)
         $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
@@ -660,7 +682,11 @@ class SriEnvioService
 
         $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
 
-        if ($recepcion['estado'] !== 'RECIBIDA') {
+        // Error 70 del SRI: ya lo tiene en cola, no es un rechazo. Ver
+        // recepcionEnProcesamiento().
+        $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
+
+        if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
             $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('notas_credito_cabecera', $idNC, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
@@ -670,7 +696,17 @@ class SriEnvioService
         }
 
         $this->actualizarEstadoDocumento('notas_credito_cabecera', $idNC, 'recibida', null, null, null, $idUsuario);
-        
+        // Este registro faltaba: sin un 'recibida' en sri_envio_log,
+        // claveYaRecibidaSinResolver() no puede saber que el SRI ya tiene la
+        // nota y un reenvío posterior volvería a chocar con el error 70.
+        $this->log($logBase + [
+            'accion'     => 'recibida',
+            'estado_sri' => 'RECIBIDA',
+            'mensaje'    => $enProcesamiento
+                ? 'El SRI ya tenía el comprobante en procesamiento de un envío anterior. Consultando autorización…'
+                : 'Comprobante recibido por el SRI. Consultando autorización…',
+        ]);
+
         // 5. Autorización
         $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
         $estadoInterno = match (strtoupper($autResult['estado'] ?? '')) {
@@ -836,7 +872,11 @@ class SriEnvioService
 
         $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
 
-        if ($recepcion['estado'] !== 'RECIBIDA') {
+        // Error 70 del SRI: ya lo tiene en cola, no es un rechazo. Ver
+        // recepcionEnProcesamiento().
+        $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
+
+        if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
             $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
@@ -846,6 +886,15 @@ class SriEnvioService
         }
 
         $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, 'recibida', null, null, null, $idUsuario);
+        // Igual que en la nota de crédito: este registro faltaba y es el que
+        // permite a claveYaRecibidaSinResolver() evitar un reenvío inútil.
+        $this->log($logBase + [
+            'accion'     => 'recibida',
+            'estado_sri' => 'RECIBIDA',
+            'mensaje'    => $enProcesamiento
+                ? 'El SRI ya tenía el comprobante en procesamiento de un envío anterior. Consultando autorización…'
+                : 'Comprobante recibido por el SRI. Consultando autorización…',
+        ]);
 
         // 5. Autorización
         $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
@@ -1012,7 +1061,11 @@ class SriEnvioService
         // 5. Enviar al WS de recepción
         $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
 
-        if ($recepcion['estado'] !== 'RECIBIDA') {
+        // Error 70 del SRI: ya la tiene en cola, no es un rechazo. Ver
+        // recepcionEnProcesamiento().
+        $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
+
+        if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
             $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('retencion_compra_cabecera', $idRetencion, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
@@ -1023,7 +1076,13 @@ class SriEnvioService
         }
 
         $this->actualizarEstadoDocumento('retencion_compra_cabecera', $idRetencion, 'recibida', null, null, null, $idUsuario);
-        $this->log($logBase + ['accion' => 'recibida', 'estado_sri' => 'RECIBIDA', 'mensaje' => 'Retención recibida por el SRI. Consultando autorización…']);
+        $this->log($logBase + [
+            'accion'     => 'recibida',
+            'estado_sri' => 'RECIBIDA',
+            'mensaje'    => $enProcesamiento
+                ? 'El SRI ya tenía la retención en procesamiento de un envío anterior. Consultando autorización…'
+                : 'Retención recibida por el SRI. Consultando autorización…',
+        ]);
 
         // 6. Consultar autorización
         $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
@@ -1144,6 +1203,39 @@ class SriEnvioService
      *  respuesta (EN PROCESAMIENTO/PPR, vacía, o ERROR "Sin autorizaciones en respuesta" —
      *  el ambiente de pruebas del SRI todavía no publicó el resultado) sigue reintentando. */
     private const ESTADOS_DEFINITIVOS = ['AUTORIZADO', 'NO AUTORIZADO', 'RECHAZADO'];
+
+    /**
+     * ¿La recepción "falló" solo porque el SRI ya tiene esta clave en cola?
+     *
+     * El WS de recepción responde el error **70 — CLAVE DE ACCESO EN
+     * PROCESAMIENTO** cuando el comprobante ya entró en un envío anterior y
+     * todavía no tiene resolución. NO es un rechazo del comprobante: reenviarlo
+     * devolverá siempre lo mismo, y lo único que queda por hacer es consultar
+     * su autorización.
+     *
+     * Tratarlo como "devuelta" tenía dos consecuencias malas: el usuario leía
+     * "el SRI devolvió el comprobante con errores" (no hay nada que corregir),
+     * y el documento quedaba fuera del reintento automático —
+     * SriReintentosPendientesService solo recoge las acciones
+     * enviando/recibida/en_procesamiento/error, no 'devuelta'—, así que nadie
+     * volvía a mirarlo.
+     *
+     * Se compara por identificador y también por el texto del mensaje, porque
+     * el identificador puede venir vacío en respuestas mal formadas.
+     */
+    private function recepcionEnProcesamiento(array $recepcion): bool
+    {
+        foreach ($recepcion['errores'] ?? [] as $error) {
+            if (trim((string) ($error['id'] ?? '')) === '70') {
+                return true;
+            }
+            if (stripos((string) ($error['mensaje'] ?? ''), 'EN PROCESAMIENTO') !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private function consultarConReintentos(string $claveAcceso, string $tipoAmbiente): array
     {
@@ -1920,7 +2012,11 @@ class SriEnvioService
         // 5. Enviar al WS
         $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
 
-        if ($recepcion['estado'] !== 'RECIBIDA') {
+        // Error 70 del SRI: ya la tiene en cola, no es un rechazo. Ver
+        // recepcionEnProcesamiento().
+        $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
+
+        if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
             $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('guias_remision_cabecera', $idGuia, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
@@ -1931,7 +2027,13 @@ class SriEnvioService
         }
 
         $this->actualizarEstadoDocumento('guias_remision_cabecera', $idGuia, 'recibida', null, null, null, $idUsuario);
-        $this->log($logBase + ['accion' => 'recibida', 'estado_sri' => 'RECIBIDA', 'mensaje' => 'Guía recibida por el SRI. Consultando autorización…']);
+        $this->log($logBase + [
+            'accion'     => 'recibida',
+            'estado_sri' => 'RECIBIDA',
+            'mensaje'    => $enProcesamiento
+                ? 'El SRI ya tenía la guía en procesamiento de un envío anterior. Consultando autorización…'
+                : 'Guía recibida por el SRI. Consultando autorización…',
+        ]);
 
         // 6. Consultar autorización
         $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
@@ -2107,7 +2209,11 @@ class SriEnvioService
         // 5. Enviar al WS de recepción
         $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
 
-        if ($recepcion['estado'] !== 'RECIBIDA') {
+        // Error 70 del SRI: ya la tiene en cola, no es un rechazo. Ver
+        // recepcionEnProcesamiento().
+        $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
+
+        if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
             $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('liquidaciones_cabecera', $idLiq, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
@@ -2120,7 +2226,13 @@ class SriEnvioService
         }
 
         $this->actualizarEstadoDocumento('liquidaciones_cabecera', $idLiq, 'recibida', null, null, null, $idUsuario);
-        $this->log($logBase + ['accion' => 'recibida', 'estado_sri' => 'RECIBIDA', 'mensaje' => 'Liquidación recibida por el SRI. Consultando autorización…']);
+        $this->log($logBase + [
+            'accion'     => 'recibida',
+            'estado_sri' => 'RECIBIDA',
+            'mensaje'    => $enProcesamiento
+                ? 'El SRI ya tenía la liquidación en procesamiento de un envío anterior. Consultando autorización…'
+                : 'Liquidación recibida por el SRI. Consultando autorización…',
+        ]);
 
         // 6. Consultar autorización
         $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);

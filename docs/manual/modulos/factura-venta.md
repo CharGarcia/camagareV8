@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision
-version: 1.5
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico
+version: 1.7
 orden: 20
 estado: activo
 ---
@@ -87,14 +87,25 @@ y asiento contable) según la configuración de la empresa.
 ## Errores frecuentes
 
 - **Firma caducada**: renueve el certificado y vuelva a cargarlo en la empresa.
-- **Secuencial repetido**: revise el secuencial configurado para el
-  establecimiento y punto de emisión.
+- **Secuencial repetido** (*"El número de secuencial ya existe para este punto
+  de emisión"*): revise el secuencial configurado para el establecimiento y
+  punto de emisión. Si el local **pasó de Pruebas a Producción** (o al revés) y
+  el mensaje aparece con un número que en el ambiente activo está libre, es el
+  caso corregido en la versión 1.6: la numeración de Pruebas y la de Producción
+  son independientes, y antes el sistema las comparaba entre sí.
 - **El selector de Serie aparece vacío** (no ofrece ningún punto de emisión):
   la empresa tiene más de un establecimiento y el que está realmente
   **Activo** no era el que se usaba para armar el combo (corregido; si
   persiste, confirme en el módulo Empresa → Establecimientos cuál es el
   Activo y que tenga un punto de emisión activo con "Facturas de venta"
   configurada en Secuenciales).
+- **"Clave de acceso en procesamiento"**: no es un rechazo. El SRI ya tiene la
+  factura en cola de un envío anterior y todavía no publica el resultado.
+  Reenviarla no sirve de nada: devolvería el mismo mensaje. El sistema ahora la
+  reconoce y pasa directo a consultar la autorización, y si el SRI aún no
+  responde la deja en seguimiento para que el reintento automático la resuelva.
+  Detalle en la guía *"Clave de acceso en procesamiento": qué significa y qué
+  hacer* (`guias/clave-de-acceso-en-procesamiento`).
 - **El cliente no recibe el correo**: verifique la dirección registrada en su ficha.
 
 ## Normativa SRI 2026: RUC del proveedor y placa de transporte
@@ -113,6 +124,19 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **1.7** — *"Clave de acceso en procesamiento"* ya no se trata como un rechazo.
+  Es la respuesta del SRI cuando la factura ya está en su cola de un envío
+  anterior: ahora el sistema lo reconoce y pasa a consultar la autorización en
+  vez de darla por devuelta. Antes quedaba marcada como devuelta y, por serlo,
+  fuera del reintento automático: nadie volvía a mirarla.
+- **1.6** — El secuencial ahora es único **por ambiente**. Pruebas y Producción
+  son numeraciones independientes en el SRI (el ambiente va dentro de la clave
+  de acceso), así que al pasar un local a Producción la serie arranca de nuevo y
+  repite números ya usados en Pruebas. El sistema los leía como duplicados y
+  bloqueaba la emisión con *"El número de secuencial ya existe para este punto
+  de emisión"*, aunque el número calculado sí estuviera libre en el ambiente
+  activo. Dentro de un mismo ambiente la protección contra números repetidos
+  sigue igual de estricta.
 - **1.5** — La tirilla se adapta al ancho de papel del driver en vez de imponer el
   suyo, con columnas de ancho proporcional y tipografía sans-serif: ya no sale
   reescalada, con los importes corridos ni con la letra entrecortada en

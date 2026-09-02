@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
-etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema
-version: 1.3
+etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica
+version: 1.5
 orden: 25
 estado: activo
 ---
@@ -41,10 +41,41 @@ va a operar, use **Volver al sistema**, al pie de la tarjeta.
 ## Vender
 
 Con la caja abierta, se buscan los productos, se arma el pedido, se elige la
-forma de cobro y se emite el documento. La factura se genera en borrador con su
-cobro ya registrado.
+forma de cobro y se emite el documento. La factura se genera con su cobro ya
+registrado.
 
 **Si se elimina esa factura, el ingreso asociado se revierte automáticamente.**
+
+### La factura se envía al SRI en el momento
+
+Al cobrar, la factura **se envía al SRI y se espera su autorización** antes de
+mostrar el aviso de la venta; por eso el botón dice *Cobrando y autorizando…*
+unos segundos más que antes. Cuando el SRI autoriza, el aviso lo confirma en
+verde con la fecha y la **tirilla sale ya con el número de autorización**, la
+fecha y el ambiente — la misma que antes había que ir a buscar a *Facturas de
+Venta*.
+
+Tres casos en los que no sale autorizada:
+
+- **El local todavía no cargó su certificado de firma electrónica.** No se
+  intenta el envío: la factura queda en borrador y se envía desde *Facturas de
+  Venta*, como antes.
+- **El SRI no autorizó la factura.** El aviso explica el motivo. Corríjala y
+  reenvíela desde *Facturas de Venta*.
+- **El SRI no respondió a tiempo.** Queda enviada y pendiente de autorización;
+  se reenvía desde *Facturas de Venta*.
+
+En los tres, **el cobro ya está hecho**: el documento está emitido, el inventario
+descontado y el Ingreso registrado. La tirilla se puede imprimir igual, con el
+botón avisando que va **sin autorización**.
+
+Los **recibos de venta** no cambian: no son comprobantes electrónicos, no van al
+SRI y el cobro sigue siendo instantáneo.
+
+> Si al cobrar se corta la conexión, el sistema **ya no da un error a secas**:
+> avisa de que la venta pudo haberse registrado igual y pide comprobarlo en
+> *Facturas de Venta* antes de volver a cobrar. Cobrar de nuevo emitiría un
+> segundo comprobante del mismo consumo.
 
 ## El recargo por servicio (el 10%)
 
@@ -140,6 +171,13 @@ Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
 
+- **1.5** — El cobro envía la factura al SRI y espera su autorización: la
+  tirilla que se imprime desde el aviso de la venta ya sale con el número de
+  autorización, sin pasar por *Facturas de Venta*. Si el SRI rechaza o no
+  responde a tiempo, el aviso lo dice y deja imprimir sin autorización — el
+  cobro no se pierde en ningún caso. Y si se corta la conexión al cobrar, ahora
+  se avisa de que la venta pudo registrarse igual, en vez de dar un error seco
+  que invitaba a cobrar dos veces.
 - **1.4** — La forma de pago SRI del comprobante ya no sale solo del tipo de la
   forma cobrada: cuando ese tipo no la determina (efectivo u *Otro*), se toma la
   configurada en la ficha del cliente y, si no tiene, la de Empresa →

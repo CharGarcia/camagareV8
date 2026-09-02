@@ -907,6 +907,27 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="margin-bottom:4px;">`
                 : '';
 
+            // Datos de autorización del SRI: mismo bloque (y misma fuente de
+            // datos) que la tirilla de Facturas de Venta. Si la factura todavía
+            // no está autorizada —o es un recibo, que no es comprobante
+            // electrónico— no hay clave y el bloque no se imprime.
+            const claveAcceso = cab.numero_autorizacion || cab.clave_acceso || '';
+            const fechaAutorizacion = cab.fecha_autorizacion ? (() => {
+                const d = new Date(cab.fecha_autorizacion);
+                return isNaN(d) ? cab.fecha_autorizacion : d.toLocaleString('es-EC', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            })() : '';
+            const ambienteAut = parseInt(cab.tipo_ambiente) === 2 ? 'PRODUCCIÓN' : 'PRUEBAS';
+            const autorizacionHtml = claveAcceso ? `
+                <hr class="sep">
+                <div class="center" style="font-size:10px;">NÚMERO DE AUTORIZACIÓN</div>
+                <div class="center" style="font-size:9px;word-break:break-all;">${escapeHtml(claveAcceso)}</div>
+                ${fechaAutorizacion ? `<div class="center" style="font-size:10px;">Fecha Aut.: ${escapeHtml(fechaAutorizacion)}</div>` : ''}
+                <div class="center" style="font-size:10px;">Ambiente: ${ambienteAut}</div>
+            ` : '';
+
             const lineas = detalles.map(d => {
                 const cant = parseFloat(d.cantidad || 1);
                 const pu = parseFloat(d.precio_unitario || 0);
@@ -939,6 +960,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 <div class="center bold" style="font-size:12px;">${tituloDoc}</div>
                 <div class="center">No. ${escapeHtml(num)}</div>
                 <div class="center">Fecha: ${escapeHtml(fecha)}</div>
+                ${autorizacionHtml}
                 <hr class="sep">
                 <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${escapeHtml(cab.cliente_nombre)}</td></tr>
@@ -2014,7 +2036,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
         }
 
         $btnCobrar.disabled = true;
-        $btnCobrar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
+        // Con factura el cobro espera además la autorización del SRI, así que
+        // tarda unos segundos más: el botón lo dice, o parece que se colgó. Un
+        // recibo de venta no va al SRI y sigue siendo instantáneo.
+        $btnCobrar.innerHTML = getTipoDocumento() === 'FACTURA'
+            ? '<span class="spinner-border spinner-border-sm me-1"></span>Cobrando y autorizando...'
+            : '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
 
         const fd = new FormData();
         fd.append('id_punto_emision', ID_PUNTO);
@@ -2055,16 +2082,56 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const esFactura = json.data.tipo_documento === 'FACTURA';
             const etiquetaDoc = esFactura ? 'Factura' : 'Recibo';
             const moduloDestino = esFactura ? 'Facturas de Venta' : 'Recibos de Venta';
+
+            // Resultado del envío al SRI. Viene null cuando no correspondía
+            // intentarlo: recibo de venta (no es comprobante electrónico) o
+            // empresa sin certificado de firma — ahí se mantiene el texto de
+            // antes, que dice dónde continuar.
+            const sri = json.data.sri || null;
+            const autorizada = !!(sri && sri.ok && sri.estado === 'autorizado');
+
+            let sriHtml = '';
+            if (sri) {
+                if (autorizada) {
+                    const fechaAut = sri.fecha_autorizacion ? (() => {
+                        const dt = new Date(sri.fecha_autorizacion);
+                        return isNaN(dt) ? sri.fecha_autorizacion : dt.toLocaleString('es-EC', {
+                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                        });
+                    })() : '';
+                    sriHtml = '<div class="alert alert-success py-1 px-2 mt-3 mb-0 small">' +
+                              '<i class="bi bi-patch-check me-1"></i>Autorizada por el SRI' +
+                              (fechaAut ? ' — ' + escapeHtml(fechaAut) : '') + '</div>';
+                } else if (sri.estado === 'devuelta' || sri.estado === 'no_autorizado') {
+                    const motivos = (sri.errores || []).map(e => escapeHtml(e.mensaje || '')).filter(Boolean).join('; ');
+                    sriHtml = '<div class="alert alert-danger py-1 px-2 mt-3 mb-0 small text-start">' +
+                              '<i class="bi bi-x-octagon me-1"></i>El SRI no autorizó la factura: ' +
+                              escapeHtml(sri.mensaje || '') + (motivos ? '<div class="mt-1">' + motivos + '</div>' : '') +
+                              '<div class="mt-1">Corrígela y reenvíala desde Facturas de Venta.</div></div>';
+                } else {
+                    sriHtml = '<div class="alert alert-warning py-1 px-2 mt-3 mb-0 small text-start">' +
+                              '<i class="bi bi-hourglass-split me-1"></i>El SRI no respondió a tiempo. La factura quedó enviada y pendiente de autorización; ' +
+                              'puedes reenviarla desde Facturas de Venta.</div>';
+                }
+            }
+
+            // Con envío al SRI, el estado lo dice el bloque de arriba; sin él se
+            // conserva la nota que indicaba dónde seguir.
             const notaFactura = esFactura
                 ? 'Queda pendiente de enviar al SRI — hazlo desde el módulo'
                 : 'Queda guardada como recibo interno — puedes verla, imprimirla o enviarla desde el módulo';
+            const notaPie = sri
+                ? '<br><br><span class="text-muted small">Ya se descontó el inventario y se generó el asiento contable.</span>'
+                : '<br><br><span class="text-muted small">Ya se descontó el inventario y se generó el asiento contable. ' + notaFactura + ' <b>' + moduloDestino + '</b>.</span>';
+            const etiquetaTicket = (sri && !autorizada) ? 'Imprimir tirilla sin autorización' : 'Imprimir tirilla';
+
             Swal.fire({
                 icon: 'success',
                 title: 'Venta registrada',
                 html: etiquetaDoc + ' <b>' + escapeHtml(json.data.numero_documento) + '</b> por <b>' + money(json.data.importe_total) + '</b>.' +
-                      '<br><br><span class="text-muted small">Ya se descontó el inventario y se generó el asiento contable. ' + notaFactura + ' <b>' + moduloDestino + '</b>.</span>' +
+                      notaPie + sriHtml +
                       '<div class="d-flex gap-2 justify-content-center mt-3">' +
-                      '<button type="button" class="btn btn-outline-secondary btn-sm" id="pv-swal-btn-ticket"><i class="bi bi-receipt me-1"></i>Imprimir tirilla</button>' +
+                      '<button type="button" class="btn btn-outline-secondary btn-sm" id="pv-swal-btn-ticket"><i class="bi bi-receipt me-1"></i>' + etiquetaTicket + '</button>' +
                       (esFactura ? '<button type="button" class="btn btn-outline-success btn-sm" id="pv-swal-btn-whatsapp"><i class="bi bi-whatsapp me-1"></i>WhatsApp</button>' : '') +
                       '</div>',
                 confirmButtonColor: '#198754',
@@ -2086,7 +2153,16 @@ $rutaAjax = $base . '/' . $rutaModulo;
             renderCart();
             snapshotTicketActual();
         } catch (e) {
-            swalError('Error de conexión al cobrar.');
+            // La respuesta se perdió (red, o PHP cortó la petición mientras
+            // esperaba al SRI), pero la venta pudo haberse registrado igual. El
+            // carrito sigue aquí y volver a cobrar emitiría un segundo
+            // comprobante del mismo consumo, así que se avisa antes de repetir.
+            swalWarning(
+                'Se perdió la conexión antes de recibir la respuesta.<br><br>' +
+                '<b>La venta pudo haberse registrado igual.</b> Revísela en ' +
+                (getTipoDocumento() === 'FACTURA' ? 'Facturas de Venta' : 'Recibos de Venta') +
+                ' antes de volver a cobrar: si el documento ya está emitido, cobrar otra vez generaría uno duplicado.'
+            );
             renderCart();
         }
     });

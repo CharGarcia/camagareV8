@@ -1547,6 +1547,25 @@ window.addEventListener('pageshow', function (e) {
     const mdPago = document.getElementById('mdPago') ? new bootstrap.Modal('#mdPago') : null;
     const modalClienteNuevo = document.getElementById('modalClienteNuevo') ? new bootstrap.Modal('#modalClienteNuevo') : null;
     let tiposIdCargados = false;
+
+    // Mientras el cobro está en vuelo (emisión del documento + autorización del
+    // SRI) el modal NO se puede cerrar: un clic fuera, un Escape o la X lo
+    // hacían desaparecer con la petición todavía corriendo, y el mesero se
+    // quedaba sin el aviso del cobro ni el botón de la tirilla — con la venta ya
+    // emitida. Se bloquea en 'hide.bs.modal', que cubre los tres caminos a la
+    // vez (backdrop, teclado y botones de cierre).
+    let cobroEnCurso = false;
+    document.getElementById('mdPago')?.addEventListener('hide.bs.modal', (ev) => {
+        if (cobroEnCurso) ev.preventDefault();
+    });
+
+    /** Deshabilita los cierres del modal de cobro mientras dura la petición. */
+    function bloquearModalPago(bloquear) {
+        cobroEnCurso = bloquear;
+        document.querySelectorAll('#mdPago [data-bs-dismiss="modal"]').forEach(b => {
+            b.disabled = bloquear;
+        });
+    }
     const $cbLista = document.getElementById('cb-lista-lineas');
     const $cbTotalSel = document.getElementById('cb-total-sel');
 
@@ -2186,6 +2205,27 @@ window.addEventListener('pageshow', function (e) {
                 ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="margin-bottom:4px;">`
                 : '';
 
+            // Datos de autorización del SRI: mismo bloque (y misma fuente de
+            // datos) que la tirilla de Facturas de Venta. Si la factura todavía
+            // no está autorizada —o es un recibo, que no es comprobante
+            // electrónico— no hay clave y el bloque no se imprime.
+            const claveAcceso = cab.numero_autorizacion || cab.clave_acceso || '';
+            const fechaAutorizacion = cab.fecha_autorizacion ? (() => {
+                const d = new Date(cab.fecha_autorizacion);
+                return isNaN(d) ? cab.fecha_autorizacion : d.toLocaleString('es-EC', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            })() : '';
+            const ambienteAut = parseInt(cab.tipo_ambiente) === 2 ? 'PRODUCCIÓN' : 'PRUEBAS';
+            const autorizacionHtml = claveAcceso ? `
+                <hr class="sep">
+                <div class="center" style="font-size:10px;">NÚMERO DE AUTORIZACIÓN</div>
+                <div class="center" style="font-size:9px;word-break:break-all;">${escapeHtml(claveAcceso)}</div>
+                ${fechaAutorizacion ? `<div class="center" style="font-size:10px;">Fecha Aut.: ${escapeHtml(fechaAutorizacion)}</div>` : ''}
+                <div class="center" style="font-size:10px;">Ambiente: ${ambienteAut}</div>
+            ` : '';
+
             const lineas = detalles.map(d => {
                 const cant = parseFloat(d.cantidad || 1);
                 const pu = parseFloat(d.precio_unitario || 0);
@@ -2225,6 +2265,7 @@ window.addEventListener('pageshow', function (e) {
                 <div class="center bold" style="font-size:12px;">${tituloDoc}</div>
                 <div class="center">No. ${escapeHtml(num)}</div>
                 <div class="center">Fecha: ${escapeHtml(fecha)}</div>
+                ${autorizacionHtml}
                 <hr class="sep">
                 <table class="t-datos"><colgroup><col class="col-etq"><col></colgroup>
                     <tr><td class="bold">Cliente:</td><td>${escapeHtml(cab.cliente_nombre)}</td></tr>
@@ -2285,54 +2326,133 @@ window.addEventListener('pageshow', function (e) {
         fd.append('id_bodega', getIdBodega() || '');
 
         const $btn = document.getElementById('pg-btn-confirmar');
+        const btnHtmlOriginal = $btn.innerHTML;
+        const idGrupoCobrado = idGrupoEnPago;
         $btn.disabled = true;
+        // El cobro ahora incluye la espera de la autorización del SRI, así que
+        // puede tardar unos segundos más que antes: el botón lo dice, o parece
+        // que la pantalla se colgó.
+        $btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cobrando y autorizando…';
+        bloquearModalPago(true);
         try {
-            const r = await fetch(AJAX + '/cobrarGrupoAjax', { method: 'POST', body: fd });
-            const d = await r.json();
+            let d;
+            try {
+                const r = await fetch(AJAX + '/cobrarGrupoAjax', { method: 'POST', body: fd });
+                d = await r.json();
+            } finally {
+                // Ya hay respuesta (o falló la petición): el modal vuelve a ser
+                // cerrable. Va aquí y no en el finally de abajo porque el propio
+                // flujo lo cierra con mdPago.hide(), y el bloqueo se lo comería.
+                bloquearModalPago(false);
+            }
             if (!d.ok) { swalError(d.error || 'No se pudo registrar el cobro.'); return; }
             mdPago && mdPago.hide();
             idGrupoEnPago = null;
             await refrescarComanda();
-
-            const etiquetaDoc = d.data.tipo_documento === 'FACTURA' ? 'Factura' : 'Recibo';
-            // Con await: mientras este diálogo esté abierto la pantalla no se
-            // mueve, así que hay todo el tiempo del mundo para imprimir la
-            // tirilla del documento recién emitido.
-            await Swal.fire({
-                icon: 'success',
-                title: 'Cobro registrado',
-                html: etiquetaDoc + ' <b>' + escapeHtml(d.data.numero_documento) + '</b> por <b>' + money(d.data.importe_total) + '</b>.' +
-                      '<div class="d-flex gap-2 justify-content-center mt-3">' +
-                      '<button type="button" class="btn btn-outline-secondary btn-sm" id="cm-swal-btn-ticket"><i class="bi bi-receipt me-1"></i>Imprimir tirilla</button>' +
-                      '</div>' +
-                      '<div class="small text-muted mt-2">Si la necesita después, puede reimprimirla desde ' + etiquetaDoc + 's de Venta.</div>',
-                confirmButtonColor: '#198754',
-                confirmButtonText: 'Aceptar',
-                didOpen: () => {
-                    // El botón no cierra el diálogo: se puede imprimir más de
-                    // una copia y salir cuando el mesero quiera.
-                    document.getElementById('cm-swal-btn-ticket')?.addEventListener('click', () => imprimirTicketPos(d.data.id_documento, d.data.tipo_documento));
-                },
-            });
-
-            if (d.data.aviso_ingreso) {
-                await Swal.fire({
-                    icon: 'warning',
-                    title: 'Atención',
-                    html: escapeHtml(d.data.aviso_ingreso) + ' Regístralo manualmente desde el módulo Ingresos.',
-                    confirmButtonColor: '#0d6efd',
-                    confirmButtonText: 'Aceptar',
+            await mostrarResultadoCobro(d.data);
+        } catch (e) {
+            // La respuesta se perdió (red, o PHP cortó la petición mientras
+            // esperaba al SRI), pero el cobro pudo haberse completado igual. Se
+            // comprueba contra el servidor ANTES de dar un error: si el grupo ya
+            // quedó cobrado, se muestra su resultado — cobrar de nuevo emitiría
+            // un segundo comprobante del mismo consumo.
+            await refrescarComanda();
+            // Number() en los dos lados a propósito: el id llega como texto
+            // cuando el cobro se abrió desde el dataset del botón, y como número
+            // cuando vino del JSON del servidor.
+            const g = grupos.find(x => Number(x.id) === Number(idGrupoCobrado));
+            if (g && g.estado === 'cobrado') {
+                idGrupoEnPago = null;
+                mdPago && mdPago.hide();
+                await mostrarResultadoCobro({
+                    id_documento:     g.id_documento,
+                    tipo_documento:   g.tipo_documento,
+                    numero_documento: g.numero_documento,
+                    importe_total:    calcularTotales(g.lineas || []).total,
+                    sri:              null,
                 });
+            } else {
+                swalError('Error de conexión.');
             }
-
-            // Recién ahora, con el mesero ya fuera del diálogo (y con su tirilla
-            // impresa si la quiso), se vuelve al tablero.
-            if (volverAlTableroPendiente) {
-                volverAlTablero();
-            }
-        } catch (e) { swalError('Error de conexión.'); }
-        finally { $btn.disabled = false; }
+        }
+        // El bloqueo ya se soltó al llegar la respuesta; se repite aquí por si
+        // algo falla en medio, para que el modal no pueda quedar atrapado.
+        finally { $btn.disabled = false; $btn.innerHTML = btnHtmlOriginal; bloquearModalPago(false); }
     });
+
+    /**
+     * Diálogo posterior al cobro: documento emitido, resultado del envío al SRI
+     * y botón de tirilla. Con await, mientras esté abierto la pantalla no se
+     * mueve, así que hay todo el tiempo del mundo para imprimir.
+     */
+    async function mostrarResultadoCobro(data) {
+        const etiquetaDoc = data.tipo_documento === 'FACTURA' ? 'Factura' : 'Recibo';
+        const sri = data.sri || null;
+        const autorizada = !!(sri && sri.ok && sri.estado === 'autorizado');
+
+        // Sin bloque SRI: recibo de venta (no es comprobante electrónico) o
+        // empresa sin certificado de firma — factura en borrador, como siempre.
+        let sriHtml = '';
+        if (sri) {
+            if (autorizada) {
+                const fechaAut = sri.fecha_autorizacion ? (() => {
+                    const dt = new Date(sri.fecha_autorizacion);
+                    return isNaN(dt) ? sri.fecha_autorizacion : dt.toLocaleString('es-EC', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
+                })() : '';
+                sriHtml = '<div class="alert alert-success py-1 px-2 mt-3 mb-0 small">' +
+                          '<i class="bi bi-patch-check me-1"></i>Autorizada por el SRI' +
+                          (fechaAut ? ' — ' + escapeHtml(fechaAut) : '') + '</div>';
+            } else if (sri.estado === 'devuelta' || sri.estado === 'no_autorizado') {
+                const motivos = (sri.errores || []).map(e => escapeHtml(e.mensaje || '')).filter(Boolean).join('; ');
+                sriHtml = '<div class="alert alert-danger py-1 px-2 mt-3 mb-0 small text-start">' +
+                          '<i class="bi bi-x-octagon me-1"></i>El SRI no autorizó la factura: ' +
+                          escapeHtml(sri.mensaje || '') + (motivos ? '<div class="mt-1">' + motivos + '</div>' : '') +
+                          '<div class="mt-1">Corrígela y reenvíala desde Facturas de Venta.</div></div>';
+            } else {
+                sriHtml = '<div class="alert alert-warning py-1 px-2 mt-3 mb-0 small text-start">' +
+                          '<i class="bi bi-hourglass-split me-1"></i>El SRI no respondió a tiempo. La factura quedó enviada y pendiente de autorización; ' +
+                          'puedes reenviarla desde Facturas de Venta.</div>';
+            }
+        }
+
+        const etiquetaTicket = (sri && !autorizada) ? 'Imprimir tirilla sin autorización' : 'Imprimir tirilla';
+
+        await Swal.fire({
+            icon: 'success',
+            title: 'Cobro registrado',
+            html: etiquetaDoc + ' <b>' + escapeHtml(data.numero_documento) + '</b> por <b>' + money(data.importe_total) + '</b>.' +
+                  sriHtml +
+                  '<div class="d-flex gap-2 justify-content-center mt-3">' +
+                  '<button type="button" class="btn btn-outline-secondary btn-sm" id="cm-swal-btn-ticket"><i class="bi bi-receipt me-1"></i>' + etiquetaTicket + '</button>' +
+                  '</div>' +
+                  '<div class="small text-muted mt-2">Si la necesita después, puede reimprimirla desde ' + etiquetaDoc + 's de Venta.</div>',
+            confirmButtonColor: '#198754',
+            confirmButtonText: 'Aceptar',
+            didOpen: () => {
+                // El botón no cierra el diálogo: se puede imprimir más de
+                // una copia y salir cuando el mesero quiera.
+                document.getElementById('cm-swal-btn-ticket')?.addEventListener('click', () => imprimirTicketPos(data.id_documento, data.tipo_documento));
+            },
+        });
+
+        if (data.aviso_ingreso) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Atención',
+                html: escapeHtml(data.aviso_ingreso) + ' Regístralo manualmente desde el módulo Ingresos.',
+                confirmButtonColor: '#0d6efd',
+                confirmButtonText: 'Aceptar',
+            });
+        }
+
+        // Recién ahora, con el mesero ya fuera del diálogo (y con su tirilla
+        // impresa si la quiso), se vuelve al tablero.
+        if (volverAlTableroPendiente) {
+            volverAlTablero();
+        }
+    }
 
     renderLineas();
     buscarProductos('');
