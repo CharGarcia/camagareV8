@@ -210,12 +210,10 @@ return [
     ],
 
     // Configuración Restaurante: estaciones de preparación (antes en una pestaña
-    // del modal de Menú) y la estación predeterminada que recoge los ítems del
-    // stock general. Registrar el submódulo manualmente en submodulos_menu
-    // (menú "Restaurante", ruta = 'modulos/configuracion-restaurante') y poner
-    // aquí su id real — ver database/migrations/20260901_estacion_predeterminada.sql.
+    // del modal de Menú), su impresora, la estación predeterminada y el ancho de
+    // papel de la tirilla.
     'modulos/configuracion-restaurante' => [
-        'id_submodulo' => 0,
+        'id_submodulo' => 246, // submodulos_menu.id = 246 (menú "Restaurante")
         'legacy_rutas' => [],
     ],
 

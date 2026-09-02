@@ -527,6 +527,10 @@ window.addEventListener('pageshow', function (e) {
     let grupos = <?= json_encode($comanda['grupos'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
     let solicitaAsistencia = <?= !empty($comanda['solicita_asistencia']) ? 'true' : 'false' ?>;
     let buscarTimer = null;
+    // La mesa quedó libre y hay que volver al tablero, pero solo cuando el mesero
+    // termine con el diálogo del cobro: ahí es donde imprime su tirilla.
+    let volverAlTableroPendiente = false;
+    const volverAlTablero = () => { window.location.href = BASE + '/modulos/mesas/tablero'; };
     let formasPago = null;
     let idGrupoEnPago = null;
     let montoEnPago = 0;
@@ -959,9 +963,19 @@ window.addEventListener('pageshow', function (e) {
                 porcentajeServicio = parseFloat(d.data.servicio_efectivo || 0);
                 aplicaServicio = porcentajeServicio > 0;
                 renderLineas();
-                if (d.data.estado === 'cerrada') {
+                // Cobrada la última cuenta, la mesa queda libre y esta pantalla
+                // ya no tiene sentido. Pero NO se sale de inmediato: el diálogo
+                // del cobro ofrece imprimir la tirilla, y salir a los 1,5 s se
+                // lo llevaba por delante antes de que al mesero le diera tiempo
+                // a pulsarlo. Se vuelve al tablero cuando el mesero cierra ese
+                // diálogo; si no hay ninguno abierto (la cerró otro usuario, o
+                // fue desde el QR), se vuelve solo.
+                if (d.data.estado === 'cerrada' && !volverAlTableroPendiente) {
+                    volverAlTableroPendiente = true;
                     swalToast('success', 'Cuenta cerrada; la mesa quedó disponible.');
-                    setTimeout(() => { window.location.href = BASE + '/modulos/mesas/tablero'; }, 1500);
+                    if (!Swal.isVisible()) {
+                        setTimeout(() => { if (volverAlTableroPendiente) volverAlTablero(); }, 1500);
+                    }
                 }
             }
         } catch (e) { /* silencioso */ }
@@ -2034,17 +2048,18 @@ window.addEventListener('pageshow', function (e) {
         const lineas = vivas.map(d => {
             const pct = parseFloat(d.porcentaje_iva || 0);
             const descExtra = parseFloat(d.descuento || 0) > 0 ? ` — desc. $${fmt(d.descuento)}` : '';
-            // La propina va en UNA sola fila, con el importe a la derecha del
-            // nombre: no es un consumo con cantidad y precio unitario, así que no
-            // tiene segunda línea de detalle — sin esto el valor quedaba colgando
-            // un renglón más abajo que su texto.
+            // Los importes van CON IVA, exactamente como los muestra la pantalla
+            // de la comanda: es lo que el cliente compara contra lo que le van a
+            // cobrar. Imprimir aquí la base sin impuestos hacía que la cuenta no
+            // cuadrara con lo que tenía delante el mesero.
             if (esLineaPropina(d)) {
                 return `<tr><td>${escapeHtml(d.descripcion)}</td>
-                    <td class="num bold">$${fmt(d.subtotal)}</td></tr>`;
+                    <td class="num bold">$${fmt(totalLineaConIva(d))}</td></tr>`;
             }
+            const puConIva = round2(parseFloat(d.precio_unitario || 0) * (1 + pct / 100));
             return `<tr><td colspan="2">${escapeHtml(d.descripcion + descExtra)}</td></tr>
-                <tr><td class="sub">${cantidad(d.cantidad)} x $${precio(d.precio_unitario)} (IVA ${pct}%)</td>
-                <td class="num bold">$${fmt(d.subtotal)}</td></tr>`;
+                <tr><td class="sub">${cantidad(d.cantidad)} x $${precio(puConIva)} (IVA ${pct}%)</td>
+                <td class="num bold">$${fmt(totalLineaConIva(d))}</td></tr>`;
         }).join('<tr><td colspan="2"><hr></td></tr>');
 
         const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
@@ -2239,21 +2254,40 @@ window.addEventListener('pageshow', function (e) {
             await refrescarComanda();
 
             const etiquetaDoc = d.data.tipo_documento === 'FACTURA' ? 'Factura' : 'Recibo';
-            Swal.fire({
+            // Con await: mientras este diálogo esté abierto la pantalla no se
+            // mueve, así que hay todo el tiempo del mundo para imprimir la
+            // tirilla del documento recién emitido.
+            await Swal.fire({
                 icon: 'success',
                 title: 'Cobro registrado',
                 html: etiquetaDoc + ' <b>' + escapeHtml(d.data.numero_documento) + '</b> por <b>' + money(d.data.importe_total) + '</b>.' +
                       '<div class="d-flex gap-2 justify-content-center mt-3">' +
                       '<button type="button" class="btn btn-outline-secondary btn-sm" id="cm-swal-btn-ticket"><i class="bi bi-receipt me-1"></i>Imprimir tirilla</button>' +
-                      '</div>',
+                      '</div>' +
+                      '<div class="small text-muted mt-2">Si la necesita después, puede reimprimirla desde ' + etiquetaDoc + 's de Venta.</div>',
                 confirmButtonColor: '#198754',
                 confirmButtonText: 'Aceptar',
                 didOpen: () => {
+                    // El botón no cierra el diálogo: se puede imprimir más de
+                    // una copia y salir cuando el mesero quiera.
                     document.getElementById('cm-swal-btn-ticket')?.addEventListener('click', () => imprimirTicketPos(d.data.id_documento, d.data.tipo_documento));
                 },
             });
+
             if (d.data.aviso_ingreso) {
-                setTimeout(() => swalWarning(escapeHtml(d.data.aviso_ingreso) + ' Regístralo manualmente desde el módulo Ingresos.'), 300);
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Atención',
+                    html: escapeHtml(d.data.aviso_ingreso) + ' Regístralo manualmente desde el módulo Ingresos.',
+                    confirmButtonColor: '#0d6efd',
+                    confirmButtonText: 'Aceptar',
+                });
+            }
+
+            // Recién ahora, con el mesero ya fuera del diálogo (y con su tirilla
+            // impresa si la quiso), se vuelve al tablero.
+            if (volverAlTableroPendiente) {
+                volverAlTablero();
             }
         } catch (e) { swalError('Error de conexión.'); }
         finally { $btn.disabled = false; }

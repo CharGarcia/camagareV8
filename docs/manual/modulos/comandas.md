@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante
-version: 1.19
+version: 1.20
 orden: 20
 estado: activo
 ---
@@ -322,6 +322,30 @@ Una comanda vacía se anula sin más.
 | Recargo por servicio | Máximo 10% del subtotal; solo se puede quitar si el establecimiento lo tiene como opcional |
 | Propina voluntaria | No puede ser negativa; no tiene tope. Requiere el producto configurado en Empresa → Facturación |
 
+## La cuenta que ve el cliente
+
+El botón del recibo, junto a *Cobrar*, imprime la **cuenta** para que el cliente
+la revise antes de pagar. No es un documento válido: es la previa.
+
+Sale con **los mismos valores que muestra la pantalla**: cada ítem con su precio
+unitario y su importe **con IVA incluido**, y al pie el subtotal, el IVA
+desglosado por tarifa, el recargo por servicio si aplica y el total. Así el
+cliente puede cuadrar el papel con lo que tiene el mesero en pantalla.
+
+### La tirilla del documento cobrado
+
+Al registrar el cobro aparece un aviso con el número del documento y un botón
+**Imprimir tirilla**. Esa tirilla ya no es la cuenta previa: es la **factura o el
+recibo emitido**, con su formato fiscal.
+
+Si era la última cuenta de la mesa, la comanda se cierra y la mesa queda libre,
+pero **la pantalla no se va hasta que usted cierre ese aviso**: puede imprimir
+las copias que necesite antes de volver al tablero.
+
+Y si se le pasó, la tirilla se puede reimprimir en cualquier momento desde
+*Facturas de Venta* o *Recibos de Venta*, con el botón del recibo en la barra de
+acciones del documento.
+
 ## Locales que no trabajan con preparación
 
 Si **ningún ítem de la carta ni ninguna categoría está enrutado a una estación**
@@ -453,6 +477,11 @@ tocarlas cada vez.
   la configurada en la ficha del cliente y, si no tiene, la de Empresa →
   Facturación. Antes se emitía siempre *01* en esos casos. Si el cobro no puede
   generar su Ingreso, ahora se avisa en pantalla en vez de quedar solo en el log.
+- **1.20** — Cobrada la última cuenta, la pantalla ya no vuelve al tablero a los
+  1,5 segundos: espera a que se cierre el aviso del cobro, para que dé tiempo a
+  imprimir la tirilla del documento. La cuenta impresa muestra los importes **con IVA**, igual que la
+  pantalla: antes imprimía la base sin impuestos y las líneas no cuadraban con
+  lo que veía el mesero.
 - **1.19** — La comanda esconde el botón *Enviar a preparación* (y el aviso del
   tablero) cuando ningún ítem está enrutado a una estación: ahí los ítems del
   mesero nacen entregados y el botón de imprimir saca la comanda entera desde el
