@@ -395,11 +395,16 @@ class ReporteComprasRepository extends BaseRepository
     }
 
     /**
-     * Obtiene los tipos de comprobante disponibles en la empresa.
+     * Tipos de comprobante para el selector "Tipo de Documento" del reporte:
+     * SOLO los que tengan compras registradas en la empresa y ambiente activo
+     * (facturas 01, notas de crédito 04, notas de venta 02, etc.). Un tipo sin
+     * compras no se ofrece. El nombre sale sin los espacios/saltos de línea
+     * que arrastran algunos registros del catálogo.
      */
     public function getTiposComprobante(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT c.tipo_comprobante, COALESCE(ca.comprobante, c.tipo_comprobante) as nombre
+        $sql = "SELECT DISTINCT c.tipo_comprobante,
+                       BTRIM(COALESCE(ca.comprobante, c.tipo_comprobante), E' \\t\\r\\n') as nombre
                 FROM compras_cabecera c
                 LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
                 WHERE c.id_empresa = :id_empresa AND c.eliminado = false

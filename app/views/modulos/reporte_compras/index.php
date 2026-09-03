@@ -37,7 +37,7 @@
                             <option value="">Todas las compras (NC restan)</option>
                             <?php foreach (($tiposComprobante ?? []) as $tc): ?>
                                 <option value="<?= htmlspecialchars($tc['tipo_comprobante']) ?>">
-                                    <?= htmlspecialchars($tc['tipo_comprobante']) ?> - <?= htmlspecialchars($tc['nombre']) ?>
+                                    <?= htmlspecialchars($tc['tipo_comprobante']) ?> - <?= htmlspecialchars(trim((string)$tc['nombre'])) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>

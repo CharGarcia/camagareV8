@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de compras, compras, cuanto compre, por proveedor, por producto, gasto, exportar, pdf, excel
-version: 1.0
+version: 1.1
 orden: 20
 estado: activo
 ---
@@ -18,11 +18,17 @@ Es el espejo del reporte de ventas.
 
 | Filtro | Para qué |
 |--------|----------|
+| Tipo de documento | Un solo tipo (factura, nota de venta, liquidación de compra, nota de crédito, nota de débito, etc.) o **Todas las compras**, donde las notas de crédito restan |
 | Fecha desde / hasta | El periodo a consultar |
 | Proveedor | Compras a un proveedor concreto |
 | Producto | Compras de un producto concreto |
 
 Se combinan entre sí para acotar la consulta.
+
+El selector **Tipo de documento** empieza siempre con **Todas las compras** y
+luego ofrece únicamente los tipos que ya tienen compras registradas en la
+empresa (por ejemplo facturas, notas de crédito o notas de venta). Un tipo de
+documento del que aún no se ha registrado ninguna compra no aparece en la lista.
 
 ## Agrupación
 
@@ -53,4 +59,6 @@ Disponible en **PDF** y **Excel**.
 
 ## Historial de cambios
 
+- **1.1** (03-09-2026) — Se documenta el filtro *Tipo de documento*: lista solo
+  los tipos con compras registradas, con "Todas las compras" como primera opción.
 - **1.0** — Versión inicial.
