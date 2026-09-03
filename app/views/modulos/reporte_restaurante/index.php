@@ -1,4 +1,4 @@
-<?php /** @var string $rutaModulo @var array $mesas @var array $meseros @var array $menuItems @var array $categorias @var array $formasPago */ ?>
+<?php /** @var string $rutaModulo @var array $mesas @var array $meseros @var array $menuItems @var array $categorias @var array $formasPago @var string $correoEmpresa */ ?>
 <?php $idModulo = basename($rutaModulo); ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
@@ -34,6 +34,7 @@
                     <select id="rres-ver-por" class="form-select form-select-sm shadow-none border" style="width:180px;">
                         <option value="MESAS">Ventas por mesa</option>
                         <option value="MESERO">Ventas por mesero</option>
+                        <option value="FORMA_PAGO">Resumen por forma de pago</option>
                         <option value="MENU">Ítems del menú más vendidos</option>
                         <option value="CATEGORIA">Ventas por categoría</option>
                     </select>
@@ -170,6 +171,10 @@
                             <th class="ps-3">Mesero</th><th class="text-center">Comandas</th>
                             <th class="text-center">Documentos</th><th class="text-end pe-3">Total</th>
                         </tr>
+                        <tr id="rres-head-forma-pago" class="d-none">
+                            <th class="ps-3">Forma de pago</th><th>Tipo</th>
+                            <th class="text-center">Cobros</th><th class="text-end pe-3">Total</th>
+                        </tr>
                         <tr id="rres-head-menu" class="d-none">
                             <th class="ps-3">Ítem</th><th>Categoría</th><th class="text-center">Cant. Vendida</th><th class="text-end pe-3">Total</th>
                         </tr>
@@ -195,9 +200,18 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <label class="form-label small fw-bold mb-1">Destinatarios</label>
+        <label class="form-label small fw-bold mb-1" for="rres-correos">Destinatarios</label>
         <input type="text" class="form-control form-control-sm" id="rres-correos"
-               placeholder="correo@dominio.com, otro@dominio.com">
+               placeholder="correo@dominio.com, otro@dominio.com"
+               value="<?= htmlspecialchars($correoEmpresa ?? '') ?>">
+        <?php if (!empty($correoEmpresa)): ?>
+          <div class="form-text d-flex align-items-center gap-1 flex-wrap">
+            <span>Viene el correo de la empresa (<span class="fw-semibold"><?= htmlspecialchars($correoEmpresa) ?></span>); puede cambiarlo o añadir más.</span>
+            <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rresBtnCorreoEmpresa">Restaurar</button>
+          </div>
+        <?php else: ?>
+          <div class="form-text">La empresa no tiene un correo configurado (Empresa → Datos generales). Escriba el destinatario.</div>
+        <?php endif; ?>
         <div class="form-text">Separe varios correos con comas. Se envía el reporte con los filtros aplicados y el PDF adjunto.</div>
       </div>
       <div class="modal-footer py-2">
@@ -214,7 +228,7 @@
     const BASE = '<?= rtrim(BASE_URL ?? "", "/") ?>';
     const $ = id => document.getElementById(id);
     const money = n => '$' + (parseFloat(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const COLSPAN = { MESAS: 5, MESERO: 4, MENU: 4, CATEGORIA: 3 };
+    const COLSPAN = { MESAS: 5, MESERO: 4, FORMA_PAGO: 4, MENU: 4, CATEGORIA: 3 };
 
     function filtros() {
         return {
@@ -235,6 +249,7 @@
         const vp = f.ver_por;
         $('rres-head-mesas').classList.toggle('d-none', vp !== 'MESAS');
         $('rres-head-mesero').classList.toggle('d-none', vp !== 'MESERO');
+        $('rres-head-forma-pago').classList.toggle('d-none', vp !== 'FORMA_PAGO');
         $('rres-head-menu').classList.toggle('d-none', vp !== 'MENU');
         $('rres-head-categoria').classList.toggle('d-none', vp !== 'CATEGORIA');
 
@@ -294,7 +309,22 @@
 
     // ─── Enviar por correo ──────────────────────────────────────────────────
     const modalCorreo = new bootstrap.Modal('#rresModalCorreo');
-    $('rresBtnCorreo').addEventListener('click', () => modalCorreo.show());
+    const CORREO_EMPRESA = <?= json_encode($correoEmpresa ?? '', JSON_UNESCAPED_UNICODE) ?>;
+
+    $('rresBtnCorreo').addEventListener('click', () => {
+        // Se precarga el correo de la empresa solo si el campo está vacío: así
+        // no se pisa lo que el usuario haya escrito y cerrado sin enviar, pero
+        // tras un envío (que lo limpia) vuelve a aparecer.
+        if (!$('rres-correos').value.trim() && CORREO_EMPRESA) {
+            $('rres-correos').value = CORREO_EMPRESA;
+        }
+        modalCorreo.show();
+    });
+
+    $('rresBtnCorreoEmpresa')?.addEventListener('click', () => {
+        $('rres-correos').value = CORREO_EMPRESA;
+        $('rres-correos').focus();
+    });
 
     $('rresBtnEnviarCorreo').addEventListener('click', async () => {
         const correos = $('rres-correos').value.trim();

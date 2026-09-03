@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte-restaurante
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte restaurante, comandas, mesas, platos mas vendidos, anulaciones, consumo, rotacion de mesas, forma de pago, filtro forma de pago, tirilla, imprimir tirilla, enviar por correo, pdf, excel
-version: 1.1
+etiquetas: reporte restaurante, comandas, mesas, platos mas vendidos, anulaciones, consumo, rotacion de mesas, forma de pago, filtro forma de pago, tirilla, imprimir tirilla, enviar por correo, pdf, excel, resumen por forma de pago, cuanto entro en efectivo, cuadrar caja, cierre de turno, sin forma de pago registrada
+version: 1.2
 orden: 70
 estado: activo
 ---
@@ -16,9 +16,29 @@ consumió, en qué mesas y qué se anuló.
 
 ## Qué muestra
 
-- **Consumo por mesa**: cuánto se facturó en cada una.
-- **Platos más pedidos**: qué sale de la carta y qué no.
-- **Anulaciones**: comandas anuladas con su motivo.
+El selector **Ver por** cambia de vista sin recargar la página:
+
+- **Ventas por mesa**: cuánto se facturó en cada una.
+- **Ventas por mesero**: cuánto vendió cada uno y en cuántas comandas.
+- **Resumen por forma de pago**: cuánto entró por Efectivo, por cada banco, por
+  Payphone… (ver más abajo).
+- **Ítems del menú más vendidos**: qué sale de la carta y qué no.
+- **Ventas por categoría**.
+
+## Resumen por forma de pago
+
+Responde a *"¿cuánto entró en efectivo y cuánto por tarjeta?"*: una línea por
+forma de pago con su tipo, cuántos cobros y el total, ordenadas de mayor a menor.
+Es la vista para cuadrar la caja al cerrar el turno.
+
+Aparece también una línea **"Sin forma de pago registrada"**, marcada con un
+triángulo de aviso, cuando hay cobros cuyo Ingreso no llegó a generarse. **No es
+un error del reporte**: son cobros reales a los que les falta el Ingreso, y hay
+que registrarlos desde el módulo *Ingresos*. Mientras estén ahí, el dinero está
+contado en el total pero no se sabe por dónde entró.
+
+La suma de todas las líneas **siempre cuadra con el Total vendido** de la
+cabecera: cada cobro cae en una sola línea.
 
 ## Las anulaciones son el dato de control
 
@@ -61,9 +81,13 @@ derecha—, porque en 58 u 80 mm no caben las columnas de la pantalla. Al pie va
 las comandas, los documentos y el total. Lleva la leyenda *"Reporte interno — sin
 validez tributaria"*: es para la caja, no para el cliente.
 
-En el **correo** se escriben los destinatarios separados por comas. El cuerpo
-lleva el resumen (periodo, filtros aplicados, comandas, documentos y total) y el
-PDF va adjunto.
+El **correo** se abre con el **correo de la empresa** ya escrito (el de *Empresa →
+Datos generales*), y se puede cambiar o añadir más separándolos con comas. El
+enlace *Restaurar* vuelve a poner el de la empresa si lo borró. Si la empresa no
+tiene correo configurado, el campo arranca vacío y lo dice.
+
+El cuerpo del mensaje lleva el resumen —periodo, filtros aplicados, comandas,
+documentos y total— y el PDF va adjunto.
 
 ## Errores frecuentes
 
@@ -78,9 +102,13 @@ PDF va adjunto.
 
 ## Historial de cambios
 
+- **1.2** — Nueva vista **Resumen por forma de pago**: cuánto entró por cada una,
+  con los cobros que aún no tienen su Ingreso agrupados aparte y señalados. Sale
+  también en PDF, Excel, tirilla y correo, como el resto de vistas.
 - **1.1** — Nuevo filtro por **forma de pago** y dos salidas más junto a PDF y
   Excel: **Tirilla** (impresora térmica) y **Correo** (con el PDF adjunto). Las
-  cuatro salidas respetan los filtros aplicados. La pantalla pasó al diseño
+  cuatro salidas respetan los filtros aplicados. El envío por correo llega con
+  el correo de la empresa ya escrito, editable. La pantalla pasó al diseño
   estándar de los reportes: título, filtros e indicadores en una sola tarjeta que
   **queda fija arriba** al desplazarse, y la tabla debajo creciendo hacia abajo
   en vez de dentro de una caja con scroll propio.

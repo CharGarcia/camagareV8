@@ -1011,12 +1011,21 @@ class ComprasService
         // getAsientoPorOrigen ya excluye los anulados: si no devuelve nada, no hay asiento
         // vivo que anular (nunca se generó, o alguien lo anuló antes).
         $previo = $asientoService->getAsientoPorOrigen('compra', $idCompra, $idEmpresa);
-        if ($previo === null) {
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+        // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion',
+        // así que getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable
+        // directo de la compra (mismo criterio que el resto de módulos).
+        if ($idAsiento <= 0) {
+            $row = $this->repository->getPorId($idCompra, $idEmpresa);
+            $idAsiento = (int) ($row['id_asiento_contable'] ?? 0);
+        }
+        if ($idAsiento <= 0) {
             return;
         }
 
         try {
-            $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
+            $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
         } catch (\Throwable $e) {
             // Si otro proceso lo anuló entremedio no hay nada que corregir; cualquier otro
             // motivo (período cerrado, error de BD) sí debe abortar la eliminación.
@@ -1024,6 +1033,12 @@ class ComprasService
                 throw $e;
             }
         }
+
+        // El desvinculado automático de anular() solo actúa si modulo_origen coincide con el
+        // mapa de módulos nativos; un asiento migrado tiene modulo_origen='migracion' y no
+        // dispara ese camino, así que se limpia el enlace aquí explícitamente (idempotente si
+        // ya se limpió solo).
+        $asientoRepo->desvincularAsientoGenerico('compras_cabecera', 'id_asiento_contable', $idCompra);
     }
 
     public function actualizar(int $id, array $data): int

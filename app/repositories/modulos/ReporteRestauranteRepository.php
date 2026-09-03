@@ -246,6 +246,57 @@ class ReporteRestauranteRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Resumen por forma de pago: cuánto entró por cada una (Efectivo, un banco,
+     * Payphone…).
+     *
+     * La forma no está en la cuenta cobrada —ahí solo vive el código SRI—, así
+     * que se resuelve por el Ingreso que generó ese cobro. Va como LEFT JOIN
+     * LATERAL ... LIMIT 1 y no como JOIN normal por la misma razón que el filtro
+     * usa EXISTS: un ingreso puede tener varias filas de pago y un documento
+     * varios ingresos, y un JOIN llano multiplicaría las líneas de venta.
+     *
+     * Los cobros sin Ingreso registrado caen en "Sin forma de pago registrada".
+     * No es ruido: es justo lo que hay que ir a corregir al módulo Ingresos.
+     */
+    public function getVentasPorFormaPago(int $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteVentas($idEmpresa, $filtros);
+        $condComanda = $this->condComanda($filtros, $params);
+
+        $sql = $cte . "
+            SELECT COALESCE(fp.id, 0) AS id_forma_pago,
+                   COALESCE(fp.nombre, 'Sin forma de pago registrada') AS forma_pago_nombre,
+                   COALESCE(fp.tipo, '') AS forma_pago_tipo,
+                   COUNT(DISTINCT ventas.id_grupo) AS cantidad_documentos,
+                   SUM(ventas.monto) AS total
+            FROM ventas
+            JOIN comandas c ON c.id = ventas.id_comanda
+            LEFT JOIN LATERAL (
+                SELECT ip.id_forma_cobro
+                  FROM comanda_grupos_cobro g2
+                  JOIN ingresos_detalle idet ON idet.id_referencia_documento = g2.id_documento
+                                            AND idet.tipo_documento = g2.tipo_documento
+                  JOIN ingresos_cabecera ic ON ic.id = idet.id_ingreso
+                                           AND ic.eliminado = false
+                                           AND ic.estado <> 'anulado'
+                  JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id
+                 WHERE g2.id = ventas.id_grupo
+                 ORDER BY ic.id DESC, ip.id ASC
+                 LIMIT 1
+            ) fpago ON true
+            LEFT JOIN empresa_formas_pago fp ON fp.id = fpago.id_forma_cobro
+            WHERE 1=1 {$condComanda}
+            GROUP BY COALESCE(fp.id, 0),
+                     COALESCE(fp.nombre, 'Sin forma de pago registrada'),
+                     COALESCE(fp.tipo, '')
+            ORDER BY total DESC
+        ";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** KPIs generales (tarjetas resumen arriba de la tabla). */
     public function getEstadisticas(int $idEmpresa, array $filtros): array
     {

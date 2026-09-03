@@ -311,17 +311,31 @@ class RetencionVentaService
 
         // getAsientoPorOrigen ya excluye los anulados: si no devuelve nada, no hay asiento vivo.
         $previo = $asientoService->getAsientoPorOrigen('retencion_venta', $idRetencion, $idEmpresa);
-        if ($previo === null) {
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+        // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion',
+        // así que getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable
+        // directo de la retención.
+        if ($idAsiento <= 0) {
+            $row = $this->repository->getPorId($idRetencion, $idEmpresa);
+            $idAsiento = (int) ($row['id_asiento_contable'] ?? 0);
+        }
+        if ($idAsiento <= 0) {
             return;
         }
 
         try {
-            $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
+            $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
         } catch (\Throwable $e) {
             if (stripos($e->getMessage(), 'ya se encuentra anulado') === false) {
                 throw $e;
             }
         }
+
+        // El desvinculado automático de anular() solo actúa si modulo_origen coincide con
+        // 'retencion_venta'; un asiento migrado tiene modulo_origen='migracion' y no dispara
+        // ese camino, así que se limpia el enlace aquí explícitamente (idempotente).
+        (new \App\repositories\modulos\AsientoContableRepository())->desvincularAsientoRetencionVenta($idRetencion);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

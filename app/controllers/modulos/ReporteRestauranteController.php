@@ -7,8 +7,8 @@ namespace App\controllers\modulos;
 use App\repositories\modulos\ReporteRestauranteRepository;
 
 /**
- * Reportes del POS Restaurantes: ventas por mesa, por mesero, por ítem del
- * menú y por categoría del menú. Mismo patrón que ReportePosController: un
+ * Reportes del POS Restaurantes: ventas por mesa, por mesero, por forma de pago,
+ * por ítem del menú y por categoría. Mismo patrón que ReportePosController: un
  * solo select "ver_por" que cambia de vista sin recargar la página.
  */
 class ReporteRestauranteController extends BaseModuloController
@@ -31,7 +31,13 @@ class ReporteRestauranteController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
+        // Correo de la empresa: precarga el modal de envío. Puede venir vacío
+        // (empresa sin correo configurado), y entonces el modal simplemente
+        // arranca en blanco.
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+
         $this->viewWithLayout('layouts.main', 'modulos/reporte_restaurante/index', [
+            'correoEmpresa' => trim((string) ($empresa['mail'] ?? '')),
             'titulo'      => 'Reportes Restaurante',
             'perm'        => $this->getPermisos(),
             'rutaModulo'  => $this->getRutaModulo(),
@@ -66,10 +72,11 @@ class ReporteRestauranteController extends BaseModuloController
     private function tituloVista(string $verPor): string
     {
         return match ($verPor) {
-            'MESERO'    => 'Ventas por mesero',
-            'MENU'      => 'Ítems del menú más vendidos',
-            'CATEGORIA' => 'Ventas por categoría',
-            default     => 'Ventas por mesa',
+            'MESERO'     => 'Ventas por mesero',
+            'FORMA_PAGO' => 'Resumen por forma de pago',
+            'MENU'       => 'Ítems del menú más vendidos',
+            'CATEGORIA'  => 'Ventas por categoría',
+            default      => 'Ventas por mesa',
         };
     }
 
@@ -117,6 +124,7 @@ class ReporteRestauranteController extends BaseModuloController
     {
         return match ($filtros['ver_por']) {
             'MESERO'     => $this->repository->getVentasPorMesero($idEmpresa, $filtros),
+            'FORMA_PAGO' => $this->repository->getVentasPorFormaPago($idEmpresa, $filtros),
             'MENU'       => $this->repository->getVentasPorMenu($idEmpresa, $filtros),
             'CATEGORIA'  => $this->repository->getVentasPorCategoria($idEmpresa, $filtros),
             default      => $this->repository->getVentasPorMesa($idEmpresa, $filtros),
@@ -169,7 +177,17 @@ class ReporteRestauranteController extends BaseModuloController
         $money = fn($v) => number_format((float) ($v ?? 0), 2);
         $html = '<tr class="align-middle">';
 
-        if ($verPor === 'MESERO') {
+        if ($verPor === 'FORMA_PAGO') {
+            // Los cobros sin Ingreso registrado se marcan: son los que hay que
+            // ir a corregir, no una forma de pago más.
+            $sinRegistrar = (int) ($r['id_forma_pago'] ?? 0) === 0;
+            $html .= "<td><span class='fw-bold'>" . htmlspecialchars($r['forma_pago_nombre'] ?? '') . "</span>"
+                   . ($sinRegistrar ? " <i class='bi bi-exclamation-triangle text-warning ms-1' title='Cobros sin Ingreso registrado: revíselos en el módulo Ingresos'></i>" : '')
+                   . "</td>";
+            $html .= "<td>" . htmlspecialchars($r['forma_pago_tipo'] ?? '') . "</td>";
+            $html .= "<td class='text-center'>" . (int) ($r['cantidad_documentos'] ?? 0) . "</td>";
+            $html .= "<td class='text-end fw-bold text-success'>$" . $money($r['total']) . "</td>";
+        } elseif ($verPor === 'MESERO') {
             $html .= "<td>" . htmlspecialchars($r['mesero_nombre'] ?? '') . "</td>";
             $html .= "<td class='text-center'>" . (int) ($r['cantidad_comandas'] ?? 0) . "</td>";
             $html .= "<td class='text-center'>" . (int) ($r['cantidad_documentos'] ?? 0) . "</td>";
@@ -219,7 +237,12 @@ class ReporteRestauranteController extends BaseModuloController
 
     private function armarExportacion(array $rows, string $verPor): array
     {
-        if ($verPor === 'MESERO') {
+        if ($verPor === 'FORMA_PAGO') {
+            $headers = ['Forma de pago', 'Tipo', 'Cobros', 'Total'];
+            $exportData = array_map(fn($r) => [
+                $r['forma_pago_nombre'], $r['forma_pago_tipo'], (int) $r['cantidad_documentos'], (float) $r['total'],
+            ], $rows);
+        } elseif ($verPor === 'MESERO') {
             $headers = ['Mesero', 'Comandas', 'Documentos', 'Total'];
             $exportData = array_map(fn($r) => [
                 $r['mesero_nombre'], (int) $r['cantidad_comandas'], (int) $r['cantidad_documentos'], (float) $r['total'],
@@ -342,6 +365,14 @@ class ReporteRestauranteController extends BaseModuloController
         $num = static fn($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');
 
         return array_map(static function (array $r) use ($verPor, $num): array {
+            if ($verPor === 'FORMA_PAGO') {
+                return [
+                    'concepto' => (string) ($r['forma_pago_nombre'] ?? ''),
+                    'detalle'  => trim(($r['forma_pago_tipo'] ?? '') . ' — '
+                                . (int) ($r['cantidad_documentos'] ?? 0) . ' cobro(s)', ' —'),
+                    'total'    => (float) ($r['total'] ?? 0),
+                ];
+            }
             if ($verPor === 'MESERO') {
                 return [
                     'concepto' => (string) ($r['mesero_nombre'] ?? ''),
