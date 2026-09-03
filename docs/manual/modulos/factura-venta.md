@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico
-version: 1.8
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos
+version: 1.9
 orden: 20
 estado: activo
 ---
@@ -33,6 +33,24 @@ Para emitir facturas electrónicas la empresa necesita tener configurado:
 5. Guarde la factura.
 
 Una factura guardada queda en borrador hasta que se envía al SRI.
+
+### Saldo del producto en el buscador
+
+Al escribir en la columna **Descripción** para buscar un producto, cada resultado de la
+lista muestra a la derecha el **saldo disponible** junto al precio: en verde si hay
+existencias y en rojo si el saldo es cero o negativo. Así se ve cuánto queda **antes**
+de elegir el producto, sin tener que agregarlo a la factura para enterarse.
+
+- El saldo corresponde a la **bodega seleccionada en la cabecera** de la factura. Si se
+  cambia la bodega, la siguiente búsqueda ya muestra el saldo de la nueva.
+- Solo aparece en los productos de tipo **bien** marcados como inventariables. Los
+  servicios no muestran saldo (no manejan existencias).
+- Solo aparece si la empresa tiene activado **"La facturación afecta al inventario"**
+  (módulo Empresa → pestaña Facturación). Si está apagado, la factura no descuenta stock
+  y el buscador no muestra saldos.
+- Al editar una factura ya guardada, el saldo se muestra **sin contar esa misma
+  factura**, es decir, el stock que habría si el documento no existiera — el mismo
+  criterio que usan los lotes y la validación de cantidades.
 
 ## Barra de acciones del documento
 
@@ -124,6 +142,9 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **1.9** — El buscador de productos del detalle muestra el **saldo disponible** del
+  producto en la bodega de la cabecera, para los bienes inventariables y solo cuando la
+  facturación afecta al inventario.
 - **1.8** — La ventana de la tirilla ya no desaparece al cancelar la
   impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
   ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.

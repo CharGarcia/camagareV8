@@ -1655,14 +1655,55 @@ class FacturaVentaController extends BaseModuloController
         $preciosMap = $repo->getPreciosPorProductos($idsProd, $idEmpresa);
         $variantMap = $repo->getVariantesPorProductos($idsProd, $idEmpresa);
 
-        $rows = array_map(function ($p) use ($preciosMap, $variantMap) {
+        // Saldo (stock) del producto en la bodega de la cabecera, para mostrarlo en el
+        // buscador. Solo aplica a bienes inventariables y solo si la vista mandó bodega
+        // (la vista es la que conoce la config final de la empresa/establecimiento:
+        // si "La facturación afecta al inventario" está apagada no hay bodega ni saldo).
+        // Una sola consulta para los 15 resultados: no se puede pedir producto a producto.
+        $idBodega = (int) ($_GET['id_bodega'] ?? 0);
+        $idVenta  = (int) ($_GET['id_venta'] ?? 0);
+        $stockMap = [];
+        if ($idBodega > 0) {
+            $idsInventariables = [];
+            foreach ($result['rows'] as $p) {
+                if ($this->esProductoInventariable($p)) {
+                    $idsInventariables[] = (int) $p['id'];
+                }
+            }
+            if (!empty($idsInventariables)) {
+                $repoInv  = new \App\repositories\modulos\InventarioRepository();
+                $stockMap = $repoInv->getStockActualPorProductos(
+                    $idsInventariables,
+                    $idBodega,
+                    $idEmpresa,
+                    $idVenta > 0 ? $idVenta : null,
+                    $idVenta > 0 ? 'factura_venta' : null
+                );
+            }
+        }
+
+        $rows = array_map(function ($p) use ($preciosMap, $variantMap, $idBodega, $stockMap) {
             $p['precios_lista'] = $preciosMap[(int)$p['id']] ?? [];
             $p['variantes']     = $variantMap[(int)$p['id']] ?? [];
+            $p['stock_bodega']  = ($idBodega > 0 && $this->esProductoInventariable($p))
+                ? (float) ($stockMap[(int)$p['id']] ?? 0)
+                : null;
             return $p;
         }, $result['rows']);
 
         echo json_encode(['ok' => true, 'data' => $rows]);
         exit;
+    }
+
+    /**
+     * Bien que afecta al inventario: mismo criterio que usa la vista para decidir si la
+     * fila maneja lote/caducidad/stock (inventariable y tipo_produccion != '02' = servicio).
+     */
+    private function esProductoInventariable(array $p): bool
+    {
+        $inv = $p['inventariable'] ?? false;
+        $esInventariable = ($inv === true || $inv === 'true' || $inv === 't' || $inv == 1);
+        return $esInventariable && (string) ($p['tipo_produccion'] ?? '') !== '02';
     }
 
     public function eliminarAjax(): void

@@ -21,22 +21,42 @@ class InventarioRepository extends BaseRepository
      * Stock actual de varios productos a la vez en una sola bodega (una sola
      * consulta, evita N+1). Devuelve [id_producto => stock]; los productos
      * sin ningún movimiento no aparecen en el resultado (asumir 0).
+     * @param int|null    $excludeRefId   ID de referencia a excluir (para ediciones)
+     * @param string|null $excludeRefTipo Tipo de referencia a excluir (para ediciones)
      */
-    public function getStockActualPorProductos(array $idProductos, int $idBodega, int $idEmpresa): array
-    {
+    public function getStockActualPorProductos(
+        array $idProductos,
+        int $idBodega,
+        int $idEmpresa,
+        ?int $excludeRefId = null,
+        ?string $excludeRefTipo = null
+    ): array {
         $idProductos = array_values(array_unique(array_map('intval', $idProductos)));
         if (empty($idProductos)) {
             return [];
         }
         $placeholders = implode(',', array_fill(0, count($idProductos), '?'));
+        $params = array_merge([$idBodega, $idEmpresa, $idEmpresa], $idProductos);
+
+        // Al editar un documento, su propio movimiento no debe restar del saldo que se
+        // muestra: el saldo relevante es el que habría "sin este documento" (igual que
+        // hace getStockActual() / getLotesDisponibles()).
+        $whereExcluir = "";
+        if ($excludeRefId !== null && $excludeRefTipo !== null) {
+            $whereExcluir = " AND NOT (referencia_id = ? AND referencia_tipo = ?)";
+            $params[] = $excludeRefId;
+            $params[] = $excludeRefTipo;
+        }
+
         $sql = "SELECT id_producto, COALESCE(SUM(cantidad), 0) AS stock
                 FROM inventario_kardex
                 WHERE id_bodega = ? AND id_empresa = ? AND eliminado = false
                   AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                   AND id_producto IN ($placeholders)
+                  $whereExcluir
                 GROUP BY id_producto";
         $st = $this->db->prepare($sql);
-        $st->execute(array_merge([$idBodega, $idEmpresa, $idEmpresa], $idProductos));
+        $st->execute($params);
 
         $resultado = [];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {

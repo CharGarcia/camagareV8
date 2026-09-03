@@ -4259,8 +4259,20 @@ $totalPages = $totalPagesOriginal;
             dropdownGlobal.classList.remove('d-none');
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
 
+            // Saldo en el buscador: solo se pide cuando la facturación afecta al inventario
+            // y hay bodega en la cabecera. El backend devuelve stock_bodega solo para los
+            // bienes inventariables (los servicios vienen en null y no muestran saldo).
+            let urlBusqueda = `${B_URL}/${RUTA_MODULO}/getProductosAjax?q=${encodeURIComponent(q)}`;
+            if (EMPRESA_CONFIG.facturacion_inventario) {
+                const idBodBusqueda = getIdBodegaCabecera();
+                if (idBodBusqueda) {
+                    urlBusqueda += `&id_bodega=${encodeURIComponent(idBodBusqueda)}`;
+                    if (FV_ID_ACTIVO) urlBusqueda += `&id_venta=${FV_ID_ACTIVO}`;
+                }
+            }
+
             try {
-                const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getProductosAjax?q=${encodeURIComponent(q)}`);
+                const resp = await fetch(urlBusqueda);
                 const json = await resp.json();
                 dropdownGlobal.innerHTML = '';
 
@@ -4278,13 +4290,26 @@ $totalPages = $totalPagesOriginal;
                         const b = document.createElement('button');
                         b.type = 'button';
                         b.className = 'list-group-item list-group-item-action small py-1 border-bottom';
+                        // Saldo del producto en la bodega de la cabecera (solo bienes
+                        // inventariables con inventario activo): verde si hay stock, rojo si no.
+                        let saldoHtml = '';
+                        if (p.stock_bodega !== undefined && p.stock_bodega !== null) {
+                            const saldo = parseFloat(p.stock_bodega) || 0;
+                            const cls = saldo > 0 ? 'success' : 'danger';
+                            saldoHtml = `<span class="badge bg-${cls} bg-opacity-10 text-${cls} border border-${cls} border-opacity-10" title="Saldo disponible en la bodega seleccionada">
+                                            <i class="bi bi-box-seam me-1"></i>${saldo.toFixed(DEC_CANT)}
+                                         </span>`;
+                        }
                         b.innerHTML = `
                             <div class="d-flex justify-content-between align-items-center text-start">
                                 <div class="pe-3">
                                     <div class="fw-bold text-dark">${p.nombre}</div>
                                     <div class="x-small text-muted">${p.codigo} ${p.codigo_barras ? '| ' + p.codigo_barras : ''}</div>
                                 </div>
-                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-10">$${parseFloat(p.precio_base).toFixed(2)}</span>
+                                <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                    ${saldoHtml}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-10">$${parseFloat(p.precio_base).toFixed(2)}</span>
+                                </div>
                             </div>
                         `;
                         b.onmousedown = (evt) => {
