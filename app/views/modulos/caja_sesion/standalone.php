@@ -100,6 +100,31 @@ $volverA = $volverA ?? null;
                 </div>
 
                 <div id="cx-cierre-form" class="d-none">
+                    <!-- Cobrado del turno, desglosado por forma de pago: lo llena
+                         resumenTurnoAjax al abrir el arqueo. -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-uppercase text-muted">Cobrado en el turno</label>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-1" style="font-size:.82rem;">
+                                <tbody id="cx-formas-pago">
+                                    <tr><td colspan="2" class="text-muted text-center py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Cargando…
+                                    </td></tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="border-top">
+                                        <th>Total cobrado</th>
+                                        <th class="text-end" id="cx-total-cobrado">$0.00</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Efectivo esperado en caja</span>
+                        <b id="cx-monto-esperado">$0.00</b>
+                    </div>
                     <label class="form-label small fw-semibold text-uppercase text-muted">Monto contado (arqueo)</label>
                     <div class="input-group mb-2">
                         <span class="input-group-text">$</span>
@@ -157,6 +182,13 @@ $volverA = $volverA ?? null;
 
     function money(v) {
         return '$' + (parseFloat(v || 0)).toFixed(2);
+    }
+
+    /** Los nombres de las formas de pago los escribe el usuario: nunca al HTML sin escapar. */
+    function escapeHtml(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
     }
 
     function swalToast(icon, title) {
@@ -273,7 +305,47 @@ $volverA = $volverA ?? null;
     document.getElementById('cx-btn-cerrar').addEventListener('click', () => {
         document.getElementById('cx-cierre-form').classList.remove('d-none');
         document.getElementById('cx-turno-acciones').classList.add('d-none');
+        cargarResumenTurno();
     });
+
+    /** Cobrado del turno por forma de pago, para arquear sabiendo qué entró y por dónde. */
+    async function cargarResumenTurno() {
+        if (!sesionActual) return;
+        const $tbody = document.getElementById('cx-formas-pago');
+
+        try {
+            const res = await fetch(AJAX + '/resumenTurnoAjax?id=' + encodeURIComponent(sesionActual.id),
+                { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await res.json();
+            if (!json.ok) {
+                $tbody.innerHTML = '<tr><td colspan="2" class="text-danger text-center py-2">'
+                    + (json.error || 'No se pudo cargar el resumen.') + '</td></tr>';
+                return;
+            }
+
+            const r = json.resumen;
+            $tbody.innerHTML = r.formas_pago.length
+                ? r.formas_pago.map(f => {
+                    // Los cobros sin Ingreso no se pueden atribuir a una forma:
+                    // se marcan para que el cajero sepa qué falta registrar.
+                    const sinRegistrar = !f.id_forma_pago;
+                    return '<tr>'
+                        + '<td>' + escapeHtml(f.nombre)
+                        + (sinRegistrar ? ' <i class="bi bi-exclamation-triangle text-warning" title="Cobros sin Ingreso registrado"></i>' : '')
+                        + ' <span class="text-muted">(' + f.documentos + ')</span></td>'
+                        + '<td class="text-end">' + money(f.total) + '</td>'
+                        + '</tr>';
+                }).join('')
+                : '<tr><td colspan="2" class="text-muted text-center py-2">Sin cobros en este turno.</td></tr>';
+
+            document.getElementById('cx-total-cobrado').textContent  = money(r.total_cobrado);
+            document.getElementById('cx-monto-esperado').textContent = money(r.monto_esperado);
+            // Se propone lo esperado: el cajero corrige si contó otra cosa.
+            document.getElementById('cx-monto-contado').value = (r.monto_esperado || 0).toFixed(2);
+        } catch (e) {
+            $tbody.innerHTML = '<tr><td colspan="2" class="text-danger text-center py-2">Error de comunicación.</td></tr>';
+        }
+    }
 
     document.getElementById('cx-btn-cancelar-cierre').addEventListener('click', () => {
         document.getElementById('cx-cierre-form').classList.add('d-none');
@@ -296,9 +368,14 @@ $volverA = $volverA ?? null;
 
         const dif = parseFloat(json.sesion.diferencia || 0);
         if (Math.abs(dif) < 0.01) {
-            swalToast('success', 'Caja cerrada correctamente.');
+            swalToast('success', 'Caja cerrada correctamente. El detalle se envió por correo.');
         } else {
             swalWarning('Caja cerrada con una diferencia de <b>' + money(dif) + '</b> respecto a lo esperado.');
+        }
+        // El correo del cierre no bloquea nada: si no salió, se avisa aparte
+        // para que alguien lo mire, con la caja ya cerrada.
+        if (json.aviso_correo) {
+            setTimeout(() => swalWarning('La caja se cerró correctamente, pero ' + escapeHtml(json.aviso_correo)), 400);
         }
         consultarEstado($pto.value);
     });

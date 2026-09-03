@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte-restaurante
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte restaurante, comandas, mesas, platos mas vendidos, anulaciones, consumo, rotacion de mesas, forma de pago, filtro forma de pago, tirilla, imprimir tirilla, enviar por correo, pdf, excel, resumen por forma de pago, cuanto entro en efectivo, cuadrar caja, cierre de turno, sin forma de pago registrada
-version: 1.2
+version: 1.3
 orden: 70
 estado: activo
 ---
@@ -102,6 +102,11 @@ documentos y total— y el PDF va adjunto.
 
 ## Historial de cambios
 
+- **1.3** — La ventana de la tirilla ya no desaparece al cancelar la
+  impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
+  ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.
+  Ahora avisa de que se cerrará en 10 segundos y deja a mano **Imprimir de
+  nuevo** —que reinicia la cuenta— y **Cerrar**.
 - **1.2** — Nueva vista **Resumen por forma de pago**: cuánto entró por cada una,
   con los cobros que aún no tienen su Ingreso agrupados aparte y señalados. Sale
   también en PDF, Excel, tirilla y correo, como el resto de vistas.

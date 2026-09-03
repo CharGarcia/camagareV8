@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
-etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica
-version: 1.5
+etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre
+version: 1.7
 orden: 25
 estado: activo
 ---
@@ -114,12 +114,34 @@ después se facturan por ese punto.
 
 ## Cerrar la caja
 
-Al terminar el turno se cierra la sesión declarando el **monto contado**: el
-efectivo que hay físicamente. El sistema lo compara con lo que debería haber
-según las ventas del turno y muestra la diferencia.
+Al pulsar **Cerrar caja (arqueo)** la pantalla muestra primero **todo lo cobrado
+en el turno, desglosado por forma de pago** —Efectivo, cada banco, Payphone…—
+con cuántos documentos van por cada una y su total. Debajo, el **efectivo
+esperado en caja** (el fondo inicial más lo cobrado en efectivo) y el campo del
+**monto contado**, que llega propuesto con ese valor esperado: solo hay que
+corregirlo si al contar sale otra cosa.
 
-El monto contado es obligatorio y debe ser numérico. Ese arqueo es el que
-permite detectar faltantes el mismo día, no a fin de mes.
+El monto contado es obligatorio y debe ser numérico. El sistema calcula la
+diferencia y la muestra al cerrar. Ese arqueo es el que permite detectar
+faltantes el mismo día, no a fin de mes.
+
+La forma de pago sale del **Ingreso** que generó cada cobro, que es donde queda
+registrado con qué se pagó. Los cobros cuyo Ingreso no llegó a generarse
+aparecen agrupados como **"Sin forma de pago registrada"**, con un triángulo de
+aviso: el dinero está contado en el total, pero no se sabe por dónde entró y hay
+que registrarlo desde el módulo *Ingresos*.
+
+### El cierre se envía por correo
+
+Al confirmar, el sistema envía automáticamente el detalle del cierre al **correo
+registrado en la empresa** (*Empresa → Datos generales*). El mensaje lleva el
+turno y el cajero, las horas de apertura y cierre, el cobrado por forma de pago,
+y el arqueo completo: fondo inicial, esperado, contado y diferencia, más las
+observaciones si las hubo.
+
+Si la empresa no tiene correo configurado —o el envío falla— **la caja se cierra
+igual**: solo aparece un aviso explicando que el detalle no salió. El cierre
+nunca depende de que el correo funcione.
 
 ## Errores frecuentes
 
@@ -171,6 +193,18 @@ Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
 
+- **1.7** — El cierre de caja ahora muestra **todo lo cobrado en el turno
+  desglosado por forma de pago** antes de arquear, propone el efectivo esperado
+  en el campo del monto contado, y al confirmar **envía el detalle del cierre
+  por correo** a la dirección registrada en la empresa. El efectivo esperado se
+  calcula desde la forma de pago real del cobro: antes salía de un criterio que
+  podía dejarlo en cero aunque hubiera ventas en efectivo.
+
+- **1.6** — La ventana de la tirilla ya no desaparece al cancelar la
+  impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
+  ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.
+  Ahora avisa de que se cerrará en 10 segundos y deja a mano **Imprimir de
+  nuevo** —que reinicia la cuenta— y **Cerrar**.
 - **1.5** — El cobro envía la factura al SRI y espera su autorización: la
   tirilla que se imprime desde el aviso de la venta ya sale con el número de
   autorización, sin pasar por *Facturas de Venta*. Si el SRI rechaza o no

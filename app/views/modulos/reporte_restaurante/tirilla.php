@@ -74,10 +74,7 @@ $fmt = fn($v) => number_format((float) $v, 2);
     <div class="feed"></div>
 
     <script>
-        window.onload = function () {
-            window.print();
-            window.onafterprint = function () { setTimeout(function () { window.close(); }, 2000); };
-        };
+    <?php require MVC_APP . '/views/partials/tirilla_script.php'; ?>
     </script>
 </body>
 </html>

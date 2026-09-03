@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos
-version: 1.2
+version: 1.3
 orden: 35
 estado: activo
 ---
@@ -63,6 +63,11 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
 
 ## Historial de cambios
 
+- **1.3** — La ventana de la tirilla ya no desaparece al cancelar la
+  impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
+  ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.
+  Ahora avisa de que se cerrará en 10 segundos y deja a mano **Imprimir de
+  nuevo** —que reinicia la cuenta— y **Cerrar**.
 - **1.2** — La tirilla se adapta al ancho de papel del driver en vez de imponer el
   suyo, con columnas de ancho proporcional y tipografía sans-serif: ya no sale
   reescalada, con los importes corridos ni con la letra entrecortada en

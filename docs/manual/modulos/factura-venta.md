@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico
-version: 1.7
+version: 1.8
 orden: 20
 estado: activo
 ---
@@ -124,6 +124,11 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **1.8** — La ventana de la tirilla ya no desaparece al cancelar la
+  impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
+  ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.
+  Ahora avisa de que se cerrará en 10 segundos y deja a mano **Imprimir de
+  nuevo** —que reinicia la cuenta— y **Cerrar**.
 - **1.7** — *"Clave de acceso en procesamiento"* ya no se trata como un rechazo.
   Es la respuesta del SRI cuando la factura ya está en su cola de un envío
   anterior: ahora el sistema lo reconoce y pasa a consultar la autorización en

@@ -599,6 +599,25 @@ class CajaPosController extends BaseModuloController
         }
     }
 
+    /** Desglose de cobros del turno por forma de pago, para la pantalla de arqueo. */
+    public function resumenTurnoAjax(): void
+    {
+        $this->requirePermisoTurno('r');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+
+        try {
+            if ($id <= 0) {
+                throw new \Exception('Sesión de caja no válida.');
+            }
+            $this->json(['ok' => true, 'resumen' => $this->service->getResumenTurno($id, $idEmpresa)]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
     public function cerrarAjax(): void
     {
         $this->requirePermisoTurno('u');
@@ -618,7 +637,14 @@ class CajaPosController extends BaseModuloController
             }
             $sesion = $this->service->cerrar($id, $idEmpresa, $data);
             unset($_SESSION['pos_id_punto_emision']);
-            $this->json(['ok' => true, 'msg' => 'Caja cerrada correctamente.', 'sesion' => $sesion]);
+            $this->json([
+                'ok'    => true,
+                'msg'   => 'Caja cerrada correctamente.',
+                'sesion' => $sesion,
+                // Si el correo del cierre no salió, la caja igual quedó cerrada:
+                // se avisa aparte para que el cajero lo sepa sin bloquearlo.
+                'aviso_correo' => $sesion['aviso_correo'] ?? null,
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);

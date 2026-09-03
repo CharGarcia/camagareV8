@@ -148,6 +148,75 @@ class CajaSesionRepository extends BaseRepository
         }
     }
 
+    /**
+     * Cobros del turno agrupados por forma de pago de la empresa (Efectivo, un
+     * banco, Payphone…), que es lo que eligió quien cobró.
+     *
+     * El documento NO guarda esa forma —en `forma_pago` lleva el código SRI—,
+     * así que se llega por el Ingreso que generó cada cobro. Va como
+     * LEFT JOIN LATERAL ... LIMIT 1 y no como JOIN llano: un ingreso puede tener
+     * varias filas de pago y un documento varios ingresos (cobros parciales), y
+     * un JOIN duplicaría los importes del arqueo.
+     *
+     * Los documentos sin Ingreso registrado caen en "Sin forma de pago
+     * registrada": no se pierden del total, pero se ven aparte porque son los
+     * que hay que corregir en el módulo Ingresos.
+     *
+     * @return list<array{id_forma_pago:int, nombre:string, tipo:string, documentos:int, total:float}>
+     */
+    public function getCobrosPorFormaPagoEnTurno(int $idCajaSesion): array
+    {
+        $sql = "
+            SELECT COALESCE(fp.id, 0)                                  AS id_forma_pago,
+                   COALESCE(fp.nombre, 'Sin forma de pago registrada') AS nombre,
+                   COALESCE(fp.tipo, '')                               AS tipo,
+                   COUNT(*)                                            AS documentos,
+                   COALESCE(SUM(t.total), 0)                           AS total
+            FROM (
+                SELECT v.id AS id_doc, 'FACTURA' AS tipo_doc, v.importe_total AS total
+                  FROM ventas_cabecera v
+                 WHERE v.id_caja_sesion = :id1 AND v.eliminado = false AND v.estado <> 'anulado'
+                UNION ALL
+                SELECT r.id, 'RECIBO', r.importe_total
+                  FROM recibos_venta_cabecera r
+                 WHERE r.id_caja_sesion = :id2 AND r.eliminado = false AND r.estado <> 'anulado'
+            ) t
+            LEFT JOIN LATERAL (
+                SELECT ip.id_forma_cobro
+                  FROM ingresos_detalle idet
+                  JOIN ingresos_cabecera ic ON ic.id = idet.id_ingreso
+                                           AND ic.eliminado = false
+                                           AND ic.estado <> 'anulado'
+                  JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id
+                 WHERE idet.id_referencia_documento = t.id_doc
+                   AND idet.tipo_documento = t.tipo_doc
+                 ORDER BY ic.id DESC, ip.id ASC
+                 LIMIT 1
+            ) f ON true
+            LEFT JOIN empresa_formas_pago fp ON fp.id = f.id_forma_cobro
+            GROUP BY COALESCE(fp.id, 0), COALESCE(fp.nombre, 'Sin forma de pago registrada'), COALESCE(fp.tipo, '')
+            ORDER BY total DESC
+        ";
+
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':id1' => $idCajaSesion, ':id2' => $idCajaSesion]);
+            return array_map(static fn(array $r): array => [
+                'id_forma_pago' => (int) $r['id_forma_pago'],
+                'nombre'        => (string) $r['nombre'],
+                'tipo'          => (string) $r['tipo'],
+                'documentos'    => (int) $r['documentos'],
+                'total'         => round((float) $r['total'], 2),
+            ], $st->fetchAll(PDO::FETCH_ASSOC));
+        } catch (\Throwable $e) {
+            // Mismo criterio defensivo que getEfectivoCobradoEnTurno(): si falta
+            // alguna columna por una migración pendiente, el cierre sigue
+            // funcionando sin el desglose en vez de romperse.
+            error_log('[CajaSesion] No se pudo calcular el desglose por forma de pago del turno: ' . $e->getMessage());
+            return [];
+        }
+    }
+
     public function cerrar(int $id, int $idEmpresa, array $data): bool
     {
         $sql = "UPDATE {$this->table} SET

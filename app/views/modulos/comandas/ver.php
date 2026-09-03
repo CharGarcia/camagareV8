@@ -1179,13 +1179,16 @@ window.addEventListener('pageshow', function (e) {
             <table class="items"><colgroup><col style="width:20%"><col></colgroup><tbody>${filas}</tbody></table>
             ${t.observaciones ? `<hr class="sep"><div>${escapeHtml(t.observaciones)}</div>` : ''}
             <div class="feed"></div>
+            <script>
+<?php require MVC_APP . '/views/partials/tirilla_script.php'; ?>
+<\/script>
         </body></html>`;
 
         const copias = Math.min(5, Math.max(1, parseInt(t.copias, 10) || 1));
         for (let i = 0; i < copias; i++) {
             const win = window.open('', '_blank', 'width=380,height=600,scrollbars=yes');
             if (!win) { swalWarning('Permite ventanas emergentes para imprimir la orden.'); return; }
-            win.document.write(html + '<script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>');
+            win.document.write(html);
             win.document.close();
         }
     }
@@ -2169,7 +2172,9 @@ window.addEventListener('pageshow', function (e) {
                 ${filaDato('Propina:', propina > 0 ? '$' + fmt(propina) : '')}
             </table>
             <div class="feed"></div>
-            <script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>
+            <script>
+<?php require MVC_APP . '/views/partials/tirilla_script.php'; ?>
+<\/script>
         </body></html>`;
 
         const win = window.open('', '_blank', 'width=320,height=600,scrollbars=yes');
@@ -2305,7 +2310,9 @@ window.addEventListener('pageshow', function (e) {
                 <hr class="sep">
                 <div class="center" style="font-size:10px;">¡Gracias por su compra!</div>
                 <div class="feed"></div>
-                <script>window.onload=function(){window.print();window.onafterprint=function(){setTimeout(function(){window.close();},2000);};};<\/script>
+                <script>
+<?php require MVC_APP . '/views/partials/tirilla_script.php'; ?>
+<\/script>
             </body></html>`;
 
             const win = window.open('', '_blank', 'width=320,height=600,scrollbars=yes');

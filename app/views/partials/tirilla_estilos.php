@@ -109,7 +109,27 @@ $fPie    = $esAngosta ?  9 : 11;
        menos, pero de más no estorba: solo alarga un poco el papel. */
     .feed { height: 40mm; }
 
+    /* Barra de control de la ventana de impresión (ver partials/tirilla_script.php).
+       Fija abajo para no empujar el ticket, y fuera del papel al imprimir. */
+    .tirilla-barra {
+        position: fixed; left: 0; right: 0; bottom: 0;
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding: 6px 8px;
+        background: #fff; border-top: 1px solid #000;
+        font-size: 11px;
+    }
+    .tirilla-barra button {
+        font: inherit; padding: 3px 8px; cursor: pointer;
+        background: #fff; border: 1px solid #000; border-radius: 3px;
+    }
+    .tirilla-barra__aviso { flex: 1 1 100%; }
+    /* Deja sitio a la barra para que no tape el final del ticket en pantalla.
+       No afecta a la impresión: la barra desaparece y este relleno también. */
+    body { padding-bottom: 46px; }
+
     @media print {
         button { display: none; }
+        .tirilla-barra { display: none !important; }
+        body { padding-bottom: 0; }
     }
 </style>

@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante, datos para la factura, precuenta, cuenta previa, llenar a mano, direccion, telefono
-version: 1.24
+version: 1.25
 orden: 20
 estado: activo
 ---
@@ -542,6 +542,11 @@ tocarlas cada vez.
 
 ## Historial de cambios
 
+- **1.25** — La ventana de la tirilla ya no desaparece al cancelar la
+  impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
+  ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.
+  Ahora avisa de que se cerrará en 10 segundos y deja a mano **Imprimir de
+  nuevo** —que reinicia la cuenta— y **Cerrar**.
 - **1.24** — En la cuenta impresa, los datos de facturación pasaron **del
   encabezado al pie**, bajo el título *DATOS PARA LA FACTURA*, y se sumaron
   **Dirección**, **Teléfono** y **Propina** a los tres que ya había. Así el
