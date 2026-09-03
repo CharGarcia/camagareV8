@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica
-version: 2.5
+version: 2.6
 orden: 20
 estado: activo
 ---
@@ -339,6 +339,7 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.6** — El asiento automático tolera más centavos de redondeo en facturas con muchas líneas: 1 centavo por línea con IVA (mínimo 3), llevados a la cuenta de Ajuste por redondeo. Si aun así no cuadra, el mensaje pide revisar subtotal, IVA e importe total de la compra.
 - **2.5** — La pestaña **Asiento contable** ahora solo aparece si el usuario tiene acceso a Contabilidad → Asientos Contables, y con permiso de modificar permite corregir el asiento y guardarlo desde el propio modal, validando que siga cuadrando con el total de la compra. Un asiento corregido a mano deja de regenerarse al reguardar la compra; se vuelve al automático con **Restaurar automático**.
 
 - **2.4** — Se corrigió la **paginación del listado**: al pasar de página podía

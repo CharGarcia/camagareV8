@@ -89,6 +89,18 @@
                         <div id="rc-dropdown-entidad" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
 
+                    <!-- Documento: se busca entre los documentos del cliente/proveedor seleccionado.
+                         Con una selección fija, Backspace/Delete limpia todo el filtro de una vez. -->
+                    <div class="position-relative" style="width:260px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-file-earmark-text"></i></span>
+                            <input type="text" class="form-control border-start-0 px-1 shadow-none" id="rc-search-documento" placeholder="Nº de documento (opcional)" autocomplete="off">
+                        </div>
+                        <input type="hidden" name="documento" id="rc-documento" value="">
+                        <div id="rc-dropdown-documento" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
+                    </div>
+
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
                         <button type="submit" class="btn btn-primary btn-sm shadow-sm text-nowrap" id="btn-generar-reporte">
@@ -133,20 +145,8 @@
         </div>
     </div>
 
-    <!-- ── Acciones (PDF / Excel / Correo) ── -->
-    <div class="d-flex justify-content-end mb-2">
-        <div class="btn-group btn-group-sm">
-            <button type="button" class="btn btn-outline-danger" onclick="window.RC_exportarPDF()" title="Descargar PDF">
-                <i class="bi bi-file-earmark-pdf"></i> PDF
-            </button>
-            <button type="button" class="btn btn-outline-success" onclick="window.RC_exportarExcel()" title="Descargar Excel">
-                <i class="bi bi-file-earmark-spreadsheet"></i> Excel
-            </button>
-            <button type="button" class="btn btn-outline-primary" onclick="window.RC_abrirModalCorreo()" title="Enviar por correo">
-                <i class="bi bi-envelope"></i> Correo
-            </button>
-        </div>
-    </div>
+    <!-- Las acciones PDF / Excel / Correo van en el encabezado de cada estado de
+         cuenta (renderSeccionScreen), antes del nombre del cliente/proveedor. -->
 
     <!-- ── Resultados: un estado de cuenta por entidad seleccionada ── -->
     <div id="rc-resultados">
@@ -163,6 +163,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <input type="hidden" id="rc-correo-id-entidad" value="">
+                <div class="small text-muted mb-2" id="rc-correo-entidad-nombre"></div>
                 <div class="mb-3">
                     <label class="form-label small fw-bold">Destinatarios</label>
                     <input type="text" id="rc-correo-destinatarios" class="form-control form-control-sm" placeholder="correo1@ejemplo.com, correo2@ejemplo.com">
@@ -176,7 +178,7 @@
                         <option value="ambos">PDF y Excel</option>
                     </select>
                 </div>
-                <small class="text-muted">Se enviará el estado de cuenta de la selección y período actuales.</small>
+                <small class="text-muted">Se enviará el estado de cuenta de este cliente/proveedor con el período y el documento filtrados.</small>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>

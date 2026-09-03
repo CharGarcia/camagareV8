@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -106,6 +107,37 @@ class ReporteCarteraRepository extends BaseRepository
         return " AND {$expr} = :ent_{$suffix}";
     }
 
+    /**
+     * Filtro por número de documento para una rama del UNION. Cada entrada de
+     * $exprs identifica el documento del movimiento: el propio número en los
+     * cargos, el número del documento cancelado en los abonos. Una entrada
+     * string se compara normalizada (AbonosVentaSql::normalizar, 15 dígitos);
+     * una entrada array ['sql' => '... {k} ...', 'raw' => bool] es SQL propio
+     * donde {k} se sustituye por el placeholder (raw = comparar el texto tal
+     * cual, p. ej. facturas del exterior con números libres). Sin $documento
+     * no filtra. Los placeholders llevan sufijo propio por rama.
+     */
+    private function documentoWhere(array $exprs, string $suffix, ?string $documento, array &$params): string
+    {
+        $documento = trim((string) $documento);
+        if ($documento === '') {
+            return '';
+        }
+        $norm  = AbonosVentaSql::normalizarValor($documento);
+        $conds = [];
+        foreach (array_values($exprs) as $i => $e) {
+            $k = ":doc_{$suffix}_{$i}";
+            if (is_string($e)) {
+                $conds[]    = AbonosVentaSql::normalizar($e) . " = {$k}";
+                $params[$k] = $norm;
+                continue;
+            }
+            $conds[]    = str_replace('{k}', $k, (string) $e['sql']);
+            $params[$k] = !empty($e['raw']) ? $documento : $norm;
+        }
+        return ' AND (' . implode(' OR ', $conds) . ')';
+    }
+
     private function sumarSaldo(array $movs): float
     {
         $saldo = 0.0;
@@ -124,7 +156,7 @@ class ReporteCarteraRepository extends BaseRepository
      * expone: fecha, tipo_movimiento, signo, origen, numero_documento,
      * detalle, monto, id_orden, id_entidad (cliente al que se atribuye).
      */
-    private function unionCliente(int $idEmpresa, ?int $idCliente, ?string $fechaDesde, ?string $fechaHasta, array &$params): string
+    private function unionCliente(int $idEmpresa, ?int $idCliente, ?string $fechaDesde, ?string $fechaHasta, array &$params, ?string $documento = null): string
     {
         $amb = $this->ambienteEmpresa($idEmpresa);
 
@@ -153,6 +185,38 @@ class ReporteCarteraRepository extends BaseRepository
         $wR      = $this->entidadWhere($eR,      'r',  $idCliente, $params);
         $wNc     = $this->entidadWhere($eNc,     'nc', $idCliente, $params);
 
+        // Filtro por documento: el número del cargo, o el del documento que
+        // cancela cada abono (mismo enlace que la atribución del cliente).
+        $numV    = "v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial";
+        $dVenta  = $this->documentoWhere([$numV], 'v',  $documento, $params);
+        $dRecibo = $this->documentoWhere([$numV], 'rv', $documento, $params);
+        $dNd     = $this->documentoWhere(['nd.num_doc_modificado'], 'nd', $documento, $params);
+        $dSi     = $this->documentoWhere(['s.nro_documento'], 'si', $documento, $params);
+        $dIc     = $this->documentoWhere([
+            "vf.establecimiento || '-' || vf.punto_emision || '-' || vf.secuencial",
+            "rv.establecimiento || '-' || rv.punto_emision || '-' || rv.secuencial",
+            'si.nro_documento',
+        ], 'ic', $documento, $params);
+        $dR      = $this->documentoWhere([
+            $numV,
+            ['sql' => "EXISTS (SELECT 1 FROM retencion_venta_detalle rdd WHERE rdd.id_retencion = r.id AND "
+                      . AbonosVentaSql::normalizar('rdd.num_doc_sustento') . " = {k})"],
+        ], 'r', $documento, $params);
+        $dNc     = $this->documentoWhere(['nc.num_doc_modificado'], 'nc', $documento, $params);
+
+        // Monto de la retención: normalmente el total de la cabecera (toda la
+        // retención es del mismo cliente). Con filtro por documento, solo lo
+        // retenido en las líneas de ESE documento (una retención puede sustentar
+        // varias facturas); si ninguna línea enlaza (retención por id_venta sin
+        // sustento), se mantiene el total de la cabecera.
+        $montoR = "(COALESCE(r.total_renta,0) + COALESCE(r.total_iva,0) + COALESCE(r.total_isd,0))";
+        if (trim((string) $documento) !== '') {
+            $params[':doc_r_monto'] = AbonosVentaSql::normalizarValor((string) $documento);
+            $montoR = "COALESCE((SELECT SUM(rdm.valor_retenido) FROM retencion_venta_detalle rdm
+                                  WHERE rdm.id_retencion = r.id
+                                    AND " . AbonosVentaSql::normalizar('rdm.num_doc_sustento') . " = :doc_r_monto), {$montoR})";
+        }
+
         $params += [
             ':emp1' => $idEmpresa, ':emp2' => $idEmpresa, ':emp3' => $idEmpresa, ':emp4' => $idEmpresa,
             ':emp5' => $idEmpresa, ':emp6' => $idEmpresa, ':emp7' => $idEmpresa,
@@ -169,7 +233,7 @@ class ReporteCarteraRepository extends BaseRepository
                 FROM ventas_cabecera v
                 WHERE v.id_empresa = :emp1 AND v.eliminado = false
                   AND v.estado IN ('autorizado','autorizada')
-                  AND v.tipo_ambiente = '{$amb}' {$wVenta} {$fVenta}
+                  AND v.tipo_ambiente = '{$amb}' {$wVenta} {$fVenta} {$dVenta}
 
                 UNION ALL
 
@@ -180,7 +244,7 @@ class ReporteCarteraRepository extends BaseRepository
                 FROM recibos_venta_cabecera v
                 WHERE v.id_empresa = :emp2 AND v.eliminado = false
                   AND v.estado NOT IN ('borrador','anulado','facturado')
-                  AND (v.tipo_ambiente IS NULL OR v.tipo_ambiente = '{$amb}') {$wRecibo} {$fRecibo}
+                  AND (v.tipo_ambiente IS NULL OR v.tipo_ambiente = '{$amb}') {$wRecibo} {$fRecibo} {$dRecibo}
 
                 UNION ALL
 
@@ -199,7 +263,7 @@ class ReporteCarteraRepository extends BaseRepository
                 ) vm ON true
                 WHERE nd.id_empresa = :emp3 AND nd.eliminado = false
                   AND nd.estado != 'anulado'
-                  AND (nd.tipo_ambiente IS NULL OR nd.tipo_ambiente = '{$amb}') {$wNd} {$fNd}
+                  AND (nd.tipo_ambiente IS NULL OR nd.tipo_ambiente = '{$amb}') {$wNd} {$fNd} {$dNd}
 
                 UNION ALL
 
@@ -207,7 +271,7 @@ class ReporteCarteraRepository extends BaseRepository
                 SELECT s.fecha_emision::date, 'CARGO', 1, 'SALDO_INICIAL', s.nro_documento,
                        'Saldo Inicial', s.saldo_inicial, s.id, {$eSi}
                 FROM saldos_iniciales_cxc s
-                WHERE s.id_empresa = :emp4 AND s.eliminado = false {$wSi} {$fSi}
+                WHERE s.id_empresa = :emp4 AND s.eliminado = false {$wSi} {$fSi} {$dSi}
 
                 UNION ALL
 
@@ -226,7 +290,7 @@ class ReporteCarteraRepository extends BaseRepository
                   AND COALESCE(idet.monto_cobrado, 0) <> 0
                   -- el documento cobrado debe ser del ambiente actual (si no, su cargo tampoco está)
                   AND (vf.id IS NULL OR vf.tipo_ambiente = '{$amb}')
-                  AND (rv.id IS NULL OR rv.tipo_ambiente IS NULL OR rv.tipo_ambiente = '{$amb}') {$wIc} {$fIc}
+                  AND (rv.id IS NULL OR rv.tipo_ambiente IS NULL OR rv.tipo_ambiente = '{$amb}') {$wIc} {$fIc} {$dIc}
 
                 UNION ALL
 
@@ -234,7 +298,7 @@ class ReporteCarteraRepository extends BaseRepository
                 -- (id_venta directo o num_doc_sustento del detalle); si no, al de la retención
                 SELECT r.fecha_emision::date, 'ABONO', -1, 'RETENCION',
                        CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial),
-                       'Retención', (COALESCE(r.total_renta,0) + COALESCE(r.total_iva,0) + COALESCE(r.total_isd,0)), r.id, {$eR}
+                       'Retención', {$montoR}, r.id, {$eR}
                 FROM retencion_venta_cabecera r
                 LEFT JOIN ventas_cabecera v ON v.id = r.id_venta
                 LEFT JOIN LATERAL (
@@ -251,7 +315,7 @@ class ReporteCarteraRepository extends BaseRepository
                 ) vs ON true
                 WHERE r.id_empresa = :emp6 AND r.eliminado = false
                   AND (r.tipo_ambiente IS NULL OR r.tipo_ambiente = '{$amb}')
-                  AND (v.id IS NULL OR v.tipo_ambiente = '{$amb}') {$wR} {$fR}
+                  AND (v.id IS NULL OR v.tipo_ambiente = '{$amb}') {$wR} {$fR} {$dR}
 
                 UNION ALL
 
@@ -270,7 +334,7 @@ class ReporteCarteraRepository extends BaseRepository
                 ) vm ON true
                 WHERE nc.id_empresa = :emp7 AND nc.eliminado = false
                   AND nc.estado != 'anulado'
-                  AND (nc.tipo_ambiente IS NULL OR nc.tipo_ambiente = '{$amb}') {$wNc} {$fNc}
+                  AND (nc.tipo_ambiente IS NULL OR nc.tipo_ambiente = '{$amb}') {$wNc} {$fNc} {$dNc}
         ";
     }
 
@@ -279,10 +343,10 @@ class ReporteCarteraRepository extends BaseRepository
      * inicial) y ABONO (cobro/retención/NC). $fechaDesde/$fechaHasta son
      * opcionales (null = sin límite).
      */
-    public function getMovimientosCliente(int $idEmpresa, int $idCliente, ?string $fechaDesde, ?string $fechaHasta): array
+    public function getMovimientosCliente(int $idEmpresa, int $idCliente, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
     {
         $params = [];
-        $union  = $this->unionCliente($idEmpresa, $idCliente, $fechaDesde, $fechaHasta, $params);
+        $union  = $this->unionCliente($idEmpresa, $idCliente, $fechaDesde, $fechaHasta, $params, $documento);
 
         $sql = "SELECT fecha, tipo_movimiento, signo, origen, numero_documento, detalle, monto, id_orden
                 FROM ( {$union} ) mov
@@ -298,10 +362,10 @@ class ReporteCarteraRepository extends BaseRepository
      * saldo corriente del rango filtrado). Reutiliza getMovimientosCliente
      * con fecha_hasta = fechaDesde - 1 día.
      */
-    public function getSaldoAnteriorCliente(int $idEmpresa, int $idCliente, string $fechaDesde): float
+    public function getSaldoAnteriorCliente(int $idEmpresa, int $idCliente, string $fechaDesde, ?string $documento = null): float
     {
         $hasta = date('Y-m-d', strtotime($fechaDesde . ' -1 day'));
-        return $this->sumarSaldo($this->getMovimientosCliente($idEmpresa, $idCliente, null, $hasta));
+        return $this->sumarSaldo($this->getMovimientosCliente($idEmpresa, $idCliente, null, $hasta, $documento));
     }
 
     /**
@@ -344,7 +408,7 @@ class ReporteCarteraRepository extends BaseRepository
      * de compra viven como filas de compras_cabecera (tipo_comprobante
      * 04/05), no en tablas propias.
      */
-    private function unionProveedor(int $idEmpresa, ?int $idProveedor, ?string $fechaDesde, ?string $fechaHasta, array &$params): string
+    private function unionProveedor(int $idEmpresa, ?int $idProveedor, ?string $fechaDesde, ?string $fechaHasta, array &$params, ?string $documento = null): string
     {
         $amb = $this->ambienteEmpresa($idEmpresa);
 
@@ -375,6 +439,25 @@ class ReporteCarteraRepository extends BaseRepository
         $wR      = $this->entidadWhere($eR,      'r',  $idProveedor, $params);
         $wNc     = $this->entidadWhere($eNc,     'nc', $idProveedor, $params);
 
+        // Filtro por documento (número del cargo o del documento pagado/retenido/modificado)
+        $numC    = "c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov";
+        $dCompra = $this->documentoWhere([$numC], 'c', $documento, $params);
+        $dLiquid = $this->documentoWhere(["l.establecimiento || '-' || l.punto_emision || '-' || l.secuencial"], 'l', $documento, $params);
+        $dImport = $this->documentoWhere([['sql' => 'COALESCE(fe.numero_factura, ic.numero_importacion) = {k}', 'raw' => true]], 'fe', $documento, $params);
+        $dNd     = $this->documentoWhere(['nd.documento_modificado'], 'nd', $documento, $params);
+        $dSi     = $this->documentoWhere(['s.nro_documento'], 'si', $documento, $params);
+        $dEc     = $this->documentoWhere([
+            "pc.establecimiento_prov || '-' || pc.punto_emision_prov || '-' || pc.secuencial_prov",
+            "pl.establecimiento || '-' || pl.punto_emision || '-' || pl.secuencial",
+            ['sql' => 'pf.numero_factura = {k}', 'raw' => true],
+            'ps.nro_documento',
+        ], 'ec', $documento, $params);
+        $dR      = $this->documentoWhere([
+            "rc.establecimiento_prov || '-' || rc.punto_emision_prov || '-' || rc.secuencial_prov",
+            "rl.establecimiento || '-' || rl.punto_emision || '-' || rl.secuencial",
+        ], 'r', $documento, $params);
+        $dNc     = $this->documentoWhere(['nc.documento_modificado'], 'nc', $documento, $params);
+
         $params += [
             ':emp1' => $idEmpresa, ':emp2' => $idEmpresa, ':emp3' => $idEmpresa, ':emp4' => $idEmpresa,
             ':emp5' => $idEmpresa, ':emp6' => $idEmpresa, ':emp7' => $idEmpresa, ':emp8' => $idEmpresa,
@@ -389,7 +472,7 @@ class ReporteCarteraRepository extends BaseRepository
                 FROM compras_cabecera c
                 WHERE c.id_empresa = :emp1 AND c.eliminado = false
                   AND c.tipo_comprobante = '01'
-                  AND c.tipo_ambiente = '{$amb}' {$wCompra} {$fCompra}
+                  AND c.tipo_ambiente = '{$amb}' {$wCompra} {$fCompra} {$dCompra}
 
                 UNION ALL
 
@@ -400,7 +483,7 @@ class ReporteCarteraRepository extends BaseRepository
                 FROM liquidaciones_cabecera l
                 WHERE l.id_empresa = :emp2 AND l.eliminado = false
                   AND UPPER(l.estado) IN ('AUTORIZADO','APROBADO')
-                  AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = '{$amb}') {$wLiquid} {$fLiquid}
+                  AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = '{$amb}') {$wLiquid} {$fLiquid} {$dLiquid}
 
                 UNION ALL
 
@@ -410,7 +493,7 @@ class ReporteCarteraRepository extends BaseRepository
                        'Factura Proveedor Exterior', fe.monto_usd, fe.id, {$eImport}
                 FROM importaciones_factura_exterior fe
                 JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
-                WHERE ic.id_empresa = :emp3 AND fe.eliminado = false AND ic.eliminado = false {$wImport} {$fImport}
+                WHERE ic.id_empresa = :emp3 AND fe.eliminado = false AND ic.eliminado = false {$wImport} {$fImport} {$dImport}
 
                 UNION ALL
 
@@ -422,7 +505,7 @@ class ReporteCarteraRepository extends BaseRepository
                 FROM compras_cabecera nd
                 WHERE nd.id_empresa = :emp4 AND nd.eliminado = false
                   AND nd.tipo_comprobante = '05'
-                  AND (nd.tipo_ambiente IS NULL OR nd.tipo_ambiente = '{$amb}') {$wNd} {$fNd}
+                  AND (nd.tipo_ambiente IS NULL OR nd.tipo_ambiente = '{$amb}') {$wNd} {$fNd} {$dNd}
 
                 UNION ALL
 
@@ -430,7 +513,7 @@ class ReporteCarteraRepository extends BaseRepository
                 SELECT s.fecha_emision::date, 'CARGO', 1, 'SALDO_INICIAL', s.nro_documento,
                        'Saldo Inicial', s.saldo_inicial, s.id, {$eSi}
                 FROM saldos_iniciales_cxp s
-                WHERE s.id_empresa = :emp5 AND s.eliminado = false {$wSi} {$fSi}
+                WHERE s.id_empresa = :emp5 AND s.eliminado = false {$wSi} {$fSi} {$dSi}
 
                 UNION ALL
 
@@ -451,7 +534,7 @@ class ReporteCarteraRepository extends BaseRepository
                   AND COALESCE(ed.monto_pagado, 0) <> 0
                   -- el documento pagado debe ser del ambiente actual (si no, su cargo tampoco está)
                   AND (pc.id IS NULL OR pc.tipo_ambiente = '{$amb}')
-                  AND (pl.id IS NULL OR pl.tipo_ambiente IS NULL OR pl.tipo_ambiente = '{$amb}') {$wEc} {$fEc}
+                  AND (pl.id IS NULL OR pl.tipo_ambiente IS NULL OR pl.tipo_ambiente = '{$amb}') {$wEc} {$fEc} {$dEc}
 
                 UNION ALL
 
@@ -467,7 +550,7 @@ class ReporteCarteraRepository extends BaseRepository
                   AND UPPER(COALESCE(r.estado,'')) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
                   AND (r.tipo_ambiente IS NULL OR r.tipo_ambiente = '{$amb}')
                   AND (rc.id IS NULL OR rc.tipo_ambiente = '{$amb}')
-                  AND (rl.id IS NULL OR rl.tipo_ambiente IS NULL OR rl.tipo_ambiente = '{$amb}') {$wR} {$fR}
+                  AND (rl.id IS NULL OR rl.tipo_ambiente IS NULL OR rl.tipo_ambiente = '{$amb}') {$wR} {$fR} {$dR}
 
                 UNION ALL
 
@@ -479,7 +562,7 @@ class ReporteCarteraRepository extends BaseRepository
                 FROM compras_cabecera nc
                 WHERE nc.id_empresa = :emp8 AND nc.eliminado = false
                   AND nc.tipo_comprobante = '04'
-                  AND (nc.tipo_ambiente IS NULL OR nc.tipo_ambiente = '{$amb}') {$wNc} {$fNc}
+                  AND (nc.tipo_ambiente IS NULL OR nc.tipo_ambiente = '{$amb}') {$wNc} {$fNc} {$dNc}
         ";
     }
 
@@ -488,10 +571,10 @@ class ReporteCarteraRepository extends BaseRepository
      * importación/ND recibida/saldo inicial) y ABONO (pago/retención/NC
      * recibida).
      */
-    public function getMovimientosProveedor(int $idEmpresa, int $idProveedor, ?string $fechaDesde, ?string $fechaHasta): array
+    public function getMovimientosProveedor(int $idEmpresa, int $idProveedor, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
     {
         $params = [];
-        $union  = $this->unionProveedor($idEmpresa, $idProveedor, $fechaDesde, $fechaHasta, $params);
+        $union  = $this->unionProveedor($idEmpresa, $idProveedor, $fechaDesde, $fechaHasta, $params, $documento);
 
         $sql = "SELECT fecha, tipo_movimiento, signo, origen, numero_documento, detalle, monto, id_orden
                 FROM ( {$union} ) mov
@@ -502,10 +585,10 @@ class ReporteCarteraRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getSaldoAnteriorProveedor(int $idEmpresa, int $idProveedor, string $fechaDesde): float
+    public function getSaldoAnteriorProveedor(int $idEmpresa, int $idProveedor, string $fechaDesde, ?string $documento = null): float
     {
         $hasta = date('Y-m-d', strtotime($fechaDesde . ' -1 day'));
-        return $this->sumarSaldo($this->getMovimientosProveedor($idEmpresa, $idProveedor, null, $hasta));
+        return $this->sumarSaldo($this->getMovimientosProveedor($idEmpresa, $idProveedor, null, $hasta, $documento));
     }
 
     /**
@@ -532,6 +615,112 @@ class ReporteCarteraRepository extends BaseRepository
             WHERE prov.id_empresa = :emp_prov AND prov.eliminado = false
             ORDER BY prov.razon_social ASC
         ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DOCUMENTOS (CARGOS) DE LAS ENTIDADES SELECCIONADAS — para el filtro
+    // "Documento" del reporte
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Documentos que generan deuda (los mismos CARGOS del estado de cuenta)
+     * de los clientes o proveedores indicados, para el buscador del filtro
+     * por documento. $ids vacío = sin filtro de entidad (modo "Todos").
+     * Devuelve: origen, numero, fecha, total, id_entidad, nombre_entidad.
+     */
+    public function getDocumentosEntidad(int $idEmpresa, string $tipo, array $ids, string $q, int $limite = 20): array
+    {
+        $amb    = $this->ambienteEmpresa($idEmpresa);
+        $ids    = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        $params = [];
+
+        // IN (...) con placeholders propios por rama (no repetir nombres)
+        $in = static function (string $col, string $suffix) use ($ids, &$params): string {
+            if (empty($ids)) return '';
+            $ph = [];
+            foreach ($ids as $i => $id) { $k = ":e_{$suffix}_{$i}"; $ph[] = $k; $params[$k] = $id; }
+            return " AND {$col} IN (" . implode(',', $ph) . ")";
+        };
+
+        if ($tipo === 'PROVEEDOR') {
+            $params += [':emp1' => $idEmpresa, ':emp2' => $idEmpresa, ':emp3' => $idEmpresa, ':emp4' => $idEmpresa, ':emp_n' => $idEmpresa];
+            $union = "
+                SELECT 'COMPRA'::text AS origen,
+                       (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero,
+                       c.fecha_emision::date AS fecha, c.importe_total AS total, c.id_proveedor AS id_entidad
+                FROM compras_cabecera c
+                WHERE c.id_empresa = :emp1 AND c.eliminado = false AND c.tipo_comprobante = '01'
+                  AND c.tipo_ambiente = '{$amb}' {$in('c.id_proveedor', 'c')}
+                UNION ALL
+                SELECT 'LIQUIDACION', (l.establecimiento || '-' || l.punto_emision || '-' || l.secuencial),
+                       l.fecha_emision::date, l.importe_total, l.id_proveedor
+                FROM liquidaciones_cabecera l
+                WHERE l.id_empresa = :emp2 AND l.eliminado = false
+                  AND UPPER(l.estado) IN ('AUTORIZADO','APROBADO')
+                  AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = '{$amb}') {$in('l.id_proveedor', 'l')}
+                UNION ALL
+                SELECT 'IMPORTACION', COALESCE(fe.numero_factura, ic.numero_importacion),
+                       COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::date), fe.monto_usd, fe.id_proveedor
+                FROM importaciones_factura_exterior fe
+                JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
+                WHERE ic.id_empresa = :emp3 AND fe.eliminado = false AND ic.eliminado = false {$in('fe.id_proveedor', 'fe')}
+                UNION ALL
+                SELECT 'SALDO_INICIAL', s.nro_documento, s.fecha_emision::date, s.saldo_inicial, s.id_proveedor
+                FROM saldos_iniciales_cxp s
+                WHERE s.id_empresa = :emp4 AND s.eliminado = false {$in('s.id_proveedor', 'si')}
+            ";
+            $joinNombre = "LEFT JOIN proveedores ent ON ent.id = d.id_entidad AND ent.id_empresa = :emp_n";
+            $nombre     = 'ent.razon_social';
+        } else {
+            $params += [':emp1' => $idEmpresa, ':emp2' => $idEmpresa, ':emp3' => $idEmpresa, ':emp_n' => $idEmpresa];
+            $union = "
+                SELECT 'FACTURA'::text AS origen,
+                       (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial) AS numero,
+                       v.fecha_emision::date AS fecha, v.importe_total AS total, v.id_cliente AS id_entidad
+                FROM ventas_cabecera v
+                WHERE v.id_empresa = :emp1 AND v.eliminado = false
+                  AND v.estado IN ('autorizado','autorizada') AND v.tipo_ambiente = '{$amb}' {$in('v.id_cliente', 'v')}
+                UNION ALL
+                SELECT 'RECIBO', (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial),
+                       v.fecha_emision::date, v.importe_total, v.id_cliente
+                FROM recibos_venta_cabecera v
+                WHERE v.id_empresa = :emp2 AND v.eliminado = false
+                  AND v.estado NOT IN ('borrador','anulado','facturado')
+                  AND (v.tipo_ambiente IS NULL OR v.tipo_ambiente = '{$amb}') {$in('v.id_cliente', 'rv')}
+                UNION ALL
+                SELECT 'SALDO_INICIAL', s.nro_documento, s.fecha_emision::date, s.saldo_inicial, s.id_cliente
+                FROM saldos_iniciales_cxc s
+                WHERE s.id_empresa = :emp3 AND s.eliminado = false {$in('s.id_cliente', 'si')}
+            ";
+            $joinNombre = "LEFT JOIN clientes ent ON ent.id = d.id_entidad AND ent.id_empresa = :emp_n";
+            $nombre     = 'ent.nombre';
+        }
+
+        // Búsqueda: por texto del número y por número normalizado (ceros/guiones opcionales)
+        $q = trim($q);
+        $wq = '';
+        if ($q !== '') {
+            $params[':q_like'] = '%' . $q . '%';
+            $wq = " AND (d.numero ILIKE :q_like";
+            $digitos = preg_replace('/[^0-9]/', '', $q) ?? '';
+            if ($digitos !== '') {
+                $params[':q_norm'] = '%' . $digitos . '%';
+                $wq .= " OR " . AbonosVentaSql::normalizar('d.numero') . " LIKE :q_norm";
+            }
+            $wq .= ")";
+        }
+
+        $limite = max(1, min(100, $limite));
+        $sql = "SELECT d.origen, d.numero, d.fecha, d.total, d.id_entidad, COALESCE({$nombre}, '') AS nombre_entidad
+                FROM ( {$union} ) d
+                {$joinNombre}
+                WHERE d.numero IS NOT NULL AND d.numero <> '' {$wq}
+                ORDER BY d.fecha DESC, d.numero DESC
+                LIMIT {$limite}";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);

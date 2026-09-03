@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado
-version: 1.3
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado
+version: 1.4
 orden: 0
 estado: activo
 ---
@@ -37,12 +37,21 @@ qué quedó su saldo.
    de corte, sin buscarlos uno por uno.
 3. Ajustar el período con **Mes/Año** (atajo) o con **Fecha Desde/Fecha
    Hasta** directamente. Dejar las fechas vacías trae todo el historial.
-4. Hacer clic en **Generar Estado de Cuenta**. Aparece una tarjeta por cada
-   entidad incluida, con su tabla de movimientos y saldo final.
-5. Exportar a **PDF** o **Excel** (un PDF por entidad, con salto de página
-   entre cada uno; el Excel trae una sección por entidad), o usar
-   **Correo** para enviarlo directamente por email con los mismos filtros
-   aplicados.
+4. Opcionalmente, elegir un **Documento**: el buscador (a la derecha del
+   cliente/proveedor) lista las facturas, recibos, compras, liquidaciones,
+   importaciones y saldos iniciales **del cliente o proveedor ya
+   seleccionado**; se puede escribir parte del número (con o sin guiones ni
+   ceros). Al elegir uno, el estado de cuenta muestra solo ese documento y
+   los abonos que lo cancelan (cobros o pagos, retenciones, notas de
+   crédito/débito). Con un documento fijado, **Backspace o Delete** limpia
+   el filtro de una vez.
+5. Hacer clic en **Generar**. Aparece una tarjeta por cada entidad
+   incluida, con su tabla de movimientos y saldo final.
+6. En el **encabezado de cada tarjeta**, antes del nombre, están los botones
+   **PDF**, **Excel** y **Correo** de ese cliente o proveedor: exportan o
+   envían el estado de cuenta de **esa entidad** con el período y el
+   documento filtrados. El modal de correo precarga el email registrado en
+   su ficha (se puede cambiar o agregar varios separados por coma).
 
 ## Campos del formulario
 
@@ -53,6 +62,7 @@ qué quedó su saldo.
 | Todos | No | Reemplaza a la selección manual: incluye a todo cliente/proveedor con saldo pendiente (mayor a cero) a la fecha de corte (Fecha Hasta, o la fecha actual si no se indica). Mientras está activo, el buscador se deshabilita. |
 | Mes / Año | No | Atajo que llena Fecha Desde/Hasta con el mes o año elegido. |
 | Fecha Desde / Fecha Hasta | No | Rango del estado de cuenta. Vacío en ambos = todo el historial. Si se llena Fecha Desde, el saldo antes de esa fecha se muestra como "Saldo Anterior". |
+| Documento | No | Número de un documento del cliente/proveedor seleccionado (o de cualquiera, si está marcado "Todos"). Limita el estado de cuenta a ese documento y a los abonos que lo cancelan. El número se compara normalizado: `001-001-13`, `001001000000013` y `001-001-000000013` son el mismo documento. |
 
 ## Permisos
 
@@ -128,6 +138,12 @@ es puramente de lectura.
 
 ## Historial de cambios
 
+- **1.4** — Nuevo filtro **Documento**: buscador de los documentos del
+  cliente/proveedor seleccionado; al elegir uno, el estado de cuenta se
+  limita a ese documento y a sus abonos (cobros/pagos, retenciones, notas).
+  Los botones **PDF / Excel / Correo** pasan al encabezado de cada estado de
+  cuenta, antes del nombre del cliente o proveedor, y actúan sobre esa
+  entidad; el correo precarga el email de su ficha.
 - **1.3** — Corrección del cálculo de saldos: los abonos (cobros/pagos,
   retenciones, notas de crédito) se atribuyen ahora al tercero del documento
   que cancelan, igual que Cuentas por Cobrar / Pagar, en vez de filtrarse

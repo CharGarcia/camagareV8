@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
 use PDO;
 
 class CuentasPorCobrarRepository extends BaseRepository
 {
+    /** Número de la factura `v` normalizado a 15 dígitos: clave de enlace con nc_aplic / nd_aplic. */
+    private string $numV;
+
     public function __construct()
     {
         parent::__construct('ventas_cabecera');
+        $this->numV = AbonosVentaSql::numFactura('v');
     }
 
     /**
@@ -47,86 +52,47 @@ class CuentasPorCobrarRepository extends BaseRepository
 
     /**
      * CTE que calcula lo retenido por factura hasta una fecha de corte opcional.
-     * Cubre dos vías de enlace: id_venta directo y num_doc_sustento en el detalle.
+     * La regla de enlace (id_venta o num_doc_sustento normalizado a 15 dígitos, con lo retenido
+     * por línea cuando una retención sustenta varias facturas) vive en
+     * AbonosVentaSql y es la misma que usan Ingresos y Facturas de Venta.
      * $idEmpresa: mismo motivo que getCteCobrado — sin filtrar, sumaba retenciones
      * de todas las empresas.
      */
     private function getCteRetenido(int $idEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :retenido_hasta" : '';
-        return "
-            SELECT tmp.id_venta, SUM(tmp.monto) AS total_retenido
-            FROM (
-                SELECT r.id_venta,
-                       (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                       r.id AS id_ret
-                FROM retencion_venta_cabecera r
-                WHERE r.eliminado = false AND r.id_venta IS NOT NULL
-                  AND r.id_empresa = {$idEmpresa}
-                {$filtroFecha}
-
-                UNION
-
-                SELECT vc.id AS id_venta,
-                       (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                       r.id AS id_ret
-                FROM retencion_venta_cabecera r
-                JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
-                JOIN ventas_cabecera vc
-                     ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
-                    AND vc.id_empresa = r.id_empresa
-                    AND vc.eliminado  = false
-                WHERE r.eliminado = false
-                  AND r.id_empresa = {$idEmpresa}
-                {$filtroFecha}
-            ) tmp
-            GROUP BY tmp.id_venta
-        ";
+        return AbonosVentaSql::cteRetenidoPorFactura((string)$idEmpresa, $filtroFecha);
     }
 
     /**
      * CTE que calcula el total de notas de crédito aplicadas hasta una fecha de corte opcional.
+     * Columnas: num_norm (documento modificado, normalizado a 15 dígitos) y total_nc.
      */
     private function getCteNC(int $idEmpresa, ?string $fechaHasta = null): string
     {
-        $filtroFecha = $fechaHasta ? "AND nc.fecha_emision <= :nc_hasta" : '';
+        $filtroFecha = $fechaHasta ? "AND n.fecha_emision <= :nc_hasta" : '';
         // $idEmpresa es int validado → interpolación segura. Se filtra por empresa
         // (multiempresa, §4) y por el ambiente actual de la empresa, tolerando NC
         // legacy sin tipo_ambiente (NULL) para no perderlas del cálculo.
-        return "
-            SELECT nc.num_doc_modificado,
-                   SUM(nc.importe_total) AS total_nc
-            FROM notas_credito_cabecera nc
-            WHERE nc.estado   != 'anulado'
-              AND nc.eliminado = false
-              AND nc.id_empresa = {$idEmpresa}
-              AND (nc.tipo_ambiente IS NULL
-                   OR nc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
-              {$filtroFecha}
-            GROUP BY nc.num_doc_modificado
-        ";
+        $extra = "AND (n.tipo_ambiente IS NULL
+                   OR n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
+              {$filtroFecha}";
+        return AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', (string)$idEmpresa, $extra);
     }
 
     /**
      * CTE que calcula el total de notas de débito aplicadas hasta una fecha de corte opcional.
      * A diferencia de la NC (que resta), la ND SUMA al saldo pendiente de la factura:
      * es un cargo adicional al cliente, no una devolución.
+     * Columnas: num_norm (documento modificado, normalizado a 15 dígitos) y total_nd.
      */
     private function getCteND(int $idEmpresa, ?string $fechaHasta = null): string
     {
-        $filtroFecha = $fechaHasta ? "AND nd.fecha_emision <= :nd_hasta" : '';
-        return "
-            SELECT nd.num_doc_modificado,
-                   SUM(nd.importe_total) AS total_nd
-            FROM nota_debito_cabecera nd
-            WHERE nd.estado   != 'anulado'
-              AND nd.eliminado = false
-              AND nd.id_empresa = {$idEmpresa}
-              AND (nd.tipo_ambiente IS NULL
-                   OR nd.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
-              {$filtroFecha}
-            GROUP BY nd.num_doc_modificado
-        ";
+        $filtroFecha = $fechaHasta ? "AND n.fecha_emision <= :nd_hasta" : '';
+        $extra = "AND (n.tipo_ambiente IS NULL
+                   OR n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
+              {$filtroFecha}";
+        return AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', (string)$idEmpresa, $extra);
     }
 
     /**
@@ -180,8 +146,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
+            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
             WHERE {$where}
             ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC
         ";
@@ -240,8 +206,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 JOIN clientes c ON c.id = v.id_cliente
                 LEFT JOIN cobrado  cb ON cb.id_venta = v.id
                 LEFT JOIN retenido rt ON rt.id_venta = v.id
-                LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
+            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
                 WHERE {$where}
             ";
 
@@ -377,8 +343,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                     JOIN clientes c ON c.id = v.id_cliente
                     LEFT JOIN cobrado  cb ON cb.id_venta = v.id
                     LEFT JOIN retenido rt ON rt.id_venta = v.id
-                    LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-                    LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
+                    LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
                     WHERE {$where}
                 ) sub
             ";
@@ -791,8 +757,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
+            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
             WHERE v.id         = :id
               AND v.id_empresa = :id_empresa
               AND v.eliminado  = false
@@ -945,8 +911,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
+            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
             WHERE v.id_empresa = :id_empresa
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')

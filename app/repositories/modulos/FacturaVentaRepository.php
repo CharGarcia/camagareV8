@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\core\Database;
+use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
 
 class FacturaVentaRepository extends BaseRepository
@@ -53,18 +54,15 @@ class FacturaVentaRepository extends BaseRepository
         $pagoFiltro = $filtros['estado_pago'] ?? $filtros['pago'] ?? null;
         unset($filtros['estado_pago'], $filtros['pago']);
         if ($pagoFiltro !== null) {
+            // NC y retenciones con la regla compartida de AbonosVentaSql (enlace por
+            // dígitos; retención repartida por línea si sustenta varias facturas).
             $sqlAbonos =
                 "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
                 . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
                 . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
                 . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
-                . "+ (SELECT COALESCE(SUM(nc.importe_total),0) FROM notas_credito_cabecera nc "
-                . "WHERE nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) "
-                . "AND nc.id_empresa = v.id_empresa AND nc.estado != 'anulado' AND nc.eliminado = false) "
-                . "+ (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd),0) FROM retencion_venta_cabecera r "
-                . "WHERE r.eliminado = false AND r.id_empresa = v.id_empresa AND (r.id_venta = v.id "
-                . "OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id "
-                . "AND rd.num_doc_sustento = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)))))";
+                . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
+                . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
             $saldo = "(v.importe_total - $sqlAbonos)";
 
             $valores = is_array($pagoFiltro['valor']) ? $pagoFiltro['valor'] : [$pagoFiltro['valor']];
@@ -158,13 +156,8 @@ class FacturaVentaRepository extends BaseRepository
             . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
             . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
             . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
-            . "+ (SELECT COALESCE(SUM(nc.importe_total),0) FROM notas_credito_cabecera nc "
-            . "WHERE nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) "
-            . "AND nc.id_empresa = v.id_empresa AND nc.estado != 'anulado' AND nc.eliminado = false) "
-            . "+ (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd),0) FROM retencion_venta_cabecera r "
-            . "WHERE r.eliminado = false AND r.id_empresa = v.id_empresa AND (r.id_venta = v.id "
-            . "OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id "
-            . "AND rd.num_doc_sustento = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)))))";
+            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
+            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
 
         // Para columnas calculadas (JOIN) se prefija la tabla correcta
         $ordenExpr = match($ordenCol) {
@@ -186,9 +179,9 @@ class FacturaVentaRepository extends BaseRepository
                        ven.nombre      AS vendedor_nombre,
                        u.nombre        AS usuario_nombre,
                        (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado,
-                       (SELECT COALESCE(SUM(nc.importe_total), 0) FROM notas_credito_cabecera nc WHERE nc.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AND nc.id_empresa = v.id_empresa AND nc.estado != 'anulado' AND nc.eliminado = false) AS total_nc,
-                       (SELECT COALESCE(SUM(nd.importe_total), 0) FROM nota_debito_cabecera nd WHERE nd.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AND nd.id_empresa = v.id_empresa AND nd.estado != 'anulado' AND nd.eliminado = false) AS total_nd,
-                       (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd), 0) FROM retencion_venta_cabecera r WHERE r.eliminado = false AND r.id_empresa = v.id_empresa AND (r.id_venta = v.id OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id AND rd.num_doc_sustento = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)))) AS total_retencion
+                       " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " AS total_nc,
+                       " . AbonosVentaSql::subNotasFactura('nota_debito_cabecera', 'v') . " AS total_nd,
+                       " . AbonosVentaSql::subRetenidoFactura('v') . " AS total_retencion
                 FROM ventas_cabecera v
                 INNER JOIN clientes  c   ON v.id_cliente  = c.id
                 LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
@@ -292,9 +285,9 @@ class FacturaVentaRepository extends BaseRepository
                        uc.nombre             AS creado_por_nombre,
                        uu.nombre             AS actualizado_por_nombre,
                        (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado,
-                       (SELECT COALESCE(SUM(nc.importe_total), 0) FROM notas_credito_cabecera nc WHERE nc.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AND nc.id_empresa = v.id_empresa AND nc.estado != 'anulado' AND nc.eliminado = false) AS total_nc,
-                       (SELECT COALESCE(SUM(nd.importe_total), 0) FROM nota_debito_cabecera nd WHERE nd.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AND nd.id_empresa = v.id_empresa AND nd.estado != 'anulado' AND nd.eliminado = false) AS total_nd,
-                       (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd), 0) FROM retencion_venta_cabecera r WHERE r.eliminado = false AND r.id_empresa = v.id_empresa AND (r.id_venta = v.id OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id AND rd.num_doc_sustento = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)))) AS total_retencion
+                       " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " AS total_nc,
+                       " . AbonosVentaSql::subNotasFactura('nota_debito_cabecera', 'v') . " AS total_nd,
+                       " . AbonosVentaSql::subRetenidoFactura('v') . " AS total_retencion
                 FROM ventas_cabecera v
                 INNER JOIN clientes   c   ON v.id_cliente  = c.id
                 LEFT  JOIN identificador_comprador_vendedor icv ON icv.codigo = c.tipo_id

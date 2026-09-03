@@ -1304,26 +1304,33 @@ class AsientoBuilderService
      *   diff < 0 (falta Debe)  → línea de ajuste al DEBE  por abs(diff)
      *
      * Salvaguardas:
-     *   - |diff| > TOPE_AJUSTE_REDONDEO (0.03) → excepción: descuadre real de configuración,
-     *     NO se enmascara en la cuenta de ajuste.
+     *   - |diff| > tope → excepción: descuadre real de configuración, NO se enmascara en la
+     *     cuenta de ajuste. El tope es TOPE_AJUSTE_REDONDEO (0.03) o 1 centavo por línea con IVA
+     *     del documento ($numLineasIva, hoy solo lo informan compras y liquidaciones de compra),
+     *     el que sea mayor.
      *   - Descuadre dentro del tope pero sin cuenta de ajuste configurada → excepción pidiendo
      *     configurarla (la empresa debe dejar la config completa).
      *
      * @param array  $reglas   Reglas base del concepto (incluye la regla de ajuste si existe).
      * @param string $etiqueta Texto para los mensajes de error ('ventas', 'compras', …).
      */
-    private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta, array $reglasSinCuenta = [], ?array $cuentaRedondeoCategoria = null): array
+    private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta, array $reglasSinCuenta = [], ?array $cuentaRedondeoCategoria = null, int $numLineasIva = 0): array
     {
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
         $diff = round($totalDebe - $totalHaber, 2);
+        // Tope efectivo: el fijo (3 centavos) o 1 centavo por línea con IVA, lo que sea mayor. Una
+        // factura de proveedor con muchas líneas acumula legítimamente más centavos de diferencia
+        // entre el IVA línea a línea y el total de cabecera (el emisor redondea distinto); un
+        // descuadre de dólares sigue quedando muy por encima y se bloquea igual.
+        $tope = max(self::TOPE_AJUSTE_REDONDEO, round(0.01 * max(0, $numLineasIva), 2));
 
         if ($diff === 0.0) {
             return $detalles;
         }
 
         // Descuadre mayor al tope = error real de configuración (cuenta/impuesto faltante).
-        if (abs($diff) > self::TOPE_AJUSTE_REDONDEO) {
+        if (abs($diff) > $tope) {
             // Causa casi siempre real: una regla activa sin cuenta asignada se salta en
             // silencio y su lado del asiento desaparece. Se nombra para que el mensaje
             // diga qué hacer en vez de solo "Debe: $0.00, Haber: $905.50".
@@ -1340,7 +1347,8 @@ class AsientoBuilderService
                 "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
                 ", Haber: $" . number_format($totalHaber, 2) .
                 ". La diferencia ($" . number_format(abs($diff), 2) . ") supera el máximo de ajuste por " .
-                "redondeo (3 centavos). Revise la configuración de cuentas contables para $etiqueta."
+                "redondeo ($" . number_format($tope, 2) . "). Revise los totales del documento (subtotal, IVA e importe total) " .
+                "y la configuración de cuentas contables para $etiqueta."
             );
         }
 
@@ -2443,6 +2451,7 @@ class AsientoBuilderService
             $idProveedor = (int) ($data['id_proveedor'] ?? 0);
             $sqlIva = "SELECT i.codigo_porcentaje,
                               SUM(i.valor)  AS total_valor,
+                              COUNT(*) FILTER (WHERE i.valor <> 0) AS num_lineas,
                               COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
                               pc.codigo     AS cuenta_codigo,
                               pc.nombre     AS cuenta_nombre,
@@ -2485,6 +2494,7 @@ class AsientoBuilderService
                     'valor'             => $row['total_valor'],
                     'codigo_porcentaje' => $row['codigo_porcentaje'],
                     'tarifa_nombre'     => $row['tarifa_nombre'],
+                    'num_lineas'        => (int) ($row['num_lineas'] ?? 0),
                 ];
             }
         }
@@ -2686,7 +2696,10 @@ class AsientoBuilderService
             throw new \Exception("No se ha configurado ninguna cuenta para el asiento de adquisición o los montos son cero.");
         }
 
-        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'compras', $reglasSinCuenta);
+        // Tope de redondeo proporcional: cada línea con IVA puede aportar hasta 1 centavo de
+        // diferencia entre el IVA sumado línea a línea y el total de cabecera del documento.
+        $numLineasIva = (int) array_sum(array_column($ivaRows, 'num_lineas'));
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'compras', $reglasSinCuenta, null, $numLineasIva);
 
         return $detalles;
     }
@@ -2746,6 +2759,7 @@ class AsientoBuilderService
         $ivaRows = [];
         $sqlIva = "SELECT i.codigo_porcentaje,
                           SUM(i.valor)  AS total_valor,
+                          COUNT(*) FILTER (WHERE i.valor <> 0) AS num_lineas,
                           COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
                           pc.codigo     AS cuenta_codigo,
                           pc.nombre     AS cuenta_nombre,
@@ -2788,6 +2802,7 @@ class AsientoBuilderService
                 'valor'             => $row['total_valor'],
                 'codigo_porcentaje' => $row['codigo_porcentaje'],
                 'tarifa_nombre'     => $row['tarifa_nombre'],
+                'num_lineas'        => (int) ($row['num_lineas'] ?? 0),
             ];
         }
 

@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad
-version: 1.8
+version: 1.9
 orden: 20
 estado: activo
 ---
@@ -187,10 +187,25 @@ revisar el balance.
 
 ## Diferencias de centavos
 
-En documentos con impuestos, la base y el IVA pueden dejar diferencias de un
-centavo al redondear. El sistema las absorbe automáticamente en la línea de mayor
-monto del lado que quedó corto. Un descuadre mayor que un redondeo sí detiene el
-proceso: eso indica un error real.
+En documentos con impuestos, la base y el IVA pueden dejar diferencias de
+centavos al redondear. El sistema las lleva automáticamente a la cuenta de
+**Ajuste por redondeo** del concepto (se configura en Configuración contable).
+Un descuadre mayor que un redondeo sí detiene el proceso: eso indica un error
+real, casi siempre una cuenta sin asignar o un documento cuyos totales no
+coinciden con sus líneas.
+
+**Cuánto se tolera.** Hasta **3 centavos** en todos los documentos. En **facturas
+de compra y liquidaciones de compra** el margen crece con el tamaño del documento:
+**1 centavo por cada línea con IVA**, con un mínimo de 3. Una factura de proveedor
+de 20 líneas tolera hasta 20 centavos, porque el IVA sumado línea a línea puede
+alejarse legítimamente del total de cabecera cuando el emisor redondea distinto.
+El ajuste queda visible como una línea más del asiento, contra la cuenta de
+redondeo, y nunca enmascara un descuadre de dólares.
+
+Si el asiento de una compra sigue sin cuadrar, el mensaje muestra la diferencia y
+el tope aplicado. Lo que hay que revisar es el documento: que el subtotal, el IVA
+de las líneas y el importe total sean consistentes. Al volver a guardar la compra
+el sistema recalcula los totales desde las líneas.
 
 ## Imprimir en PDF o Excel
 
@@ -239,6 +254,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.9** — El margen de redondeo en facturas y liquidaciones de compra ya no es fijo: 1 centavo por línea con IVA, mínimo 3. El mensaje de descuadre indica el tope aplicado y pide revisar los totales del documento.
 - **1.8** — La pestaña llega también a consignaciones de venta, retornos y cambios de producto: ahí la vista previa se puede completar a mano para registrar el asiento junto con el documento cuando falta alguna cuenta. En roles de pago la pestaña sigue siendo de solo lectura (muestra el asiento calculado del empleado, no uno registrado).
 - **1.7** — El asiento se puede corregir y guardar desde la pestaña *Asiento
   contable* del propio documento, con las mismas validaciones del Libro Diario.

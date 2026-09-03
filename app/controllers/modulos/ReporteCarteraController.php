@@ -57,6 +57,10 @@ class ReporteCarteraController extends BaseModuloController
             'todos'       => !empty($_REQUEST['todos']),
             'fecha_desde' => trim((string) ($_REQUEST['fecha_desde'] ?? '')),
             'fecha_hasta' => trim((string) ($_REQUEST['fecha_hasta'] ?? '')),
+            // Número de documento (factura, recibo, compra, saldo inicial...) elegido
+            // en el buscador "Documento": limita el estado de cuenta a ese documento
+            // y a los abonos que lo cancelan.
+            'documento'   => mb_substr(trim((string) ($_REQUEST['documento'] ?? '')), 0, 60),
         ];
     }
 
@@ -91,7 +95,7 @@ class ReporteCarteraController extends BaseModuloController
     {
         $ledgers = [];
         foreach ($this->resolverIds($idEmpresa, $filtros) as $idEntidad) {
-            $ledger = $this->construirLedger($idEmpresa, $filtros['tipo'], $idEntidad, $filtros['fecha_desde'], $filtros['fecha_hasta']);
+            $ledger = $this->construirLedger($idEmpresa, $filtros['tipo'], $idEntidad, $filtros['fecha_desde'], $filtros['fecha_hasta'], $filtros['documento'] ?? '');
             if ($ledger) {
                 $ledgers[] = $ledger;
             }
@@ -99,18 +103,19 @@ class ReporteCarteraController extends BaseModuloController
         return $ledgers;
     }
 
-    private function construirLedger(int $idEmpresa, string $tipo, int $idEntidad, string $fechaDesde, string $fechaHasta): ?array
+    private function construirLedger(int $idEmpresa, string $tipo, int $idEntidad, string $fechaDesde, string $fechaHasta, string $documento = ''): ?array
     {
+        $doc = $documento !== '' ? $documento : null;
         if ($tipo === 'PROVEEDOR') {
             $entidad = $this->repository->getProveedorPorId($idEmpresa, $idEntidad);
             if (!$entidad) return null;
-            $movimientos   = $this->repository->getMovimientosProveedor($idEmpresa, $idEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null);
-            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorProveedor($idEmpresa, $idEntidad, $fechaDesde) : 0.0;
+            $movimientos   = $this->repository->getMovimientosProveedor($idEmpresa, $idEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
+            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorProveedor($idEmpresa, $idEntidad, $fechaDesde, $doc) : 0.0;
         } else {
             $entidad = $this->repository->getClientePorId($idEmpresa, $idEntidad);
             if (!$entidad) return null;
-            $movimientos   = $this->repository->getMovimientosCliente($idEmpresa, $idEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null);
-            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorCliente($idEmpresa, $idEntidad, $fechaDesde) : 0.0;
+            $movimientos   = $this->repository->getMovimientosCliente($idEmpresa, $idEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
+            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorCliente($idEmpresa, $idEntidad, $fechaDesde, $doc) : 0.0;
         }
 
         $saldo = $saldoAnterior;
@@ -168,6 +173,43 @@ class ReporteCarteraController extends BaseModuloController
         return 'Todas las fechas';
     }
 
+    /**
+     * Documentos (cargos) de las entidades seleccionadas, para el buscador
+     * del filtro "Documento". Sin entidad seleccionada y sin "Todos" no hay
+     * nada que listar: el documento se busca en base al cliente/proveedor.
+     */
+    public function getDocumentosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $filtros   = $this->getFiltrosDesdeRequest();
+            $q         = mb_substr(trim((string) ($_REQUEST['q'] ?? '')), 0, 60);
+
+            if (empty($filtros['ids']) && !$filtros['todos']) {
+                echo json_encode(['ok' => true, 'data' => [], 'mensaje' => 'Seleccione primero un ' . $this->etiquetaEntidad($filtros['tipo']) . '.']);
+                exit;
+            }
+
+            $rows = $this->repository->getDocumentosEntidad($idEmpresa, $filtros['tipo'], $filtros['todos'] ? [] : $filtros['ids'], $q, 20);
+            $data = array_map(fn($r) => [
+                'numero'  => (string) $r['numero'],
+                'origen'  => ucfirst(strtolower(str_replace('_', ' ', (string) $r['origen']))),
+                'fecha'   => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '',
+                'total'   => number_format((float) $r['total'], 2),
+                'entidad' => (string) ($r['nombre_entidad'] ?? ''),
+            ], $rows);
+
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     // ────────────────────────────────────────────────────────────────
     // GENERAR (AJAX)
     // ────────────────────────────────────────────────────────────────
@@ -200,7 +242,7 @@ class ReporteCarteraController extends BaseModuloController
                 echo '<div class="text-center text-muted py-5"><i class="bi bi-inbox fs-3 d-block mb-2"></i>' . htmlspecialchars($mensaje) . '</div>';
             } else {
                 foreach ($ledgers as $ledger) {
-                    echo $this->renderSeccionScreen($ledger, $filtros['tipo']);
+                    echo $this->renderSeccionScreen($ledger, $filtros['tipo'], $filtros['documento'] ?? '');
                 }
             }
             $html = (string) ob_get_clean();
@@ -213,22 +255,40 @@ class ReporteCarteraController extends BaseModuloController
         exit;
     }
 
-    private function renderSeccionScreen(array $ledger, string $tipo): string
+    private function renderSeccionScreen(array $ledger, string $tipo, string $documento = ''): string
     {
         $e = $ledger['entidad'];
         $etiqueta = $this->etiquetaEntidad($tipo);
         $deudor = $ledger['saldo_final'] > 0.005;
+        $idEntidad = (int) ($e['id'] ?? 0);
+        $emailEntidad = (string) ($e['email'] ?? '');
 
         ob_start();
         ?>
         <div class="card border-0 shadow-sm rounded-3 mb-3">
             <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <span class="fw-bold"><?= htmlspecialchars($e['nombre'] ?? '') ?></span>
-                    <small class="text-muted d-block">
-                        <?= htmlspecialchars($etiqueta) ?> · <?= htmlspecialchars($e['identificacion'] ?? '') ?>
-                        <?= !empty($e['email']) ? ' · ' . htmlspecialchars($e['email']) : '' ?>
-                    </small>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <!-- Acciones del estado de cuenta de ESTA entidad (PDF / Excel / Correo) -->
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Acciones">
+                        <button type="button" class="btn btn-outline-danger" onclick="window.RC_exportarPDF(<?= $idEntidad ?>)" title="Descargar PDF">
+                            <i class="bi bi-file-earmark-pdf"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-success" onclick="window.RC_exportarExcel(<?= $idEntidad ?>)" title="Descargar Excel">
+                            <i class="bi bi-file-earmark-spreadsheet"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" onclick="window.RC_abrirModalCorreo(<?= $idEntidad ?>, <?= htmlspecialchars(json_encode($emailEntidad), ENT_QUOTES) ?>)" title="Enviar por correo">
+                            <i class="bi bi-envelope"></i>
+                        </button>
+                    </div>
+                    <div class="vr mx-1"></div>
+                    <div>
+                        <span class="fw-bold"><?= htmlspecialchars($e['nombre'] ?? '') ?></span>
+                        <small class="text-muted d-block">
+                            <?= htmlspecialchars($etiqueta) ?> · <?= htmlspecialchars($e['identificacion'] ?? '') ?>
+                            <?= $emailEntidad !== '' ? ' · ' . htmlspecialchars($emailEntidad) : '' ?>
+                            <?= $documento !== '' ? ' · <span class="badge bg-info bg-opacity-10 text-info border border-info">Documento: ' . htmlspecialchars($documento) . '</span>' : '' ?>
+                        </small>
+                    </div>
                 </div>
                 <span class="badge <?= $deudor ? 'bg-danger' : 'bg-success' ?> bg-opacity-10 <?= $deudor ? 'text-danger' : 'text-success' ?> border <?= $deudor ? 'border-danger' : 'border-success' ?>">
                     Saldo: $<?= number_format($ledger['saldo_final'], 2) ?>
@@ -354,6 +414,9 @@ class ReporteCarteraController extends BaseModuloController
                 <h3>Estado de Cuenta - <?= htmlspecialchars($etiqueta) ?></h3>
                 <p><strong><?= htmlspecialchars($e['nombre'] ?? '') ?></strong> — <?= htmlspecialchars($e['identificacion'] ?? '') ?></p>
                 <p>Período: <?= htmlspecialchars($rango) ?> &nbsp;|&nbsp; Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
+                <?php if (($filtros['documento'] ?? '') !== ''): ?>
+                    <p>Documento: <strong><?= htmlspecialchars($filtros['documento']) ?></strong></p>
+                <?php endif; ?>
             </div>
             <table>
                 <thead>
@@ -560,7 +623,8 @@ class ReporteCarteraController extends BaseModuloController
             $cuerpo = '
                 <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;">
                     <h2 style="color:#2563eb;">Reporte de Cartera</h2>
-                    <p>Adjunto el estado de cuenta de <strong>' . htmlspecialchars($nombreEmpresa) . '</strong>.</p>
+                    <p>Adjunto el estado de cuenta de <strong>' . htmlspecialchars($nombreEmpresa) . '</strong>.</p>'
+                    . (($filtros['documento'] ?? '') !== '' ? '<p>Documento: <strong>' . htmlspecialchars($filtros['documento']) . '</strong></p>' : '') . '
                     <table style="border-collapse:collapse;font-size:14px;">
                         <tr><td style="padding:4px 12px;color:#666;">' . htmlspecialchars($etiqueta) . 's incluidos</td><td style="padding:4px 12px;"><strong>' . (int) $stats['entidades'] . '</strong></td></tr>
                         <tr><td style="padding:4px 12px;color:#666;">Total deuda generada</td><td style="padding:4px 12px;">$ ' . number_format($stats['total_cargos'], 2) . '</td></tr>

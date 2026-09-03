@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago
-version: 1.2
+version: 1.3
 orden: 40
 estado: activo
 ---
@@ -26,7 +26,29 @@ El listado se arma con:
 
 Y se descuenta lo que ya se cobró: cada ingreso que cobra un documento reduce
 su saldo. En las facturas también restan las notas de crédito y las retenciones
-que le practicó el cliente; los recibos de venta solo se reducen con cobros.
+que le practicó el cliente, y suman las notas de débito; los recibos de venta
+solo se reducen con cobros.
+
+Fórmula de cada factura:
+
+```
+saldo = total de la factura + notas de débito − cobros − retenciones − notas de crédito
+```
+
+### Cómo se enlazan las retenciones y las notas con la factura
+
+- Una **retención** se aplica a la factura desde la que se registró o, si vino
+  del SRI, a la factura que figura como *documento de sustento* en sus líneas.
+  Si una misma retención sustenta **varias facturas**, cada factura recibe
+  solo el valor retenido de **sus** líneas, no el total de la retención.
+- Las **notas de crédito y débito** se aplican a la factura que consta como
+  *documento modificado*.
+- En ambos casos el número se compara **normalizado** (sin guiones y con ceros a la izquierda): `001-001-1120`,
+  `001001000001120` y `001-001-000001120` son la misma factura. Un formato
+  distinto ya no deja la retención o la nota sin descontar.
+- La misma regla la usan el buscador de documentos pendientes de **Ingresos** y
+  el estado de pago de **Facturas de Venta**, así que los tres muestran el
+  mismo saldo para la misma factura.
 
 ## Filtrar por tipo de documento
 
@@ -98,6 +120,14 @@ Casi siempre por una de estas tres razones, en este orden de frecuencia:
 2. **Falta la nota de crédito** de una devolución ya acordada.
 3. El cobro se registró **contra otro documento** del mismo cliente.
 
+Y dos casos que el reporte **no** descuenta a propósito:
+
+- Una retención o nota de crédito cuyo documento de sustento **no existe** como
+  factura ni como saldo inicial (por ejemplo, de una factura anterior al uso
+  del sistema). Regístrela como saldo inicial o corrija el número.
+- Una factura que sigue en **borrador** (aún sin autorizar): no aparece en el
+  listado aunque tenga saldo.
+
 ## Errores frecuentes
 
 - **Un cliente aparece debiendo algo que ya pagó**: revise si el ingreso quedó
@@ -108,6 +138,12 @@ Casi siempre por una de estas tres razones, en este orden de frecuencia:
 
 ## Historial de cambios
 
+- **1.3** — Corrección del cruce del saldo: (1) una retención que sustenta
+  varias facturas ya no resta su total completo a cada una, sino solo el valor
+  retenido de las líneas de cada factura; (2) las retenciones y las notas de
+  crédito/débito se enlazan a la factura comparando el número **normalizado** (sin guiones, con ceros a la izquierda) del
+  número, así un formato distinto (`001-001-1120`) ya no deja el abono sin
+  descontar. La misma regla quedó compartida con Ingresos y Facturas de Venta.
 - **1.2** — El envío masivo de correo ahora agrupa por cliente: un solo correo
   con la tabla resumen de todos sus documentos pendientes (facturas y recibos)
   y el total, con ventana previa para revisar, corregir o completar el correo

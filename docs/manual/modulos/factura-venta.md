@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos
-version: 1.9
+version: 2.0
 orden: 20
 estado: activo
 ---
@@ -142,6 +142,11 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **2.0** — El **estado de pago** (pendiente / abonada / pagada) y las columnas
+  de cobrado, notas y retención usan la misma regla que Cuentas por Cobrar: una
+  retención que sustenta varias facturas reparte lo retenido por línea, y las
+  retenciones y notas de crédito/débito se enlazan a la factura comparando solo
+  los dígitos del número.
 - **1.9** — El buscador de productos del detalle muestra el **saldo disponible** del
   producto en la bodega de la cabecera, para los bienes inventariables y solo cuando la
   facturación afecta al inventario.

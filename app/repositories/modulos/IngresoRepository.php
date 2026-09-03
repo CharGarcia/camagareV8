@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -282,35 +283,10 @@ class IngresoRepository extends BaseRepository
                     GROUP BY id_referencia_documento
                 ),
                 retenido_fact AS (
-                    -- Cubre dos vías de enlace: id_venta directo (flujo normal) y
-                    -- num_doc_sustento en el detalle (retenciones migradas, sin id_venta).
-                    SELECT tmp.id_venta, SUM(tmp.monto) AS total_retenido
-                    FROM (
-                        SELECT r.id_venta,
-                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                               r.id AS id_ret
-                        FROM retencion_venta_cabecera r
-                        WHERE r.id_empresa = :id_empresa
-                          AND r.eliminado = FALSE
-                          AND r.id_venta IS NOT NULL
-                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-
-                        UNION
-
-                        SELECT vc.id AS id_venta,
-                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                               r.id AS id_ret
-                        FROM retencion_venta_cabecera r
-                        JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
-                        JOIN ventas_cabecera vc
-                             ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
-                            AND vc.id_empresa = r.id_empresa
-                            AND vc.eliminado  = FALSE
-                        WHERE r.id_empresa = :id_empresa
-                          AND r.eliminado = FALSE
-                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                    ) tmp
-                    GROUP BY tmp.id_venta
+                    -- Regla compartida (AbonosVentaSql): enlace por id_venta o por
+                    -- num_doc_sustento normalizado a 15 dígitos; si una retención
+                    -- sustenta varias facturas, cada una recibe lo retenido en sus líneas.
+                    " . AbonosVentaSql::cteRetenidoPorFactura(':id_empresa', "AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)") . "
                 ),
                 cobrado_si AS (
                     SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
@@ -344,21 +320,12 @@ class IngresoRepository extends BaseRepository
                 ),
                 nc_aplic AS (
                     -- Notas de crédito de venta, enlazadas a la factura por num_doc_modificado
-                    SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS total_nc
-                    FROM notas_credito_cabecera nc
-                    WHERE nc.estado != 'anulado'
-                      AND nc.eliminado = false
-                      AND nc.id_empresa = :id_empresa
-                    GROUP BY nc.num_doc_modificado
+                    -- (número normalizado; columnas num_norm y total_nc)
+                    " . AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', ':id_empresa') . "
                 ),
                 nd_aplic AS (
                     -- Notas de débito de venta: SUMAN al saldo pendiente (al contrario de la NC).
-                    SELECT nd.num_doc_modificado, SUM(nd.importe_total) AS total_nd
-                    FROM nota_debito_cabecera nd
-                    WHERE nd.estado != 'anulado'
-                      AND nd.eliminado = false
-                      AND nd.id_empresa = :id_empresa
-                    GROUP BY nd.num_doc_modificado
+                    " . AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', ':id_empresa') . "
                 )
                 SELECT * FROM (
                     SELECT 'FACTURA'::varchar AS tipo_documento,
@@ -372,8 +339,8 @@ class IngresoRepository extends BaseRepository
                     FROM ventas_cabecera v
                     LEFT JOIN cobrado c        ON v.id = c.id_referencia_documento
                     LEFT JOIN retenido_fact rf ON v.id = rf.id_venta
-                    LEFT JOIN nc_aplic ncf     ON ncf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-                    LEFT JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    LEFT JOIN nc_aplic ncf     ON ncf.num_norm = " . AbonosVentaSql::numFactura('v') . "
+                    LEFT JOIN nd_aplic ndf     ON ndf.num_norm = " . AbonosVentaSql::numFactura('v') . "
                     WHERE v.id_cliente = :id_cliente
                       AND v.id_empresa = :id_empresa
                       AND v.estado <> 'anulado' -- Vigentes: incluye 'borrador' (aún sin autorizar por el SRI), que igual se puede cobrar
@@ -473,35 +440,10 @@ class IngresoRepository extends BaseRepository
                     GROUP BY d.id_referencia_documento
                 ),
                 retenido_fact AS (
-                    -- Cubre dos vías de enlace: id_venta directo (flujo normal) y
-                    -- num_doc_sustento en el detalle (retenciones migradas, sin id_venta).
-                    SELECT tmp.id_venta, SUM(tmp.monto) AS total_retenido
-                    FROM (
-                        SELECT r.id_venta,
-                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                               r.id AS id_ret
-                        FROM retencion_venta_cabecera r
-                        WHERE r.id_empresa = :id_empresa
-                          AND r.eliminado = FALSE
-                          AND r.id_venta IS NOT NULL
-                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-
-                        UNION
-
-                        SELECT vc.id AS id_venta,
-                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                               r.id AS id_ret
-                        FROM retencion_venta_cabecera r
-                        JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
-                        JOIN ventas_cabecera vc
-                             ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
-                            AND vc.id_empresa = r.id_empresa
-                            AND vc.eliminado  = FALSE
-                        WHERE r.id_empresa = :id_empresa
-                          AND r.eliminado = FALSE
-                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                    ) tmp
-                    GROUP BY tmp.id_venta
+                    -- Regla compartida (AbonosVentaSql): enlace por id_venta o por
+                    -- num_doc_sustento normalizado a 15 dígitos; si una retención
+                    -- sustenta varias facturas, cada una recibe lo retenido en sus líneas.
+                    " . AbonosVentaSql::cteRetenidoPorFactura(':id_empresa', "AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)") . "
                 ),
                 retenido_si AS (
                     SELECT s.id AS id_saldo, SUM(rd.valor_retenido) AS total_retenido
@@ -525,29 +467,20 @@ class IngresoRepository extends BaseRepository
                 ),
                 nc_aplic AS (
                     -- Notas de crédito de venta, enlazadas a la factura por num_doc_modificado
-                    SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS total_nc
-                    FROM notas_credito_cabecera nc
-                    WHERE nc.estado != 'anulado'
-                      AND nc.eliminado = false
-                      AND nc.id_empresa = :id_empresa
-                    GROUP BY nc.num_doc_modificado
+                    -- (número normalizado; columnas num_norm y total_nc)
+                    " . AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', ':id_empresa') . "
                 ),
                 nd_aplic AS (
                     -- Notas de débito de venta: SUMAN al saldo pendiente (al contrario de la NC).
-                    SELECT nd.num_doc_modificado, SUM(nd.importe_total) AS total_nd
-                    FROM nota_debito_cabecera nd
-                    WHERE nd.estado != 'anulado'
-                      AND nd.eliminado = false
-                      AND nd.id_empresa = :id_empresa
-                    GROUP BY nd.num_doc_modificado
+                    " . AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', ':id_empresa') . "
                 ),
                 clientes_pendientes AS (
                     SELECT v.id_cliente
                     FROM ventas_cabecera v
                     LEFT JOIN cobrado c        ON v.id = c.id_referencia_documento
                     LEFT JOIN retenido_fact rf ON v.id = rf.id_venta
-                    LEFT JOIN nc_aplic ncf     ON ncf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-                    LEFT JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    LEFT JOIN nc_aplic ncf     ON ncf.num_norm = " . AbonosVentaSql::numFactura('v') . "
+                    LEFT JOIN nd_aplic ndf     ON ndf.num_norm = " . AbonosVentaSql::numFactura('v') . "
                     WHERE v.id_empresa = :id_empresa
                       AND v.estado <> 'anulado' -- incluye 'borrador': una factura sin autorizar del SRI igual se cobra
                       AND v.eliminado = FALSE
@@ -898,35 +831,10 @@ class IngresoRepository extends BaseRepository
                     GROUP BY id_referencia_documento
                 ),
                 retenido_fact AS (
-                    -- Cubre dos vías de enlace: id_venta directo (flujo normal) y
-                    -- num_doc_sustento en el detalle (retenciones migradas, sin id_venta).
-                    SELECT tmp.id_venta, SUM(tmp.monto) AS total_retenido
-                    FROM (
-                        SELECT r.id_venta,
-                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                               r.id AS id_ret
-                        FROM retencion_venta_cabecera r
-                        WHERE r.id_empresa = :id_empresa
-                          AND r.eliminado = FALSE
-                          AND r.id_venta IS NOT NULL
-                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-
-                        UNION
-
-                        SELECT vc.id AS id_venta,
-                               (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                               r.id AS id_ret
-                        FROM retencion_venta_cabecera r
-                        JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
-                        JOIN ventas_cabecera vc
-                             ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
-                            AND vc.id_empresa = r.id_empresa
-                            AND vc.eliminado  = FALSE
-                        WHERE r.id_empresa = :id_empresa
-                          AND r.eliminado = FALSE
-                          AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                    ) tmp
-                    GROUP BY tmp.id_venta
+                    -- Regla compartida (AbonosVentaSql): enlace por id_venta o por
+                    -- num_doc_sustento normalizado a 15 dígitos; si una retención
+                    -- sustenta varias facturas, cada una recibe lo retenido en sus líneas.
+                    " . AbonosVentaSql::cteRetenidoPorFactura(':id_empresa', "AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)") . "
                 ),
                 cobrado_si AS (
                     SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
@@ -960,21 +868,12 @@ class IngresoRepository extends BaseRepository
                 ),
                 nc_aplic AS (
                     -- Notas de crédito de venta, enlazadas a la factura por num_doc_modificado
-                    SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS total_nc
-                    FROM notas_credito_cabecera nc
-                    WHERE nc.estado != 'anulado'
-                      AND nc.eliminado = false
-                      AND nc.id_empresa = :id_empresa
-                    GROUP BY nc.num_doc_modificado
+                    -- (número normalizado; columnas num_norm y total_nc)
+                    " . AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', ':id_empresa') . "
                 ),
                 nd_aplic AS (
                     -- Notas de débito de venta: SUMAN al saldo pendiente (al contrario de la NC).
-                    SELECT nd.num_doc_modificado, SUM(nd.importe_total) AS total_nd
-                    FROM nota_debito_cabecera nd
-                    WHERE nd.estado != 'anulado'
-                      AND nd.eliminado = false
-                      AND nd.id_empresa = :id_empresa
-                    GROUP BY nd.num_doc_modificado
+                    " . AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', ':id_empresa') . "
                 )
                 SELECT * FROM (
                     -- Facturas de venta pendientes (saldo neto = total + notas de débito - cobros - retenciones - notas de crédito)
@@ -994,8 +893,8 @@ class IngresoRepository extends BaseRepository
                     INNER JOIN clientes c ON v.id_cliente = c.id
                     LEFT  JOIN cobrado cb       ON v.id = cb.id_referencia_documento
                     LEFT  JOIN retenido_fact rf ON v.id = rf.id_venta
-                    LEFT  JOIN nc_aplic ncf     ON ncf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-                    LEFT  JOIN nd_aplic ndf     ON ndf.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    LEFT  JOIN nc_aplic ncf     ON ncf.num_norm = " . AbonosVentaSql::numFactura('v') . "
+                    LEFT  JOIN nd_aplic ndf     ON ndf.num_norm = " . AbonosVentaSql::numFactura('v') . "
                     WHERE v.id_empresa = :id_empresa
                       AND v.estado <> 'anulado' -- incluye 'borrador': una factura sin autorizar del SRI igual se cobra
                       AND v.eliminado = FALSE

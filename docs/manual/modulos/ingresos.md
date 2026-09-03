@@ -6,7 +6,7 @@ ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
 etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado
-version: 1.5
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -169,6 +169,11 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **1.7** — El saldo pendiente de las facturas en el buscador de documentos usa
+  la misma regla que Cuentas por Cobrar: una retención que sustenta varias
+  facturas reparte lo retenido por línea (antes restaba su total a cada una), y
+  las retenciones y notas de crédito/débito se enlazan a la factura comparando
+  el número normalizado (sin guiones y con ceros a la izquierda).
 - **1.6** — Corregido un caso en que el número seguía repitiéndose pese a la
   corrección anterior: los ingresos creados **automáticamente** (cobro con
   tarjeta al facturar, cobro de suscripciones) guardaban el secuencial sin los
