@@ -527,10 +527,21 @@ class PermisosModulosController extends Controller
      */
     private function opcionEmpresa(array $r): array
     {
-        $text = $r['nombre_comercial'] ?? $r['ruc'] ?? 'Empresa';
-        if (!empty($r['ruc'])) $text .= ' (' . $r['ruc'] . ')';
+        $nombreComercial = trim((string) ($r['nombre_comercial'] ?? ''));
+        $razonSocial     = trim((string) ($r['razon_social'] ?? ''));
+        $ruc             = trim((string) ($r['ruc'] ?? ''));
 
-        $opt = ['value' => (int) ($r['id_empresa'] ?? $r['id'] ?? 0), 'text' => $text];
+        $text = $nombreComercial !== '' ? $nombreComercial : ($razonSocial !== '' ? $razonSocial : ($ruc !== '' ? $ruc : 'Empresa'));
+        if ($ruc !== '') $text .= ' (' . $ruc . ')';
+
+        // razon_social y ruc viajan como campos propios para que TomSelect también
+        // busque por ellos (searchField) y muestre la razón social bajo el nombre.
+        $opt = [
+            'value'        => (int) ($r['id_empresa'] ?? $r['id'] ?? 0),
+            'text'         => $text,
+            'razon_social' => $razonSocial,
+            'ruc'          => $ruc,
+        ];
 
         if (array_key_exists('asignada', $r)) {
             $asignada = (int) $r['asignada'] === 1;

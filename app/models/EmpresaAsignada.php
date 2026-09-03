@@ -167,10 +167,10 @@ class EmpresaAsignada extends BaseModel
 
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.nombre ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
         }
 
-        $sql = "SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc FROM {$from} WHERE {$where} ORDER BY e.nombre_comercial LIMIT 50";
+        $sql = "SELECT e.id AS id_empresa, e.nombre_comercial, e.nombre AS razon_social, e.ruc FROM {$from} WHERE {$where} ORDER BY e.nombre_comercial LIMIT 50";
         return $this->query($sql);
     }
 
@@ -215,7 +215,7 @@ class EmpresaAsignada extends BaseModel
         if ($nivel >= 3) {
             return [];
         }
-        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc FROM empresa_asignada ea INNER JOIN empresas e ON e.id = ea.id_empresa WHERE ea.id_usuario = {$idA} AND e.estado = '1' ORDER BY e.nombre_comercial LIMIT " . (int) $limit);
+        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.nombre AS razon_social, e.ruc FROM empresa_asignada ea INNER JOIN empresas e ON e.id = ea.id_empresa WHERE ea.id_usuario = {$idA} AND e.estado = '1' ORDER BY e.nombre_comercial LIMIT " . (int) $limit);
     }
 
     /**
@@ -227,12 +227,12 @@ class EmpresaAsignada extends BaseModel
         $idT = (int) $idUsuarioTarget;
         $idA = (int) $idAdmin;
         if ($nivel >= 3) {
-            return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc
+            return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.nombre AS razon_social, e.ruc
                 FROM empresa_asignada ea INNER JOIN empresas e ON e.id = ea.id_empresa
                 WHERE ea.id_usuario = {$idT} AND e.estado = '1'
                 ORDER BY e.nombre_comercial");
         }
-        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc
+        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.nombre AS razon_social, e.ruc
             FROM empresa_asignada ea
             INNER JOIN empresas e ON e.id = ea.id_empresa AND e.estado = '1'
             INNER JOIN empresa_asignada ea2 ON ea2.id_empresa = ea.id_empresa AND ea2.id_usuario = {$idA}
@@ -254,9 +254,9 @@ class EmpresaAsignada extends BaseModel
         $where = "WHERE e.eliminado = false AND e.estado = '1'";
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.nombre ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
         }
-        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc,
+        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.nombre AS razon_social, e.ruc,
                 CASE WHEN EXISTS (
                     SELECT 1 FROM empresa_asignada ea
                     WHERE ea.id_empresa = e.id AND ea.id_usuario = {$idT}
@@ -287,7 +287,7 @@ class EmpresaAsignada extends BaseModel
     {
         $id = (int) $idEmpresa;
         if ($id <= 0) return null;
-        $r = $this->query("SELECT id AS id_empresa, nombre_comercial, ruc FROM empresas
+        $r = $this->query("SELECT id AS id_empresa, nombre_comercial, nombre AS razon_social, ruc FROM empresas
             WHERE id = {$id} AND eliminado = false AND estado = '1' LIMIT 1");
         return $r[0] ?? null;
     }
@@ -319,9 +319,9 @@ class EmpresaAsignada extends BaseModel
         $where = "WHERE e.eliminado = false AND e.estado = '1'";
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.nombre ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
         }
-        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc FROM empresas e {$where} ORDER BY e.nombre_comercial LIMIT " . (int) $limit);
+        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.nombre AS razon_social, e.ruc FROM empresas e {$where} ORDER BY e.nombre_comercial LIMIT " . (int) $limit);
     }
 
     /**
@@ -339,9 +339,9 @@ class EmpresaAsignada extends BaseModel
         $where = "WHERE ea.id_usuario = {$idA} AND e.eliminado = false AND e.estado = '1'";
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+            $where .= " AND (e.nombre_comercial ILIKE '%{$b}%' OR e.nombre ILIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
         }
-        return $this->query("SELECT DISTINCT e.id AS id_empresa, e.nombre_comercial, e.ruc
+        return $this->query("SELECT DISTINCT e.id AS id_empresa, e.nombre_comercial, e.nombre AS razon_social, e.ruc
             FROM empresa_asignada ea
             INNER JOIN empresas e ON e.id = ea.id_empresa
             {$where}

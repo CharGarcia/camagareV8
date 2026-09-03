@@ -41,6 +41,7 @@ class AuditoriaEtiquetas
         'consignaciones_ventas'          => 'Consignaciones de venta',
         'egresos_cabecera'               => 'Egresos',
         'empleados'                      => 'Empleados',
+        'empresa_firma'                  => 'Firma electrónica de la empresa',
         'empresa_opciones_ingreso_egreso' => 'Opciones de ingreso/egreso',
         'factura_express_plantillas'     => 'Plantillas de factura exprés',
         'factura_express_solicitudes'    => 'Solicitudes de factura exprés',

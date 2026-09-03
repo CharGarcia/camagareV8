@@ -1416,3 +1416,82 @@ if (!function_exists('enviar_correo_sri_pendientes')) {
         }
     }
 }
+
+if (!function_exists('enviar_correo_firma_caducidad')) {
+    /**
+     * Avisa a la empresa que su firma electrónica está por caducar (o acaba de
+     * caducar). Lo dispara el cron (FirmaCaducidadAvisoService::enviarAvisos).
+     *
+     * @param array $data empresa_nombre, empresa_ruc, fecha_expiracion (Y-m-d),
+     *                     dias (negativo = caducada), url (opcional)
+     */
+    function enviar_correo_firma_caducidad(string $correoDestino, array $data): bool
+    {
+        if (!filter_var($correoDestino, FILTER_VALIDATE_EMAIL)) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'Correo de destino inválido.';
+            return false;
+        }
+
+        $base = \App\services\EmailConfigService::getDataForSendEmail('notificaciones');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config para "notificaciones"';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        if (!file_exists($docMailDir . '/phpmailer.php')) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No se encuentra PHPMailer';
+            return false;
+        }
+
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth = true;
+            $mail->Username = $base['emisor'];
+            $mail->Password = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port = $base['port'];
+            $mail->CharSet = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            $mail->addAddress($correoDestino);
+
+            $dias = (int) ($data['dias'] ?? 0);
+            if ($dias > 1) {
+                $asunto = 'Su firma electrónica caduca en ' . $dias . ' días';
+            } elseif ($dias === 1) {
+                $asunto = 'Su firma electrónica caduca mañana';
+            } elseif ($dias === 0) {
+                $asunto = 'Su firma electrónica caduca hoy';
+            } else {
+                $asunto = 'Su firma electrónica caducó: no podrá emitir comprobantes electrónicos';
+            }
+            $nombreEmp = trim((string) ($data['empresa_nombre'] ?? ''));
+            $mail->Subject = $asunto . ($nombreEmp !== '' ? ' — ' . $nombreEmp : '');
+
+            ob_start();
+            require MVC_APP . '/views/emails/firma_caducidad.php';
+            $mail->Body = ob_get_clean();
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $e) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $e->getMessage();
+            error_log('Mailer Error (FirmaCaducidad): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+}

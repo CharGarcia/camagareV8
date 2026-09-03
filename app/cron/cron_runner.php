@@ -149,6 +149,23 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en reintentos de comprobantes SRI: " . $e->getMessage() . "\n";
 }
 
+// ── Firma electrónica: aviso por correo de caducidad (FIJO, 1 vez al día) ─────
+//    Complementa al ícono del navbar: avisa al correo registrado en la ficha de
+//    la empresa (empresas.mail) cuando la firma activa caduca mañana (o acaba de
+//    caducar y aún no se avisó). Se autolimita a UNA revisión diaria desde las
+//    06:00 y a UN correo por firma (la marca vive en log_sistema).
+try {
+    $svcFirma = new \App\Services\FirmaCaducidadAvisoService();
+    $resFirma = $svcFirma->ejecutarSiCorresponde();
+    if (!empty($resFirma['ejecutado']) && $resFirma['firmas'] > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] Firma electrónica: {$resFirma['firmas']} firma(s) por caducar, "
+            . "{$resFirma['correos']} correo(s) enviado(s), {$resFirma['sin_correo']} sin correo, "
+            . "{$resFirma['fallidos']} fallido(s).\n";
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en aviso de caducidad de firma electrónica: " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();

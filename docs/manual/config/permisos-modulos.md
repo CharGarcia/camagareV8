@@ -6,8 +6,8 @@ ruta_modulo: config/permisos-modulos
 tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
-etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscador, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente
-version: 1.4
+etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -50,8 +50,11 @@ ha creado nada y no tiene acceso total.
    propio nombre, lo que hacía pensar que no se podía cambiar). Si el usuario no
    aparece entre los primeros de la lista, siga escribiendo: al teclear dos o más
    letras se consulta el resto de usuarios.
-2. Pulse **Seleccionar empresa** y elija la empresa (también es un buscador). Si
-   el usuario tiene una sola empresa asignada, se selecciona sola.
+2. Pulse **Seleccionar empresa** y elija la empresa (también es un buscador).
+   Se puede escribir parte del **nombre comercial**, de la **razón social** o del
+   **RUC**; cada opción muestra el nombre comercial con el RUC y, debajo, la razón
+   social cuando es distinta. Si el usuario tiene una sola empresa asignada, se
+   selecciona sola.
 3. Marque los permisos submódulo por submódulo.
 4. Guarde. El cambio se aplica en la siguiente pantalla que abra el usuario.
 
@@ -132,6 +135,12 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.5** — Los buscadores de empresa de esta pantalla (selección principal,
+  *Copiar desde otra empresa*, *Copiar permisos a otro usuario* y *Crear usuario*)
+  buscan por **nombre comercial, razón social y RUC**. Antes la razón social no se
+  tenía en cuenta y una empresa cuyo nombre comercial no coincide con su razón
+  social no se encontraba. Cada opción muestra ahora la razón social debajo del
+  nombre comercial.
 - **1.4** — El modal **Crear usuario** pide solo correo y empresa (buscador), con
   el alcance de cada nivel: el administrador solo puede asignar sus empresas. Si el
   correo ya está registrado no se reenvía la invitación: se asigna la empresa y se

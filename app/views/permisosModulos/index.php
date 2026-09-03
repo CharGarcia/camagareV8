@@ -149,6 +149,29 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
 </div>
 
 <script>
+// Configuración común de los selectores de empresa (TomSelect) de esta pantalla:
+// se busca por nombre comercial (text), razón social y RUC, y cada opción muestra
+// la razón social debajo del nombre comercial. Las opciones llegan del servidor
+// (opcionEmpresa) con los campos razon_social y ruc.
+window.cmgEmpresaTomSelect = function() {
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    return {
+        searchField: ['text', 'razon_social', 'ruc'],
+        render: {
+            option: function(data, escape) {
+                var html = '<div>' + esc(data.text);
+                if (data.razon_social && data.razon_social !== data.text.replace(/\s*\([^)]*\)\s*$/, '')) {
+                    html += '<div class="small text-muted">' + esc(data.razon_social) + '</div>';
+                }
+                return html + '</div>';
+            }
+        }
+    };
+};
+
 (function() {
     var form = document.getElementById('form-permisos-buscar');
     var selectEmpresa = document.getElementById('select-empresa');
@@ -624,7 +647,7 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             if (typeof TomSelect !== 'undefined') {
                 tsUsu = new TomSelect('#copia-usuario', { create: false, placeholder: 'Buscar usuario...', maxOptions: 500 });
 
-                var configEmpDestino = { create: false, placeholder: 'Buscar empresa...', maxOptions: 500 };
+                var configEmpDestino = Object.assign({ create: false, placeholder: 'Buscar empresa por nombre, razón social o RUC...', maxOptions: 500 }, window.cmgEmpresaTomSelect());
                 <?php if ($esSuper): ?>
                 // El superadministrador puede copiar hacia cualquier empresa activa; si
                 // el usuario destino no la tiene, se le asigna al copiar los permisos.
@@ -802,11 +825,11 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             }
 
             if (typeof TomSelect !== 'undefined') {
-                tsOrigen = new TomSelect('#copiaEmp-empresa-origen', {
+                tsOrigen = new TomSelect('#copiaEmp-empresa-origen', Object.assign({
                     create: false,
                     placeholder: 'Seleccione empresa origen...',
                     maxOptions: 500
-                });
+                }, window.cmgEmpresaTomSelect()));
                 tsOrigen.disable();
                 tsOrigen.on('change', function(val) {
                     btnCopiar.disabled = !val;
@@ -990,13 +1013,13 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             }
 
             if (typeof TomSelect !== 'undefined') {
-                tsEmpresaCrear = new TomSelect('#crear-empresa', {
+                tsEmpresaCrear = new TomSelect('#crear-empresa', Object.assign({
                     create: false,
-                    placeholder: 'Escriba el nombre o el RUC de la empresa...',
+                    placeholder: 'Escriba el nombre, la razón social o el RUC de la empresa...',
                     maxOptions: 200,
                     loadThrottle: 300,
                     load: function(query, callback) { cargarEmpresasCrear(query, callback); }
-                });
+                }, window.cmgEmpresaTomSelect()));
             }
 
             // Lista inicial: así el administrador ve de una sus empresas sin escribir.
@@ -1108,9 +1131,9 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
         var esSuper = <?= $esSuper ? 'true' : 'false' ?>;
         var avisoNoAsignada = document.getElementById('empresa-no-asignada-aviso');
 
-        var configEmpresa = {
+        var configEmpresa = Object.assign(window.cmgEmpresaTomSelect(), {
             create: false,
-            placeholder: 'Buscar empresa...',
+            placeholder: 'Buscar empresa por nombre, razón social o RUC...',
             maxOptions: 500,
             loadThrottle: 300,
             shouldLoad: function(q) { return (q || '').length >= 2; },
@@ -1124,7 +1147,7 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                     .then(function(data) { callback(Array.isArray(data) ? data : []); })
                     .catch(function() { callback(); });
             }
-        };
+        });
 
         // El superadministrador ve todas las empresas activas del sistema: se separan
         // en el desplegable las que el usuario ya tiene de las que todavía no.
@@ -1140,10 +1163,11 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
         var tsEmpresa = new TomSelect('#select-empresa', configEmpresa);
 
         // Las opciones que vienen escritas en el HTML solo traen valor y texto. Se
-        // completan con el grupo y la marca de asignada para que el desplegable se
-        // vea igual que cuando la lista llega por AJAX.
+        // completan con la razón social y el RUC (buscador) y, para el superadmin,
+        // con el grupo y la marca de asignada, para que el desplegable se vea igual
+        // que cuando la lista llega por AJAX.
         var empresasIniciales = <?= json_encode($opcionesEmpresas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?: '[]' ?>;
-        if (esSuper && Array.isArray(empresasIniciales) && empresasIniciales.length) {
+        if (Array.isArray(empresasIniciales) && empresasIniciales.length) {
             empresasIniciales.forEach(function(o) {
                 if (tsEmpresa.options[o.value]) {
                     tsEmpresa.updateOption(o.value, o);
