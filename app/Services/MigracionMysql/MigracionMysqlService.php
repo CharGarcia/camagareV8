@@ -4693,6 +4693,13 @@ class MigracionMysqlService
         );
         $cuerpoStmt = $mysql->prepare("SELECT ejercicio_fiscal, base_imponible, codigo_impuesto, impuesto, porcentaje_retencion, valor_retenido, tipo_documento, numero_documento FROM cuerpo_retencion_venta WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $mapRet = $this->mapaDe($pg, $idEmpresa, 'retenciones_venta'); // para reconciliar al re-correr
+        // En retenciones de VENTA el número (estab-pto-sec) es del CLIENTE: cada agente de retención emite con
+        // su propia serie, así que dos clientes distintos pueden tener el mismo número y ambos documentos son
+        // válidos. La deduplicación incluye id_cliente (igual que el módulo: RetencionVentaRepository::existeNumero).
+        // Corridas anteriores no lo hacían: el segundo documento quedaba "vinculado" al del otro cliente y nunca
+        // se insertaba. Esos vínculos falsos se detectan aquí y se deshacen para que el documento se inserte.
+        $qVinc  = $pg->prepare("SELECT m.vinculado, r.id_cliente FROM migracion_mysql_map m JOIN retencion_venta_cabecera r ON r.id = m.id_destino WHERE m.id_empresa = ? AND m.entidad = 'retenciones_venta' AND m.id_origen = ?");
+        $delMap = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'retenciones_venta' AND id_origen = ?");
         $updCab = $pg->prepare("UPDATE retencion_venta_cabecera SET id_cliente = ?, fecha_emision = ?, periodo_fiscal = ?, total_isd = ?, total_iva = ?, total_renta = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet = $pg->prepare("DELETE FROM retencion_venta_detalle WHERE id_retencion = ?");
 
@@ -4718,8 +4725,18 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_retencion']), 9, '0', STR_PAD_LEFT);
+            if ($idRetExist) {
+                // Vínculo falso de una corrida anterior: apunta a la retención de OTRO cliente con el mismo número.
+                $qVinc->execute([$idEmpresa, $old]);
+                $vi = $qVinc->fetch(PDO::FETCH_ASSOC);
+                if ($vi && !empty($vi['vinculado']) && (int) $vi['id_cliente'] !== (int) $idCliente) {
+                    $delMap->execute([$idEmpresa, $old]);
+                    unset($mapRet[(string) $old], $done[(string) $old]);
+                    $idRetExist = null;
+                }
+            }
             if (!$idRetExist) {
-                $ye = $this->docExistente($pg, 'retencion_venta_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+                $ye = $this->docExistente($pg, 'retencion_venta_cabecera', ['id_empresa' => $idEmpresa, 'id_cliente' => $idCliente, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
                 if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
             }
             $fe    = substr((string) $ec['fecha_emision'], 0, 10);

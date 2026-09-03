@@ -70,7 +70,15 @@ dos maneras distintas, según lo que traiga el sistema anterior:
   y consignaciones. Son los documentos **autorizados por el SRI** y los que se
   numeran con serie en el sistema anterior: se migran **exactamente con la
   serie y el secuencial que ya tenían**. La migración nunca los renumera.
-- **Documentos sin serie en el sistema anterior** — ingresos, egresos, pedidos
+  - Caso especial, **retenciones en venta**: el número de esos documentos no
+    es de la empresa sino del **cliente** que hizo la retención (cada agente
+    de retención numera con su propia serie). Por eso dos clientes distintos
+    pueden tener, por ejemplo, la retención `001-002-000000938` y las dos son
+    documentos válidos. La migración las distingue por **cliente + número**,
+    no solo por número. Si una corrida anterior había dejado la segunda como
+    "vinculada" a la del otro cliente (sin insertarla), al volver a migrar
+    Retenciones en venta se deshace ese vínculo y se inserta el documento
+    faltante; no hace falta usar *Eliminar migrados*.- **Documentos sin serie en el sistema anterior** — ingresos, egresos, pedidos
   y cambios de producto. El sistema anterior solo les guarda un número
   correlativo. La migración les asigna la **serie activa de la empresa**: el
   establecimiento activo y el **punto de emisión activo de menor número**,
@@ -115,6 +123,11 @@ documentos hay que revisarlos a mano: nada se borra ni se renumera solo.
 
 ## Historial de cambios
 
+- **1.3** — Retenciones en venta: la deduplicación pasa a ser por **cliente +
+  número** (antes solo por número). Una retención con el mismo
+  `estab-pto-secuencial` que otra de un cliente distinto se migraba como
+  "vinculada" y nunca aparecía en el módulo; ahora se inserta, y las
+  vinculaciones falsas de corridas anteriores se corrigen al re-migrar.
 - **1.2** — Se documenta cómo se asigna la **serie** a los documentos
   migrados: los que ya la traen del sistema anterior (autorizados del SRI y
   consignaciones) la conservan intacta; los que no la traen (ingresos,
