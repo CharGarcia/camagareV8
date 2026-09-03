@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\ProformaPlantillaRepository;
+use App\Rules\modulos\ProformaRules;
 use App\Services\LogSistemaService;
 use App\core\Database;
 
@@ -57,6 +58,7 @@ class ProformaPlantillaService
                 'nombre'          => $nombre,
                 'dias_vigencia'   => $data['dias_vigencia'] ?? 15,
                 'vigencia_unidad' => $data['vigencia_unidad'] ?? 'dias',
+                'condiciones_html' => ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null),
             ]);
 
             foreach ($data['detalles'] as $det) {
@@ -115,6 +117,7 @@ class ProformaPlantillaService
                 'nombre'          => $nombre,
                 'dias_vigencia'   => $data['dias_vigencia'] ?? 15,
                 'vigencia_unidad' => $data['vigencia_unidad'] ?? 'dias',
+                'condiciones_html' => ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null),
             ]);
 
             $this->repository->deleteDetalles($id);

@@ -136,15 +136,22 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
     </div>
 
     <!-- Botón flotante -->
-    <button type="button" id="sopLauncher" class="sop-launcher shadow" title="Soporte">
+    <button type="button" id="sopLauncher" class="sop-launcher shadow" title="Soporte (arrastre para mover el botón)">
         <i class="bi bi-headset" id="sopLauncherIcon"></i>
         <span class="soporte-sinleer-icon d-none">
             <span class="badge rounded-pill bg-danger soporte-sinleer-badge sop-launcher-badge">0</span>
         </span>
     </button>
+    <!-- Quitar la burbuja hasta el próximo inicio de sesión. Va fuera del
+         launcher (un botón no puede contener otro) y se ve al pasar el ratón. -->
+    <button type="button" id="sopOcultar" class="sop-ocultar" title="Quitar la burbuja hasta la próxima sesión">
+        <i class="bi bi-x-lg"></i>
+    </button>
 </div>
 
 <style>
+/* right/bottom son la posición por defecto; el JS los sobreescribe en línea
+   cuando el usuario arrastra el botón (ver habilitarArrastre en soporte_widget.js). */
 .sop-widget { position: fixed; right: 18px; bottom: 18px; z-index: 1035; }
 
 .sop-launcher {
@@ -153,8 +160,29 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
     font-size: 1.4rem; position: relative;
     display: flex; align-items: center; justify-content: center;
     transition: transform .15s ease, background-color .15s ease;
+    touch-action: none;   /* el arrastre táctil lo maneja el JS, no el scroll de la página */
+    user-select: none;
 }
 .sop-launcher:hover { transform: scale(1.06); background: #0b5ed7; }
+.sop-widget.sop-arrastrando .sop-launcher {
+    cursor: grabbing; transform: scale(1.06); transition: none;
+    animation: none !important;
+}
+
+/* Botón para quitar la burbuja durante la sesión: aparece al pasar el ratón por
+   la burbuja (en pantallas táctiles, sin hover, queda siempre visible). */
+.sop-ocultar {
+    position: absolute; top: -6px; left: -6px; z-index: 1;
+    width: 20px; height: 20px; border-radius: 50%; padding: 0;
+    border: 2px solid #fff; background: #6c757d; color: #fff;
+    font-size: .6rem; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s ease, background-color .15s ease;
+}
+.sop-widget:hover .sop-ocultar, .sop-ocultar:focus-visible { opacity: 1; }
+.sop-ocultar:hover { background: #dc3545; }
+.sop-widget.sop-arrastrando .sop-ocultar { opacity: 0; }
+@media (hover: none) { .sop-ocultar { opacity: .85; } }
 .sop-launcher-badge { position: absolute; top: -2px; right: -2px; font-size: .65rem; }
 
 /* ── Aviso de respuesta sin leer ──────────────────────────────────────────
@@ -203,6 +231,10 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
     background: #fff; border-radius: 14px; overflow: hidden;
     display: flex; flex-direction: column;
 }
+/* El panel se abre hacia el lado donde hay sitio: lo decide el JS según
+   dónde haya quedado el botón (clases sop-lado-izq / sop-arriba). */
+.sop-widget.sop-lado-izq .sop-panel { right: auto; left: 0; }
+.sop-widget.sop-arriba .sop-panel   { bottom: auto; top: 68px; }
 .sop-panel-head {
     background: #0d6efd; color: #fff;
     padding: 10px 14px; display: flex; align-items: center; flex-shrink: 0;
@@ -236,7 +268,10 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
 
 @media (max-width: 575.98px) {
     .sop-widget { right: 12px; bottom: 12px; }
-    .sop-panel {
+    /* En móvil el panel ocupa toda la pantalla, esté donde esté el botón. */
+    .sop-widget .sop-panel,
+    .sop-widget.sop-lado-izq .sop-panel,
+    .sop-widget.sop-arriba .sop-panel {
         position: fixed; right: 0; left: 0; bottom: 0; top: 0;
         width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh;
         border-radius: 0;
@@ -247,5 +282,9 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
 <script>
     window.SOP_BASE = '<?= $base ?>';
     window.SOP_MODULO = '<?= htmlspecialchars($rutaModulo ?? '', ENT_QUOTES) ?>';
+    // Huella de la sesión (no reversible): la posición del botón guardada en el
+    // navegador solo vale mientras dure este inicio de sesión. Al volver a
+    // entrar, el botón aparece en su esquina de siempre.
+    window.SOP_SESION = '<?= substr(hash('sha256', (string)($_SESSION['session_token'] ?? '')), 0, 16) ?>';
 </script>
 <script src="<?= $base ?>/js/soporte_widget.js?v=<?= @filemtime(MVC_ROOT . '/public/js/soporte_widget.js') ?: time() ?>"></script>

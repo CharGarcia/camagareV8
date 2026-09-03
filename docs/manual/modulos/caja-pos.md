@@ -114,16 +114,36 @@ después se facturan por ese punto.
 
 ## Cerrar la caja
 
-Al pulsar **Cerrar caja (arqueo)** la pantalla muestra primero **todo lo cobrado
-en el turno, desglosado por forma de pago** —Efectivo, cada banco, Payphone…—
-con cuántos documentos van por cada una y su total. Debajo, el **efectivo
-esperado en caja** (el fondo inicial más lo cobrado en efectivo) y el campo del
-**monto contado**, que llega propuesto con ese valor esperado: solo hay que
-corregirlo si al contar sale otra cosa.
+Al pulsar **Cerrar caja (arqueo)** la pantalla muestra el turno **forma de pago
+por forma de pago**, en tres columnas:
 
-El monto contado es obligatorio y debe ser numérico. El sistema calcula la
-diferencia y la muestra al cerrar. Ese arqueo es el que permite detectar
-faltantes el mismo día, no a fin de mes.
+| Columna | Qué es |
+|---|---|
+| **Forma de pago** | Efectivo, cada banco, Payphone… y entre paréntesis cuántos documentos |
+| **Cobrado** | Lo que registró el sistema |
+| **Contado** | Lo que usted confirma que realmente entró |
+
+La columna **Contado** llega con el valor del sistema ya escrito: si todo cuadra
+no hay nada que tocar, solo confirmar. Si en alguna no coincide, se corrige ese
+número y la fila **se marca en rojo** para no tener que buscar dónde está el
+descuadre.
+
+**Ya no hay un campo de "monto contado" suelto**: el monto contado del cierre es
+la **suma de esa columna**, y se ve en el pie de la tabla junto al total cobrado
+y a la diferencia entre ambos, que se recalcula mientras escribe.
+
+El **fondo inicial no entra en el arqueo** —no es un cobro—, pero se recuerda
+bajo la tabla porque sí está en el cajón: al contar el efectivo hay que
+separarlo de lo cobrado.
+
+Bajo el total aparece **"Propina"**: cuánto de lo cobrado en el turno es
+propina y se reparte al personal. Suma las dos que maneja el sistema —el
+**recargo por servicio** y la **propina voluntaria** que deja el cliente—, que
+viajan en sitios distintos del comprobante. **No se suma al total**: ya está
+dentro de él.
+
+Ese arqueo es el que permite detectar faltantes el mismo día, no a fin de mes; y
+ahora dice además **por qué medio** falta el dinero, no solo cuánto.
 
 La forma de pago sale del **Ingreso** que generó cada cobro, que es donde queda
 registrado con qué se pagó. Los cobros cuyo Ingreso no llegó a generarse
@@ -136,8 +156,8 @@ que registrarlo desde el módulo *Ingresos*.
 Al confirmar, el sistema envía automáticamente el detalle del cierre al **correo
 registrado en la empresa** (*Empresa → Datos generales*). El mensaje lleva el
 turno y el cajero, las horas de apertura y cierre, el cobrado por forma de pago,
-y el arqueo completo: fondo inicial, esperado, contado y diferencia, más las
-observaciones si las hubo.
+el total de propina del turno, y el arqueo completo: fondo inicial, esperado,
+contado y diferencia, más las observaciones si las hubo.
 
 Si la empresa no tiene correo configurado —o el envío falla— **la caja se cierra
 igual**: solo aparece un aviso explicando que el detalle no salió. El cierre
@@ -193,12 +213,13 @@ Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
 
-- **1.7** — El cierre de caja ahora muestra **todo lo cobrado en el turno
-  desglosado por forma de pago** antes de arquear, propone el efectivo esperado
-  en el campo del monto contado, y al confirmar **envía el detalle del cierre
-  por correo** a la dirección registrada en la empresa. El efectivo esperado se
-  calcula desde la forma de pago real del cobro: antes salía de un criterio que
-  podía dejarlo en cero aunque hubiera ventas en efectivo.
+- **1.7** — El cierre de caja se hace ahora **forma de pago por forma de pago**:
+  la pantalla lista lo cobrado en cada una y una columna al lado para confirmar
+  lo que realmente entró. **Desaparece el campo de "monto contado"** — el monto
+  del cierre es la suma de esa columna, con la diferencia calculada en vivo y las
+  filas descuadradas marcadas en rojo. Se muestra también el **total de propina**
+  del turno, y al confirmar **se envía el detalle del cierre por correo** a la
+  dirección registrada en la empresa.
 
 - **1.6** — La ventana de la tirilla ya no desaparece al cancelar la
   impresión: antes el navegador avisaba igual al imprimir que al cancelar y la

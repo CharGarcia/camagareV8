@@ -404,6 +404,18 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 <i class="fa-solid fa-utensils"></i>
             </a>
             <?php endif; ?>
+            <!-- Novedades del sistema (solo escritorio): desplegable con las novedades vigentes;
+                 badge = sin leer. Lo llena el JS de partials/novedades_modal.php (oculto hasta
+                 saber si hay novedades). Al elegir una se abre la tarjeta flotante en esa novedad. -->
+            <div class="dropdown d-none cmg-novedades-wrap me-2">
+                <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Novedades del sistema">
+                    <i class="bi bi-megaphone-fill" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-novedades-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm cmg-novedades-menu" id="cmgNovedadesMenu" style="min-width: 320px; max-width: 380px; z-index: 5065;">
+                    <li><h6 class="dropdown-header"><i class="bi bi-megaphone me-1"></i>Novedades vigentes</h6></li>
+                </ul>
+            </div>
             <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-light btn-sm cmg-navbar-btn"
                title="Manual del sistema<?= $rutaActualAyuda !== '' ? ' (ayuda de esta pantalla)' : '' ?>"
                target="_blank" rel="noopener">
@@ -413,7 +425,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                target="_blank" rel="noopener">
                 <i class="bi bi-play-btn-fill"></i>
             </a>
-            <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Configuración">
+            <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Ajustes">
                 <i class="bi bi-gear-fill"></i>
             </a>
             <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Cerrar sesión">

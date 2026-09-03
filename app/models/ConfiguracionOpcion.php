@@ -29,6 +29,7 @@ class ConfiguracionOpcion extends BaseModel
             ['nombre' => 'Unidades de medida', 'descripcion' => 'Tipos y unidades de medida (kg, litro, etc.)', 'icono' => 'rulers', 'clase_color' => 'secondary', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Unidades de medida', 'ruta' => '/config/unidades-medida', 'clase_btn' => 'secondary']],
             ['nombre' => 'Asientos tipo', 'descripcion' => 'Modelos de asientos contables predefinidos del sistema', 'icono' => 'sliders', 'clase_color' => 'dark', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Asientos tipo', 'ruta' => '/config/asientos-tipo', 'clase_btn' => 'dark']],
             ['nombre' => 'Documentos legales', 'descripcion' => 'Acuerdo de uso de datos y contrato de uso que se envían a las empresas', 'icono' => 'journal-text', 'clase_color' => 'primary', 'nivel_minimo' => 3, 'enlace' => ['etiqueta' => 'Configurar', 'ruta' => '/config/documentos-legales', 'clase_btn' => 'primary']],
+            ['nombre' => 'Novedades del sistema', 'descripcion' => 'Avisos, mejoras y nuevas funciones que los usuarios ven en una ventana al ingresar', 'icono' => 'megaphone', 'clase_color' => 'info', 'nivel_minimo' => 3, 'enlace' => ['etiqueta' => 'Administrar', 'ruta' => '/config/novedades-sistema', 'clase_btn' => 'info']],
         ];
         foreach ($base as $op) {
             $ruta = $op['enlace']['ruta'] ?? '';

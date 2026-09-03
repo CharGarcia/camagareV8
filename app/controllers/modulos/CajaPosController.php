@@ -625,8 +625,14 @@ class CajaPosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $id = (int) ($_POST['id'] ?? 0);
 
+        // El arqueo ya no llega como un total suelto: viene lo confirmado por
+        // cada forma de pago y el Service lo suma. Se acepta 'monto_contado'
+        // por si queda algún cliente cacheado con la pantalla anterior.
+        $formasContadas = json_decode((string) ($_POST['formas_contadas'] ?? ''), true);
+
         $data = [
             'id_usuario' => (int) $_SESSION['id_usuario'],
+            'formas_contadas' => is_array($formasContadas) ? $formasContadas : null,
             'monto_contado' => $_POST['monto_contado'] ?? null,
             'observaciones_cierre' => $_POST['observaciones_cierre'] ?? '',
         ];

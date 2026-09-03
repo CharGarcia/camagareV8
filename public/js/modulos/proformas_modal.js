@@ -32,6 +32,42 @@
     const $id = id => document.getElementById(id);
     const fmt2 = v => parseFloat(v || 0).toFixed(2);
 
+    /* ── Editor de condiciones (Quill) ───────────────────────── */
+    // El contenido NO va en la proforma: se guarda como HTML y se imprime en un PDF anexo.
+    // Sin imágenes a propósito (se incrustarían en base64 dentro de la columna de texto).
+    const QUILL_TOOLBAR = [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ color: [] }],
+        [{ align: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ indent: '-1' }, { indent: '+1' }],
+        ['link', 'clean'],
+    ];
+    let _quillPf = null, _quillPlt = null;
+    function _crearQuill(selector, placeholder) {
+        if (!window.Quill || !document.querySelector(selector)) return null;
+        return new Quill(selector, { theme: 'snow', placeholder, modules: { toolbar: QUILL_TOOLBAR } });
+    }
+    // Se crean bajo demanda (la primera vez que se usan), ya con el DOM del modal presente.
+    function _quillProforma() {
+        if (!_quillPf) _quillPf = _crearQuill('#pf_condicionesEditor', 'Escriba aquí las condiciones adicionales de la cotización…');
+        return _quillPf;
+    }
+    function _quillPlantilla() {
+        if (!_quillPlt) _quillPlt = _crearQuill('#plt_condicionesEditor', 'Condiciones que se precargarán al usar la plantilla…');
+        return _quillPlt;
+    }
+    /** HTML del editor, o '' si no hay texto real (solo párrafos vacíos). */
+    function _condicionesHtml(q) {
+        if (!q || !q.getText().trim()) return '';
+        return q.root.innerHTML;
+    }
+    function _setCondicionesHtml(q, html) {
+        if (!q) return;
+        q.setContents(html ? q.clipboard.convert(html) : [], 'silent');
+    }
+
     /* ── Notificaciones ──────────────────────────────────────── */
     function toast(msg, type = 'success') {
         if (typeof window.mostrarToast === 'function') { window.mostrarToast(msg, type); return; }
@@ -90,6 +126,9 @@
         const editable = estado === 'borrador';
         const fieldset = $id('pf_fieldsetEditable');
         if (fieldset) fieldset.disabled = !editable;
+        // El fieldset no bloquea un contenteditable: el editor se desactiva aparte.
+        const qCond = _quillProforma();
+        if (qCond) qCond.enable(editable);
         show('pf-btn-plantillas', editable);
         show('pf-vr1',          perm().crear && guardada);
         show('pf-btn-pdf',       guardada);
@@ -117,6 +156,7 @@
         $id('pf_diasVigencia').value = '15';
         $id('pf_vendedor').value     = '';
         $id('pf_observaciones').value = '';
+        _setCondicionesHtml(_quillProforma(), '');
 
         // Punto de emisión — seleccionar el primero si hay uno solo
         const selPunto = $id('pf_punto');
@@ -867,6 +907,7 @@
             dias_vigencia:      parseInt($id('pf_diasVigencia').value || 15),
             vigencia_unidad:    $id('pf_vigenciaUnidad').value || 'dias',
             observaciones:      $id('pf_observaciones').value.trim(),
+            condiciones_html:   _condicionesHtml(_quillProforma()),
             moneda:             'DOLAR',
             total_sin_impuestos: +totalSinImpuestos.toFixed(2),
             total_descuento:     +totalDescuento.toFixed(2),
@@ -1265,6 +1306,7 @@
             $id('pf_vigenciaUnidad').value = c.vigencia_unidad || 'dias';
             $id('pf_vendedor').value      = c.id_vendedor   || '';
             $id('pf_observaciones').value = c.observaciones || '';
+            _setCondicionesHtml(_quillProforma(), c.condiciones_html || '');
 
             // Cliente (sin insertar correo aún, se hará al cargar info_adicional)
             _limpiarCliente();
@@ -1356,6 +1398,7 @@
         estado.vigencia_unidad  = $id('pf_vigenciaUnidad')?.value || '';
         estado.id_vendedor      = $id('pf_vendedor')?.value       || '';
         estado.observaciones    = $id('pf_observaciones')?.value  || '';
+        estado.condiciones_html = _condicionesHtml(_quillProforma());
 
         // Detalles
         estado.detalles = [];
@@ -1431,6 +1474,7 @@
         if (estado.vigencia_unidad && $id('pf_vigenciaUnidad')) $id('pf_vigenciaUnidad').value = estado.vigencia_unidad;
         if (estado.id_vendedor)    $id('pf_vendedor').value      = estado.id_vendedor;
         if (estado.observaciones)  $id('pf_observaciones').value = estado.observaciones;
+        if (estado.condiciones_html) _setCondicionesHtml(_quillProforma(), estado.condiciones_html);
 
         // Detalles
         const tbody = $id('pf_tbodyDetalle');
@@ -1691,6 +1735,22 @@
             a.remove();
         },
 
+        /** PDF anexo con las condiciones (se genera desde lo GUARDADO en la proforma). */
+        imprimirCondiciones() {
+            const id = $id('pf_id').value;
+            if (!id) { toast('Guarde la proforma antes de generar el PDF de condiciones', 'error'); return; }
+            if (!_condicionesHtml(_quillProforma())) {
+                toast('La proforma no tiene condiciones. Escríbalas y guarde antes de descargar el PDF', 'error');
+                return;
+            }
+            const a = document.createElement('a');
+            a.href = `${urlBase()}/exportarCondicionesAjax?id=${id}`;
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        },
+
         /* ── Plantillas ──────────────────────────────────────── */
         abrirPlantillas() {
             _cargarPlantillas();
@@ -1702,6 +1762,7 @@
             $id('plt_nombre').value = '';
             $id('plt_diasVigencia').value = 15;
             $id('plt_vigenciaUnidad').value = 'dias';
+            _setCondicionesHtml(_quillPlantilla(), '');
             if ($id('plt_modalTitulo')) $id('plt_modalTitulo').textContent = 'Nueva plantilla';
 
             const tbody = $id('plt_tbodyDetalle');
@@ -1725,6 +1786,7 @@
                 $id('plt_nombre').value = p.nombre || '';
                 $id('plt_diasVigencia').value = p.dias_vigencia || 15;
                 $id('plt_vigenciaUnidad').value = p.vigencia_unidad || 'dias';
+                _setCondicionesHtml(_quillPlantilla(), p.condiciones_html || '');
                 if ($id('plt_modalTitulo')) $id('plt_modalTitulo').textContent = 'Editar plantilla';
 
                 const tbody = $id('plt_tbodyDetalle');
@@ -1779,6 +1841,7 @@
                 nombre,
                 dias_vigencia:   parseInt($id('plt_diasVigencia').value || 15),
                 vigencia_unidad: $id('plt_vigenciaUnidad').value || 'dias',
+                condiciones_html: _condicionesHtml(_quillPlantilla()),
                 detalles,
                 info_adicional,
             };
@@ -1808,7 +1871,7 @@
             const tieneDatos = Array.from(document.querySelectorAll('#pf_tbodyDetalle .row-detalle'))
                 .some(tr => tr.querySelector('.input-descripcion')?.value.trim());
             if (tieneDatos) {
-                const ok = await confirm2('Esto reemplazará el detalle, la información adicional y la vigencia actuales por los de la plantilla.');
+                const ok = await confirm2('Esto reemplazará el detalle, la información adicional, la vigencia y las condiciones actuales por los de la plantilla.');
                 if (!ok) return;
             }
 
@@ -1832,6 +1895,7 @@
 
                 if ($id('pf_diasVigencia'))   $id('pf_diasVigencia').value   = p.dias_vigencia   || 15;
                 if ($id('pf_vigenciaUnidad')) $id('pf_vigenciaUnidad').value = p.vigencia_unidad || 'dias';
+                _setCondicionesHtml(_quillProforma(), p.condiciones_html || '');
 
                 _renderInfoProductos();
 
@@ -1922,6 +1986,9 @@
 
             const correoActual = ($id('pf_clienteEmail')?.textContent || '').trim();
             const modalEl = document.getElementById('modalProforma');
+            // El anexo de condiciones va siempre con la proforma (se genera desde lo guardado);
+            // aquí solo se avisa. El editor refleja lo que se cargó de la proforma.
+            const tieneCond = !!_condicionesHtml(_quillProforma());
 
             const { value: formValues, isConfirmed } = await Swal.fire({
                 title: 'Enviar proforma por correo',
@@ -1933,7 +2000,10 @@
                         <label class="form-check-label small" for="pf-swal-ficha">
                             Adjuntar ficha de productos con imágenes
                         </label>
-                    </div>`,
+                    </div>
+                    ${tieneCond ? `<div class="text-start small text-muted mt-2">
+                        <i class="bi bi-paperclip me-1"></i>Se adjuntará también el PDF de condiciones de la proforma.
+                    </div>` : ''}`,
                 target: modalEl || undefined,
                 showCancelButton: true,
                 confirmButtonText: '<i class="bi bi-send me-1"></i> Enviar',

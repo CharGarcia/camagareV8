@@ -13,6 +13,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
     .modal-proforma .modal-header { padding: 10px 16px; border-bottom: 1px solid #dee2e6; }
     .modal-proforma .modal-body   { padding: 0; }
     .modal-proforma .nav-tabs .nav-link { font-size: 0.8rem; white-space: nowrap; }
+    /* Editor de condiciones (Quill), compacto para caber en el pie del modal */
+    .pf-quill .ql-toolbar.ql-snow { padding: 3px 4px; border-radius: 4px 4px 0 0; }
+    .pf-quill .ql-toolbar.ql-snow .ql-formats { margin-right: 6px; }
+    .pf-quill .ql-container.ql-snow { border-radius: 0 0 4px 4px; font-size: 0.8rem; }
+    .pf-quill .ql-editor { min-height: 140px; max-height: 260px; overflow-y: auto; }
+    .pf-quill .ql-editor.ql-blank::before { font-style: italic; color: #adb5bd; }
     .modal-proforma label, .modal-proforma .x-small { font-size: 0.72rem; }
     .modal-proforma .table-detalle th { font-size: 0.7rem; padding: 4px 6px; background: #f8f9fa; }
     .modal-proforma .table-detalle td { padding: 0 !important; vertical-align: middle; }
@@ -355,6 +361,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                                 Vigencia
                                             </button>
                                         </li>
+                                        <li class="nav-item">
+                                            <button class="nav-link py-1 small"
+                                                data-bs-toggle="tab" data-bs-target="#pf-subtab-condiciones" type="button">
+                                                Condiciones
+                                            </button>
+                                        </li>
                                     </ul>
                                     <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height:120px;">
                                         <div class="tab-pane fade show active" id="pf-subtab-info" role="tabpanel">
@@ -398,6 +410,21 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                                     </div>
                                                 </div>
                                             </div>
+                                        </div>
+                                        <!-- Pestaña Condiciones: texto enriquecido que NO va en la proforma,
+                                             se genera como PDF anexo aparte (descarga aquí / adjunto del correo). -->
+                                        <div class="tab-pane fade" id="pf-subtab-condiciones" role="tabpanel">
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <span class="x-small text-muted">
+                                                    Condiciones adicionales de la cotización. Se generan como un PDF anexo
+                                                    que acompaña a la proforma al enviarla por correo.
+                                                </span>
+                                                <button type="button" class="btn btn-outline-danger btn-sm px-2 ms-auto flex-shrink-0"
+                                                    onclick="PF.imprimirCondiciones()" title="Descargar PDF de las condiciones">
+                                                    <i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF
+                                                </button>
+                                            </div>
+                                            <div id="pf_condicionesEditor" class="pf-quill bg-white"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -659,6 +686,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                         </div>
                     </div>
 
+                    <label class="x-small fw-bold text-muted mb-1 d-block">
+                        Condiciones (PDF anexo)
+                        <span class="fw-normal">— se precargan en la pestaña Condiciones al usar la plantilla</span>
+                    </label>
+                    <div id="plt_condicionesEditor" class="pf-quill bg-white mb-3"></div>
+
                     <label class="x-small fw-bold text-muted mb-1 d-block">Detalle de ítems</label>
                     <div class="border rounded-3 overflow-hidden bg-white shadow-sm mb-3">
                         <div class="table-responsive" style="max-height:260px;">
@@ -807,3 +840,7 @@ $totalPages = $pf_totalPagesBackup;
     });
 })();
 </script>
+
+<!-- Editor de texto enriquecido (Quill) para la pestaña Condiciones; mismo CDN que Empresa/Documentos Legales (permitido en CSP). -->
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>

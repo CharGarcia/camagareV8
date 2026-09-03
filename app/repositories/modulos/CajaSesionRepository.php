@@ -217,6 +217,73 @@ class CajaSesionRepository extends BaseRepository
         }
     }
 
+    /**
+     * Propina generada en el turno: lo que se reparte al personal.
+     *
+     * Suma las DOS propinas que maneja el sistema, porque viajan en sitios
+     * distintos del comprobante:
+     *   · **Recargo por servicio** (el 10%): va en el campo `propina` del
+     *     documento, que es el único que tiene el comprobante electrónico.
+     *   · **Propina voluntaria** del cliente: como ese campo ya está ocupado,
+     *     se emite como una LÍNEA más, con el producto configurado en el
+     *     establecimiento (`id_producto_propina`).
+     *
+     * No se suma al total cobrado: ya está dentro de él. Es un "de lo cobrado,
+     * esto es propina".
+     */
+    public function getPropinaDelTurno(int $idCajaSesion): float
+    {
+        $total = 0.0;
+
+        // 1) Campo <propina> del comprobante (recargo por servicio).
+        try {
+            $st = $this->db->prepare(
+                "SELECT COALESCE((SELECT SUM(v.propina) FROM ventas_cabecera v
+                                   WHERE v.id_caja_sesion = :id1 AND v.eliminado = false
+                                     AND v.estado <> 'anulado'), 0)
+                      + COALESCE((SELECT SUM(r.propina) FROM recibos_venta_cabecera r
+                                   WHERE r.id_caja_sesion = :id2 AND r.eliminado = false
+                                     AND r.estado <> 'anulado'), 0)"
+            );
+            $st->execute([':id1' => $idCajaSesion, ':id2' => $idCajaSesion]);
+            $total += (float) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            error_log('[CajaSesion] No se pudo sumar el recargo por servicio del turno: ' . $e->getMessage());
+        }
+
+        // 2) Líneas de propina voluntaria. El producto se configura por
+        //    establecimiento y la columna llegó después (comandas_propina_
+        //    voluntaria.sql), así que solo se consulta si ya existe.
+        try {
+            if (!(new EmpresaRepository())->tieneColumnaProductoPropina()) {
+                return round($total, 2);
+            }
+
+            $st = $this->db->prepare(
+                "SELECT COALESCE((SELECT SUM(vd.precio_total_sin_impuesto)
+                                    FROM ventas_detalle vd
+                                    JOIN ventas_cabecera v ON v.id = vd.id_venta
+                                   WHERE v.id_caja_sesion = cs.id AND v.eliminado = false
+                                     AND v.estado <> 'anulado' AND vd.id_producto = ee.id_producto_propina), 0)
+                      + COALESCE((SELECT SUM(rd.precio_total_sin_impuesto)
+                                    FROM recibos_venta_detalle rd
+                                    JOIN recibos_venta_cabecera r ON r.id = rd.id_recibo
+                                   WHERE r.id_caja_sesion = cs.id AND r.eliminado = false
+                                     AND r.estado <> 'anulado' AND rd.id_producto = ee.id_producto_propina), 0)
+                   FROM caja_sesiones cs
+                   JOIN empresa_punto_emision pe ON pe.id = cs.id_punto_emision
+                   JOIN empresa_establecimiento ee ON ee.id = pe.id_establecimiento
+                  WHERE cs.id = :id AND ee.id_producto_propina IS NOT NULL"
+            );
+            $st->execute([':id' => $idCajaSesion]);
+            $total += (float) ($st->fetchColumn() ?: 0);
+        } catch (\Throwable $e) {
+            error_log('[CajaSesion] No se pudo sumar la propina voluntaria del turno: ' . $e->getMessage());
+        }
+
+        return round($total, 2);
+    }
+
     public function cerrar(int $id, int $idEmpresa, array $data): bool
     {
         $sql = "UPDATE {$this->table} SET

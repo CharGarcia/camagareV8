@@ -223,16 +223,18 @@ class ProformaRepository extends BaseRepository
 
     public function insertCabecera(array $data): int
     {
+        // condiciones_html es opcional hasta desplegar el SQL (20260903_proformas_condiciones.sql).
+        $conCondiciones = in_array('condiciones_html', $this->columnasExistentes('proformas_cabecera'), true);
         $sql = "INSERT INTO proformas_cabecera (
                     id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario,
                     id_vendedor, fecha_emision, establecimiento, punto_emision, secuencial,
                     tipo_ambiente, dias_vigencia,
                     total_sin_impuestos, total_descuento, total_ice, importe_total, moneda,
-                    estado, observaciones, created_by, updated_by
+                    estado, observaciones, created_by, updated_by" . ($conCondiciones ? ", condiciones_html" : "") . "
                 ) VALUES (
-                    ?,?,?,?,?,  ?,?,?,?,?,  ?,?,  ?,?,?,?,?,  ?,?,?,?
+                    ?,?,?,?,?,  ?,?,?,?,?,  ?,?,  ?,?,?,?,?,  ?,?,?,?" . ($conCondiciones ? ",?" : "") . "
                 ) RETURNING id";
-        return (int) $this->query($sql, [
+        $params = [
             (int) $data['id_empresa'],
             (int) $data['id_establecimiento'],
             (int) $data['id_punto_emision'],
@@ -254,11 +256,16 @@ class ProformaRepository extends BaseRepository
             !empty($data['observaciones']) ? $data['observaciones'] : null,
             (int) $data['id_usuario'],
             (int) $data['id_usuario'],
-        ])->fetchColumn();
+        ];
+        if ($conCondiciones) {
+            $params[] = ($data['condiciones_html'] ?? '') !== '' ? (string) $data['condiciones_html'] : null;
+        }
+        return (int) $this->query($sql, $params)->fetchColumn();
     }
 
     public function updateCabecera(int $id, array $data): void
     {
+        $conCondiciones = in_array('condiciones_html', $this->columnasExistentes('proformas_cabecera'), true);
         $sql = "UPDATE proformas_cabecera SET
                     id_establecimiento    = ?,
                     id_punto_emision      = ?,
@@ -274,11 +281,12 @@ class ProformaRepository extends BaseRepository
                     total_ice             = ?,
                     importe_total         = ?,
                     estado                = ?,
-                    observaciones         = ?,
+                    observaciones         = ?," . ($conCondiciones ? "
+                    condiciones_html      = ?," : "") . "
                     updated_by            = ?,
                     updated_at            = NOW()
                 WHERE id = ?";
-        $this->query($sql, [
+        $params = [
             (int) $data['id_establecimiento'],
             (int) $data['id_punto_emision'],
             (int) $data['id_cliente'],
@@ -294,9 +302,13 @@ class ProformaRepository extends BaseRepository
             (float) ($data['importe_total'] ?? 0),
             $data['estado'] ?? 'borrador',
             !empty($data['observaciones']) ? $data['observaciones'] : null,
-            (int) $data['id_usuario'],
-            $id,
-        ]);
+        ];
+        if ($conCondiciones) {
+            $params[] = ($data['condiciones_html'] ?? '') !== '' ? (string) $data['condiciones_html'] : null;
+        }
+        $params[] = (int) $data['id_usuario'];
+        $params[] = $id;
+        $this->query($sql, $params);
     }
 
     public function actualizarEstado(int $id, string $estado, int $idUsuario): void

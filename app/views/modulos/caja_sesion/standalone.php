@@ -100,35 +100,50 @@ $volverA = $volverA ?? null;
                 </div>
 
                 <div id="cx-cierre-form" class="d-none">
-                    <!-- Cobrado del turno, desglosado por forma de pago: lo llena
-                         resumenTurnoAjax al abrir el arqueo. -->
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold text-uppercase text-muted">Cobrado en el turno</label>
+                    <!-- Arqueo por forma de pago: el sistema pone lo que registró
+                         (columna Cobrado) y el cajero confirma lo que realmente
+                         entró por cada una (columna Contado). El monto contado del
+                         cierre es la SUMA de esa columna, no un campo suelto. -->
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold text-uppercase text-muted">Arqueo por forma de pago</label>
                         <div class="table-responsive">
-                            <table class="table table-sm mb-1" style="font-size:.82rem;">
+                            <table class="table table-sm align-middle mb-1" style="font-size:.82rem;">
+                                <thead>
+                                    <tr class="text-muted" style="font-size:.72rem;">
+                                        <th class="fw-normal">Forma de pago</th>
+                                        <th class="fw-normal text-end">Cobrado</th>
+                                        <th class="fw-normal text-end" style="width:108px;">Contado</th>
+                                    </tr>
+                                </thead>
                                 <tbody id="cx-formas-pago">
-                                    <tr><td colspan="2" class="text-muted text-center py-2">
+                                    <tr><td colspan="3" class="text-muted text-center py-2">
                                         <span class="spinner-border spinner-border-sm me-1"></span>Cargando…
                                     </td></tr>
                                 </tbody>
                                 <tfoot>
                                     <tr class="border-top">
-                                        <th>Total cobrado</th>
+                                        <th>Total</th>
                                         <th class="text-end" id="cx-total-cobrado">$0.00</th>
+                                        <th class="text-end" id="cx-total-contado">$0.00</th>
+                                    </tr>
+                                    <tr id="cx-fila-diferencia" class="d-none">
+                                        <td class="border-0 pt-0">Diferencia</td>
+                                        <td class="border-0 pt-0"></td>
+                                        <td class="border-0 pt-0 text-end fw-bold" id="cx-diferencia">$0.00</td>
+                                    </tr>
+                                    <!-- La propina ya está dentro del total: es un
+                                         "de esto, tanto se reparte al personal". -->
+                                    <tr class="text-muted">
+                                        <td class="border-0 pt-0">Propina</td>
+                                        <td class="border-0 pt-0"></td>
+                                        <td class="border-0 pt-0 text-end" id="cx-propina">$0.00</td>
                                     </tr>
                                 </tfoot>
                             </table>
                         </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between small text-muted mb-1">
-                        <span>Efectivo esperado en caja</span>
-                        <b id="cx-monto-esperado">$0.00</b>
-                    </div>
-                    <label class="form-label small fw-semibold text-uppercase text-muted">Monto contado (arqueo)</label>
-                    <div class="input-group mb-2">
-                        <span class="input-group-text">$</span>
-                        <input type="number" id="cx-monto-contado" class="form-control" step="0.01" min="0" value="0.00">
+                        <!-- El fondo no es un cobro, así que no entra en el arqueo;
+                             se recuerda aquí porque sí está en el cajón. -->
+                        <div class="small text-muted" id="cx-nota-efectivo"></div>
                     </div>
                     <textarea id="cx-observaciones" class="form-control mb-3" rows="2" placeholder="Observaciones del cierre (opcional)"></textarea>
                     <div class="d-flex gap-2">
@@ -334,17 +349,53 @@ $volverA = $volverA ?? null;
                         + (sinRegistrar ? ' <i class="bi bi-exclamation-triangle text-warning" title="Cobros sin Ingreso registrado"></i>' : '')
                         + ' <span class="text-muted">(' + f.documentos + ')</span></td>'
                         + '<td class="text-end">' + money(f.total) + '</td>'
-                        + '</tr>';
+                        + '<td class="text-end p-1">'
+                        + '<input type="number" class="form-control form-control-sm text-end cx-contado"'
+                        + ' step="0.01" min="0" value="' + Number(f.total).toFixed(2) + '"'
+                        + ' data-id="' + f.id_forma_pago + '"'
+                        + ' data-nombre="' + escapeHtml(f.nombre) + '"'
+                        + ' data-cobrado="' + Number(f.total) + '">'
+                        + '</td></tr>';
                 }).join('')
-                : '<tr><td colspan="2" class="text-muted text-center py-2">Sin cobros en este turno.</td></tr>';
+                : '<tr><td colspan="3" class="text-muted text-center py-2">Sin cobros en este turno.</td></tr>';
 
-            document.getElementById('cx-total-cobrado').textContent  = money(r.total_cobrado);
-            document.getElementById('cx-monto-esperado').textContent = money(r.monto_esperado);
-            // Se propone lo esperado: el cajero corrige si contó otra cosa.
-            document.getElementById('cx-monto-contado').value = (r.monto_esperado || 0).toFixed(2);
+            document.getElementById('cx-total-cobrado').textContent = money(r.total_cobrado);
+            document.getElementById('cx-propina').textContent       = money(r.propina);
+
+            // El fondo inicial no es un cobro: no entra en el arqueo, pero sí
+            // está en el cajón, así que se recuerda para no confundir al contar.
+            const $nota = document.getElementById('cx-nota-efectivo');
+            $nota.textContent = r.fondo_inicial > 0
+                ? 'Fondo inicial: ' + money(r.fondo_inicial) + '. No entra en el arqueo; en el cajón debe estar aparte del efectivo cobrado.'
+                : '';
+
+            $tbody.querySelectorAll('.cx-contado').forEach(i => i.addEventListener('input', recalcularArqueo));
+            recalcularArqueo();
         } catch (e) {
-            $tbody.innerHTML = '<tr><td colspan="2" class="text-danger text-center py-2">Error de comunicación.</td></tr>';
+            $tbody.innerHTML = '<tr><td colspan="3" class="text-danger text-center py-2">Error de comunicación.</td></tr>';
         }
+    }
+
+    /** Total contado = suma de lo que el cajero confirma en cada forma de pago. */
+    function recalcularArqueo() {
+        let contado = 0, cobrado = 0;
+        document.querySelectorAll('.cx-contado').forEach(i => {
+            contado += parseFloat(i.value) || 0;
+            cobrado += parseFloat(i.dataset.cobrado) || 0;
+            // Cada fila se marca sola cuando no coincide, para no tener que
+            // buscar dónde está el descuadre.
+            i.classList.toggle('border-danger',
+                Math.abs((parseFloat(i.value) || 0) - (parseFloat(i.dataset.cobrado) || 0)) >= 0.01);
+        });
+
+        const dif = Math.round((contado - cobrado) * 100) / 100;
+        document.getElementById('cx-total-contado').textContent = money(contado);
+
+        const $fila = document.getElementById('cx-fila-diferencia');
+        const $dif  = document.getElementById('cx-diferencia');
+        $fila.classList.toggle('d-none', Math.abs(dif) < 0.01);
+        $dif.textContent = money(dif);
+        $dif.className = 'border-0 pt-0 text-end fw-bold ' + (dif < 0 ? 'text-danger' : 'text-success');
     }
 
     document.getElementById('cx-btn-cancelar-cierre').addEventListener('click', () => {
@@ -354,12 +405,19 @@ $volverA = $volverA ?? null;
 
     document.getElementById('cx-btn-confirmar-cierre').addEventListener('click', async () => {
         if (!sesionActual) return;
-        const montoContado = document.getElementById('cx-monto-contado').value;
         const observaciones = document.getElementById('cx-observaciones').value;
+
+        // Lo contado por forma de pago; el servidor lo suma para el monto
+        // contado del cierre (no se le manda el total ya sumado).
+        const contadas = Array.from(document.querySelectorAll('.cx-contado')).map(i => ({
+            id_forma_pago: parseInt(i.dataset.id, 10) || 0,
+            nombre: i.dataset.nombre || '',
+            contado: parseFloat(i.value) || 0,
+        }));
 
         const fd = new FormData();
         fd.append('id', sesionActual.id);
-        fd.append('monto_contado', montoContado);
+        fd.append('formas_contadas', JSON.stringify(contadas));
         fd.append('observaciones_cierre', observaciones);
 
         const res = await fetch(AJAX + '/cerrarAjax', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });

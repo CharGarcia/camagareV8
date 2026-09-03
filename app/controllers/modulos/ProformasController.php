@@ -514,6 +514,38 @@ class ProformasController extends BaseModuloController
         exit;
     }
 
+    /** Anexo de condiciones (texto enriquecido de la sub-pestaña "Condiciones") en PDF. */
+    public function exportarCondicionesAjax(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $cabecera = $this->repository->getPorId($id);
+        if (!$cabecera || (int) $cabecera['id_empresa'] !== $idEmpresa) {
+            http_response_code(404);
+            echo 'Proforma no encontrada.';
+            exit;
+        }
+
+        $empresa = $this->empresaConfig($idEmpresa);
+        $pdf = (new \App\Services\modulos\ProformaCondicionesPdfService())->generar($cabecera, $empresa, 'S');
+        if ($pdf === '') {
+            http_response_code(404);
+            echo 'La proforma no tiene condiciones registradas. Escríbalas en la pestaña Condiciones y guarde.';
+            exit;
+        }
+
+        $numero = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
+                . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="Condiciones_' . $numero . '.pdf"');
+        header('Content-Length: ' . strlen($pdf));
+        echo $pdf;
+        exit;
+    }
+
     public function exportarExcelAjax(): void
     {
         $this->requireLeer();
@@ -738,6 +770,12 @@ class ProformasController extends BaseModuloController
                     $adjuntosExtra[] = ['contenido' => $fichaPdf, 'nombre' => "Ficha_Productos_{$numero}.pdf"];
                 }
             }
+            // Anexo de condiciones: va SIEMPRE con la proforma cuando existe texto guardado
+            // (si la proforma no tiene condiciones, generar() devuelve '' y no se adjunta nada).
+            $condPdf = (new \App\Services\modulos\ProformaCondicionesPdfService())->generar($cabecera, $empresa, 'S');
+            if ($condPdf !== '') {
+                $adjuntosExtra[] = ['contenido' => $condPdf, 'nombre' => "Condiciones_{$numero}.pdf"];
+            }
 
             $emailSvc = new \App\Services\EnvioDocumentosSRIService();
             $enviado  = $emailSvc->enviarPdfSimple(
@@ -958,7 +996,44 @@ class ProformasController extends BaseModuloController
                 error_log('[Proforma WA] guardar chat: ' . $ex->getMessage());
             }
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Proforma enviada por WhatsApp exitosamente.']);
+            // Anexo de condiciones: la plantilla de Meta admite un solo documento, así que
+            // va como un segundo mensaje de tipo documento. Meta solo lo acepta si hay una
+            // conversación abierta (el cliente escribió en las últimas 24 h); si lo rechaza,
+            // la proforma ya salió y se avisa al usuario en la respuesta, sin fallar el envío.
+            $avisoCondiciones = '';
+            try {
+                $condPdf = (new \App\Services\modulos\ProformaCondicionesPdfService())
+                    ->generar($cabecera, (new Empresa())->getPorId($idEmpresa) ?? [], 'S');
+                if ($condPdf !== '') {
+                    $tmpCond = sys_get_temp_dir() . '/proforma_cond_' . $id . '_' . time() . '.pdf';
+                    file_put_contents($tmpCond, $condPdf);
+                    $upCond = $whatsappService->uploadMessageMedia($idEmpresa, $tmpCond, 'application/pdf');
+                    @unlink($tmpCond);
+                    $resCond = !empty($upCond['media_id'])
+                        ? $whatsappService->sendMediaMessage($idEmpresa, $telefono, $upCond['media_id'], 'document', 'Condiciones de la proforma ' . $numero)
+                        : ['success' => false, 'message' => $upCond['message'] ?? 'no se pudo subir el archivo'];
+                    if (empty($resCond['success'])) {
+                        $avisoCondiciones = ' El PDF de condiciones no pudo enviarse por WhatsApp (Meta solo admite un documento adicional si el cliente escribió en las últimas 24 horas); envíelo por correo.';
+                        error_log('[Proforma WA] anexo condiciones: ' . ($resCond['message'] ?? ''));
+                    } else {
+                        try {
+                            $repoMsj = $repoMsj ?? new \App\repositories\modulos\WhatsappMensajeRepository();
+                            $idChat  = $idChat  ?? $repoMsj->getOrCreateChat($idEmpresa, $telefono, $nombreCliente, 'Proforma enviada', false);
+                            $repoMsj->saveMessage($idEmpresa, $idChat, 'OUT', $telefono, 'document', [
+                                'filename' => 'Condiciones_' . $numero . '.pdf',
+                                'caption'  => 'Condiciones de la proforma ' . $numero,
+                            ], $resCond['data']['messages'][0]['id'] ?? null, 'sent');
+                        } catch (\Throwable $ex) {
+                            error_log('[Proforma WA] guardar chat anexo: ' . $ex->getMessage());
+                        }
+                    }
+                }
+            } catch (\Throwable $ex) {
+                $avisoCondiciones = ' El PDF de condiciones no pudo enviarse por WhatsApp; envíelo por correo.';
+                error_log('[Proforma WA] anexo condiciones: ' . $ex->getMessage());
+            }
+
+            echo json_encode(['ok' => true, 'mensaje' => 'Proforma enviada por WhatsApp exitosamente.' . $avisoCondiciones]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => 'Error inesperado: ' . $e->getMessage()]);

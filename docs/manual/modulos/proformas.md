@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla
-version: 1.5
+etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas
+version: 1.9
 orden: 15
 estado: activo
 ---
@@ -120,11 +120,49 @@ un segundo PDF tipo catálogo con la imagen, código/nombre, cantidad e
 información adicional de cada línea — útil para que el cliente reconozca
 visualmente lo cotizado. Es opcional y no se adjunta si no se marca la casilla.
 
+## Condiciones: anexo en PDF aparte de la proforma
+
+En el pie del modal, junto a **Info. Adicional** y **Vigencia**, está la
+sub-pestaña **Condiciones**. Es un editor de texto con formato (títulos,
+negrita, cursiva, subrayado, color, alineación, listas, sangría y enlaces)
+pensado para escribir todo lo que la cotización necesite aclarar y que no cabe
+en la proforma: garantías, forma y plazos de pago, tiempos de entrega,
+exclusiones, cláusulas, etc.
+
+Lo que se escribe ahí **no se imprime dentro de la proforma**. Se genera como un
+**PDF anexo independiente** (`Condiciones_<número>.pdf`) con el nombre de la
+empresa, el número de la proforma, la fecha y el cliente en la cabecera, y el
+texto con su formato debajo.
+
+- **Descargar PDF**: el botón dentro de la misma pestaña descarga el anexo. Se
+  genera a partir de lo **guardado**, así que hay que guardar la proforma antes
+  (si se editaron las condiciones y no se ha guardado, el PDF sale con la
+  versión anterior).
+- **Correo**: el anexo viaja **siempre** junto al PDF de la proforma cuando la
+  proforma tiene condiciones guardadas; no hay que marcar nada. El diálogo de
+  envío lo avisa con la línea "Se adjuntará también el PDF de condiciones". Si
+  la proforma no tiene condiciones, simplemente no se adjunta.
+- **WhatsApp**: la plantilla de Meta admite un único documento, así que la
+  proforma va en el mensaje de plantilla y las condiciones se envían como un
+  **segundo mensaje** con el PDF. Meta solo acepta ese segundo mensaje si el
+  cliente escribió a la empresa en las últimas 24 horas (conversación abierta);
+  si lo rechaza, la proforma ya salió y el sistema avisa que el anexo no pudo
+  enviarse por ese canal, para que se envíe por correo.
+- **Info. Adicional**: el sistema **no** agrega ninguna fila automática. Si
+  quiere que en la proforma impresa conste que existe el anexo, agregue a su
+  criterio una línea en Info. Adicional (por ejemplo, concepto `Condiciones` y
+  detalle `Ver anexo adjunto`).
+
+Las condiciones solo se editan mientras la proforma está en **borrador**, igual
+que el resto del documento. No admite imágenes: el contenido se guarda como
+texto y una imagen incrustada haría crecer el registro sin control.
+
 ## Plantillas
 
 Una plantilla guarda una "foto" del **detalle de ítems**, la **información
-adicional** y la **vigencia** para reutilizarla y armar una proforma nueva más
-rápido. No incluye cliente ni fechas — eso se define en cada proforma.
+adicional**, la **vigencia** y las **condiciones** para reutilizarla y armar una
+proforma nueva más rápido. No incluye cliente ni fechas — eso se define en cada
+proforma.
 
 Para crear una: en la pestaña **Plantillas** pulsa **"Nueva plantilla"**. Se
 abre un formulario propio (nombre, vigencia, detalle de ítems con buscador de
@@ -133,8 +171,8 @@ cabecera) — es independiente de la proforma que estés editando en ese momento
 
 Para usarla: en la pestaña **Plantillas** pulsa **Usar** sobre la que
 necesites. Si el detalle actual ya tiene datos, se pide confirmación porque
-**reemplaza** por completo el detalle, la información adicional y la vigencia
-— no los combina. Al aplicarla, el modal cambia automáticamente a la pestaña
+**reemplaza** por completo el detalle, la información adicional, la vigencia y
+las condiciones — no los combina. Al aplicarla, el modal cambia automáticamente a la pestaña
 **Proforma** para que veas el resultado.
 
 Para modificarla, pulsa el ícono de lápiz — abre el mismo formulario con sus
@@ -205,6 +243,14 @@ en Facturas de Venta.
 
 ## Historial de cambios
 
+- **1.9** — Nueva sub-pestaña **Condiciones** (junto a Vigencia): editor de texto
+  con formato para las condiciones adicionales de la cotización. No se imprimen en
+  la proforma: se generan como un **PDF anexo aparte**, descargable desde la misma
+  pestaña, que acompaña siempre a la proforma al enviarla por correo (y por
+  WhatsApp como segundo mensaje, cuando Meta lo permite).
+  Las **plantillas** también guardan las condiciones y las precargan al usarlas.
+  El sistema no agrega filas a Info. Adicional; esa referencia la escribe el
+  usuario si la quiere.
 - **1.8** — La proforma respeta la **configuración de la empresa** (decimales de
   cantidad, decimales de precio y modo de cálculo del IVA), la misma que usan las
   facturas de venta; antes usaba decimales fijos y sumaba el IVA siempre línea por

@@ -26,8 +26,19 @@
         enVuelo: false,
         conversaciones: [],      // último listado recibido
         calificacion: 0,         // estrellas elegidas, aún sin enviar
-        califOmitida: false      // el usuario pulsó "Ahora no"
+        califOmitida: false,     // el usuario pulsó "Ahora no"
+        ignorarClick: false      // el pointerup vino de un arrastre, no de un clic
     };
+
+    // Posición del botón flotante. Se guarda en el navegador (no en BD): es una
+    // comodidad de pantalla y no vale la pena una petición por cada movimiento.
+    // Va atada a la huella de la sesión (window.SOP_SESION): con cada inicio de
+    // sesión nuevo se descarta y el botón vuelve a su esquina.
+    var POS_KEY = 'cmg_sop_widget_pos';
+    var OCULTO_KEY = 'cmg_sop_widget_oculto';   // guarda la huella de la sesión en que se quitó
+    var POS_SESION = String(window.SOP_SESION || '');
+    var POS_MARGEN = 8;      // separación mínima con los bordes de la ventana
+    var POS_UMBRAL = 6;      // píxeles a partir de los cuales un clic pasa a ser arrastre
 
     // ── Utilidades ──────────────────────────────────────────────────────────
 
@@ -448,12 +459,158 @@
         if (window.CMG_refreshContadores) window.CMG_refreshContadores();
     }
 
+    // ── Arrastre del botón flotante ─────────────────────────────────────────
+    // El botón se puede llevar a cualquier punto de la ventana. La posición se
+    // guarda como distancia al borde derecho e inferior, igual que el CSS base,
+    // para que al cambiar el tamaño de la ventana el botón siga cerca de la
+    // esquina donde se dejó y nunca quede fuera de la vista.
+
+    function leerPosicion() {
+        try {
+            var v = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+            if (v && v.sesion === POS_SESION && isFinite(v.right) && isFinite(v.bottom)) return v;
+        } catch (e) { /* almacenamiento bloqueado o dato corrupto: posición por defecto */ }
+        return null;
+    }
+
+    function guardarPosicion(pos) {
+        pos.sesion = POS_SESION;
+        try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch (e) { /* sin persistencia */ }
+    }
+
+    // ── Quitar la burbuja durante la sesión ─────────────────────────────────
+    // Se guarda la huella de la sesión en que se quitó: mientras coincida, la
+    // burbuja no se muestra; con el siguiente inicio de sesión vuelve sola.
+
+    function estaOculta() {
+        try { return localStorage.getItem(OCULTO_KEY) === POS_SESION; } catch (e) { return false; }
+    }
+
+    function ocultarWidget() {
+        if (S.abierto) cerrarPanel();
+        $('sopWidget').classList.add('d-none');
+        try { localStorage.setItem(OCULTO_KEY, POS_SESION); } catch (e) { /* solo en esta página */ }
+    }
+
+    // Alto del navbar fijo: el botón no puede subir por encima de esa línea,
+    // si no quedaría tapado por el menú. Se mide el header real y, si no está,
+    // se usa la variable CSS que mantiene el app-shell.
+    function altoNavbar() {
+        var h = document.querySelector('.cmg-sticky-header');
+        if (h && h.offsetHeight) return h.offsetHeight;
+        var v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cmg-sticky-h'));
+        return isFinite(v) ? v : 0;
+    }
+
+    // El panel cuelga del botón: si el botón está a la izquierda, el panel se
+    // abre hacia la derecha; si está arriba, se abre hacia abajo. Así nunca
+    // queda cortado por el borde de la ventana ni escondido bajo el navbar.
+    function ubicarPanel() {
+        var widget = $('sopWidget');
+        var panel = $('sopPanel');
+        var r = widget.getBoundingClientRect();
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var nav = altoNavbar();
+        var panelW = Math.min(370, vw - 36);
+        var panelH = Math.min(520, vh - 120) + 68;
+
+        var espIzq = r.right, espDer = vw - r.left;
+        widget.classList.toggle('sop-lado-izq', espIzq < panelW + POS_MARGEN && espDer > espIzq);
+
+        var espArriba = r.top - nav, espAbajo = vh - r.bottom;
+        var abajo = espArriba < panelH + POS_MARGEN && espAbajo > espArriba;
+        widget.classList.toggle('sop-arriba', abajo);
+
+        // Si el lado elegido no da para el alto completo, el panel se acorta en
+        // vez de meterse bajo el navbar o salirse por abajo. En móvil el panel
+        // ocupa toda la pantalla y no se toca.
+        if (vw < 576) {
+            panel.style.maxHeight = '';
+        } else {
+            var disponible = (abajo ? espAbajo : espArriba) - 68 - POS_MARGEN;
+            panel.style.maxHeight = Math.max(240, Math.min(vh - 120, disponible)) + 'px';
+        }
+    }
+
+    function aplicarPosicion(right, bottom) {
+        var widget = $('sopWidget');
+        var btn = $('sopLauncher');
+        var maxRight = Math.max(POS_MARGEN, window.innerWidth - btn.offsetWidth - POS_MARGEN);
+        var maxBottom = Math.max(POS_MARGEN, window.innerHeight - btn.offsetHeight - altoNavbar() - POS_MARGEN);
+        right = Math.min(Math.max(right, POS_MARGEN), maxRight);
+        bottom = Math.min(Math.max(bottom, POS_MARGEN), maxBottom);
+        widget.style.right = right + 'px';
+        widget.style.bottom = bottom + 'px';
+        ubicarPanel();
+        return { right: Math.round(right), bottom: Math.round(bottom) };
+    }
+
+    function habilitarArrastre() {
+        var widget = $('sopWidget');
+        var btn = $('sopLauncher');
+        var arrastre = null;
+
+        var guardada = leerPosicion();
+        if (guardada) aplicarPosicion(guardada.right, guardada.bottom);
+        else ubicarPanel();
+
+        btn.addEventListener('pointerdown', function (e) {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            var r = widget.getBoundingClientRect();
+            arrastre = {
+                id: e.pointerId,
+                x0: e.clientX, y0: e.clientY,
+                offX: e.clientX - r.left, offY: e.clientY - r.top,
+                movido: false
+            };
+            try { btn.setPointerCapture(e.pointerId); } catch (err) { /* navegador sin captura */ }
+        });
+
+        btn.addEventListener('pointermove', function (e) {
+            if (!arrastre || e.pointerId !== arrastre.id) return;
+            if (!arrastre.movido) {
+                if (Math.abs(e.clientX - arrastre.x0) < POS_UMBRAL && Math.abs(e.clientY - arrastre.y0) < POS_UMBRAL) return;
+                arrastre.movido = true;
+                widget.classList.add('sop-arrastrando');
+            }
+            var left = e.clientX - arrastre.offX;
+            var top = e.clientY - arrastre.offY;
+            aplicarPosicion(window.innerWidth - left - btn.offsetWidth, window.innerHeight - top - btn.offsetHeight);
+        });
+
+        function terminar(e) {
+            if (!arrastre || e.pointerId !== arrastre.id) return;
+            var movido = arrastre.movido;
+            arrastre = null;
+            widget.classList.remove('sop-arrastrando');
+            if (!movido) return;
+            // El navegador dispara "click" al soltar: no debe abrir/cerrar el panel.
+            S.ignorarClick = true;
+            guardarPosicion(aplicarPosicion(parseFloat(widget.style.right), parseFloat(widget.style.bottom)));
+        }
+        btn.addEventListener('pointerup', terminar);
+        btn.addEventListener('pointercancel', terminar);
+
+        // Si la ventana se achica, que el botón no quede fuera de la vista.
+        var timerResize = null;
+        window.addEventListener('resize', function () {
+            clearTimeout(timerResize);
+            timerResize = setTimeout(function () {
+                var pos = leerPosicion();
+                if (pos) aplicarPosicion(pos.right, pos.bottom);
+                else ubicarPanel();
+            }, 120);
+        });
+    }
+
     // ── Arranque ────────────────────────────────────────────────────────────
 
     function enlazarEventos() {
         $('sopLauncher').addEventListener('click', function () {
+            if (S.ignorarClick) { S.ignorarClick = false; return; }
             S.abierto ? cerrarPanel() : abrirPanel();
         });
+        $('sopOcultar').addEventListener('click', ocultarWidget);
         $('sopBtnCerrar').addEventListener('click', cerrarPanel);
 
         $('sopBtnVolver').addEventListener('click', function () {
@@ -527,8 +684,12 @@
         // si no hay nada que enganchar, este script no hace ni una petición.
         if (!$('sopWidget')) return;
 
+        // El usuario la quitó en esta sesión: no se muestra ni se engancha nada.
+        if (estaOculta()) { $('sopWidget').classList.add('d-none'); return; }
+
         S.bienvenida = $('sopSubtitulo').textContent.trim();
         enlazarEventos();
+        habilitarArrastre();
     }
 
     if (document.readyState === 'loading') {

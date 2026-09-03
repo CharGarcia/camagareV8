@@ -655,6 +655,13 @@ class ConfigController extends Controller
         (new DocumentosLegalesController())->previsualizar();
     }
 
+    // ─── Novedades del sistema (ventana al ingresar; solo nivel 3 administra) ──
+
+    public function novedadesSistema(): void
+    {
+        (new NovedadesSistemaController())->gestion();
+    }
+
     public function empresasSistemaUpdate(): void
     {
         (new EmpresasSistemaController())->update();

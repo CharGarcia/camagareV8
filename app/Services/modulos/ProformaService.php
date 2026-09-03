@@ -37,6 +37,9 @@ class ProformaService
             throw new \RuntimeException(implode(' | ', $errores));
         }
 
+        // Condiciones (HTML del editor): solo formato, nada ejecutable.
+        $data['condiciones_html'] = ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null);
+
         $idEmpresa  = (int) $data['id_empresa'];
         $idUsuario  = (int) $data['id_usuario'];
         $idEstab    = (int) $data['id_establecimiento'];
@@ -115,6 +118,7 @@ class ProformaService
         $data['establecimiento']    = $proforma['establecimiento'];
         $data['punto_emision']      = $proforma['punto_emision'];
         $data['secuencial']         = $proforma['secuencial'];
+        $data['condiciones_html']   = ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null);
 
         if ($this->repository->existeSecuencial(
             $idEmpresa,

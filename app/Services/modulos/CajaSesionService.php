@@ -92,8 +92,6 @@ class CajaSesionService
 
     public function cerrar(int $id, int $idEmpresa, array $data): array
     {
-        $this->rules->validarCierre($data);
-
         $sesion = $this->repository->findById($id, $idEmpresa);
         if (!$sesion) {
             throw new Exception('La sesión de caja no existe.');
@@ -102,12 +100,20 @@ class CajaSesionService
             throw new Exception('Esta sesión de caja ya está cerrada.');
         }
 
-        // Arqueo real: lo esperado es el fondo con el que se abrió el turno
-        // más el efectivo cobrado durante el turno (Facturas/Recibos del POS
-        // pagados en efectivo). Tarjeta/banco no se cuentan aquí: no afectan
-        // lo que debe haber físicamente en la caja.
-        $formasPago = $this->repository->getCobrosPorFormaPagoEnTurno($id);
-        $montoEsperado = round((float) $sesion['fondo_inicial'] + $this->efectivoDelTurno($id, $formasPago), 2);
+        // El arqueo se hace forma de pago por forma de pago: lo esperado es lo
+        // que el sistema registró cobrado, y lo contado es la SUMA de lo que el
+        // cajero confirmó en cada una. El fondo inicial no entra: no es un
+        // cobro, se cuenta aparte en el cajón.
+        $formasPago    = $this->repository->getCobrosPorFormaPagoEnTurno($id);
+        $montoEsperado = round(array_sum(array_column($formasPago, 'total')), 2);
+
+        $contadas = $this->normalizarContadas($data['formas_contadas'] ?? null, $formasPago);
+        $data['monto_contado'] = $contadas !== null
+            ? round(array_sum(array_column($contadas, 'contado')), 2)
+            : $data['monto_contado'];
+
+        $this->rules->validarCierre($data);
+
         $montoContado = (float) $data['monto_contado'];
         $diferencia = round($montoContado - $montoEsperado, 2);
 
@@ -136,17 +142,84 @@ class CajaSesionService
             $this->repository->commit();
 
             $sesionCerrada = $this->repository->findById($id, $idEmpresa) ?? $updateData;
-            $sesionCerrada['formas_pago'] = $formasPago;
+            $sesionCerrada['formas_pago'] = $this->cruzarContado($formasPago, $contadas);
+            $sesionCerrada['propina']     = $this->repository->getPropinaDelTurno($id);
 
             // El correo va DESPUÉS del commit y no puede tumbar el cierre: la
             // caja ya está cuadrada y cerrada; si el correo falla, se avisa.
-            $sesionCerrada['aviso_correo'] = $this->enviarCorreoCierre($idEmpresa, $sesionCerrada, $formasPago);
+            $sesionCerrada['aviso_correo'] = $this->enviarCorreoCierre($idEmpresa, $sesionCerrada, $sesionCerrada['formas_pago']);
 
             return $sesionCerrada;
         } catch (Exception $e) {
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Deja lo que confirmó el cajero en una forma segura de usar: solo las
+     * formas de pago que el turno realmente tiene, en números y sin negativos.
+     *
+     * Se filtra contra `$formasPago` a propósito: los importes vienen del
+     * navegador, y sin este cruce se podría inventar una forma que no existe o
+     * colar texto. Devuelve null si no llegó nada (cliente con la pantalla
+     * anterior), y entonces el llamador usa el `monto_contado` de siempre.
+     *
+     * @return list<array{id_forma_pago:int, nombre:string, contado:float}>|null
+     */
+    private function normalizarContadas(?array $contadas, array $formasPago): ?array
+    {
+        if ($contadas === null || $contadas === []) {
+            return null;
+        }
+
+        $validas = [];
+        foreach ($formasPago as $f) {
+            $validas[(int) $f['id_forma_pago']] = (string) $f['nombre'];
+        }
+
+        // Indexado por forma, no una lista: si llegaran dos filas de la misma
+        // forma de pago, una lista haría que el total sumara las dos mientras
+        // el desglose mostraría solo una — el total y el detalle dirían cosas
+        // distintas. Con la última gana, las dos vistas coinciden siempre.
+        $limpias = [];
+        foreach ($contadas as $c) {
+            if (!is_array($c)) {
+                continue;
+            }
+            $idForma = (int) ($c['id_forma_pago'] ?? -1);
+            if (!array_key_exists($idForma, $validas)) {
+                continue;
+            }
+            $limpias[$idForma] = [
+                'id_forma_pago' => $idForma,
+                'nombre'        => $validas[$idForma],
+                'contado'       => max(0, round((float) ($c['contado'] ?? 0), 2)),
+            ];
+        }
+
+        return $limpias !== [] ? array_values($limpias) : null;
+    }
+
+    /**
+     * Añade a cada forma de pago lo contado y su diferencia, para la respuesta
+     * y el correo. Si el cajero no confirmó nada, se asume lo cobrado.
+     */
+    private function cruzarContado(array $formasPago, ?array $contadas): array
+    {
+        $porId = [];
+        foreach ($contadas ?? [] as $c) {
+            $porId[(int) $c['id_forma_pago']] = (float) $c['contado'];
+        }
+
+        return array_map(static function (array $f) use ($porId, $contadas): array {
+            $contado = $contadas === null
+                ? (float) $f['total']
+                : (float) ($porId[(int) $f['id_forma_pago']] ?? 0);
+            $f['contado']    = round($contado, 2);
+            $f['diferencia'] = round($contado - (float) $f['total'], 2);
+            return $f;
+        }, $formasPago);
     }
 
     /** Desglose de cobros del turno por forma de pago, para la pantalla de cierre. */
@@ -163,6 +236,9 @@ class CajaSesionService
         return [
             'formas_pago'     => $formasPago,
             'total_cobrado'   => round(array_sum(array_column($formasPago, 'total')), 2),
+            // Va dentro del total cobrado, no se suma aparte: es un "de esto,
+            // tanto es propina" para saber qué se reparte al personal.
+            'propina'         => $this->repository->getPropinaDelTurno($id),
             'efectivo'        => $efectivo,
             'fondo_inicial'   => round((float) $sesion['fondo_inicial'], 2),
             'monto_esperado'  => round((float) $sesion['fondo_inicial'] + $efectivo, 2),
@@ -234,19 +310,25 @@ class CajaSesionService
 
         $filas = '';
         foreach ($formasPago as $f) {
+            $dif = (float) ($f['diferencia'] ?? 0);
             $filas .= '<tr>'
                 . '<td style="padding:6px 12px;border-bottom:1px solid #eee;">' . $e($f['nombre'])
                 . ($f['tipo'] !== '' ? ' <span style="color:#888;font-size:12px;">(' . $e($f['tipo']) . ')</span>' : '')
                 . '</td>'
                 . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:center;">' . (int) $f['documentos'] . '</td>'
                 . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">' . $m($f['total']) . '</td>'
+                . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">' . $m($f['contado'] ?? $f['total']) . '</td>'
+                . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;'
+                . (abs($dif) >= 0.01 ? 'color:#dc3545;font-weight:bold;' : 'color:#999;') . '">'
+                . (abs($dif) >= 0.01 ? $m($dif) : '—') . '</td>'
                 . '</tr>';
         }
         if ($filas === '') {
-            $filas = '<tr><td colspan="3" style="padding:10px 12px;color:#888;">El turno se cerró sin cobros registrados.</td></tr>';
+            $filas = '<tr><td colspan="5" style="padding:10px 12px;color:#888;">El turno se cerró sin cobros registrados.</td></tr>';
         }
 
         $totalCobrado = array_sum(array_column($formasPago, 'total'));
+        $propina      = (float) ($sesion['propina'] ?? 0);
         $diferencia   = (float) ($sesion['diferencia'] ?? 0);
         $colorDif     = abs($diferencia) < 0.01 ? '#198754' : '#dc3545';
 
@@ -262,30 +344,41 @@ class CajaSesionService
                     <tr><td style="padding:3px 12px 3px 0;color:#666;">Cierre</td><td style="padding:3px 0;">' . $e($fec($sesion['fecha_cierre'] ?? null)) . '</td></tr>
                 </table>
 
-                <h3 style="font-size:15px;margin-bottom:6px;">Cobrado por forma de pago</h3>
+                <h3 style="font-size:15px;margin-bottom:6px;">Arqueo por forma de pago</h3>
                 <table style="border-collapse:collapse;font-size:14px;width:100%;">
                     <thead>
                         <tr style="background:#f5f5f5;">
                             <th style="padding:6px 12px;text-align:left;">Forma de pago</th>
                             <th style="padding:6px 12px;text-align:center;">Docs.</th>
-                            <th style="padding:6px 12px;text-align:right;">Total</th>
+                            <th style="padding:6px 12px;text-align:right;">Cobrado</th>
+                            <th style="padding:6px 12px;text-align:right;">Contado</th>
+                            <th style="padding:6px 12px;text-align:right;">Dif.</th>
                         </tr>
                     </thead>
                     <tbody>' . $filas . '</tbody>
                     <tfoot>
                         <tr>
-                            <th style="padding:8px 12px;text-align:left;">Total cobrado</th>
+                            <th style="padding:8px 12px;text-align:left;">Total</th>
                             <th style="padding:8px 12px;"></th>
                             <th style="padding:8px 12px;text-align:right;">' . $m($totalCobrado) . '</th>
+                            <th style="padding:8px 12px;text-align:right;">' . $m($sesion['monto_contado'] ?? 0) . '</th>
+                            <th style="padding:8px 12px;text-align:right;color:' . $colorDif . ';">' . $m($diferencia) . '</th>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="padding:2px 12px 8px;text-align:left;color:#666;font-size:13px;">
+                                Propina
+                            </td>
+                            <td style="padding:2px 12px 8px;text-align:right;color:#666;font-size:13px;">' . $m($propina) . '</td>
+                            <td colspan="2"></td>
                         </tr>
                     </tfoot>
                 </table>
 
-                <h3 style="font-size:15px;margin:18px 0 6px;">Arqueo de efectivo</h3>
+                <h3 style="font-size:15px;margin:18px 0 6px;">Resumen</h3>
                 <table style="border-collapse:collapse;font-size:14px;">
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Fondo inicial</td><td style="padding:3px 0;text-align:right;">' . $m($sesion['fondo_inicial'] ?? 0) . '</td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Esperado en caja</td><td style="padding:3px 0;text-align:right;">' . $m($sesion['monto_esperado'] ?? 0) . '</td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Contado</td><td style="padding:3px 0;text-align:right;">' . $m($sesion['monto_contado'] ?? 0) . '</td></tr>
+                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Fondo inicial <span style="color:#999;font-size:12px;">(no entra en el arqueo)</span></td><td style="padding:3px 0;text-align:right;">' . $m($sesion['fondo_inicial'] ?? 0) . '</td></tr>
+                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Cobrado según el sistema</td><td style="padding:3px 0;text-align:right;">' . $m($sesion['monto_esperado'] ?? 0) . '</td></tr>
+                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Confirmado por el cajero</td><td style="padding:3px 0;text-align:right;">' . $m($sesion['monto_contado'] ?? 0) . '</td></tr>
                     <tr><td style="padding:3px 12px 3px 0;color:#666;">Diferencia</td><td style="padding:3px 0;text-align:right;color:' . $colorDif . ';"><strong>' . $m($diferencia) . '</strong></td></tr>
                 </table>
 

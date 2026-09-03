@@ -6,7 +6,7 @@ ruta_modulo: modulos/soporte-chat
 tipo: modulo
 visibilidad: todos
 etiquetas: soporte, chat, ayuda, aviso whatsapp, alerta soporte, consulta, mesa de ayuda, asistencia, contactar soporte, hablar con alguien, burbuja, no me funciona, reportar problema, ticket
-version: 1.2
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -34,6 +34,31 @@ en qué parte del sistema estaba y no tiene que preguntarlo.
 
 La burbuja no aparece en las pantallas que funcionan aparte del sistema, como el
 punto de venta, la cocina, las mesas y las comandas.
+
+### Mover la burbuja de sitio
+
+Si la burbuja tapa algo que necesita ver (un botón, el total de una tabla),
+**arrástrela** con el ratón o con el dedo hasta donde le estorbe menos. Un toque
+corto sigue abriendo el chat; solo se mueve cuando la arrastra.
+
+- La posición se mantiene mientras dure su sesión, aunque cambie de pantalla o
+  abra otra pestaña. Al **cerrar sesión y volver a entrar**, la burbuja regresa a
+  la esquina inferior derecha.
+- La burbuja nunca queda fuera de la ventana ni **debajo del menú superior**: si
+  la arrastra hacia arriba se detiene justo bajo el navbar, y si achica la
+  pantalla se reacomoda sola hacia adentro.
+- El panel del chat se abre hacia el lado donde haya espacio (hacia la derecha
+  si dejó la burbuja a la izquierda, hacia abajo si la dejó arriba).
+
+### Quitar la burbuja por un rato
+
+Si prefiere no verla, pase el ratón por encima de la burbuja y pulse la **x**
+gris que aparece en su esquina (en pantallas táctiles la x está siempre a la
+vista). La burbuja desaparece de todas las pantallas **hasta que cierre sesión y
+vuelva a entrar**; entonces regresa sola a su esquina.
+
+Quitarla no afecta a sus consultas: las conversaciones y las respuestas del
+equipo siguen ahí y las verá al volver a tener la burbuja.
 
 ## Qué pasa después de enviar la consulta
 
@@ -249,6 +274,12 @@ trabajo diario, y se sigue consultando marcando **Archivadas** en los filtros.
 
 ## Historial de cambios
 
+- **1.3** — La burbuja de soporte se puede **arrastrar** a cualquier punto de la
+  pantalla; la posición dura mientras la sesión esté abierta (al volver a entrar
+  regresa a su esquina), nunca se mete bajo el navbar y el panel se abre hacia
+  el lado donde hay espacio. También se puede **quitar** durante la sesión con
+  la x de su esquina. Nuevas secciones *Mover la burbuja de sitio* y *Quitar la
+  burbuja por un rato*.
 - **1.2** — El aviso de consultas sin atender pasa a 1 minuto (prácticamente
   inmediato) y puede salir también por **WhatsApp**, con la empresa y la persona
   que piden soporte. Nueva sección *Aviso por WhatsApp* y tres ajustes nuevos en

@@ -20,6 +20,20 @@ class ProformaPlantillaRepository extends BaseRepository
         return $st;
     }
 
+    private array $colsCache = [];
+
+    /** Columnas reales de la tabla (condiciones_html es opcional hasta desplegar su SQL). */
+    private function tieneColumna(string $tabla, string $columna): bool
+    {
+        if (!isset($this->colsCache[$tabla])) {
+            $this->colsCache[$tabla] = $this->query(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ? AND table_schema = 'public'",
+                [$tabla]
+            )->fetchAll(\PDO::FETCH_COLUMN);
+        }
+        return in_array($columna, $this->colsCache[$tabla], true);
+    }
+
     public function getListado(int $idEmpresa): array
     {
         $sql = "SELECT pl.*,
@@ -56,30 +70,43 @@ class ProformaPlantillaRepository extends BaseRepository
 
     public function insertCabecera(array $data): int
     {
-        $sql = "INSERT INTO proformas_plantillas (id_empresa, nombre, dias_vigencia, vigencia_unidad, created_by, updated_by)
-                VALUES (?,?,?,?,?,?) RETURNING id";
-        return (int) $this->query($sql, [
+        $conCondiciones = $this->tieneColumna('proformas_plantillas', 'condiciones_html');
+        $sql = "INSERT INTO proformas_plantillas (id_empresa, nombre, dias_vigencia, vigencia_unidad, created_by, updated_by"
+             . ($conCondiciones ? ", condiciones_html" : "") . ")
+                VALUES (?,?,?,?,?,?" . ($conCondiciones ? ",?" : "") . ") RETURNING id";
+        $params = [
             (int) $data['id_empresa'],
             $data['nombre'],
             (int) ($data['dias_vigencia'] ?? 15),
             $data['vigencia_unidad'] ?? 'dias',
             (int) $data['id_usuario'],
             (int) $data['id_usuario'],
-        ])->fetchColumn();
+        ];
+        if ($conCondiciones) {
+            $params[] = ($data['condiciones_html'] ?? '') !== '' ? (string) $data['condiciones_html'] : null;
+        }
+        return (int) $this->query($sql, $params)->fetchColumn();
     }
 
     public function updateCabecera(int $id, array $data): void
     {
+        $conCondiciones = $this->tieneColumna('proformas_plantillas', 'condiciones_html');
         $sql = "UPDATE proformas_plantillas
-                SET nombre = ?, dias_vigencia = ?, vigencia_unidad = ?, updated_by = ?, updated_at = NOW()
+                SET nombre = ?, dias_vigencia = ?, vigencia_unidad = ?, "
+             . ($conCondiciones ? "condiciones_html = ?, " : "")
+             . "updated_by = ?, updated_at = NOW()
                 WHERE id = ?";
-        $this->query($sql, [
+        $params = [
             $data['nombre'],
             (int) ($data['dias_vigencia'] ?? 15),
             $data['vigencia_unidad'] ?? 'dias',
-            (int) $data['id_usuario'],
-            $id,
-        ]);
+        ];
+        if ($conCondiciones) {
+            $params[] = ($data['condiciones_html'] ?? '') !== '' ? (string) $data['condiciones_html'] : null;
+        }
+        $params[] = (int) $data['id_usuario'];
+        $params[] = $id;
+        $this->query($sql, $params);
     }
 
     public function deleteDetalles(int $idPlantilla): void
