@@ -10,6 +10,7 @@ class SincronizadorAsientosService
 {
     private array $warnings = [];
     /** Notas informativas (no son errores): explican comportamientos intencionales. */
+    private array $info = [];
     private int $generados = 0;
     /**
      * Resumen corto de documentos con problema, agrupado por módulo: ['Facturas de Venta' => 20, ...].
@@ -54,18 +55,21 @@ class SincronizadorAsientosService
         // Facturas con costo en Kardex que no se puede contabilizar porque faltan las
         // cuentas de Costo de Ventas e Inventario.
         $this->verificarCosteoVentasPendiente($db, $idEmpresa);
+
+        // Nota informativa: documentos migrados que siguen sin asiento (no se generan por diseño).
+        $this->verificarMigradosSinAsiento($db, $idEmpresa);
     }
 
     /**
      * Total de "pasos" en los que se puede dividir sincronizar(): uno por cada trabajo (módulo)
-     * más las 3 verificaciones fijas del final. Lo usa la UI para calcular el % de la barra de
+     * más las 4 verificaciones fijas del final. Lo usa la UI para calcular el % de la barra de
      * progreso — debe coincidir exactamente con lo que recorre ejecutarPaso().
      */
     public function contarPasos(int $idEmpresa): int
     {
         $db = Database::getConnection();
         $excMig = $this->construirExclusionMigracion($db);
-        return count($this->construirTrabajos($idEmpresa, $excMig)) + 3;
+        return count($this->construirTrabajos($idEmpresa, $excMig)) + 4;
     }
 
     /**
@@ -82,7 +86,7 @@ class SincronizadorAsientosService
         $this->prepararEsquema($db);
         $excMig = $this->construirExclusionMigracion($db);
         $trabajos = $this->construirTrabajos($idEmpresa, $excMig);
-        $totalPasos = count($trabajos) + 3;
+        $totalPasos = count($trabajos) + 4;
 
         $nombrePaso = null;
         if ($paso >= 0 && $paso < count($trabajos)) {
@@ -101,6 +105,9 @@ class SincronizadorAsientosService
         } elseif ($paso === count($trabajos) + 2) {
             $nombrePaso = 'Costeo de Ventas pendiente';
             $this->verificarCosteoVentasPendiente($db, $idEmpresa);
+        } elseif ($paso === count($trabajos) + 3) {
+            $nombrePaso = 'Documentos migrados sin asiento';
+            $this->verificarMigradosSinAsiento($db, $idEmpresa);
         }
 
         return [
@@ -112,6 +119,7 @@ class SincronizadorAsientosService
             'warnings'         => $this->warnings,
             'detalle'          => $this->detalle,
             'resumenPorModulo' => $this->resumenPorModulo,
+            'info'             => $this->info,
         ];
     }
 
@@ -1161,6 +1169,127 @@ class SincronizadorAsientosService
         $txt   = implode(', ', $etiquetas);
         $resto = count($ids) - count($muestra);
         return $resto > 0 ? $txt . ' y ' . $resto . ' más' : $txt;
+    }
+
+    /**
+     * Documentos que la migración desde MySQL INSERTÓ (migracion_mysql_map, vinculado IS NOT TRUE)
+     * y que siguen SIN asiento contable, agrupados por módulo. Es el complemento exacto de
+     * construirExclusionMigracion(): usa las mismas consultas de detección de cada módulo, pero
+     * con el fragmento de migración invertido (EXISTS en vez de NOT EXISTS), así "documento
+     * migrado sin asiento" significa lo mismo que "documento pendiente" para el resto del sistema
+     * (mismos filtros de estado, eliminado, etc.).
+     *
+     * Por qué existe: el sincronizador excluye estos documentos ANTES de intentar generar, así
+     * que nunca aparecen en pendientes ni en avisos de error. Sin esta detección el usuario los ve
+     * "sin asiento contable" sin ninguna explicación, indistinguibles de un fallo real. Lo normal
+     * es que la migración de contabilidad los deje enlazados a su asiento histórico; si no fue así
+     * (asiento inexistente en el sistema viejo, tipo no enlazable, migración de contabilidad aún
+     * no corrida) hay que decirlo.
+     *
+     * @return array<int, array{nombre:string, tabla:string, colsDoc:array, ids:int[]}>
+     */
+    private function detectarMigradosSinAsiento(\PDO $db, int $idEmpresa): array
+    {
+        try {
+            $tieneMap = (bool) $db->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn();
+            if (!$tieneMap) {
+                return [];
+            }
+            // Empresa sin documentos migrados: una sola consulta barata y fuera (este método corre
+            // al abrir cada módulo contable, no solo en la generación en masa).
+            $stHay = $db->prepare("SELECT 1 FROM migracion_mysql_map WHERE id_empresa = ? AND vinculado IS NOT TRUE LIMIT 1");
+            $stHay->execute([$idEmpresa]);
+            if (!$stHay->fetchColumn()) {
+                return [];
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        // Mismo fragmento que construirExclusionMigracion(), invertido. $entidad/$idExpr son
+        // literales del código y $idEmpresa es int → seguros de interpolar. Se filtra por
+        // id_empresa para aprovechar el índice (id_empresa, entidad, id_destino).
+        $soloMig = function (string $entidad, string $idExpr) use ($idEmpresa): string {
+            return " AND EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.id_empresa = {$idEmpresa} AND mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE) ";
+        };
+
+        $out = [];
+        foreach ($this->construirTrabajos($idEmpresa, $soloMig) as $t) {
+            $tabla = $t['tablaVerif'] ?? null;
+            // Solo los módulos cuya detección aplica el fragmento de migración: un módulo que no lo
+            // usa (roles de pago, importaciones…) devolvería TODOS sus pendientes como si fueran
+            // migrados. Se reconoce por el marcador que deja $soloMig en el SQL.
+            if ($tabla === null || strpos((string) $t['sql'], 'migracion_mysql_map mm WHERE mm.id_empresa') === false) {
+                continue;
+            }
+            $col = $t['colAsiento'] ?? 'id_asiento_contable';
+            try {
+                // El SQL de detección de algunos módulos trae también documentos CON asiento que
+                // requieren reproceso (p. ej. facturas con costeo pendiente). Aquí interesan solo
+                // los que de verdad no tienen asiento: se cruza contra la columna del documento.
+                $st = $db->prepare("SELECT tv.id FROM ({$t['sql']}) AS _m JOIN {$tabla} tv ON tv.id = _m.id WHERE tv.{$col} IS NULL ORDER BY tv.id");
+                $st->execute($t['params']);
+                $ids = array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+            } catch (\Throwable $e) {
+                // Tabla/columna inexistente (migración de BD pendiente): se omite sin romper.
+                continue;
+            }
+            if (!empty($ids)) {
+                $out[] = ['nombre' => (string) $t['nombre'], 'tabla' => (string) $tabla, 'colsDoc' => $t['colsDoc'] ?? [], 'ids' => $ids];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Cuántos documentos migrados siguen sin asiento contable, SIN generar nada. Lo consulta la UI
+     * al abrir los módulos contables (junto a contarPendientes()) para mostrar la nota informativa.
+     */
+    public function contarMigradosSinAsiento(int $idEmpresa): int
+    {
+        $db = Database::getConnection();
+        $total = 0;
+        foreach ($this->detectarMigradosSinAsiento($db, $idEmpresa) as $g) {
+            $total += count($g['ids']);
+        }
+        return $total;
+    }
+
+    /**
+     * Nota INFORMATIVA (canal $info, no $warnings): documentos migrados sin asiento, con la cantidad
+     * por módulo y los primeros números de documento. No es un pendiente —la generación no los
+     * contabiliza por diseño— y por eso no se mezcla con los errores: el usuario debe distinguir
+     * "esto es intencional y así se resuelve" de "esto falló".
+     */
+    private function verificarMigradosSinAsiento(\PDO $db, int $idEmpresa): void
+    {
+        $grupos = $this->detectarMigradosSinAsiento($db, $idEmpresa);
+        if (empty($grupos)) {
+            return;
+        }
+
+        $total  = 0;
+        $partes = [];
+        foreach ($grupos as $g) {
+            $cant   = count($g['ids']);
+            $total += $cant;
+            $numeros = !empty($g['colsDoc'])
+                ? $this->resolverNumerosDocumento($db, $g['tabla'], $g['colsDoc'], array_slice($g['ids'], 0, 5))
+                : [];
+            $partes[] = "{$g['nombre']}: {$cant} (" . $this->listarDocumentos($g['ids'], $numeros) . ")";
+        }
+
+        $this->info[] = "{$total} documento(s) traídos del sistema anterior siguen sin asiento contable — "
+            . implode('; ', $partes) . ". La generación automática no los contabiliza para no duplicar el "
+            . "histórico migrado. Para resolverlo, vuelva a correr la migración de contabilidad de la empresa "
+            . "(enlaza cada documento con su asiento histórico) o registre el asiento desde la pestaña "
+            . "«Asiento contable» del propio documento.";
+    }
+
+    /** Notas informativas de la última corrida (no son errores ni pendientes). */
+    public function getInfo(): array
+    {
+        return $this->info;
     }
 
     public function getWarnings(): array

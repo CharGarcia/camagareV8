@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad
-version: 1.9
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados sin asiento, migración, sistema anterior, aviso informativo
+version: 1.10
 orden: 20
 estado: activo
 ---
@@ -185,6 +185,39 @@ los asientos con las cuentas tal como estén configuradas, así que un concepto 
 apuntado se propaga a todos los documentos de golpe y el error solo se nota al
 revisar el balance.
 
+## Documentos migrados sin asiento contable
+
+Los documentos que llegaron desde el sistema anterior por la migración **no
+generan asiento automático**. Su contabilidad viene en el diario histórico
+migrado, y contabilizarlos otra vez duplicaría los saldos. Por eso la generación
+en masa los deja de lado y no los cuenta como pendientes.
+
+Lo normal es que cada documento migrado quede **enlazado** a su asiento
+histórico y lo muestre en su pestaña *Asiento contable*. Cuando eso no ocurre,
+el documento aparece sin asiento aunque no haya ningún error de configuración.
+Para que no pase desapercibido, el sistema avisa en dos momentos:
+
+- **Al abrir** Asientos Contables, Estados Financieros, Balance de Comprobación
+  o Mayores: si hay documentos migrados sin asiento, aparece una nota azul con
+  la cantidad. Si además hay pendientes normales, la nota va dentro de la misma
+  pregunta de "¿Desea generarlos ahora?".
+- **Al terminar la generación en masa**: el resumen incluye un bloque
+  *Información* con el total por módulo y los primeros números de documento.
+
+Es un aviso informativo, no un error: el botón *Generar* no los contabiliza. Para
+resolverlo hay dos caminos:
+
+1. **Volver a correr la migración de contabilidad** de la empresa. Es segura de
+   repetir: no duplica asientos y vuelve a enlazar cada documento con su asiento
+   histórico por el código del diario. Es la opción correcta cuando el sistema
+   anterior sí tenía el asiento.
+2. **Registrar el asiento desde el propio documento**, en su pestaña *Asiento
+   contable*, cuando en el sistema anterior nunca se contabilizó.
+
+Si después de re-migrar el aviso persiste, los documentos que quedan son los que
+no tenían asiento en el sistema anterior, o cuyo tipo no lo enlaza la migración
+(por ejemplo roles de pago).
+
 ## Diferencias de centavos
 
 En documentos con impuestos, la base y el IVA pueden dejar diferencias de
@@ -254,6 +287,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.10** — Aviso de documentos migrados sin asiento contable: nota informativa (azul) al abrir los módulos contables y en el resumen de la generación en masa, con la cantidad por módulo y los documentos. No los genera; explica cómo resolverlo (re-migrar contabilidad o registrar el asiento desde el documento).
 - **1.9** — El margen de redondeo en facturas y liquidaciones de compra ya no es fijo: 1 centavo por línea con IVA, mínimo 3. El mensaje de descuadre indica el tope aplicado y pide revisar los totales del documento.
 - **1.8** — La pestaña llega también a consignaciones de venta, retornos y cambios de producto: ahí la vista previa se puede completar a mano para registrar el asiento junto con el documento cuando falta alguna cuenta. En roles de pago la pestaña sigue siendo de solo lectura (muestra el asiento calculado del empleado, no uno registrado).
 - **1.7** — El asiento se puede corregir y guardar desde la pestaña *Asiento

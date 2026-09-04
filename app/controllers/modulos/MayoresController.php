@@ -123,7 +123,11 @@ class MayoresController extends BaseModuloController
             }
 
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
-            echo json_encode(['ok' => true, 'pendientes' => $sincronizador->contarPendientes($idEmpresa)]);
+            echo json_encode([
+                'ok'                   => true,
+                'pendientes'           => $sincronizador->contarPendientes($idEmpresa),
+                'migrados_sin_asiento' => $sincronizador->contarMigradosSinAsiento($idEmpresa),
+            ]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
@@ -156,6 +160,7 @@ class MayoresController extends BaseModuloController
                 'resumen'   => $sincronizador->getResumenMensaje(),
                 'detalle'   => $sincronizador->getDetalle(),
                 'warnings'  => $sincronizador->getWarnings(),
+                'info'      => $sincronizador->getInfo(),
                 'generados' => $sincronizador->getGenerados(),
             ]);
         } catch (\Throwable $th) {
