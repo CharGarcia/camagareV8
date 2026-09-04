@@ -1274,9 +1274,12 @@ class SincronizadorAsientosService
             $cant   = count($g['ids']);
             $total += $cant;
             $numeros = !empty($g['colsDoc'])
-                ? $this->resolverNumerosDocumento($db, $g['tabla'], $g['colsDoc'], array_slice($g['ids'], 0, 5))
+                ? $this->resolverNumerosDocumento($db, $g['tabla'], $g['colsDoc'], array_slice($g['ids'], 0, 15))
                 : [];
-            $partes[] = "{$g['nombre']}: {$cant} (" . $this->listarDocumentos($g['ids'], $numeros) . ")";
+            // Hasta 15 números por módulo (más que en los avisos de error): aquí el usuario necesita
+            // identificar los documentos; el listado completo está en
+            // database/diagnosticos/20260904_migrados_sin_asiento.sql.
+            $partes[] = "{$g['nombre']}: {$cant} (" . $this->listarDocumentos($g['ids'], $numeros, 15) . ")";
         }
 
         $this->info[] = "{$total} documento(s) traídos del sistema anterior siguen sin asiento contable — "
