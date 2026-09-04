@@ -430,13 +430,45 @@ class CuentasPorPagarRepository extends BaseRepository
     }
 
     /**
-     * Agregados de los saldos iniciales CXP pendientes (saldo_pendiente =
-     * saldo_inicial - monto_pagado) para sumarlos a las tarjetas. Respeta el
+     * JOIN LATERAL con lo pagado de un saldo inicial CxP. Alias `pag`, columna
+     * `pagado`. Misma regla que el CTE `pagado` de las compras: con "Fecha
+     * Hasta", un egreso fechado después del corte NO reduce el saldo (el
+     * saldo inicial sigue pendiente hasta el día anterior al pago). Sin corte
+     * devuelve el acumulado guardado (monto_pagado, que
+     * SaldosInicialesRepository::actualizarMontoPagadoCxp deriva de estos
+     * mismos egresos); con corte lo recalcula desde egresos_detalle solo con
+     * los egresos fechados hasta la fecha. Registra el parámetro en $params.
+     */
+    private function lateralPagadoSaldoInicialCxp(array $filtros, array &$params): string
+    {
+        $fh = !empty($filtros['fecha_hasta']) ? (string)$filtros['fecha_hasta'] : null;
+        if ($fh === null) {
+            return "
+                LEFT JOIN LATERAL (SELECT s.monto_pagado AS pagado) pag ON true";
+        }
+        $params[':si_pag_hasta'] = $fh;
+        return "
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(ed.monto_pagado), 0) AS pagado
+                    FROM egresos_detalle ed
+                    INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                    WHERE ed.tipo_documento = 'SALDO_INICIAL'
+                      AND ed.id_referencia_documento = s.id
+                      AND ec.estado    != 'anulado'
+                      AND ec.eliminado  = false
+                      AND ed.eliminado  = false
+                      AND ec.fecha_emision <= :si_pag_hasta
+                ) pag ON true";
+    }
+
+    /**
+     * Agregados de los saldos iniciales CXP pendientes (pendiente =
+     * saldo_inicial - pagado al corte) para sumarlos a las tarjetas. Respeta el
      * filtro de proveedor.
      */
     private function getStatsSaldosInicialesCxp(int $idEmpresa, array $filtros): array
     {
-        $where  = "id_empresa = :si_emp AND eliminado = false";
+        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
         $params = [':si_emp' => $idEmpresa];
 
         if (!empty($filtros['id_proveedor'])) {
@@ -445,21 +477,27 @@ class CuentasPorPagarRepository extends BaseRepository
             if (!empty($prov)) {
                 $in = [];
                 foreach (array_values($prov) as $i => $id) { $k = ":sipp{$i}"; $in[] = $k; $params[$k] = $id; }
-                $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
+                $where .= " AND s.id_proveedor IN (" . implode(',', $in) . ")";
             }
         }
-        if (!empty($filtros['fecha_desde'])) { $where .= " AND fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
-        if (!empty($filtros['fecha_hasta'])) { $where .= " AND fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
+        $lateralPag = $this->lateralPagadoSaldoInicialCxp($filtros, $params);
 
         $sql = "
             SELECT
-                COUNT(*) FILTER (WHERE saldo_pendiente > 0) AS cnt,
-                COALESCE(SUM(CASE WHEN saldo_pendiente > 0 THEN saldo_pendiente ELSE 0 END), 0) AS total_saldo,
-                COALESCE(SUM(CASE WHEN saldo_pendiente > 0 AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento < CURRENT_DATE THEN saldo_pendiente ELSE 0 END), 0) AS total_vencido,
-                COALESCE(SUM(CASE WHEN saldo_pendiente > 0 AND (fecha_vencimiento IS NULL OR fecha_vencimiento >= CURRENT_DATE) THEN saldo_pendiente ELSE 0 END), 0) AS total_al_dia,
-                COUNT(*) FILTER (WHERE saldo_pendiente > 0 AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento < CURRENT_DATE) AS vencidas
-            FROM saldos_iniciales_cxp
-            WHERE {$where}
+                COUNT(*) FILTER (WHERE sub.pend > 0) AS cnt,
+                COALESCE(SUM(CASE WHEN sub.pend > 0 THEN sub.pend ELSE 0 END), 0) AS total_saldo,
+                COALESCE(SUM(CASE WHEN sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE THEN sub.pend ELSE 0 END), 0) AS total_vencido,
+                COALESCE(SUM(CASE WHEN sub.pend > 0 AND (sub.fecha_vencimiento IS NULL OR sub.fecha_vencimiento >= CURRENT_DATE) THEN sub.pend ELSE 0 END), 0) AS total_al_dia,
+                COUNT(*) FILTER (WHERE sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE) AS vencidas
+            FROM (
+                SELECT s.fecha_vencimiento,
+                       (s.saldo_inicial - pag.pagado) AS pend
+                FROM saldos_iniciales_cxp s"
+                . $lateralPag . "
+                WHERE {$where}
+            ) sub
         ";
 
         $st = $this->db->prepare($sql);
@@ -575,11 +613,11 @@ class CuentasPorPagarRepository extends BaseRepository
 
     /**
      * Tramos de antigüedad de los saldos iniciales CXP pendientes
-     * (saldo_pendiente = saldo_inicial - monto_pagado). Respeta el filtro de proveedor.
+     * (pendiente = saldo_inicial - pagado al corte). Respeta el filtro de proveedor.
      */
     private function getAntiguedadSaldosInicialesCxp(int $idEmpresa, array $filtros): array
     {
-        $where  = "id_empresa = :si_emp AND eliminado = false AND saldo_pendiente > 0";
+        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
         $params = [':si_emp' => $idEmpresa];
 
         if (!empty($filtros['id_proveedor'])) {
@@ -588,23 +626,29 @@ class CuentasPorPagarRepository extends BaseRepository
             if (!empty($prov)) {
                 $in = [];
                 foreach (array_values($prov) as $i => $id) { $k = ":sipa{$i}"; $in[] = $k; $params[$k] = $id; }
-                $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
+                $where .= " AND s.id_proveedor IN (" . implode(',', $in) . ")";
             }
         }
-        if (!empty($filtros['fecha_desde'])) { $where .= " AND fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
-        if (!empty($filtros['fecha_hasta'])) { $where .= " AND fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
-
-        $dv = "CASE WHEN fecha_vencimiento IS NULL THEN 0 ELSE (CURRENT_DATE - fecha_vencimiento)::int END";
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
+        $lateralPag = $this->lateralPagadoSaldoInicialCxp($filtros, $params);
 
         $sql = "
             SELECT
-                COALESCE(SUM(CASE WHEN {$dv} <= 0           THEN saldo_pendiente ELSE 0 END), 0) AS tramo_vigente,
-                COALESCE(SUM(CASE WHEN {$dv} BETWEEN 1 AND 30  THEN saldo_pendiente ELSE 0 END), 0) AS tramo_1_30,
-                COALESCE(SUM(CASE WHEN {$dv} BETWEEN 31 AND 60 THEN saldo_pendiente ELSE 0 END), 0) AS tramo_31_60,
-                COALESCE(SUM(CASE WHEN {$dv} BETWEEN 61 AND 90 THEN saldo_pendiente ELSE 0 END), 0) AS tramo_61_90,
-                COALESCE(SUM(CASE WHEN {$dv} > 90            THEN saldo_pendiente ELSE 0 END), 0) AS tramo_mas_90
-            FROM saldos_iniciales_cxp
-            WHERE {$where}
+                COALESCE(SUM(CASE WHEN dv <= 0           THEN pend ELSE 0 END), 0) AS tramo_vigente,
+                COALESCE(SUM(CASE WHEN dv BETWEEN 1 AND 30  THEN pend ELSE 0 END), 0) AS tramo_1_30,
+                COALESCE(SUM(CASE WHEN dv BETWEEN 31 AND 60 THEN pend ELSE 0 END), 0) AS tramo_31_60,
+                COALESCE(SUM(CASE WHEN dv BETWEEN 61 AND 90 THEN pend ELSE 0 END), 0) AS tramo_61_90,
+                COALESCE(SUM(CASE WHEN dv > 90            THEN pend ELSE 0 END), 0) AS tramo_mas_90
+            FROM (
+                SELECT (s.saldo_inicial - pag.pagado) AS pend,
+                       CASE WHEN s.fecha_vencimiento IS NULL THEN 0
+                            ELSE (CURRENT_DATE - s.fecha_vencimiento)::int END AS dv
+                FROM saldos_iniciales_cxp s"
+                . $lateralPag . "
+                WHERE {$where}
+            ) sub
+            WHERE sub.pend > 0
         ";
 
         $st = $this->db->prepare($sql);
@@ -938,15 +982,25 @@ class CuentasPorPagarRepository extends BaseRepository
 
     public function getSaldosInicialesCxp(int $idEmpresa, array $filtros = []): array
     {
-        $where  = "id_empresa = :id_empresa AND eliminado = false";
+        // Pendiente = saldo_inicial - pagado. Con "Fecha Hasta" lo pagado se
+        // corta a esa fecha (ver lateralPagadoSaldoInicialCxp), igual que las
+        // compras del listado principal; el estado se deriva de ese pendiente.
+        $pend = '(s.saldo_inicial - pag.pagado)';
+
+        $where  = "s.id_empresa = :id_empresa AND s.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
-            $where .= " AND estado = :estado";
-            $params[':estado'] = $filtros['estado'];
+            if ($filtros['estado'] === 'PAGADO') {
+                $where .= " AND {$pend} <= 0";
+            } elseif ($filtros['estado'] === 'PARCIAL') {
+                $where .= " AND {$pend} > 0 AND pag.pagado > 0";
+            } elseif ($filtros['estado'] === 'PENDIENTE') {
+                $where .= " AND {$pend} > 0 AND pag.pagado <= 0";
+            }
         }
         if (!empty($filtros['tipo_documento'])) {
-            $where .= " AND tipo_documento = :tipo_documento";
+            $where .= " AND s.tipo_documento = :tipo_documento";
             $params[':tipo_documento'] = $filtros['tipo_documento'];
         }
         // Filtro por proveedor (mismo criterio que el listado principal de CxP)
@@ -958,24 +1012,31 @@ class CuentasPorPagarRepository extends BaseRepository
                 foreach (array_values($provs) as $i => $id) {
                     $k = ":siprov{$i}"; $in[] = $k; $params[$k] = $id;
                 }
-                $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
+                $where .= " AND s.id_proveedor IN (" . implode(',', $in) . ")";
             }
         }
-        if (!empty($filtros['fecha_desde'])) { $where .= " AND fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
-        if (!empty($filtros['fecha_hasta'])) { $where .= " AND fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
+        $lateralPag = $this->lateralPagadoSaldoInicialCxp($filtros, $params);
 
         $sql = "SELECT
-                    id, tipo_documento, nro_documento, fecha_emision, fecha_vencimiento,
-                    ruc_proveedor, nombre_proveedor,
-                    CAST(saldo_inicial   AS NUMERIC(16,2)) AS saldo_inicial,
-                    CAST(monto_pagado    AS NUMERIC(16,2)) AS monto_pagado,
-                    CAST(saldo_pendiente AS NUMERIC(16,2)) AS saldo_pendiente,
-                    estado, observaciones,
-                    CASE WHEN fecha_vencimiento < CURRENT_DATE AND estado != 'PAGADO'
-                         THEN CURRENT_DATE - fecha_vencimiento ELSE 0 END AS dias_vencido
-                FROM saldos_iniciales_cxp
+                    s.id, s.tipo_documento, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
+                    s.ruc_proveedor, s.nombre_proveedor, s.id_proveedor,
+                    CAST(s.saldo_inicial AS NUMERIC(16,2)) AS saldo_inicial,
+                    CAST(pag.pagado      AS NUMERIC(16,2)) AS monto_pagado,
+                    CAST({$pend}         AS NUMERIC(16,2)) AS saldo_pendiente,
+                    CASE
+                        WHEN {$pend} <= 0    THEN 'PAGADO'
+                        WHEN pag.pagado > 0  THEN 'PARCIAL'
+                        ELSE 'PENDIENTE'
+                    END AS estado,
+                    s.observaciones,
+                    CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
+                         THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido
+                FROM saldos_iniciales_cxp s"
+                . $lateralPag . "
                 WHERE {$where}
-                ORDER BY fecha_emision ASC, nro_documento ASC";
+                ORDER BY s.fecha_emision ASC, s.nro_documento ASC";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);

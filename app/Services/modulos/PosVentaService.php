@@ -110,9 +110,18 @@ class PosVentaService
      * Porcentaje que se debe cobrar en una venta suelta (mostrador), según lo
      * configurado y lo que pidió el cajero. En 'obligatorio' no importa lo que
      * llegue de la pantalla: se cobra igual.
+     *
+     * Excepción: una venta 'domicilio' NUNCA lleva recargo, ni siquiera en modo
+     * 'obligatorio'. El recargo por servicio retribuye la atención de mesa/salón;
+     * un pedido a domicilio no la recibe, así que no hay servicio que cobrar. Se
+     * resuelve aquí (servidor) y no solo ocultando el botón en pantalla, para que
+     * no dependa de que el cajero se acuerde de quitarlo en cada venta a domicilio.
      */
-    public function porcentajeServicioVenta(int $idEmpresa, bool $pedidoPorElCajero): float
+    public function porcentajeServicioVenta(int $idEmpresa, bool $pedidoPorElCajero, string $tipoEntrega = 'local'): float
     {
+        if ($tipoEntrega === 'domicilio') {
+            return 0.0;
+        }
         $cfg = $this->getConfigServicio($idEmpresa);
         if ($cfg['modo'] === 'no') {
             return 0.0;
@@ -249,9 +258,10 @@ class PosVentaService
         $totalSinImp = 0.0;
         $totalDesc = 0.0;
         $ivaTotal = 0.0;
-        // Suma de las líneas marcadas como propina voluntaria: se factura como
-        // una línea normal, pero queda fuera de la base del recargo por servicio.
-        $totalPropinaItems = 0.0;
+        // Suma de las líneas que quedan FUERA de la base del recargo por servicio,
+        // aunque se facturen como una línea normal: propina voluntaria y productos
+        // marcados como "no aplica recargo de servicio" (envases, empaques, etc.).
+        $totalExcluidoRecargo = 0.0;
         foreach ($items as $it) {
             $idProducto = (int) ($it['id_producto'] ?? 0);
             $cant = (float) ($it['cantidad'] ?? 0);
@@ -272,6 +282,12 @@ class PosVentaService
             // comprobante sale con la misma tarifa que vio el mesero en pantalla.
             // Los demás flujos no mandan la clave y siguen resolviendo por producto.
             $tar = $this->reciboRepo->getTarifaIvaProducto($idProducto);
+            // Se lee ANTES de que $tar pueda ser reemplazado por $tarItem más abajo:
+            // ese reemplazo solo cambia el impuesto, no si el producto es un envase/
+            // empaque que no debe sumar a la base del recargo por servicio.
+            $excluyeRecargo = $tar
+                ? in_array((string) ($tar['excluir_recargo_servicio'] ?? ''), ['t', 'true', '1'], true)
+                : false;
             $idTarItem = (int) ($it['id_tarifa_iva'] ?? 0);
             if ($idTarItem > 0 && (!$tar || $idTarItem !== (int) $tar['id'])) {
                 $tarItem = $this->reciboRepo->getTarifaIvaById($idTarItem);
@@ -290,8 +306,8 @@ class PosVentaService
             $totalSinImp += $base;
             $totalDesc += $dscto;
             $ivaTotal += $ivaLinea;
-            if (!empty($it['es_propina'])) {
-                $totalPropinaItems += $base;
+            if (!empty($it['es_propina']) || $excluyeRecargo) {
+                $totalExcluidoRecargo += $base;
             }
 
             $descripcion = (string) ($it['descripcion'] ?? '');
@@ -342,9 +358,11 @@ class PosVentaService
         // cliente dejó una propina voluntaria (que viaja como una línea más del
         // detalle, ver ComandaService::guardarPropina), esa línea no puede
         // inflar el recargo. Con consumo 80 + IVA 12 + servicio 8 = 100, una
-        // propina de 5 tiene que dar 105 y no 105.50.
+        // propina de 5 tiene que dar 105 y no 105.50. Igual queda fuera un
+        // producto marcado como "no aplica recargo de servicio" (envases,
+        // empaques): no es consumo de mesa, aunque vaya en el mismo documento.
         $pctPropina = min(10.0, max(0.0, (float) ($data['porcentaje_propina'] ?? 0)));
-        $baseServicio = round($totalSinImp - $totalPropinaItems, 2);
+        $baseServicio = round($totalSinImp - $totalExcluidoRecargo, 2);
         if ($baseServicio < 0) $baseServicio = 0.0;
         $propina = round($baseServicio * $pctPropina / 100, 2);
 

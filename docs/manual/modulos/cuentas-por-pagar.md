@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones
-version: 1.0
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta
+version: 1.1
 orden: 50
 estado: activo
 ---
@@ -26,6 +26,26 @@ Menos lo ya pagado mediante egresos.
 El **vencimiento** se calcula con el *plazo* configurado en la ficha del
 proveedor. Si un documento vence antes de lo que esperaba, ese es el campo a
 revisar.
+
+## Fecha Hasta como fecha de corte
+
+El filtro **Fecha Hasta** no solo limita qué documentos se muestran (los
+emitidos hasta esa fecha): también es la **fecha de corte del saldo**. Los
+pagos, retenciones y notas de crédito o débito fechados **después** de esa
+fecha no se descuentan, así el listado muestra lo que se debía **ese día**.
+
+Ejemplo: una compra pagada el 31 de mayo aparece pendiente, con su saldo
+completo, en cualquier consulta con Fecha Hasta igual o anterior al 30 de mayo,
+y desaparece de los pendientes a partir del 31.
+
+La regla es la misma que en Cuentas por Cobrar y aplica por igual a las
+compras, liquidaciones, importaciones y **saldos iniciales**; las tarjetas
+superiores, el gráfico de antigüedad y las exportaciones respetan el corte.
+Sin Fecha Hasta, el saldo es el actual.
+
+La fecha que manda para un pago es la **fecha del egreso**. Si el egreso se
+generó automáticamente (descarga del SRI o *Generar pagos pendientes*), esa
+fecha es la de la compra, aunque el cheque tenga fecha posterior.
 
 ## Notas de crédito y débito del proveedor
 
@@ -53,4 +73,8 @@ una factura se pagó en varias partes.
 
 ## Historial de cambios
 
+- **1.1** — Los **saldos iniciales** respetan la fecha de corte igual que las
+  compras: con Fecha Hasta, un pago posterior a esa fecha ya no descuenta el
+  saldo inicial (antes se usaba el acumulado pagado sin importar la fecha).
+  Aplica al listado, a las tarjetas y al gráfico de antigüedad.
 - **1.0** — Versión inicial.

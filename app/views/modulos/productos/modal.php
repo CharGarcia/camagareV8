@@ -488,6 +488,17 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                         </div>
                                     </div>
                                 </div>
+                                <div class="col-md-12">
+                                    <div class="p-3 border rounded bg-light bg-opacity-50">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="excluir_recargo_servicio" id="prod_excluir_recargo_servicio" value="1">
+                                            <label class="form-check-label fw-bold text-muted" for="prod_excluir_recargo_servicio">
+                                                No aplicar el recargo por servicio (propina) a este producto
+                                            </label>
+                                            <div class="small text-muted mt-1">Aplica para restaurantes y caja POS.</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                         </div>

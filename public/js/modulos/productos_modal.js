@@ -559,6 +559,7 @@
 
 
         document.getElementById('prod_inventariable').checked = (data.inventariable === true || data.inventariable === 'true' || data.inventariable == 1 || data.inventariable === 't');
+        document.getElementById('prod_excluir_recargo_servicio').checked = (data.excluir_recargo_servicio === true || data.excluir_recargo_servicio === 'true' || data.excluir_recargo_servicio == 1 || data.excluir_recargo_servicio === 't');
         document.getElementById('prod_stock_minimo').value = parseFloat(data.stock_minimo || 0).toFixed(4);
         document.getElementById('prod_stock_maximo').value = parseFloat(data.stock_maximo || 0).toFixed(4);
         document.getElementById('prod_stock_actual').value = '0.00'; // Se llenará en fetchDetalleExtra

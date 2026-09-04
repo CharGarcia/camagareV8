@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago
-version: 1.3
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta
+version: 1.4
 orden: 40
 estado: activo
 ---
@@ -62,6 +62,22 @@ El filtro **Documento** permite ver todo junto o solo un tipo:
 Las tarjetas superiores, el gráfico de antigüedad y las exportaciones a PDF y
 Excel respetan este filtro. La columna **Origen** de la tabla indica de qué
 tipo es cada fila.
+
+## Fecha Hasta como fecha de corte
+
+El filtro **Fecha Hasta** no solo limita qué documentos se muestran (los
+emitidos hasta esa fecha): también es la **fecha de corte del saldo**. Los
+cobros, retenciones y notas de crédito o débito fechados **después** de esa
+fecha no se descuentan, así el listado muestra lo que se debía **ese día**.
+
+Ejemplo: una factura cobrada el 31 de mayo aparece pendiente, con su saldo
+completo, en cualquier consulta con Fecha Hasta igual o anterior al 30 de mayo,
+y desaparece de los pendientes a partir del 31.
+
+Aplica por igual a facturas, recibos de venta y **saldos iniciales**; las
+tarjetas, el gráfico de antigüedad y las exportaciones respetan el corte. Sin
+Fecha Hasta, el saldo es el actual. La fecha que manda para un cobro es la
+**fecha del ingreso**.
 
 ## Días vencidos
 
@@ -138,6 +154,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **1.4** — Los **saldos iniciales** respetan la fecha de corte igual que las
+  facturas: con Fecha Hasta, un cobro, retención o nota de crédito posterior a
+  esa fecha ya no descuenta el saldo inicial (antes se usaba el acumulado
+  cobrado sin importar la fecha). Aplica al listado, a las tarjetas y al
+  gráfico de antigüedad.
 - **1.3** — Corrección del cruce del saldo: (1) una retención que sustenta
   varias facturas ya no resta su total completo a cada una, sino solo el valor
   retenido de las líneas de cada factura; (2) las retenciones y las notas de

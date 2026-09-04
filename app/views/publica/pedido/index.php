@@ -329,6 +329,12 @@ $ajax = $base . '/pedido/' . $token;
     const ID_PRODUCTO_PROPINA = <?= (int) ($idProductoPropina ?? 0) ?>;
     const esLineaPropina = (d) => ID_PRODUCTO_PROPINA > 0 && parseInt(d.id_producto, 10) === ID_PRODUCTO_PROPINA;
 
+    // Producto marcado "no aplica recargo de servicio" (envases, empaques, etc.):
+    // igual que la propina voluntaria, no genera recargo, aunque se cobre como
+    // una línea normal. Mismo criterio que el salón y PosVentaService::cobrar().
+    const excluyeRecargo = (d) => d.excluir_recargo_servicio === true || d.excluir_recargo_servicio === 'true'
+        || d.excluir_recargo_servicio == 1 || d.excluir_recargo_servicio === 't';
+
     // El subtotal de la línea (comanda_detalle.subtotal) es sin impuestos. El
     // IVA se redondea LÍNEA POR LÍNEA, igual que en el salón y que
     // PosVentaService::cobrar() al emitir: agrupar y redondear al final daría a
@@ -344,7 +350,7 @@ $ajax = $base . '/pedido/' . $token;
     // qué está pagando antes de confirmar.
     function servicioDe(lineas) {
         if (!APLICA_SERVICIO || PORCENTAJE_SERVICIO <= 0) return 0;
-        const base = lineas.reduce((a, d) => esLineaPropina(d) ? a : a + (parseFloat(d.subtotal) || 0), 0);
+        const base = lineas.reduce((a, d) => (esLineaPropina(d) || excluyeRecargo(d)) ? a : a + (parseFloat(d.subtotal) || 0), 0);
         return round2(round2(base) * PORCENTAJE_SERVICIO / 100);
     }
 
@@ -647,7 +653,11 @@ $ajax = $base . '/pedido/' . $token;
         // El recargo por servicio de esta parte de la cuenta, para que el total
         // que ve el cliente sea el mismo que le va a cobrar Payphone. Se manda
         // id_producto porque servicioDe() debe dejar fuera la línea de propina.
-        const servicio = servicioDe(marcados.map(chk => ({ subtotal: chk.dataset.base, id_producto: chk.dataset.idProducto })));
+        const servicio = servicioDe(marcados.map(chk => ({
+            subtotal: chk.dataset.base,
+            id_producto: chk.dataset.idProducto,
+            excluir_recargo_servicio: chk.dataset.excluyeRecargo === '1',
+        })));
         // La propina que escribe el cliente se suma tal cual: no paga impuestos
         // ni genera recargo por servicio.
         const propina = propinaEscrita();
@@ -695,7 +705,7 @@ $ajax = $base . '/pedido/' . $token;
         if (!lineas.length) { swalError('No tienes ítems entregados pendientes por pagar.'); return; }
         document.getElementById('pq-cuenta-items').innerHTML = lineas.map(d => `
             <label class="pq-cuenta-item mb-0">
-                <input type="checkbox" class="form-check-input mt-0" checked data-total="${lineaConIva(d)}" data-base="${d.subtotal}" data-pct="${d.porcentaje_iva || 0}" data-id-producto="${d.id_producto || ''}">
+                <input type="checkbox" class="form-check-input mt-0" checked data-total="${lineaConIva(d)}" data-base="${d.subtotal}" data-pct="${d.porcentaje_iva || 0}" data-id-producto="${d.id_producto || ''}" data-excluye-recargo="${excluyeRecargo(d) ? '1' : ''}">
                 <span class="nombre">${cantidad(d.cantidad)} x ${escapeHtml(d.descripcion)}</span>
                 <span class="total">${money(lineaConIva(d))}</span>
             </label>`).join('');

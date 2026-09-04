@@ -256,6 +256,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         }
         if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
         if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
+        [$fCob, $fRet, $fNc] = $this->corteSaldoInicialCxc($filtros, $params);
 
         $sql = "
             SELECT
@@ -266,29 +267,11 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COUNT(*) FILTER (WHERE sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE) AS vencidas
             FROM (
                 SELECT s.fecha_vencimiento,
-                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend
-                FROM saldos_iniciales_cxc s
-                LEFT JOIN LATERAL (
-                    SELECT SUM(rd.valor_retenido) AS retenido
-                    FROM retencion_venta_detalle rd
-                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
-                    WHERE r.eliminado = false
-                      AND r.id_empresa = s.id_empresa
-                      AND r.id_venta IS NULL
-                      AND r.id_cliente = s.id_cliente
-                      AND rd.num_doc_sustento IS NOT NULL
-                      AND rd.num_doc_sustento <> ''
-                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
-                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM ventas_cabecera vc
-                          WHERE vc.id_empresa = s.id_empresa
-                            AND vc.eliminado = false
-                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
-                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      )
-                ) ret ON true"
-                . $this->lateralNcSaldoInicial() . "
+                       (s.saldo_inicial - cob.cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend
+                FROM saldos_iniciales_cxc s"
+                . $this->lateralCobradoSaldoInicial($fCob)
+                . $this->lateralRetSaldoInicial($fRet)
+                . $this->lateralNcSaldoInicial($fNc) . "
                 WHERE {$where}
             ) sub
         ";
@@ -393,6 +376,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         }
         if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
         if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
+        [$fCob, $fRet, $fNc] = $this->corteSaldoInicialCxc($filtros, $params);
 
         $sql = "
             SELECT
@@ -402,31 +386,13 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(SUM(CASE WHEN dv BETWEEN 61 AND 90 THEN pend ELSE 0 END), 0) AS tramo_61_90,
                 COALESCE(SUM(CASE WHEN dv > 90            THEN pend ELSE 0 END), 0) AS tramo_mas_90
             FROM (
-                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend,
+                SELECT (s.saldo_inicial - cob.cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend,
                        CASE WHEN s.fecha_vencimiento IS NULL THEN 0
                             ELSE (CURRENT_DATE - s.fecha_vencimiento)::int END AS dv
-                FROM saldos_iniciales_cxc s
-                LEFT JOIN LATERAL (
-                    SELECT SUM(rd.valor_retenido) AS retenido
-                    FROM retencion_venta_detalle rd
-                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
-                    WHERE r.eliminado = false
-                      AND r.id_empresa = s.id_empresa
-                      AND r.id_venta IS NULL
-                      AND r.id_cliente = s.id_cliente
-                      AND rd.num_doc_sustento IS NOT NULL
-                      AND rd.num_doc_sustento <> ''
-                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
-                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM ventas_cabecera vc
-                          WHERE vc.id_empresa = s.id_empresa
-                            AND vc.eliminado = false
-                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
-                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      )
-                ) ret ON true"
-                . $this->lateralNcSaldoInicial() . "
+                FROM saldos_iniciales_cxc s"
+                . $this->lateralCobradoSaldoInicial($fCob)
+                . $this->lateralRetSaldoInicial($fRet)
+                . $this->lateralNcSaldoInicial($fNc) . "
                 WHERE {$where}
             ) sub
             WHERE sub.pend > 0
@@ -953,12 +919,96 @@ class CuentasPorCobrarRepository extends BaseRepository
     // ─────────────────────────────────────────────────────────────────────
 
     /**
+     * Corte de fecha para los abonos de un saldo inicial CxC (misma regla que
+     * los CTEs cobrado/retenido/nc_aplic de las facturas): con "Fecha Hasta",
+     * un cobro, retención o NC fechado después del corte NO reduce el saldo,
+     * así el saldo inicial sigue pendiente hasta el día anterior al cobro.
+     *
+     * Devuelve [filtroCobro, filtroRet, filtroNc] para los tres LATERAL y
+     * registra los parámetros (placeholders distintos: PDO/pgsql no admite
+     * repetirlos). Sin corte, los tres filtros van vacíos.
+     */
+    private function corteSaldoInicialCxc(array $filtros, array &$params): array
+    {
+        $fh = !empty($filtros['fecha_hasta']) ? (string)$filtros['fecha_hasta'] : null;
+        if ($fh === null) {
+            return ['', '', ''];
+        }
+        $params[':si_cob_hasta'] = $fh;
+        $params[':si_ret_hasta'] = $fh;
+        $params[':si_nc_hasta']  = $fh;
+        return [
+            "AND ic.fecha_emision <= :si_cob_hasta",
+            "AND r.fecha_emision <= :si_ret_hasta",
+            "AND ncc.fecha_emision <= :si_nc_hasta",
+        ];
+    }
+
+    /**
+     * JOIN LATERAL con lo cobrado de un saldo inicial CxC. Alias `cob`, columna
+     * `cobrado`. Sin corte devuelve el acumulado guardado (monto_cobrado, que
+     * SaldosInicialesRepository::actualizarMontoCobradoCxc deriva de estos
+     * mismos ingresos); con corte lo recalcula desde ingresos_detalle solo con
+     * los ingresos fechados hasta la fecha.
+     */
+    private function lateralCobradoSaldoInicial(string $filtroFecha = ''): string
+    {
+        if ($filtroFecha === '') {
+            return "
+                LEFT JOIN LATERAL (SELECT s.monto_cobrado AS cobrado) cob ON true";
+        }
+        return "
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(id2.monto_cobrado), 0) AS cobrado
+                    FROM ingresos_detalle id2
+                    INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
+                    WHERE id2.tipo_documento = 'SALDO_INICIAL'
+                      AND id2.id_referencia_documento = s.id
+                      AND ic.estado    != 'anulado'
+                      AND ic.eliminado  = false
+                      {$filtroFecha}
+                ) cob ON true";
+    }
+
+    /**
+     * JOIN LATERAL que suma lo retenido sobre un saldo inicial CxC (retenciones
+     * sin id_venta cuyo sustento coincide con el nro_documento del saldo, del
+     * mismo cliente). Alias `ret`, columna `retenido`. La guarda NOT EXISTS
+     * evita duplicar cuando el número también corresponde a una factura real.
+     */
+    private function lateralRetSaldoInicial(string $filtroFecha = ''): string
+    {
+        return "
+                LEFT JOIN LATERAL (
+                    SELECT SUM(rd.valor_retenido) AS retenido
+                    FROM retencion_venta_detalle rd
+                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                    WHERE r.eliminado = false
+                      AND r.id_empresa = s.id_empresa
+                      AND r.id_venta IS NULL
+                      AND r.id_cliente = s.id_cliente
+                      AND rd.num_doc_sustento IS NOT NULL
+                      AND rd.num_doc_sustento <> ''
+                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      {$filtroFecha}
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ret ON true";
+    }
+
+    /**
      * JOIN LATERAL que suma las notas de crédito aplicadas a un saldo inicial CxC
      * (match por número de documento normalizado). Alias `ncsi`, columna `nc_total`.
      * La guarda NOT EXISTS evita duplicar el descuento cuando el número también
      * corresponde a una factura real (esa NC ya la resta el listado de facturas).
      */
-    private function lateralNcSaldoInicial(): string
+    private function lateralNcSaldoInicial(string $filtroFecha = ''): string
     {
         return "
                 LEFT JOIN LATERAL (
@@ -969,6 +1019,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                       AND ncc.id_empresa = s.id_empresa
                       AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
                           = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      {$filtroFecha}
                       AND NOT EXISTS (
                           SELECT 1 FROM ventas_cabecera vc
                           WHERE vc.id_empresa = s.id_empresa
@@ -983,12 +1034,14 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         // Pendiente real = saldo_inicial - cobrado - retenido - NC. Lo retenido y
         // las NC se calculan al vuelo (igual que en las facturas normales); no se
-        // almacenan en el saldo inicial.
-        $pend     = '(s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0))';
-        $aplicado = '(s.monto_cobrado + COALESCE(ret.retenido, 0) + COALESCE(ncsi.nc_total, 0))';
+        // almacenan en el saldo inicial. Con "Fecha Hasta", los tres abonos se
+        // cortan a esa fecha (ver corteSaldoInicialCxc).
+        $pend     = '(s.saldo_inicial - cob.cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0))';
+        $aplicado = '(cob.cobrado + COALESCE(ret.retenido, 0) + COALESCE(ncsi.nc_total, 0))';
 
         $where  = "s.id_empresa = :id_empresa AND s.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
+        [$fCob, $fRet, $fNc] = $this->corteSaldoInicialCxc($filtros, $params);
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
             if ($filtros['estado'] === 'PAGADO') {
@@ -1019,7 +1072,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                     s.id, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
                     s.ruc_cliente, s.nombre_cliente,
                     CAST(s.saldo_inicial          AS NUMERIC(16,2)) AS saldo_inicial,
-                    CAST(s.monto_cobrado          AS NUMERIC(16,2)) AS monto_cobrado,
+                    CAST(cob.cobrado              AS NUMERIC(16,2)) AS monto_cobrado,
                     CAST(COALESCE(ret.retenido,0) AS NUMERIC(16,2)) AS monto_retenido,
                     CAST(COALESCE(ncsi.nc_total,0) AS NUMERIC(16,2)) AS monto_nc,
                     CAST({$pend}                  AS NUMERIC(16,2)) AS saldo_pendiente,
@@ -1031,28 +1084,10 @@ class CuentasPorCobrarRepository extends BaseRepository
                     s.observaciones,
                     CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
                          THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido
-                FROM saldos_iniciales_cxc s
-                LEFT JOIN LATERAL (
-                    SELECT SUM(rd.valor_retenido) AS retenido
-                    FROM retencion_venta_detalle rd
-                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
-                    WHERE r.eliminado = false
-                      AND r.id_empresa = s.id_empresa
-                      AND r.id_venta IS NULL
-                      AND r.id_cliente = s.id_cliente
-                      AND rd.num_doc_sustento IS NOT NULL
-                      AND rd.num_doc_sustento <> ''
-                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
-                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM ventas_cabecera vc
-                          WHERE vc.id_empresa = s.id_empresa
-                            AND vc.eliminado = false
-                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
-                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      )
-                ) ret ON true"
-                . $this->lateralNcSaldoInicial() . "
+                FROM saldos_iniciales_cxc s"
+                . $this->lateralCobradoSaldoInicial($fCob)
+                . $this->lateralRetSaldoInicial($fRet)
+                . $this->lateralNcSaldoInicial($fNc) . "
                 WHERE {$where}
                 ORDER BY s.fecha_emision ASC, s.nro_documento ASC";
 

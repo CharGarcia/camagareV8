@@ -597,6 +597,14 @@ window.addEventListener('pageshow', function (e) {
     const ID_PRODUCTO_PROPINA = <?= (int) ($empresaConfig['id_producto_propina'] ?? 0) ?>;
     const esLineaPropina = (d) => ID_PRODUCTO_PROPINA > 0 && parseInt(d.id_producto, 10) === ID_PRODUCTO_PROPINA;
 
+    // Producto marcado "no aplica recargo de servicio" (envases, empaques, etc.):
+    // igual que la propina voluntaria, queda fuera de la base sobre la que se
+    // calcula el recargo, aunque se facture como una línea normal. Mismo criterio
+    // que PosVentaService::cobrar() al emitir — esto solo evita que la pantalla
+    // muestre un recargo mayor al que realmente se va a cobrar.
+    const excluyeRecargo = (d) => d.excluir_recargo_servicio === true || d.excluir_recargo_servicio === 'true'
+        || d.excluir_recargo_servicio == 1 || d.excluir_recargo_servicio === 't';
+
     /**
      * ¿Esta línea todavía se puede tocar? Sí mientras no esté en una cuenta, o
      * esté en una que aún no se cobró: el cliente puede pedir la cuenta y
@@ -626,12 +634,13 @@ window.addEventListener('pageshow', function (e) {
     // — igual que PosVentaService, que aplica el porcentaje sobre el subtotal
     // del documento al emitirlo.
     function calcularTotales(vivas) {
-        let subtotal = 0, totalImpuestos = 0, propina = 0;
+        let subtotal = 0, totalImpuestos = 0, propina = 0, excluidoServicio = 0;
         const impuestos = {};
         vivas.forEach(d => {
             const base = round2(d.subtotal);
             subtotal = round2(subtotal + base);
             if (esLineaPropina(d)) propina = round2(propina + base);
+            if (excluyeRecargo(d)) excluidoServicio = round2(excluidoServicio + base);
             const pct = parseFloat(d.porcentaje_iva || 0);
             if (pct > 0) {
                 const lbl = `IVA ${pct}%`;
@@ -641,9 +650,10 @@ window.addEventListener('pageshow', function (e) {
             }
         });
         // El recargo se calcula sobre el CONSUMO, así que la propina voluntaria
-        // —que es una línea más— se descuenta de la base. Mismo criterio que
-        // PosVentaService al emitir: si no, dejar propina subiría el recargo.
-        const baseServicio = round2(subtotal - propina);
+        // —que es una línea más— y los productos marcados "no aplica recargo de
+        // servicio" (envases, empaques) se descuentan de la base. Mismo criterio
+        // que PosVentaService al emitir.
+        const baseServicio = round2(subtotal - propina - excluidoServicio);
         const servicio = (aplicaServicio && porcentajeServicio > 0)
             ? round2(baseServicio * porcentajeServicio / 100)
             : 0;

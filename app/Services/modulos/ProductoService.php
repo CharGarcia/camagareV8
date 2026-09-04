@@ -104,6 +104,7 @@ class ProductoService
                 'stock_maximo'          => !empty($data['stock_maximo']) ? (float)$data['stock_maximo'] : 0,
                 'opciones'              => !empty($data['opciones']) ? $data['opciones'] : '{"compra":true,"venta":true}',
                 'ubicacion'             => !empty($data['ubicacion']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['ubicacion'])) : null,
+                'excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']),
             ];
 
             $id = $this->repository->create($insertData);
@@ -387,6 +388,7 @@ class ProductoService
                 'stock_maximo'          => !empty($data['stock_maximo']) ? (float)$data['stock_maximo'] : 0,
                 'opciones'              => !empty($data['opciones']) ? $data['opciones'] : '{"compra":true,"venta":true}',
                 'ubicacion'             => !empty($data['ubicacion']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['ubicacion'])) : null,
+                'excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']),
             ];
 
             $this->repository->update($id, $idEmpresa, $updateData);

@@ -452,6 +452,7 @@ class CajaPosController extends BaseModuloController
         $numeroOperacion = trim($_POST['numero_operacion'] ?? '');
         $fechaCobro = trim($_POST['fecha_cobro'] ?? '');
         $items = json_decode($_POST['items'] ?? '[]', true);
+        $tipoEntrega = strtolower(trim($_POST['tipo_entrega'] ?? 'local')) === 'domicilio' ? 'domicilio' : 'local';
 
         try {
             if (!is_array($items)) {
@@ -485,7 +486,8 @@ class CajaPosController extends BaseModuloController
                 // la configuración, no el navegador.
                 'porcentaje_propina' => $this->ventaService->porcentajeServicioVenta(
                     $idEmpresa,
-                    in_array((string) ($_POST['aplica_servicio'] ?? ''), ['1', 'true', 'on'], true)
+                    in_array((string) ($_POST['aplica_servicio'] ?? ''), ['1', 'true', 'on'], true),
+                    $tipoEntrega
                 ),
                 // Cobro de mostrador: se espera la autorización del SRI antes de
                 // responder, para que la tirilla que imprime el cajero ya salga

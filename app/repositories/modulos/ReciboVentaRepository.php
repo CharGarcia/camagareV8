@@ -692,7 +692,8 @@ class ReciboVentaRepository extends BaseRepository
     /** Tarifa de IVA (id, porcentaje_iva, codigo SRI) configurada en el producto, más su código principal. */
     public function getTarifaIvaProducto(int $idProducto): ?array
     {
-        $sql = "SELECT ti.id, ti.porcentaje_iva, ti.codigo, p.codigo AS codigo_producto
+        $sql = "SELECT ti.id, ti.porcentaje_iva, ti.codigo, p.codigo AS codigo_producto,
+                       p.excluir_recargo_servicio
                 FROM productos p
                 JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                 WHERE p.id = ?";

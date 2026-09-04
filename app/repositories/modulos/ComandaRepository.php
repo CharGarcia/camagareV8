@@ -115,10 +115,12 @@ class ComandaRepository extends BaseRepository
     {
         // La propina voluntaria viaja como una línea más, pero no genera recargo
         // por servicio: se excluye de la base igual que en PosVentaService y en
-        // el pie de la comanda, o el tablero mostraría un total mayor.
+        // el pie de la comanda, o el tablero mostraría un total mayor. Igual se
+        // excluye un producto marcado "no aplica recargo de servicio" (envases,
+        // empaques, etc.) — mismo criterio en los tres sitios.
         $condPropina = $idProductoPropina > 0
-            ? "d.id_producto IS DISTINCT FROM " . $idProductoPropina
-            : "true";
+            ? "d.id_producto IS DISTINCT FROM " . $idProductoPropina . " AND COALESCE(p.excluir_recargo_servicio, false) = false"
+            : "COALESCE(p.excluir_recargo_servicio, false) = false";
 
         // Aviso de "esta mesa pidió desde el QR". Mientras falte su migración se
         // devuelve en false, para no tumbar el tablero.
@@ -368,7 +370,8 @@ class ComandaRepository extends BaseRepository
      * producto. Sin eso, la pantalla mostraría una y la factura saldría con otra.
      */
     private const SQL_SELECT_IVA = "COALESCE(tm.porcentaje_iva, tp.porcentaje_iva, 0) AS porcentaje_iva,
-                COALESCE(mi.id_tarifa_iva, p.tarifa_iva) AS id_tarifa_iva";
+                COALESCE(mi.id_tarifa_iva, p.tarifa_iva) AS id_tarifa_iva,
+                COALESCE(p.excluir_recargo_servicio, false) AS excluir_recargo_servicio";
     private const SQL_JOIN_IVA = "LEFT JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN tarifa_iva tp ON tp.id = p.tarifa_iva
                 LEFT JOIN menu_items mi ON mi.id = d.id_menu_item

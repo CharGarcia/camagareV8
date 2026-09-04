@@ -230,6 +230,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 No tienes permiso para generar Facturas ni Recibos de Venta. Pide que te asignen uno de los dos.
             </div>
             <?php endif; ?>
+            <div class="px-3 pt-3 pb-2 border-bottom d-none" id="pv-wrap-tipo-entrega">
+                <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Tipo de entrega</label>
+                <select id="pv-tipo-entrega" class="form-select form-select-sm">
+                    <option value="local" selected>En el local</option>
+                    <option value="domicilio">A domicilio</option>
+                </select>
+            </div>
             <div class="pv-cliente px-3 pt-3 pb-2 border-bottom">
                 <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Cliente</label>
                 <div id="pv-cliente-actual" class="d-flex align-items-center justify-content-between gap-2">
@@ -1007,7 +1014,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         if (!cart.length) return;
         const fmt = (n) => parseFloat(n || 0).toFixed(2);
 
-        let subtotal = 0, totalIva = 0;
+        let subtotal = 0, totalIva = 0, baseServicioPrevia = 0;
         const impMap = {};
         cart.forEach(l => {
             const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
@@ -1015,9 +1022,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const ivaLinea = baseNeta * l.pct_iva / 100;
             const lbl = `IVA ${l.pct_iva}%`;
             impMap[lbl] = (impMap[lbl] || 0) + ivaLinea;
+            if (!l.excluir_recargo) baseServicioPrevia += baseNeta;
         });
         Object.values(impMap).forEach(v => totalIva += v);
-        const servicioPrevia = (aplicaServicio && SERVICIO_PCT > 0) ? Math.round(subtotal * SERVICIO_PCT) / 100 : 0;
+        const servicioPrevia = (aplicaServicio && SERVICIO_PCT > 0 && !esDomicilio()) ? Math.round(baseServicioPrevia * SERVICIO_PCT) / 100 : 0;
         const total = subtotal + totalIva + servicioPrevia;
 
         const lineas = cart.map(l => {
@@ -1233,6 +1241,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
             id_producto_variante: idVariante,
             id_unidad_medida: idUnidadMedida,
             descuento: 0,
+            // No suma a la base del recargo por servicio (envases, empaques, etc.).
+            // El cobro real lo decide siempre el servidor (PosVentaService::cobrar());
+            // esto solo evita que la vista previa muestre un recargo mayor al que se va a cobrar.
+            excluir_recargo: (p.excluir_recargo_servicio === true || p.excluir_recargo_servicio === 'true' || p.excluir_recargo_servicio == 1 || p.excluir_recargo_servicio === 't'),
         });
         renderCart();
         enfocarBuscador();
@@ -1479,18 +1491,42 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const SERVICIO_PCT = <?= (float) ($servicio['porcentaje'] ?? 0) ?>;
     let aplicaServicio = SERVICIO_MODO !== 'no';
 
+    // Tipo de entrega: 'local' | 'domicilio'. El recargo por servicio retribuye
+    // la atención de mesa/salón — un pedido a domicilio no la recibe, así que
+    // nunca lleva recargo (ni siquiera en modo 'obligatorio'). El monto final lo
+    // vuelve a forzar el servidor en PosVentaService::porcentajeServicioVenta();
+    // esto solo evita que el cajero tenga que acordarse de quitarlo a mano.
+    const $tipoEntrega = document.getElementById('pv-tipo-entrega');
+    const $wrapTipoEntrega = document.getElementById('pv-wrap-tipo-entrega');
+    if ($wrapTipoEntrega) $wrapTipoEntrega.classList.toggle('d-none', SERVICIO_MODO === 'no');
+
+    function esDomicilio() {
+        return $tipoEntrega ? $tipoEntrega.value === 'domicilio' : false;
+    }
+
+    $tipoEntrega?.addEventListener('change', () => renderCart());
+
     /**
      * Fila del recargo en los totales del carrito.
      * - 'no'          → no aparece.
      * - 'obligatorio' → se ve el valor, sin opción de quitarlo.
      * - 'opcional'    → con enlace Quitar/Aplicar. Quitado sigue visible, para
      *                   que el cajero no lo dé por perdido sin darse cuenta.
+     * - Tipo de entrega 'domicilio' → nunca aplica, sin importar el modo.
      */
     function renderServicio(valor) {
         const $fila = document.getElementById('pv-fila-servicio');
         const $btn = document.getElementById('pv-btn-servicio');
         if (!$fila) return;
         if (SERVICIO_MODO === 'no') { $fila.classList.add('d-none'); return; }
+
+        if (esDomicilio()) {
+            $fila.classList.remove('d-none');
+            document.getElementById('pv-servicio-label').textContent = 'Servicio (no aplica a domicilio)';
+            document.getElementById('pv-servicio').textContent = money(0);
+            $btn.classList.add('d-none');
+            return;
+        }
 
         $fila.classList.remove('d-none');
         document.getElementById('pv-servicio-label').textContent =
@@ -1513,14 +1549,15 @@ $rutaAjax = $base . '/' . $rutaModulo;
     });
 
     function totalCarrito() {
-        let subtotal = 0, iva = 0;
+        let subtotal = 0, iva = 0, baseServicio = 0;
         cart.forEach(l => {
             const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
             subtotal += baseNeta;
             iva += baseNeta * l.pct_iva / 100;
+            if (!l.excluir_recargo) baseServicio += baseNeta;
         });
-        const servicio = (aplicaServicio && SERVICIO_PCT > 0)
-            ? Math.round(subtotal * SERVICIO_PCT) / 100
+        const servicio = (aplicaServicio && SERVICIO_PCT > 0 && !esDomicilio())
+            ? Math.round(baseServicio * SERVICIO_PCT) / 100
             : 0;
         return { subtotal, iva, servicio, total: subtotal + iva + servicio };
     }
@@ -2057,6 +2094,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         // Solo dice si el cajero lo dejó puesto: el porcentaje y si se permite
         // quitarlo los resuelve el servidor desde la configuración.
         fd.append('aplica_servicio', aplicaServicio ? '1' : '0');
+        fd.append('tipo_entrega', esDomicilio() ? 'domicilio' : 'local');
         if (bancoVisible) {
             fd.append('tipo_operacion_bancaria', $tipoOpBanco.value);
             fd.append('numero_operacion', $numOpBanco.value.trim());

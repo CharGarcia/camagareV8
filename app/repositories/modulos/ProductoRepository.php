@@ -254,13 +254,15 @@ class ProductoRepository extends BaseRepository
                     codigo_auxiliar, codigo_barras, precio_base, tipo_produccion,
                     tarifa_iva, id_medida, id_tipo_medida, status, valor_ice, codigo_ice,
                     nombre_ice, inventariable, id_categoria, id_marca, imagen, costo_producto,
-                    eliminado, created_at, stock_minimo, stock_maximo, id_ice, opciones, ubicacion
+                    eliminado, created_at, stock_minimo, stock_maximo, id_ice, opciones, ubicacion,
+                    excluir_recargo_servicio
                 ) VALUES (
                     :id_empresa, :id_usuario, :created_by, :codigo, :nombre,
                     :codigo_auxiliar, :codigo_barras, :precio_base, :tipo_produccion,
                     :tarifa_iva, :id_medida, :id_tipo_medida, :status, :valor_ice, :codigo_ice,
                     :nombre_ice, :inventariable, :id_categoria, :id_marca, :imagen, :costo_producto,
-                    :eliminado, CURRENT_TIMESTAMP, :stock_minimo, :stock_maximo, :id_ice, :opciones, :ubicacion
+                    :eliminado, CURRENT_TIMESTAMP, :stock_minimo, :stock_maximo, :id_ice, :opciones, :ubicacion,
+                    :excluir_recargo_servicio
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -291,6 +293,7 @@ class ProductoRepository extends BaseRepository
             ':id_ice'                 => !empty($data['id_ice']) ? (int)$data['id_ice'] : null,
             ':opciones'               => $data['opciones'] ?? '{"compra":true,"venta":true}',
             ':ubicacion'              => !empty($data['ubicacion']) ? $data['ubicacion'] : null,
+            ':excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']) ? 'true' : 'false',
         ]);
         return (int) $this->lastInsertId();
     }
@@ -321,6 +324,7 @@ class ProductoRepository extends BaseRepository
                 id_ice = :id_ice,
                 opciones = :opciones,
                 ubicacion = :ubicacion,
+                excluir_recargo_servicio = :excluir_recargo_servicio,
                 id_usuario = :id_usuario,
                 updated_by = :updated_by,
                 updated_at = CURRENT_TIMESTAMP
@@ -350,6 +354,7 @@ class ProductoRepository extends BaseRepository
             ':id_ice'                 => !empty($data['id_ice']) ? (int)$data['id_ice'] : null,
             ':opciones'               => $data['opciones'] ?? '{"compra":true,"venta":true}',
             ':ubicacion'              => !empty($data['ubicacion']) ? $data['ubicacion'] : null,
+            ':excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']) ? 'true' : 'false',
             ':id_usuario'             => $data['id_usuario'],
             ':updated_by'             => $data['id_usuario'],
             ':id'                     => $id,
