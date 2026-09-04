@@ -406,7 +406,8 @@ class ReporteCarteraRepository extends BaseRepository
     /**
      * Cuerpo UNION ALL de los movimientos de cartera de proveedores. NC y ND
      * de compra viven como filas de compras_cabecera (tipo_comprobante
-     * 04/05), no en tablas propias.
+     * 04/05), no en tablas propias. Los cargos son TODOS los tipos que generan
+     * deuda (ver TiposComprobanteCompra), no solo la factura '01'.
      */
     private function unionProveedor(int $idEmpresa, ?int $idProveedor, ?string $fechaDesde, ?string $fechaHasta, array &$params, ?string $documento = null): string
     {
@@ -463,15 +464,20 @@ class ReporteCarteraRepository extends BaseRepository
             ':emp5' => $idEmpresa, ':emp6' => $idEmpresa, ':emp7' => $idEmpresa, ':emp8' => $idEmpresa,
         ];
 
+        // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…),
+        // no solo '01': mismo criterio que Cuentas por Pagar y que el asiento de compra.
+        $esCargo    = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
+        $nombreTipo = \App\Helpers\TiposComprobanteCompra::sqlNombre('c.tipo_comprobante');
+
         return "
-                -- FACTURAS DE COMPRA (CARGO) — solo el ambiente actual, como CxP
+                -- COMPRAS (CARGO): facturas, notas de venta y demás comprobantes con deuda — solo el ambiente actual, como CxP
                 SELECT c.fecha_emision::date AS fecha, 'CARGO'::text AS tipo_movimiento, 1 AS signo, 'COMPRA'::text AS origen,
                        CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) AS numero_documento,
-                       'Factura de Compra'::text AS detalle, c.importe_total AS monto, c.id AS id_orden,
+                       ({$nombreTipo})::text AS detalle, c.importe_total AS monto, c.id AS id_orden,
                        {$eCompra} AS id_entidad
                 FROM compras_cabecera c
                 WHERE c.id_empresa = :emp1 AND c.eliminado = false
-                  AND c.tipo_comprobante = '01'
+                  AND {$esCargo}
                   AND c.tipo_ambiente = '{$amb}' {$wCompra} {$fCompra} {$dCompra}
 
                 UNION ALL
@@ -647,13 +653,14 @@ class ReporteCarteraRepository extends BaseRepository
         };
 
         if ($tipo === 'PROVEEDOR') {
+            $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
             $params += [':emp1' => $idEmpresa, ':emp2' => $idEmpresa, ':emp3' => $idEmpresa, ':emp4' => $idEmpresa, ':emp_n' => $idEmpresa];
             $union = "
                 SELECT 'COMPRA'::text AS origen,
                        (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero,
                        c.fecha_emision::date AS fecha, c.importe_total AS total, c.id_proveedor AS id_entidad
                 FROM compras_cabecera c
-                WHERE c.id_empresa = :emp1 AND c.eliminado = false AND c.tipo_comprobante = '01'
+                WHERE c.id_empresa = :emp1 AND c.eliminado = false AND {$esCargo}
                   AND c.tipo_ambiente = '{$amb}' {$in('c.id_proveedor', 'c')}
                 UNION ALL
                 SELECT 'LIQUIDACION', (l.establecimiento || '-' || l.punto_emision || '-' || l.secuencial),

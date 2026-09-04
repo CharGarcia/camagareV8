@@ -294,6 +294,7 @@ class PagoAutomaticoProveedorService
 
         $numDocExpr = "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)";
 
+        $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante'); // todo comprobante con deuda, no solo '01' (igual que CxP)
         $sql = "
             WITH pagado AS (
                 SELECT ed.id_referencia_documento AS id_doc
@@ -342,7 +343,7 @@ class PagoAutomaticoProveedorService
             WHERE c.id_empresa       = :id_empresa
               AND c.id_proveedor     = :id_proveedor
               AND c.eliminado        = false
-              AND c.tipo_comprobante = '01'
+              AND {$esCargo}
               AND c.fecha_emision   <= :fecha_hasta
               AND pg.id_doc IS NULL
               {$filtroAmb}

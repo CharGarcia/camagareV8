@@ -195,6 +195,8 @@ class CuentasPorPagarRepository extends BaseRepository
         $fvlExpr = $this->exprFechaVencLiquid('l');
         $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
 
+        // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…), no solo '01'.
+        $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
         $sql = "
             WITH
             pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
@@ -245,7 +247,7 @@ class CuentasPorPagarRepository extends BaseRepository
                  AND ret.id_liquidacion IS NULL
                 WHERE c.id_empresa       = :id_empresa
                   AND c.eliminado        = false
-                  AND c.tipo_comprobante = '01'
+                  AND {$esCargo}
                   AND c.tipo_ambiente    = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)
 
                 UNION ALL
@@ -344,6 +346,8 @@ class CuentasPorPagarRepository extends BaseRepository
         $fvlExpr = $this->exprFechaVencLiquid('l');
         $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
 
+        // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…), no solo '01'.
+        $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
         $sql = "
             WITH
             pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
@@ -368,7 +372,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN nc_nd nn  ON nn.id_empresa=c.id_empresa AND nn.id_proveedor=c.id_proveedor
                                    AND nn.documento_modificado=CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
-                WHERE c.id_empresa=:id_empresa AND c.eliminado=false AND c.tipo_comprobante='01'
+                WHERE c.id_empresa=:id_empresa AND c.eliminado=false AND {$esCargo}
                   AND c.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta)
 
                 UNION ALL
@@ -526,6 +530,8 @@ class CuentasPorPagarRepository extends BaseRepository
         $fvlExpr = $this->exprFechaVencLiquid('l');
         $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
 
+        // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…), no solo '01'.
+        $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
         $sql = "
             WITH
             pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
@@ -550,7 +556,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN nc_nd nn  ON nn.id_empresa=c.id_empresa AND nn.id_proveedor=c.id_proveedor
                                    AND nn.documento_modificado=CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
-                WHERE c.id_empresa=:id_empresa AND c.eliminado=false AND c.tipo_comprobante='01'
+                WHERE c.id_empresa=:id_empresa AND c.eliminado=false AND {$esCargo}
                   AND c.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta)
 
                 UNION ALL
@@ -773,6 +779,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE fe.id=:id AND ic.id_empresa=:id_empresa AND fe.eliminado=false AND ic.eliminado=false
             ";
         } else {
+            // Todo comprobante que genera deuda, no solo '01' (mismo criterio que el listado).
+            $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
             $sql = "
                 SELECT c.id,
                        'COMPRA' AS tipo_fuente,
@@ -822,7 +830,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 FROM compras_cabecera c
                 JOIN proveedores p ON p.id=c.id_proveedor
                 WHERE c.id=:id AND c.id_empresa=:id_empresa AND c.eliminado=false
-                  AND c.tipo_comprobante='01'
+                  AND {$esCargo}
             ";
         }
 
@@ -905,8 +913,9 @@ class CuentasPorPagarRepository extends BaseRepository
 
     public function getAniosDisponibles(int $idEmpresa): array
     {
+        $esCargoSinAlias = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('tipo_comprobante');
         $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision)::int AS anio FROM compras_cabecera
-                WHERE id_empresa=:id_empresa AND eliminado=false AND tipo_comprobante='01'
+                WHERE id_empresa=:id_empresa AND eliminado=false AND {$esCargoSinAlias}
                 UNION
                 SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision)::int FROM liquidaciones_cabecera
                 WHERE id_empresa=:id_empresa2 AND eliminado=false

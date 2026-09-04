@@ -302,6 +302,7 @@ class ProveedorRepository extends BaseRepository
                 $params[':amb'] = $amb;
             }
 
+             $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante'); // todo comprobante con deuda, no solo '01'
             $sql = "
                 WITH pagado AS (
                     SELECT ed.tipo_documento,
@@ -349,7 +350,7 @@ class ProveedorRepository extends BaseRepository
                     WHERE c.id_empresa       = :id_empresa
                       AND c.id_proveedor     = :id
                       AND c.eliminado        = false
-                      AND c.tipo_comprobante = '01'
+                      AND {$esCargo}
                       {$filtroAmbC}
 
                     UNION ALL

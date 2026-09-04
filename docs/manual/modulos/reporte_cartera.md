@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
 etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado
-version: 1.4
+version: 1.5
 orden: 0
 estado: activo
 ---
@@ -136,8 +136,21 @@ es puramente de lectura.
   si hay Fecha Desde, el saldo mostrado parte de "Saldo Anterior" (todo lo
   anterior a esa fecha), no de cero.
 
+## Qué comprobantes de compra cuentan como deuda
+
+En la cartera de proveedores entra como **cargo** todo comprobante de compra que
+genera una obligación con el proveedor: la factura, la **nota de venta**, la
+liquidación de compra, los documentos de instituciones financieras, las
+planillas de servicios básicos y los demás tipos autorizados por el SRI. Solo
+quedan fuera las notas de crédito (que son abono), las notas de débito (que se
+suman a la factura que modifican), las guías de remisión y los comprobantes de
+retención. La columna *Detalle* indica el tipo de cada documento. Es el mismo
+criterio que usa Cuentas por Pagar y que el asiento contable de la compra, así
+que los tres deben coincidir.
+
 ## Historial de cambios
 
+- **1.5** — La cartera de proveedores incluye todos los comprobantes de compra que generan deuda (notas de venta, documentos financieros, planillas, etc.), no solo la factura. Antes esos documentos tenían asiento de cuenta por pagar pero no aparecían en el reporte.
 - **1.4** — Nuevo filtro **Documento**: buscador de los documentos del
   cliente/proveedor seleccionado; al elegir uno, el estado de cuenta se
   limita a ese documento y a sus abonos (cobros/pagos, retenciones, notas).
