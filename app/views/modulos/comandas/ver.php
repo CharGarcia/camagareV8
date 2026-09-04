@@ -2313,7 +2313,12 @@ window.addEventListener('pageshow', function (e) {
                     ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}
                     ${totalIce > 0 ? `<tr><td>ICE</td><td class="num">$${fmt(totalIce)}</td></tr>` : ''}
-                    ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Propina</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
+                    <!-- El campo <propina> del comprobante es donde viaja el
+                         RECARGO POR SERVICIO (el comprobante electrónico solo
+                         tiene ese campo), así que en la tirilla se llama por su
+                         nombre. La propina voluntaria del cliente no pasa por
+                         aquí: va como una línea más del detalle. -->
+                    ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Servicio</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
                     <tr><td>TOTAL</td><td class="num">$${fmt(total)}</td></tr>
                 </table>
                 ${cab.observaciones ? `<hr class="sep"><div style="font-size:10px;">${escapeHtml(cab.observaciones)}</div>` : ''}

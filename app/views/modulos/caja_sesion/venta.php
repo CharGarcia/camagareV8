@@ -982,7 +982,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}
                     ${totalIce > 0 ? `<tr><td>ICE</td><td class="num">$${fmt(totalIce)}</td></tr>` : ''}
-                    ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Propina</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
+                    <!-- El campo <propina> del comprobante es donde viaja el
+                         RECARGO POR SERVICIO: el comprobante electrónico solo
+                         tiene ese campo. En la tirilla se llama por su nombre.
+                         (La tirilla de Facturas de Venta mantiene "Propina" a
+                         propósito: la usan también empresas que no son
+                         restaurante.) -->
+                    ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Servicio</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
                     <tr><td>TOTAL</td><td class="num">$${fmt(total)}</td></tr>
                 </table>
                 ${cab.observaciones ? `<hr class="sep"><div style="font-size:10px;">${escapeHtml(cab.observaciones)}</div>` : ''}
