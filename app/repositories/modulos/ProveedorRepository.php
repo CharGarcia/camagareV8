@@ -298,11 +298,15 @@ class ProveedorRepository extends BaseRepository
             $filtroAmbL = '';
             if ($amb !== null) {
                 $filtroAmbC = " AND CAST(c.tipo_ambiente AS VARCHAR) = :amb";
-                $filtroAmbL = " AND CAST(l.tipo_ambiente AS VARCHAR) = :amb";
+                $filtroAmbL = " AND (l.tipo_ambiente IS NULL OR CAST(l.tipo_ambiente AS VARCHAR) = :amb)"; // NULL = registro antiguo/migrado, igual que CxP
                 $params[':amb'] = $amb;
             }
 
              $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante'); // todo comprobante con deuda, no solo '01'
+
+             $compraVigente = \App\Helpers\TiposComprobanteCompra::sqlCompraVigente('c.estado'); // anuladas/rechazadas no son deuda
+
+             $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado'); // incluye 'contabilizado', igual que CxP
             $sql = "
                 WITH pagado AS (
                     SELECT ed.tipo_documento,
@@ -350,7 +354,7 @@ class ProveedorRepository extends BaseRepository
                     WHERE c.id_empresa       = :id_empresa
                       AND c.id_proveedor     = :id
                       AND c.eliminado        = false
-                      AND {$esCargo}
+                      AND {$esCargo} AND {$compraVigente}
                       {$filtroAmbC}
 
                     UNION ALL
@@ -366,7 +370,7 @@ class ProveedorRepository extends BaseRepository
                     WHERE l.id_empresa   = :id_empresa
                       AND l.id_proveedor = :id
                       AND l.eliminado    = false
-                      AND LOWER(COALESCE(l.estado,'')) <> 'anulado'
+                      AND {$liqVigente}
                       {$filtroAmbL}
                 )
                 SELECT COALESCE(SUM(total), 0)                                   AS total_bruto,

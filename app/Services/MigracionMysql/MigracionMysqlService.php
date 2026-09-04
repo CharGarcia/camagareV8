@@ -3775,6 +3775,9 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+        // Cruce retención de compra → liquidación: ahora que las liquidaciones existen, se completa el
+        // id_liquidacion de las retenciones (03) ya migradas que sustentan contra ellas.
+        $res['retenciones_cruzadas'] = $this->cruzarRetencionesConLiquidaciones($pg, $idEmpresa);
         return $res;
     }
 
@@ -4417,6 +4420,9 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
             }
         }
+        // Cruce retención de compra → factura de compra: ahora que las compras existen, se completa el
+        // id_compra de las retenciones ya migradas que sustentan contra ellas (retenciones se migran antes).
+        $res['retenciones_cruzadas'] = $this->cruzarRetencionesConCompras($pg, $idEmpresa);
         return $res;
     }
 
@@ -4666,7 +4672,69 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+        // Cruce con el documento sustentado: factura de compra (id_compra) o liquidación (id_liquidacion).
+        // Se corre también al final de Compras y Liquidaciones, porque el orden por defecto migra las
+        // retenciones ANTES que ellas.
+        $res['cruzadas_compra'] = $this->cruzarRetencionesConCompras($pg, $idEmpresa);
+        $res['cruzadas_liquidacion'] = $this->cruzarRetencionesConLiquidaciones($pg, $idEmpresa);
         return $res;
+    }
+
+    /**
+     * Cruza las retenciones de compra migradas con su factura de compra: llena id_compra buscando la
+     * compra del MISMO proveedor cuyo número del proveedor (establecimiento_prov-punto_emision_prov-
+     * secuencial_prov, solo dígitos) coincide con el num_doc_sustento de la retención. Idempotente
+     * (solo toca id_compra NULL). Se llama al final de migrarRetencionesCompra Y de migrarCompras
+     * (el orden por defecto migra retenciones antes que compras, así que quien corra 2º completa el enlace).
+     */
+    private function cruzarRetencionesConCompras(PDO $pg, int $idEmpresa): int
+    {
+        try {
+            $st = $pg->prepare(
+                "UPDATE retencion_compra_cabecera rc
+                    SET id_compra = c.id, updated_at = now()
+                   FROM compras_cabecera c
+                  WHERE rc.id_empresa = :e AND rc.eliminado = false AND rc.id_compra IS NULL
+                    AND rc.tipo_doc_sustento IS DISTINCT FROM '03'
+                    AND rc.num_doc_sustento IS NOT NULL AND rc.num_doc_sustento <> ''
+                    AND c.id_empresa = rc.id_empresa AND c.eliminado = false
+                    AND c.id_proveedor = rc.id_proveedor
+                    AND (COALESCE(c.establecimiento_prov,'') || COALESCE(c.punto_emision_prov,'') || COALESCE(c.secuencial_prov,''))
+                        = regexp_replace(rc.num_doc_sustento, '[^0-9]', '', 'g')"
+            );
+            $st->execute([':e' => $idEmpresa]);
+            return $st->rowCount();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Cruza las retenciones de compra que sustentan contra una LIQUIDACIÓN de compra (tipo_doc_sustento
+     * '03'): llena id_liquidacion emparejando mismo proveedor + número (establecimiento||punto_emision||
+     * secuencial de liquidaciones_cabecera, solo dígitos) con el num_doc_sustento. Idempotente. Se llama
+     * al final de migrarRetencionesCompra Y de migrarLiquidaciones (retenciones se migran antes).
+     */
+    private function cruzarRetencionesConLiquidaciones(PDO $pg, int $idEmpresa): int
+    {
+        try {
+            $st = $pg->prepare(
+                "UPDATE retencion_compra_cabecera rc
+                    SET id_liquidacion = l.id, updated_at = now()
+                   FROM liquidaciones_cabecera l
+                  WHERE rc.id_empresa = :e AND rc.eliminado = false AND rc.id_liquidacion IS NULL
+                    AND rc.tipo_doc_sustento = '03'
+                    AND rc.num_doc_sustento IS NOT NULL AND rc.num_doc_sustento <> ''
+                    AND l.id_empresa = rc.id_empresa AND l.eliminado = false
+                    AND l.id_proveedor = rc.id_proveedor
+                    AND (COALESCE(l.establecimiento,'') || COALESCE(l.punto_emision,'') || COALESCE(l.secuencial,''))
+                        = regexp_replace(rc.num_doc_sustento, '[^0-9]', '', 'g')"
+            );
+            $st->execute([':e' => $idEmpresa]);
+            return $st->rowCount();
+        } catch (\Throwable $e) {
+            return 0;
+        }
     }
 
     /** Migra retenciones de venta (cabecera + detalle) resolviendo cliente vía el mapa. */

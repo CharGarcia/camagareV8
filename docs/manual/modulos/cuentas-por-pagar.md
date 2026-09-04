@@ -77,13 +77,16 @@ Aparece como cuenta por pagar todo comprobante de compra que genera una
 obligación con el proveedor: la factura, la **nota de venta**, los documentos de
 instituciones financieras, las planillas de servicios básicos y los demás tipos
 autorizados por el SRI, además de las liquidaciones de compra, importaciones y
-saldos iniciales. No aparecen como fila las notas de crédito y de débito
-recibidas: esas ajustan el saldo de la factura que modifican. Mismo criterio que
+saldos iniciales. Una liquidación de compra se muestra desde que se autoriza y
+sigue visible cuando pasa a *contabilizado*; solo sale de la lista al anularse o
+al quedar pagada. Las compras anuladas o rechazadas no se muestran. No aparecen
+como fila las notas de crédito y de débito recibidas: esas ajustan el saldo de
+la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
-- **1.2** — Se listan y se pueden pagar todos los comprobantes de compra que generan deuda (notas de venta, documentos financieros, planillas, etc.), no solo la factura. También aplica al saldo de la ficha del proveedor y al pago automático a proveedores.
+- **1.2** — Se listan y se pueden pagar todos los comprobantes de compra que generan deuda (notas de venta, documentos financieros, planillas, etc.), no solo la factura. Las **liquidaciones de compra ya contabilizadas** vuelven a aparecer (antes desaparecían de la cartera al registrarse su asiento). Las compras anuladas o rechazadas dejan de mostrarse como deuda. También aplica al saldo de la ficha del proveedor y al pago automático a proveedores.
 - **1.1** — Los **saldos iniciales** respetan la fecha de corte igual que las
   compras: con Fecha Hasta, un pago posterior a esa fecha ya no descuenta el
   saldo inicial (antes se usaba el acumulado pagado sin importar la fecha).

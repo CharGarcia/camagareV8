@@ -150,7 +150,7 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
-- **1.5** — La cartera de proveedores incluye todos los comprobantes de compra que generan deuda (notas de venta, documentos financieros, planillas, etc.), no solo la factura. Antes esos documentos tenían asiento de cuenta por pagar pero no aparecían en el reporte.
+- **1.5** — La cartera de proveedores incluye todos los comprobantes de compra que generan deuda (notas de venta, documentos financieros, planillas, etc.), no solo la factura, y las liquidaciones de compra ya contabilizadas. Las compras anuladas o rechazadas quedan fuera. Antes esos documentos tenían asiento de cuenta por pagar pero no aparecían en el reporte.
 - **1.4** — Nuevo filtro **Documento**: buscador de los documentos del
   cliente/proveedor seleccionado; al elegir uno, el estado de cuenta se
   limita a ese documento y a sus abonos (cobros/pagos, retenciones, notas).

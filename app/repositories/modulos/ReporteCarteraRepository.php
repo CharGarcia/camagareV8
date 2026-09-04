@@ -466,8 +466,10 @@ class ReporteCarteraRepository extends BaseRepository
 
         // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…),
         // no solo '01': mismo criterio que Cuentas por Pagar y que el asiento de compra.
-        $esCargo    = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
-        $nombreTipo = \App\Helpers\TiposComprobanteCompra::sqlNombre('c.tipo_comprobante');
+        $esCargo       = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
+        $compraVigente = \App\Helpers\TiposComprobanteCompra::sqlCompraVigente('c.estado');
+        $liqVigente    = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
+        $nombreTipo    = \App\Helpers\TiposComprobanteCompra::sqlNombre('c.tipo_comprobante');
 
         return "
                 -- COMPRAS (CARGO): facturas, notas de venta y demás comprobantes con deuda — solo el ambiente actual, como CxP
@@ -477,7 +479,7 @@ class ReporteCarteraRepository extends BaseRepository
                        {$eCompra} AS id_entidad
                 FROM compras_cabecera c
                 WHERE c.id_empresa = :emp1 AND c.eliminado = false
-                  AND {$esCargo}
+                  AND {$esCargo} AND {$compraVigente}
                   AND c.tipo_ambiente = '{$amb}' {$wCompra} {$fCompra} {$dCompra}
 
                 UNION ALL
@@ -488,7 +490,7 @@ class ReporteCarteraRepository extends BaseRepository
                        'Liquidación de Compra', l.importe_total, l.id, {$eLiquid}
                 FROM liquidaciones_cabecera l
                 WHERE l.id_empresa = :emp2 AND l.eliminado = false
-                  AND UPPER(l.estado) IN ('AUTORIZADO','APROBADO')
+                  AND {$liqVigente}
                   AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = '{$amb}') {$wLiquid} {$fLiquid} {$dLiquid}
 
                 UNION ALL
@@ -653,21 +655,23 @@ class ReporteCarteraRepository extends BaseRepository
         };
 
         if ($tipo === 'PROVEEDOR') {
-            $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
+            $esCargo       = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
+            $compraVigente = \App\Helpers\TiposComprobanteCompra::sqlCompraVigente('c.estado');
+            $liqVigente    = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
             $params += [':emp1' => $idEmpresa, ':emp2' => $idEmpresa, ':emp3' => $idEmpresa, ':emp4' => $idEmpresa, ':emp_n' => $idEmpresa];
             $union = "
                 SELECT 'COMPRA'::text AS origen,
                        (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero,
                        c.fecha_emision::date AS fecha, c.importe_total AS total, c.id_proveedor AS id_entidad
                 FROM compras_cabecera c
-                WHERE c.id_empresa = :emp1 AND c.eliminado = false AND {$esCargo}
+                WHERE c.id_empresa = :emp1 AND c.eliminado = false AND {$esCargo} AND {$compraVigente}
                   AND c.tipo_ambiente = '{$amb}' {$in('c.id_proveedor', 'c')}
                 UNION ALL
                 SELECT 'LIQUIDACION', (l.establecimiento || '-' || l.punto_emision || '-' || l.secuencial),
                        l.fecha_emision::date, l.importe_total, l.id_proveedor
                 FROM liquidaciones_cabecera l
                 WHERE l.id_empresa = :emp2 AND l.eliminado = false
-                  AND UPPER(l.estado) IN ('AUTORIZADO','APROBADO')
+                  AND {$liqVigente}
                   AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = '{$amb}') {$in('l.id_proveedor', 'l')}
                 UNION ALL
                 SELECT 'IMPORTACION', COALESCE(fe.numero_factura, ic.numero_importacion),

@@ -47,6 +47,33 @@ final class TiposComprobanteCompra
         '45' => 'Liquidación de Reclamo de Aseguradora',
     ];
 
+    /**
+     * Estados de compras_cabecera que NO son deuda. Se comparan normalizados (UPPER/TRIM): los
+     * documentos migrados guardan el estado en mayúsculas. 'pendiente_aprobacion' sí se muestra:
+     * es una deuda real a la espera de aprobación interna.
+     */
+    public const ESTADOS_COMPRA_SIN_DEUDA = ['ANULADO', 'ANULADA', 'RECHAZADA', 'RECHAZADO'];
+
+    /**
+     * Estados de liquidaciones_cabecera que SÍ son deuda. Incluye 'contabilizado': es el estado
+     * al que pasa la liquidación cuando se registra su asiento (LiquidacionCompraService), y CxP
+     * y Cartera solo aceptaban autorizado/aprobado — la liquidación desaparecía de la cartera
+     * justo al contabilizarse (reporte del usuario, 2026-09-04).
+     */
+    public const ESTADOS_LIQUIDACION_VIGENTE = ['AUTORIZADO', 'AUTORIZADA', 'APROBADO', 'APROBADA', 'CONTABILIZADO', 'CONTABILIZADA'];
+
+    /** Fragmento SQL (sin AND): la compra sigue siendo deuda (no anulada ni rechazada). */
+    public static function sqlCompraVigente(string $colEstado): string
+    {
+        return "UPPER(TRIM(COALESCE({$colEstado}, ''))) NOT IN (" . self::lista(self::ESTADOS_COMPRA_SIN_DEUDA) . ")";
+    }
+
+    /** Fragmento SQL (sin AND): la liquidación de compra es deuda vigente. */
+    public static function sqlLiquidacionVigente(string $colEstado): string
+    {
+        return "UPPER(TRIM(COALESCE({$colEstado}, ''))) IN (" . self::lista(self::ESTADOS_LIQUIDACION_VIGENTE) . ")";
+    }
+
     /** ¿El tipo genera una deuda propia con el proveedor (una fila de cartera)? Vacío/NULL = factura (registros antiguos). */
     public static function esCargo(?string $tipo): bool
     {
