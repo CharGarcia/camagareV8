@@ -154,10 +154,12 @@ class MayoresController extends BaseModuloController
             }
 
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            $migrados = $sincronizador->resumenMigradosSinAsiento($idEmpresa);
             echo json_encode([
                 'ok'                   => true,
                 'pendientes'           => $sincronizador->contarPendientes($idEmpresa),
-                'migrados_sin_asiento' => $sincronizador->contarMigradosSinAsiento($idEmpresa),
+                'migrados_sin_asiento' => $migrados['total'],
+                'migrados_detalle'     => $migrados['modulos'],
             ]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);

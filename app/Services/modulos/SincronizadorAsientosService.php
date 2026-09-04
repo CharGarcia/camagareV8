@@ -1334,12 +1334,33 @@ class SincronizadorAsientosService
      */
     public function contarMigradosSinAsiento(int $idEmpresa): int
     {
-        $db = Database::getConnection();
-        $total = 0;
+        return $this->resumenMigradosSinAsiento($idEmpresa)['total'];
+    }
+
+    /**
+     * Resumen de los documentos migrados sin asiento: total y una línea por módulo con la cantidad
+     * y hasta 15 números de documento ("Ingresos: 1 (001-001-000000050)"). Es lo que ve el usuario
+     * tanto en el aviso al abrir el módulo (contarPendientesAjax → migrados_detalle) como en la
+     * nota del final de la generación: un "hay 1 documento" sin decir cuál ni de qué módulo no le
+     * sirve para actuar. El listado completo está en
+     * database/diagnosticos/20260904_migrados_sin_asiento.sql.
+     *
+     * @return array{total:int, modulos:string[]}
+     */
+    public function resumenMigradosSinAsiento(int $idEmpresa, ?\PDO $db = null): array
+    {
+        $db ??= Database::getConnection();
+        $total  = 0;
+        $partes = [];
         foreach ($this->detectarMigradosSinAsiento($db, $idEmpresa) as $g) {
-            $total += count($g['ids']);
+            $cant   = count($g['ids']);
+            $total += $cant;
+            $numeros = !empty($g['colsDoc'])
+                ? $this->resolverNumerosDocumento($db, $g['tabla'], $g['colsDoc'], array_slice($g['ids'], 0, 15))
+                : [];
+            $partes[] = "{$g['nombre']}: {$cant} (" . $this->listarDocumentos($g['ids'], $numeros, 15) . ")";
         }
-        return $total;
+        return ['total' => $total, 'modulos' => $partes];
     }
 
     /**
@@ -1350,25 +1371,12 @@ class SincronizadorAsientosService
      */
     private function verificarMigradosSinAsiento(\PDO $db, int $idEmpresa): void
     {
-        $grupos = $this->detectarMigradosSinAsiento($db, $idEmpresa);
-        if (empty($grupos)) {
+        $res = $this->resumenMigradosSinAsiento($idEmpresa, $db);
+        if ($res['total'] <= 0) {
             return;
         }
-
-        $total  = 0;
-        $partes = [];
-        foreach ($grupos as $g) {
-            $cant   = count($g['ids']);
-            $total += $cant;
-            $numeros = !empty($g['colsDoc'])
-                ? $this->resolverNumerosDocumento($db, $g['tabla'], $g['colsDoc'], array_slice($g['ids'], 0, 15))
-                : [];
-            // Hasta 15 números por módulo (más que en los avisos de error): aquí el usuario necesita
-            // identificar los documentos; el listado completo está en
-            // database/diagnosticos/20260904_migrados_sin_asiento.sql.
-            $partes[] = "{$g['nombre']}: {$cant} (" . $this->listarDocumentos($g['ids'], $numeros, 15) . ")";
-        }
-
+        $total  = $res['total'];
+        $partes = $res['modulos'];
         $this->info[] = "{$total} documento(s) traídos del sistema anterior siguen sin asiento contable — "
             . implode('; ', $partes) . ". La generación automática no los contabiliza para no duplicar el "
             . "histórico migrado. Para resolverlo, vuelva a correr la migración de contabilidad de la empresa "

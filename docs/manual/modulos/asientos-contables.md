@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados sin asiento, migración, sistema anterior, aviso informativo
-version: 1.12
+version: 1.13
 orden: 20
 estado: activo
 ---
@@ -199,8 +199,9 @@ Para que no pase desapercibido, el sistema avisa en dos momentos:
 
 - **Al abrir** Asientos Contables, Estados Financieros, Balance de Comprobación
   o Mayores: si hay documentos migrados sin asiento, aparece una nota azul con
-  la cantidad. Si además hay pendientes normales, la nota va dentro de la misma
-  pregunta de "¿Desea generarlos ahora?".
+  la cantidad y, por módulo, los números de documento (hasta 15 por módulo). Si
+  además hay pendientes normales, la nota va dentro de la misma pregunta de
+  "¿Desea generarlos ahora?".
 - **Al terminar la generación en masa**: el resumen incluye un bloque
   *Información* con el total por módulo y los primeros números de documento.
 
@@ -310,6 +311,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.13** — El aviso al abrir el módulo indica el módulo y los números de los documentos migrados sin asiento, no solo la cantidad.
 - **1.12** — Las consignaciones migradas (y sus retornos, cambios y facturaciones) quedan fuera del aviso de migrados sin asiento y del botón de generar: el sistema anterior no las contabilizaba.
 - **1.11** — Botón **Generar asientos a los migrados** en el aviso de documentos migrados sin asiento: genera, previa confirmación de que la migración de contabilidad ya se volvió a correr, los asientos de los migrados que el sistema anterior nunca contabilizó. Queda en la auditoría.
 - **1.10** — Aviso de documentos migrados sin asiento contable: nota informativa (azul) al abrir los módulos contables y en el resumen de la generación en masa, con la cantidad por módulo y los documentos. No los genera; explica cómo resolverlo (re-migrar contabilidad o registrar el asiento desde el documento).

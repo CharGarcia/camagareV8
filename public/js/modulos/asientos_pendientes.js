@@ -13,7 +13,8 @@
  * llamada HTTP es corta, así que "cancelar" simplemente deja de pedir el siguiente paso.
  *
  * Endpoints esperados en el controlador del módulo (mismo urlBase):
- *   GET {urlBase}/contarPendientesAjax        → { ok: true, pendientes: <int>, migrados_sin_asiento: <int> }
+ *   GET {urlBase}/contarPendientesAjax        → { ok: true, pendientes: <int>, migrados_sin_asiento: <int>,
+ *                                                 migrados_detalle: ["Ingresos: 1 (001-001-000000050)", …] }
  *   GET {urlBase}/sincronizarPasoAjax?paso=N  → { ok: true, paso, totalPasos, nombrePaso,
  *                                                 terminado, generados, warnings, detalle,
  *                                                 resumenPorModulo, info }
@@ -237,10 +238,15 @@
                 // Documentos migrados sin asiento: informativo. La generación no los contabiliza
                 // (su contabilidad debía venir en el histórico migrado), así que no se ofrece
                 // "generar": se explica qué son y cómo resolverlos.
+                // Módulo y números de documento: sin esto el usuario no sabe cuál es ni dónde buscarlo.
+                const listaMigrados = (Array.isArray(json.migrados_detalle) && json.migrados_detalle.length)
+                    ? `<ul class="mb-2 mt-1 ps-3">${json.migrados_detalle.map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul>`
+                    : '';
                 const textoMigrados = m > 0
-                    ? `Hay <strong>${m}</strong> documento(s) traídos del sistema anterior que siguen <strong>sin asiento contable</strong>. `
+                    ? `Hay <strong>${m}</strong> documento(s) traídos del sistema anterior que siguen <strong>sin asiento contable</strong>:`
+                      + listaMigrados
                       + `La generación automática no los contabiliza para no duplicar el histórico migrado. `
-                      + `Para resolverlo, vuelva a correr la <strong>migración de contabilidad</strong> de la empresa (enlaza cada documento con su asiento histórico) `
+                      + `Para resolverlo, vuelva a correr la <strong>migración de contabilidad</strong> de la empresa (enlaza cada documento con su asiento histórico); `
                       + `los que sigan sin asiento después de eso nunca se contabilizaron en el sistema anterior: `
                       + `genérelos con <strong>Generar asientos a los migrados</strong> o regístrelos desde la pestaña <em>Asiento contable</em> del documento.`
                     : '';
