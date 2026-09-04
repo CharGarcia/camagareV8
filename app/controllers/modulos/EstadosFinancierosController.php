@@ -136,6 +136,37 @@ class EstadosFinancierosController extends BaseModuloController
     }
 
     /**
+     * Un paso de la generación de asientos para DOCUMENTOS MIGRADOS que siguen sin asiento.
+     * Acción explícita del usuario desde el aviso informativo, previa confirmación de que la
+     * migración de contabilidad ya se corrió completa (ver
+     * SincronizadorAsientosService::ejecutarPasoMigrados()). Misma respuesta que
+     * sincronizarPasoAjax() para reutilizar la barra de progreso de la UI.
+     */
+    public function sincronizarMigradosPasoAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $paso = (int) ($_GET['paso'] ?? $_POST['paso'] ?? 0);
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            @set_time_limit(120);
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            $resultado = $sincronizador->ejecutarPasoMigrados($idEmpresa, $idUsuario, $paso);
+
+            echo json_encode(['ok' => true] + $resultado);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
+    /**
      * Cuenta cuántos documentos operativos están pendientes de generar su asiento contable,
      * sin generar nada. La vista lo consulta al cargar para preguntar al usuario si desea
      * generarlos ahora o continuar sin generar.

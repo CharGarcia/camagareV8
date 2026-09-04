@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados sin asiento, migración, sistema anterior, aviso informativo
-version: 1.10
+version: 1.11
 orden: 20
 estado: activo
 ---
@@ -204,19 +204,35 @@ Para que no pase desapercibido, el sistema avisa en dos momentos:
 - **Al terminar la generación en masa**: el resumen incluye un bloque
   *Información* con el total por módulo y los primeros números de documento.
 
-Es un aviso informativo, no un error: el botón *Generar* no los contabiliza. Para
-resolverlo hay dos caminos:
+Es un aviso informativo, no un error: el botón *Generar* de los pendientes
+normales no los contabiliza. Para resolverlo, en este orden:
 
-1. **Volver a correr la migración de contabilidad** de la empresa. Es segura de
-   repetir: no duplica asientos y vuelve a enlazar cada documento con su asiento
-   histórico por el código del diario. Es la opción correcta cuando el sistema
-   anterior sí tenía el asiento.
-2. **Registrar el asiento desde el propio documento**, en su pestaña *Asiento
-   contable*, cuando en el sistema anterior nunca se contabilizó.
+1. **Volver a correr la migración de contabilidad** de la empresa, con el rango
+   completo de fechas. Es segura de repetir: no duplica asientos y vuelve a
+   enlazar cada documento con su asiento histórico por el código del diario. Los
+   que sí tenían asiento en el sistema anterior desaparecen del aviso con este
+   paso.
+2. **Generar asientos a los migrados** que sigan sin asiento después de
+   re-migrar. Son documentos que el sistema anterior nunca contabilizó, así que
+   generarlos con la configuración contable actual no duplica nada. El botón
+   está en el propio aviso azul al abrir el módulo y pide marcar una casilla de
+   confirmación de que la migración de contabilidad ya se volvió a correr.
+   Procesa módulo por módulo con barra de progreso, igual que la generación
+   normal, y al final muestra lo generado y lo que no pudo generarse (por
+   ejemplo, una cuenta sin configurar). La acción queda registrada en la
+   auditoría del sistema.
+3. **Registrar el asiento desde el propio documento**, en su pestaña *Asiento
+   contable*, para los casos puntuales que la generación no pudo resolver.
+
+**Cuidado con el orden.** Si se usa *Generar asientos a los migrados* antes de
+volver a correr la migración de contabilidad, un documento que sí tenía asiento
+histórico pero todavía no estaba enlazado recibiría un segundo asiento. Por eso
+la casilla de confirmación.
 
 Si después de re-migrar el aviso persiste, los documentos que quedan son los que
 no tenían asiento en el sistema anterior, o cuyo tipo no lo enlaza la migración
-(por ejemplo roles de pago).
+(por ejemplo roles de pago). Para verlos uno por uno, con estado y total, está la
+consulta `database/diagnosticos/20260904_migrados_sin_asiento.sql`.
 
 ## Diferencias de centavos
 
@@ -287,6 +303,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.11** — Botón **Generar asientos a los migrados** en el aviso de documentos migrados sin asiento: genera, previa confirmación de que la migración de contabilidad ya se volvió a correr, los asientos de los migrados que el sistema anterior nunca contabilizó. Queda en la auditoría.
 - **1.10** — Aviso de documentos migrados sin asiento contable: nota informativa (azul) al abrir los módulos contables y en el resumen de la generación en masa, con la cantidad por módulo y los documentos. No los genera; explica cómo resolverlo (re-migrar contabilidad o registrar el asiento desde el documento).
 - **1.9** — El margen de redondeo en facturas y liquidaciones de compra ya no es fijo: 1 centavo por línea con IVA, mínimo 3. El mensaje de descuadre indica el tope aplicado y pide revisar los totales del documento.
 - **1.8** — La pestaña llega también a consignaciones de venta, retornos y cambios de producto: ahí la vista previa se puede completar a mano para registrar el asiento junto con el documento cuando falta alguna cuenta. En roles de pago la pestaña sigue siendo de solo lectura (muestra el asiento calculado del empleado, no uno registrado).

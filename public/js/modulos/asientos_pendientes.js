@@ -23,6 +23,9 @@
  * toca (su contabilidad debía venir en el histórico migrado), así que no cuentan como
  * pendientes, pero el usuario debe saber que existen y cómo resolverlo.
  *   GET {urlBase}/sincronizarAjax             → (respaldo sin barra de progreso, solo si no hay SweetAlert2)
+ *   GET {urlBase}/sincronizarMigradosPasoAjax?paso=N → igual que sincronizarPasoAjax, pero SOLO para los
+ *                                                 documentos migrados sin asiento (acción explícita, con
+ *                                                 confirmación; ver confirmarYGenerarMigrados()).
  *
  * Uso:
  *   CMG_verificarAsientosPendientes({ urlBase: '<...>', onGenerado: () => { ... } });
@@ -105,7 +108,8 @@
             .catch(() => { /* silencioso: no hay Swal para avisar el error */ });
     }
 
-    function generar(urlBase, onGenerado) {
+    function generar(urlBase, onGenerado, accion) {
+        accion = accion || 'sincronizarPasoAjax';
         if (!window.Swal) {
             return generarSinProgreso(urlBase, onGenerado);
         }
@@ -141,7 +145,7 @@
 
                 let json;
                 try {
-                    const res = await fetch(`${urlBase}/sincronizarPasoAjax?paso=${n}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const res = await fetch(`${urlBase}/${accion}?paso=${n}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
                     json = await res.json();
                 } catch (e) {
                     errorMsg = 'No se pudo completar la generación de asientos (error de red).';
@@ -184,6 +188,34 @@
     }
 
     /**
+     * Generación EXPLÍCITA de asientos para documentos migrados que siguen sin asiento. Pide
+     * confirmar que la migración de contabilidad ya se corrió con el rango completo: si no, un
+     * documento cuyo asiento histórico todavía no se enlazó recibiría un segundo asiento.
+     */
+    function confirmarYGenerarMigrados(urlBase, onGenerado) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Generar asientos a documentos migrados',
+            html: `<div class="text-start small">
+                <p class="mb-2">Se generarán asientos, con la configuración contable actual, para los documentos traídos del sistema anterior que <strong>no tienen asiento</strong>.</p>
+                <p class="mb-2">Hágalo solo si ya volvió a correr la <strong>migración de contabilidad</strong> con el rango completo de fechas: ese paso enlaza los documentos que sí tenían asiento en el sistema anterior, y los que siguen sin asiento después son los que nunca se contabilizaron.</p>
+                <p class="mb-0 text-danger">Si la migración de contabilidad no se ha vuelto a correr, algunos documentos podrían quedar con dos asientos.</p>
+            </div>`,
+            input: 'checkbox',
+            inputPlaceholder: 'Ya volví a correr la migración de contabilidad con el rango completo',
+            inputValidator: (v) => v ? undefined : 'Debe confirmar para continuar.',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-gear-fill me-1"></i> Generar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            width: 600,
+        }).then(res => {
+            if (res.isConfirmed) generar(urlBase, onGenerado, 'sincronizarMigradosPasoAjax');
+        });
+    }
+
+    /**
      * @param {Object} opts
      * @param {string} opts.urlBase      Base del módulo (p. ej. ".../modulos/asientos_contables").
      * @param {Function} [opts.onGenerado] Callback tras generar con éxito (p. ej. refrescar la tabla/reporte).
@@ -209,7 +241,8 @@
                     ? `Hay <strong>${m}</strong> documento(s) traídos del sistema anterior que siguen <strong>sin asiento contable</strong>. `
                       + `La generación automática no los contabiliza para no duplicar el histórico migrado. `
                       + `Para resolverlo, vuelva a correr la <strong>migración de contabilidad</strong> de la empresa (enlaza cada documento con su asiento histórico) `
-                      + `o registre el asiento desde la pestaña <em>Asiento contable</em> del propio documento.`
+                      + `los que sigan sin asiento después de eso nunca se contabilizaron en el sistema anterior: `
+                      + `genérelos con <strong>Generar asientos a los migrados</strong> o regístrelos desde la pestaña <em>Asiento contable</em> del documento.`
                     : '';
 
                 if (!window.Swal) {
@@ -226,8 +259,15 @@
                         icon: 'info',
                         title: 'Documentos migrados sin asiento',
                         html: `<div class="text-start small">${textoMigrados}</div>`,
-                        confirmButtonText: 'Entendido',
+                        showCancelButton: true,
+                        confirmButtonText: '<i class="bi bi-gear-fill me-1"></i> Generar asientos a los migrados',
+                        cancelButtonText: 'Entendido',
+                        confirmButtonColor: '#0d6efd',
+                        cancelButtonColor: '#6c757d',
+                        reverseButtons: true,
                         width: 560,
+                    }).then(res => {
+                        if (res.isConfirmed) confirmarYGenerarMigrados(urlBase, onGenerado);
                     });
                     return;
                 }
@@ -238,6 +278,9 @@
                     html: `Hay <strong>${n}</strong> documento(s) sin asiento contable generado.<br>¿Desea generarlos ahora?`
                         + (m > 0 ? `<div class="text-start small alert alert-info py-2 px-3 mt-3 mb-0">${textoMigrados}</div>` : ''),
                     width: m > 0 ? 560 : undefined,
+                    showDenyButton: m > 0,
+                    denyButtonText: '<i class="bi bi-box-arrow-in-down me-1"></i> Migrados sin asiento…',
+                    denyButtonColor: '#0dcaf0',
                     showCancelButton: true,
                     confirmButtonText: '<i class="bi bi-gear-fill me-1"></i> Generar ahora',
                     cancelButtonText: 'Continuar sin generar',
@@ -247,6 +290,7 @@
                     reverseButtons: true,
                 }).then(res => {
                     if (res.isConfirmed) generar(urlBase, onGenerado);
+                    else if (res.isDenied) confirmarYGenerarMigrados(urlBase, onGenerado);
                 });
             })
             .catch(() => { /* Silencioso: no bloquear el módulo por el aviso. */ });
