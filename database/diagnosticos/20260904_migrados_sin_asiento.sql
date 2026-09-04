@@ -8,7 +8,7 @@
 -- Uso en pgAdmin: cambiar el id de empresa en la primera línea y ejecutar todo.
 -- Solo lectura. La última consulta es el resumen por módulo y estado.
 
-WITH p AS (SELECT 8::int AS id_empresa),
+WITH p AS (SELECT 33::int AS id_empresa),
 docs AS (
     SELECT 'Facturas de Venta' AS modulo, v.id, v.establecimiento||'-'||v.punto_emision||'-'||v.secuencial AS numero,
            v.fecha_emision::date AS fecha, v.estado, v.importe_total AS total, v.eliminado
@@ -85,6 +85,7 @@ SELECT modulo, id, numero, fecha, estado, total, eliminado,
        CASE
          WHEN eliminado THEN 'eliminado: no necesita asiento'
          WHEN UPPER(TRIM(COALESCE(estado,''))) IN ('ANULADO','ANULADA','RECHAZADA','PENDIENTE_APROBACION','BORRADOR') THEN 'estado sin efecto contable: no necesita asiento'
+         WHEN modulo = 'Consignaciones en Ventas' THEN 'consignación migrada: el sistema anterior no las contabilizaba, no necesita asiento'
          ELSE 'sin asiento: re-migrar contabilidad o registrar desde el documento'
        END AS situacion
   FROM docs

@@ -11,6 +11,14 @@ class SincronizadorAsientosService
     private array $warnings = [];
     /** Notas informativas (no son errores): explican comportamientos intencionales. */
     private array $info = [];
+    /**
+     * Módulos cuyos documentos MIGRADOS nunca deben recibir asiento ni contarse como "migrados sin
+     * asiento": el sistema anterior no contabilizaba consignaciones (ni sus retornos, cambios o
+     * facturaciones), así que un migrado de estos módulos sin asiento es lo normal, no un faltante.
+     * Solo las consignaciones nacidas en este sistema generan su reclasificación de inventario
+     * (decisión del usuario, 2026-09-04, empresa 33: 131 consignaciones migradas sin asiento).
+     */
+    private const MODULOS_MIGRADOS_SIN_CONTABILIDAD = ['consignaciones', 'retornos_cv', 'cambios_producto_cv', 'facturacion_cv'];
     private int $generados = 0;
     /**
      * Resumen corto de documentos con problema, agrupado por módulo: ['Facturas de Venta' => 20, ...].
@@ -1219,6 +1227,9 @@ class SincronizadorAsientosService
 
         $out = [];
         foreach ($this->construirTrabajos($idEmpresa, $soloMig) as $t) {
+            if (in_array((string) ($t['clave'] ?? ''), self::MODULOS_MIGRADOS_SIN_CONTABILIDAD, true)) {
+                continue; // el sistema anterior no los contabilizaba: ni aviso ni generación
+            }
             $tabla = $t['tablaVerif'] ?? null;
             // Solo los módulos cuya detección aplica el fragmento de migración: un módulo que no lo
             // usa (roles de pago, importaciones…) devolvería TODOS sus pendientes como si fueran

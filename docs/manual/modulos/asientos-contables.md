@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados sin asiento, migración, sistema anterior, aviso informativo
-version: 1.11
+version: 1.12
 orden: 20
 estado: activo
 ---
@@ -234,6 +234,13 @@ no tenían asiento en el sistema anterior, o cuyo tipo no lo enlaza la migració
 (por ejemplo roles de pago). Para verlos uno por uno, con estado y total, está la
 consulta `database/diagnosticos/20260904_migrados_sin_asiento.sql`.
 
+**Consignaciones migradas: nunca.** El sistema anterior no contabilizaba las
+consignaciones, así que las que llegaron por migración no se cuentan en este
+aviso ni las toca el botón de generar, aunque estén emitidas o entregadas. Solo
+las consignaciones creadas en este sistema generan su asiento de reclasificación
+de inventario. Lo mismo aplica a sus retornos, cambios de producto y
+facturaciones.
+
 ## Diferencias de centavos
 
 En documentos con impuestos, la base y el IVA pueden dejar diferencias de
@@ -303,6 +310,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.12** — Las consignaciones migradas (y sus retornos, cambios y facturaciones) quedan fuera del aviso de migrados sin asiento y del botón de generar: el sistema anterior no las contabilizaba.
 - **1.11** — Botón **Generar asientos a los migrados** en el aviso de documentos migrados sin asiento: genera, previa confirmación de que la migración de contabilidad ya se volvió a correr, los asientos de los migrados que el sistema anterior nunca contabilizó. Queda en la auditoría.
 - **1.10** — Aviso de documentos migrados sin asiento contable: nota informativa (azul) al abrir los módulos contables y en el resumen de la generación en masa, con la cantidad por módulo y los documentos. No los genera; explica cómo resolverlo (re-migrar contabilidad o registrar el asiento desde el documento).
 - **1.9** — El margen de redondeo en facturas y liquidaciones de compra ya no es fijo: 1 centavo por línea con IVA, mínimo 3. El mensaje de descuadre indica el tope aplicado y pide revisar los totales del documento.
