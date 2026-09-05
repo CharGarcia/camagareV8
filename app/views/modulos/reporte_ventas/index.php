@@ -105,12 +105,12 @@
                 </div>
 
                 <div class="d-flex flex-wrap align-items-start gap-2">
-                    <div>
+                    <div style="flex:1 1 150px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;">
                             <i class="bi bi-person-badge me-1"></i>Vendedor
                             <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_vendedor', 'id_vendedor') ?>
                         </label>
-                        <select name="id_vendedor" id="rv_id_vendedor" class="form-select form-select-sm shadow-none border" style="width:170px;" onchange="window.RV_generarReporte()">
+                        <select name="id_vendedor" id="rv_id_vendedor" class="form-select form-select-sm shadow-none border w-100" onchange="window.RV_generarReporte()">
                             <option value="" selected>Todos</option>
                             <?php foreach (($vendedores ?? []) as $vd): ?>
                                 <option value="<?= (int)$vd['id'] ?>"><?= htmlspecialchars($vd['nombre']) ?></option>
@@ -118,7 +118,7 @@
                         </select>
                     </div>
 
-                    <div class="position-relative" style="width:210px;">
+                    <div class="position-relative" style="flex:1 1 180px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
@@ -130,7 +130,7 @@
                         <div id="rv-dropdown-items" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
 
-                    <div class="position-relative" style="width:180px;">
+                    <div class="position-relative" style="flex:1 1 180px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;"><i class="bi bi-palette me-1"></i>Variante</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
@@ -141,7 +141,7 @@
                         </div>
                     </div>
 
-                    <div class="position-relative" style="width:210px;">
+                    <div class="position-relative" style="flex:1 1 180px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;"><i class="bi bi-card-text me-1"></i>Info adicional</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-card-text"></i></span>
@@ -153,7 +153,7 @@
                         <div id="rv-dropdown-info" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
 
-                    <div style="width:90px;">
+                    <div style="flex:0 0 100px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
                         <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100" id="btn-generar-reporte">
                             <i class="bi bi-search me-1"></i> Buscar
