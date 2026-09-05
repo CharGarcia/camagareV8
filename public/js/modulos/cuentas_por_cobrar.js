@@ -19,6 +19,34 @@ let CXC_catalogosCargados = false;
 let CXC_cobroOrigen = 'FACTURA'; // origen del documento en el modal de cobro
 let CXC_agrupado    = false;           // vista agrupada por cliente
 const CXC_gruposAbiertos = new Set();  // claves de grupos expandidos
+// Consolidado por RUC (fase 1, solo lectura): lo confirma el servidor en cada carga.
+// Las filas de OTRO establecimiento (r.es_hermana) no se cobran ni se notifican desde aquí.
+let CXC_consolidado = false;
+
+/* Alcance elegido en el filtro (el select solo existe cuando la empresa activa es la matriz). */
+function CXC_getAlcance() {
+    return document.getElementById('cxc-alcance')?.value || 'ESTABLECIMIENTO';
+}
+
+// Fase 2 del consolidado: cobro de un documento de OTRO establecimiento desde la matriz.
+// El ingreso se registra en los libros de esa empresa, con SUS series, conceptos y formas.
+let CXC_cobroEmpresa = 0;            // empresa dueña del documento en el modal de cobro (0 = la activa)
+const CXC_catalogosPorEmpresa = {};  // caché de catálogos por establecimiento hermano
+
+/* Catálogos (series, conceptos, formas de cobro) de otro establecimiento del grupo RUC. */
+async function CXC_cargarCatalogosDe(idEmpresa) {
+    if (CXC_catalogosPorEmpresa[idEmpresa]) return CXC_catalogosPorEmpresa[idEmpresa];
+    const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getCatalogosCobroAjax?id_empresa=${idEmpresa}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || 'No se pudieron cargar los catálogos del establecimiento.');
+    return (CXC_catalogosPorEmpresa[idEmpresa] = {
+        puntos:    data.puntos    || [],
+        conceptos: data.conceptos || [],
+        formas:    data.formas    || [],
+    });
+}
 
 /* ════════════════════════════════════════════════════
    INICIALIZACIÓN
@@ -46,6 +74,7 @@ async function CXC_cargar() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value  || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
+        alcance:     CXC_getAlcance(),
     });
 
     try {
@@ -61,6 +90,14 @@ async function CXC_cargar() {
 
         CXC_datos = data.filas || [];
         CXC_filtradoLocal = [...CXC_datos];
+
+        // El servidor decide si el consolidado procede (solo desde la matriz)
+        CXC_consolidado = !!data.consolidado;
+        const estabWrap = document.getElementById('cxc-stat-estab-wrap');
+        if (estabWrap) {
+            estabWrap.hidden = !CXC_consolidado;
+            document.getElementById('cxc-stat-estab').textContent = data.establecimientos || 1;
+        }
 
         CXC_actualizarStats(data.stats || {});
         CXC_renderTabla(CXC_filtradoLocal);
@@ -140,6 +177,13 @@ function CXC_filaHtml(r) {
     const fVenc      = CXC_fmtFecha(r.fecha_vencimiento);
     const esSaldo    = r.origen === 'SALDO_INICIAL';
     const esRecibo   = r.origen === 'RECIBO';
+    // Consolidado: documento de OTRO establecimiento del RUC → solo lectura
+    const esHermana  = !!r.es_hermana;
+    const idEmpresa  = parseInt(r.id_empresa) || 0;
+    const estabTxt   = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
+    const estabBadge = (CXC_consolidado && r.establecimiento)
+        ? `<span class="badge ${esHermana ? 'bg-info bg-opacity-10 text-info border-info' : 'bg-success bg-opacity-10 text-success border-success'} border border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="${esc(estabTxt)}">${esc(r.establecimiento)}</span>`
+        : '';
     let origenBadge;
     if (esSaldo) {
         origenBadge = `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`;
@@ -150,13 +194,14 @@ function CXC_filaHtml(r) {
     }
 
     return `
-        <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
+        <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-hermana="${esHermana ? 1 : 0}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
             <td class="text-center p-1">
                 <input class="form-check-input cxc-chk" type="checkbox" value="${key}"
-                       ${esSaldo ? 'disabled' : (selec ? 'checked' : '')}
+                       ${(esSaldo || esHermana) ? 'disabled' : (selec ? 'checked' : '')}
+                       ${esHermana ? 'title="Documento de otro establecimiento: no se puede notificar desde aquí"' : ''}
                        onchange="CXC_toggleSeleccion('${key}', this.checked)">
             </td>
-            <td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;white-space:nowrap;">${esc(r.numero_factura)}</td>
+            <td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;white-space:nowrap;">${estabBadge}${esc(r.numero_factura)}</td>
             <td class="text-center" style="white-space:nowrap;">${origenBadge}</td>
             <td class="text-truncate" title="${esc(r.cliente_nombre)}" style="font-size:.8rem;">${esc(r.cliente_nombre)}</td>
             <td style="font-size:.78rem;white-space:nowrap;">${fEmision}</td>
@@ -167,21 +212,31 @@ function CXC_filaHtml(r) {
             <td class="text-center" style="overflow:hidden;white-space:nowrap;">${badgeHtml}</td>
             <td class="text-center">
                 <div class="d-flex justify-content-center gap-1">
-                    ${saldo > 0 ? `
+                    ${(saldo > 0 && esHermana && r.puede_operar) ? `
+                    <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro en el establecimiento ${esc(estabTxt)}"
+                            onclick="CXC_abrirModalCobro(${r.id}, '${r.origen}', ${idEmpresa})">
+                        <i class="bi bi-cash-coin"></i>
+                    </button>` : ''}
+                    ${(saldo > 0 && esHermana && !r.puede_operar) ? `
+                    <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" disabled
+                            title="Sin permiso para registrar cobros en el establecimiento ${esc(estabTxt)}">
+                        <i class="bi bi-cash-coin"></i>
+                    </button>` : ''}
+                    ${(saldo > 0 && !esHermana) ? `
                     <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro"
                             onclick="CXC_abrirModalCobro(${r.id}, '${r.origen}')">
                         <i class="bi bi-cash-coin"></i>
                     </button>` : ''}
                     <button class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:.72rem;" title="Ver historial de cobros"
-                            onclick="CXC_abrirHistorial(${r.id}, '${esc(r.numero_factura)}', '${r.origen}')">
+                            onclick="CXC_abrirHistorial(${r.id}, '${esc(r.numero_factura)}', '${r.origen}', ${idEmpresa})">
                         <i class="bi bi-clock-history"></i>
                     </button>
-                    ${!esSaldo ? `
+                    ${(!esSaldo && !esHermana) ? `
                     <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" title="Enviar recordatorio email"
                             onclick="CXC_abrirEmail(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_email || '')}', '${esc(r.cliente_nombre)}', '${r.origen}')">
                         <i class="bi bi-envelope"></i>
                     </button>` : ''}
-                    ${(!esSaldo && !esRecibo) ? `
+                    ${(!esSaldo && !esRecibo && !esHermana) ? `
                     <button class="btn btn-sm py-0 px-2" style="font-size:.72rem;background:#25d366;color:#fff;" title="Enviar WhatsApp"
                             onclick="CXC_abrirWA(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_telefono || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-whatsapp"></i>
@@ -285,9 +340,10 @@ function CXC_toggleSeleccion(key, sel) {
 }
 
 function CXC_seleccionarTodos(sel) {
-    // Facturas y recibos: los saldos iniciales no tienen email/WhatsApp
+    // Facturas y recibos: los saldos iniciales no tienen email/WhatsApp, y los
+    // documentos de otro establecimiento (consolidado) son solo lectura.
     CXC_filtradoLocal.forEach(r => {
-        if (r.origen === 'SALDO_INICIAL') return;
+        if (r.origen === 'SALDO_INICIAL' || r.es_hermana) return;
         const key = CXC_keyFila(r);
         sel ? CXC_seleccionados.add(key) : CXC_seleccionados.delete(key);
     });
@@ -297,8 +353,18 @@ function CXC_seleccionarTodos(sel) {
 /* ════════════════════════════════════════════════════
    MODAL COBRO
 ════════════════════════════════════════════════════ */
-async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
+async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA', idEmpresa = 0) {
     CXC_cobroOrigen = origen;
+    // Consolidado (fase 2): si el documento es de OTRO establecimiento del RUC, el cobro se
+    // registra en ESA empresa, con sus series, conceptos, formas de cobro y contabilidad.
+    const filaDoc = CXC_datos.find(r => r.id == idVenta && r.origen === origen);
+    CXC_cobroEmpresa = (filaDoc && filaDoc.es_hermana) ? (parseInt(idEmpresa) || parseInt(filaDoc.id_empresa) || 0) : 0;
+    const empQs = CXC_cobroEmpresa ? `&id_empresa=${CXC_cobroEmpresa}` : '';
+    let cat = CXC_catalogos;
+    if (CXC_cobroEmpresa) {
+        try { cat = await CXC_cargarCatalogosDe(CXC_cobroEmpresa); }
+        catch (e) { CXC_toast(e.message || 'No se pudieron cargar los catálogos del establecimiento.', 'danger'); return; }
+    }
     let f;
     if (origen === 'SALDO_INICIAL') {
         // Saldo inicial: tomar datos de la fila ya cargada (no hay endpoint de factura)
@@ -310,8 +376,8 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
     } else {
         // Factura o recibo: obtener datos en tiempo real del servidor
         const infoUrl = origen === 'RECIBO'
-            ? `${BASE_URL}/${RUTA_MODULO_CXC}/getReciboParaCobroInfoAjax?id_recibo=${idVenta}`
-            : `${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}`;
+            ? `${BASE_URL}/${RUTA_MODULO_CXC}/getReciboParaCobroInfoAjax?id_recibo=${idVenta}${empQs}`
+            : `${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}${empQs}`;
         try {
             const resp = await fetch(infoUrl);
             const data = await resp.json();
@@ -353,7 +419,7 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
 
     // ── Serie (puntos de emisión) ──────────────────────────────────────────
     const selPunto = document.getElementById('cobro-punto-emision');
-    const pts = CXC_catalogos.puntos;
+    const pts = cat.puntos;
     selPunto.innerHTML = '<option value="">— Seleccione —</option>'
         + pts.map(p => `<option value="${p.id_punto}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('');
     if (pts.length === 1) {
@@ -365,7 +431,7 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
 
     // ── Concepto (solo lectura, auto-seleccionado) ─────────────────────────
     const selConc = document.getElementById('cobro-concepto');
-    const cons = CXC_catalogos.conceptos;
+    const cons = cat.conceptos;
     selConc.innerHTML = cons.length
         ? cons.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')
         : '<option value="">Sin conceptos configurados</option>';
@@ -390,7 +456,8 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
 
     // ── Formas de cobro ────────────────────────────────────────────────────
     const selForma = document.getElementById('cobro-forma');
-    const fps = CXC_catalogos.formas;
+    const fps = cat.formas;
+    CXC_formasCobro = cat.formas; // alias para toggleBancoDatos: el catálogo EN USO (propio o de la hermana)
     selForma.innerHTML = fps.length
         ? fps.map(f => `<option value="${f.id}" data-tipo="${(f.tipo||'').toUpperCase()}">${f.nombre}</option>`).join('')
         : '<option value="">Sin formas de cobro configuradas</option>';
@@ -403,6 +470,17 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
     if (elTipoOp) elTipoOp.value = 'TRANSFERENCIA';
     if (elNumOp)  elNumOp.value  = '';
 
+    // Aviso: el cobro va a los libros de otro establecimiento (consolidado, fase 2)
+    const avisoEst = document.getElementById('cobro-aviso-establecimiento');
+    if (avisoEst) {
+        avisoEst.hidden = !CXC_cobroEmpresa;
+        if (CXC_cobroEmpresa && filaDoc) {
+            avisoEst.innerHTML = `<i class="bi bi-diagram-3 me-1"></i>Este cobro se registra en el establecimiento `
+                + `<strong>${esc(filaDoc.establecimiento || '')} - ${esc(filaDoc.empresa_nombre || '')}</strong>: `
+                + `el ingreso, su secuencial y su contabilidad pertenecen a esa empresa.`;
+        }
+    }
+
     new bootstrap.Modal(document.getElementById('modalCobro')).show();
 }
 
@@ -413,7 +491,7 @@ async function CXC_cargarSecuencial(idPunto) {
     el.value = '…';
     try {
         const r = await fetch(
-            `${BASE_URL}/${RUTA_MODULO_CXC}/getSecuencialAjax?id_punto_emision=${idPunto}`,
+            `${BASE_URL}/${RUTA_MODULO_CXC}/getSecuencialAjax?id_punto_emision=${idPunto}${CXC_cobroEmpresa ? '&id_empresa=' + CXC_cobroEmpresa : ''}`,
             { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
         );
         const data = await r.json();
@@ -473,6 +551,8 @@ async function CXC_guardarCobro() {
         fd.append('id_forma_cobro',     forma);
         fd.append('fecha_cobro',        fecha);
         fd.append('observaciones',      obs);
+        // Consolidado (fase 2): el servidor registra el ingreso en la hermana dueña del documento
+        if (CXC_cobroEmpresa) fd.append('id_empresa', CXC_cobroEmpresa);
 
         // Datos bancarios si el bloque está visible
         const divBanco = document.getElementById('cobro-div-banco');
@@ -508,7 +588,7 @@ async function CXC_guardarCobro() {
 /* ════════════════════════════════════════════════════
    MODAL HISTORIAL
 ════════════════════════════════════════════════════ */
-async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA') {
+async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA', idEmpresa = 0) {
     const esSaldo  = origen === 'SALDO_INICIAL';
     const esRecibo = origen === 'RECIBO';
     const prefijo  = esSaldo ? 'Saldo inicial: ' : (esRecibo ? 'Recibo: ' : 'Factura: ');
@@ -519,11 +599,14 @@ async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA') {
     new bootstrap.Modal(document.getElementById('modalHistorial')).show();
 
     try {
+        // id_empresa: en el consolidado la fila puede ser de otro establecimiento (solo lectura);
+        // el servidor solo lo acepta si es una hermana del grupo RUC consolidable.
+        const emp = idEmpresa ? `&id_empresa=${parseInt(idEmpresa)}` : '';
         const url = esSaldo
-            ? `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosSaldoInicialAjax?id_saldo=${idVenta}`
+            ? `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosSaldoInicialAjax?id_saldo=${idVenta}${emp}`
             : (esRecibo
-                ? `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosReciboAjax?id_recibo=${idVenta}`
-                : `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosAjax?id_venta=${idVenta}`);
+                ? `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosReciboAjax?id_recibo=${idVenta}${emp}`
+                : `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosAjax?id_venta=${idVenta}${emp}`);
         const r = await fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
@@ -882,7 +965,7 @@ function CXC_initBuscadorClientes() {
 async function CXC_buscarClientes(q) {
     const drop = document.getElementById('cxc-dropdown-clientes');
     try {
-        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getClientesAjax?q=${encodeURIComponent(q)}`, {
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getClientesAjax?q=${encodeURIComponent(q)}&alcance=${CXC_getAlcance()}`, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await r.json();
@@ -944,6 +1027,8 @@ function CXC_limpiarFiltros() {
     document.getElementById('cxc-search-cliente').value = '';
     const selVend = document.getElementById('cxc-vendedor');
     if (selVend) selVend.value = '';
+    const selAlc = document.getElementById('cxc-alcance');
+    if (selAlc) selAlc.value = 'ESTABLECIMIENTO';
 
     CXC_clientesSeleccionados = [];
     CXC_renderChipsClientes();
@@ -965,6 +1050,7 @@ function CXC_exportarExcel() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
+        alcance:     CXC_getAlcance(),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`, '_blank');
 }
@@ -977,6 +1063,7 @@ function CXC_exportarPDF() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
+        alcance:     CXC_getAlcance(),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`, '_blank');
 }
@@ -1048,6 +1135,12 @@ document.addEventListener('click', function (e) {
         fecha:       r.fecha_emision  || '',
         sujetoLabel: 'Cliente',
         sujeto:      r.cliente_nombre || tr.dataset.cliente || '',
-        total:       r.total
+        total:       r.total,
+        // Consolidado: el detalle de un documento de otro establecimiento no se puede
+        // consultar desde esta empresa; el panel muestra solo el resumen de la fila.
+        soloResumen: !!r.es_hermana,
+        aviso:       r.es_hermana
+            ? `Documento del establecimiento ${r.establecimiento || ''} - ${r.empresa_nombre || ''}. Cambie a esa empresa para ver el detalle completo; el cobro sí puede registrarse desde aquí con el botón de la fila.`
+            : ''
     });
 });

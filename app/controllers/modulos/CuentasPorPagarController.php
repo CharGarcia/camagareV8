@@ -51,12 +51,22 @@ class CuentasPorPagarController extends BaseModuloController
         $anios      = $this->repo->getAniosDisponibles($idEmpresa);
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
+        // Consolidado por RUC (fase 1, SOLO LECTURA): el selector de alcance aparece únicamente
+        // si la empresa activa es la matriz del grupo y el usuario tiene acceso a al menos otro
+        // establecimiento del mismo RUC (ver EmpresaRepository::getIdsConsolidadoDesdeMatriz).
+        $empresaRepo      = new \App\repositories\modulos\EmpresaRepository();
+        $idsConsolidado   = $empresaRepo->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        $establecimientos = $idsConsolidado ? $empresaRepo->getEtiquetasEstablecimiento($idsConsolidado) : [];
+
         $this->viewWithLayout('layouts.main', 'modulos/cuentas_por_pagar/index', [
             'titulo'      => 'Cuentas por Pagar',
             'perm'        => $this->getPermisos(),
             'vistaConfig' => $prefsVista,
             'rutaModulo'  => $this->getRutaModulo(),
             'anios'       => $anios,
+            'puedeConsolidar'  => !empty($idsConsolidado),
+            'establecimientos' => $establecimientos,
+            'idEmpresa'        => $idEmpresa,
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -71,10 +81,11 @@ class CuentasPorPagarController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas      = $this->getFilasUnificadas($idEmpresa, $filtros);
-        $stats      = $this->repo->getEstadisticas($idEmpresa, $filtros);
-        $antiguedad = $this->repo->getAntiguedad($idEmpresa, $filtros);
+        $filas      = $this->getFilasUnificadas($idsEmpresa, $filtros);
+        $stats      = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        $antiguedad = $this->repo->getAntiguedad($idsEmpresa, $filtros);
 
         foreach ($filas as &$f) {
             $f['total']          = number_format((float)$f['total'],          2, '.', '');
@@ -84,14 +95,100 @@ class CuentasPorPagarController extends BaseModuloController
             $f['total_retenido'] = number_format((float)($f['total_retenido'] ?? 0), 2, '.', '');
             $f['saldo']          = number_format((float)$f['saldo'],          2, '.', '');
             $f['dias_vencido']   = (int)($f['dias_vencido'] ?? 0);
+            // Consolidado: los documentos de OTRO establecimiento son solo lectura
+            // (sin pago desde aquí). La vista lo usa para deshabilitar esa acción y
+            // mostrar el badge del establecimiento.
+            $f['id_empresa'] = (int)($f['id_empresa'] ?? $idEmpresa);
+            $f['es_hermana'] = $f['id_empresa'] !== $idEmpresa;
+            // Fase 2: pagar desde la matriz un documento de una hermana exige permiso de
+            // CREAR en ESA empresa (el egreso se registra en sus libros). Se resuelve una
+            // vez por establecimiento; la vista deshabilita el botón cuando es false.
+            $permCrearPorEmpresa ??= [];
+            if ($f['es_hermana']) {
+                $e = $f['id_empresa'];
+                if (!isset($permCrearPorEmpresa[$e])) {
+                    $permCrearPorEmpresa[$e] = !empty(\App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $e)['crear']);
+                }
+                $f['puede_operar'] = $permCrearPorEmpresa[$e];
+            } else {
+                $f['puede_operar'] = true;
+            }
         }
         unset($f);
 
         $this->jsonSuccess([
-            'filas'      => $filas,
-            'stats'      => $stats,
-            'antiguedad' => $antiguedad,
+            'filas'            => $filas,
+            'stats'            => $stats,
+            'antiguedad'       => $antiguedad,
+            'consolidado'      => $consolidado,
+            'establecimientos' => count($idsEmpresa),
         ]);
+    }
+
+    /**
+     * Alcance del listado (fase 1 del consolidado por RUC: SOLO LECTURA desde la matriz).
+     * Devuelve [idsEmpresa, consolidado]. El valor `alcance=CONSOLIDADO` que manda la vista
+     * solo se honra si la empresa activa es la matriz del grupo RUC y hay hermanas accesibles
+     * para el usuario (EmpresaRepository::getIdsConsolidadoDesdeMatriz); en cualquier otro
+     * caso se ignora en silencio y el listado queda como siempre (solo la empresa activa).
+     * En consolidado, el filtro de proveedor se expande a las filas hermanas del mismo
+     * proveedor (misma identificación), porque `proveedores` es una tabla por establecimiento.
+     */
+    private function resolverAlcance(int $idEmpresa, array &$filtros): array
+    {
+        $idsEmpresa  = [$idEmpresa];
+        $consolidado = false;
+        if (($filtros['alcance'] ?? '') === 'CONSOLIDADO') {
+            $grupo = (new \App\repositories\modulos\EmpresaRepository())
+                ->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+            if ($grupo) {
+                $idsEmpresa  = $grupo;
+                $consolidado = true;
+            }
+        }
+        $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
+        if ($consolidado && !empty($filtros['id_proveedor'])) {
+            $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
+            $filtros['id_proveedor'] = $this->repo->expandirProveedoresPorIdentificacion($raw, $idsEmpresa);
+        }
+        return [$idsEmpresa, $consolidado];
+    }
+
+    /**
+     * Empresa sobre la que se consulta un documento (historial, datos para el modal,
+     * catálogos de pago). Por defecto la activa; en la vista consolidada cada fila trae su
+     * `id_empresa`, y se acepta únicamente si es una hermana del grupo consolidable desde la
+     * matriz (misma regla que el listado). Cualquier otro valor se ignora y se responde por
+     * la activa.
+     */
+    private function empresaLectura(): int
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $pedida    = (int) ($_REQUEST['id_empresa'] ?? 0);
+        if ($pedida <= 0 || $pedida === $idEmpresa) {
+            return $idEmpresa;
+        }
+        $grupo = (new \App\repositories\modulos\EmpresaRepository())
+            ->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        return in_array($pedida, $grupo, true) ? $pedida : $idEmpresa;
+    }
+
+    /**
+     * Empresa en la que se REGISTRA un pago (fase 2 del consolidado). Por defecto la activa;
+     * si la petición trae el `id_empresa` de una hermana del grupo consolidable desde la
+     * matriz, el egreso se registra en los libros de ESA empresa (su punto de emisión, su
+     * secuencial, su cartera y su contabilidad), y se exige que el usuario tenga permiso de
+     * CREAR en ella (Permisos::porRutaEnEmpresa): responde 403 si no lo tiene. Un id fuera del
+     * grupo cae a la empresa activa, donde el documento no existe y el pago se rechaza.
+     */
+    private function empresaEscritura(): int
+    {
+        $idEmpresa = $this->empresaLectura();
+        if ($idEmpresa !== (int) $_SESSION['id_empresa']
+            && empty(\App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $idEmpresa)['crear'])) {
+            $this->json(['ok' => false, 'error' => 'No tiene permiso para registrar pagos en ese establecimiento.'], 403);
+        }
+        return $idEmpresa;
     }
 
     /**
@@ -100,7 +197,7 @@ class CuentasPorPagarController extends BaseModuloController
      * `tipo_fuente` ('COMPRA' | 'LIQUIDACION' | 'IMPORTACION' | 'SALDO_INICIAL')
      * para distinguirla y enrutar.
      */
-    private function getFilasUnificadas(int $idEmpresa, array $filtros): array
+    private function getFilasUnificadas(int|array $idEmpresa, array $filtros): array
     {
         // Compras + liquidaciones + importaciones
         $docs = $this->repo->getListado($idEmpresa, $filtros);
@@ -137,6 +234,9 @@ class CuentasPorPagarController extends BaseModuloController
             $filasSI[] = [
                 'tipo_fuente'        => 'SALDO_INICIAL',
                 'id'                 => (int)$s['id'],
+                'id_empresa'         => (int)($s['id_empresa'] ?? 0),
+                'establecimiento'    => $s['establecimiento'] ?? '',
+                'empresa_nombre'     => $s['empresa_nombre'] ?? '',
                 'id_proveedor'       => $s['id_proveedor'] ?? null,
                 'proveedor_nombre'   => $s['nombre_proveedor'],
                 'proveedor_ruc'      => $s['ruc_proveedor'],
@@ -171,7 +271,7 @@ class CuentasPorPagarController extends BaseModuloController
     public function registrarPagoAjax(): void
     {
         $this->requireCrear();
-        $idEmpresa   = (int) $_SESSION['id_empresa'];
+        $idEmpresa   = $this->empresaEscritura(); // consolidado: pago en los libros de la hermana dueña
         $idUsuario   = (int) $_SESSION['id_usuario'];
 
         $idDoc       = (int)($_POST['id_doc']           ?? 0);
@@ -226,7 +326,7 @@ class CuentasPorPagarController extends BaseModuloController
     public function getDocumentoParaPagoInfoAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idEmpresa  = $this->empresaLectura(); // consolidado: puede ser una hermana
         $idDoc      = (int) ($_GET['id_doc']       ?? 0);
         $tipoFuente = trim($_GET['tipo_fuente']    ?? 'COMPRA');
 
@@ -251,7 +351,7 @@ class CuentasPorPagarController extends BaseModuloController
     public function historialPagosAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idEmpresa  = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idDoc      = (int)($_GET['id_doc']       ?? 0);
         $tipoFuente = trim($_GET['tipo_fuente']   ?? 'COMPRA');
 
@@ -270,7 +370,7 @@ class CuentasPorPagarController extends BaseModuloController
     public function getCatalogosPagoAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: series/conceptos/formas de la hermana dueña
         $this->jsonSuccess([
             'puntos'    => $this->repo->getPuntosEmision($idEmpresa),
             'conceptos' => $this->repo->getConceptos($idEmpresa),
@@ -288,6 +388,11 @@ class CuentasPorPagarController extends BaseModuloController
         $idPunto = (int)($_GET['id_punto_emision'] ?? 0);
         if ($idPunto <= 0) {
             $this->jsonError('ID de punto de emisión inválido.');
+        }
+        // El punto debe pertenecer a la empresa del pago (la activa o, en consolidado, la
+        // hermana dueña del documento); así no se consulta el secuencial de cualquier serie.
+        if (!$this->repo->getPuntoEmisionPorId($idPunto, $this->empresaLectura())) {
+            $this->jsonError('Punto de emisión no válido.');
         }
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
@@ -308,16 +413,11 @@ class CuentasPorPagarController extends BaseModuloController
             $this->jsonSuccess(['proveedores' => []]);
         }
 
-        $sql = "SELECT id, razon_social AS nombre, identificacion
-                FROM proveedores
-                WHERE id_empresa = :id_empresa
-                  AND eliminado  = false
-                  AND (LOWER(razon_social) LIKE :q OR identificacion LIKE :q2)
-                ORDER BY razon_social LIMIT 15";
-
-        $st = $this->repo->getDb()->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa, ':q' => '%' . strtolower($q) . '%', ':q2' => '%' . $q . '%']);
-        $this->jsonSuccess(['proveedores' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+        // Consolidado: se busca en todos los establecimientos del grupo (una fila por
+        // identificación). Si el alcance no procede, resolverAlcance() lo deja en la activa.
+        $filtros = ['alcance' => strtoupper(trim((string)($_GET['alcance'] ?? '')))];
+        [$idsEmpresa] = $this->resolverAlcance($idEmpresa, $filtros);
+        $this->jsonSuccess(['proveedores' => $this->repo->buscarProveedores($idsEmpresa, $idEmpresa, $q)]);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -329,17 +429,23 @@ class CuentasPorPagarController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
 
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
-            $filtrosTxt    = $this->describirFiltros($idEmpresa, $filtros);
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
             $headers = ['Tipo', 'Documento', 'Proveedor', 'RUC', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Pagado', 'Saldo', 'Estado'];
             // Columnas de montos (1-based): número con 2 decimales, sin separador de miles
             $formatos = array_fill_keys([8, 9, 10, 11, 12, 13], '0.00');
+            if ($consolidado) {
+                // Consolidado: primera columna con el establecimiento dueño del documento
+                array_unshift($headers, 'Estab.');
+                $formatos = array_fill_keys([9, 10, 11, 12, 13, 14], '0.00');
+            }
 
             $exportData = [];
             foreach ($filas as $r) {
@@ -350,6 +456,7 @@ class CuentasPorPagarController extends BaseModuloController
                 $nc        = (float)($r['total_nc'] ?? 0);
                 $ret       = (float)($r['total_retenido'] ?? 0);
                 $exportData[] = [
+                    ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
                     match ($r['tipo_fuente']) {
                         'SALDO_INICIAL' => 'Saldo inicial',
                         'LIQUIDACION'   => 'Liquidación',
@@ -393,14 +500,23 @@ class CuentasPorPagarController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
-        $stats = $this->repo->getEstadisticas($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
+        $stats = $this->repo->getEstadisticas($idsEmpresa, $filtros);
 
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
-            $filtrosTxt    = $this->describirFiltros($idEmpresa, $filtros);
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
+
+            // Consolidado: columna "Estab." al inicio; se le resta ancho a "Proveedor" para
+            // que la suma siga en 100% (table-layout: fixed).
+            $wEst  = $consolidado ? 6 : 0;
+            $wProv = 28 - $wEst;
+            $tdEst = fn (array $r): string => $consolidado
+                ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
+                : '';
 
             $totalSaldo   = 0;
             $totalPagRet  = 0;   // pagado + retenido + NC (lo que muestra la columna)
@@ -431,9 +547,9 @@ class CuentasPorPagarController extends BaseModuloController
                     default         => 'Fac.',
                 };
 
-                $filaHtml .= "<tr style='{$color}'>
+                $filaHtml .= "<tr style='{$color}'>{$tdEst($r)}
                     <td style='width:14%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . htmlspecialchars($r['numero_documento'] ?? '') . "</td>
-                    <td style='width:28%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>
+                    <td style='width:{$wProv}%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>
                     <td class='text-center' style='width:12%;'>{$fEmis}</td>
                     <td class='text-center' style='width:16%;'>{$fVenc}<br>{$badge}</td>
                     <td class='text-end' style='width:10%;'>\$" . number_format($ts, 2) . "</td>
@@ -498,8 +614,9 @@ class CuentasPorPagarController extends BaseModuloController
             <table>
                 <thead>
                     <tr>
+                        <?php if ($consolidado): ?><th style="width:<?= $wEst ?>%;">Estab.</th><?php endif; ?>
                         <th style="width:14%;">Documento</th>
-                        <th style="width:28%;">Proveedor</th>
+                        <th style="width:<?= $wProv ?>%;">Proveedor</th>
                         <th style="width:12%;">F. Emisión</th>
                         <th style="width:16%;">F. Vencimiento</th>
                         <th style="width:10%;">Total</th>
@@ -512,7 +629,7 @@ class CuentasPorPagarController extends BaseModuloController
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="4" class="text-end" style="width:70%;">TOTALES:</td>
+                        <td colspan="<?= $consolidado ? 5 : 4 ?>" class="text-end" style="width:70%;">TOTALES:</td>
                         <td class="text-end" style="width:10%;">$<?= number_format($totalTotal, 2) ?></td>
                         <td class="text-end" style="width:10%;color:#198754;">$<?= number_format($totalPagRet, 2) ?></td>
                         <td class="text-end" style="width:10%;color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
@@ -543,6 +660,9 @@ class CuentasPorPagarController extends BaseModuloController
             'fecha_hasta'  => $_REQUEST['fecha_hasta']  ?? '',
             'id_proveedor' => $_REQUEST['id_proveedor'] ?? '',
             'tipo_fuente'  => $_REQUEST['tipo_fuente']  ?? '',
+            // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
+            // solo se honra desde la matriz — ver resolverAlcance()).
+            'alcance'      => strtoupper(trim((string)($_REQUEST['alcance'] ?? ''))),
         ];
     }
 
@@ -550,8 +670,9 @@ class CuentasPorPagarController extends BaseModuloController
      * Descripción legible de los filtros aplicados (encabezado de PDF y Excel).
      * Devuelve etiqueta => valor, con los ids de proveedor resueltos a nombre.
      */
-    private function describirFiltros(int $idEmpresa, array $filtros): array
+    private function describirFiltros(int|array $idsEmpresa, array $filtros): array
     {
+        $idsEmpresa = (array) $idsEmpresa;
         $tipoLbl = [
             ''            => 'Todos (facturas, liquidaciones, importaciones y saldos iniciales)',
             'COMPRA'      => 'Solo facturas',
@@ -584,22 +705,33 @@ class CuentasPorPagarController extends BaseModuloController
             $ids = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
             $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
             if ($ids) {
-                $provRepo = new \App\repositories\modulos\ProveedorRepository();
-                $nombres  = [];
-                foreach ($ids as $id) {
-                    $p = $provRepo->findById($id, $idEmpresa);
-                    $nombres[] = $p
-                        ? trim(($p['razon_social'] ?? '') . (!empty($p['identificacion']) ? " ({$p['identificacion']})" : ''))
-                        : "#{$id}";
+                // En consolidado el filtro viene expandido a las filas hermanas del mismo
+                // proveedor: se muestra una sola vez por identificación.
+                $nombres = [];
+                $vistos  = [];
+                foreach ($this->repo->getProveedoresPorIds($ids, $idsEmpresa) as $id => $p) {
+                    $clave = $p['identificacion'] !== '' ? 'i:' . $p['identificacion'] : 'id:' . $id;
+                    if (isset($vistos[$clave])) {
+                        continue;
+                    }
+                    $vistos[$clave] = true;
+                    $nombres[] = trim($p['nombre'] . ($p['identificacion'] !== '' ? " ({$p['identificacion']})" : ''));
                 }
-                $proveedorTxt = implode(', ', $nombres);
+                $proveedorTxt = $nombres ? implode(', ', $nombres) : implode(', ', array_map(static fn ($i) => "#{$i}", $ids));
             }
+        }
+
+        $alcanceTxt = 'Este establecimiento';
+        if (($filtros['alcance'] ?? '') === 'CONSOLIDADO') {
+            $etq = (new \App\repositories\modulos\EmpresaRepository())->getEtiquetasEstablecimiento($idsEmpresa);
+            $alcanceTxt = 'Consolidado por RUC (' . count($etq) . ' establecimientos: ' . implode(' · ', $etq) . ')';
         }
 
         $tipo   = (string)($filtros['tipo_fuente'] ?? '');
         $estado = (string)($filtros['estado'] ?? 'PENDIENTES');
 
         return [
+            'Alcance'           => $alcanceTxt,
             'Tipo de documento' => $tipoLbl[$tipo] ?? $tipo,
             'Estado'            => $estadoLbl[$estado] ?? $estado,
             'Período'           => $periodo,
@@ -629,7 +761,7 @@ class CuentasPorPagarController extends BaseModuloController
     public function registrarPagoSaldoInicialAjax(): void
     {
         $this->requireCrear();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaEscritura(); // consolidado: pago en los libros de la hermana dueña
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         $idSaldo = (int)($_POST['id_saldo'] ?? 0);
@@ -682,7 +814,7 @@ class CuentasPorPagarController extends BaseModuloController
     public function historialPagosSaldoInicialAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idSaldo   = (int)($_GET['id_saldo'] ?? 0);
         if ($idSaldo <= 0) {
             $this->jsonError('ID de saldo inválido.');

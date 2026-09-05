@@ -146,6 +146,23 @@ class EmpresaRepository extends BaseModel
         return array_values(array_intersect($grupo, $asignadas));
     }
 
+    /**
+     * Establecimientos que la empresa activa puede CONSOLIDAR en un listado (Cuentas por
+     * Cobrar / Cuentas por Pagar): todos los del grupo RUC accesibles al usuario, únicamente
+     * si $idEmpresa es la matriz del grupo (es_matriz) y existe al menos otro establecimiento
+     * accesible. Devuelve [] en cualquier otro caso (no es matriz, RUC único, o el usuario no
+     * tiene asignada ninguna hermana), y así el llamador cae al comportamiento normal (solo la
+     * empresa activa). Punto único de la regla "el consolidado se ve desde la matriz".
+     */
+    public function getIdsConsolidadoDesdeMatriz(int $idEmpresa, int $idUsuario): array
+    {
+        if ($idEmpresa <= 0 || !$this->getEsMatriz($idEmpresa)) {
+            return [];
+        }
+        $ids = $this->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
+        return count($ids) > 1 ? array_values($ids) : [];
+    }
+
     /** RUC de una empresa por id (para resolver la empresa facturada). */
     public function getRucPorId(int $id): ?string
     {

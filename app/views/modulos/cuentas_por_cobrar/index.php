@@ -69,6 +69,19 @@
                     </select>
                 </div>
 
+                <?php if (!empty($puedeConsolidar)): ?>
+                <!-- Alcance: solo la MATRIZ del grupo RUC puede consolidar (fase 1: solo lectura de las hermanas) -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
+                    <select id="cxc-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
+                            onchange="CXC_cargar()"
+                            title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
+                        <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
+                        <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?> establec.)</option>
+                    </select>
+                </div>
+                <?php endif; ?>
+
                 <!-- Fecha Desde -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
@@ -142,6 +155,14 @@
                     <div>
                         <div class="cmg-control-card__stat-value text-success">$<span id="cxc-stat-aldia">0.00</span></div>
                         <div class="cmg-control-card__stat-label">Al Día</div>
+                    </div>
+                </div>
+                <!-- Solo en la vista consolidada por RUC -->
+                <div class="cmg-control-card__stat" id="cxc-stat-estab-wrap" hidden>
+                    <i class="bi bi-diagram-3 bg-info bg-opacity-10 text-info"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-info" id="cxc-stat-estab">0</div>
+                        <div class="cmg-control-card__stat-label">Establecimientos</div>
                     </div>
                 </div>
             </div>
@@ -240,6 +261,8 @@
             </div>
             <div class="modal-body p-3">
                 <input type="hidden" id="cobro-id-venta">
+                <!-- Consolidado (fase 2): el cobro de un documento de otra sucursal se registra en ESA empresa -->
+                <div class="alert alert-info py-1 px-2 mb-2" id="cobro-aviso-establecimiento" style="font-size:.75rem;" hidden></div>
                 <div class="p-2 border rounded-3 bg-light mb-3" id="cobro-info-factura">
                     <div class="row g-1">
                         <div class="col-6">

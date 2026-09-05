@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor
-version: 1.6
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales
+version: 1.8
 orden: 40
 estado: activo
 ---
@@ -77,6 +77,56 @@ asignado a cada factura o recibo (vacía en los saldos iniciales).
 
 > Los **saldos iniciales** no tienen vendedor, así que al elegir un vendedor
 > quedan fuera del listado y de los totales. Con **Todos** vuelven a aparecer.
+
+## Consolidado de establecimientos (solo desde la matriz)
+
+Cuando un mismo RUC tiene varios establecimientos registrados como empresas
+distintas (matriz y sucursales), la cartera de cada uno vive por separado. Desde
+la **matriz** se puede ver la cartera de todo el grupo en una sola pantalla con el
+filtro **Establecimientos**:
+
+- **Solo este (matriz)**: comportamiento normal, únicamente los documentos de la
+  empresa activa.
+- **Consolidado (N establec.)**: suma los documentos de todos los
+  establecimientos del mismo RUC a los que el usuario tiene acceso. Las tarjetas
+  (documentos, saldo, vencido, al día), el gráfico de antigüedad, la vista *Por
+  cliente*, el PDF y el Excel consolidan de la misma forma. Aparece una tarjeta
+  extra con la cantidad de establecimientos incluidos.
+
+Reglas:
+
+- El filtro **solo aparece en la matriz** del grupo (la empresa marcada como
+  matriz en *Empresas*) y solo si existe al menos otro establecimiento accesible.
+  En una sucursal no se muestra.
+- Un usuario que no es superadministrador solo ve los establecimientos que tiene
+  asignados; los demás no entran al consolidado aunque compartan RUC.
+- Cada documento muestra un **badge con el código del establecimiento** (001,
+  002, …) al inicio de la columna *Documento*; al pasar el mouse se ve el nombre.
+- **Cobrar un documento de otra sucursal desde la matriz**: el botón de cobro
+  de la fila abre el mismo modal, pero el ingreso se registra **en los libros de
+  la sucursal dueña del documento**: sus series (puntos de emisión), su
+  secuencial de ingresos, sus conceptos, sus formas de cobro y su contabilidad.
+  El modal lo avisa con una franja azul con el nombre del establecimiento. La
+  matriz no registra nada propio: no hay asiento intercompañías.
+- Para cobrar en una sucursal el usuario necesita permiso de **crear** en
+  Cuentas por Cobrar **en esa sucursal** (superadministrador siempre puede). Si
+  no lo tiene, el botón aparece deshabilitado con el aviso "Sin permiso para
+  registrar cobros en el establecimiento…".
+- El historial de cobros de un documento de otra sucursal sí se consulta desde
+  la matriz. El correo y el WhatsApp de recordatorio **no**: usan la
+  configuración de correo y las plantillas de la empresa activa, así que para
+  esos documentos se envían desde la sucursal; tampoco entran en el envío masivo.
+  Al hacer clic en la fila, el panel de detalle muestra solo el resumen.
+- El buscador de **Cliente** busca en todos los establecimientos y muestra al
+  cliente una sola vez por identificación; al elegirlo, el filtro alcanza sus
+  documentos en todas las sucursales (el cruce es por RUC/cédula, porque cada
+  establecimiento tiene su propia lista de clientes).
+- El filtro **Vendedor** es por establecimiento: en consolidado solo acota los
+  documentos del establecimiento donde existe ese vendedor.
+- Cada establecimiento se filtra por **su propio ambiente** (producción o
+  pruebas), no por el de la matriz.
+- En el PDF y el Excel, el encabezado indica *Alcance: Consolidado por RUC* con
+  la lista de establecimientos, y se agrega la columna **Estab.**
 
 ## Fecha Hasta como fecha de corte
 
@@ -169,6 +219,18 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **1.8** — Consolidado, fase 2: desde la matriz ya se puede **registrar el
+  cobro** de una factura, recibo o saldo inicial de otra sucursal. El ingreso se
+  registra en los libros de la sucursal dueña (sus series, secuencial, conceptos,
+  formas de cobro y contabilidad) y exige permiso de crear en esa sucursal. El
+  correo y el WhatsApp siguen enviándose desde la sucursal.
+- **1.7** — Nuevo filtro **Establecimientos** para ver la cartera **consolidada
+  de todos los establecimientos del mismo RUC**, disponible solo desde la
+  **matriz** del grupo (fase 1, solo lectura): los documentos de las sucursales
+  se listan con el badge de su establecimiento, suman en tarjetas, antigüedad,
+  PDF y Excel, y permiten ver su historial, pero el cobro, el correo y el
+  WhatsApp se registran desde la empresa dueña del documento. El buscador de
+  cliente cruza por identificación entre establecimientos.
 - **1.6** — El PDF y el Excel exportados muestran, bajo el encabezado, los
   **filtros aplicados** (tipo de documento, estado, vendedor, período y cliente),
   para que quien lo reciba sepa exactamente qué cartera está viendo. En el Excel

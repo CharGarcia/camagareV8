@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta
-version: 1.3
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales
+version: 1.5
 orden: 50
 estado: activo
 ---
@@ -26,6 +26,51 @@ Menos lo ya pagado mediante egresos.
 El **vencimiento** se calcula con el *plazo* configurado en la ficha del
 proveedor. Si un documento vence antes de lo que esperaba, ese es el campo a
 revisar.
+
+## Consolidado de establecimientos (solo desde la matriz)
+
+Cuando un mismo RUC tiene varios establecimientos registrados como empresas
+distintas (matriz y sucursales), las deudas de cada uno viven por separado.
+Desde la **matriz** se puede ver la cartera por pagar de todo el grupo en una
+sola pantalla con el filtro **Establecimientos**:
+
+- **Solo este (matriz)**: comportamiento normal, únicamente los documentos de la
+  empresa activa.
+- **Consolidado (N establec.)**: suma las facturas de compra, liquidaciones,
+  importaciones y saldos iniciales de todos los establecimientos del mismo RUC a
+  los que el usuario tiene acceso. Las tarjetas, el gráfico de antigüedad, la
+  vista *Por proveedor*, el PDF y el Excel consolidan de la misma forma. Aparece
+  una tarjeta extra con la cantidad de establecimientos incluidos.
+
+Reglas:
+
+- El filtro **solo aparece en la matriz** del grupo (la empresa marcada como
+  matriz en *Empresas*) y solo si existe al menos otro establecimiento accesible.
+  En una sucursal no se muestra.
+- Un usuario que no es superadministrador solo ve los establecimientos que tiene
+  asignados; los demás no entran al consolidado aunque compartan RUC.
+- Cada documento muestra un **badge con el código del establecimiento** (001,
+  002, …) al inicio de la columna *Documento*; al pasar el mouse se ve el nombre.
+- **Pagar un documento de otra sucursal desde la matriz**: el botón de pago de
+  la fila abre el mismo modal, pero el egreso se registra **en los libros de la
+  sucursal dueña del documento**: sus series (puntos de emisión), su secuencial
+  de egresos, sus conceptos, sus formas de pago y su contabilidad. El modal lo
+  avisa con una franja azul con el nombre del establecimiento. La matriz no
+  registra nada propio: no hay asiento intercompañías.
+- Para pagar en una sucursal el usuario necesita permiso de **crear** en
+  Cuentas por Pagar **en esa sucursal** (superadministrador siempre puede). Si
+  no lo tiene, el botón aparece deshabilitado con el aviso "Sin permiso para
+  registrar pagos en el establecimiento…".
+- El historial de pagos de un documento de otra sucursal se consulta desde la
+  matriz. Al hacer clic en la fila, el panel de detalle muestra solo el resumen.
+- El buscador de **Proveedor** busca en todos los establecimientos y muestra al
+  proveedor una sola vez por identificación; al elegirlo, el filtro alcanza sus
+  documentos en todas las sucursales (el cruce es por RUC, porque cada
+  establecimiento tiene su propia lista de proveedores).
+- Cada establecimiento se filtra por **su propio ambiente** (producción o
+  pruebas), no por el de la matriz.
+- En el PDF y el Excel, el encabezado indica *Alcance: Consolidado por RUC* con
+  la lista de establecimientos, y se agrega la columna **Estab.**
 
 ## Fecha Hasta como fecha de corte
 
@@ -86,6 +131,18 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.5** — Consolidado, fase 2: desde la matriz ya se puede **registrar el
+  pago** de una factura de compra, liquidación, importación o saldo inicial de
+  otra sucursal. El egreso se registra en los libros de la sucursal dueña (sus
+  series, secuencial, conceptos, formas de pago y contabilidad) y exige permiso
+  de crear en esa sucursal.
+- **1.4** — Nuevo filtro **Establecimientos** para ver las deudas **consolidadas
+  de todos los establecimientos del mismo RUC**, disponible solo desde la
+  **matriz** del grupo (fase 1, solo lectura): los documentos de las sucursales
+  se listan con el badge de su establecimiento, suman en tarjetas, antigüedad,
+  PDF y Excel, y permiten ver su historial, pero el pago se registra desde la
+  empresa dueña del documento. El buscador de proveedor cruza por identificación
+  entre establecimientos.
 - **1.3** — El PDF y el Excel exportados muestran, bajo el encabezado, los
   **filtros aplicados** (tipo de documento, estado, período y proveedor), para
   que quien lo reciba sepa exactamente qué cartera está viendo. En el Excel los

@@ -2523,14 +2523,21 @@ class MigracionMysqlService
         // CRÍTICO: filtrar TAMBIÉN por ruc_empresa. El codigo_unico SÍ se repite entre empresas en la
         // base vieja (p.ej. 'FAC204315' existe en 2 contribuyentes), así que sin este filtro el detalle
         // de un asiento traería líneas de OTRA empresa y lo corrompería (líneas extra, descuadre, cuentas ajenas).
-        $detStmt = $mysql->prepare("SELECT id_cuenta, debe, haber, detalle_item FROM detalle_diario_contable WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
+        $detStmt = $mysql->prepare("SELECT id_cuenta, debe, haber, detalle_item, id_cli_pro FROM detalle_diario_contable WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?) RETURNING id");
-        $insDet  = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $insDet  = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, documento_referencia, id_entidad, tipo_entidad, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        // Terceros por línea (id_cli_pro viejo → id/tipo nuevo, según el tipo de asiento).
+        $mapProvC = $this->mapaDe($pg, $idEmpresa, 'proveedores');
+        $mapCliC  = $this->mapaDe($pg, $idEmpresa, 'clientes');
 
         // Mapa de la propia contabilidad (id_diario viejo → id asiento nuevo) y ajuste de ambiente,
         // para reconciliar / (re)enlazar en re-corridas sin re-insertar.
         $mapContab = $this->mapaDe($pg, $idEmpresa, 'contabilidad');
-        $updAmb    = $pg->prepare("UPDATE asientos_contables_cabecera SET tipo_ambiente = ?, estado = ?, tipo_comprobante = ? WHERE id = ?");
+        // Reconcile COMPLETO (re-migrar): actualiza toda la cabecera y RECONSTRUYE el detalle, para que un
+        // asiento editado en el viejo (fecha/valores/líneas) se corrija al volver a migrar. Antes solo se
+        // actualizaba ambiente/estado/tipo, así que los editados quedaban con los datos de la 1ª migración.
+        $updCabFull = $pg->prepare("UPDATE asientos_contables_cabecera SET fecha_asiento = ?, tipo_comprobante = ?, concepto = ?, estado = ?, total_debe = ?, total_haber = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $delDet     = $pg->prepare("DELETE FROM asientos_contables_detalle WHERE id_asiento = ?");
 
         // Enlace documento ↔ asiento migrado. `docDeDiario()` resuelve el documento nuevo por el
         // 'tipo' del diario y el codigo_unico (prefijo+id viejo); aquí se setea
@@ -2548,7 +2555,7 @@ class MigracionMysqlService
         };
 
         // Los asientos ELIMINADOS en el sistema viejo se marcan con estado='Anulado' → NO se migran.
-        $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo
+        $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo, id_documento
                   FROM encabezado_diario WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -2560,18 +2567,15 @@ class MigracionMysqlService
             // ya se excluyeron arriba; se mantiene el mapeo por robustez).
             $est = (stripos((string) $e['estado'], 'anul') !== false) ? 'anulado' : 'contabilizado';
             $tcomp = self::tipoComprobanteCasa($e['tipo'] ?? null); // vocabulario del sistema nuevo
-            // Ya migrado: reconciliar ambiente + estado + tipo y (re)enlazar el documento (re-corrida).
-            if (isset($mapContab[(string) $old])) {
-                $idAsientoExist = (int) $mapContab[(string) $old];
-                $updAmb->execute([$this->ambienteEmpresa($pg, $idEmpresa), $est, $tcomp, $idAsientoExist]);
-                $enlazar($e, $idAsientoExist);
-                $res['ya_migrados']++;
-                continue;
-            }
+            // Tercero de las líneas según el tipo de asiento (id_cli_pro viejo → proveedor o cliente).
+            $tipoTercero = in_array($tcomp, ['compras', 'egresos', 'retenciones_compras'], true) ? 'proveedor'
+                         : (in_array($tcomp, ['ventas', 'ingresos', 'retenciones_ventas'], true) ? 'cliente' : null);
 
             $detStmt->execute([':cu' => (string) $e['codigo_unico'], ':base' => $base]);
             $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
             if (!$dets) { $res['omitidos']++; continue; } // encabezado sin detalle (huérfano)
+
+            $idExist = isset($mapContab[(string) $old]) ? (int) $mapContab[(string) $old] : 0;
 
             try {
                 $pg->beginTransaction();
@@ -2589,7 +2593,14 @@ class MigracionMysqlService
                     // truncado defensivo por si algún detalle superara ese límite.
                     $ref = self::nz($d['detalle_item']);
                     if ($ref !== null) { $ref = mb_substr((string) $ref, 0, 500); }
-                    $lineas[] = [$idc, (float) $d['debe'], (float) $d['haber'], $ref];
+                    // Tercero (id_entidad/tipo_entidad) desde id_cli_pro, resuelto por el mapa según el tipo.
+                    $idEnt = null; $tipEnt = null;
+                    $cliPro = (int) ($d['id_cli_pro'] ?? 0);
+                    if ($cliPro > 0 && $tipoTercero !== null) {
+                        $idEnt = ($tipoTercero === 'proveedor' ? ($mapProvC[(string) $cliPro] ?? null) : ($mapCliC[(string) $cliPro] ?? null));
+                        if ($idEnt) { $tipEnt = $tipoTercero; } else { $idEnt = null; }
+                    }
+                    $lineas[] = [$idc, (float) $d['debe'], (float) $d['haber'], $ref, $idEnt, $tipEnt];
                     $td += (float) $d['debe'];
                     $th += (float) $d['haber'];
                 }
@@ -2598,16 +2609,35 @@ class MigracionMysqlService
                     $res['omitidos']++;
                     continue;
                 }
-                $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), $tcomp, (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
-                $idAsiento = (int) $insCab->fetchColumn();
-                foreach ($lineas as $ln) {
-                    $insDet->execute([$idEmpresa, $idAsiento, $ln[0], $ln[1], $ln[2], $ln[3], $idUsuario]);
+                $fe   = substr((string) $e['fecha_asiento'], 0, 10);
+                $conc = (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']);
+                $amb  = $this->ambienteEmpresa($pg, $idEmpresa);
+                // Documento de referencia por línea (mismo doc para todo el asiento): el número legible
+                // (EEE-PPP-SSSSSSSSS) que trae el concepto viejo; si no, el código de documento (id_documento).
+                $docRef = null;
+                if (preg_match('/\d{3}-\d{3}-\d{6,}/', (string) $e['concepto_general'], $mmref)) {
+                    $docRef = $mmref[0];
+                } else {
+                    $d0 = self::nz($e['id_documento']);
+                    $docRef = ($d0 === '0') ? null : ($d0 !== null ? mb_substr($d0, 0, 100) : null);
                 }
-                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idAsiento, ':cn' => (string) $e['codigo_unico'], ':vin' => 'f', ':cb' => $idUsuario]);
+                if ($idExist) {
+                    // Re-migrar: actualiza cabecera COMPLETA + reconstruye el detalle (corrige editados).
+                    $updCabFull->execute([$fe, $tcomp, $conc, $est, $td, $th, $amb, $idUsuario, $idExist]);
+                    $delDet->execute([$idExist]);
+                    $idAsiento = $idExist;
+                } else {
+                    $insCab->execute([$idEmpresa, $fe, $tcomp, (string) $e['codigo_unico'], $conc, $est, $td, $th, $amb, $idUsuario]);
+                    $idAsiento = (int) $insCab->fetchColumn();
+                    $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idAsiento, ':cn' => (string) $e['codigo_unico'], ':vin' => 'f', ':cb' => $idUsuario]);
+                }
+                foreach ($lineas as $ln) {
+                    $insDet->execute([$idEmpresa, $idAsiento, $ln[0], $ln[1], $ln[2], $ln[3], $docRef, $ln[4], $ln[5], $idUsuario]);
+                }
                 $enlazar($e, $idAsiento); // enlaza el documento nuevo con este asiento (id_asiento_contable)
                 $pg->commit();
                 $done[(string) $old] = true;
-                $res['migrados']++;
+                if ($idExist) { $res['ya_migrados']++; } else { $res['migrados']++; }
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;

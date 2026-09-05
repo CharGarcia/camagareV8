@@ -145,22 +145,30 @@ final class AbonosVentaSql
      * @param string $totalAlias  Nombre de la columna sumada (`total_nc` / `total_nd`).
      * @param string $empresaExpr Entero validado o placeholder de la empresa.
      * @param string $extraWhere  Condiciones extra sobre el alias `n`.
+     * @param bool   $porEmpresa  Si true, agrega la columna `id_empresa` al resultado (y al
+     *                            GROUP BY) para que el llamador enlace también por empresa.
+     *                            Necesario cuando `$empresaExpr` abarca varias empresas
+     *                            (consolidado por RUC): dos establecimientos podrían tener
+     *                            un número de documento igual, y sin la empresa en el
+     *                            enlace la nota de uno descontaría la factura del otro.
      */
-    public static function cteNotasPorFactura(string $tabla, string $totalAlias, string $empresaExpr, string $extraWhere = ''): string
+    public static function cteNotasPorFactura(string $tabla, string $totalAlias, string $empresaExpr, string $extraWhere = '', bool $porEmpresa = false): string
     {
         $tabla      = $tabla === 'nota_debito_cabecera' ? 'nota_debito_cabecera' : 'notas_credito_cabecera';
         $totalAlias = preg_replace('/[^a-z_]/', '', $totalAlias) ?: 'total';
         $numNorm    = self::normalizar('n.num_doc_modificado');
+        $colEmp     = $porEmpresa ? 'n.id_empresa, ' : '';
+        $groupBy    = $porEmpresa ? '1, 2' : '1';
 
         return "
-            SELECT {$numNorm} AS num_norm,
+            SELECT {$colEmp}{$numNorm} AS num_norm,
                    SUM(n.importe_total) AS {$totalAlias}
             FROM {$tabla} n
             WHERE n.estado    != 'anulado'
               AND n.eliminado  = false
               AND n.id_empresa = {$empresaExpr}
               {$extraWhere}
-            GROUP BY 1
+            GROUP BY {$groupBy}
         ";
     }
 

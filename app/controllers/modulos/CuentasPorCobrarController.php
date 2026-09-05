@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\repositories\modulos\CuentasPorCobrarRepository;
+use App\repositories\modulos\EmpresaRepository;
 use App\services\WhatsappService;
 use App\Services\LogSistemaService;
 use PDO;
@@ -57,6 +58,13 @@ class CuentasPorCobrarController extends BaseModuloController
             ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'] ?? [];
         $prefsVista   = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
+        // Consolidado por RUC (fase 1, SOLO LECTURA): el selector de alcance aparece únicamente
+        // si la empresa activa es la matriz del grupo y el usuario tiene acceso a al menos otro
+        // establecimiento del mismo RUC (ver EmpresaRepository::getIdsConsolidadoDesdeMatriz).
+        $empresaRepo      = new EmpresaRepository();
+        $idsConsolidado   = $empresaRepo->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        $establecimientos = $idsConsolidado ? $empresaRepo->getEtiquetasEstablecimiento($idsConsolidado) : [];
+
         $this->viewWithLayout('layouts.main', 'modulos/cuentas_por_cobrar/index', [
             'titulo'      => 'Cuentas por Cobrar',
             'perm'        => $this->getPermisos(),
@@ -65,6 +73,9 @@ class CuentasPorCobrarController extends BaseModuloController
             'anios'       => $anios,
             'tieneWA'     => $tieneWA,
             'vendedores'  => $vendedores,
+            'puedeConsolidar'  => !empty($idsConsolidado),
+            'establecimientos' => $establecimientos,
+            'idEmpresa'        => $idEmpresa,
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -80,10 +91,11 @@ class CuentasPorCobrarController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
         $filtros = $this->getFiltros();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas      = $this->getFilasUnificadas($idEmpresa, $filtros);
-        $stats      = $this->repo->getEstadisticas($idEmpresa, $filtros);
-        $antiguedad = $this->repo->getAntiguedad($idEmpresa, $filtros);
+        $filas      = $this->getFilasUnificadas($idsEmpresa, $filtros);
+        $stats      = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        $antiguedad = $this->repo->getAntiguedad($idsEmpresa, $filtros);
 
         // Formateamos filas
         foreach ($filas as &$f) {
@@ -91,14 +103,99 @@ class CuentasPorCobrarController extends BaseModuloController
             $f['total_cobrado']= number_format((float)$f['total_cobrado'],2, '.', '');
             $f['saldo']        = number_format((float)$f['saldo'],        2, '.', '');
             $f['dias_vencido'] = (int)($f['dias_vencido'] ?? 0);
+            // Consolidado: los documentos de OTRO establecimiento son solo lectura
+            // (sin cobro, correo ni WhatsApp desde aquí). La vista lo usa para
+            // deshabilitar esas acciones y mostrar el badge del establecimiento.
+            $f['id_empresa'] = (int)($f['id_empresa'] ?? $idEmpresa);
+            $f['es_hermana'] = $f['id_empresa'] !== $idEmpresa;
+            // Fase 2: cobrar desde la matriz un documento de una hermana exige permiso de
+            // CREAR en ESA empresa (el ingreso se registra en sus libros). Se resuelve una
+            // vez por establecimiento; la vista deshabilita el botón cuando es false.
+            $permCrearPorEmpresa ??= [];
+            if ($f['es_hermana']) {
+                $e = $f['id_empresa'];
+                if (!isset($permCrearPorEmpresa[$e])) {
+                    $permCrearPorEmpresa[$e] = !empty(\App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $e)['crear']);
+                }
+                $f['puede_operar'] = $permCrearPorEmpresa[$e];
+            } else {
+                $f['puede_operar'] = true;
+            }
         }
         unset($f);
 
         $this->jsonSuccess([
-            'filas'      => $filas,
-            'stats'      => $stats,
-            'antiguedad' => $antiguedad,
+            'filas'            => $filas,
+            'stats'            => $stats,
+            'antiguedad'       => $antiguedad,
+            'consolidado'      => $consolidado,
+            'establecimientos' => count($idsEmpresa),
         ]);
+    }
+
+    /**
+     * Alcance del listado (fase 1 del consolidado por RUC: SOLO LECTURA desde la matriz).
+     * Devuelve [idsEmpresa, consolidado]. El valor `alcance=CONSOLIDADO` que manda la vista
+     * solo se honra si la empresa activa es la matriz del grupo RUC y hay hermanas accesibles
+     * para el usuario (EmpresaRepository::getIdsConsolidadoDesdeMatriz); en cualquier otro
+     * caso se ignora en silencio y el listado queda como siempre (solo la empresa activa).
+     * En consolidado, el filtro de cliente se expande a las filas hermanas del mismo cliente
+     * (misma identificación), porque `clientes` es una tabla por establecimiento.
+     */
+    private function resolverAlcance(int $idEmpresa, array &$filtros): array
+    {
+        $idsEmpresa  = [$idEmpresa];
+        $consolidado = false;
+        if (($filtros['alcance'] ?? '') === 'CONSOLIDADO') {
+            $grupo = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+            if ($grupo) {
+                $idsEmpresa  = $grupo;
+                $consolidado = true;
+            }
+        }
+        $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
+        if ($consolidado && !empty($filtros['id_cliente'])) {
+            $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
+            $filtros['id_cliente'] = $this->repo->expandirClientesPorIdentificacion($raw, $idsEmpresa);
+        }
+        return [$idsEmpresa, $consolidado];
+    }
+
+    /**
+     * Empresa sobre la que se consulta un documento (historial, datos para el modal,
+     * catálogos de cobro). Por defecto la activa; en la vista consolidada cada fila trae su
+     * `id_empresa`, y se acepta únicamente si es una hermana del grupo consolidable desde la
+     * matriz (misma regla que el listado). Cualquier otro valor se ignora y se responde por
+     * la activa. El correo y el WhatsApp no usan este método a propósito: siguen atados a la
+     * empresa activa (usan su configuración de correo y sus plantillas).
+     */
+    private function empresaLectura(): int
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $pedida    = (int) ($_REQUEST['id_empresa'] ?? 0);
+        if ($pedida <= 0 || $pedida === $idEmpresa) {
+            return $idEmpresa;
+        }
+        $grupo = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        return in_array($pedida, $grupo, true) ? $pedida : $idEmpresa;
+    }
+
+    /**
+     * Empresa en la que se REGISTRA un cobro (fase 2 del consolidado). Por defecto la activa;
+     * si la petición trae el `id_empresa` de una hermana del grupo consolidable desde la
+     * matriz, el ingreso se registra en los libros de ESA empresa (su punto de emisión, su
+     * secuencial, su cartera y su contabilidad), y se exige que el usuario tenga permiso de
+     * CREAR en ella (Permisos::porRutaEnEmpresa): responde 403 si no lo tiene. Un id fuera del
+     * grupo cae a la empresa activa, donde el documento no existe y el cobro se rechaza.
+     */
+    private function empresaEscritura(): int
+    {
+        $idEmpresa = $this->empresaLectura();
+        if ($idEmpresa !== (int) $_SESSION['id_empresa']
+            && empty(\App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $idEmpresa)['crear'])) {
+            $this->json(['ok' => false, 'error' => 'No tiene permiso para registrar cobros en ese establecimiento.'], 403);
+        }
+        return $idEmpresa;
     }
 
     /**
@@ -110,7 +207,7 @@ class CuentasPorCobrarController extends BaseModuloController
      * qué orígenes se incluyen. Los saldos iniciales se filtran por el mismo
      * estado/cliente del listado.
      */
-    private function getFilasUnificadas(int $idEmpresa, array $filtros): array
+    private function getFilasUnificadas(int|array $idEmpresa, array $filtros): array
     {
         $tipoDoc = $filtros['tipo_doc'] ?? 'TODOS';
 
@@ -160,6 +257,9 @@ class CuentasPorCobrarController extends BaseModuloController
             $filasSI[] = [
                 'origen'            => 'SALDO_INICIAL',
                 'id'                => (int)$s['id'],
+                'id_empresa'        => (int)($s['id_empresa'] ?? 0),
+                'establecimiento'   => $s['establecimiento'] ?? '',
+                'empresa_nombre'    => $s['empresa_nombre'] ?? '',
                 'numero_factura'    => $s['nro_documento'],
                 'id_cliente'        => $s['id_cliente'] ?? null,
                 'cliente_nombre'    => $s['nombre_cliente'],
@@ -197,7 +297,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function registrarCobroAjax(): void
     {
         $this->requireCrear();
-        $idEmpresa    = (int) $_SESSION['id_empresa'];
+        $idEmpresa    = $this->empresaEscritura(); // consolidado: cobro en los libros de la hermana dueña
         $idUsuario    = (int) $_SESSION['id_usuario'];
 
         $idVenta      = (int)($_POST['id_venta']          ?? 0);
@@ -326,7 +426,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function getFacturaParaCobroInfoAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana
         $idVenta   = (int) ($_GET['id_venta'] ?? 0);
 
         if ($idVenta <= 0) {
@@ -350,7 +450,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function historialCobrosAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idVenta   = (int)($_GET['id_venta'] ?? 0);
 
         if ($idVenta <= 0) {
@@ -369,7 +469,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function getReciboParaCobroInfoAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana
         $idRecibo  = (int) ($_GET['id_recibo'] ?? 0);
 
         if ($idRecibo <= 0) {
@@ -389,7 +489,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function historialCobrosReciboAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idRecibo  = (int)($_GET['id_recibo'] ?? 0);
 
         if ($idRecibo <= 0) {
@@ -409,7 +509,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function registrarCobroReciboAjax(): void
     {
         $this->requireCrear();
-        $idEmpresa    = (int) $_SESSION['id_empresa'];
+        $idEmpresa    = $this->empresaEscritura(); // consolidado: cobro en los libros de la hermana dueña
         $idUsuario    = (int) $_SESSION['id_usuario'];
 
         $idRecibo     = (int)($_POST['id_recibo']         ?? 0);
@@ -542,7 +642,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function getCatalogosCobroAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: series/conceptos/formas de la hermana dueña
         $this->jsonSuccess([
             'puntos'    => $this->repo->getPuntosEmision($idEmpresa),
             'conceptos' => $this->repo->getConceptos($idEmpresa),
@@ -562,6 +662,12 @@ class CuentasPorCobrarController extends BaseModuloController
             $this->jsonError('ID de punto de emisión inválido.');
             return;
         }
+        // El punto debe pertenecer a la empresa del cobro (la activa o, en consolidado, la
+        // hermana dueña del documento); así no se consulta el secuencial de cualquier serie.
+        if (!$this->repo->getPuntoEmisionPorId($idPunto, $this->empresaLectura())) {
+            $this->jsonError('Punto de emisión no válido.');
+            return;
+        }
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
         $this->jsonSuccess($res);
@@ -570,7 +676,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function getFormasCobroAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura();
         $this->jsonSuccess(['formas' => $this->repo->getFormasCobro($idEmpresa)]);
     }
 
@@ -1068,16 +1174,11 @@ $plantillasFiltradas = [];
             return;
         }
 
-        $sql = "SELECT id, nombre, identificacion
-                FROM clientes
-                WHERE id_empresa = :id_empresa
-                  AND eliminado  = false
-                  AND (LOWER(nombre) LIKE :q OR identificacion LIKE :q2)
-                ORDER BY nombre LIMIT 15";
-
-        $st = $this->repo->getDb()->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa, ':q' => '%' . strtolower($q) . '%', ':q2' => '%' . $q . '%']);
-        $this->jsonSuccess(['clientes' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+        // Consolidado: se busca en todos los establecimientos del grupo (una fila por
+        // identificación). Si el alcance no procede, resolverAlcance() lo deja en la activa.
+        $filtros = ['alcance' => strtoupper(trim((string)($_GET['alcance'] ?? '')))];
+        [$idsEmpresa] = $this->resolverAlcance($idEmpresa, $filtros);
+        $this->jsonSuccess(['clientes' => $this->repo->buscarClientes($idsEmpresa, $idEmpresa, $q)]);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1089,17 +1190,23 @@ $plantillasFiltradas = [];
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
 
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = $this->describirFiltros($idEmpresa, $filtros);
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
             $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
             // Columnas de montos (1-based): número con 2 decimales, sin separador de miles
             $formatos = array_fill_keys([9, 10, 11, 12, 13, 14], '0.00');
+            if ($consolidado) {
+                // Consolidado: primera columna con el establecimiento dueño del documento
+                array_unshift($headers, 'Estab.');
+                $formatos = array_fill_keys([10, 11, 12, 13, 14, 15], '0.00');
+            }
 
             $exportData = [];
             foreach ($filas as $r) {
@@ -1109,6 +1216,7 @@ $plantillasFiltradas = [];
                 $nc     = (float)($r['total_nc'] ?? 0);
                 $ret    = (float)($r['total_retenido'] ?? 0);
                 $exportData[] = [
+                    ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
                     (string)($r['numero_factura'] ?? ''),
                     $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
                     (string)($r['cliente_nombre'] ?? ''),
@@ -1148,14 +1256,23 @@ $plantillasFiltradas = [];
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
-        $stats = $this->repo->getEstadisticas($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
+        $stats = $this->repo->getEstadisticas($idsEmpresa, $filtros);
 
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = $this->describirFiltros($idEmpresa, $filtros);
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
+
+            // Consolidado: columna "Estab." al inicio; se le resta ancho a "Cliente" para
+            // que la suma siga en 100% (table-layout: fixed).
+            $wEst = $consolidado ? 6 : 0;
+            $wCli = 24 - $wEst;
+            $tdEst = fn (array $r): string => $consolidado
+                ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
+                : '';
 
             $totalSaldo   = 0;
             $totalCobrado = 0;
@@ -1174,10 +1291,10 @@ $plantillasFiltradas = [];
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
                 $origenTxt = $this->getOrigenLabel($r['origen'] ?? 'FACTURA');
-                $filaHtml .= "<tr>
+                $filaHtml .= "<tr>{$tdEst($r)}
                     <td style='width:13%;'>" . htmlspecialchars($r['numero_factura'] ?? '') . "</td>
                     <td class='text-center' style='width:9%;'>{$origenTxt}</td>
-                    <td style='width:24%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>
+                    <td style='width:{$wCli}%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>
                     <td class='text-center' style='width:11%;'>{$fEmis}</td>
                     <td class='text-center' style='width:16%;'>{$fVenc} {$badge}</td>
                     <td class='text-end' style='width:9%;'>\$" . number_format($ts, 2) . "</td>
@@ -1243,9 +1360,10 @@ $plantillasFiltradas = [];
             <table>
                 <thead>
                     <tr>
+                        <?php if ($consolidado): ?><th style="width:<?= $wEst ?>%;">Estab.</th><?php endif; ?>
                         <th style="width:13%;">Documento</th>
                         <th style="width:9%;">Origen</th>
-                        <th style="width:24%;">Cliente</th>
+                        <th style="width:<?= $wCli ?>%;">Cliente</th>
                         <th style="width:11%;">F. Emisión</th>
                         <th style="width:16%;">F. Vencimiento</th>
                         <th style="width:9%;">Total</th>
@@ -1258,7 +1376,7 @@ $plantillasFiltradas = [];
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="5" class="text-end" style="width:73%;">TOTALES:</td>
+                        <td colspan="<?= $consolidado ? 6 : 5 ?>" class="text-end" style="width:73%;">TOTALES:</td>
                         <td class="text-end" style="width:9%;">$<?= number_format($totalTotal, 2) ?></td>
                         <td class="text-end" style="width:9%;">$<?= number_format($totalCobrado, 2) ?></td>
                         <td class="text-end" style="width:9%;">$<?= number_format($totalSaldo, 2) ?></td>
@@ -1294,6 +1412,9 @@ $plantillasFiltradas = [];
             'fecha_hasta' => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'  => $_REQUEST['id_cliente']  ?? '',
             'id_vendedor' => (int)($_REQUEST['id_vendedor'] ?? 0) ?: '',
+            // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
+            // solo se honra desde la matriz — ver resolverAlcance()).
+            'alcance'     => strtoupper(trim((string)($_REQUEST['alcance'] ?? ''))),
         ];
     }
 
@@ -1301,8 +1422,10 @@ $plantillasFiltradas = [];
      * Descripción legible de los filtros aplicados (para encabezados de PDF).
      * Devuelve etiqueta => valor, con los ids de cliente/vendedor resueltos a nombre.
      */
-    private function describirFiltros(int $idEmpresa, array $filtros): array
+    private function describirFiltros(int|array $idsEmpresa, array $filtros): array
     {
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idsEmpresa = (array) $idsEmpresa;
         $tipoDocLbl = [
             'TODOS'         => 'Todos (facturas, recibos y saldos iniciales)',
             'FACTURA'       => 'Facturas de venta',
@@ -1341,17 +1464,30 @@ $plantillasFiltradas = [];
             $ids = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
             $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
             if ($ids) {
-                $cliRepo = new \App\repositories\modulos\ClienteRepository();
+                // En consolidado el filtro viene expandido a las filas hermanas del mismo
+                // cliente: se muestra una sola vez por identificación.
                 $nombres = [];
-                foreach ($ids as $id) {
-                    $c = $cliRepo->getPorId($id, $idEmpresa);
-                    $nombres[] = $c ? trim(($c['nombre'] ?? '') . (!empty($c['identificacion']) ? " ({$c['identificacion']})" : '')) : "#{$id}";
+                $vistos  = [];
+                foreach ($this->repo->getClientesPorIds($ids, $idsEmpresa) as $id => $c) {
+                    $clave = $c['identificacion'] !== '' ? 'i:' . $c['identificacion'] : 'id:' . $id;
+                    if (isset($vistos[$clave])) {
+                        continue;
+                    }
+                    $vistos[$clave] = true;
+                    $nombres[] = trim($c['nombre'] . ($c['identificacion'] !== '' ? " ({$c['identificacion']})" : ''));
                 }
-                $clienteTxt = implode(', ', $nombres);
+                $clienteTxt = $nombres ? implode(', ', $nombres) : implode(', ', array_map(static fn ($i) => "#{$i}", $ids));
             }
         }
 
+        $alcanceTxt = 'Este establecimiento';
+        if (($filtros['alcance'] ?? '') === 'CONSOLIDADO') {
+            $etq = (new EmpresaRepository())->getEtiquetasEstablecimiento($idsEmpresa);
+            $alcanceTxt = 'Consolidado por RUC (' . count($etq) . ' establecimientos: ' . implode(' · ', $etq) . ')';
+        }
+
         return [
+            'Alcance'           => $alcanceTxt,
             'Tipo de documento' => $tipoDocLbl[$filtros['tipo_doc'] ?? 'TODOS'] ?? 'Todos',
             'Estado'            => $estadoLbl[$filtros['estado'] ?? 'PENDIENTES'] ?? (string)($filtros['estado'] ?? ''),
             'Vendedor'          => $vendedorTxt,
@@ -1495,7 +1631,7 @@ HTML;
     public function registrarCobroSaldoInicialAjax(): void
     {
         $this->requireCrear();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaEscritura(); // consolidado: cobro en los libros de la hermana dueña
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         $idSaldo = (int)($_POST['id_saldo'] ?? 0);
@@ -1548,7 +1684,7 @@ HTML;
     public function historialCobrosSaldoInicialAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idSaldo   = (int)($_GET['id_saldo'] ?? 0);
         if ($idSaldo <= 0) {
             $this->jsonError('ID de saldo inválido.');

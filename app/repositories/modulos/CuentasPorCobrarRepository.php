@@ -19,6 +19,74 @@ class CuentasPorCobrarRepository extends BaseRepository
         $this->numV = AbonosVentaSql::numFactura('v');
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // ALCANCE POR EMPRESA (una empresa o varios establecimientos del mismo RUC)
+    //
+    // Todos los listados/agregados reciben `int|array $idsEmpresa`: la empresa
+    // activa (int, comportamiento normal) o la lista de establecimientos del
+    // grupo RUC cuando la matriz pide el consolidado (el controller la resuelve
+    // con EmpresaRepository::getIdsConsolidadoDesdeMatriz, nunca el cliente).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Normaliza el alcance a lista de ids enteros positivos, sin repetidos y nunca vacía. */
+    private function idsEmpresa(int|array $idsEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $idsEmpresa), static fn ($i) => $i > 0)));
+        if (!$ids) {
+            throw new \InvalidArgumentException('Cuentas por Cobrar: id_empresa requerido.');
+        }
+        return $ids;
+    }
+
+    /** Lista para interpolar en `IN (...)` (ids ya validados como enteros por idsEmpresa()). */
+    private function sqlIn(array $ids): string
+    {
+        return implode(',', $ids);
+    }
+
+    /** Expresión `ANY(ARRAY[...])` para los helpers de AbonosVentaSql, que comparan con `=`. */
+    private function sqlAny(array $ids): string
+    {
+        return 'ANY(ARRAY[' . $this->sqlIn($ids) . '])';
+    }
+
+    /**
+     * Placeholders `:prefijo0,:prefijo1,…` para un IN con PDO (pgsql no admite repetir un
+     * placeholder, por eso cada IN lleva su prefijo). Registra los valores en $params.
+     */
+    private function phIn(array $ids, string $prefijo, array &$params): string
+    {
+        $ph = [];
+        foreach (array_values($ids) as $i => $id) {
+            $k = ":{$prefijo}{$i}";
+            $ph[] = $k;
+            $params[$k] = $id;
+        }
+        return implode(',', $ph);
+    }
+
+    /**
+     * El documento pertenece al ambiente actual de SU PROPIA empresa. Correlacionada por fila
+     * (no por la empresa activa): en el consolidado cada establecimiento puede estar en un
+     * ambiente distinto y debe filtrarse contra el suyo.
+     */
+    private function condAmbiente(string $alias): string
+    {
+        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+    }
+
+    /**
+     * Columnas que identifican el establecimiento dueño de la fila (badge en el consolidado).
+     * `id_empresa` sale del documento ($aliasDoc), no de `empresas`: el JOIN a empresas es
+     * LEFT para que un documento nunca desaparezca del listado por su empresa.
+     */
+    private function colsEstablecimiento(string $aliasDoc, string $aliasEmp = 'emp'): string
+    {
+        return "{$aliasDoc}.id_empresa AS id_empresa,
+                COALESCE({$aliasEmp}.establecimiento, '') AS establecimiento,
+                COALESCE(NULLIF({$aliasEmp}.nombre_comercial, ''), {$aliasEmp}.nombre, '') AS empresa_nombre";
+    }
+
     /**
      * CTE que calcula lo cobrado por documento hasta una fecha de corte opcional.
      * Si $fechaHasta es null, incluye todos los cobros (comportamiento en tiempo real).
@@ -31,7 +99,7 @@ class CuentasPorCobrarRepository extends BaseRepository
      * interpola directo igual que getCteNC/getCteND en este mismo archivo (int
      * validado por el tipo del parámetro → interpolación segura).
      */
-    private function getCteCobrado(int $idEmpresa, ?string $fechaHasta = null, string $tipoDoc = 'FACTURA'): string
+    private function getCteCobrado(array $idsEmpresa, ?string $fechaHasta = null, string $tipoDoc = 'FACTURA'): string
     {
         $filtroFecha = $fechaHasta ? "AND ic2.fecha_emision <= :cobrado_hasta" : '';
         $tipoDoc     = $tipoDoc === 'RECIBO' ? 'RECIBO' : 'FACTURA'; // literal seguro
@@ -44,7 +112,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             WHERE id2.tipo_documento = '{$tipoDoc}'
               AND ic2.estado    != 'anulado'
               AND ic2.eliminado  = false
-              AND ic2.id_empresa = {$idEmpresa}
+              AND ic2.id_empresa IN ({$this->sqlIn($idsEmpresa)})
               {$filtroFecha}
             GROUP BY id2.id_referencia_documento
         ";
@@ -58,26 +126,30 @@ class CuentasPorCobrarRepository extends BaseRepository
      * $idEmpresa: mismo motivo que getCteCobrado — sin filtrar, sumaba retenciones
      * de todas las empresas.
      */
-    private function getCteRetenido(int $idEmpresa, ?string $fechaHasta = null): string
+    private function getCteRetenido(array $idsEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :retenido_hasta" : '';
-        return AbonosVentaSql::cteRetenidoPorFactura((string)$idEmpresa, $filtroFecha);
+        // El helper compara `r.id_empresa = {expr}`; con ANY(ARRAY[...]) cubre uno o varios
+        // establecimientos. El enlace a la factura ya exige vc.id_empresa = r.id_empresa.
+        return AbonosVentaSql::cteRetenidoPorFactura($this->sqlAny($idsEmpresa), $filtroFecha);
     }
 
     /**
      * CTE que calcula el total de notas de crédito aplicadas hasta una fecha de corte opcional.
      * Columnas: num_norm (documento modificado, normalizado a 15 dígitos) y total_nc.
      */
-    private function getCteNC(int $idEmpresa, ?string $fechaHasta = null): string
+    private function getCteNC(array $idsEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND n.fecha_emision <= :nc_hasta" : '';
-        // $idEmpresa es int validado → interpolación segura. Se filtra por empresa
-        // (multiempresa, §4) y por el ambiente actual de la empresa, tolerando NC
-        // legacy sin tipo_ambiente (NULL) para no perderlas del cálculo.
-        $extra = "AND (n.tipo_ambiente IS NULL
-                   OR n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
+        // Ids enteros validados → interpolación segura. Se filtra por empresa (multiempresa,
+        // §4) y por el ambiente actual de la empresa DUEÑA de la nota (correlacionado por
+        // fila, ver condAmbiente), tolerando NC legacy sin tipo_ambiente (NULL) para no
+        // perderlas del cálculo. porEmpresa=true: el CTE sale con id_empresa para enlazar
+        // por (empresa, número) y que la NC de un establecimiento no descuente la factura
+        // de otro con el mismo número.
+        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n')})
               {$filtroFecha}";
-        return AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', (string)$idEmpresa, $extra);
+        return AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', $this->sqlAny($idsEmpresa), $extra, true);
     }
 
     /**
@@ -86,13 +158,12 @@ class CuentasPorCobrarRepository extends BaseRepository
      * es un cargo adicional al cliente, no una devolución.
      * Columnas: num_norm (documento modificado, normalizado a 15 dígitos) y total_nd.
      */
-    private function getCteND(int $idEmpresa, ?string $fechaHasta = null): string
+    private function getCteND(array $idsEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND n.fecha_emision <= :nd_hasta" : '';
-        $extra = "AND (n.tipo_ambiente IS NULL
-                   OR n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
+        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n')})
               {$filtroFecha}";
-        return AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', (string)$idEmpresa, $extra);
+        return AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', $this->sqlAny($idsEmpresa), $extra, true);
     }
 
     /**
@@ -114,18 +185,20 @@ class CuentasPorCobrarRepository extends BaseRepository
     /**
      * Listado principal de cuentas por cobrar.
      */
-    public function getListado(int $idEmpresa, array $filtros): array
+    public function getListado(int|array $idsEmpresa, array $filtros): array
     {
-        [$where, $params] = $this->buildWhere($idEmpresa, $filtros);
+        $ids = $this->idsEmpresa($idsEmpresa);
+        [$where, $params] = $this->buildWhere($ids, $filtros);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa, $fh) . "),
-                 retenido AS (" . $this->getCteRetenido($idEmpresa, $fh) . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
-                 nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
+            WITH cobrado  AS (" . $this->getCteCobrado($ids, $fh) . "),
+                 retenido AS (" . $this->getCteRetenido($ids, $fh) . "),
+                 nc_aplic AS (" . $this->getCteNC($ids, $fh) . "),
+                 nd_aplic AS (" . $this->getCteND($ids, $fh) . ")
             SELECT
                 v.id,
+                {$this->colsEstablecimiento('v')},
                 v.fecha_emision,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura,
                 c.id                        AS id_cliente,
@@ -144,12 +217,13 @@ class CuentasPorCobrarRepository extends BaseRepository
                 v.dias_credito,
                 (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
             FROM ventas_cabecera v
+            LEFT JOIN empresas emp ON emp.id = v.id_empresa
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN vendedores ven ON ven.id = v.id_vendedor
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
-            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
+            LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
+            LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
             WHERE {$where}
             ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC
         ";
@@ -185,22 +259,23 @@ class CuentasPorCobrarRepository extends BaseRepository
     /**
      * Estadísticas para las tarjetas superiores (respeta el filtro tipo_doc).
      */
-    public function getEstadisticas(int $idEmpresa, array $filtros): array
+    public function getEstadisticas(int|array $idsEmpresa, array $filtros): array
     {
+        $ids     = $this->idsEmpresa($idsEmpresa);
         $tipoDoc = $this->getTipoDoc($filtros);
         $r = ['total_facturas' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'facturas_vencidas' => 0];
 
         if (in_array($tipoDoc, ['TODOS', 'FACTURA'], true)) {
             // Para estadísticas, no aplicar filtro de estado pues queremos todos los saldos
             $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-            [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
+            [$where, $params] = $this->buildWhere($ids, $filtrosSinEstado);
             $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
             $sql = "
-                WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa, $fh) . "),
-                     retenido AS (" . $this->getCteRetenido($idEmpresa, $fh) . "),
-                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
-                     nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
+                WITH cobrado  AS (" . $this->getCteCobrado($ids, $fh) . "),
+                     retenido AS (" . $this->getCteRetenido($ids, $fh) . "),
+                     nc_aplic AS (" . $this->getCteNC($ids, $fh) . "),
+                     nd_aplic AS (" . $this->getCteND($ids, $fh) . ")
                 SELECT
                     COUNT(v.id) AS total_facturas,
                     SUM(v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
@@ -221,8 +296,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 JOIN clientes c ON c.id = v.id_cliente
                 LEFT JOIN cobrado  cb ON cb.id_venta = v.id
                 LEFT JOIN retenido rt ON rt.id_venta = v.id
-                LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
-            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
+                LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
+                LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
                 WHERE {$where}
             ";
 
@@ -233,12 +308,12 @@ class CuentasPorCobrarRepository extends BaseRepository
 
         // Sumar los recibos de venta pendientes (mismo filtro de cliente/fechas)
         $rec = in_array($tipoDoc, ['TODOS', 'RECIBO'], true)
-            ? $this->getStatsRecibos($idEmpresa, $filtros)
+            ? $this->getStatsRecibos($ids, $filtros)
             : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
 
         // Sumar los saldos iniciales CXC (mismo filtro de cliente; sin vendedor no aplican)
         $si = $this->incluyeSaldosIniciales($filtros)
-            ? $this->getStatsSaldosInicialesCxc($idEmpresa, $filtros)
+            ? $this->getStatsSaldosInicialesCxc($ids, $filtros)
             : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
 
         return [
@@ -255,10 +330,10 @@ class CuentasPorCobrarRepository extends BaseRepository
      * - cobrado - retenido, con la retención calculada al vuelo) para sumarlos a
      * las tarjetas. Respeta el filtro de cliente.
      */
-    private function getStatsSaldosInicialesCxc(int $idEmpresa, array $filtros): array
+    private function getStatsSaldosInicialesCxc(array $idsEmpresa, array $filtros): array
     {
-        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
-        $params = [':si_emp' => $idEmpresa];
+        $params = [];
+        $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -307,21 +382,22 @@ class CuentasPorCobrarRepository extends BaseRepository
     /**
      * Análisis de antigüedad (aging) para el gráfico (respeta el filtro tipo_doc).
      */
-    public function getAntiguedad(int $idEmpresa, array $filtros): array
+    public function getAntiguedad(int|array $idsEmpresa, array $filtros): array
     {
+        $ids     = $this->idsEmpresa($idsEmpresa);
         $tipoDoc = $this->getTipoDoc($filtros);
         $r = ['tramo_vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'tramo_mas_90' => 0];
 
         if (in_array($tipoDoc, ['TODOS', 'FACTURA'], true)) {
             $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-            [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
+            [$where, $params] = $this->buildWhere($ids, $filtrosSinEstado);
             $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
             $sql = "
-                WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa, $fh) . "),
-                     retenido AS (" . $this->getCteRetenido($idEmpresa, $fh) . "),
-                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
-                     nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
+                WITH cobrado  AS (" . $this->getCteCobrado($ids, $fh) . "),
+                     retenido AS (" . $this->getCteRetenido($ids, $fh) . "),
+                     nc_aplic AS (" . $this->getCteNC($ids, $fh) . "),
+                     nd_aplic AS (" . $this->getCteND($ids, $fh) . ")
                 SELECT
                     SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30
                         THEN saldo ELSE 0 END) AS tramo_1_30,
@@ -341,8 +417,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                     JOIN clientes c ON c.id = v.id_cliente
                     LEFT JOIN cobrado  cb ON cb.id_venta = v.id
                     LEFT JOIN retenido rt ON rt.id_venta = v.id
-                    LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
-                    LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
+                    LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
+                    LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
                     WHERE {$where}
                 ) sub
             ";
@@ -354,12 +430,12 @@ class CuentasPorCobrarRepository extends BaseRepository
 
         // Sumar los tramos de los recibos de venta (mismo filtro de cliente/fechas)
         $rec = in_array($tipoDoc, ['TODOS', 'RECIBO'], true)
-            ? $this->getAntiguedadRecibos($idEmpresa, $filtros)
+            ? $this->getAntiguedadRecibos($ids, $filtros)
             : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
 
         // Sumar los tramos de los saldos iniciales CXC (mismo filtro de cliente; sin vendedor no aplican)
         $si = $this->incluyeSaldosIniciales($filtros)
-            ? $this->getAntiguedadSaldosInicialesCxc($idEmpresa, $filtros)
+            ? $this->getAntiguedadSaldosInicialesCxc($ids, $filtros)
             : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
 
         return [
@@ -375,10 +451,10 @@ class CuentasPorCobrarRepository extends BaseRepository
      * Tramos de antigüedad de los saldos iniciales CXC pendientes (pendiente
      * neto de retención calculada al vuelo). Respeta el filtro de cliente.
      */
-    private function getAntiguedadSaldosInicialesCxc(int $idEmpresa, array $filtros): array
+    private function getAntiguedadSaldosInicialesCxc(array $idsEmpresa, array $filtros): array
     {
-        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
-        $params = [':si_emp' => $idEmpresa];
+        $params = [];
+        $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -435,17 +511,13 @@ class CuentasPorCobrarRepository extends BaseRepository
      * WHERE del listado de recibos de venta. Un recibo cuenta como CxC salvo
      * que esté anulado o facturado (al facturarlo, la factura hereda el saldo).
      */
-    private function buildWhereRecibos(int $idEmpresa, array $filtros): array
+    private function buildWhereRecibos(array $idsEmpresa, array $filtros): array
     {
-        $where = "v.id_empresa = :id_empresa
+        $params = [];
+        $where = "v.id_empresa IN ({$this->phIn($idsEmpresa, 'emp', $params)})
               AND v.eliminado  = false
               AND v.estado NOT IN ('anulado','facturado')
-              AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)";
-
-        $params = [
-            ':id_empresa'    => $idEmpresa,
-            ':id_empresa_ta' => $idEmpresa,
-        ];
+              AND {$this->condAmbiente('v')}";
 
         $saldoExpr = "(v.importe_total - COALESCE(cb.total_cobrado, 0))";
 
@@ -495,16 +567,18 @@ class CuentasPorCobrarRepository extends BaseRepository
      * Listado de recibos de venta para CxC (mismas columnas que getListado;
      * total_retenido y total_nc siempre 0: el recibo no tiene retenciones ni NC).
      */
-    public function getListadoRecibos(int $idEmpresa, array $filtros): array
+    public function getListadoRecibos(int|array $idsEmpresa, array $filtros): array
     {
-        [$where, $params] = $this->buildWhereRecibos($idEmpresa, $filtros);
+        $ids = $this->idsEmpresa($idsEmpresa);
+        [$where, $params] = $this->buildWhereRecibos($ids, $filtros);
         $fh = !empty($filtros['fecha_hasta']) ? $filtros['fecha_hasta'] : null;
         if ($fh) $params[':cobrado_hasta'] = $fh;
 
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, $fh, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado($ids, $fh, 'RECIBO') . ")
             SELECT
                 v.id,
+                {$this->colsEstablecimiento('v')},
                 v.fecha_emision,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura,
                 c.id                        AS id_cliente,
@@ -522,6 +596,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 v.dias_credito,
                 (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
             FROM recibos_venta_cabecera v
+            LEFT JOIN empresas emp ON emp.id = v.id_empresa
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN vendedores ven ON ven.id = v.id_vendedor
             LEFT JOIN cobrado cb ON cb.id_venta = v.id
@@ -537,15 +612,15 @@ class CuentasPorCobrarRepository extends BaseRepository
     /**
      * Agregados de los recibos de venta pendientes para las tarjetas superiores.
      */
-    private function getStatsRecibos(int $idEmpresa, array $filtros): array
+    private function getStatsRecibos(array $idsEmpresa, array $filtros): array
     {
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-        [$where, $params] = $this->buildWhereRecibos($idEmpresa, $filtrosSinEstado);
+        [$where, $params] = $this->buildWhereRecibos($idsEmpresa, $filtrosSinEstado);
         $fh = !empty($filtros['fecha_hasta']) ? $filtros['fecha_hasta'] : null;
         if ($fh) $params[':cobrado_hasta'] = $fh;
 
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, $fh, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado($idsEmpresa, $fh, 'RECIBO') . ")
             SELECT
                 COUNT(v.id) AS cnt,
                 COALESCE(SUM(v.importe_total - COALESCE(cb.total_cobrado, 0)), 0) AS total_saldo,
@@ -579,15 +654,15 @@ class CuentasPorCobrarRepository extends BaseRepository
     /**
      * Tramos de antigüedad de los recibos de venta pendientes.
      */
-    private function getAntiguedadRecibos(int $idEmpresa, array $filtros): array
+    private function getAntiguedadRecibos(array $idsEmpresa, array $filtros): array
     {
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-        [$where, $params] = $this->buildWhereRecibos($idEmpresa, $filtrosSinEstado);
+        [$where, $params] = $this->buildWhereRecibos($idsEmpresa, $filtrosSinEstado);
         $fh = !empty($filtros['fecha_hasta']) ? $filtros['fecha_hasta'] : null;
         if ($fh) $params[':cobrado_hasta'] = $fh;
 
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, $fh, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado($idsEmpresa, $fh, 'RECIBO') . ")
             SELECT
                 COALESCE(SUM(CASE WHEN dias_vencido <= 0              THEN saldo ELSE 0 END), 0) AS tramo_vigente,
                 COALESCE(SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30  THEN saldo ELSE 0 END), 0) AS tramo_1_30,
@@ -625,7 +700,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function getReciboParaCobro(int $idRecibo, int $idEmpresa): ?array
     {
         $sql = "
-            WITH cobrado AS (" . $this->getCteCobrado($idEmpresa, null, 'RECIBO') . ")
+            WITH cobrado AS (" . $this->getCteCobrado([$idEmpresa], null, 'RECIBO') . ")
             SELECT
                 v.*,
                 c.nombre         AS cliente_nombre,
@@ -724,10 +799,10 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function getFacturaParaCobro(int $idVenta, int $idEmpresa): ?array
     {
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa) . "),
-                 retenido AS (" . $this->getCteRetenido($idEmpresa) . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . "),
-                 nd_aplic AS (" . $this->getCteND($idEmpresa) . ")
+            WITH cobrado  AS (" . $this->getCteCobrado([$idEmpresa]) . "),
+                 retenido AS (" . $this->getCteRetenido([$idEmpresa]) . "),
+                 nc_aplic AS (" . $this->getCteNC([$idEmpresa]) . "),
+                 nd_aplic AS (" . $this->getCteND([$idEmpresa]) . ")
             SELECT
                 v.*,
                 c.nombre         AS cliente_nombre,
@@ -744,8 +819,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
-            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
+            LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
+            LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
             WHERE v.id         = :id
               AND v.id_empresa = :id_empresa
               AND v.eliminado  = false
@@ -874,10 +949,10 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function getFacturasPendientesParaEnvio(int $idEmpresa, bool $soloVencidas, int $diasMin): array
     {
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado($idEmpresa) . "),
-                 retenido AS (" . $this->getCteRetenido($idEmpresa) . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . "),
-                 nd_aplic AS (" . $this->getCteND($idEmpresa) . ")
+            WITH cobrado  AS (" . $this->getCteCobrado([$idEmpresa]) . "),
+                 retenido AS (" . $this->getCteRetenido([$idEmpresa]) . "),
+                 nc_aplic AS (" . $this->getCteNC([$idEmpresa]) . "),
+                 nd_aplic AS (" . $this->getCteND([$idEmpresa]) . ")
             SELECT
                 v.id,
                 v.id_cliente,
@@ -898,8 +973,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
-            LEFT JOIN nd_aplic nd ON nd.num_norm = {$this->numV}
+            LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
+            LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
             WHERE v.id_empresa = :id_empresa
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
@@ -1051,7 +1126,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 ) ncsi ON true";
     }
 
-    public function getSaldosInicialesCxc(int $idEmpresa, array $filtros = []): array
+    public function getSaldosInicialesCxc(int|array $idsEmpresa, array $filtros = []): array
     {
         // Pendiente real = saldo_inicial - cobrado - retenido - NC. Lo retenido y
         // las NC se calculan al vuelo (igual que en las facturas normales); no se
@@ -1060,8 +1135,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $pend     = '(s.saldo_inicial - cob.cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0))';
         $aplicado = '(cob.cobrado + COALESCE(ret.retenido, 0) + COALESCE(ncsi.nc_total, 0))';
 
-        $where  = "s.id_empresa = :id_empresa AND s.eliminado = false";
-        $params = [':id_empresa' => $idEmpresa];
+        $params = [];
+        $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";
         [$fCob, $fRet, $fNc] = $this->corteSaldoInicialCxc($filtros, $params);
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
@@ -1090,8 +1165,9 @@ class CuentasPorCobrarRepository extends BaseRepository
         if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $sql = "SELECT
-                    s.id, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
+                    s.id, s.id_cliente, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
                     s.ruc_cliente, s.nombre_cliente,
+                    {$this->colsEstablecimiento('s')},
                     CAST(s.saldo_inicial          AS NUMERIC(16,2)) AS saldo_inicial,
                     CAST(cob.cobrado              AS NUMERIC(16,2)) AS monto_cobrado,
                     CAST(COALESCE(ret.retenido,0) AS NUMERIC(16,2)) AS monto_retenido,
@@ -1105,7 +1181,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                     s.observaciones,
                     CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
                          THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido
-                FROM saldos_iniciales_cxc s"
+                FROM saldos_iniciales_cxc s
+                LEFT JOIN empresas emp ON emp.id = s.id_empresa"
                 . $this->lateralCobradoSaldoInicial($fCob)
                 . $this->lateralRetSaldoInicial($fRet)
                 . $this->lateralNcSaldoInicial($fNc) . "
@@ -1117,17 +1194,13 @@ class CuentasPorCobrarRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function buildWhere(int $idEmpresa, array $filtros): array
+    private function buildWhere(array $idsEmpresa, array $filtros): array
     {
-        $where = "v.id_empresa = :id_empresa
+        $params = [];
+        $where = "v.id_empresa IN ({$this->phIn($idsEmpresa, 'emp', $params)})
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
-              AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)";
-
-        $params = [
-            ':id_empresa'    => $idEmpresa,
-            ':id_empresa_ta' => $idEmpresa,
-        ];
+              AND {$this->condAmbiente('v')}";
 
         // Filtro de estado CxC
         $estado = $filtros['estado'] ?? 'PENDIENTES';
@@ -1169,5 +1242,109 @@ class CuentasPorCobrarRepository extends BaseRepository
         }
 
         return [$where, $params];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // CLIENTES (buscador del filtro)
+    //
+    // `clientes` es por empresa: el mismo cliente existe como filas distintas
+    // en cada establecimiento del RUC. En el consolidado se busca en todos y se
+    // cruza por identificación.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Buscador del filtro Cliente. Con varios establecimientos, devuelve UNA fila por
+     * identificación (prefiere la de la empresa activa) para no repetir al cliente en el
+     * dropdown; el filtro luego se expande a las hermanas con
+     * expandirClientesPorIdentificacion().
+     */
+    public function buscarClientes(int|array $idsEmpresa, int $idEmpresaActual, string $q, int $limite = 15): array
+    {
+        $ids = $this->idsEmpresa($idsEmpresa);
+        $q   = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':q' => '%' . mb_strtolower($q) . '%', ':q2' => '%' . $q . '%', ':actual' => $idEmpresaActual];
+        $inEmp  = $this->phIn($ids, 'bce', $params);
+        $sql = "SELECT id, nombre, identificacion, id_empresa
+                FROM clientes
+                WHERE id_empresa IN ({$inEmp})
+                  AND eliminado  = false
+                  AND (LOWER(nombre) LIKE :q OR identificacion LIKE :q2)
+                ORDER BY (id_empresa = :actual) DESC, nombre
+                LIMIT " . max(15, $limite * count($ids));
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        $out = [];
+        $vistos = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $clave = trim((string)($c['identificacion'] ?? ''));
+            $clave = $clave !== '' ? 'i:' . $clave : 'id:' . (int)$c['id'];
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $out[] = ['id' => (int)$c['id'], 'nombre' => $c['nombre'], 'identificacion' => $c['identificacion']];
+            if (count($out) >= $limite) {
+                break;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Consolidado: expande los ids de cliente elegidos a TODOS los ids del grupo de
+     * establecimientos que comparten la misma identificación (los clientes sin
+     * identificación solo se cruzan consigo mismos). Devuelve la unión con los ids
+     * originales, para que el filtro `id_cliente IN (...)` alcance los documentos y
+     * saldos iniciales de las hermanas.
+     */
+    public function expandirClientesPorIdentificacion(array $idsCliente, int|array $idsEmpresa): array
+    {
+        $idsCliente = array_values(array_unique(array_filter(array_map('intval', $idsCliente))));
+        if (!$idsCliente) {
+            return [];
+        }
+        $params = [];
+        $inCli  = $this->phIn($idsCliente, 'xc', $params);
+        $inEmp  = $this->phIn($this->idsEmpresa($idsEmpresa), 'xe', $params);
+        $sql = "SELECT DISTINCT c2.id
+                FROM clientes c1
+                JOIN clientes c2
+                  ON c2.identificacion = c1.identificacion
+                 AND c2.eliminado = false
+                 AND c2.id_empresa IN ({$inEmp})
+                WHERE c1.id IN ({$inCli})
+                  AND COALESCE(TRIM(c1.identificacion), '') <> ''";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $extra = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+        return array_values(array_unique(array_merge($idsCliente, $extra)));
+    }
+
+    /**
+     * Nombre e identificación de varios clientes (para describir el filtro en PDF/Excel),
+     * buscándolos en cualquiera de los establecimientos del alcance.
+     * Devuelve id => ['nombre' => …, 'identificacion' => …].
+     */
+    public function getClientesPorIds(array $idsCliente, int|array $idsEmpresa): array
+    {
+        $idsCliente = array_values(array_unique(array_filter(array_map('intval', $idsCliente))));
+        if (!$idsCliente) {
+            return [];
+        }
+        $params = [];
+        $inCli  = $this->phIn($idsCliente, 'nc', $params);
+        $inEmp  = $this->phIn($this->idsEmpresa($idsEmpresa), 'ne', $params);
+        $st = $this->db->prepare("SELECT id, nombre, identificacion FROM clientes
+                                  WHERE id IN ({$inCli}) AND id_empresa IN ({$inEmp})");
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $out[(int)$c['id']] = ['nombre' => (string)$c['nombre'], 'identificacion' => (string)($c['identificacion'] ?? '')];
+        }
+        return $out;
     }
 }

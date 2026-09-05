@@ -14,6 +14,35 @@ let CXP_catalogos     = { puntos: [], conceptos: [], formas: [] };
 let CXP_catalogosCargados = false;
 let CXP_agrupado      = false;          // vista agrupada por proveedor
 const CXP_gruposAbiertos = new Set();   // claves de grupos expandidos
+// Consolidado por RUC (fase 1, solo lectura): lo confirma el servidor en cada carga.
+// Las filas de OTRO establecimiento (r.es_hermana) no se pagan desde aquí.
+let CXP_consolidado   = false;
+
+/* Alcance elegido en el filtro (el select solo existe cuando la empresa activa es la matriz). */
+function CXP_getAlcance() {
+    return document.getElementById('cxp-alcance')?.value || 'ESTABLECIMIENTO';
+}
+
+// Fase 2 del consolidado: pago de un documento de OTRO establecimiento desde la matriz.
+// El egreso se registra en los libros de esa empresa, con SUS series, conceptos y formas.
+let CXP_pagoEmpresa = 0;             // empresa dueña del documento en el modal de pago (0 = la activa)
+let CXP_catUso      = null;          // catálogo en uso en el modal (propio o de la hermana)
+const CXP_catalogosPorEmpresa = {};  // caché de catálogos por establecimiento hermano
+
+/* Catálogos (series, conceptos, formas de pago) de otro establecimiento del grupo RUC. */
+async function CXP_cargarCatalogosDe(idEmpresa) {
+    if (CXP_catalogosPorEmpresa[idEmpresa]) return CXP_catalogosPorEmpresa[idEmpresa];
+    const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getCatalogosPagoAjax?id_empresa=${idEmpresa}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || 'No se pudieron cargar los catálogos del establecimiento.');
+    return (CXP_catalogosPorEmpresa[idEmpresa] = {
+        puntos:    data.puntos    || [],
+        conceptos: data.conceptos || [],
+        formas:    data.formas    || [],
+    });
+}
 
 /* ════════════════════════════════════════════════════
    INICIALIZACIÓN
@@ -38,6 +67,7 @@ async function CXP_cargar() {
         fecha_desde: document.getElementById('cxp-fecha-desde')?.value  || '',
         fecha_hasta: document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor:CXP_getProveedoresSeleccionados(),
+        alcance:     CXP_getAlcance(),
     });
 
     try {
@@ -53,6 +83,14 @@ async function CXP_cargar() {
 
         CXP_datos = data.filas || [];
         CXP_filtradoLocal = [...CXP_datos];
+
+        // El servidor decide si el consolidado procede (solo desde la matriz)
+        CXP_consolidado = !!data.consolidado;
+        const estabWrap = document.getElementById('cxp-stat-estab-wrap');
+        if (estabWrap) {
+            estabWrap.hidden = !CXP_consolidado;
+            document.getElementById('cxp-stat-estab').textContent = data.establecimientos || 1;
+        }
 
         CXP_actualizarStats(data.stats || {});
         CXP_renderTabla(CXP_filtradoLocal);
@@ -111,6 +149,13 @@ function CXP_filaHtml(r) {
         const esImp   = r.tipo_fuente === 'IMPORTACION';
         const esSaldo = r.tipo_fuente === 'SALDO_INICIAL';
         const pagada  = saldo <= 0.001;
+        // Consolidado: documento de OTRO establecimiento del RUC → solo lectura
+        const esHermana  = !!r.es_hermana;
+        const idEmpresa  = parseInt(r.id_empresa) || 0;
+        const estabTxt   = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
+        const estabBadge = (CXP_consolidado && r.establecimiento)
+            ? `<span class="badge ${esHermana ? 'bg-info bg-opacity-10 text-info border-info' : 'bg-primary bg-opacity-10 text-primary border-primary'} border border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="${cxpEsc(estabTxt)}">${cxpEsc(r.establecimiento)}</span>`
+            : '';
 
         // ── Badge de estado y color de fila ──
         // Vencido desde el primer día: amarillo 1-30d, rojo 31d+
@@ -158,12 +203,12 @@ function CXP_filaHtml(r) {
 
         return `
         <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle"
-            data-id="${r.id}" data-tipo="${cxpEsc(r.tipo_fuente)}"
+            data-id="${r.id}" data-tipo="${cxpEsc(r.tipo_fuente)}" data-hermana="${esHermana ? 1 : 0}"
             data-proveedor="${cxpEsc(r.proveedor_nombre)}" data-doc="${cxpEsc(r.numero_documento)}">
 
             <!-- Documento -->
             <td class="ps-2" title="${cxpEsc(r.numero_documento)}">
-                <span class="fw-semibold" style="font-size:.79rem;">${cxpEsc(r.numero_documento)}</span>
+                ${estabBadge}<span class="fw-semibold" style="font-size:.79rem;">${cxpEsc(r.numero_documento)}</span>
             </td>
 
             <!-- Origen -->
@@ -200,13 +245,23 @@ function CXP_filaHtml(r) {
             <!-- Acciones -->
             <td class="text-center">
                 <div class="d-flex justify-content-center gap-1">
-                    ${!pagada ? `
+                    ${(!pagada && esHermana && r.puede_operar) ? `
+                    <button class="btn btn-primary btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar pago en el establecimiento ${cxpEsc(estabTxt)}"
+                            onclick="CXP_abrirModalPago(${r.id}, '${r.tipo_fuente}', ${idEmpresa})">
+                        <i class="bi bi-cash-stack"></i>
+                    </button>` : ''}
+                    ${(!pagada && esHermana && !r.puede_operar) ? `
+                    <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" disabled
+                            title="Sin permiso para registrar pagos en el establecimiento ${cxpEsc(estabTxt)}">
+                        <i class="bi bi-cash-stack"></i>
+                    </button>` : ''}
+                    ${(!pagada && !esHermana) ? `
                     <button class="btn btn-primary btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar pago"
                             onclick="CXP_abrirModalPago(${r.id}, '${r.tipo_fuente}')">
                         <i class="bi bi-cash-stack"></i>
                     </button>` : ''}
                     <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" title="Ver historial de pagos"
-                            onclick="CXP_abrirHistorial(${r.id}, '${r.tipo_fuente}', '${cxpEsc(r.numero_documento)}')">
+                            onclick="CXP_abrirHistorial(${r.id}, '${r.tipo_fuente}', '${cxpEsc(r.numero_documento)}', ${idEmpresa})">
                         <i class="bi bi-clock-history"></i>
                     </button>
                 </div>
@@ -331,7 +386,18 @@ async function CXP_cargarCatalogos() {
 /* ════════════════════════════════════════════════════
    MODAL PAGO — abrir
 ════════════════════════════════════════════════════ */
-async function CXP_abrirModalPago(idDoc, tipoFuente) {
+async function CXP_abrirModalPago(idDoc, tipoFuente, idEmpresa = 0) {
+    // Consolidado (fase 2): si el documento es de OTRO establecimiento del RUC, el pago se
+    // registra en ESA empresa, con sus series, conceptos, formas de pago y contabilidad.
+    const filaDoc = CXP_datos.find(r => r.id == idDoc && r.tipo_fuente === tipoFuente);
+    CXP_pagoEmpresa = (filaDoc && filaDoc.es_hermana) ? (parseInt(idEmpresa) || parseInt(filaDoc.id_empresa) || 0) : 0;
+    const empQs = CXP_pagoEmpresa ? `&id_empresa=${CXP_pagoEmpresa}` : '';
+    let cat = CXP_catalogos;
+    if (CXP_pagoEmpresa) {
+        try { cat = await CXP_cargarCatalogosDe(CXP_pagoEmpresa); }
+        catch (e) { CXP_toast(e.message || 'No se pudieron cargar los catálogos del establecimiento.', 'danger'); return; }
+    }
+    CXP_catUso = cat;
     let d;
     if (tipoFuente === 'SALDO_INICIAL') {
         // Saldo inicial: tomar datos de la fila ya cargada (no hay endpoint de documento)
@@ -343,7 +409,7 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
     } else {
         // Compra / liquidación: obtener datos en tiempo real del servidor
         try {
-            const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getDocumentoParaPagoInfoAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`);
+            const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getDocumentoParaPagoInfoAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}${empQs}`);
             const data = await resp.json();
             if (!data.ok) { alert(data.error || 'Error al cargar el documento.'); return; }
             d = data.doc;
@@ -393,7 +459,7 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
 
         // Serie / punto de emisión
         const selPunto = document.getElementById('pago-punto-emision');
-        const pts = CXP_catalogos.puntos;
+        const pts = cat.puntos;
         selPunto.innerHTML = '<option value="">— Seleccione —</option>'
             + pts.map(p => `<option value="${p.id_punto}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('');
         if (pts.length === 1) {
@@ -403,7 +469,7 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
 
         // Concepto de egreso — filtrado y bloqueo por tipo de documento
         const selConc = document.getElementById('pago-concepto');
-        const cons = CXP_catalogos.conceptos;
+        const cons = cat.conceptos;
 
         // tipo_fuente viene como 'COMPRA' o 'LIQUIDACION' desde el servidor
         const compTipoFuente = (tipoFuente || '').toUpperCase();
@@ -430,7 +496,7 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
 
         // Forma de pago
         const selForma = document.getElementById('pago-forma');
-        const fps = CXP_catalogos.formas;
+        const fps = cat.formas;
         selForma.innerHTML = fps.length
             ? fps.map(f => `<option value="${f.id}" data-tipo="${(f.tipo||'').toUpperCase()}">${cxpEsc(f.nombre)}</option>`).join('')
             : '<option value="">Sin formas de pago configuradas</option>';
@@ -450,6 +516,17 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
         if (msgErr) msgErr.classList.add('d-none');
     }
 
+    // Aviso: el pago va a los libros de otro establecimiento (consolidado, fase 2)
+    const avisoEst = document.getElementById('pago-aviso-establecimiento');
+    if (avisoEst) {
+        avisoEst.hidden = !CXP_pagoEmpresa;
+        if (CXP_pagoEmpresa && filaDoc) {
+            avisoEst.innerHTML = `<i class="bi bi-diagram-3 me-1"></i>Este pago se registra en el establecimiento `
+                + `<strong>${cxpEsc(filaDoc.establecimiento || '')} - ${cxpEsc(filaDoc.empresa_nombre || '')}</strong>: `
+                + `el egreso, su secuencial y su contabilidad pertenecen a esa empresa.`;
+        }
+    }
+
     new bootstrap.Modal(document.getElementById('modalPago')).show();
 }
 
@@ -461,7 +538,7 @@ async function CXP_cargarSecuencial(idPunto) {
     el.value = '…';
     try {
         const r = await fetch(
-            `${BASE_URL}/${RUTA_MODULO_CXP}/getSecuencialAjax?id_punto_emision=${idPunto}`,
+            `${BASE_URL}/${RUTA_MODULO_CXP}/getSecuencialAjax?id_punto_emision=${idPunto}${CXP_pagoEmpresa ? '&id_empresa=' + CXP_pagoEmpresa : ''}`,
             { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
         );
         const data = await r.json();
@@ -480,7 +557,7 @@ async function CXP_cargarSecuencial(idPunto) {
 function CXP_toggleBancoDatos(idForma) {
     const divBanco = document.getElementById('pago-div-banco');
     if (!divBanco) return;
-    const fp   = CXP_catalogos.formas.find(f => f.id == idForma);
+    const fp   = (CXP_catUso || CXP_catalogos).formas.find(f => f.id == idForma);
     const tipo = fp ? (fp.tipo || '').toUpperCase() : '';
     const esBanco = tipo === 'BANCO';
     divBanco.classList.toggle('d-none', !esBanco);
@@ -572,6 +649,8 @@ async function CXP_guardarPago() {
         fd.append('id_forma_pago',      forma);
         fd.append('fecha_pago',         fecha);
         fd.append('observaciones',      obs);
+        // Consolidado (fase 2): el servidor registra el egreso en la hermana dueña del documento
+        if (CXP_pagoEmpresa) fd.append('id_empresa', CXP_pagoEmpresa);
 
         const divBanco = document.getElementById('pago-div-banco');
         if (divBanco && !divBanco.classList.contains('d-none')) {
@@ -611,7 +690,7 @@ async function CXP_guardarPago() {
 /* ════════════════════════════════════════════════════
    MODAL HISTORIAL DE PAGOS
 ════════════════════════════════════════════════════ */
-async function CXP_abrirHistorial(idDoc, tipoFuente, nroDoc) {
+async function CXP_abrirHistorial(idDoc, tipoFuente, nroDoc, idEmpresa = 0) {
     const esSaldo = tipoFuente === 'SALDO_INICIAL';
     document.getElementById('historial-pago-subtitulo').textContent = (esSaldo ? 'Saldo inicial: ' : 'Documento: ') + nroDoc;
     document.getElementById('historial-pagos-tbody').innerHTML =
@@ -621,9 +700,12 @@ async function CXP_abrirHistorial(idDoc, tipoFuente, nroDoc) {
     new bootstrap.Modal(document.getElementById('modalHistorialPagos')).show();
 
     try {
+        // id_empresa: en el consolidado la fila puede ser de otro establecimiento (solo lectura);
+        // el servidor solo lo acepta si es una hermana del grupo RUC consolidable.
+        const emp = idEmpresa ? `&id_empresa=${parseInt(idEmpresa)}` : '';
         const url = esSaldo
-            ? `${BASE_URL}/${RUTA_MODULO_CXP}/historialPagosSaldoInicialAjax?id_saldo=${idDoc}`
-            : `${BASE_URL}/${RUTA_MODULO_CXP}/historialPagosAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`;
+            ? `${BASE_URL}/${RUTA_MODULO_CXP}/historialPagosSaldoInicialAjax?id_saldo=${idDoc}${emp}`
+            : `${BASE_URL}/${RUTA_MODULO_CXP}/historialPagosAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}${emp}`;
         const r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const data = await r.json();
 
@@ -703,7 +785,7 @@ function CXP_initBuscadorProveedores() {
 async function CXP_buscarProveedores(q) {
     const dd = document.getElementById('cxp-dropdown-proveedores');
     try {
-        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getProveedoresAjax?q=${encodeURIComponent(q)}`, {
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getProveedoresAjax?q=${encodeURIComponent(q)}&alcance=${CXP_getAlcance()}`, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await r.json();
@@ -760,6 +842,8 @@ function CXP_limpiarFiltros() {
     document.getElementById('cxp-fecha-desde').value = '';
     document.getElementById('cxp-fecha-hasta').value = hoyStr;
     document.getElementById('cxp-search-proveedor').value = '';
+    const selAlc = document.getElementById('cxp-alcance');
+    if (selAlc) selAlc.value = 'ESTABLECIMIENTO';
 
     CXP_proveedoresSeleccionados = {};
     CXP_renderChipsProveedores();
@@ -780,6 +864,7 @@ function CXP_exportarExcel() {
         fecha_desde:  document.getElementById('cxp-fecha-desde')?.value  || '',
         fecha_hasta:  document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor: CXP_getProveedoresSeleccionados(),
+        alcance:      CXP_getAlcance(),
     });
     window.location.href = `${BASE_URL}/${RUTA_MODULO_CXP}/exportExcel?${params}`;
 }
@@ -791,6 +876,7 @@ function CXP_exportarPDF() {
         fecha_desde:  document.getElementById('cxp-fecha-desde')?.value  || '',
         fecha_hasta:  document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor: CXP_getProveedoresSeleccionados(),
+        alcance:      CXP_getAlcance(),
     });
     window.location.href = `${BASE_URL}/${RUTA_MODULO_CXP}/exportPdf?${params}`;
 }
@@ -863,6 +949,12 @@ document.addEventListener('click', function (e) {
         fecha:       r.fecha_emision    || '',
         sujetoLabel: 'Proveedor',
         sujeto:      r.proveedor_nombre || tr.dataset.proveedor || '',
-        total:       r.total
+        total:       r.total,
+        // Consolidado: el detalle de un documento de otro establecimiento no se puede
+        // consultar desde esta empresa; el panel muestra solo el resumen de la fila.
+        soloResumen: !!r.es_hermana,
+        aviso:       r.es_hermana
+            ? `Documento del establecimiento ${r.establecimiento || ''} - ${r.empresa_nombre || ''}. Cambie a esa empresa para ver el detalle completo; el pago sí puede registrarse desde aquí con el botón de la fila.`
+            : ''
     });
 });

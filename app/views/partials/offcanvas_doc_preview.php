@@ -295,6 +295,24 @@
         const cfg = TIPOS[tipo];
         if (!cfg) { error('Tipo de documento no soportado: ' + tipo); return; }
 
+        // Solo resumen: el documento pertenece a OTRO establecimiento del grupo RUC
+        // (vista consolidada de CxC/CxP). Los endpoints de detalle responden por la
+        // empresa activa, así que no hay nada que consultar: se pinta lo que ya trae
+        // la fila y un aviso de a qué establecimiento hay que cambiar para ver más.
+        if (extra.soloResumen) {
+            pintarCabecera({
+                badge:       cfg.badge,
+                numero:      extra.numero || '',
+                fechaTxt:    fecha(extra.fecha),
+                sujetoLabel: extra.sujetoLabel || cfg.sujeto,
+                sujeto:      extra.sujeto || ''
+            });
+            pintarItems(null, extra.aviso || 'Documento de otro establecimiento: cambie de empresa para ver el detalle.');
+            pintarTotales({ total: extra.total, soloTotal: true, labelTotal: 'Total' });
+            mostrar('preview-doc-content');
+            return;
+        }
+
         mostrar('preview-doc-loading');
 
         fetch(`${cfg.url}?id=${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })

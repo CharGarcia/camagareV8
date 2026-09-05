@@ -15,6 +15,68 @@ class CuentasPorPagarRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // ALCANCE POR EMPRESA (una empresa o varios establecimientos del mismo RUC)
+    //
+    // Los listados/agregados reciben `int|array $idsEmpresa`: la empresa activa
+    // (int, comportamiento normal) o los establecimientos del grupo RUC cuando
+    // la matriz pide el consolidado (lo resuelve el controller con
+    // EmpresaRepository::getIdsConsolidadoDesdeMatriz, nunca el cliente).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Normaliza el alcance a lista de ids enteros positivos, sin repetidos y nunca vacía. */
+    private function idsEmpresa(int|array $idsEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $idsEmpresa), static fn ($i) => $i > 0)));
+        if (!$ids) {
+            throw new \InvalidArgumentException('Cuentas por Pagar: id_empresa requerido.');
+        }
+        return $ids;
+    }
+
+    /** Lista para interpolar en `IN (...)` (ids ya validados como enteros por idsEmpresa()). */
+    private function sqlIn(array $ids): string
+    {
+        return implode(',', $ids);
+    }
+
+    /**
+     * Placeholders `:prefijo0,:prefijo1,…` para un IN con PDO (pgsql no admite repetir un
+     * placeholder, por eso cada IN lleva su prefijo). Registra los valores en $params.
+     */
+    private function phIn(array $ids, string $prefijo, array &$params): string
+    {
+        $ph = [];
+        foreach (array_values($ids) as $i => $id) {
+            $k = ":{$prefijo}{$i}";
+            $ph[] = $k;
+            $params[$k] = $id;
+        }
+        return implode(',', $ph);
+    }
+
+    /**
+     * El documento pertenece al ambiente actual de SU PROPIA empresa. Correlacionada por fila
+     * (no por la empresa activa): en el consolidado cada establecimiento puede estar en un
+     * ambiente distinto y debe filtrarse contra el suyo.
+     */
+    private function condAmbiente(string $alias): string
+    {
+        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+    }
+
+    /**
+     * Columnas que identifican el establecimiento dueño de la fila (badge en el consolidado).
+     * `id_empresa` sale del documento ($aliasDoc), no de `empresas`: el JOIN a empresas es
+     * LEFT para que un documento nunca desaparezca del listado por su empresa.
+     */
+    private function colsEstablecimiento(string $aliasDoc, string $aliasEmp = 'emp'): string
+    {
+        return "{$aliasDoc}.id_empresa AS id_empresa,
+                COALESCE({$aliasEmp}.establecimiento, '') AS establecimiento,
+                COALESCE(NULLIF({$aliasEmp}.nombre_comercial, ''), {$aliasEmp}.nombre, '') AS empresa_nombre";
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // CTEs reutilizables
     // ─────────────────────────────────────────────────────────────────────
 
@@ -25,7 +87,7 @@ class CuentasPorPagarRepository extends BaseRepository
      * problema encontrado y corregido en ReporteVentasRepository/CuentasPorCobrarRepository
      * y afines). Se interpola directo (int validado por el tipo del parámetro).
      */
-    private function getCtePagado(int $idEmpresa, ?string $fechaHasta = null): string
+    private function getCtePagado(array $idsEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND ec.fecha_emision <= :pagado_hasta" : '';
         return "
@@ -38,7 +100,7 @@ class CuentasPorPagarRepository extends BaseRepository
               AND ec.estado    != 'anulado'
               AND ec.eliminado  = false
               AND ed.eliminado  = false
-              AND ec.id_empresa = {$idEmpresa}
+              AND ec.id_empresa IN ({$this->sqlIn($idsEmpresa)})
               {$filtroFecha}
             GROUP BY ed.tipo_documento, ed.id_referencia_documento
         ";
@@ -50,7 +112,7 @@ class CuentasPorPagarRepository extends BaseRepository
      * nn.id_empresa = c.id_empresa (no había bug de datos cruzados entre empresas),
      * pero igual agregaba TODAS las NC/ND del sistema en cada consulta.
      */
-    private function getCteNcNd(int $idEmpresa, ?string $fechaHasta = null): string
+    private function getCteNcNd(array $idsEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND nc.fecha_emision <= :nc_nd_hasta" : '';
         return "
@@ -62,7 +124,7 @@ class CuentasPorPagarRepository extends BaseRepository
             FROM compras_cabecera nc
             WHERE nc.tipo_comprobante IN ('04','05')
               AND nc.eliminado = false
-              AND nc.id_empresa = {$idEmpresa}
+              AND nc.id_empresa IN ({$this->sqlIn($idsEmpresa)})
               {$filtroFecha}
             GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
         ";
@@ -72,7 +134,7 @@ class CuentasPorPagarRepository extends BaseRepository
      * CTE que suma retenciones autorizadas hasta una fecha de corte opcional.
      * $idEmpresa: mismo motivo que getCtePagado.
      */
-    private function getCteRetenciones(int $idEmpresa, ?string $fechaHasta = null): string
+    private function getCteRetenciones(array $idsEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :ret_hasta" : '';
         // Cubre dos vías de enlace: id_compra/id_liquidacion directo (flujo normal) y
@@ -85,7 +147,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE r.eliminado = false
                   AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
                   AND (r.id_compra IS NOT NULL OR r.id_liquidacion IS NOT NULL)
-                  AND r.id_empresa = {$idEmpresa}
+                  AND r.id_empresa IN ({$this->sqlIn($idsEmpresa)})
                   {$filtroFecha}
 
                 UNION
@@ -101,7 +163,7 @@ class CuentasPorPagarRepository extends BaseRepository
                   AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
                   AND r.id_compra IS NULL AND r.id_liquidacion IS NULL
                   AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
-                  AND r.id_empresa = {$idEmpresa}
+                  AND r.id_empresa IN ({$this->sqlIn($idsEmpresa)})
                   {$filtroFecha}
             ) tmp
             GROUP BY tmp.id_compra, tmp.id_liquidacion
@@ -186,9 +248,10 @@ class CuentasPorPagarRepository extends BaseRepository
     /**
      * Listado unificado de cuentas por pagar (facturas de compra + liquidaciones).
      */
-    public function getListado(int $idEmpresa, array $filtros): array
+    public function getListado(int|array $idsEmpresa, array $filtros): array
     {
-        [$whereExtra, $params] = $this->buildWhereExtra($idEmpresa, $filtros);
+        $ids = $this->idsEmpresa($idsEmpresa);
+        [$whereExtra, $params, $in] = $this->buildWhereExtra($ids, $filtros);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $fvcExpr = $this->exprFechaVencCompra('c');
@@ -201,14 +264,15 @@ class CuentasPorPagarRepository extends BaseRepository
         $liqVigente    = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado'); // incluye 'contabilizado'
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
-            nc_nd  AS (" . $this->getCteNcNd($idEmpresa, $fh) . "),
-            ret    AS (" . $this->getCteRetenciones($idEmpresa, $fh) . "),
+            pagado AS (" . $this->getCtePagado($ids, $fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($ids, $fh) . "),
+            ret    AS (" . $this->getCteRetenciones($ids, $fh) . "),
             docs   AS (
                 -- ── FACTURAS DE COMPRA ────────────────────────────────────
                 SELECT
                     c.id,
                     'COMPRA'                                                      AS tipo_fuente,
+                    {$this->colsEstablecimiento('c')},
                     c.id_proveedor,
                     p.razon_social                                                AS proveedor_nombre,
                     p.identificacion                                              AS proveedor_ruc,
@@ -235,6 +299,8 @@ class CuentasPorPagarRepository extends BaseRepository
                         + COALESCE(nn.total_nd,       0)                         AS saldo,
                     {$fvcExpr}                                                    AS fecha_vencimiento
                 FROM compras_cabecera c
+                LEFT JOIN empresas emp
+                  ON emp.id = c.id_empresa
                 JOIN proveedores p
                   ON p.id = c.id_proveedor
                 LEFT JOIN pagado pg
@@ -247,10 +313,10 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN ret
                   ON ret.id_compra = c.id
                  AND ret.id_liquidacion IS NULL
-                WHERE c.id_empresa       = :id_empresa
+                WHERE c.id_empresa       IN ({$in['c']})
                   AND c.eliminado        = false
                   AND {$esCargo} AND {$compraVigente}
-                  AND c.tipo_ambiente    = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)
+                  AND {$this->condAmbiente('c')}
 
                 UNION ALL
 
@@ -258,6 +324,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT
                     l.id,
                     'LIQUIDACION'                                                 AS tipo_fuente,
+                    {$this->colsEstablecimiento('l')},
                     l.id_proveedor,
                     p.razon_social                                                AS proveedor_nombre,
                     p.identificacion                                              AS proveedor_ruc,
@@ -275,6 +342,8 @@ class CuentasPorPagarRepository extends BaseRepository
                         - COALESCE(ret.total_retenido,0)                         AS saldo,
                     {$fvlExpr}                                                    AS fecha_vencimiento
                 FROM liquidaciones_cabecera l
+                LEFT JOIN empresas emp
+                  ON emp.id = l.id_empresa
                 JOIN proveedores p
                   ON p.id = l.id_proveedor
                 LEFT JOIN pagado pg
@@ -283,10 +352,10 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN ret
                   ON ret.id_liquidacion = l.id
                  AND ret.id_compra IS NULL
-                WHERE l.id_empresa    = :id_empresa2
+                WHERE l.id_empresa    IN ({$in['l']})
                   AND l.eliminado     = false
                   AND {$liqVigente}
-                  AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta2))
+                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l')})
 
                 UNION ALL
 
@@ -294,6 +363,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT
                     fe.id,
                     'IMPORTACION'                                                  AS tipo_fuente,
+                    {$this->colsEstablecimiento('ic')},
                     fe.id_proveedor,
                     p.razon_social                                                 AS proveedor_nombre,
                     p.identificacion                                               AS proveedor_ruc,
@@ -311,6 +381,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 FROM importaciones_factura_exterior fe
                 JOIN importaciones_cabecera ic
                   ON ic.id = fe.id_importacion
+                LEFT JOIN empresas emp
+                  ON emp.id = ic.id_empresa
                 JOIN proveedores p
                   ON p.id = fe.id_proveedor
                 LEFT JOIN pagado pg
@@ -318,8 +390,8 @@ class CuentasPorPagarRepository extends BaseRepository
                  AND pg.id_doc = fe.id
                 WHERE fe.eliminado    = false
                   AND ic.eliminado    = false
-                  AND ic.id_empresa   = :id_empresa3
-                  AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta3)
+                  AND ic.id_empresa   IN ({$in['i']})
+                  AND {$this->condAmbiente('ic')}
             )
             SELECT
                 d.*,
@@ -338,10 +410,11 @@ class CuentasPorPagarRepository extends BaseRepository
     /**
      * Estadísticas para las tarjetas superiores.
      */
-    public function getEstadisticas(int $idEmpresa, array $filtros): array
+    public function getEstadisticas(int|array $idsEmpresa, array $filtros): array
     {
+        $ids = $this->idsEmpresa($idsEmpresa);
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-        [$whereExtra, $params] = $this->buildWhereExtra($idEmpresa, $filtrosSinEstado);
+        [$whereExtra, $params, $in] = $this->buildWhereExtra($ids, $filtrosSinEstado);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $fvcExpr = $this->exprFechaVencCompra('c');
@@ -354,9 +427,9 @@ class CuentasPorPagarRepository extends BaseRepository
         $liqVigente    = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado'); // incluye 'contabilizado'
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
-            nc_nd  AS (" . $this->getCteNcNd($idEmpresa, $fh) . "),
-            ret    AS (" . $this->getCteRetenciones($idEmpresa, $fh) . "),
+            pagado AS (" . $this->getCtePagado($ids, $fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($ids, $fh) . "),
+            ret    AS (" . $this->getCteRetenciones($ids, $fh) . "),
             docs   AS (
                 SELECT c.id_proveedor,
                        'COMPRA'::text                                              AS tipo_fuente,
@@ -376,8 +449,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN nc_nd nn  ON nn.id_empresa=c.id_empresa AND nn.id_proveedor=c.id_proveedor
                                    AND nn.documento_modificado=CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
-                WHERE c.id_empresa=:id_empresa AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
-                  AND c.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta)
+                WHERE c.id_empresa IN ({$in['c']}) AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
+                  AND {$this->condAmbiente('c')}
 
                 UNION ALL
 
@@ -392,9 +465,9 @@ class CuentasPorPagarRepository extends BaseRepository
                 JOIN proveedores p ON p.id = l.id_proveedor
                 LEFT JOIN pagado pg ON pg.tipo_documento='LIQUIDACION' AND pg.id_doc=l.id
                 LEFT JOIN ret      ON ret.id_liquidacion=l.id AND ret.id_compra IS NULL
-                WHERE l.id_empresa=:id_empresa2 AND l.eliminado=false
+                WHERE l.id_empresa IN ({$in['l']}) AND l.eliminado=false
                   AND {$liqVigente}
-                  AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta2))
+                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l')})
 
                 UNION ALL
 
@@ -407,8 +480,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
                 JOIN proveedores p ON p.id = fe.id_proveedor
                 LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
-                WHERE ic.id_empresa=:id_empresa3 AND fe.eliminado=false AND ic.eliminado=false
-                  AND ic.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta3)
+                WHERE ic.id_empresa IN ({$in['i']}) AND fe.eliminado=false AND ic.eliminado=false
+                  AND {$this->condAmbiente('ic')}
             )
             SELECT
                 COUNT(*) AS total_docs,
@@ -426,7 +499,7 @@ class CuentasPorPagarRepository extends BaseRepository
         $r = $st->fetch(PDO::FETCH_ASSOC);
 
         // Sumar los saldos iniciales CXP (mismo filtro de proveedor)
-        $si = $this->getStatsSaldosInicialesCxp($idEmpresa, $filtros);
+        $si = $this->getStatsSaldosInicialesCxp($ids, $filtros);
 
         return [
             'total_docs'    => (int)($r['total_docs']    ?? 0) + $si['cnt'],
@@ -474,10 +547,10 @@ class CuentasPorPagarRepository extends BaseRepository
      * saldo_inicial - pagado al corte) para sumarlos a las tarjetas. Respeta el
      * filtro de proveedor.
      */
-    private function getStatsSaldosInicialesCxp(int $idEmpresa, array $filtros): array
+    private function getStatsSaldosInicialesCxp(array $idsEmpresa, array $filtros): array
     {
-        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
-        $params = [':si_emp' => $idEmpresa];
+        $params = [];
+        $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
 
         if (!empty($filtros['id_proveedor'])) {
             $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
@@ -524,10 +597,11 @@ class CuentasPorPagarRepository extends BaseRepository
     /**
      * Antigüedad del saldo para el gráfico.
      */
-    public function getAntiguedad(int $idEmpresa, array $filtros): array
+    public function getAntiguedad(int|array $idsEmpresa, array $filtros): array
     {
+        $ids = $this->idsEmpresa($idsEmpresa);
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-        [$whereExtra, $params] = $this->buildWhereExtra($idEmpresa, $filtrosSinEstado);
+        [$whereExtra, $params, $in] = $this->buildWhereExtra($ids, $filtrosSinEstado);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $fvcExpr = $this->exprFechaVencCompra('c');
@@ -540,9 +614,9 @@ class CuentasPorPagarRepository extends BaseRepository
         $liqVigente    = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado'); // incluye 'contabilizado'
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado($idEmpresa, $fh) . "),
-            nc_nd  AS (" . $this->getCteNcNd($idEmpresa, $fh) . "),
-            ret    AS (" . $this->getCteRetenciones($idEmpresa, $fh) . "),
+            pagado AS (" . $this->getCtePagado($ids, $fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($ids, $fh) . "),
+            ret    AS (" . $this->getCteRetenciones($ids, $fh) . "),
             docs   AS (
                 SELECT c.id_proveedor,
                        'COMPRA'::text                                              AS tipo_fuente,
@@ -562,8 +636,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN nc_nd nn  ON nn.id_empresa=c.id_empresa AND nn.id_proveedor=c.id_proveedor
                                    AND nn.documento_modificado=CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
-                WHERE c.id_empresa=:id_empresa AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
-                  AND c.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta)
+                WHERE c.id_empresa IN ({$in['c']}) AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
+                  AND {$this->condAmbiente('c')}
 
                 UNION ALL
 
@@ -578,9 +652,9 @@ class CuentasPorPagarRepository extends BaseRepository
                 JOIN proveedores p ON p.id=l.id_proveedor
                 LEFT JOIN pagado pg ON pg.tipo_documento='LIQUIDACION' AND pg.id_doc=l.id
                 LEFT JOIN ret      ON ret.id_liquidacion=l.id AND ret.id_compra IS NULL
-                WHERE l.id_empresa=:id_empresa2 AND l.eliminado=false
+                WHERE l.id_empresa IN ({$in['l']}) AND l.eliminado=false
                   AND {$liqVigente}
-                  AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta2))
+                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l')})
 
                 UNION ALL
 
@@ -593,8 +667,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
                 JOIN proveedores p ON p.id = fe.id_proveedor
                 LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
-                WHERE ic.id_empresa=:id_empresa3 AND fe.eliminado=false AND ic.eliminado=false
-                  AND ic.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta3)
+                WHERE ic.id_empresa IN ({$in['i']}) AND fe.eliminado=false AND ic.eliminado=false
+                  AND {$this->condAmbiente('ic')}
             )
             SELECT
                 SUM(CASE WHEN d.saldo > 0 AND (CURRENT_DATE - d.fecha_vencimiento::date) <= 0              THEN d.saldo ELSE 0 END) AS tramo_vigente,
@@ -612,7 +686,7 @@ class CuentasPorPagarRepository extends BaseRepository
         $r = $st->fetch(PDO::FETCH_ASSOC);
 
         // Sumar los tramos de los saldos iniciales CXP (mismo filtro de proveedor)
-        $si = $this->getAntiguedadSaldosInicialesCxp($idEmpresa, $filtros);
+        $si = $this->getAntiguedadSaldosInicialesCxp($ids, $filtros);
 
         return [
             'vigente'     => (float)($r['tramo_vigente'] ?? 0) + $si['vigente'],
@@ -627,10 +701,10 @@ class CuentasPorPagarRepository extends BaseRepository
      * Tramos de antigüedad de los saldos iniciales CXP pendientes
      * (pendiente = saldo_inicial - pagado al corte). Respeta el filtro de proveedor.
      */
-    private function getAntiguedadSaldosInicialesCxp(int $idEmpresa, array $filtros): array
+    private function getAntiguedadSaldosInicialesCxp(array $idsEmpresa, array $filtros): array
     {
-        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
-        $params = [':si_emp' => $idEmpresa];
+        $params = [];
+        $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
 
         if (!empty($filtros['id_proveedor'])) {
             $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
@@ -941,15 +1015,15 @@ class CuentasPorPagarRepository extends BaseRepository
      * Construye el WHERE extra (aplicado sobre el resultado del UNION)
      * y los parámetros base para empresa + tipo_ambiente.
      */
-    private function buildWhereExtra(int $idEmpresa, array $filtros): array
+    private function buildWhereExtra(array $idsEmpresa, array $filtros): array
     {
-        $params = [
-            ':id_empresa'     => $idEmpresa,
-            ':id_empresa_ta'  => $idEmpresa,
-            ':id_empresa2'    => $idEmpresa,
-            ':id_empresa_ta2' => $idEmpresa,
-            ':id_empresa3'    => $idEmpresa,
-            ':id_empresa_ta3' => $idEmpresa,
+        $params = [];
+        // Un IN por rama del UNION (compras / liquidaciones / importaciones): PDO-pgsql no
+        // admite repetir un placeholder, así que cada rama lleva su propio juego.
+        $in = [
+            'c' => $this->phIn($idsEmpresa, 'ce', $params),
+            'l' => $this->phIn($idsEmpresa, 'le', $params),
+            'i' => $this->phIn($idsEmpresa, 'ie', $params),
         ];
         $whereExtra = '';
 
@@ -990,22 +1064,22 @@ class CuentasPorPagarRepository extends BaseRepository
             $params[':tipo_fuente'] = $filtros['tipo_fuente'];
         }
 
-        return [$whereExtra, $params];
+        return [$whereExtra, $params, $in];
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // SALDOS INICIALES CXP
     // ─────────────────────────────────────────────────────────────────────
 
-    public function getSaldosInicialesCxp(int $idEmpresa, array $filtros = []): array
+    public function getSaldosInicialesCxp(int|array $idsEmpresa, array $filtros = []): array
     {
         // Pendiente = saldo_inicial - pagado. Con "Fecha Hasta" lo pagado se
         // corta a esa fecha (ver lateralPagadoSaldoInicialCxp), igual que las
         // compras del listado principal; el estado se deriva de ese pendiente.
         $pend = '(s.saldo_inicial - pag.pagado)';
 
-        $where  = "s.id_empresa = :id_empresa AND s.eliminado = false";
-        $params = [':id_empresa' => $idEmpresa];
+        $params = [];
+        $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
             if ($filtros['estado'] === 'PAGADO') {
@@ -1039,6 +1113,7 @@ class CuentasPorPagarRepository extends BaseRepository
         $sql = "SELECT
                     s.id, s.tipo_documento, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
                     s.ruc_proveedor, s.nombre_proveedor, s.id_proveedor,
+                    {$this->colsEstablecimiento('s')},
                     CAST(s.saldo_inicial AS NUMERIC(16,2)) AS saldo_inicial,
                     CAST(pag.pagado      AS NUMERIC(16,2)) AS monto_pagado,
                     CAST({$pend}         AS NUMERIC(16,2)) AS saldo_pendiente,
@@ -1050,7 +1125,8 @@ class CuentasPorPagarRepository extends BaseRepository
                     s.observaciones,
                     CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
                          THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido
-                FROM saldos_iniciales_cxp s"
+                FROM saldos_iniciales_cxp s
+                LEFT JOIN empresas emp ON emp.id = s.id_empresa"
                 . $lateralPag . "
                 WHERE {$where}
                 ORDER BY s.fecha_emision ASC, s.nro_documento ASC";
@@ -1058,6 +1134,110 @@ class CuentasPorPagarRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PROVEEDORES (buscador del filtro)
+    //
+    // `proveedores` es por empresa: el mismo proveedor existe como filas
+    // distintas en cada establecimiento del RUC. En el consolidado se busca en
+    // todos y se cruza por identificación.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Buscador del filtro Proveedor. Con varios establecimientos devuelve UNA fila por
+     * identificación (prefiere la de la empresa activa) para no repetir al proveedor en
+     * el dropdown; el filtro luego se expande a las hermanas con
+     * expandirProveedoresPorIdentificacion().
+     */
+    public function buscarProveedores(int|array $idsEmpresa, int $idEmpresaActual, string $q, int $limite = 15): array
+    {
+        $ids = $this->idsEmpresa($idsEmpresa);
+        $q   = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':q' => '%' . mb_strtolower($q) . '%', ':q2' => '%' . $q . '%', ':actual' => $idEmpresaActual];
+        $inEmp  = $this->phIn($ids, 'bpe', $params);
+        $sql = "SELECT id, razon_social AS nombre, identificacion, id_empresa
+                FROM proveedores
+                WHERE id_empresa IN ({$inEmp})
+                  AND eliminado  = false
+                  AND (LOWER(razon_social) LIKE :q OR identificacion LIKE :q2)
+                ORDER BY (id_empresa = :actual) DESC, razon_social
+                LIMIT " . max(15, $limite * count($ids));
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        $out = [];
+        $vistos = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $p) {
+            $clave = trim((string)($p['identificacion'] ?? ''));
+            $clave = $clave !== '' ? 'i:' . $clave : 'id:' . (int)$p['id'];
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $out[] = ['id' => (int)$p['id'], 'nombre' => $p['nombre'], 'identificacion' => $p['identificacion']];
+            if (count($out) >= $limite) {
+                break;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Consolidado: expande los ids de proveedor elegidos a TODOS los ids del grupo de
+     * establecimientos que comparten la misma identificación (los proveedores sin
+     * identificación solo se cruzan consigo mismos). Devuelve la unión con los ids
+     * originales, para que el filtro `id_proveedor IN (...)` alcance los documentos y
+     * saldos iniciales de las hermanas.
+     */
+    public function expandirProveedoresPorIdentificacion(array $idsProveedor, int|array $idsEmpresa): array
+    {
+        $idsProveedor = array_values(array_unique(array_filter(array_map('intval', $idsProveedor))));
+        if (!$idsProveedor) {
+            return [];
+        }
+        $params = [];
+        $inProv = $this->phIn($idsProveedor, 'xp', $params);
+        $inEmp  = $this->phIn($this->idsEmpresa($idsEmpresa), 'xe', $params);
+        $sql = "SELECT DISTINCT p2.id
+                FROM proveedores p1
+                JOIN proveedores p2
+                  ON p2.identificacion = p1.identificacion
+                 AND p2.eliminado = false
+                 AND p2.id_empresa IN ({$inEmp})
+                WHERE p1.id IN ({$inProv})
+                  AND COALESCE(TRIM(p1.identificacion), '') <> ''";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $extra = array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+        return array_values(array_unique(array_merge($idsProveedor, $extra)));
+    }
+
+    /**
+     * Razón social e identificación de varios proveedores (para describir el filtro en
+     * PDF/Excel), buscándolos en cualquiera de los establecimientos del alcance.
+     * Devuelve id => ['nombre' => …, 'identificacion' => …].
+     */
+    public function getProveedoresPorIds(array $idsProveedor, int|array $idsEmpresa): array
+    {
+        $idsProveedor = array_values(array_unique(array_filter(array_map('intval', $idsProveedor))));
+        if (!$idsProveedor) {
+            return [];
+        }
+        $params = [];
+        $inProv = $this->phIn($idsProveedor, 'np', $params);
+        $inEmp  = $this->phIn($this->idsEmpresa($idsEmpresa), 'ne', $params);
+        $st = $this->db->prepare("SELECT id, razon_social, identificacion FROM proveedores
+                                  WHERE id IN ({$inProv}) AND id_empresa IN ({$inEmp})");
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $p) {
+            $out[(int)$p['id']] = ['nombre' => (string)$p['razon_social'], 'identificacion' => (string)($p['identificacion'] ?? '')];
+        }
+        return $out;
     }
 
     public function getDb(): \PDO
