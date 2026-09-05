@@ -99,6 +99,9 @@ class EgresoRules
             if ($monto <= 0) {
                 throw new Exception("El monto de pago #" . ($idx + 1) . " debe ser mayor a cero.");
             }
+            if (!empty($p['fecha_cobro']) && strtotime($p['fecha_cobro']) > strtotime('+1 year')) {
+                throw new Exception("La fecha de cobro del cheque en la línea #" . ($idx + 1) . " no puede ser mayor a 1 año desde hoy.");
+            }
             $totalPagos += $monto;
         }
 

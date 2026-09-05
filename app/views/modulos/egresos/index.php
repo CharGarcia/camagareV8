@@ -545,7 +545,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </div>
                                             <div class="eg-div-cheque-fields d-none" style="width:140px;">
                                                 <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
-                                                <input type="date" id="eg-add-pago-fecha-cheque" class="form-control form-control-sm border-primary">
+                                                <input type="date" id="eg-add-pago-fecha-cheque" class="form-control form-control-sm border-primary" max="<?= date('Y-m-d', strtotime('+1 year')) ?>">
                                             </div>
                                             <div style="width:110px;">
                                                 <label class="form-label small fw-bold">Monto</label>
@@ -1655,6 +1655,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 benefChq = document.getElementById('eg-add-pago-benef-cheque').value.trim().toUpperCase() || null;
                 if (!numChq) { Swal.fire('Campo requerido', 'Ingrese número de cheque', 'warning'); return; }
                 if (!fecChq) { Swal.fire('Campo requerido', 'Ingrese fecha de cobro del cheque', 'warning'); return; }
+                const maxFecChq = new Date(); maxFecChq.setFullYear(maxFecChq.getFullYear() + 1);
+                if (new Date(fecChq + 'T00:00:00') > maxFecChq) {
+                    Swal.fire('Fecha Inválida', 'La fecha de cobro del cheque no puede ser mayor a 1 año desde hoy.', 'warning');
+                    return;
+                }
             }
         }
 
@@ -1822,6 +1827,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         tipo_documento: s.tipo_bd,
                         id_referencia_documento: s.id,
                         numero_documento: s.numero,
+                        fecha_documento: s.fecha || '',
                         descripcion: `${s.numero} · ${it.desc}`,
                         monto_documento: tItem,
                         saldo_anterior: tItem,
@@ -1834,6 +1840,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     tipo_documento: s.tipo_bd,
                     id_referencia_documento: s.id,
                     numero_documento: s.numero,
+                    fecha_documento: s.fecha || '',
                     monto_documento: s.total,
                     saldo_anterior: s.pendiente,
                     monto_pagado: s.pagado,

@@ -57,6 +57,18 @@
                     </select>
                 </div>
 
+                <!-- Vendedor (asignado en la factura / recibo; los saldos iniciales no tienen vendedor) -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
+                    <select id="cxc-vendedor" name="id_vendedor" class="form-select form-select-sm shadow-none border" style="width:170px;"
+                            onchange="CXC_cargar()">
+                        <option value="" selected>Todos</option>
+                        <?php foreach (($vendedores ?? []) as $v): ?>
+                            <option value="<?php echo (int)$v['id']; ?>"><?php echo htmlspecialchars($v['nombre']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
                 <!-- Fecha Desde -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>

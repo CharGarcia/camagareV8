@@ -52,6 +52,9 @@ class CuentasPorCobrarController extends BaseModuloController
 
         $anios        = $this->repo->getAniosDisponibles($idEmpresa);
         $tieneWA      = $this->repo->tieneWhatsappConfigurado($idEmpresa);
+        // Catálogo para el filtro Vendedor (incluye inactivos: pueden tener cartera pendiente)
+        $vendedores   = (new \App\repositories\modulos\VendedorRepository())
+            ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'] ?? [];
         $prefsVista   = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
         $this->viewWithLayout('layouts.main', 'modulos/cuentas_por_cobrar/index', [
@@ -61,6 +64,7 @@ class CuentasPorCobrarController extends BaseModuloController
             'rutaModulo'  => $this->getRutaModulo(),
             'anios'       => $anios,
             'tieneWA'     => $tieneWA,
+            'vendedores'  => $vendedores,
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -126,8 +130,9 @@ class CuentasPorCobrarController extends BaseModuloController
             unset($r);
         }
 
-        // Saldos iniciales (todos; se filtran en PHP por el mismo estado del listado)
-        if (!in_array($tipoDoc, ['TODOS', 'SALDO_INICIAL'], true)) {
+        // Saldos iniciales (todos; se filtran en PHP por el mismo estado del listado).
+        // No tienen vendedor: al filtrar por vendedor quedan fuera (ver repo->incluyeSaldosIniciales).
+        if (!$this->repo->incluyeSaldosIniciales($filtros)) {
             $saldos = [];
         } else {
             $saldos = $this->repo->getSaldosInicialesCxc($idEmpresa, [
@@ -161,6 +166,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'cliente_ruc'       => $s['ruc_cliente'],
                 'cliente_email'     => '',
                 'cliente_telefono'  => '',
+                'vendedor_nombre'   => '', // los saldos iniciales no tienen vendedor
                 'fecha_emision'     => $s['fecha_emision'],
                 'fecha_vencimiento' => $s['fecha_vencimiento'],
                 'total'             => $s['saldo_inicial'],
@@ -1090,7 +1096,7 @@ $plantillasFiltradas = [];
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
 
-            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
+            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
 
             $exportData = [];
             foreach ($filas as $r) {
@@ -1104,6 +1110,7 @@ $plantillasFiltradas = [];
                     $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
                     (string)($r['cliente_nombre'] ?? ''),
                     (string)($r['cliente_ruc'] ?? ''),
+                    (string)($r['vendedor_nombre'] ?? ''),
                     $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
                     $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
                     $dias > 0 ? $dias : 0,
@@ -1271,6 +1278,7 @@ $plantillasFiltradas = [];
             'fecha_desde' => $_REQUEST['fecha_desde'] ?? '',
             'fecha_hasta' => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'  => $_REQUEST['id_cliente']  ?? '',
+            'id_vendedor' => (int)($_REQUEST['id_vendedor'] ?? 0) ?: '',
         ];
     }
 

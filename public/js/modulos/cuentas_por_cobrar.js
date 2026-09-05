@@ -45,6 +45,7 @@ async function CXC_cargar() {
         fecha_desde: document.getElementById('cxc-fecha-desde')?.value  || '',
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value  || '',
         id_cliente:  CXC_getClientesSeleccionados(),
+        id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
     });
 
     try {
@@ -941,6 +942,8 @@ function CXC_limpiarFiltros() {
     document.getElementById('cxc-fecha-desde').value = '';
     document.getElementById('cxc-fecha-hasta').value = hoyStr;
     document.getElementById('cxc-search-cliente').value = '';
+    const selVend = document.getElementById('cxc-vendedor');
+    if (selVend) selVend.value = '';
 
     CXC_clientesSeleccionados = [];
     CXC_renderChipsClientes();
@@ -961,6 +964,7 @@ function CXC_exportarExcel() {
         fecha_desde: document.getElementById('cxc-fecha-desde')?.value || '',
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
+        id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`, '_blank');
 }
@@ -972,6 +976,7 @@ function CXC_exportarPDF() {
         fecha_desde: document.getElementById('cxc-fecha-desde')?.value || '',
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
+        id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`, '_blank');
 }

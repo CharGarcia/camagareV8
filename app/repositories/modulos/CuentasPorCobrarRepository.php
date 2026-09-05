@@ -133,6 +133,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 c.identificacion            AS cliente_ruc,
                 COALESCE(c.email,'')        AS cliente_email,
                 COALESCE(c.telefono,'')     AS cliente_telefono,
+                COALESCE(ven.nombre,'')     AS vendedor_nombre,
                 v.importe_total             AS total,
                 COALESCE(cb.total_cobrado, 0)                                                                               AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                                                              AS total_retenido,
@@ -144,6 +145,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
             FROM ventas_cabecera v
             JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN vendedores ven ON ven.id = v.id_vendedor
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
             LEFT JOIN nc_aplic nc ON nc.num_norm = {$this->numV}
@@ -165,6 +167,19 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $t = strtoupper(trim((string)($filtros['tipo_doc'] ?? 'TODOS')));
         return in_array($t, ['FACTURA', 'RECIBO', 'SALDO_INICIAL'], true) ? $t : 'TODOS';
+    }
+
+    /**
+     * Indica si los saldos iniciales entran en el cálculo con los filtros dados.
+     * Los saldos iniciales no tienen vendedor (saldos_iniciales_cxc no guarda
+     * id_vendedor), así que cuando se filtra por un vendedor concreto se excluyen
+     * en lugar de mostrarse como si pertenecieran a todos. La misma regla la
+     * aplica el controller al armar el listado unificado.
+     */
+    public function incluyeSaldosIniciales(array $filtros): bool
+    {
+        return in_array($this->getTipoDoc($filtros), ['TODOS', 'SALDO_INICIAL'], true)
+            && empty($filtros['id_vendedor']);
     }
 
     /**
@@ -221,8 +236,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             ? $this->getStatsRecibos($idEmpresa, $filtros)
             : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
 
-        // Sumar los saldos iniciales CXC (mismo filtro de cliente)
-        $si = in_array($tipoDoc, ['TODOS', 'SALDO_INICIAL'], true)
+        // Sumar los saldos iniciales CXC (mismo filtro de cliente; sin vendedor no aplican)
+        $si = $this->incluyeSaldosIniciales($filtros)
             ? $this->getStatsSaldosInicialesCxc($idEmpresa, $filtros)
             : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
 
@@ -342,8 +357,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             ? $this->getAntiguedadRecibos($idEmpresa, $filtros)
             : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
 
-        // Sumar los tramos de los saldos iniciales CXC (mismo filtro de cliente)
-        $si = in_array($tipoDoc, ['TODOS', 'SALDO_INICIAL'], true)
+        // Sumar los tramos de los saldos iniciales CXC (mismo filtro de cliente; sin vendedor no aplican)
+        $si = $this->incluyeSaldosIniciales($filtros)
             ? $this->getAntiguedadSaldosInicialesCxc($idEmpresa, $filtros)
             : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
 
@@ -468,6 +483,10 @@ class CuentasPorCobrarRepository extends BaseRepository
                 $where .= " AND v.id_cliente IN (" . implode(',', $in) . ")";
             }
         }
+        if (!empty($filtros['id_vendedor'])) {
+            $where .= " AND v.id_vendedor = :id_vendedor";
+            $params[':id_vendedor'] = (int)$filtros['id_vendedor'];
+        }
 
         return [$where, $params];
     }
@@ -493,6 +512,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 c.identificacion            AS cliente_ruc,
                 COALESCE(c.email,'')        AS cliente_email,
                 COALESCE(c.telefono,'')     AS cliente_telefono,
+                COALESCE(ven.nombre,'')     AS vendedor_nombre,
                 v.importe_total             AS total,
                 COALESCE(cb.total_cobrado, 0)                       AS total_cobrado,
                 0                                                   AS total_retenido,
@@ -503,6 +523,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
             FROM recibos_venta_cabecera v
             JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN vendedores ven ON ven.id = v.id_vendedor
             LEFT JOIN cobrado cb ON cb.id_venta = v.id
             WHERE {$where}
             ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC
@@ -1141,6 +1162,10 @@ class CuentasPorCobrarRepository extends BaseRepository
                 }
                 $where .= " AND v.id_cliente IN (" . implode(',', $in) . ")";
             }
+        }
+        if (!empty($filtros['id_vendedor'])) {
+            $where .= " AND v.id_vendedor = :id_vendedor";
+            $params[':id_vendedor'] = (int)$filtros['id_vendedor'];
         }
 
         return [$where, $params];

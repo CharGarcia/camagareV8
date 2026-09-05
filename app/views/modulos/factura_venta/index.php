@@ -1004,7 +1004,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         </div>
                                                         <div class="col-6">
                                                             <label class="form-label fw-bold mb-0 text-muted" style="font-size:0.7rem;">Fecha <span class="text-danger">*</span></label>
-                                                            <input type="date" class="form-control form-control-sm shadow-none border-secondary-subtle" id="fvPagoFecha" value="<?= date('Y-m-d') ?>" required>
+                                                            <input type="date" class="form-control form-control-sm shadow-none border-secondary-subtle" id="fvPagoFecha" value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>" required>
                                                         </div>
                                                         <div class="col-6">
                                                             <label class="form-label fw-bold mb-0 text-muted" style="font-size:0.7rem;">Concepto <span class="text-danger">*</span></label>
@@ -1045,7 +1045,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                 <!-- Solo para CHEQUE: fecha en que se podrá cobrar (cheques posfechados) -->
                                                                 <div class="col-6 d-none" id="fvPagoWrapFechaCheque">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;"><i class="bi bi-calendar-date me-1"></i>Fecha de cobro</label>
-                                                                    <input type="date" class="form-control form-control-sm shadow-none" id="fvPagoFechaCobro">
+                                                                    <input type="date" class="form-control form-control-sm shadow-none" id="fvPagoFechaCobro" max="<?= date('Y-m-d', strtotime('+1 year')) ?>">
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -7261,6 +7261,15 @@ $totalPages = $totalPagesOriginal;
 
         if (!payload.id_punto_emision) {
             return Swal.fire('Campos requeridos', 'Seleccione la serie (punto de emisión).', 'warning');
+        }
+        if (payload.fecha_emision > CMG_fechaLocal()) {
+            return Swal.fire('Fecha Inválida', 'La fecha de emisión no puede ser posterior a la fecha actual.', 'warning');
+        }
+        if (payload.fecha_cobro) {
+            const maxFechaCobroFv = new Date(); maxFechaCobroFv.setFullYear(maxFechaCobroFv.getFullYear() + 1);
+            if (new Date(payload.fecha_cobro + 'T00:00:00') > maxFechaCobroFv) {
+                return Swal.fire('Fecha Inválida', 'La fecha de cobro del cheque no puede ser mayor a 1 año desde hoy.', 'warning');
+            }
         }
         if (!payload.id_forma_cobro) {
             return Swal.fire('Campos requeridos', 'Seleccione la forma de cobro.', 'warning');

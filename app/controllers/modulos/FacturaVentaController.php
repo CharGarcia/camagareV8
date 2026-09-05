@@ -2546,6 +2546,7 @@ class FacturaVentaController extends BaseModuloController
                     'tipo_documento'          => 'FACTURA',
                     'id_referencia_documento' => (int)$data['id_factura'],
                     'numero_documento'        => $numDoc,
+                    'fecha_documento'         => $factura['fecha_emision'] ?? null,
                     'descripcion'             => 'Cobro de factura ' . $numDoc,
                     'monto_documento'         => (float)$factura['importe_total'],
                     'saldo_anterior'          => $saldoAnterior,

@@ -146,6 +146,7 @@ class CuentasPorPagarService
                 'tipo_documento'          => $tipoDocEg,
                 'id_referencia_documento' => $idDoc,
                 'numero_documento'        => $numDoc,
+                'fecha_documento'         => $doc['fecha_emision'] ?? null,
                 'descripcion'             => "Pago de {$tipoDocEg} {$numDoc}",
                 'monto_documento'         => $totalDoc,
                 'saldo_anterior'          => $saldo,

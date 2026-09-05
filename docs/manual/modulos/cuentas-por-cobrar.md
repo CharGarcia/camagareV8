@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta
-version: 1.4
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor
+version: 1.5
 orden: 40
 estado: activo
 ---
@@ -62,6 +62,21 @@ El filtro **Documento** permite ver todo junto o solo un tipo:
 Las tarjetas superiores, el gráfico de antigüedad y las exportaciones a PDF y
 Excel respetan este filtro. La columna **Origen** de la tabla indica de qué
 tipo es cada fila.
+
+## Filtrar por vendedor
+
+El filtro **Vendedor** deja ver solo la cartera de un vendedor: las facturas y
+los recibos de venta que tienen a ese vendedor asignado en el documento. La
+lista muestra todos los vendedores de la empresa, incluidos los inactivos,
+porque un vendedor dado de baja puede seguir teniendo cartera pendiente.
+
+Las tarjetas superiores, el gráfico de antigüedad y las exportaciones a PDF y
+Excel respetan el filtro, igual que el de tipo de documento y el de cliente.
+El **Excel** incluye además la columna **Vendedor** con el nombre del vendedor
+asignado a cada factura o recibo (vacía en los saldos iniciales).
+
+> Los **saldos iniciales** no tienen vendedor, así que al elegir un vendedor
+> quedan fuera del listado y de los totales. Con **Todos** vuelven a aparecer.
 
 ## Fecha Hasta como fecha de corte
 
@@ -154,6 +169,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **1.5** — Nuevo filtro **Vendedor** en la tarjeta de filtros: acota facturas y
+  recibos al vendedor asignado en el documento. Aplica a listado, tarjetas,
+  gráfico de antigüedad y exportaciones. Los saldos iniciales, que no tienen
+  vendedor, se excluyen mientras haya un vendedor seleccionado. El Excel
+  incorpora la columna **Vendedor**.
 - **1.4** — Los **saldos iniciales** respetan la fecha de corte igual que las
   facturas: con Fecha Hasta, un cobro, retención o nota de crédito posterior a
   esa fecha ya no descuenta el saldo inicial (antes se usaba el acumulado

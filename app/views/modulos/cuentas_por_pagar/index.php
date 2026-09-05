@@ -309,7 +309,7 @@
                         <div class="col-6">
                             <label class="form-label small fw-bold mb-1">Fecha Emisión <span class="text-danger">*</span></label>
                             <input type="date" id="pago-fecha" class="form-control form-control-sm shadow-none"
-                                   value="<?php echo date('Y-m-d'); ?>">
+                                   value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>">
                         </div>
                         <div class="col-6">
                             <label class="form-label small fw-bold mb-1">Concepto de Egreso</label>
@@ -356,7 +356,7 @@
                                 </div>
                                 <div class="col-6 d-none" id="pago-div-fecha-cobro">
                                     <label class="form-label small fw-bold mb-1">Fecha Cobro</label>
-                                    <input type="date" id="pago-fecha-cobro" class="form-control form-control-sm shadow-none">
+                                    <input type="date" id="pago-fecha-cobro" class="form-control form-control-sm shadow-none" max="<?php echo date('Y-m-d', strtotime('+1 year')); ?>">
                                 </div>
                             </div>
                         </div>

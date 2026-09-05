@@ -214,6 +214,9 @@ class EgresoService
         // 3. Validar Periodo Contable
         $this->validarPeriodo($data, 'No se puede registrar el egreso porque el periodo contable está cerrado.');
 
+        // 4. Validar fecha de emisión vs fechas de los documentos que paga
+        $this->validarFechaVsDocumentos($data);
+
         $db = Database::getConnection();
         $inTrans = $db->inTransaction();
         if (!$inTrans) $db->beginTransaction();
@@ -415,6 +418,12 @@ class EgresoService
 
         if ($fechaEmision && strtotime($fechaEmision) > strtotime(date('Y-m-d'))) {
             throw new \Exception("La fecha de emisión no puede ser posterior a la fecha actual.");
+        }
+
+        foreach ($pagos as $idx => $p) {
+            if (!empty($p['fecha_cobro']) && strtotime($p['fecha_cobro']) > strtotime('+1 year')) {
+                throw new \Exception("La fecha de cobro del cheque en la línea #" . ($idx + 1) . " no puede ser mayor a 1 año desde hoy.");
+            }
         }
 
         // 1. Validar Periodo Contable de la fecha original
@@ -622,6 +631,22 @@ class EgresoService
 
         if ($fecha && $idEmpresa) {
             $this->periodosService->validarFechaPermitida($fecha, $idEmpresa, $mensaje);
+        }
+    }
+
+    /** Misma regla que IngresoService: la fecha del egreso no puede ser anterior a la del documento que paga. */
+    private function validarFechaVsDocumentos(array $data): void
+    {
+        $fechaEmision = $data['fecha_emision'] ?? null;
+        if (!$fechaEmision || empty($data['detalles'])) return;
+
+        foreach ($data['detalles'] as $detalle) {
+            $fechaDoc = $detalle['fecha_documento'] ?? null;
+            if ($fechaDoc && $fechaEmision < $fechaDoc) {
+                throw new \Exception(
+                    "La fecha de emisión ($fechaEmision) no puede ser anterior a la fecha del documento {$detalle['numero_documento']} ($fechaDoc)."
+                );
+            }
         }
     }
 

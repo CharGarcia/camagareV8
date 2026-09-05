@@ -544,6 +544,17 @@ async function CXP_guardarPago() {
     if (!monto || monto <= 0) { mostrarError('Ingrese un monto válido mayor a $0.'); return; }
     if (!forma)               { mostrarError('Seleccione una forma de pago.'); return; }
     if (!fecha)               { mostrarError('Seleccione la fecha de emisión.'); return; }
+    if (fecha > CMG_fechaLocal()) { mostrarError('La fecha de emisión no puede ser posterior a la fecha actual.'); return; }
+
+    const divBancoChk = document.getElementById('pago-div-banco');
+    if (divBancoChk && !divBancoChk.classList.contains('d-none') && document.getElementById('pago-tipo-op')?.value === 'CHEQUE') {
+        const fechaCobroChk = document.getElementById('pago-fecha-cobro')?.value || '';
+        const maxFechaCobro = new Date(); maxFechaCobro.setFullYear(maxFechaCobro.getFullYear() + 1);
+        if (fechaCobroChk && new Date(fechaCobroChk + 'T00:00:00') > maxFechaCobro) {
+            mostrarError('La fecha de cobro del cheque no puede ser mayor a 1 año desde hoy.');
+            return;
+        }
+    }
     if (msgErr) msgErr.classList.add('d-none');
 
     const btn = document.getElementById('btn-guardar-pago');

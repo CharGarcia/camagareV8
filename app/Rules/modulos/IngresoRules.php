@@ -99,10 +99,13 @@ class IngresoRules
 
         // Suma de Pagos
         $sumPagos = 0.0;
-        foreach ($data['pagos'] as $p) {
+        foreach ($data['pagos'] as $idxPago => $p) {
             $monto = (float) ($p['monto'] ?? 0);
             if ($monto <= 0) {
                 throw new \Exception('El monto en las formas de cobro debe ser mayor a cero.');
+            }
+            if (!empty($p['fecha_cobro']) && strtotime($p['fecha_cobro']) > strtotime('+1 year')) {
+                throw new \Exception('La fecha de cobro del cheque en la línea #' . ($idxPago + 1) . ' no puede ser mayor a 1 año desde hoy.');
             }
             $sumPagos += $monto;
         }

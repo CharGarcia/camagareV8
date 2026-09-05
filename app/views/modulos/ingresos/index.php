@@ -547,7 +547,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </div>
                                             <div class="div-cheque-fields d-none" style="width:140px;">
                                                 <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
-                                                <input type="date" id="m-add-cobro-fecha-cheque" class="form-control form-control-sm border-primary">
+                                                <input type="date" id="m-add-cobro-fecha-cheque" class="form-control form-control-sm border-primary" max="<?= date('Y-m-d', strtotime('+1 year')) ?>">
                                             </div>
                                             <div style="width:110px;">
                                                 <label class="form-label small fw-bold">Monto</label>
@@ -1681,6 +1681,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
                 if (!fecChq) {
                     Swal.fire('Cheque', 'Por favor seleccione la fecha de cobro del cheque.', 'warning');
+                    return;
+                }
+                const maxFecChq = new Date(); maxFecChq.setFullYear(maxFecChq.getFullYear() + 1);
+                if (new Date(fecChq + 'T00:00:00') > maxFecChq) {
+                    Swal.fire('Fecha Inválida', 'La fecha de cobro del cheque no puede ser mayor a 1 año desde hoy.', 'warning');
                     return;
                 }
             }

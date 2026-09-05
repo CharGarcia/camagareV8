@@ -188,6 +188,20 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Construye las condiciones WHERE a partir de los filtros.
      */
+    /**
+     * Condición de cruce entre una nota de crédito y la factura de venta que
+     * modifica (mismo criterio que ReporteVentasVendedorRepository y
+     * NotaCreditoRepository): num_doc_modificado = establecimiento-punto-secuencial
+     * de la factura, dentro de la misma empresa y ambiente.
+     */
+    private function condicionFacturaDeNc(string $aliasNc, string $aliasFactura): string
+    {
+        return "{$aliasFactura}.id_empresa = {$aliasNc}.id_empresa
+                AND {$aliasFactura}.eliminado = false
+                AND {$aliasFactura}.tipo_ambiente = {$aliasNc}.tipo_ambiente
+                AND CONCAT({$aliasFactura}.establecimiento, '-', {$aliasFactura}.punto_emision, '-', {$aliasFactura}.secuencial) = {$aliasNc}.num_doc_modificado";
+    }
+
     private function buildWhereYParams(int $idEmpresa, array $filtros, string $aliasVenta, string $aliasDetalle = null, bool $filtrarEstado = true): array
     {
         $f = $this->fuente($filtros);
@@ -219,6 +233,21 @@ class ReporteVentasRepository extends BaseRepository
                 $params[$pName] = $id;
             }
             $where .= " AND {$aliasVenta}.id_cliente IN (" . implode(',', $inNames) . ")";
+        }
+
+        // Filtro por Vendedor. Las notas de crédito no registran vendedor
+        // (ver fuente()): se toma el de la factura de venta que modifican.
+        if (!empty($filtros['id_vendedor'])) {
+            if ($f['vendedor']) {
+                $where .= " AND {$aliasVenta}.id_vendedor = :id_vendedor";
+            } else {
+                $where .= " AND EXISTS (
+                    SELECT 1 FROM ventas_cabecera fvnc
+                    WHERE " . $this->condicionFacturaDeNc($aliasVenta, 'fvnc') . "
+                      AND fvnc.id_vendedor = :id_vendedor
+                )";
+            }
+            $params[':id_vendedor'] = (int)$filtros['id_vendedor'];
         }
 
         if (!empty($filtros['id_producto'])) {
@@ -318,9 +347,14 @@ class ReporteVentasRepository extends BaseRepository
             $retenJoin = "";
             $reten = "0";
         }
-        // Las notas de crédito no tienen id_vendedor: se omite el join.
-        $vendedorSel  = $f['vendedor'] ? "COALESCE(vend.nombre, '')" : "''";
-        $vendedorJoin = $f['vendedor'] ? "LEFT JOIN vendedores vend ON vend.id = v.id_vendedor" : "";
+        // Las notas de crédito no tienen id_vendedor: se muestra el de la factura modificada.
+        $vendedorSel  = "COALESCE(vend.nombre, '')";
+        if ($f['vendedor']) {
+            $vendedorJoin = "LEFT JOIN vendedores vend ON vend.id = v.id_vendedor";
+        } else {
+            $vendedorJoin = "LEFT JOIN ventas_cabecera fvnc ON " . $this->condicionFacturaDeNc('v', 'fvnc') . "
+            LEFT JOIN vendedores vend ON vend.id = fvnc.id_vendedor";
+        }
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . "){$retenCte}

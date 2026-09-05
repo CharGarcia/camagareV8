@@ -1,12 +1,12 @@
 ---
 titulo: Reporte de ventas
-resumen: Ventas del periodo con filtros por cliente, producto y estado, agrupables y exportables.
+resumen: Ventas del periodo con filtros por cliente, vendedor, producto y estado, agrupables y exportables.
 categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por producto, estadisticas, exportar, pdf, excel
-version: 1.0
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel
+version: 1.1
 orden: 10
 estado: activo
 ---
@@ -20,6 +20,7 @@ qué, en el periodo que se indique.
 |--------|----------|
 | Fecha desde / hasta | El periodo a consultar |
 | Cliente | Ventas de un cliente concreto |
+| Vendedor | Ventas de un vendedor concreto. Las notas de crédito no llevan vendedor propio: se les atribuye el vendedor de la factura que modifican, así que sí entran en el filtro (también en *Facturas − NC*) |
 | Producto | Ventas de un producto concreto |
 | Estado | Borrador, autorizada o anulada |
 
@@ -58,4 +59,5 @@ se va a seguir analizando por fuera.
 
 ## Historial de cambios
 
+- **1.1** — Selector de **Vendedor** en los filtros (segunda fila, antes de Producto); los campos de esa fila se compactaron para caber en una sola línea. Las notas de crédito toman el vendedor de la factura que modifican, tanto para el filtro como para la columna Vendedor del detallado.
 - **1.0** — Versión inicial.

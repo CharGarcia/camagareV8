@@ -36,6 +36,9 @@ class ReporteVentasController extends BaseModuloController
         // Obtener los años disponibles para el filtro
         $anios = $this->repository->getAniosDisponibles($idEmpresa);
 
+        // Vendedores activos de la empresa para el selector del filtro
+        $vendedores = (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/reporte_ventas/index', [
             'titulo'      => 'Reporte de Ventas',
             'perm'        => $this->getPermisos(),
@@ -43,6 +46,7 @@ class ReporteVentasController extends BaseModuloController
             'rutaModulo'  => $this->getRutaModulo(),
             'tarifasIva'  => $tarifasIva,
             'anios'       => $anios,
+            'vendedores'  => $vendedores,
             'fullWidth'   => true,
             'base'        => BASE_URL
         ]);
@@ -56,6 +60,7 @@ class ReporteVentasController extends BaseModuloController
             'fecha_desde'    => $_REQUEST['fecha_desde'] ?? '',
             'fecha_hasta'    => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'     => $_REQUEST['id_cliente'] ?? '',
+            'id_vendedor'    => (int)($_REQUEST['id_vendedor'] ?? 0),
             'id_producto'    => $_REQUEST['id_producto'] ?? '',
             'producto_texto' => trim($_REQUEST['producto_texto'] ?? ''),
             'variante_texto' => trim($_REQUEST['variante_texto'] ?? ''),
