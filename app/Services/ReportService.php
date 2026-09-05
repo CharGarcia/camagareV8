@@ -20,10 +20,16 @@ class ReportService
      * @param string $sheetTitle Título de la hoja
      * @param string|null $mainTitle Título principal (ej: Nombre de Empresa) para mostrar arriba
      */
-    public function exportToExcel(string $filename, array $headers, array $data, string $sheetTitle = 'Reporte', ?string $mainTitle = null): void
+    /**
+     * @param array $infoLineas        Opcional: etiqueta => valor que se escribe bajo el título
+     *                                 (p. ej. los filtros aplicados) antes de los encabezados.
+     * @param array $formatosColumnas  Opcional: índice de columna (1-based) => formato numérico
+     *                                 de Excel (p. ej. '0.00') aplicado a las filas de datos.
+     */
+    public function exportToExcel(string $filename, array $headers, array $data, string $sheetTitle = 'Reporte', ?string $mainTitle = null, array $infoLineas = [], array $formatosColumnas = []): void
     {
         try {
-            $spreadsheet = $this->construirSpreadsheet($headers, $data, $sheetTitle, $mainTitle);
+            $spreadsheet = $this->construirSpreadsheet($headers, $data, $sheetTitle, $mainTitle, $infoLineas, $formatosColumnas);
             $this->descargarSpreadsheet($spreadsheet, $filename);
         } catch (\Throwable $e) {
             throw new \Exception("Error al generar el reporte Excel: " . $e->getMessage());
@@ -114,22 +120,38 @@ class ReportService
         }
     }
 
-    public function construirSpreadsheet(array $headers, array $data, string $sheetTitle, ?string $mainTitle): Spreadsheet
+    public function construirSpreadsheet(array $headers, array $data, string $sheetTitle, ?string $mainTitle, array $infoLineas = [], array $formatosColumnas = []): Spreadsheet
     {
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle(substr($sheetTitle, 0, 31));
 
-            $dataRowStart = 1;
+            $dataRowStart  = 1;
+            $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
 
             // Si hay un título principal, lo ponemos en la fila 1 y movemos la tabla abajo
             if ($mainTitle) {
-                $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
                 $sheet->setCellValue('A1', mb_strtoupper($mainTitle));
                 $sheet->mergeCells("A1:{$lastColLetter}1");
                 $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
                 $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $dataRowStart = 3; // Empezar encabezados en la fila 3
+            }
+
+            // Líneas de información (p. ej. filtros aplicados) entre el título y los encabezados:
+            // etiqueta en negrita en la columna A, valor en B combinado hasta la última columna.
+            if ($infoLineas) {
+                $rowInfo = $mainTitle ? 2 : 1;
+                foreach ($infoLineas as $lbl => $val) {
+                    $sheet->setCellValueExplicit("A{$rowInfo}", (string)$lbl . ':', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->getStyle("A{$rowInfo}")->getFont()->setBold(true);
+                    $sheet->setCellValueExplicit("B{$rowInfo}", (string)$val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    if (count($headers) > 2) {
+                        $sheet->mergeCells("B{$rowInfo}:{$lastColLetter}{$rowInfo}");
+                    }
+                    $rowInfo++;
+                }
+                $dataRowStart = $rowInfo + 1; // fila en blanco antes de los encabezados
             }
 
             // Estilo para encabezados
@@ -175,6 +197,17 @@ class ReportService
                     $col++;
                 }
                 $rowNum++;
+            }
+
+            // Formato numérico por columna sobre las filas de datos
+            if ($formatosColumnas && $rowNum > $dataRowStart + 1) {
+                $primera = $dataRowStart + 1;
+                $ultima  = $rowNum - 1;
+                foreach ($formatosColumnas as $idxCol => $formato) {
+                    $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex((int)$idxCol);
+                    $sheet->getStyle("{$colLetter}{$primera}:{$colLetter}{$ultima}")
+                          ->getNumberFormat()->setFormatCode($formato);
+                }
             }
 
             // Auto-ajustar columnas

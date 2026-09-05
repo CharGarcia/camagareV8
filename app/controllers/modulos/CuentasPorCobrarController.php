@@ -1095,8 +1095,11 @@ $plantillasFiltradas = [];
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = $this->describirFiltros($idEmpresa, $filtros);
 
             $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
+            // Columnas de montos (1-based): número con 2 decimales, sin separador de miles
+            $formatos = array_fill_keys([9, 10, 11, 12, 13, 14], '0.00');
 
             $exportData = [];
             foreach ($filas as $r) {
@@ -1114,18 +1117,18 @@ $plantillasFiltradas = [];
                     $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
                     $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
                     $dias > 0 ? $dias : 0,
-                    number_format((float)$r['total'], 2),
-                    number_format($abonos, 2),
-                    number_format($nc, 2),
-                    number_format($ret, 2),
-                    number_format($abonos + $nc + $ret, 2),
-                    number_format((float)$r['saldo'], 2),
+                    round((float)$r['total'], 2),
+                    round($abonos, 2),
+                    round($nc, 2),
+                    round($ret, 2),
+                    round($abonos + $nc + $ret, 2),
+                    round((float)$r['saldo'], 2),
                     $estadoCxC,
                 ];
             }
 
             $reportService = new \App\Services\ReportService();
-            $reportService->exportToExcel('cuentas_por_cobrar', $headers, $exportData, 'Cuentas por Cobrar', $nombreEmpresa);
+            $reportService->exportToExcel('cuentas_por_cobrar', $headers, $exportData, 'Cuentas por Cobrar', $nombreEmpresa, $filtrosTxt, $formatos);
             exit;
         } catch (\Throwable $e) {
             if (!headers_sent()) {
@@ -1152,6 +1155,7 @@ $plantillasFiltradas = [];
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = $this->describirFiltros($idEmpresa, $filtros);
 
             $totalSaldo   = 0;
             $totalCobrado = 0;
@@ -1198,6 +1202,9 @@ $plantillasFiltradas = [];
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
+                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
+                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; }
+                table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <div class="header">
@@ -1205,6 +1212,14 @@ $plantillasFiltradas = [];
                 <h3>Cuentas por Cobrar</h3>
                 <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
             </div>
+            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
+                <?php foreach ($filtrosTxt as $lbl => $val): ?>
+                <tr>
+                    <td class="filtro-lbl"><?= htmlspecialchars($lbl) ?>:</td>
+                    <td class="filtro-val"><?= htmlspecialchars($val) ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </table>
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
@@ -1279,6 +1294,69 @@ $plantillasFiltradas = [];
             'fecha_hasta' => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'  => $_REQUEST['id_cliente']  ?? '',
             'id_vendedor' => (int)($_REQUEST['id_vendedor'] ?? 0) ?: '',
+        ];
+    }
+
+    /**
+     * Descripción legible de los filtros aplicados (para encabezados de PDF).
+     * Devuelve etiqueta => valor, con los ids de cliente/vendedor resueltos a nombre.
+     */
+    private function describirFiltros(int $idEmpresa, array $filtros): array
+    {
+        $tipoDocLbl = [
+            'TODOS'         => 'Todos (facturas, recibos y saldos iniciales)',
+            'FACTURA'       => 'Facturas de venta',
+            'RECIBO'        => 'Recibos de venta',
+            'SALDO_INICIAL' => 'Saldos iniciales',
+        ];
+        $estadoLbl = [
+            'PENDIENTES' => 'Saldo pendiente',
+            'VENCIDAS'   => 'Vencidas',
+            'AL_DIA'     => 'Al día',
+            'PAGADAS'    => 'Pagadas',
+            'TODOS'      => 'Todos',
+        ];
+
+        $fmt = fn(string $f): string => $f !== '' ? date('d-m-Y', strtotime($f)) : '';
+        $desde = $fmt((string)($filtros['fecha_desde'] ?? ''));
+        $hasta = $fmt((string)($filtros['fecha_hasta'] ?? ''));
+        if ($desde !== '' && $hasta !== '') {
+            $periodo = "Del {$desde} al {$hasta}";
+        } elseif ($desde !== '') {
+            $periodo = "Desde {$desde}";
+        } elseif ($hasta !== '') {
+            $periodo = "Hasta {$hasta} (fecha de corte)";
+        } else {
+            $periodo = 'Sin límite de fechas';
+        }
+
+        $vendedorTxt = 'Todos';
+        if (!empty($filtros['id_vendedor'])) {
+            $v = (new \App\repositories\modulos\VendedorRepository())->findById((int)$filtros['id_vendedor'], $idEmpresa);
+            $vendedorTxt = $v['nombre'] ?? ('#' . (int)$filtros['id_vendedor']);
+        }
+
+        $clienteTxt = 'Todos';
+        if (!empty($filtros['id_cliente'])) {
+            $ids = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
+            $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+            if ($ids) {
+                $cliRepo = new \App\repositories\modulos\ClienteRepository();
+                $nombres = [];
+                foreach ($ids as $id) {
+                    $c = $cliRepo->getPorId($id, $idEmpresa);
+                    $nombres[] = $c ? trim(($c['nombre'] ?? '') . (!empty($c['identificacion']) ? " ({$c['identificacion']})" : '')) : "#{$id}";
+                }
+                $clienteTxt = implode(', ', $nombres);
+            }
+        }
+
+        return [
+            'Tipo de documento' => $tipoDocLbl[$filtros['tipo_doc'] ?? 'TODOS'] ?? 'Todos',
+            'Estado'            => $estadoLbl[$filtros['estado'] ?? 'PENDIENTES'] ?? (string)($filtros['estado'] ?? ''),
+            'Vendedor'          => $vendedorTxt,
+            'Período'           => $periodo,
+            'Cliente'           => $clienteTxt,
         ];
     }
 

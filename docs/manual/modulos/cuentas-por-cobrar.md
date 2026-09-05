@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor
-version: 1.5
+version: 1.6
 orden: 40
 estado: activo
 ---
@@ -169,6 +169,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **1.6** — El PDF y el Excel exportados muestran, bajo el encabezado, los
+  **filtros aplicados** (tipo de documento, estado, vendedor, período y cliente),
+  para que quien lo reciba sepa exactamente qué cartera está viendo. En el Excel
+  los montos ahora son celdas numéricas con dos decimales y sin separador de
+  miles, listas para sumar.
 - **1.5** — Nuevo filtro **Vendedor** en la tarjeta de filtros: acota facturas y
   recibos al vendedor asignado en el documento. Aplica a listado, tarjetas,
   gráfico de antigüedad y exportaciones. Los saldos iniciales, que no tienen

@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta
-version: 1.2
+version: 1.3
 orden: 50
 estado: activo
 ---
@@ -86,6 +86,11 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.3** — El PDF y el Excel exportados muestran, bajo el encabezado, los
+  **filtros aplicados** (tipo de documento, estado, período y proveedor), para
+  que quien lo reciba sepa exactamente qué cartera está viendo. En el Excel los
+  montos ahora son celdas numéricas con dos decimales y sin separador de miles,
+  listas para sumar.
 - **1.2** — Se listan y se pueden pagar todos los comprobantes de compra que generan deuda (notas de venta, documentos financieros, planillas, etc.), no solo la factura. Las **liquidaciones de compra ya contabilizadas** vuelven a aparecer (antes desaparecían de la cartera al registrarse su asiento). Las compras anuladas o rechazadas dejan de mostrarse como deuda. También aplica al saldo de la ficha del proveedor y al pago automático a proveedores.
 - **1.1** — Los **saldos iniciales** respetan la fecha de corte igual que las
   compras: con Fecha Hasta, un pago posterior a esa fecha ya no descuenta el
