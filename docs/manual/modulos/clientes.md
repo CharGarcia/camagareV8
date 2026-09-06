@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita
-version: 1.2
+etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor
+version: 1.3
 orden: 10
 estado: activo
 ---
@@ -160,6 +160,16 @@ configurada y usted tiene permiso para crear ingresos.
 > Los **saldos iniciales** de cartera no entran en el cobro automático: se cobran
 > desde el módulo Ingresos, para revisarlos uno a uno.
 
+## Carga masiva desde Excel
+
+En *Configuración → Importador desde Excel* la entidad **Clientes** permite
+cargar o actualizar clientes en bloque (se reconocen por identificación). La
+plantilla incluye al final la columna opcional **VENDEDOR**, donde se escribe la
+identificación o el nombre exacto del vendedor asignado; la hoja de consulta
+*Vendedores* del mismo archivo lista los que existen en la empresa. Si la celda
+va vacía, un cliente que ya existía conserva su vendedor. Detalle y errores
+frecuentes en la guía *Importar datos desde Excel*.
+
 ## Permisos
 
 Lo que puede hacer cada persona depende de los permisos asignados al submódulo:
@@ -193,6 +203,8 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **1.3** — Carga masiva desde Excel: la plantilla de clientes admite la columna
+  VENDEDOR para asignar el vendedor por identificación o nombre.
 - **1.2** — Pestaña *Visitas*: días de visita del vendedor, frecuencia (semanal,
   quincenal, mensual), semanas del mes, orden dentro de la ruta, horario de
   atención y nota para el vendedor. Columna *Días de visita* en el listado, en el

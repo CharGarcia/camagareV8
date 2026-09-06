@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/vendedores
 tipo: modulo
 visibilidad: todos
-etiquetas: vendedores, vendedor, comercial, agente, asesor, comision, ventas por vendedor
-version: 1.0
+etiquetas: vendedores, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel
+version: 1.1
 orden: 50
 estado: activo
 ---
@@ -24,6 +24,18 @@ no entran al sistema, y usuarios que no venden.
 3. Añada el correo si quiere (se valida el formato).
 4. Guarde.
 
+## Carga masiva desde Excel
+
+Si tiene muchos vendedores, no hace falta registrarlos uno por uno: en
+*Configuración → Importador desde Excel* está la entidad **Vendedores**. La
+plantilla pide identificación y nombre (obligatorios) y correo, teléfono y
+dirección (opcionales). Si la identificación ya existe, el vendedor se actualiza
+en lugar de duplicarse.
+
+En esa misma herramienta, la plantilla de **Clientes** trae la columna VENDEDOR
+para asignar cada cliente a su vendedor por identificación o nombre. Detalle en
+la guía *Importar datos desde Excel*.
+
 ## Errores frecuentes
 
 - **"El formato del correo electrónico no es válido"**: revise la dirección.
@@ -31,4 +43,6 @@ no entran al sistema, y usuarios que no venden.
 
 ## Historial de cambios
 
+- **1.1** — Carga masiva desde Excel: entidad *Vendedores* en el importador y
+  columna VENDEDOR en la plantilla de clientes.
 - **1.0** — Versión inicial.

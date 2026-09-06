@@ -37,6 +37,21 @@ class ImportadorExcelService
                     'DIAS_PLAZO',
                     'PROVINCIA (nombre exacto, opcional)',
                     'CIUDAD (nombre exacto, opcional - requiere PROVINCIA)',
+                    'VENDEDOR (identificación o nombre exacto, ver hoja Vendedores, opcional)',
+                ]
+            ],
+            // Cargar antes que los clientes: la plantilla de clientes trae la
+            // hoja "Vendedores" con los que ya existen en la empresa.
+            'vendedores' => [
+                'nombre' => 'Vendedores',
+                'global' => false,
+                'col_numericas' => [],
+                'columnas' => [
+                    'IDENTIFICACION',
+                    'NOMBRE',
+                    'CORREO (opcional)',
+                    'TELEFONO (opcional)',
+                    'DIRECCION (opcional)',
                 ]
             ],
             'productos' => [
@@ -193,6 +208,7 @@ class ImportadorExcelService
     {
         $mapa = [
             'clientes' => 'clientes',
+            'vendedores' => 'vendedores',
             'productos' => 'productos',
             'vehiculos' => 'vehiculos',
             'proveedores' => 'proveedores',
@@ -209,6 +225,8 @@ class ImportadorExcelService
         switch ($entidadId) {
             case 'clientes':
                 return $this->insertarCliente($fila, $numeroFila, $idEmpresa, $tipoAmbiente, $idUsuario);
+            case 'vendedores':
+                return $this->insertarVendedor($fila, $numeroFila, $idEmpresa, $idUsuario);
             case 'productos':
                 return $this->insertarProducto($fila, $numeroFila, $idEmpresa, $tipoAmbiente, $idUsuario);
             case 'vehiculos':
@@ -240,6 +258,8 @@ class ImportadorExcelService
         $plazo          = abs((int)($fila[6] ?? 0));
         $provinciaNombre = trim((string)($fila[7] ?? ''));
         $ciudadNombre    = trim((string)($fila[8] ?? ''));
+        // Columna opcional; las plantillas antiguas (sin ella) siguen funcionando.
+        $vendedorRaw     = trim((string)($fila[9] ?? ''));
 
         // Validar y normalizar emails
         $email = $this->validarYNormalizarEmails($emailRaw, $numeroFila);
@@ -258,6 +278,9 @@ class ImportadorExcelService
         // Resolver provincia y ciudad
         [$codProvincia, $codCiudad] = $this->resolverProvinciaYCiudad($provinciaNombre, $ciudadNombre, $numeroFila);
 
+        // Resolver vendedor asignado (null si la celda viene vacía)
+        $idVendedor = $this->resolverVendedor($vendedorRaw, $idEmpresa, $numeroFila);
+
         // Verificar si ya existe → UPDATE, si no → INSERT
         $stCheck = $this->db->prepare(
             "SELECT id FROM clientes WHERE id_empresa = ? AND identificacion = ? AND eliminado = false LIMIT 1"
@@ -269,12 +292,16 @@ class ImportadorExcelService
             $sql = "UPDATE clientes SET
                         tipo_id = ?, nombre = ?, direccion = ?, email = ?, telefono = ?,
                         plazo = ?, provincia = ?, ciudad = ?,
+                        id_vendedor = COALESCE(CAST(? AS INTEGER), id_vendedor),
                         updated_by = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ? AND id_empresa = ?";
+            // Si la celda VENDEDOR viene vacía se conserva el vendedor que el
+            // cliente ya tenía; la plantilla no sirve para "desasignar".
             $st = $this->db->prepare($sql);
             $st->execute([
                 $tipoId, $nombre, $direccion, $email, $telefono,
                 $plazo, $codProvincia, $codCiudad,
+                $idVendedor,
                 $idUsuario, (int)$idExistente, $idEmpresa,
             ]);
             return (int)$idExistente;
@@ -283,12 +310,12 @@ class ImportadorExcelService
         $sql = "INSERT INTO clientes (
                     id_empresa, id_usuario, tipo_id, identificacion, nombre,
                     direccion, email, telefono, plazo,
-                    provincia, ciudad,
+                    provincia, ciudad, id_vendedor,
                     status, eliminado, created_by, updated_by
                 ) VALUES (
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
-                    ?, ?,
+                    ?, ?, ?,
                     1, false, ?, ?
                 ) RETURNING id";
 
@@ -296,7 +323,133 @@ class ImportadorExcelService
         $st->execute([
             $idEmpresa, $idUsuario, $tipoId, $identificacion, $nombre,
             $direccion, $email, $telefono, $plazo,
-            $codProvincia, $codCiudad,
+            $codProvincia, $codCiudad, $idVendedor,
+            $idUsuario, $idUsuario,
+        ]);
+        return (int)$st->fetchColumn();
+    }
+
+    /**
+     * Busca el vendedor escrito en la columna VENDEDOR de la plantilla de
+     * clientes. Se acepta la identificación (cédula/RUC) o el nombre exacto,
+     * sin distinguir mayúsculas. Devuelve null si la celda viene vacía.
+     */
+    private function resolverVendedor(string $valorRaw, int $idEmpresa, int $numeroFila): ?int
+    {
+        $valor = $this->sanitizarTexto($valorRaw, 100);
+        if ($valor === '') {
+            return null;
+        }
+
+        $st = $this->db->prepare(
+            "SELECT id, identificacion, nombre, status
+               FROM vendedores
+              WHERE id_empresa = :id_empresa
+                AND eliminado = false
+                AND (identificacion = :valor OR LOWER(TRIM(nombre)) = LOWER(:valor2))
+              ORDER BY CASE WHEN identificacion = :valor3 THEN 0 ELSE 1 END, id ASC"
+        );
+        $st->execute([
+            ':id_empresa' => $idEmpresa,
+            ':valor'      => $valor,
+            ':valor2'     => $valor,
+            ':valor3'     => $valor,
+        ]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($rows)) {
+            throw new Exception(
+                "Fila {$numeroFila}: No existe un vendedor con identificación o nombre \"{$valor}\" en esta empresa. " .
+                "Revise la hoja Vendedores de la plantilla o cargue primero la entidad Vendedores."
+            );
+        }
+
+        // La coincidencia exacta por identificación manda; si solo hubo
+        // coincidencias por nombre y son varias, el dato es ambiguo.
+        $porIdentificacion = array_filter($rows, fn($r) => (string)($r['identificacion'] ?? '') === $valor);
+        if (count($rows) > 1 && empty($porIdentificacion)) {
+            throw new Exception(
+                "Fila {$numeroFila}: Hay " . count($rows) . " vendedores llamados \"{$valor}\". " .
+                "Escriba la identificación del vendedor en lugar del nombre."
+            );
+        }
+
+        $vendedor = $rows[0];
+        if ((int)($vendedor['status'] ?? 1) !== 1) {
+            throw new Exception(
+                "Fila {$numeroFila}: El vendedor \"{$vendedor['nombre']}\" está inactivo y no puede asignarse. " .
+                "Actívelo en el módulo de Vendedores o deje la celda VENDEDOR vacía."
+            );
+        }
+
+        return (int)$vendedor['id'];
+    }
+
+    /**
+     * Carga un vendedor. Si ya existe uno con la misma identificación en la
+     * empresa, se ACTUALIZAN nombre, correo, teléfono y dirección (igual que
+     * clientes); no se duplica.
+     */
+    private function insertarVendedor(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
+    {
+        // Largos reales de la tabla vendedores: identificacion 50, nombre 50,
+        // correo 100, telefono 20, direccion 100.
+        $identificacion = $this->campoTexto($fila, 0, 'IDENTIFICACION', 50, $numeroFila);
+        $nombre         = $this->campoTexto($fila, 1, 'NOMBRE', 50, $numeroFila);
+        $correoRaw      = $this->campoTexto($fila, 2, 'CORREO', 100, $numeroFila);
+        $telefono       = $this->campoTexto($fila, 3, 'TELEFONO', 20, $numeroFila);
+        $direccion      = $this->campoTexto($fila, 4, 'DIRECCION', 100, $numeroFila);
+
+        if ($identificacion === '' || $nombre === '') {
+            throw new Exception("Fila {$numeroFila}: IDENTIFICACION y NOMBRE del vendedor son obligatorios.");
+        }
+        if (!preg_match('/^[0-9A-Za-z\-]{3,50}$/', $identificacion)) {
+            throw new Exception(
+                "Fila {$numeroFila}: La IDENTIFICACION del vendedor \"{$identificacion}\" no es válida " .
+                "(solo letras, números y guiones, entre 3 y 50 caracteres)."
+            );
+        }
+
+        $correo = strtolower($correoRaw);
+        if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception("Fila {$numeroFila}: El CORREO del vendedor \"{$correoRaw}\" no tiene un formato válido.");
+        }
+
+        $stCheck = $this->db->prepare(
+            "SELECT id FROM vendedores WHERE id_empresa = ? AND identificacion = ? AND eliminado = false LIMIT 1"
+        );
+        $stCheck->execute([$idEmpresa, $identificacion]);
+        $idExistente = $stCheck->fetchColumn();
+
+        if ($idExistente) {
+            $st = $this->db->prepare(
+                "UPDATE vendedores SET
+                    nombre = ?, correo = ?, telefono = ?, direccion = ?,
+                    updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                  WHERE id = ? AND id_empresa = ?"
+            );
+            $st->execute([
+                $nombre,
+                $correo !== '' ? $correo : null,
+                $telefono !== '' ? $telefono : null,
+                $direccion !== '' ? $direccion : null,
+                $idUsuario, (int)$idExistente, $idEmpresa,
+            ]);
+            return (int)$idExistente;
+        }
+
+        $st = $this->db->prepare(
+            "INSERT INTO vendedores (
+                id_empresa, id_usuario, identificacion, nombre, correo, telefono, direccion,
+                status, eliminado, created_by, updated_by
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, false, ?, ?)
+             RETURNING id"
+        );
+        $st->execute([
+            $idEmpresa, $idUsuario, $identificacion, $nombre,
+            $correo !== '' ? $correo : null,
+            $telefono !== '' ? $telefono : null,
+            $direccion !== '' ? $direccion : null,
             $idUsuario, $idUsuario,
         ]);
         return (int)$st->fetchColumn();
@@ -515,13 +668,14 @@ class ImportadorExcelService
     /**
      * Verifica que el archivo Excel haya sido generado para el mismo establecimiento destino.
      * Lee la hoja oculta _Config y compara el id_empresa embebido.
-     * Solo aplica a plantillas operativas (productos, clientes, etc.).
+     * Solo aplica a las plantillas que traen datos propios de la empresa
+     * (productos → unidades de medida, clientes → vendedores, unidades de medida).
      * Si la hoja _Config no existe se permite la importación (plantillas antiguas sin esta validación).
      */
     private function validarEmpresaPlantilla(\PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet, int $idEmpresaDestino, string $entidadId): void
     {
         // Solo validar entidades cuya plantilla incluye la hoja _Config
-        if (!in_array($entidadId, ['productos', 'unidades_medida'], true)) {
+        if (!in_array($entidadId, ['productos', 'unidades_medida', 'clientes'], true)) {
             return;
         }
 

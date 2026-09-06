@@ -148,35 +148,38 @@ class ImportadorExcelController extends Controller
         );
         $sheet->getStyle([1, 2])->getFont()->setItalic(true)->getColor()->setARGB('FF888888');
 
+        $db = Database::getConnection();
+
+        // Etiqueta del establecimiento de destino (para notas y la hoja _Config)
+        $labelEstablecimiento = $this->getLabelEstablecimiento($db, $idEmpresaPlantilla);
+
+        // Helper local para crear hojas de referencia con encabezado coloreado
+        $crearHojaRef = function(string $titulo, array $headers, array $filas, string $colorArgb) use ($spreadsheet): void {
+            $sh = $spreadsheet->createSheet();
+            $sh->setTitle($titulo);
+            foreach ($headers as $ci => $h) {
+                $col = $ci + 1;
+                $sh->setCellValueExplicit([$col, 1], $h, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sh->getColumnDimensionByColumn($col)->setAutoSize(true);
+                $sh->getStyle([$col, 1])->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
+                $sh->getStyle([$col, 1])->getFill()
+                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()->setARGB($colorArgb);
+            }
+            $sh->getStyle([1, 1])->getBorders()->getAllBorders()
+                ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM);
+            $row = 2;
+            foreach ($filas as $fila) {
+                foreach (array_values($fila) as $ci => $val) {
+                    $sh->setCellValueExplicit([$ci + 1, $row], (string)$val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                }
+                $sh->getStyle([1, $row])->getFont()->setBold(true);
+                $row++;
+            }
+        };
+
         // Hojas de referencia para proveedores
         if ($entidad === 'proveedores') {
-            $db = \App\core\Database::getConnection();
-
-            // Helper local para crear hojas de referencia con encabezado coloreado
-            $crearHojaRef = function(string $titulo, array $headers, array $filas, string $colorArgb) use ($spreadsheet): void {
-                $sh = $spreadsheet->createSheet();
-                $sh->setTitle($titulo);
-                foreach ($headers as $ci => $h) {
-                    $col = $ci + 1;
-                    $sh->setCellValueExplicit([$col, 1], $h, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                    $sh->getColumnDimensionByColumn($col)->setAutoSize(true);
-                    $sh->getStyle([$col, 1])->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
-                    $sh->getStyle([$col, 1])->getFill()
-                        ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-                        ->getStartColor()->setARGB($colorArgb);
-                }
-                $sh->getStyle([1, 1])->getBorders()->getAllBorders()
-                    ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM);
-                $row = 2;
-                foreach ($filas as $fila) {
-                    foreach (array_values($fila) as $ci => $val) {
-                        $sh->setCellValueExplicit([$ci + 1, $row], (string)$val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                    }
-                    $sh->getStyle([1, $row])->getFont()->setBold(true);
-                    $row++;
-                }
-            };
-
             // Hoja: Tipos_ID (04,05,06,08 — no aplica 07 para proveedores)
             $stTipos = $db->query("SELECT codigo, nombre FROM identificador_comprador_vendedor WHERE status = 1 AND codigo IN ('04','05','06','08') ORDER BY codigo ASC");
             $crearHojaRef('Tipos_ID', ['CODIGO (usar este valor)', 'NOMBRE'], $stTipos->fetchAll(PDO::FETCH_ASSOC), 'FF7030A0');
@@ -204,7 +207,6 @@ class ImportadorExcelController extends Controller
 
         // Hoja extra con tipos de identificación para clientes
         if ($entidad === 'clientes') {
-            $db = \App\core\Database::getConnection();
             $stTipos = $db->query(
                 "SELECT codigo, nombre FROM identificador_comprador_vendedor
                   WHERE status = 1 AND codigo IN ('04','05','06','07','08')
@@ -235,6 +237,36 @@ class ImportadorExcelController extends Controller
                 $sheetTipos->getStyle([1, $rowT])->getFont()->setBold(true);
                 $rowT++;
             }
+
+            // Hoja: Vendedores de la empresa (para la columna VENDEDOR)
+            $vendedores = [];
+            if ($idEmpresaPlantilla > 0) {
+                $stVend = $db->prepare(
+                    "SELECT identificacion, nombre,
+                            CASE WHEN status = 1 THEN 'Activo' ELSE 'Inactivo' END AS estado
+                       FROM vendedores
+                      WHERE id_empresa = ? AND eliminado = false
+                      ORDER BY nombre ASC"
+                );
+                $stVend->execute([$idEmpresaPlantilla]);
+                $vendedores = $stVend->fetchAll(PDO::FETCH_ASSOC);
+            }
+            if (empty($vendedores)) {
+                $vendedores = [[
+                    'identificacion' => 'No hay vendedores registrados en esta empresa. Cárguelos primero con la entidad Vendedores o déjelos vacíos.',
+                    'nombre'         => '',
+                    'estado'         => '',
+                ]];
+            }
+            $crearHojaRef(
+                'Vendedores',
+                ['IDENTIFICACION (usar este valor)', 'NOMBRE (o este, si es único)', 'ESTADO'],
+                $vendedores,
+                'FF548235'
+            );
+
+            // Hoja oculta _Config: la lista de vendedores es de esta empresa
+            $this->agregarHojaConfig($spreadsheet, $idEmpresaPlantilla, $labelEstablecimiento);
         }
 
         // Hoja extra con tarifas IVA para la entidad productos
@@ -278,17 +310,6 @@ class ImportadorExcelController extends Controller
 
         // Hoja extra con unidades de medida (solo para productos)
         if ($entidad === 'productos') {
-            // Obtener nombre del establecimiento para la nota informativa
-            $stEmp = $db->prepare(
-                "SELECT establecimiento, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre_emp, ruc
-                   FROM empresas WHERE id = ? AND eliminado = false LIMIT 1"
-            );
-            $stEmp->execute([$idEmpresaPlantilla]);
-            $empRow = $stEmp->fetch(PDO::FETCH_ASSOC);
-            $labelEstablecimiento = $empRow
-                ? 'Est. ' . ($empRow['establecimiento'] ?? '001') . ' - ' . $empRow['nombre_emp'] . ' (RUC: ' . $empRow['ruc'] . ')'
-                : 'ID Empresa: ' . $idEmpresaPlantilla;
-
             if ($idEmpresaPlantilla > 0) {
                 $stUm = $db->prepare(
                     "SELECT um.codigo, um.nombre, um.abreviatura,
@@ -363,19 +384,45 @@ class ImportadorExcelController extends Controller
             }
 
             // Hoja oculta _Config: guarda el id_empresa para validar al importar
-            $sheetConfig = $spreadsheet->createSheet();
-            $sheetConfig->setTitle('_Config');
-            $sheetConfig->setCellValueExplicit([1, 1], 'id_empresa',         \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheetConfig->setCellValueExplicit([2, 1], (string)$idEmpresaPlantilla, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheetConfig->setCellValueExplicit([1, 2], 'establecimiento',    \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheetConfig->setCellValueExplicit([2, 2], $labelEstablecimiento, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheetConfig->getSheetState(); // existe solo para referencia
-            // Ocultar la hoja _Config del usuario
-            $sheetConfig->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
+            $this->agregarHojaConfig($spreadsheet, $idEmpresaPlantilla, $labelEstablecimiento);
         }
 
         $spreadsheet->setActiveSheetIndex(0);
         $this->enviarXlsx($spreadsheet, "plantilla_{$entidad}.xlsx");
+    }
+
+    /**
+     * Texto que identifica al establecimiento de destino en las plantillas
+     * ("Est. 001 - Nombre (RUC: ...)").
+     */
+    private function getLabelEstablecimiento(PDO $db, int $idEmpresaPlantilla): string
+    {
+        $stEmp = $db->prepare(
+            "SELECT establecimiento, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre_emp, ruc
+               FROM empresas WHERE id = ? AND eliminado = false LIMIT 1"
+        );
+        $stEmp->execute([$idEmpresaPlantilla]);
+        $empRow = $stEmp->fetch(PDO::FETCH_ASSOC);
+
+        return $empRow
+            ? 'Est. ' . ($empRow['establecimiento'] ?? '001') . ' - ' . $empRow['nombre_emp'] . ' (RUC: ' . $empRow['ruc'] . ')'
+            : 'ID Empresa: ' . $idEmpresaPlantilla;
+    }
+
+    /**
+     * Hoja oculta _Config con el id_empresa para el que se generó la plantilla.
+     * ImportadorExcelService::validarEmpresaPlantilla() la lee al importar y
+     * rechaza el archivo si se sube en otro establecimiento.
+     */
+    private function agregarHojaConfig(Spreadsheet $spreadsheet, int $idEmpresaPlantilla, string $labelEstablecimiento): void
+    {
+        $sheetConfig = $spreadsheet->createSheet();
+        $sheetConfig->setTitle('_Config');
+        $sheetConfig->setCellValueExplicit([1, 1], 'id_empresa',                \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setCellValueExplicit([2, 1], (string) $idEmpresaPlantilla, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setCellValueExplicit([1, 2], 'establecimiento',           \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setCellValueExplicit([2, 2], $labelEstablecimiento,       \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
     }
 
     /**
@@ -410,15 +457,7 @@ class ImportadorExcelController extends Controller
     {
         $db = Database::getConnection();
 
-        $stEmp = $db->prepare(
-            "SELECT establecimiento, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre_emp, ruc
-               FROM empresas WHERE id = ? AND eliminado = false LIMIT 1"
-        );
-        $stEmp->execute([$idEmpresaPlantilla]);
-        $empRow = $stEmp->fetch(PDO::FETCH_ASSOC);
-        $labelEstablecimiento = $empRow
-            ? 'Est. ' . ($empRow['establecimiento'] ?? '001') . ' - ' . $empRow['nombre_emp'] . ' (RUC: ' . $empRow['ruc'] . ')'
-            : 'ID Empresa: ' . $idEmpresaPlantilla;
+        $labelEstablecimiento = $this->getLabelEstablecimiento($db, $idEmpresaPlantilla);
 
         $spreadsheet = new Spreadsheet();
 
@@ -650,13 +689,7 @@ class ImportadorExcelController extends Controller
         }
 
         // ── Hoja oculta _Config: valida el establecimiento al importar ───
-        $sheetConfig = $spreadsheet->createSheet();
-        $sheetConfig->setTitle('_Config');
-        $sheetConfig->setCellValueExplicit([1, 1], 'id_empresa', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheetConfig->setCellValueExplicit([2, 1], (string) $idEmpresaPlantilla, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheetConfig->setCellValueExplicit([1, 2], 'establecimiento', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheetConfig->setCellValueExplicit([2, 2], $labelEstablecimiento, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheetConfig->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
+        $this->agregarHojaConfig($spreadsheet, $idEmpresaPlantilla, $labelEstablecimiento);
 
         $spreadsheet->setActiveSheetIndex(0);
 
