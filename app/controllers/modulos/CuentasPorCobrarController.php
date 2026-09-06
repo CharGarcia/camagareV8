@@ -253,15 +253,21 @@ class CuentasPorCobrarController extends BaseModuloController
                 $totalCobrado += $g['cobrado'];
                 $totalDocs    += $g['total'];
                 $totalCant    += $g['cantidad'];
+                // Html2Pdf no parte palabras largas por sí solo ni respeta table-layout:fixed
+                // sin ancho en cada celda: se fija el ancho por <td> (mismas proporciones que
+                // el <thead>) y se insertan cortes en nombres/códigos sin espacios para que la
+                // celda haga multilínea en vez de desbordar la hoja por la derecha.
+                $nombrePdf = wordwrap($g['nombre'], 34, "\n", true);
+                $codigoPdf = wordwrap($g['codigo'], 14, "\n", true);
                 $cuerpo .= "<tr>
-                    <td>" . $e($g['codigo']) . "</td>
-                    <td>" . $e($g['nombre']) . "</td>
-                    <td class='text-center'>" . count($g['docs']) . "</td>
-                    <td class='text-end'>" . number_format($g['cantidad'], 2) . "</td>
-                    <td class='text-end'>\$" . number_format($g['valor'], 2) . "</td>
-                    <td class='text-end'>\$" . number_format($g['total'], 2) . "</td>
-                    <td class='text-end'>\$" . number_format($g['cobrado'], 2) . "</td>
-                    <td class='text-end' style='font-weight:bold;'>\$" . number_format($g['saldo'], 2) . "</td>
+                    <td style='width:11%;'>" . nl2br($e($codigoPdf)) . "</td>
+                    <td style='width:33%;'>" . nl2br($e($nombrePdf)) . "</td>
+                    <td class='text-center' style='width:7%;'>" . count($g['docs']) . "</td>
+                    <td class='text-end' style='width:9%;'>" . number_format($g['cantidad'], 2) . "</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($g['valor'], 2) . "</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($g['total'], 2) . "</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($g['cobrado'], 2) . "</td>
+                    <td class='text-end' style='width:10%;font-weight:bold;'>\$" . number_format($g['saldo'], 2) . "</td>
                 </tr>";
             }
 
@@ -292,25 +298,25 @@ class CuentasPorCobrarController extends BaseModuloController
             <table>
                 <thead>
                     <tr>
-                        <th style="width:12%;">Código</th>
-                        <th style="width:34%;">Producto</th>
-                        <th style="width:8%;">Docs.</th>
-                        <th style="width:8%;">Cantidad</th>
+                        <th style="width:11%;">Código</th>
+                        <th style="width:33%;">Producto</th>
+                        <th style="width:7%;">Docs.</th>
+                        <th style="width:9%;">Cantidad</th>
                         <th style="width:10%;">Valor Prod.</th>
                         <th style="width:10%;">Total Docs.</th>
-                        <th style="width:9%;">Cobrado</th>
-                        <th style="width:9%;">Saldo</th>
+                        <th style="width:10%;">Cobrado</th>
+                        <th style="width:10%;">Saldo</th>
                     </tr>
                 </thead>
-                <tbody><?= $cuerpo ?: "<tr><td colspan='8' class='text-center'>Sin documentos con líneas de producto para los filtros aplicados.</td></tr>" ?></tbody>
+                <tbody><?= $cuerpo ?: "<tr><td colspan='8' class='text-center' style='width:100%;'>Sin documentos con líneas de producto para los filtros aplicados.</td></tr>" ?></tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="3" class="text-end">TOTALES (<?= count($grupos) ?> productos):</td>
-                        <td class="text-end"><?= number_format($totalCant, 2) ?></td>
-                        <td class="text-end">$<?= number_format($totalValor, 2) ?></td>
-                        <td class="text-end">$<?= number_format($totalDocs, 2) ?></td>
-                        <td class="text-end">$<?= number_format($totalCobrado, 2) ?></td>
-                        <td class="text-end">$<?= number_format($totalSaldo, 2) ?></td>
+                        <td colspan="3" class="text-end" style="width:51%;">TOTALES (<?= count($grupos) ?> productos):</td>
+                        <td class="text-end" style="width:9%;"><?= number_format($totalCant, 2) ?></td>
+                        <td class="text-end" style="width:10%;">$<?= number_format($totalValor, 2) ?></td>
+                        <td class="text-end" style="width:10%;">$<?= number_format($totalDocs, 2) ?></td>
+                        <td class="text-end" style="width:10%;">$<?= number_format($totalCobrado, 2) ?></td>
+                        <td class="text-end" style="width:10%;">$<?= number_format($totalSaldo, 2) ?></td>
                     </tr>
                 </tfoot>
             </table>
