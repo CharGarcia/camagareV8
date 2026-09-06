@@ -36,7 +36,7 @@
                 <!-- Tipo de documento -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
-                    <select id="cxc-tipo-doc" name="tipo_doc" class="form-select form-select-sm shadow-none border" style="width:140px;"
+                    <select id="cxc-tipo-doc" name="tipo_doc" class="form-select form-select-sm shadow-none border" style="width:128px;"
                             onchange="CXC_cargar()">
                         <option value="TODOS" selected>Todos</option>
                         <option value="FACTURA">Facturas de venta</option>
@@ -48,7 +48,7 @@
                 <!-- Estado CxC -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
-                    <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:130px;"
+                    <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:120px;"
                             onchange="CXC_cargar()">
                         <option value="PENDIENTES" selected>Saldo Pendiente</option>
                         <option value="VENCIDAS">Vencidas</option>
@@ -61,7 +61,7 @@
                 <!-- Vendedor (asignado en la factura / recibo; los saldos iniciales no tienen vendedor) -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
-                    <select id="cxc-vendedor" name="id_vendedor" class="form-select form-select-sm shadow-none border" style="width:170px;"
+                    <select id="cxc-vendedor" name="id_vendedor" class="form-select form-select-sm shadow-none border" style="width:135px;"
                             onchange="CXC_cargar()">
                         <option value="" selected>Todos</option>
                         <?php foreach (($vendedores ?? []) as $v): ?>
@@ -70,29 +70,15 @@
                     </select>
                 </div>
 
-                <!-- Producto: buscador con lista (nombre o código); se filtra por las líneas de facturas y recibos.
-                     Los saldos iniciales no tienen líneas y quedan fuera mientras haya un producto elegido o escrito. -->
-                <div class="position-relative" style="width:260px;">
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-box-seam"></i></span>
-                        <input type="text" id="cxc-search-producto" class="form-control border-start-0 px-1 shadow-none"
-                               placeholder="Buscar producto..." autocomplete="off">
-                    </div>
-                    <div id="cxc-chips-producto" class="d-flex flex-wrap gap-1 mt-1"></div>
-                    <div id="cxc-dropdown-productos" class="list-group shadow position-absolute d-none"
-                         style="z-index:1050;width:100%;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
-                </div>
-
                 <?php if (!empty($puedeConsolidar)): ?>
                 <!-- Alcance: solo la MATRIZ del grupo RUC puede consolidar (fase 1: solo lectura de las hermanas) -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
-                    <select id="cxc-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
+                    <select id="cxc-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:150px;"
                             onchange="CXC_cargar()"
                             title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
                         <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
-                        <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?> establec.)</option>
+                        <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?>)</option>
                     </select>
                 </div>
                 <?php endif; ?>
@@ -101,21 +87,23 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
                     <input type="date" id="cxc-fecha-desde" name="fecha_desde"
-                           class="form-control form-control-sm shadow-none border" style="width:115px;">
+                           class="form-control form-control-sm shadow-none border" style="width:110px;">
                 </div>
 
                 <!-- Fecha Hasta -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
                     <input type="date" id="cxc-fecha-hasta" name="fecha_hasta"
-                           class="form-control form-control-sm shadow-none border" style="width:115px;"
+                           class="form-control form-control-sm shadow-none border" style="width:110px;"
                            value="<?php echo date('Y-m-d'); ?>">
                 </div>
 
-                <!-- Cliente + Botones: agrupados para que nunca se separen al hacer wrap -->
-                <div class="d-flex flex-wrap align-items-start gap-2">
+                <!-- Cliente + Producto + Botones: un solo ítem flexible que ocupa el resto de la fila.
+                     Los dos buscadores reparten el espacio sobrante (flex) con un mínimo, y los
+                     botones van pegados a la derecha; así toda la barra cabe en una sola fila. -->
+                <div class="d-flex flex-wrap align-items-start gap-2" style="flex:1 1 520px;min-width:0;">
                     <!-- Buscador cliente -->
-                    <div class="position-relative" style="width:440px;">
+                    <div class="position-relative" style="flex:1 1 180px;min-width:170px;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cliente</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
@@ -124,18 +112,32 @@
                         </div>
                         <div id="cxc-chips-cliente" class="d-flex flex-wrap gap-1 mt-1"></div>
                         <div id="cxc-dropdown-clientes" class="list-group shadow position-absolute d-none"
-                             style="z-index:1050;width:100%;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
+                             style="z-index:1050;width:100%;min-width:320px;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
+                    </div>
+
+                    <!-- Producto: buscador con lista (nombre o código); filtra por las líneas de facturas y recibos.
+                         Los saldos iniciales no tienen líneas y quedan fuera mientras haya un producto elegido o escrito. -->
+                    <div class="position-relative" style="flex:1 1 180px;min-width:170px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-box-seam"></i></span>
+                            <input type="text" id="cxc-search-producto" class="form-control border-start-0 px-1 shadow-none"
+                                   placeholder="Buscar producto..." autocomplete="off">
+                        </div>
+                        <div id="cxc-chips-producto" class="d-flex flex-wrap gap-1 mt-1"></div>
+                        <div id="cxc-dropdown-productos" class="list-group shadow position-absolute d-none"
+                             style="z-index:1050;width:100%;min-width:320px;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
 
                     <!-- Botones -->
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="CXC_limpiarFiltros()">
-                                <i class="bi bi-eraser me-1"></i>Limpiar filtros
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="CXC_limpiarFiltros()" title="Limpiar filtros">
+                                <i class="bi bi-eraser me-1"></i>Limpiar
                             </button>
-                            <button type="submit" class="btn btn-success btn-sm px-3 shadow-sm">
-                                <i class="bi bi-search me-1"></i>Aplicar Filtros
+                            <button type="submit" class="btn btn-success btn-sm px-2 shadow-sm" title="Aplicar filtros">
+                                <i class="bi bi-search me-1"></i>Aplicar
                             </button>
                         </div>
                     </div>

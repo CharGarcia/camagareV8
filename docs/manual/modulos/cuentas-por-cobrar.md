@@ -118,10 +118,11 @@ aparecen los documentos con sus acciones normales (cobrar, historial, correo).
   saldo de los grupos no se suma entre sí.
 - Los saldos iniciales no tienen líneas y no entran en esta vista; se avisa al
   pie cuántos quedaron fuera.
-- **PDF y Excel** en esta vista salen agrupados por producto: el PDF con una
-  cabecera por producto y sus documentos debajo, y el Excel con una fila por
-  producto y documento (producto, código, cantidad, valor del producto,
-  documento, cliente, fechas, total, cobrado y saldo).
+- **PDF y Excel** en esta vista salen como **resumen por producto**: una sola
+  fila por producto con código, nombre, número de documentos, cantidad, valor
+  del producto, total de los documentos, cobrado y saldo, sin el detalle de
+  documentos ni clientes (igual que un resumen agrupado). Para ver el detalle de
+  documentos se exporta desde la vista Detallado con el filtro de producto.
 
 ## Consolidado de establecimientos (solo desde la matriz)
 
