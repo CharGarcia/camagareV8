@@ -41,8 +41,41 @@ class ReporteConsolidadoRepository extends BaseRepository
         return $st;
     }
 
-    /** Ambiente de la empresa (los documentos filtran por él). */
-    private const AMB = "(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+    // ── Alcance por empresa (una empresa o varios establecimientos del mismo RUC) ──
+    //
+    // Todas las consultas reciben `int|array $idEmpresa`: la empresa activa (int, normal)
+    // o los establecimientos del grupo RUC cuando la matriz pide el consolidado por
+    // establecimientos (lo resuelve el controller con
+    // EmpresaRepository::getIdsConsolidadoDesdeMatriz, nunca el cliente).
+
+    /** Lista `1,2,3` de ids validados, para interpolar en `IN (...)`. */
+    private string $inEmp = '0';
+
+    private function setAlcance(int|array $idEmpresa): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $idEmpresa), static fn ($i) => $i > 0)));
+        if (!$ids) {
+            throw new \InvalidArgumentException('Reporte consolidado: id_empresa requerido.');
+        }
+        $this->inEmp = implode(',', $ids);
+    }
+
+    /**
+     * Condición estándar de una cabecera: empresa dentro del alcance, no eliminada y en el
+     * ambiente actual de SU PROPIA empresa (correlacionado por fila: en el consolidado cada
+     * establecimiento puede estar en un ambiente distinto).
+     */
+    private function condEmpresa(string $alias): string
+    {
+        return "{$alias}.id_empresa IN ({$this->inEmp}) AND {$alias}.eliminado = false
+                              AND {$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+    }
+
+    /** Código del establecimiento dueño del documento (columna `establecimiento`, para el Excel consolidado). */
+    private function colEst(string $alias): string
+    {
+        return "(SELECT COALESCE(e.establecimiento, '') FROM empresas e WHERE e.id = {$alias}.id_empresa) AS establecimiento";
+    }
 
     /** Grupos de checkbox "Incluir" del filtro (clave => etiqueta). */
     public const GRUPOS = [
@@ -151,7 +184,7 @@ class ReporteConsolidadoRepository extends BaseRepository
     {
         switch ($rama) {
             case 'COMPRAS':
-                return "SELECT 'COMPRAS'::varchar AS tipo_documento, c.id AS id_documento,
+                return "SELECT 'COMPRAS'::varchar AS tipo_documento, c.id AS id_documento, c.id_empresa AS id_empresa,
                                c.fecha_emision AS fecha,
                                (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero,
                                'PROVEEDOR'::varchar AS tercero_tipo,
@@ -161,13 +194,13 @@ class ReporteConsolidadoRepository extends BaseRepository
                                'registrado'::varchar AS estado, NULL::varchar AS origen
                         FROM compras_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                        WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('c') . "
                               AND c.tipo_comprobante = '01'
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_cp');
                         // compras_cabecera no tiene columna "estado": no hay concepto de anulado que filtrar aquí.
 
             case 'RETENCION_COMPRA':
-                return "SELECT 'RETENCION_COMPRA'::varchar AS tipo_documento, c.id AS id_documento,
+                return "SELECT 'RETENCION_COMPRA'::varchar AS tipo_documento, c.id AS id_documento, c.id_empresa AS id_empresa,
                                c.fecha_emision AS fecha,
                                (c.establecimiento || '-' || c.punto_emision || '-' || c.secuencial) AS numero,
                                'PROVEEDOR'::varchar AS tercero_tipo,
@@ -177,11 +210,11 @@ class ReporteConsolidadoRepository extends BaseRepository
                                c.estado AS estado, NULL::varchar AS origen
                         FROM retencion_compra_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                        WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('c') . "
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_rc') . $this->condNoAnulado('c.estado', $f);
 
             case 'FACTURA_VENTA':
-                return "SELECT 'FACTURA_VENTA'::varchar AS tipo_documento, v.id AS id_documento,
+                return "SELECT 'FACTURA_VENTA'::varchar AS tipo_documento, v.id AS id_documento, v.id_empresa AS id_empresa,
                                v.fecha_emision AS fecha,
                                (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial) AS numero,
                                'CLIENTE'::varchar AS tercero_tipo,
@@ -194,11 +227,11 @@ class ReporteConsolidadoRepository extends BaseRepository
                                v.importe_total AS total, v.estado AS estado, NULL::varchar AS origen
                         FROM ventas_cabecera v
                         LEFT JOIN clientes cl ON cl.id = v.id_cliente
-                        WHERE v.id_empresa = :id_empresa AND v.eliminado = false AND v.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('v') . "
                               " . $this->condFecha('v.fecha_emision', $f, $params, '_fv') . $this->condNoAnulado('v.estado', $f);
 
             case 'RECIBO_VENTA':
-                return "SELECT 'RECIBO_VENTA'::varchar AS tipo_documento, r.id AS id_documento,
+                return "SELECT 'RECIBO_VENTA'::varchar AS tipo_documento, r.id AS id_documento, r.id_empresa AS id_empresa,
                                r.fecha_emision AS fecha,
                                (r.establecimiento || '-' || r.punto_emision || '-' || r.secuencial) AS numero,
                                'CLIENTE'::varchar AS tercero_tipo,
@@ -211,11 +244,11 @@ class ReporteConsolidadoRepository extends BaseRepository
                                r.importe_total AS total, r.estado AS estado, NULL::varchar AS origen
                         FROM recibos_venta_cabecera r
                         LEFT JOIN clientes cl ON cl.id = r.id_cliente
-                        WHERE r.id_empresa = :id_empresa AND r.eliminado = false AND r.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('r') . "
                               " . $this->condFecha('r.fecha_emision', $f, $params, '_rv') . $this->condNoAnulado('r.estado', $f);
 
             case 'RETENCION_VENTA':
-                return "SELECT 'RETENCION_VENTA'::varchar AS tipo_documento, c.id AS id_documento,
+                return "SELECT 'RETENCION_VENTA'::varchar AS tipo_documento, c.id AS id_documento, c.id_empresa AS id_empresa,
                                c.fecha_emision AS fecha,
                                (c.establecimiento || '-' || c.punto_emision || '-' || c.secuencial) AS numero,
                                'CLIENTE'::varchar AS tercero_tipo,
@@ -226,11 +259,11 @@ class ReporteConsolidadoRepository extends BaseRepository
                                c.origen AS estado, NULL::varchar AS origen
                         FROM retencion_venta_cabecera c
                         LEFT JOIN clientes cl ON cl.id = c.id_cliente
-                        WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('c') . "
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_rvt');
 
             case 'NOTA_CREDITO_VENTA':
-                return "SELECT 'NOTA_CREDITO'::varchar AS tipo_documento, nc.id AS id_documento,
+                return "SELECT 'NOTA_CREDITO'::varchar AS tipo_documento, nc.id AS id_documento, nc.id_empresa AS id_empresa,
                                nc.fecha_emision AS fecha,
                                (nc.establecimiento || '-' || nc.punto_emision || '-' || nc.secuencial) AS numero,
                                'CLIENTE'::varchar AS tercero_tipo,
@@ -243,11 +276,11 @@ class ReporteConsolidadoRepository extends BaseRepository
                                nc.importe_total AS total, nc.estado AS estado, 'VENTA'::varchar AS origen
                         FROM notas_credito_cabecera nc
                         LEFT JOIN clientes cl ON cl.id = nc.id_cliente
-                        WHERE nc.id_empresa = :id_empresa AND nc.eliminado = false AND nc.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('nc') . "
                               " . $this->condFecha('nc.fecha_emision', $f, $params, '_ncv') . $this->condNoAnulado('nc.estado', $f);
 
             case 'NOTA_CREDITO_COMPRA':
-                return "SELECT 'NOTA_CREDITO'::varchar AS tipo_documento, c.id AS id_documento,
+                return "SELECT 'NOTA_CREDITO'::varchar AS tipo_documento, c.id AS id_documento, c.id_empresa AS id_empresa,
                                c.fecha_emision AS fecha,
                                (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero,
                                'PROVEEDOR'::varchar AS tercero_tipo,
@@ -257,12 +290,12 @@ class ReporteConsolidadoRepository extends BaseRepository
                                'registrado'::varchar AS estado, 'COMPRA'::varchar AS origen
                         FROM compras_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                        WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('c') . "
                               AND c.tipo_comprobante = '04'
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_ncc');
 
             case 'NOTA_DEBITO_VENTA':
-                return "SELECT 'NOTA_DEBITO'::varchar AS tipo_documento, nd.id AS id_documento,
+                return "SELECT 'NOTA_DEBITO'::varchar AS tipo_documento, nd.id AS id_documento, nd.id_empresa AS id_empresa,
                                nd.fecha_emision AS fecha,
                                (nd.establecimiento || '-' || nd.punto_emision || '-' || nd.secuencial) AS numero,
                                'CLIENTE'::varchar AS tercero_tipo,
@@ -274,11 +307,11 @@ class ReporteConsolidadoRepository extends BaseRepository
                                nd.importe_total AS total, nd.estado AS estado, 'VENTA'::varchar AS origen
                         FROM nota_debito_cabecera nd
                         LEFT JOIN clientes cl ON cl.id = nd.id_cliente
-                        WHERE nd.id_empresa = :id_empresa AND nd.eliminado = false AND nd.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('nd') . "
                               " . $this->condFecha('nd.fecha_emision', $f, $params, '_ndv') . $this->condNoAnulado('nd.estado', $f);
 
             case 'NOTA_DEBITO_COMPRA':
-                return "SELECT 'NOTA_DEBITO'::varchar AS tipo_documento, c.id AS id_documento,
+                return "SELECT 'NOTA_DEBITO'::varchar AS tipo_documento, c.id AS id_documento, c.id_empresa AS id_empresa,
                                c.fecha_emision AS fecha,
                                (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero,
                                'PROVEEDOR'::varchar AS tercero_tipo,
@@ -288,12 +321,12 @@ class ReporteConsolidadoRepository extends BaseRepository
                                'registrado'::varchar AS estado, 'COMPRA'::varchar AS origen
                         FROM compras_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                        WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('c') . "
                               AND c.tipo_comprobante = '05'
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_ndc');
 
             case 'LIQUIDACION':
-                return "SELECT 'LIQUIDACION'::varchar AS tipo_documento, l.id AS id_documento,
+                return "SELECT 'LIQUIDACION'::varchar AS tipo_documento, l.id AS id_documento, l.id_empresa AS id_empresa,
                                l.fecha_emision AS fecha,
                                (l.establecimiento || '-' || l.punto_emision || '-' || l.secuencial) AS numero,
                                'PROVEEDOR'::varchar AS tercero_tipo,
@@ -306,7 +339,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                                l.importe_total AS total, l.estado AS estado, NULL::varchar AS origen
                         FROM liquidaciones_cabecera l
                         LEFT JOIN proveedores p ON p.id = l.id_proveedor
-                        WHERE l.id_empresa = :id_empresa AND l.eliminado = false AND l.tipo_ambiente = " . self::AMB . "
+                        WHERE " . $this->condEmpresa('l') . "
                               " . $this->condFecha('l.fecha_emision', $f, $params, '_lq') . $this->condNoAnulado('l.estado', $f);
 
             default:
@@ -329,9 +362,10 @@ class ReporteConsolidadoRepository extends BaseRepository
     ];
 
     /** UNION de las ramas aplicables según los checkboxes. Devuelve [sql, params]. */
-    private function armarUnion(int $idEmpresa, array $f): array
+    private function armarUnion(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa];
+        $this->setAlcance($idEmpresa);
+        $params = [];
         $ramas = [];
         foreach (self::RAMA_GRUPO as $rama => $grupo) {
             if (!$this->incluyeGrupo($grupo, $f)) continue;
@@ -346,18 +380,25 @@ class ReporteConsolidadoRepository extends BaseRepository
     // ── Consultas públicas: resumen (cabecera) ─────────────────────────────────
 
     /** Listado consolidado a nivel de cabecera (vista + PDF). $limite = 0 => sin tope. */
-    public function getResumen(int $idEmpresa, array $f, int $limite = 5000): array
+    public function getResumen(int|array $idEmpresa, array $f, int $limite = 5000): array
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
-        $sql = "SELECT * FROM ( $union ) r WHERE 1=1 $textoWhere
+        // establecimiento / empresa_nombre: dueño de cada fila (badge en el consolidado por RUC).
+        // LEFT JOIN: un documento nunca desaparece del reporte por su empresa.
+        $sql = "SELECT r.*,
+                       COALESCE(e.establecimiento, '') AS establecimiento,
+                       COALESCE(NULLIF(e.nombre_comercial, ''), e.nombre, '') AS empresa_nombre
+                FROM ( $union ) r
+                LEFT JOIN empresas e ON e.id = r.id_empresa
+                WHERE 1=1 $textoWhere
                 ORDER BY fecha DESC, numero DESC";
         if ($limite > 0) $sql .= " LIMIT $limite";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** KPIs: cantidad y total por cada uno de los 8 grupos, más totales generales. */
-    public function getEstadisticas(int $idEmpresa, array $f): array
+    public function getEstadisticas(int|array $idEmpresa, array $f): array
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
@@ -418,10 +459,11 @@ class ReporteConsolidadoRepository extends BaseRepository
     // ── Consultas públicas: detalle por hoja (Excel) ────────────────────────────
 
     /** Detalle línea por línea de Compras (tipo_comprobante = '01'). */
-    public function getDetalleCompras(int $idEmpresa, array $f): array
+    public function getDetalleCompras(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa];
-        $sql = "SELECT c.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT " . $this->colEst('c') . ", c.fecha_emision AS fecha,
                        (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero_documento,
                        c.numero_autorizacion,
                        p.razon_social AS proveedor_nombre, p.identificacion AS proveedor_ruc,
@@ -434,7 +476,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM compras_detalle d
                 JOIN compras_cabecera c ON c.id = d.id_compra
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('c') . "
                       AND c.tipo_comprobante = '01'
                       " . $this->condFecha('c.fecha_emision', $f, $params, '') . "
                 ORDER BY c.fecha_emision, numero_documento";
@@ -442,10 +484,11 @@ class ReporteConsolidadoRepository extends BaseRepository
     }
 
     /** Detalle línea por línea (impuesto) de Retenciones de Compra. */
-    public function getDetalleRetencionesCompra(int $idEmpresa, array $f): array
+    public function getDetalleRetencionesCompra(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa];
-        $sql = "SELECT c.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT " . $this->colEst('c') . ", c.fecha_emision AS fecha,
                        (c.establecimiento || '-' || c.punto_emision || '-' || c.secuencial) AS numero_documento,
                        c.clave_acceso, p.razon_social AS proveedor_nombre, p.identificacion AS proveedor_ruc,
                        c.tipo_doc_sustento AS cod_doc_sustento, c.num_doc_sustento,
@@ -457,17 +500,18 @@ class ReporteConsolidadoRepository extends BaseRepository
                 JOIN retencion_compra_detalle d ON d.id_retencion = c.id
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
                 LEFT JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
-                WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('c') . "
                       " . $this->condFecha('c.fecha_emision', $f, $params, '') . $this->condNoAnulado('c.estado', $f) . "
                 ORDER BY c.fecha_emision, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Detalle línea por línea de Facturas de Venta. */
-    public function getDetalleFacturasVenta(int $idEmpresa, array $f): array
+    public function getDetalleFacturasVenta(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa];
-        $sql = "SELECT v.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT " . $this->colEst('v') . ", v.fecha_emision AS fecha,
                        (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial) AS numero_documento,
                        v.clave_acceso,
                        cl.nombre AS cliente_nombre, cl.identificacion AS cliente_ident,
@@ -480,17 +524,18 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM ventas_detalle d
                 JOIN ventas_cabecera v ON v.id = d.id_venta
                 LEFT JOIN clientes cl ON cl.id = v.id_cliente
-                WHERE v.id_empresa = :id_empresa AND v.eliminado = false AND v.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('v') . "
                       " . $this->condFecha('v.fecha_emision', $f, $params, '') . $this->condNoAnulado('v.estado', $f) . "
                 ORDER BY v.fecha_emision, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Detalle línea por línea de Recibos de Venta. */
-    public function getDetalleRecibosVenta(int $idEmpresa, array $f): array
+    public function getDetalleRecibosVenta(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa];
-        $sql = "SELECT r.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT " . $this->colEst('r') . ", r.fecha_emision AS fecha,
                        (r.establecimiento || '-' || r.punto_emision || '-' || r.secuencial) AS numero_documento,
                        r.con_impuestos,
                        cl.nombre AS cliente_nombre, cl.identificacion AS cliente_ident,
@@ -503,17 +548,18 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM recibos_venta_detalle d
                 JOIN recibos_venta_cabecera r ON r.id = d.id_recibo
                 LEFT JOIN clientes cl ON cl.id = r.id_cliente
-                WHERE r.id_empresa = :id_empresa AND r.eliminado = false AND r.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('r') . "
                       " . $this->condFecha('r.fecha_emision', $f, $params, '') . $this->condNoAnulado('r.estado', $f) . "
                 ORDER BY r.fecha_emision, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Detalle línea por línea (impuesto) de Retenciones de Venta. */
-    public function getDetalleRetencionesVenta(int $idEmpresa, array $f): array
+    public function getDetalleRetencionesVenta(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa];
-        $sql = "SELECT c.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT " . $this->colEst('c') . ", c.fecha_emision AS fecha,
                        (c.establecimiento || '-' || c.punto_emision || '-' || c.secuencial) AS numero_documento,
                        c.clave_acceso, cl.nombre AS cliente_nombre, cl.identificacion AS cliente_ident,
                        d.cod_doc_sustento, d.num_doc_sustento,
@@ -525,17 +571,18 @@ class ReporteConsolidadoRepository extends BaseRepository
                 JOIN retencion_venta_detalle d ON d.id_retencion = c.id
                 LEFT JOIN clientes cl ON cl.id = c.id_cliente
                 LEFT JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
-                WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('c') . "
                       " . $this->condFecha('c.fecha_emision', $f, $params, '') . "
                 ORDER BY c.fecha_emision, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Detalle línea por línea de Notas de Crédito (venta emitidas UNION compra recibidas). */
-    public function getDetalleNotasCredito(int $idEmpresa, array $f): array
+    public function getDetalleNotasCredito(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa, ':id_empresa2' => $idEmpresa];
-        $sql = "SELECT 'VENTA'::varchar AS origen, nc.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT 'VENTA'::varchar AS origen, " . $this->colEst('nc') . ", nc.fecha_emision AS fecha,
                        (nc.establecimiento || '-' || nc.punto_emision || '-' || nc.secuencial) AS numero_documento,
                        cl.nombre AS tercero_nombre, cl.identificacion AS tercero_ident,
                        nc.num_doc_modificado AS doc_modificado, nc.motivo,
@@ -548,10 +595,10 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM notas_credito_detalle d
                 JOIN notas_credito_cabecera nc ON nc.id = d.id_nota_credito
                 LEFT JOIN clientes cl ON cl.id = nc.id_cliente
-                WHERE nc.id_empresa = :id_empresa AND nc.eliminado = false AND nc.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('nc') . "
                       " . $this->condFecha('nc.fecha_emision', $f, $params, '') . $this->condNoAnulado('nc.estado', $f) . "
                 UNION ALL
-                SELECT 'COMPRA'::varchar AS origen, c.fecha_emision AS fecha,
+                SELECT 'COMPRA'::varchar AS origen, " . $this->colEst('c') . ", c.fecha_emision AS fecha,
                        (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero_documento,
                        p.razon_social AS tercero_nombre, p.identificacion AS tercero_ident,
                        c.documento_modificado AS doc_modificado, c.motivo,
@@ -564,7 +611,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM compras_detalle d
                 JOIN compras_cabecera c ON c.id = d.id_compra
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                WHERE c.id_empresa = :id_empresa2 AND c.eliminado = false AND c.tipo_ambiente = " . str_replace(':id_empresa', ':id_empresa2', self::AMB) . "
+                WHERE " . $this->condEmpresa('c') . "
                       AND c.tipo_comprobante = '04'
                       " . $this->condFecha('c.fecha_emision', $f, $params, '2') . "
                 ORDER BY fecha, numero_documento";
@@ -572,10 +619,11 @@ class ReporteConsolidadoRepository extends BaseRepository
     }
 
     /** Detalle de Notas de Débito (venta emitidas [motivo/valor] UNION compra recibidas [línea de producto]). */
-    public function getDetalleNotasDebito(int $idEmpresa, array $f): array
+    public function getDetalleNotasDebito(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa, ':id_empresa2' => $idEmpresa];
-        $sql = "SELECT 'VENTA'::varchar AS origen, nd.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT 'VENTA'::varchar AS origen, " . $this->colEst('nd') . ", nd.fecha_emision AS fecha,
                        (nd.establecimiento || '-' || nd.punto_emision || '-' || nd.secuencial) AS numero_documento,
                        cl.nombre AS tercero_nombre, cl.identificacion AS tercero_ident,
                        nd.num_doc_modificado AS doc_modificado,
@@ -593,10 +641,10 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM nota_debito_motivos m
                 JOIN nota_debito_cabecera nd ON nd.id = m.id_nota_debito
                 LEFT JOIN clientes cl ON cl.id = nd.id_cliente
-                WHERE nd.id_empresa = :id_empresa AND nd.eliminado = false AND nd.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('nd') . "
                       " . $this->condFecha('nd.fecha_emision', $f, $params, '') . $this->condNoAnulado('nd.estado', $f) . "
                 UNION ALL
-                SELECT 'COMPRA'::varchar AS origen, c.fecha_emision AS fecha,
+                SELECT 'COMPRA'::varchar AS origen, " . $this->colEst('c') . ", c.fecha_emision AS fecha,
                        (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero_documento,
                        p.razon_social AS tercero_nombre, p.identificacion AS tercero_ident,
                        c.documento_modificado AS doc_modificado,
@@ -607,7 +655,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM compras_detalle d
                 JOIN compras_cabecera c ON c.id = d.id_compra
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                WHERE c.id_empresa = :id_empresa2 AND c.eliminado = false AND c.tipo_ambiente = " . str_replace(':id_empresa', ':id_empresa2', self::AMB) . "
+                WHERE " . $this->condEmpresa('c') . "
                       AND c.tipo_comprobante = '05'
                       " . $this->condFecha('c.fecha_emision', $f, $params, '2') . "
                 ORDER BY fecha, numero_documento";
@@ -615,10 +663,11 @@ class ReporteConsolidadoRepository extends BaseRepository
     }
 
     /** Detalle línea por línea de Liquidaciones de Compra. */
-    public function getDetalleLiquidaciones(int $idEmpresa, array $f): array
+    public function getDetalleLiquidaciones(int|array $idEmpresa, array $f): array
     {
-        $params = [':id_empresa' => $idEmpresa];
-        $sql = "SELECT l.fecha_emision AS fecha,
+        $this->setAlcance($idEmpresa);
+        $params = [];
+        $sql = "SELECT " . $this->colEst('l') . ", l.fecha_emision AS fecha,
                        (l.establecimiento || '-' || l.punto_emision || '-' || l.secuencial) AS numero_documento,
                        p.razon_social AS proveedor_nombre, p.identificacion AS proveedor_ruc,
                        COALESCE(d.codigo_principal, d.codigo_auxiliar, '') AS codigo,
@@ -630,7 +679,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM liquidaciones_detalle d
                 JOIN liquidaciones_cabecera l ON l.id = d.id_cabecera
                 LEFT JOIN proveedores p ON p.id = l.id_proveedor
-                WHERE l.id_empresa = :id_empresa AND l.eliminado = false AND l.tipo_ambiente = " . self::AMB . "
+                WHERE " . $this->condEmpresa('l') . "
                       " . $this->condFecha('l.fecha_emision', $f, $params, '') . $this->condNoAnulado('l.estado', $f) . "
                 ORDER BY l.fecha_emision, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);

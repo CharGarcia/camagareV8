@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales
-version: 1.8
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales
+version: 1.9
 orden: 40
 estado: activo
 ---
@@ -77,6 +77,23 @@ asignado a cada factura o recibo (vacía en los saldos iniciales).
 
 > Los **saldos iniciales** no tienen vendedor, así que al elegir un vendedor
 > quedan fuera del listado y de los totales. Con **Todos** vuelven a aparecer.
+
+## Filtrar por producto
+
+El filtro **Producto** de la tarjeta de filtros acota la cartera a los
+documentos que tienen al menos una línea cuyo **nombre o código** contenga el
+texto escrito (por ejemplo, "ACEITE" o "PRD-001"). Sirve para ver qué se debe
+por un producto o una familia de productos y para sacar el PDF o el Excel de esa
+cartera: el encabezado de ambos indica el producto filtrado.
+
+- Aplica a **facturas y recibos de venta**, buscando en sus líneas de detalle.
+- Los **saldos iniciales** no tienen líneas, así que mientras haya un producto
+  escrito quedan fuera del listado, de las tarjetas y del gráfico de antigüedad
+  (igual que ocurre con el filtro Vendedor).
+- El saldo que se muestra es el **saldo completo del documento**, no la parte
+  correspondiente al producto: un cobro no se reparte por línea.
+- Se combina con el resto de filtros (estado, fechas, cliente, vendedor y
+  establecimientos).
 
 ## Consolidado de establecimientos (solo desde la matriz)
 
@@ -219,6 +236,9 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **1.9** — Nuevo filtro **Producto** (nombre o código de las líneas) para ver
+  y exportar la cartera de un producto: aplica a facturas y recibos; los saldos
+  iniciales quedan fuera mientras el filtro esté activo.
 - **1.8** — Consolidado, fase 2: desde la matriz ya se puede **registrar el
   cobro** de una factura, recibo o saldo inicial de otra sucursal. El ingreso se
   registra en los libros de la sucursal dueña (sus series, secuencial, conceptos,

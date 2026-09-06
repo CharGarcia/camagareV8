@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\ReporteConsolidadoRepository;
 
 class ReporteConsolidadoController extends BaseModuloController
@@ -26,12 +27,21 @@ class ReporteConsolidadoController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
+        // Consolidado por establecimientos (mismo selector que Cuentas por Cobrar/Pagar): solo
+        // aparece si la empresa activa es la matriz del grupo RUC y el usuario tiene acceso a
+        // al menos otro establecimiento (ver EmpresaRepository::getIdsConsolidadoDesdeMatriz).
+        $empresaRepo      = new EmpresaRepository();
+        $idsConsolidado   = $empresaRepo->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        $establecimientos = $idsConsolidado ? $empresaRepo->getEtiquetasEstablecimiento($idsConsolidado) : [];
+
         $this->viewWithLayout('layouts.main', 'modulos/reporte_consolidado/index', [
             'titulo'     => 'Reporte Consolidado de Transacciones',
             'perm'       => $this->getPermisos(),
             'rutaModulo' => $this->getRutaModulo(),
             'grupos'     => ReporteConsolidadoRepository::GRUPOS,
             'anios'      => $this->repository->getAniosDisponibles($idEmpresa),
+            'puedeConsolidar'  => !empty($idsConsolidado),
+            'establecimientos' => $establecimientos,
             'fullWidth'  => true,
             'base'       => BASE_URL,
         ]);
@@ -48,7 +58,40 @@ class ReporteConsolidadoController extends BaseModuloController
             'incluir'          => array_values(array_map('strval', $incluir)),
             'incluir_anulados' => !empty($_REQUEST['incluir_anulados']),
             'buscar'           => trim($_REQUEST['buscar'] ?? ''),
+            // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
+            // solo se honra desde la matriz — ver resolverAlcance()).
+            'alcance'          => strtoupper(trim((string) ($_REQUEST['alcance'] ?? ''))),
         ];
+    }
+
+    /**
+     * Alcance del reporte. Devuelve [idsEmpresa, consolidado]. `alcance=CONSOLIDADO` solo se
+     * honra si la empresa activa es la matriz del grupo RUC y hay hermanas accesibles para el
+     * usuario; en cualquier otro caso se ignora en silencio y el reporte queda como siempre.
+     */
+    private function resolverAlcance(int $idEmpresa, array &$filtros): array
+    {
+        $idsEmpresa  = [$idEmpresa];
+        $consolidado = false;
+        if (($filtros['alcance'] ?? '') === 'CONSOLIDADO') {
+            $grupo = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+            if ($grupo) {
+                $idsEmpresa  = $grupo;
+                $consolidado = true;
+            }
+        }
+        $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
+        return [$idsEmpresa, $consolidado];
+    }
+
+    /** Texto del alcance para el encabezado del PDF. */
+    private function describirAlcance(array $idsEmpresa, bool $consolidado): string
+    {
+        if (!$consolidado) {
+            return '';
+        }
+        $etq = (new EmpresaRepository())->getEtiquetasEstablecimiento($idsEmpresa);
+        return 'Consolidado por RUC (' . count($etq) . ' establecimientos: ' . implode(' · ', $etq) . ')';
     }
 
     public function generarAjax(): void
@@ -59,21 +102,22 @@ class ReporteConsolidadoController extends BaseModuloController
         try {
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $filtros   = $this->getFiltrosDesdeRequest();
+            [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-            $rows  = $this->repository->getResumen($idEmpresa, $filtros);
-            $stats = $this->repository->getEstadisticas($idEmpresa, $filtros);
+            $rows  = $this->repository->getResumen($idsEmpresa, $filtros);
+            $stats = $this->repository->getEstadisticas($idsEmpresa, $filtros);
 
             ob_start();
             if (empty($rows)) {
                 echo '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>No se encontraron resultados.</td></tr>';
             } else {
                 foreach ($rows as $r) {
-                    echo $this->renderFilaHtml($r);
+                    echo $this->renderFilaHtml($r, $consolidado);
                 }
             }
             $rowsHtml = ob_get_clean();
 
-            echo json_encode(['ok' => true, 'rows' => $rowsHtml, 'stats' => $stats]);
+            echo json_encode(['ok' => true, 'rows' => $rowsHtml, 'stats' => $stats, 'consolidado' => $consolidado, 'establecimientos' => count($idsEmpresa)]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             error_log('ReporteConsolidado Exception: ' . $e->getMessage() . ' on line ' . $e->getLine());
@@ -82,7 +126,7 @@ class ReporteConsolidadoController extends BaseModuloController
         exit;
     }
 
-    private function renderFilaHtml(array $r): string
+    private function renderFilaHtml(array $r, bool $consolidado = false): string
     {
         $etiquetas = ReporteConsolidadoRepository::GRUPOS;
         $tipo   = htmlspecialchars($etiquetas[$r['tipo_documento']] ?? $r['tipo_documento']);
@@ -92,10 +136,19 @@ class ReporteConsolidadoController extends BaseModuloController
         $total    = number_format((float) ($r['total'] ?? 0), 2);
         $estado   = htmlspecialchars((string) ($r['estado'] ?? ''));
 
+        // Consolidado por RUC: badge con el establecimiento dueño del documento (mismo estilo
+        // que Cuentas por Cobrar/Pagar), con el nombre de la empresa en el tooltip.
+        $badgeEst = '';
+        if ($consolidado && !empty($r['establecimiento'])) {
+            $tituloEst = htmlspecialchars((string) ($r['empresa_nombre'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $badgeEst  = "<span class='badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-1 fw-normal' style='font-size:.65rem;' title='{$tituloEst}'>"
+                       . htmlspecialchars((string) $r['establecimiento']) . "</span>";
+        }
+
         $html  = '<tr class="align-middle">';
         $html .= "<td><span class='badge bg-primary bg-opacity-10 text-primary border border-primary' style='font-size:.7rem;'>$tipo</span>" . ($origen ? " <small class='text-muted'>$origen</small>" : '') . "</td>";
         $html .= "<td class='text-center'>" . date('d/m/Y', strtotime($r['fecha'] ?? '')) . "</td>";
-        $html .= "<td>" . htmlspecialchars($r['numero'] ?? '') . "</td>";
+        $html .= "<td>{$badgeEst}" . htmlspecialchars($r['numero'] ?? '') . "</td>";
         $html .= "<td><span class='fw-bold'>" . htmlspecialchars($r['tercero_nombre'] ?? '') . "</span><br><small class='text-muted'>" . htmlspecialchars($r['tercero_ident'] ?? '') . "</small></td>";
         $html .= "<td class='text-end'>$subtotal</td>";
         $html .= "<td class='text-end'>$iva</td>";
@@ -138,18 +191,28 @@ class ReporteConsolidadoController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltrosDesdeRequest();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
+        $idEmpresa = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
+
+        // Consolidado: cada hoja lleva primero la columna "Estab." con el establecimiento
+        // dueño de la línea; sin consolidado, ambas piezas quedan vacías y nada cambia.
+        $hEst = $consolidado ? ['Estab.'] : [];
+        $est  = fn (array $r): array => $consolidado ? [(string) ($r['establecimiento'] ?? '')] : [];
 
         try {
-            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa);
+            $empresa       = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']);
             $nombreEmpresa = $empresa['nombre'] ?? '';
+            if ($consolidado) {
+                $nombreEmpresa .= ' — ' . $this->describirAlcance($idsEmpresa, true);
+            }
 
             $reportService = new \App\Services\ReportService();
 
             $compras     = $this->repository->getDetalleCompras($idEmpresa, $filtros);
             $codigosIva  = $this->codigosIvaPresentes($compras);
             $spreadsheet = $reportService->construirSpreadsheet(
-                array_merge(['Fecha', 'N° Documento', 'N° Autorización', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge([
+                array_merge($hEst, ['Fecha', 'N° Documento', 'N° Autorización', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
+                array_map(fn($r) => array_merge($est($r), [
                     date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['numero_autorizacion'] ?? '',
                     $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
                     (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
@@ -159,22 +222,22 @@ class ReporteConsolidadoController extends BaseModuloController
 
             $retCompra = $this->repository->getDetalleRetencionesCompra($idEmpresa, $filtros);
             $reportService->agregarHoja($spreadsheet,
-                ['Fecha', 'N° Documento', 'Clave Acceso', 'Proveedor', 'RUC/Cédula', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Estado'],
-                array_map(fn($r) => [
+                array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Proveedor', 'RUC/Cédula', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Estado']),
+                array_map(fn($r) => array_merge($est($r), [
                     date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['clave_acceso'] ?? '',
                     $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '', $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '',
                     $r['codigo_impuesto'] ?? '', $r['codigo_retencion'] ?? '', $r['concepto'] ?? '',
                     (float) $r['base_imponible'], (float) $r['porcentaje'], (float) $r['valor_retenido'],
                     (float) $r['total_retenido'], $r['estado'] ?? '',
-                ], $retCompra),
+                ]), $retCompra),
                 'Retenciones Compra'
             );
 
             $facturas   = $this->repository->getDetalleFacturasVenta($idEmpresa, $filtros);
             $codigosIva = $this->codigosIvaPresentes($facturas);
             $reportService->agregarHoja($spreadsheet,
-                array_merge(['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge([
+                array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
+                array_map(fn($r) => array_merge($est($r), [
                     date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['clave_acceso'] ?? '',
                     $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
                     (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
@@ -185,8 +248,8 @@ class ReporteConsolidadoController extends BaseModuloController
             $recibos    = $this->repository->getDetalleRecibosVenta($idEmpresa, $filtros);
             $codigosIva = $this->codigosIvaPresentes($recibos);
             $reportService->agregarHoja($spreadsheet,
-                array_merge(['Fecha', 'N° Documento', 'Con Impuestos', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge([
+                array_merge($hEst, ['Fecha', 'N° Documento', 'Con Impuestos', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
+                array_map(fn($r) => array_merge($est($r), [
                     date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], !empty($r['con_impuestos']) ? 'Sí' : 'No',
                     $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
                     (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
@@ -196,22 +259,22 @@ class ReporteConsolidadoController extends BaseModuloController
 
             $retVenta = $this->repository->getDetalleRetencionesVenta($idEmpresa, $filtros);
             $reportService->agregarHoja($spreadsheet,
-                ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Origen'],
-                array_map(fn($r) => [
+                array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Origen']),
+                array_map(fn($r) => array_merge($est($r), [
                     date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['clave_acceso'] ?? '',
                     $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '',
                     $r['codigo_impuesto'] ?? '', $r['codigo_retencion'] ?? '', $r['concepto'] ?? '',
                     (float) $r['base_imponible'], (float) $r['porcentaje'], (float) $r['valor_retenido'],
                     (float) $r['total_comprobante'], $r['origen'] ?? '',
-                ], $retVenta),
+                ]), $retVenta),
                 'Retenciones Venta'
             );
 
             $notasCredito = $this->repository->getDetalleNotasCredito($idEmpresa, $filtros);
             $codigosIva   = $this->codigosIvaPresentes($notasCredito);
             $reportService->agregarHoja($spreadsheet,
-                array_merge(['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Motivo', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge([
+                array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Motivo', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
+                array_map(fn($r) => array_merge($est($r), [
                     $r['origen'] ?? '', date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'],
                     $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '', $r['doc_modificado'] ?? '', $r['motivo'] ?? '',
                     $r['codigo'] ?? '', $r['descripcion'] ?? '', (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['subtotal_linea'],
@@ -222,8 +285,8 @@ class ReporteConsolidadoController extends BaseModuloController
             $notasDebito = $this->repository->getDetalleNotasDebito($idEmpresa, $filtros);
             $codigosIva  = $this->codigosIvaPresentes($notasDebito);
             $reportService->agregarHoja($spreadsheet,
-                array_merge(['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Descripción', 'Cantidad', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge([
+                array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Descripción', 'Cantidad', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
+                array_map(fn($r) => array_merge($est($r), [
                     $r['origen'] ?? '', date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'],
                     $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '', $r['doc_modificado'] ?? '',
                     $r['descripcion'] ?? '', $r['cantidad'] !== null ? (float) $r['cantidad'] : '', (float) $r['subtotal_linea'],
@@ -234,8 +297,8 @@ class ReporteConsolidadoController extends BaseModuloController
             $liquidaciones = $this->repository->getDetalleLiquidaciones($idEmpresa, $filtros);
             $codigosIva    = $this->codigosIvaPresentes($liquidaciones);
             $reportService->agregarHoja($spreadsheet,
-                array_merge(['Fecha', 'N° Documento', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge([
+                array_merge($hEst, ['Fecha', 'N° Documento', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
+                array_map(fn($r) => array_merge($est($r), [
                     date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '',
                     $r['codigo'] ?? '', $r['descripcion'] ?? '', (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
                 ], $this->valoresIva($r, $codigosIva), [(float) $r['total_linea'], $r['estado'] ?? '']), $liquidaciones),
@@ -254,9 +317,11 @@ class ReporteConsolidadoController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltrosDesdeRequest();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
+        $alcanceTxt = $this->describirAlcance($idsEmpresa, $consolidado);
 
-        $rows  = $this->repository->getResumen($idEmpresa, $filtros);
-        $stats = $this->repository->getEstadisticas($idEmpresa, $filtros);
+        $rows  = $this->repository->getResumen($idsEmpresa, $filtros);
+        $stats = $this->repository->getEstadisticas($idsEmpresa, $filtros);
 
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
@@ -283,6 +348,7 @@ class ReporteConsolidadoController extends BaseModuloController
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Reporte Consolidado de Transacciones</h3>
                 <p>Del <?= date('d-m-Y', strtotime($filtros['fecha_desde'])) ?> al <?= date('d-m-Y', strtotime($filtros['fecha_hasta'])) ?> — Generado: <?= date('d-m-Y H:i:s') ?></p>
+                <?php if ($alcanceTxt !== ''): ?><p><strong>Alcance:</strong> <?= htmlspecialchars($alcanceTxt) ?></p><?php endif; ?>
             </div>
             <table class="kpi">
                 <tr>
@@ -304,11 +370,12 @@ class ReporteConsolidadoController extends BaseModuloController
             </table>
             <table>
                 <thead>
-                    <tr><th>Tipo</th><th>Fecha</th><th>Número</th><th>Tercero</th><th>Identificación</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>Estado</th></tr>
+                    <tr><?php if ($consolidado): ?><th>Estab.</th><?php endif; ?><th>Tipo</th><th>Fecha</th><th>Número</th><th>Tercero</th><th>Identificación</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>Estado</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($rows as $r): ?>
                         <tr>
+                            <?php if ($consolidado): ?><td class="text-center"><?= htmlspecialchars((string) ($r['establecimiento'] ?? '')) ?></td><?php endif; ?>
                             <td><?= htmlspecialchars($etiquetas[$r['tipo_documento']] ?? $r['tipo_documento']) ?><?= !empty($r['origen']) ? ' (' . htmlspecialchars($r['origen']) . ')' : '' ?></td>
                             <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha'])) ?></td>
                             <td><?= htmlspecialchars($r['numero'] ?? '') ?></td>
@@ -323,7 +390,7 @@ class ReporteConsolidadoController extends BaseModuloController
                 </tbody>
                 <tfoot>
                     <tr style="background-color: #e9ecef;">
-                        <th colspan="7" class="text-center" style="font-size: 9pt;">TOTAL GENERAL:</th>
+                        <th colspan="<?= $consolidado ? 8 : 7 ?>" class="text-center" style="font-size: 9pt;">TOTAL GENERAL:</th>
                         <th class="text-end" style="color:#dc3545;font-weight:bold;">$<?= number_format((float) $stats['total_general'], 2) ?></th>
                         <th>-</th>
                     </tr>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\core\Controller;
+use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\ReporteVentasRepository;
 
 class ReporteVentasController extends BaseModuloController
@@ -39,6 +40,13 @@ class ReporteVentasController extends BaseModuloController
         // Vendedores activos de la empresa para el selector del filtro
         $vendedores = (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
 
+        // Consolidado por establecimientos (mismo selector que Cuentas por Cobrar/Pagar): solo
+        // aparece si la empresa activa es la matriz del grupo RUC y el usuario tiene acceso a
+        // al menos otro establecimiento (ver EmpresaRepository::getIdsConsolidadoDesdeMatriz).
+        $empresaRepo      = new EmpresaRepository();
+        $idsConsolidado   = $empresaRepo->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        $establecimientos = $idsConsolidado ? $empresaRepo->getEtiquetasEstablecimiento($idsConsolidado) : [];
+
         $this->viewWithLayout('layouts.main', 'modulos/reporte_ventas/index', [
             'titulo'      => 'Reporte de Ventas',
             'perm'        => $this->getPermisos(),
@@ -47,6 +55,8 @@ class ReporteVentasController extends BaseModuloController
             'tarifasIva'  => $tarifasIva,
             'anios'       => $anios,
             'vendedores'  => $vendedores,
+            'puedeConsolidar'  => !empty($idsConsolidado),
+            'establecimientos' => $establecimientos,
             'fullWidth'   => true,
             'base'        => BASE_URL
         ]);
@@ -66,7 +76,54 @@ class ReporteVentasController extends BaseModuloController
             'variante_texto' => trim($_REQUEST['variante_texto'] ?? ''),
             'estado'         => $_REQUEST['estado'] ?? 'TODOS',
             'buscar_info'    => trim($_REQUEST['buscar_info'] ?? ''),
+            // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
+            // solo se honra desde la matriz — ver resolverAlcance()).
+            'alcance'        => strtoupper(trim((string) ($_REQUEST['alcance'] ?? ''))),
         ];
+    }
+
+    /**
+     * Alcance del reporte. Devuelve [idsEmpresa, consolidado]. `alcance=CONSOLIDADO` solo se
+     * honra si la empresa activa es la matriz del grupo RUC y hay hermanas accesibles para el
+     * usuario; si no, se ignora en silencio. En consolidado, los filtros por id de cliente y
+     * de producto se expanden a las filas hermanas (clientes y productos son tablas por
+     * establecimiento: se cruzan por identificación y por código). El vendedor es por
+     * establecimiento y no se expande.
+     */
+    private function resolverAlcance(int $idEmpresa, array &$filtros): array
+    {
+        $idsEmpresa  = [$idEmpresa];
+        $consolidado = false;
+        if (($filtros['alcance'] ?? '') === 'CONSOLIDADO') {
+            $grupo = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+            if ($grupo) {
+                $idsEmpresa  = $grupo;
+                $consolidado = true;
+            }
+        }
+        $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
+        if ($consolidado) {
+            if (!empty($filtros['id_cliente'])) {
+                $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string) $filtros['id_cliente']);
+                $filtros['id_cliente'] = (new \App\repositories\modulos\CuentasPorCobrarRepository())
+                    ->expandirClientesPorIdentificacion($raw, $idsEmpresa);
+            }
+            if (!empty($filtros['id_producto'])) {
+                $raw = is_array($filtros['id_producto']) ? $filtros['id_producto'] : explode(',', (string) $filtros['id_producto']);
+                $filtros['id_producto'] = $this->repository->expandirProductosPorCodigo($raw, $idsEmpresa);
+            }
+        }
+        return [$idsEmpresa, $consolidado];
+    }
+
+    /** Texto del alcance para el encabezado del PDF ('' si no es consolidado). */
+    private function describirAlcance(array $idsEmpresa, bool $consolidado): string
+    {
+        if (!$consolidado) {
+            return '';
+        }
+        $etq = (new EmpresaRepository())->getEtiquetasEstablecimiento($idsEmpresa);
+        return 'Consolidado por RUC (' . count($etq) . ' establecimientos: ' . implode(' · ', $etq) . ')';
     }
 
     public function generarAjax(): void
@@ -78,6 +135,8 @@ class ReporteVentasController extends BaseModuloController
         try {
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $filtros = $this->getFiltrosDesdeRequest();
+            [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
+            $idEmpresa = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
 
             // Consultar datos
             if ($filtros['agrupar_por'] === 'CLIENTE') {
@@ -115,18 +174,19 @@ class ReporteVentasController extends BaseModuloController
                 echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>'.htmlspecialchars($mensajeVacio).'</td></tr>';
             } else {
                 foreach ($rows as $r) {
-                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA');
+                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA', $consolidado);
                 }
             }
             $rowsHtml = ob_get_clean();
 
             $jsonOutput = json_encode([
-                'ok'         => true,
-                'rows'       => $rowsHtml,
-                'rawData'    => $rows,
-                'stats'      => $stats,
-                'estados'    => $resumenEstados,
-                'agrupacion' => $filtros['agrupar_por']
+                'ok'          => true,
+                'rows'        => $rowsHtml,
+                'rawData'     => $rows,
+                'stats'       => $stats,
+                'estados'     => $resumenEstados,
+                'agrupacion'  => $filtros['agrupar_por'],
+                'consolidado' => $consolidado,
             ]);
             
             if ($jsonOutput === false) {
@@ -144,8 +204,16 @@ class ReporteVentasController extends BaseModuloController
         exit;
     }
 
-    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA'): string
+    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA', bool $consolidado = false): string
     {
+        // Consolidado por RUC: badge con el establecimiento dueño del documento (solo en el
+        // detallado; las agrupaciones suman todos los establecimientos en una fila).
+        $badgeEst = '';
+        if ($consolidado && !empty($r['establecimiento'])) {
+            $badgeEst = "<span class='badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-1 fw-normal' style='font-size:.65rem;'>"
+                      . htmlspecialchars((string) $r['establecimiento']) . "</span>";
+        }
+
         // Solo el modo detallado corresponde a un documento real: se marca la fila
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
         $attrs = '';
@@ -222,7 +290,7 @@ class ReporteVentasController extends BaseModuloController
             $retenciones = number_format((float)($r['retenciones'] ?? 0), 2);
 
             $html .= "<td class='text-center'>".date('d/m/Y', strtotime($r['fecha_emision'] ?? ''))."</td>";
-            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['numero_factura'] ?? '')."</span></td>";
+            $html .= "<td>{$badgeEst}<span class='fw-bold'>".htmlspecialchars($r['numero_factura'] ?? '')."</span></td>";
             $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
             $html .= "<td class='text-center'><span class='badge border {$badgeColor}'>".strtoupper($estado)."</span></td>";
             $html .= "<td>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
@@ -316,6 +384,9 @@ class ReporteVentasController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros = $this->getFiltrosDesdeRequest();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
+        $idEmpresaActiva = $idEmpresa;
+        $idEmpresa       = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
 
         // Consultar datos
         if ($filtros['agrupar_por'] === 'CLIENTE') {
@@ -333,8 +404,11 @@ class ReporteVentasController extends BaseModuloController
         }
 
         try {
-            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa);
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresaActiva);
             $nombreEmpresa = $empresa['nombre'] ?? '';
+            if ($consolidado) {
+                $nombreEmpresa .= ' — ' . $this->describirAlcance($idsEmpresa, true);
+            }
 
             if ($filtros['agrupar_por'] === 'CLIENTE') {
                 $headers = ['RUC/Cédula', 'Cliente', 'Nro Facturas', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
@@ -408,10 +482,11 @@ class ReporteVentasController extends BaseModuloController
                     ];
                 }
             } else {
-                $headers = ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula', 'Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones'];
+                // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento
+                $headers = array_merge($consolidado ? ['Estab.'] : [], ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula', 'Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
                 $exportData = [];
                 foreach ($rows as $r) {
-                    $exportData[] = [
+                    $exportData[] = array_merge($consolidado ? [(string) ($r['establecimiento'] ?? '')] : [], [
                         date('d/m/Y', strtotime($r['fecha_emision'])),
                         $r['numero_factura'],
                         $r['cliente_nombre'],
@@ -425,7 +500,7 @@ class ReporteVentasController extends BaseModuloController
                         (float)($r['valor_iva'] ?? 0),
                         (float)($r['total']     ?? 0),
                         (float)($r['retenciones'] ?? 0),
-                    ];
+                    ]);
                 }
             }
 
@@ -442,6 +517,9 @@ class ReporteVentasController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros = $this->getFiltrosDesdeRequest();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
+        $idEmpresaActiva = $idEmpresa;
+        $idEmpresa       = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
 
         // Consultar datos
         if ($filtros['agrupar_por'] === 'CLIENTE') {
@@ -461,8 +539,9 @@ class ReporteVentasController extends BaseModuloController
         $totales = $this->repository->getEstadisticas($idEmpresa, $filtros);
 
         try {
-            $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $empresa   = (new \App\models\Empresa())->getPorId($idEmpresaActiva) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE VENTAS';
+            $alcanceTxt    = $this->describirAlcance($idsEmpresa, $consolidado);
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
@@ -482,6 +561,7 @@ class ReporteVentasController extends BaseModuloController
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Reporte de Ventas</h3>
                 <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
+                <?php if ($alcanceTxt !== ''): ?><p><strong>Alcance:</strong> <?= htmlspecialchars($alcanceTxt) ?></p><?php endif; ?>
             </div>
             <table>
                 <thead>
@@ -496,7 +576,7 @@ class ReporteVentasController extends BaseModuloController
                     <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
                         <tr><th>Mes</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php else: ?>
-                        <tr><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Estado</th><th>Vendedor</th><th>Cajero</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th><th>Retenciones</th></tr>
+                        <tr><?php if ($consolidado): ?><th>Estab.</th><?php endif; ?><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Estado</th><th>Vendedor</th><th>Cajero</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th><th>Retenciones</th></tr>
                     <?php endif; ?>
                 </thead>
                 <tbody>
@@ -541,6 +621,7 @@ class ReporteVentasController extends BaseModuloController
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
                                 <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
                             <?php else: ?>
+                                <?php if ($consolidado): ?><td class="text-center"><?= htmlspecialchars((string) ($r['establecimiento'] ?? '')) ?></td><?php endif; ?>
                                 <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha_emision'])) ?></td>
                                 <td><?= htmlspecialchars($r['numero_factura']) ?></td>
                                 <td><?= htmlspecialchars($r['cliente_nombre']) ?></td>

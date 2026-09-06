@@ -89,6 +89,18 @@
                         </select>
                     </div>
 
+                    <?php if (!empty($puedeConsolidar)): ?>
+                    <!-- Alcance: solo la MATRIZ del grupo RUC puede consolidar (mismo selector que Cuentas por Cobrar/Pagar) -->
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
+                        <select id="rc-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
+                                onchange="window.RC_generarReporte()"
+                                title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
+                            <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
+                            <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?> establec.)</option>
+                        </select>
+                    </div>
+                    <?php endif; ?>
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
                         <input type="date" name="fecha_desde" id="rc-fecha-desde"

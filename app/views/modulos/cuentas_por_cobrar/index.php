@@ -69,6 +69,13 @@
                     </select>
                 </div>
 
+                <!-- Producto: nombre o código de las líneas (facturas y recibos; los saldos iniciales no tienen líneas) -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
+                    <input type="text" id="cxc-producto" name="producto" class="form-control form-control-sm shadow-none border" style="width:180px;"
+                           placeholder="Nombre o código..." autocomplete="off" onchange="CXC_cargar()">
+                </div>
+
                 <?php if (!empty($puedeConsolidar)): ?>
                 <!-- Alcance: solo la MATRIZ del grupo RUC puede consolidar (fase 1: solo lectura de las hermanas) -->
                 <div>

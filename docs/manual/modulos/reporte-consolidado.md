@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_consolidado
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte consolidado, todas las transacciones, resumen general, compras, ventas, facturas, recibos, retenciones, notas de credito, notas de debito, liquidaciones de compra, cierre de periodo
-version: 1.0
+etiquetas: reporte consolidado, todas las transacciones, resumen general, compras, ventas, facturas, recibos, retenciones, notas de credito, notas de debito, liquidaciones de compra, cierre de periodo, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc
+version: 1.1
 orden: 51
 estado: activo
 ---
@@ -24,6 +24,37 @@ a los reportes individuales (Reporte de Ventas, Reporte de Compras, Reporte de
 Retenciones, etc.) — estos siguen siendo la fuente para análisis más específicos
 (por producto, por vendedor, por agrupación); el consolidado es la vista de
 conjunto.
+
+## Consolidar varios establecimientos (solo desde la matriz)
+
+Cuando un mismo RUC tiene varios establecimientos registrados como empresas
+distintas (matriz y sucursales), el reporte muestra por defecto solo los
+documentos de la empresa activa. Desde la **matriz** aparece el filtro
+**Establecimientos**, el mismo que tienen Cuentas por Cobrar y Cuentas por
+Pagar:
+
+- **Solo este (matriz)**: comportamiento normal.
+- **Consolidado (N establec.)**: junta los documentos de todos los
+  establecimientos del mismo RUC a los que el usuario tiene acceso. Las tarjetas
+  (documentos, ventas, compras, neto), la tabla, el PDF y las ocho hojas del
+  Excel consolidan de la misma forma.
+
+Reglas:
+
+- El filtro **solo aparece en la matriz** del grupo (la empresa marcada como
+  matriz en *Empresas*) y solo si existe al menos otro establecimiento accesible.
+  En una sucursal no se muestra.
+- Un usuario que no es superadministrador solo ve los establecimientos que tiene
+  asignados.
+- En la tabla, cada documento lleva un **badge con el código del
+  establecimiento** (001, 002, …) delante del número; al pasar el mouse se ve el
+  nombre de la empresa. En el PDF y en cada hoja del Excel se agrega la columna
+  **Estab.** y el encabezado indica *Alcance: Consolidado por RUC* con la lista
+  de establecimientos.
+- Cada establecimiento se filtra por **su propio ambiente** (producción o
+  pruebas), no por el de la matriz.
+- El selector **Año** sigue tomando los años con documentos de la empresa
+  activa; con Fecha Desde / Fecha Hasta se puede consultar cualquier período.
 
 ## Qué documentos incluye y de dónde sale cada uno
 
@@ -88,4 +119,8 @@ documentos de toda la empresa a quien tenga acceso al reporte.
 
 ## Historial de cambios
 
+- **1.1** — Nuevo filtro **Establecimientos** (solo desde la matriz del grupo
+  RUC) para consolidar los documentos de todas las sucursales del mismo RUC:
+  badge del establecimiento en la tabla, columna "Estab." en el PDF y en las
+  hojas del Excel, y línea "Alcance" en el encabezado.
 - **1.0** — Versión inicial.

@@ -1412,6 +1412,9 @@ $plantillasFiltradas = [];
             'fecha_hasta' => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'  => $_REQUEST['id_cliente']  ?? '',
             'id_vendedor' => (int)($_REQUEST['id_vendedor'] ?? 0) ?: '',
+            // Texto del producto (nombre o código de las líneas del documento). Con este
+            // filtro los saldos iniciales quedan fuera: no tienen líneas de detalle.
+            'producto'    => trim((string)($_REQUEST['producto'] ?? '')),
             // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
             // solo se honra desde la matriz — ver resolverAlcance()).
             'alcance'     => strtoupper(trim((string)($_REQUEST['alcance'] ?? ''))),
@@ -1491,6 +1494,7 @@ $plantillasFiltradas = [];
             'Tipo de documento' => $tipoDocLbl[$filtros['tipo_doc'] ?? 'TODOS'] ?? 'Todos',
             'Estado'            => $estadoLbl[$filtros['estado'] ?? 'PENDIENTES'] ?? (string)($filtros['estado'] ?? ''),
             'Vendedor'          => $vendedorTxt,
+            'Producto'          => trim((string)($filtros['producto'] ?? '')) !== '' ? (string)$filtros['producto'] : 'Todos',
             'Período'           => $periodo,
             'Cliente'           => $clienteTxt,
         ];

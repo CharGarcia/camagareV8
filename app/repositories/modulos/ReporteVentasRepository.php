@@ -14,6 +14,54 @@ class ReporteVentasRepository extends BaseRepository
         parent::__construct('ventas_cabecera');
     }
 
+    // ── Alcance por empresa (una empresa o varios establecimientos del mismo RUC) ──
+    //
+    // Los reportes reciben `int|array $idEmpresa`: la empresa activa (int, normal) o los
+    // establecimientos del grupo RUC cuando la matriz pide el consolidado (lo resuelve el
+    // controller con EmpresaRepository::getIdsConsolidadoDesdeMatriz, nunca el cliente).
+
+    /** Lista `1,2,3` de ids validados, para interpolar en `IN (...)`. */
+    private string $inEmp = '0';
+
+    private function setAlcance(int|array $idEmpresa): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $idEmpresa), static fn ($i) => $i > 0)));
+        if (!$ids) {
+            throw new \InvalidArgumentException('Reporte de ventas: id_empresa requerido.');
+        }
+        $this->inEmp = implode(',', $ids);
+    }
+
+    /** Ambiente actual de la empresa DUEÑA del documento (correlacionado por fila). */
+    private function condAmbiente(string $alias): string
+    {
+        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+    }
+
+    /**
+     * Consolidado: `productos` es por establecimiento, así que el filtro por id de producto
+     * se expande a los productos hermanos con el MISMO código en las demás empresas del
+     * alcance. Devuelve la unión con los ids originales.
+     */
+    public function expandirProductosPorCodigo(array $idsProducto, int|array $idsEmpresa): array
+    {
+        $idsProducto = array_values(array_unique(array_filter(array_map('intval', $idsProducto))));
+        $idsEmp      = array_values(array_unique(array_filter(array_map('intval', (array) $idsEmpresa))));
+        if (!$idsProducto || !$idsEmp) {
+            return $idsProducto;
+        }
+        $params = [];
+        $inP = []; foreach ($idsProducto as $i => $id) { $inP[] = ":xp{$i}"; $params[":xp{$i}"] = $id; }
+        $inE = []; foreach ($idsEmp as $i => $id)      { $inE[] = ":xe{$i}"; $params[":xe{$i}"] = $id; }
+        $st = $this->db->prepare("SELECT DISTINCT p2.id
+                                  FROM productos p1
+                                  JOIN productos p2 ON p2.codigo = p1.codigo AND p2.eliminado = false
+                                                   AND p2.id_empresa IN (" . implode(',', $inE) . ")
+                                  WHERE p1.id IN (" . implode(',', $inP) . ") AND COALESCE(TRIM(p1.codigo), '') <> ''");
+        $st->execute($params);
+        return array_values(array_unique(array_merge($idsProducto, array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)))));
+    }
+
     /**
      * Configuración de la fuente de datos según el tipo de documento:
      *  - FACTURA         → ventas_*
@@ -89,7 +137,7 @@ class ReporteVentasRepository extends BaseRepository
      * - $restar: campos monetarios (la NC se resta).
      * - $sumar:  campos de conteo (se suman ambos: total de documentos).
      */
-    private function combinarNeto(int $idEmpresa, array $filtros, string $metodo, ?array $claves, array $restar, array $sumar = []): array
+    private function combinarNeto(int|array $idEmpresa, array $filtros, string $metodo, ?array $claves, array $restar, array $sumar = []): array
     {
         $fFac = array_merge($filtros, ['tipo_documento' => 'FACTURA']);
         $fNc  = array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']);
@@ -179,7 +227,7 @@ class ReporteVentasRepository extends BaseRepository
                 SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(i.valor) as valor_iva
             FROM {$f['det']} d
-            JOIN {$f['cab']} vcte ON vcte.id = d.{$f['fk_det']} AND vcte.id_empresa = :id_empresa
+            JOIN {$f['cab']} vcte ON vcte.id = d.{$f['fk_det']} AND vcte.id_empresa IN ({$this->inEmp})
             LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
             GROUP BY d.{$f['fk_det']}
         ";
@@ -202,19 +250,20 @@ class ReporteVentasRepository extends BaseRepository
                 AND CONCAT({$aliasFactura}.establecimiento, '-', {$aliasFactura}.punto_emision, '-', {$aliasFactura}.secuencial) = {$aliasNc}.num_doc_modificado";
     }
 
-    private function buildWhereYParams(int $idEmpresa, array $filtros, string $aliasVenta, string $aliasDetalle = null, bool $filtrarEstado = true): array
+    private function buildWhereYParams(int|array $idEmpresa, array $filtros, string $aliasVenta, string $aliasDetalle = null, bool $filtrarEstado = true): array
     {
         $f = $this->fuente($filtros);
+        $this->setAlcance($idEmpresa);
 
-        $where = "{$aliasVenta}.id_empresa = :id_empresa
+        $where = "{$aliasVenta}.id_empresa IN ({$this->inEmp})
                   AND {$aliasVenta}.eliminado = false
-                  AND {$aliasVenta}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND " . $this->condAmbiente($aliasVenta);
 
         if ($filtrarEstado) {
             $where .= " AND " . str_replace('{alias}', $aliasVenta, $f['estado_ok']);
         }
 
-        $params = [':id_empresa' => $idEmpresa];
+        $params = [];
 
         if (!empty($filtros['fecha_desde'])) {
             $where .= " AND {$aliasVenta}.fecha_emision >= :fecha_desde";
@@ -302,7 +351,7 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Reporte detallado (por documento).
      */
-    public function getReporteDetallado(int $idEmpresa, array $filtros): array
+    public function getReporteDetallado(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteDetallado', null,
@@ -332,7 +381,7 @@ class ReporteVentasRepository extends BaseRepository
                     LEFT JOIN ventas_cabecera vv ON r.id_venta IS NULL
                         AND vv.id_empresa = r.id_empresa
                         AND CONCAT(vv.establecimiento, '-', vv.punto_emision, '-', vv.secuencial) = rd.num_doc_sustento
-                    WHERE r.eliminado = false AND r.id_empresa = :id_empresa
+                    WHERE r.eliminado = false AND r.id_empresa IN ({$this->inEmp})
                 ),
                 retenciones_agg AS (
                     SELECT id_venta, SUM(total_iva + total_renta + total_isd) AS monto_retenciones
@@ -360,6 +409,8 @@ class ReporteVentasRepository extends BaseRepository
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . "){$retenCte}
             SELECT
                 v.id,
+                v.id_empresa,
+                (SELECT COALESCE(e.establecimiento, '') FROM empresas e WHERE e.id = v.id_empresa) AS establecimiento,
                 v.fecha_emision,
                 CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) as numero_factura,
                 c.identificacion as cliente_ruc,
@@ -393,7 +444,7 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Reporte agrupado por cliente.
      */
-    public function getReporteAgrupadoCliente(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoCliente(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoCliente', ['id_cliente'],
@@ -430,7 +481,7 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Reporte agrupado por producto.
      */
-    public function getReporteAgrupadoProducto(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoProducto(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoProducto', ['id_producto', 'tarifa_iva'],
@@ -471,7 +522,7 @@ class ReporteVentasRepository extends BaseRepository
      * variante elegida (id_producto_variante no nulo); el resto del reporte
      * ("Por Producto") ya las cubre de forma agregada sin distinguir variante.
      */
-    public function getReporteAgrupadoVariante(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoVariante(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoVariante', ['id_producto_variante', 'tarifa_iva'],
@@ -517,7 +568,7 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Reporte agrupado por fecha.
      */
-    public function getReporteAgrupadoFecha(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoFecha(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoFecha', ['fecha'],
@@ -551,7 +602,7 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Reporte agrupado por mes (año-mes).
      */
-    public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoMes(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoMes', ['mes'],
@@ -643,7 +694,7 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Obtiene estadísticas globales para el rango de fechas.
      */
-    public function getEstadisticas(int $idEmpresa, array $filtros): array
+    public function getEstadisticas(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             $sf = $this->getEstadisticas($idEmpresa, array_merge($filtros, ['tipo_documento' => 'FACTURA']));
@@ -686,7 +737,7 @@ class ReporteVentasRepository extends BaseRepository
         ];
     }
 
-    public function getResumenEstados(int $idEmpresa, array $filtros): array
+    public function getResumenEstados(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
             $rf = $this->getResumenEstados($idEmpresa, array_merge($filtros, ['tipo_documento' => 'FACTURA']));

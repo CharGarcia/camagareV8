@@ -74,6 +74,7 @@ async function CXC_cargar() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value  || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
+        producto:    (document.getElementById('cxc-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
     });
 
@@ -1029,6 +1030,8 @@ function CXC_limpiarFiltros() {
     if (selVend) selVend.value = '';
     const selAlc = document.getElementById('cxc-alcance');
     if (selAlc) selAlc.value = 'ESTABLECIMIENTO';
+    const inpProd = document.getElementById('cxc-producto');
+    if (inpProd) inpProd.value = '';
 
     CXC_clientesSeleccionados = [];
     CXC_renderChipsClientes();
@@ -1050,6 +1053,7 @@ function CXC_exportarExcel() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
+        producto:    (document.getElementById('cxc-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`, '_blank');
@@ -1063,6 +1067,7 @@ function CXC_exportarPDF() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
+        producto:    (document.getElementById('cxc-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`, '_blank');

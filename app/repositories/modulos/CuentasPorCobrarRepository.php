@@ -252,8 +252,10 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     public function incluyeSaldosIniciales(array $filtros): bool
     {
+        // Tampoco aplican con el filtro Producto: un saldo inicial no tiene líneas de detalle.
         return in_array($this->getTipoDoc($filtros), ['TODOS', 'SALDO_INICIAL'], true)
-            && empty($filtros['id_vendedor']);
+            && empty($filtros['id_vendedor'])
+            && trim((string)($filtros['producto'] ?? '')) === '';
     }
 
     /**
@@ -559,6 +561,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             $where .= " AND v.id_vendedor = :id_vendedor";
             $params[':id_vendedor'] = (int)$filtros['id_vendedor'];
         }
+        // Filtro Producto sobre las líneas del recibo (mismo criterio que las facturas)
+        $where .= $this->condProducto('recibos_venta_detalle', 'id_recibo', 'v', $filtros, $params, 'rp');
 
         return [$where, $params];
     }
@@ -1240,8 +1244,31 @@ class CuentasPorCobrarRepository extends BaseRepository
             $where .= " AND v.id_vendedor = :id_vendedor";
             $params[':id_vendedor'] = (int)$filtros['id_vendedor'];
         }
+        // Filtro Producto: facturas que tengan al menos una línea cuyo nombre o código
+        // contenga el texto (mismo criterio que el Reporte de Ventas, producto_texto).
+        $where .= $this->condProducto('ventas_detalle', 'id_venta', 'v', $filtros, $params, 'fp');
 
         return [$where, $params];
+    }
+
+    /**
+     * Condición EXISTS sobre las líneas del documento para el filtro Producto (nombre o
+     * código de la línea, ILIKE). Devuelve '' si no hay texto. Los saldos iniciales no tienen
+     * líneas: cuando este filtro está activo quedan fuera (ver incluyeSaldosIniciales).
+     */
+    private function condProducto(string $tablaDetalle, string $fk, string $aliasCab, array $filtros, array &$params, string $prefijo): string
+    {
+        $txt = trim((string)($filtros['producto'] ?? ''));
+        if ($txt === '') {
+            return '';
+        }
+        $params[":{$prefijo}_txt1"] = '%' . $txt . '%';
+        $params[":{$prefijo}_txt2"] = '%' . $txt . '%';
+        return " AND EXISTS (
+                    SELECT 1 FROM {$tablaDetalle} dp
+                    WHERE dp.{$fk} = {$aliasCab}.id
+                      AND (dp.descripcion ILIKE :{$prefijo}_txt1 OR dp.codigo_principal ILIKE :{$prefijo}_txt2)
+                )";
     }
 
     // ─────────────────────────────────────────────────────────────────────

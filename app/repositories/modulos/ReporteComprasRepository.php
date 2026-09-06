@@ -14,6 +14,54 @@ class ReporteComprasRepository extends BaseRepository
         parent::__construct('compras_cabecera');
     }
 
+    // ── Alcance por empresa (una empresa o varios establecimientos del mismo RUC) ──
+    //
+    // Los reportes reciben `int|array $idEmpresa`: la empresa activa (int, normal) o los
+    // establecimientos del grupo RUC cuando la matriz pide el consolidado (lo resuelve el
+    // controller con EmpresaRepository::getIdsConsolidadoDesdeMatriz, nunca el cliente).
+
+    /** Lista `1,2,3` de ids validados, para interpolar en `IN (...)`. */
+    private string $inEmp = '0';
+
+    private function setAlcance(int|array $idEmpresa): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $idEmpresa), static fn ($i) => $i > 0)));
+        if (!$ids) {
+            throw new \InvalidArgumentException('Reporte de compras: id_empresa requerido.');
+        }
+        $this->inEmp = implode(',', $ids);
+    }
+
+    /** Ambiente actual de la empresa DUEÑA del documento (correlacionado por fila). */
+    private function condAmbiente(string $alias): string
+    {
+        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+    }
+
+    /**
+     * Consolidado: `productos` es por establecimiento, así que el filtro por id de producto
+     * se expande a los productos hermanos con el MISMO código en las demás empresas del
+     * alcance. Devuelve la unión con los ids originales.
+     */
+    public function expandirProductosPorCodigo(array $idsProducto, int|array $idsEmpresa): array
+    {
+        $idsProducto = array_values(array_unique(array_filter(array_map('intval', $idsProducto))));
+        $idsEmp      = array_values(array_unique(array_filter(array_map('intval', (array) $idsEmpresa))));
+        if (!$idsProducto || !$idsEmp) {
+            return $idsProducto;
+        }
+        $params = [];
+        $inP = []; foreach ($idsProducto as $i => $id) { $inP[] = ":xp{$i}"; $params[":xp{$i}"] = $id; }
+        $inE = []; foreach ($idsEmp as $i => $id)      { $inE[] = ":xe{$i}"; $params[":xe{$i}"] = $id; }
+        $st = $this->db->prepare("SELECT DISTINCT p2.id
+                                  FROM productos p1
+                                  JOIN productos p2 ON p2.codigo = p1.codigo AND p2.eliminado = false
+                                                   AND p2.id_empresa IN (" . implode(',', $inE) . ")
+                                  WHERE p1.id IN (" . implode(',', $inP) . ") AND COALESCE(TRIM(p1.codigo), '') <> ''");
+        $st->execute($params);
+        return array_values(array_unique(array_merge($idsProducto, array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)))));
+    }
+
     /**
      * Expresión de signo por tipo de comprobante para netear las compras.
      * Solo en la vista "Todas las compras" (sin filtro de tipo) las Notas de
@@ -61,7 +109,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(i.valor) as valor_iva
             FROM compras_detalle d
-            JOIN compras_cabecera cbc ON cbc.id = d.id_compra AND cbc.id_empresa = :id_empresa
+            JOIN compras_cabecera cbc ON cbc.id = d.id_compra AND cbc.id_empresa IN ({$this->inEmp})
             LEFT JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
             GROUP BY d.id_compra
         ";
@@ -70,13 +118,14 @@ class ReporteComprasRepository extends BaseRepository
     /**
      * Construye condiciones WHERE y parámetros desde los filtros.
      */
-    private function buildWhereYParams(int $idEmpresa, array $filtros, string $aliasVenta, string $aliasDetalle = null): array
+    private function buildWhereYParams(int|array $idEmpresa, array $filtros, string $aliasVenta, string $aliasDetalle = null): array
     {
-        $where = "{$aliasVenta}.id_empresa = :id_empresa
+        $this->setAlcance($idEmpresa);
+        $where = "{$aliasVenta}.id_empresa IN ({$this->inEmp})
                   AND {$aliasVenta}.eliminado = false
-                  AND {$aliasVenta}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND " . $this->condAmbiente($aliasVenta);
 
-        $params = [':id_empresa' => $idEmpresa];
+        $params = [];
 
         if (!empty($filtros['fecha_desde'])) {
             $where .= " AND {$aliasVenta}.fecha_emision >= :fecha_desde";
@@ -141,7 +190,7 @@ class ReporteComprasRepository extends BaseRepository
     /**
      * Reporte detallado (por comprobante).
      */
-    public function getReporteDetallado(int $idEmpresa, array $filtros): array
+    public function getReporteDetallado(int|array $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
         $sgn = $this->signoNc($filtros);
@@ -150,6 +199,8 @@ class ReporteComprasRepository extends BaseRepository
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
             SELECT
                 c.id,
+                c.id_empresa,
+                (SELECT COALESCE(e.establecimiento, '') FROM empresas e WHERE e.id = c.id_empresa) AS establecimiento,
                 c.fecha_emision,
                 c.fecha_registro,
                 CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) as numero_documento,
@@ -184,7 +235,7 @@ class ReporteComprasRepository extends BaseRepository
     /**
      * Reporte agrupado por proveedor.
      */
-    public function getReporteAgrupadoProveedor(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoProveedor(int|array $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
         $sgn = $this->signoNc($filtros);
@@ -216,7 +267,7 @@ class ReporteComprasRepository extends BaseRepository
     /**
      * Reporte agrupado por producto.
      */
-    public function getReporteAgrupadoProducto(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoProducto(int|array $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c', 'd');
         $sgn = $this->signoNc($filtros);
@@ -249,7 +300,7 @@ class ReporteComprasRepository extends BaseRepository
     /**
      * Reporte agrupado por fecha.
      */
-    public function getReporteAgrupadoFecha(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoFecha(int|array $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
         $sgn = $this->signoNc($filtros);
@@ -278,7 +329,7 @@ class ReporteComprasRepository extends BaseRepository
     /**
      * Reporte agrupado por mes (año-mes).
      */
-    public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
+    public function getReporteAgrupadoMes(int|array $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
         $sgn = $this->signoNc($filtros);
@@ -363,7 +414,7 @@ class ReporteComprasRepository extends BaseRepository
     /**
      * Estadísticas globales para el rango de fechas.
      */
-    public function getEstadisticas(int $idEmpresa, array $filtros): array
+    public function getEstadisticas(int|array $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
         $sgn = $this->signoNc($filtros);
