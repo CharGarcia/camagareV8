@@ -109,44 +109,7 @@ class ImportadorExcelController extends Controller
         $colNumericas = $entidades[$entidad]['col_numericas'] ?? []; // índices base 0
 
         $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Datos');
-
-        $colIndex = 1;
-        foreach ($columnas as $idx => $col) {
-            $esNumerica = in_array($idx, $colNumericas, true);
-
-            // Cabecera
-            $sheet->setCellValueExplicit([$colIndex, 1], $col, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->getColumnDimensionByColumn($colIndex)->setWidth(22);
-            $sheet->getStyle([$colIndex, 1])->getFont()->setBold(true);
-            $sheet->getStyle([$colIndex, 1])->getFill()
-                ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-                ->getStartColor()->setARGB('FF4472C4');
-            $sheet->getStyle([$colIndex, 1])->getFont()->getColor()->setARGB('FFFFFFFF');
-
-            // Formato de celda para filas de datos (fila 3 en adelante, 1000 filas)
-            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
-            $rangoData = "{$colLetter}3:{$colLetter}1002";
-
-            if ($esNumerica) {
-                $sheet->getStyle($rangoData)->getNumberFormat()
-                    ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_NUMBER_00);
-            } else {
-                // Texto: evita que Excel altere valores como "04", "9999999999999", etc.
-                $sheet->getStyle($rangoData)->getNumberFormat()
-                    ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-            }
-
-            $colIndex++;
-        }
-
-        $sheet->setCellValueExplicit(
-            [1, 2],
-            'Llenar datos desde esta fila. Reemplazar esta fila con datos reales.',
-            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
-        );
-        $sheet->getStyle([1, 2])->getFont()->setItalic(true)->getColor()->setARGB('FF888888');
+        $this->agregarHojaDatos($spreadsheet, 'Datos', $columnas, $colNumericas, $spreadsheet->getActiveSheet());
 
         $db = Database::getConnection();
 
@@ -269,9 +232,43 @@ class ImportadorExcelController extends Controller
             $this->agregarHojaConfig($spreadsheet, $idEmpresaPlantilla, $labelEstablecimiento);
         }
 
+        // Productos: segunda hoja de datos "Precios" (varios precios por producto)
+        if ($entidad === 'productos' && !empty($entidades[$entidad]['hoja_precios'])) {
+            $cfgPrecios = $entidades[$entidad]['hoja_precios'];
+            $this->agregarHojaDatos(
+                $spreadsheet,
+                $cfgPrecios['nombre'],
+                $cfgPrecios['columnas'],
+                $cfgPrecios['col_numericas'] ?? [],
+                null,
+                'Opcional. Una fila por cada precio adicional del producto (Mayorista, Distribuidor, etc.). '
+                . 'El producto debe estar en la hoja Datos o ya existir. Si un producto aparece aquí, '
+                . 'esta es su lista completa de precios; si no aparece, conserva la que tiene.'
+            );
+
+            // Hoja de consulta: nombres de precio que la empresa ya usa (para no
+            // crear "Mayorista" y "MAYORISTA" como dos listas distintas)
+            $nombresPrecio = [];
+            if ($idEmpresaPlantilla > 0) {
+                $stNP = $db->prepare(
+                    "SELECT pp.nombre_precio, COUNT(DISTINCT pp.id_producto) AS productos
+                       FROM productos_precios pp
+                       JOIN productos p ON p.id = pp.id_producto AND p.eliminado = false
+                      WHERE pp.id_empresa = ? AND pp.eliminado = false
+                      GROUP BY pp.nombre_precio
+                      ORDER BY productos DESC, pp.nombre_precio ASC"
+                );
+                $stNP->execute([$idEmpresaPlantilla]);
+                $nombresPrecio = $stNP->fetchAll(PDO::FETCH_ASSOC);
+            }
+            if (empty($nombresPrecio)) {
+                $nombresPrecio = [['nombre_precio' => 'Aún no hay precios adicionales en esta empresa. Use el nombre que prefiera (ej. Mayorista).', 'productos' => '']];
+            }
+            $crearHojaRef('Nombres_Precio', ['NOMBRE_PRECIO (ya en uso)', 'PRODUCTOS QUE LO TIENEN'], $nombresPrecio, 'FF2E75B6');
+        }
+
         // Hoja extra con tarifas IVA para la entidad productos
         if ($entidad === 'productos') {
-            $db = \App\core\Database::getConnection();
             $stIva = $db->query("SELECT codigo, tarifa, porcentaje_iva FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC");
             $tarifas = $stIva ? $stIva->fetchAll(PDO::FETCH_ASSOC) : [];
 
@@ -389,6 +386,60 @@ class ImportadorExcelController extends Controller
 
         $spreadsheet->setActiveSheetIndex(0);
         $this->enviarXlsx($spreadsheet, "plantilla_{$entidad}.xlsx");
+    }
+
+    /**
+     * Hoja de datos estándar: cabecera azul, columnas como texto (o número
+     * para las indicadas en $colNumericas) y una fila 2 con la instrucción.
+     * Si no se pasa $hoja se crea una nueva; con $hoja se reutiliza (la hoja
+     * activa inicial del libro).
+     *
+     * @param int[] $colNumericas índices base 0 de las columnas numéricas
+     */
+    private function agregarHojaDatos(
+        Spreadsheet $spreadsheet,
+        string $titulo,
+        array $columnas,
+        array $colNumericas = [],
+        ?\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $hoja = null,
+        string $instruccion = 'Llenar datos desde esta fila. Reemplazar esta fila con datos reales.'
+    ): \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet {
+        $sheet = $hoja ?? $spreadsheet->createSheet();
+        $sheet->setTitle($titulo);
+
+        $colIndex = 1;
+        foreach ($columnas as $idx => $col) {
+            $esNumerica = in_array($idx, $colNumericas, true);
+
+            // Cabecera
+            $sheet->setCellValueExplicit([$colIndex, 1], $col, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->getColumnDimensionByColumn($colIndex)->setWidth(22);
+            $sheet->getStyle([$colIndex, 1])->getFont()->setBold(true);
+            $sheet->getStyle([$colIndex, 1])->getFill()
+                ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                ->getStartColor()->setARGB('FF4472C4');
+            $sheet->getStyle([$colIndex, 1])->getFont()->getColor()->setARGB('FFFFFFFF');
+
+            // Formato de celda para filas de datos (fila 3 en adelante, 1000 filas)
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+            $rangoData = "{$colLetter}3:{$colLetter}1002";
+
+            if ($esNumerica) {
+                $sheet->getStyle($rangoData)->getNumberFormat()
+                    ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_NUMBER_00);
+            } else {
+                // Texto: evita que Excel altere valores como "04", "9999999999999", etc.
+                $sheet->getStyle($rangoData)->getNumberFormat()
+                    ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+            }
+
+            $colIndex++;
+        }
+
+        $sheet->setCellValueExplicit([1, 2], $instruccion, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->getStyle([1, 2])->getFont()->setItalic(true)->getColor()->setARGB('FF888888');
+
+        return $sheet;
     }
 
     /**
@@ -720,9 +771,14 @@ class ImportadorExcelController extends Controller
 
             $registrosInsertados = $this->service->procesar($archivoTmp, $entidad, $idEmpresaDestino, $tipoAmbiente, $idUsuario);
 
+            $mensaje = "Importación completada exitosamente. Se insertaron {$registrosInsertados} registros.";
+            foreach ($this->service->getResumenExtra() as $linea) {
+                $mensaje .= ' ' . $linea;
+            }
+
             echo json_encode([
                 'ok' => true,
-                'mensaje' => "Importación completada exitosamente. Se insertaron {$registrosInsertados} registros."
+                'mensaje' => $mensaje
             ]);
 
         } catch (\Throwable $e) {

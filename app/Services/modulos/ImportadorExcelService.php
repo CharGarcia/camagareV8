@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\Services\LogSistemaService;
+use App\repositories\modulos\ProductoRepository;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PDO;
 use Exception;
@@ -12,6 +13,16 @@ class ImportadorExcelService
 {
     protected PDO $db;
     protected LogSistemaService $logService;
+
+    /** Nombre de la hoja de precios adicionales en la plantilla de productos. */
+    public const HOJA_PRECIOS = 'Precios';
+
+    /**
+     * Líneas de resumen adicionales de la última importación (p. ej. cuántos
+     * precios se cargaron), para que el controlador las muestre junto al
+     * conteo principal.
+     */
+    private array $resumenExtra = [];
 
     public function __construct(PDO $db, LogSistemaService $logService)
     {
@@ -71,7 +82,22 @@ class ImportadorExcelService
                     'CATEGORIA (nombre, se crea si no existe)',
                     'MARCA (nombre, se crea si no existe)',
                     'CODIGO_MEDIDA (ver hoja Unidades_Medida, solo aplica si TIPO=Producto)'
-                ]
+                ],
+                // Segunda hoja de datos, opcional: varios precios por producto
+                // (se guardan en productos_precios, como la pestaña Precios del
+                // módulo). La lee procesarPreciosProductos().
+                'hoja_precios' => [
+                    'nombre'        => self::HOJA_PRECIOS,
+                    'col_numericas' => [2], // PRECIO_SIN_IVA
+                    'columnas'      => [
+                        'CODIGO_PRINCIPAL (del producto: de la hoja Datos o ya existente)',
+                        'NOMBRE_PRECIO (ej. Mayorista, Distribuidor; ver hoja Nombres_Precio)',
+                        'PRECIO_SIN_IVA',
+                        'VALIDO_DESDE (AAAA-MM-DD, opcional)',
+                        'VALIDO_HASTA (AAAA-MM-DD, opcional)',
+                        'ESTADO (Activo / Inactivo, opcional)',
+                    ],
+                ],
             ],
             'vehiculos' => [
                 'nombre' => 'Vehículos',
@@ -169,6 +195,7 @@ class ImportadorExcelService
 
         $this->db->beginTransaction();
         $insertados = 0;
+        $this->resumenExtra = [];
 
         try {
             for ($i = 1; $i < count($filas); $i++) {
@@ -196,12 +223,178 @@ class ImportadorExcelService
                 }
             }
 
+            // Productos: la plantilla trae además la hoja "Precios" (opcional).
+            // Va después de la hoja Datos para poder apuntar a productos creados
+            // en este mismo archivo, y dentro de la misma transacción.
+            if ($entidadId === 'productos') {
+                $this->procesarPreciosProductos($spreadsheet, $idEmpresa, $idUsuario);
+            }
+
             $this->db->commit();
             return $insertados;
         } catch (\Throwable $e) {
             $this->db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Líneas de resumen adicionales de la última importación (vacío si no hay).
+     */
+    public function getResumenExtra(): array
+    {
+        return $this->resumenExtra;
+    }
+
+    /**
+     * Hoja "Precios" de la plantilla de productos: varios precios por producto
+     * (Mayorista, Distribuidor, etc.) sobre productos_precios.
+     *
+     * Reglas:
+     *  - Si el archivo no trae la hoja (plantilla antigua) o viene vacía, no
+     *    se toca ningún precio.
+     *  - Un producto solo ve reemplazada su lista de precios si aparece en la
+     *    hoja; los que no figuran conservan la suya. Para el que sí figura, la
+     *    hoja es la lista completa (misma semántica que la pestaña Precios del
+     *    módulo y que ProductoRepository::syncPrecios).
+     *  - El producto debe existir en la empresa (puede venir de la hoja Datos
+     *    del mismo archivo, que se procesa antes).
+     */
+    private function procesarPreciosProductos(
+        \PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet,
+        int $idEmpresa,
+        int $idUsuario
+    ): void {
+        $filas = $this->leerHoja($spreadsheet, self::HOJA_PRECIOS);
+        if (empty($filas)) {
+            return;
+        }
+
+        $hoja = self::HOJA_PRECIOS;
+        $porProducto = []; // codigo => ['id' => int, 'precios' => [...], 'nombres' => [nombre_lower => fila]]
+
+        foreach ($filas as $numeroFila => $fila) {
+            $codigo  = $this->campoTexto($fila, 0, 'CODIGO_PRINCIPAL', 50, $numeroFila);
+            $nombre  = $this->campoTexto($fila, 1, 'NOMBRE_PRECIO', 100, $numeroFila);
+            $precioRaw = trim((string)($fila[2] ?? ''));
+            $desde   = $this->interpretarFecha($fila[3] ?? null, 'VALIDO_DESDE', $hoja, $numeroFila);
+            $hasta   = $this->interpretarFecha($fila[4] ?? null, 'VALIDO_HASTA', $hoja, $numeroFila);
+            $estadoRaw = mb_strtolower(trim((string)($fila[5] ?? '')), 'UTF-8');
+
+            if ($codigo === '' || $nombre === '') {
+                throw new Exception("Hoja {$hoja}, fila {$numeroFila}: CODIGO_PRINCIPAL y NOMBRE_PRECIO son obligatorios.");
+            }
+
+            $precioNorm = str_replace(',', '.', $precioRaw);
+            if ($precioRaw === '' || !is_numeric($precioNorm)) {
+                throw new Exception("Hoja {$hoja}, fila {$numeroFila}: PRECIO_SIN_IVA debe ser un número (valor recibido: \"{$precioRaw}\").");
+            }
+            $precio = round((float)$precioNorm, 6);
+            if ($precio < 0) {
+                throw new Exception("Hoja {$hoja}, fila {$numeroFila}: PRECIO_SIN_IVA no puede ser negativo.");
+            }
+
+            if ($desde !== null && $hasta !== null && $hasta < $desde) {
+                throw new Exception("Hoja {$hoja}, fila {$numeroFila}: VALIDO_HASTA ({$hasta}) es anterior a VALIDO_DESDE ({$desde}).");
+            }
+
+            $estado = $estadoRaw === '' || in_array($estadoRaw, ['activo', 'activa', 'si', 'sí', 's', '1', 'true', 'yes'], true);
+            if (!$estado && !in_array($estadoRaw, ['inactivo', 'inactiva', 'no', 'n', '0', 'false'], true)) {
+                throw new Exception("Hoja {$hoja}, fila {$numeroFila}: ESTADO debe ser Activo o Inactivo (valor recibido: \"{$estadoRaw}\").");
+            }
+
+            if (!isset($porProducto[$codigo])) {
+                $stProd = $this->db->prepare(
+                    "SELECT id FROM productos WHERE id_empresa = ? AND codigo = ? AND eliminado = false LIMIT 1"
+                );
+                $stProd->execute([$idEmpresa, $codigo]);
+                $idProducto = (int)$stProd->fetchColumn();
+                if ($idProducto <= 0) {
+                    throw new Exception(
+                        "Hoja {$hoja}, fila {$numeroFila}: No existe un producto con CODIGO_PRINCIPAL \"{$codigo}\" en esta empresa. " .
+                        "Agréguelo en la hoja Datos del mismo archivo o revise el código."
+                    );
+                }
+                $porProducto[$codigo] = ['id' => $idProducto, 'precios' => [], 'nombres' => []];
+            }
+
+            $nombreKey = mb_strtolower($nombre, 'UTF-8');
+            if (isset($porProducto[$codigo]['nombres'][$nombreKey])) {
+                $filaPrevia = $porProducto[$codigo]['nombres'][$nombreKey];
+                throw new Exception(
+                    "Hoja {$hoja}, fila {$numeroFila}: El precio \"{$nombre}\" ya aparece en la fila {$filaPrevia} para el producto \"{$codigo}\". " .
+                    "Cada nombre de precio va una sola vez por producto."
+                );
+            }
+            $porProducto[$codigo]['nombres'][$nombreKey] = $numeroFila;
+            $porProducto[$codigo]['precios'][] = [
+                'nombre_precio' => $nombre,
+                'precio'        => $precio,
+                'valido_desde'  => $desde,
+                'valido_hasta'  => $hasta,
+                'estado'        => $estado,
+            ];
+        }
+
+        // Guardar: misma lógica que la pestaña Precios del módulo de productos.
+        // ProductoRepository usa la conexión compartida (Database::getConnection),
+        // así que escribe dentro de la transacción abierta por procesar().
+        $productoRepo = new ProductoRepository();
+        $totalPrecios = 0;
+        foreach ($porProducto as $codigo => $info) {
+            $antes = $productoRepo->getPrecios($info['id'], $idEmpresa);
+            $productoRepo->syncPrecios($info['id'], $idEmpresa, $info['precios'], $idUsuario);
+            $totalPrecios += count($info['precios']);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'importar_productos_precios_excel',
+                'productos_precios',
+                $info['id'],
+                ['precios' => $antes],
+                ['origen' => 'excel', 'codigo' => $codigo, 'precios' => $info['precios']]
+            );
+        }
+
+        $this->resumenExtra[] = sprintf(
+            'Hoja Precios: %d precio(s) guardado(s) en %d producto(s).',
+            $totalPrecios,
+            count($porProducto)
+        );
+    }
+
+    /**
+     * Convierte una celda de fecha a 'Y-m-d' o null si viene vacía. Acepta
+     * AAAA-MM-DD, DD/MM/AAAA, DD-MM-AAAA y el serial numérico de Excel (cuando
+     * la celda se formateó como fecha en vez de texto).
+     */
+    private function interpretarFecha($valor, string $campo, string $hoja, int $numeroFila): ?string
+    {
+        $texto = trim((string)$valor);
+        if ($texto === '') {
+            return null;
+        }
+
+        if (is_numeric($texto) && (float)$texto > 10000) {
+            // Serial de Excel
+            try {
+                return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float)$texto)->format('Y-m-d');
+            } catch (\Throwable $e) {
+                // cae al mensaje de abajo
+            }
+        }
+
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'Y/m/d', 'd/m/y', 'd-m-y'] as $formato) {
+            $dt = \DateTime::createFromFormat('!' . $formato, $texto);
+            if ($dt !== false && $dt->format($formato) === $texto) {
+                return $dt->format('Y-m-d');
+            }
+        }
+
+        throw new Exception(
+            "Hoja {$hoja}, fila {$numeroFila}: {$campo} no es una fecha válida (valor recibido: \"{$texto}\"). Use el formato AAAA-MM-DD."
+        );
     }
 
     private function getTablaEntidad(string $entidadId): string

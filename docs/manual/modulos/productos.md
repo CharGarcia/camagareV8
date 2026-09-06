@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable
-version: 1.2
+etiquetas: productos, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos
+version: 1.3
 orden: 10
 estado: activo
 ---
@@ -91,6 +91,20 @@ vez, y muestra cuántos se actualizaron y cuántos no tenían movimientos. Un
 usuario sin acceso total solo actualiza los productos que él mismo creó,
 igual que en el listado.
 
+## Varios precios por producto
+
+Además del precio base, en la pestaña **Precios** de la ficha se pueden definir
+otros precios con nombre (Mayorista, Distribuidor, Promoción…), cada uno con
+vigencia opcional (desde / hasta) y estado. Al facturar se elige cuál aplicar.
+Al guardar la ficha se guarda la lista completa de esa pestaña.
+
+Para cargarlos en bloque hay dos caminos: la hoja **Precios** de la plantilla
+de Productos en *Configuración → Importador desde Excel* (guía *Importar datos
+desde Excel*), o el módulo *Carga de Productos por Excel* cuando además se
+quieren cargar variantes, componentes o stock por bodega. En ambos, si un
+producto aparece en la hoja de precios, esa es su lista completa; si no
+aparece, conserva la que tenía.
+
 ## Buscar en el listado
 
 Además del texto libre, el buscador acepta filtros `clave:valor`
@@ -129,6 +143,8 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.3** — Sección *Varios precios por producto* y carga masiva de precios
+  desde la hoja *Precios* del Importador desde Excel.
 - **1.2** — Corregidos los filtros `tipo:`, `estado:`/`status:` y `stock:` del
   buscador: `tipo:bien`/`tipo:servicio` y `estado:activo`/`estado:inactivo` no
   encontraban nada (o rompían la búsqueda) porque comparaban la etiqueta

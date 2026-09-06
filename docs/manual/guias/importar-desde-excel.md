@@ -4,8 +4,8 @@ resumen: Cargar clientes, vendedores, productos, proveedores, unidades de medida
 categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
-etiquetas: importar, excel, xlsx, carga masiva, plantilla, subir datos, migrar, cargar clientes, cargar vendedores, asignar vendedor a clientes, cargar productos, unidades de medida, tipos de medida, importador
-version: 1.1
+etiquetas: importar, excel, xlsx, carga masiva, plantilla, subir datos, migrar, cargar clientes, cargar vendedores, asignar vendedor a clientes, cargar productos, unidades de medida, tipos de medida, importador, varios precios, lista de precios, precios por producto, mayorista
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -87,6 +87,43 @@ activos.
 Las plantillas de clientes descargadas antes de esta versión (sin la columna
 VENDEDOR) siguen funcionando: simplemente no asignan vendedor.
 
+## Productos con varios precios
+
+Además del **precio base** de la hoja Datos, un producto puede tener otros
+precios con nombre (Mayorista, Distribuidor, Promoción…), los mismos que se ven
+en la pestaña *Precios* de la ficha del producto y que se eligen al facturar.
+Para cargarlos, la plantilla de Productos trae una segunda hoja de datos
+llamada **Precios**.
+
+### Columnas de la hoja Precios
+
+| Campo | Obligatorio | Qué significa |
+|-------|-------------|---------------|
+| CODIGO_PRINCIPAL | Sí | Código del producto. Puede estar en la hoja Datos del mismo archivo o ya existir en la empresa |
+| NOMBRE_PRECIO | Sí | Nombre con el que se elige el precio al vender (máximo 100 caracteres). La hoja de consulta *Nombres_Precio* lista los que la empresa ya usa, para escribirlos igual |
+| PRECIO_SIN_IVA | Sí | Valor antes de impuestos |
+| VALIDO_DESDE | No | Fecha desde la que aplica, en formato AAAA-MM-DD |
+| VALIDO_HASTA | No | Fecha hasta la que aplica. No puede ser anterior a VALIDO_DESDE |
+| ESTADO | No | Activo o Inactivo. Vacío equivale a Activo |
+
+### Reglas de la hoja Precios
+
+- La hoja es **opcional**: si se deja vacía, no se toca ningún precio. Las
+  plantillas antiguas sin esta hoja siguen funcionando.
+- **Si un producto aparece en la hoja, esa es su lista completa de precios**: se
+  reemplaza la que tenía. Un producto que no aparece conserva la suya. Es la
+  misma regla que la pestaña Precios de la ficha, donde se guarda la lista
+  entera.
+- Un mismo nombre de precio va **una sola vez por producto** en la hoja.
+- La hoja Datos se procesa primero, así que se pueden crear productos y sus
+  precios en el mismo archivo. Todo va en una sola transacción: si una fila de
+  Precios falla, tampoco se guardan los productos.
+- El resultado indica cuántos precios se guardaron y en cuántos productos.
+
+> Para cargas completas del catálogo (variantes, componentes, stock por bodega,
+> homologaciones) existe el módulo *Carga de Productos por Excel*, que trae una
+> plantilla pre-poblada con todo lo que la empresa ya tiene.
+
 ## Unidades y tipos de medida
 
 Esta entidad carga las dos tablas del catálogo de medidas **en un solo archivo**,
@@ -149,12 +186,22 @@ nombres, abreviaturas o factores del catálogo actual.
   del vendedor en lugar del nombre.
 - **"El vendedor X está inactivo y no puede asignarse"**: actívelo en el módulo
   de Vendedores o deje la celda VENDEDOR vacía.
+- **"Hoja Precios, fila N: No existe un producto con CODIGO_PRINCIPAL X"**: el
+  código no está en la hoja Datos ni en la empresa. Revise que sea el código
+  principal, no el auxiliar ni el de barras.
+- **"El precio X ya aparece en la fila N para el producto Y"**: el mismo
+  nombre de precio está repetido para ese producto. Deje una sola fila.
+- **"VALIDO_DESDE no es una fecha válida"**: escriba la fecha como
+  AAAA-MM-DD (por ejemplo 2026-01-31) y mantenga la celda como texto.
 - **Excel cambió mis códigos**: no reemplace las columnas ni pegue con formato;
   las celdas de la plantilla vienen como texto justamente para que códigos como
   "04" o "M3" no se transformen.
 
 ## Historial de cambios
 
+- **1.2** — La plantilla de *Productos* incorpora la hoja de datos *Precios*
+  (varios precios con nombre por producto, con vigencia y estado) y la hoja de
+  consulta *Nombres_Precio*.
 - **1.1** — Nueva entidad *Vendedores* (crea o actualiza por identificación).
   La plantilla de *Clientes* incorpora la columna opcional VENDEDOR, la hoja de
   consulta *Vendedores* de la empresa y queda atada al establecimiento de
