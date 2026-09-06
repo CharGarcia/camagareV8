@@ -1356,6 +1356,71 @@ class CuentasPorCobrarRepository extends BaseRepository
         return array_values(array_unique(array_merge($idsProducto, array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)))));
     }
 
+    /**
+     * Vista "Por producto": líneas de producto de los documentos del listado, una fila por
+     * documento y producto (varias líneas del mismo producto en un documento se suman), con
+     * cantidad y valor (base de la línea + sus impuestos). Facturas desde ventas_detalle y
+     * recibos desde recibos_venta_detalle; los saldos iniciales no tienen líneas. Si el
+     * listado ya está filtrado por producto (ids o texto), solo devuelve esas líneas, para que
+     * la vista muestre exactamente la cartera de los productos elegidos.
+     *
+     * @return array<int,array{origen:string,id_doc:int,id_producto:?int,codigo:string,nombre:string,cantidad:float,valor:float}>
+     */
+    public function getLineasProductoPorDocumentos(array $idsFacturas, array $idsRecibos, array $filtros = []): array
+    {
+        $idsFacturas = array_values(array_unique(array_filter(array_map('intval', $idsFacturas))));
+        $idsRecibos  = array_values(array_unique(array_filter(array_map('intval', $idsRecibos))));
+        $out = [];
+        $fuentes = [
+            ['FACTURA', 'ventas_detalle',        'id_venta',  'ventas_detalle_impuestos',        'id_venta_detalle',  $idsFacturas, 'lf'],
+            ['RECIBO',  'recibos_venta_detalle', 'id_recibo', 'recibos_venta_detalle_impuestos', 'id_recibo_detalle', $idsRecibos,  'lr'],
+        ];
+        foreach ($fuentes as [$origen, $tabla, $fk, $tablaImp, $fkImp, $ids, $pref]) {
+            if (!$ids) {
+                continue;
+            }
+            $params = [];
+            $inDoc  = $this->phIn($ids, "{$pref}_doc", $params);
+            $where  = "d.{$fk} IN ({$inDoc})";
+            $idsProd = $filtros['id_producto'] ?? '';
+            $idsProd = array_values(array_unique(array_filter(array_map('intval', is_array($idsProd) ? $idsProd : explode(',', (string)$idsProd)))));
+            if ($idsProd) {
+                $where .= " AND d.id_producto IN (" . $this->phIn($idsProd, "{$pref}_prod", $params) . ")";
+            }
+            $txt = trim((string)($filtros['producto'] ?? ''));
+            if ($txt !== '') {
+                $params[":{$pref}_t1"] = '%' . $txt . '%';
+                $params[":{$pref}_t2"] = '%' . $txt . '%';
+                $where .= " AND (d.descripcion ILIKE :{$pref}_t1 OR d.codigo_principal ILIKE :{$pref}_t2)";
+            }
+            $sql = "SELECT '{$origen}' AS origen,
+                           d.{$fk} AS id_doc,
+                           d.id_producto,
+                           COALESCE(NULLIF(TRIM(d.codigo_principal), ''), '') AS codigo,
+                           COALESCE(NULLIF(TRIM(d.descripcion), ''), '(sin descripción)') AS nombre,
+                           SUM(d.cantidad) AS cantidad,
+                           SUM(d.precio_total_sin_impuesto
+                               + COALESCE((SELECT SUM(i.valor) FROM {$tablaImp} i WHERE i.{$fkImp} = d.id), 0)) AS valor
+                    FROM {$tabla} d
+                    WHERE {$where}
+                    GROUP BY 1, 2, 3, 4, 5";
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $l) {
+                $out[] = [
+                    'origen'      => $origen,
+                    'id_doc'      => (int)$l['id_doc'],
+                    'id_producto' => $l['id_producto'] !== null ? (int)$l['id_producto'] : null,
+                    'codigo'      => (string)$l['codigo'],
+                    'nombre'      => (string)$l['nombre'],
+                    'cantidad'    => (float)$l['cantidad'],
+                    'valor'       => (float)$l['valor'],
+                ];
+            }
+        }
+        return $out;
+    }
+
     /** Código y nombre de varios productos (para describir el filtro en PDF/Excel): id => [codigo, nombre]. */
     public function getProductosPorIds(array $idsProducto, int|array $idsEmpresa): array
     {

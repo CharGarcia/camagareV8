@@ -18,6 +18,8 @@ let CXC_catalogos = { puntos: [], conceptos: [], formas: [] };
 let CXC_catalogosCargados = false;
 let CXC_cobroOrigen = 'FACTURA'; // origen del documento en el modal de cobro
 let CXC_agrupado    = false;           // vista agrupada por cliente
+let CXC_vista       = 'detalle';       // 'detalle' | 'agrupado' (por cliente) | 'producto'
+let CXC_lineas      = null;            // líneas de producto de los documentos (solo vista 'producto'; null = no cargadas)
 const CXC_gruposAbiertos = new Set();  // claves de grupos expandidos
 // Consolidado por RUC (fase 1, solo lectura): lo confirma el servidor en cada carga.
 // Las filas de OTRO establecimiento (r.es_hermana) no se cobran ni se notifican desde aquí.
@@ -78,6 +80,8 @@ async function CXC_cargar() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
+        // Vista "Por producto": pide además las líneas de producto de cada documento
+        incluir_lineas: CXC_vista === 'producto' ? '1' : '',
     });
 
     try {
@@ -93,6 +97,9 @@ async function CXC_cargar() {
 
         CXC_datos = data.filas || [];
         CXC_filtradoLocal = [...CXC_datos];
+        // Líneas de producto: vienen solo cuando se pidieron (vista 'producto'); si no, quedan
+        // en null para que al cambiar a esa vista se vuelva a consultar.
+        CXC_lineas = Array.isArray(data.lineas) ? data.lineas : null;
 
         // El servidor decide si el consolidado procede (solo desde la matriz)
         CXC_consolidado = !!data.consolidado;
@@ -138,6 +145,7 @@ function CXC_renderTabla(filas) {
         return;
     }
 
+    if (CXC_vista === 'producto') { CXC_renderAgrupadoProducto(filas); return; }
     if (CXC_agrupado) { CXC_renderAgrupado(filas); return; }
 
     label.textContent = filas.length + ' registros';
@@ -306,16 +314,97 @@ function CXC_toggleGrupo(el) {
 
 /* Cambia entre vista detallada y agrupada (llamado desde los botones de la vista). */
 function CXC_setVista(modo) {
-    CXC_agrupado = (modo === 'agrupado');
-    const bDet = document.getElementById('cxc-btn-detalle');
-    const bGrp = document.getElementById('cxc-btn-agrupado');
-    if (bDet && bGrp) {
-        bDet.classList.toggle('btn-success',         !CXC_agrupado);
-        bDet.classList.toggle('btn-outline-success',  CXC_agrupado);
-        bGrp.classList.toggle('btn-success',          CXC_agrupado);
-        bGrp.classList.toggle('btn-outline-success', !CXC_agrupado);
+    CXC_vista    = ['detalle', 'agrupado', 'producto'].includes(modo) ? modo : 'detalle';
+    CXC_agrupado = (CXC_vista === 'agrupado');
+    const botones = { detalle: 'cxc-btn-detalle', agrupado: 'cxc-btn-agrupado', producto: 'cxc-btn-producto' };
+    for (const [m, id] of Object.entries(botones)) {
+        const b = document.getElementById(id);
+        if (!b) continue;
+        b.classList.toggle('btn-success',          m === CXC_vista);
+        b.classList.toggle('btn-outline-success',  m !== CXC_vista);
+    }
+    // La vista por producto necesita las líneas de cada documento: si aún no se cargaron
+    // (la carga normal no las trae), se vuelve a consultar el listado pidiéndolas.
+    if (CXC_vista === 'producto' && CXC_lineas === null) {
+        CXC_cargar();
+        return;
     }
     CXC_renderTabla(CXC_filtradoLocal);
+}
+
+/* ════════════════════════════════════════════════════
+   VISTA AGRUPADA POR PRODUCTO
+   Un grupo por producto (código; si no hay, nombre) con
+   los documentos pendientes que lo contienen. Un documento
+   con varios productos aparece en cada uno; los saldos
+   iniciales no tienen líneas y no entran en esta vista.
+════════════════════════════════════════════════════ */
+function CXC_renderAgrupadoProducto(filas) {
+    const tbody = document.getElementById('cxc-tbody');
+    const label = document.getElementById('cxc-count-label');
+
+    const visibles = new Map(filas.map(r => [CXC_keyFila(r), r]));
+    const mapa = new Map();
+    for (const l of (CXC_lineas || [])) {
+        const keyDoc = `${l.origen}:${l.id_doc}`;
+        const r = visibles.get(keyDoc);
+        if (!r) continue;
+        const pk = l.codigo ? 'c:' + l.codigo : 'n:' + l.nombre;
+        let g = mapa.get(pk);
+        if (!g) {
+            g = { key: pk, codigo: l.codigo || '', nombre: l.nombre || '(sin descripción)', cantidad: 0, valor: 0,
+                  total: 0, cobrado: 0, saldo: 0, docs: new Map() };
+            mapa.set(pk, g);
+        }
+        g.cantidad += parseFloat(l.cantidad) || 0;
+        g.valor    += parseFloat(l.valor)    || 0;
+        if (!g.docs.has(keyDoc)) {
+            g.docs.set(keyDoc, r);
+            g.total   += parseFloat(r.total) || 0;
+            g.cobrado += CXC_totalCobrado(r);
+            g.saldo   += parseFloat(r.saldo) || 0;
+        }
+    }
+    const grupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+    const sinLineas = filas.filter(r => r.origen === 'SALDO_INICIAL').length;
+
+    label.textContent = `${filas.length} docs · ${grupos.length} producto${grupos.length !== 1 ? 's' : ''}`;
+
+    if (!grupos.length) {
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+            <i class="bi bi-box-seam fs-3 d-block mb-2 text-success opacity-40"></i>
+            No hay documentos con líneas de producto para los filtros aplicados.
+        </td></tr>`;
+        return;
+    }
+
+    let html = '';
+    for (const g of grupos) {
+        const abierto = CXC_gruposAbiertos.has(g.key);
+        const chev = abierto ? 'bi-chevron-down' : 'bi-chevron-right';
+        html += `
+        <tr class="cxc-grp-row" data-gkey="${esc(g.key)}" onclick="CXC_toggleGrupo(this)" style="cursor:pointer;background:#eef7ff;">
+            <td class="text-center p-1"><i class="bi ${chev} text-primary"></i></td>
+            <td colspan="5" class="fw-bold" style="font-size:.82rem;">
+                ${esc(g.nombre)}${g.codigo ? ` <small class="text-muted fw-normal">${esc(g.codigo)}</small>` : ''}
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2 fw-normal">${g.docs.size} doc${g.docs.size !== 1 ? 's' : ''}</span>
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 ms-1 fw-normal" title="Cantidad del producto en los documentos">cant. ${CXC_fmt(g.cantidad)}</span>
+            </td>
+            <td class="text-end fw-semibold" style="font-size:.8rem;" title="Valor del producto en los documentos (Total: $${CXC_fmt(g.total)})">$${CXC_fmt(g.valor)}</td>
+            <td class="text-end fw-semibold text-success" style="font-size:.8rem;" title="Cobrado de los documentos">$${CXC_fmt(g.cobrado)}</td>
+            <td class="text-end fw-bold pe-3" style="font-size:.82rem;color:${g.saldo > 0 ? '#dc3545' : '#198754'};" title="Saldo de los documentos que contienen el producto">$${CXC_fmt(g.saldo)}</td>
+            <td colspan="2"></td>
+        </tr>`;
+        if (abierto) {
+            for (const r of g.docs.values()) html += CXC_filaHtml(r);
+        }
+    }
+    if (sinLineas > 0) {
+        html += `<tr><td colspan="11" class="text-muted small py-2 text-center">
+            ${sinLineas} saldo${sinLineas !== 1 ? 's' : ''} inicial${sinLineas !== 1 ? 'es' : ''} sin líneas de producto no se muestra${sinLineas !== 1 ? 'n' : ''} en esta vista.
+        </td></tr>`;
+    }
+    tbody.innerHTML = html;
 }
 
 /* ════════════════════════════════════════════════════
@@ -1143,6 +1232,7 @@ function CXC_exportarExcel() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
+        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : '',
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`, '_blank');
 }
@@ -1158,6 +1248,7 @@ function CXC_exportarPDF() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
+        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : '',
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`, '_blank');
 }

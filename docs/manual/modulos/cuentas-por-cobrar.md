@@ -102,6 +102,27 @@ productos filtrados.
 - Se combina con el resto de filtros (estado, fechas, cliente, vendedor y
   establecimientos).
 
+### Vista "Por producto"
+
+Junto a los botones **Detallado** y **Por cliente** está **Por producto**:
+muestra la cartera agrupada por producto, un grupo por código (o por nombre si
+la línea no tiene código), igual que la vista por cliente. Cada grupo indica
+cuántos documentos pendientes contienen el producto, la **cantidad** vendida en
+ellos, el **valor del producto** en esos documentos (base más impuestos de la
+línea), y el **cobrado** y el **saldo** de los documentos. Al desplegar el grupo
+aparecen los documentos con sus acciones normales (cobrar, historial, correo).
+
+- Sin filtro de producto, la vista lista **todos los productos** presentes en la
+  cartera pendiente. Con productos elegidos o texto escrito, solo esos.
+- Un documento con varios productos aparece en cada uno de ellos, así que el
+  saldo de los grupos no se suma entre sí.
+- Los saldos iniciales no tienen líneas y no entran en esta vista; se avisa al
+  pie cuántos quedaron fuera.
+- **PDF y Excel** en esta vista salen agrupados por producto: el PDF con una
+  cabecera por producto y sus documentos debajo, y el Excel con una fila por
+  producto y documento (producto, código, cantidad, valor del producto,
+  documento, cliente, fechas, total, cobrado y saldo).
+
 ## Consolidado de establecimientos (solo desde la matriz)
 
 Cuando un mismo RUC tiene varios establecimientos registrados como empresas
@@ -243,9 +264,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
-- **1.9** — Nuevo filtro **Producto** (nombre o código de las líneas) para ver
-  y exportar la cartera de un producto: aplica a facturas y recibos; los saldos
-  iniciales quedan fuera mientras el filtro esté activo.
+- **1.9** — Buscador **Producto** con lista y etiquetas (igual que Cliente) y
+  nueva vista **Por producto**: la cartera agrupada por producto con cantidad,
+  valor del producto, cobrado y saldo de los documentos, exportable a PDF y
+  Excel. Aplica a facturas y recibos; los saldos iniciales no tienen líneas y
+  quedan fuera con este filtro o en esta vista.
 - **1.8** — Consolidado, fase 2: desde la matriz ya se puede **registrar el
   cobro** de una factura, recibo o saldo inicial de otra sucursal. El ingreso se
   registra en los libros de la sucursal dueña (sus series, secuencial, conceptos,

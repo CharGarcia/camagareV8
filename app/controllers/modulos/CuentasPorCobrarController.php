@@ -124,13 +124,222 @@ class CuentasPorCobrarController extends BaseModuloController
         }
         unset($f);
 
+        // Vista "Por producto": líneas de producto de los documentos listados (solo cuando la
+        // vista las pide, para no cargar el detalle en cada consulta normal).
+        $lineas = null;
+        if (!empty($_REQUEST['incluir_lineas'])) {
+            $lineas = $this->lineasProductoDe($filas, $filtros);
+        }
+
         $this->jsonSuccess([
             'filas'            => $filas,
             'stats'            => $stats,
             'antiguedad'       => $antiguedad,
             'consolidado'      => $consolidado,
             'establecimientos' => count($idsEmpresa),
+            'lineas'           => $lineas,
         ]);
+    }
+
+    /** Líneas de producto de las facturas y recibos del listado (ver repo->getLineasProductoPorDocumentos). */
+    private function lineasProductoDe(array $filas, array $filtros): array
+    {
+        $idsF = [];
+        $idsR = [];
+        foreach ($filas as $f) {
+            if (($f['origen'] ?? '') === 'FACTURA') {
+                $idsF[] = (int)$f['id'];
+            } elseif (($f['origen'] ?? '') === 'RECIBO') {
+                $idsR[] = (int)$f['id'];
+            }
+        }
+        return $this->repo->getLineasProductoPorDocumentos($idsF, $idsR, $filtros);
+    }
+
+    /**
+     * Agrupa el listado por producto (vista "Por producto" en PDF/Excel): un grupo por código
+     * (o nombre si no hay código) con cantidad, valor del producto y los documentos que lo
+     * contienen, cada uno con su total, cobrado y saldo. Un documento con varios productos
+     * aparece en cada uno de ellos; los saldos iniciales no tienen líneas y quedan fuera.
+     */
+    private function agruparPorProducto(array $filas, array $filtros): array
+    {
+        $porKey = [];
+        foreach ($filas as $f) {
+            $porKey[($f['origen'] ?? 'FACTURA') . ':' . (int)$f['id']] = $f;
+        }
+        $grupos = [];
+        foreach ($this->lineasProductoDe($filas, $filtros) as $l) {
+            $keyDoc = $l['origen'] . ':' . $l['id_doc'];
+            if (!isset($porKey[$keyDoc])) {
+                continue;
+            }
+            $pk = $l['codigo'] !== '' ? 'c:' . $l['codigo'] : 'n:' . $l['nombre'];
+            if (!isset($grupos[$pk])) {
+                $grupos[$pk] = ['codigo' => $l['codigo'], 'nombre' => $l['nombre'], 'cantidad' => 0.0, 'valor' => 0.0,
+                                'total' => 0.0, 'cobrado' => 0.0, 'saldo' => 0.0, 'docs' => []];
+            }
+            $g = &$grupos[$pk];
+            $g['cantidad'] += $l['cantidad'];
+            $g['valor']    += $l['valor'];
+            if (!isset($g['docs'][$keyDoc])) {
+                $r = $porKey[$keyDoc];
+                $cobrado = (float)($r['total_cobrado'] ?? 0) + (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
+                $g['docs'][$keyDoc] = ['fila' => $r, 'cantidad' => 0.0, 'valor' => 0.0];
+                $g['total']   += (float)$r['total'];
+                $g['cobrado'] += $cobrado;
+                $g['saldo']   += (float)$r['saldo'];
+            }
+            $g['docs'][$keyDoc]['cantidad'] += $l['cantidad'];
+            $g['docs'][$keyDoc]['valor']    += $l['valor'];
+            unset($g);
+        }
+        usort($grupos, static fn ($a, $b) => $b['saldo'] <=> $a['saldo']);
+        return array_values($grupos);
+    }
+
+    /** Excel de la vista "Por producto": una fila por producto y documento. */
+    private function exportExcelPorProducto(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
+    {
+        $grupos = $this->agruparPorProducto($filas, $filtros);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = ['Vista' => 'Por producto'] + $this->describirFiltros($idsEmpresa, $filtros);
+
+            $headers = ['Producto', 'Código', 'Cant.', 'Valor Producto', 'Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Total Doc.', 'Cobrado', 'Saldo'];
+            $formatos = array_fill_keys([3, 4, 11, 12, 13], '0.00');
+            if ($consolidado) {
+                array_unshift($headers, 'Estab.');
+                $formatos = array_fill_keys([4, 5, 12, 13, 14], '0.00');
+            }
+            $exportData = [];
+            foreach ($grupos as $g) {
+                foreach ($g['docs'] as $d) {
+                    $r = $d['fila'];
+                    $cobrado = (float)($r['total_cobrado'] ?? 0) + (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
+                    $exportData[] = [
+                        ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
+                        $g['nombre'], $g['codigo'],
+                        round($d['cantidad'], 2), round($d['valor'], 2),
+                        (string)($r['numero_factura'] ?? ''), $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
+                        (string)($r['cliente_nombre'] ?? ''), (string)($r['cliente_ruc'] ?? ''),
+                        !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                        !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                        round((float)$r['total'], 2), round($cobrado, 2), round((float)$r['saldo'], 2),
+                    ];
+                }
+            }
+            (new \App\Services\ReportService())->exportToExcel('cuentas_por_cobrar_producto', $headers, $exportData, 'Cuentas por Cobrar por Producto', $nombreEmpresa, $filtrosTxt, $formatos);
+            exit;
+        } catch (\Throwable $e) {
+            if (!headers_sent()) {
+                $_SESSION['cuentas_por_cobrar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . $this->getRutaModulo());
+            }
+            exit;
+        }
+    }
+
+    /** PDF de la vista "Por producto": una cabecera por producto y debajo sus documentos. */
+    private function exportPdfPorProducto(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
+    {
+        $grupos = $this->agruparPorProducto($filas, $filtros);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = ['Vista' => 'Por producto'] + $this->describirFiltros($idsEmpresa, $filtros);
+            $e = static fn ($v): string => htmlspecialchars((string)$v);
+
+            $totalValor = 0.0; $totalSaldo = 0.0;
+            $cuerpo = '';
+            foreach ($grupos as $g) {
+                $totalValor += $g['valor'];
+                $totalSaldo += $g['saldo'];
+                $cuerpo .= "<tr style='background:#e9ecef;font-weight:bold;'>
+                    <td colspan='4'>" . $e($g['nombre']) . ($g['codigo'] !== '' ? " <small>(" . $e($g['codigo']) . ")</small>" : '') . " <small>· " . count($g['docs']) . " doc.</small></td>
+                    <td class='text-end'>" . number_format($g['cantidad'], 2) . "</td>
+                    <td class='text-end'>\$" . number_format($g['valor'], 2) . "</td>
+                    <td class='text-end'>\$" . number_format($g['total'], 2) . "</td>
+                    <td class='text-end'>\$" . number_format($g['cobrado'], 2) . "</td>
+                    <td class='text-end'>\$" . number_format($g['saldo'], 2) . "</td>
+                </tr>";
+                foreach ($g['docs'] as $d) {
+                    $r = $d['fila'];
+                    $cobrado = (float)($r['total_cobrado'] ?? 0) + (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
+                    $est = $consolidado && !empty($r['establecimiento']) ? "<small>[" . $e($r['establecimiento']) . "]</small> " : '';
+                    $cuerpo .= "<tr>
+                        <td>{$est}" . $e($r['numero_factura'] ?? '') . "</td>
+                        <td class='text-center'>" . $this->getOrigenLabel($r['origen'] ?? 'FACTURA') . "</td>
+                        <td>" . $e($r['cliente_nombre'] ?? '') . "</td>
+                        <td class='text-center'>" . (!empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—') . "</td>
+                        <td class='text-end'>" . number_format($d['cantidad'], 2) . "</td>
+                        <td class='text-end'>\$" . number_format($d['valor'], 2) . "</td>
+                        <td class='text-end'>\$" . number_format((float)$r['total'], 2) . "</td>
+                        <td class='text-end'>\$" . number_format($cobrado, 2) . "</td>
+                        <td class='text-end' style='font-weight:bold;'>\$" . number_format((float)$r['saldo'], 2) . "</td>
+                    </tr>";
+                }
+            }
+
+            ob_start();
+            ?>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
+                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
+                .text-end { text-align: right; } .text-center { text-align: center; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
+                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
+                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; } table.filtros td.filtro-val { width: 88%; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <div class="header">
+                <h2><?= $e($nombreEmpresa) ?></h2>
+                <h3>Cuentas por Cobrar por Producto</h3>
+                <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
+            </div>
+            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
+                <?php foreach ($filtrosTxt as $lbl => $val): ?>
+                <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
+                <?php endforeach; ?>
+            </table>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:15%;">Documento</th>
+                        <th style="width:8%;">Origen</th>
+                        <th style="width:24%;">Cliente</th>
+                        <th style="width:10%;">F. Venc.</th>
+                        <th style="width:7%;">Cant.</th>
+                        <th style="width:9%;">Valor Prod.</th>
+                        <th style="width:9%;">Total Doc.</th>
+                        <th style="width:9%;">Cobrado</th>
+                        <th style="width:9%;">Saldo</th>
+                    </tr>
+                </thead>
+                <tbody><?= $cuerpo ?: "<tr><td colspan='9' class='text-center'>Sin documentos con líneas de producto para los filtros aplicados.</td></tr>" ?></tbody>
+                <tfoot>
+                    <tr style="background:#f8f9fa;font-weight:bold;">
+                        <td colspan="5" class="text-end">TOTALES (<?= count($grupos) ?> productos):</td>
+                        <td class="text-end">$<?= number_format($totalValor, 2) ?></td>
+                        <td colspan="2" class="text-end"><small>Los saldos se repiten en cada producto del documento</small></td>
+                        <td class="text-end">$<?= number_format($totalSaldo, 2) ?></td>
+                    </tr>
+                </tfoot>
+            </table>
+            </page>
+            <?php
+            $html     = ob_get_clean();
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($html);
+            $html2pdf->output('CuentasPorCobrar_Producto_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
     }
 
     /**
@@ -1219,6 +1428,12 @@ $plantillasFiltradas = [];
 
         $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
 
+        // Vista "Por producto": mismo listado, agrupado por producto (una fila por producto y documento)
+        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PRODUCTO') {
+            $this->exportExcelPorProducto($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
+            return;
+        }
+
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
@@ -1284,6 +1499,13 @@ $plantillasFiltradas = [];
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
         $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
+
+        // Vista "Por producto": cabecera por producto y debajo sus documentos
+        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PRODUCTO') {
+            $this->exportPdfPorProducto($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
+            return;
+        }
+
         $stats = $this->repo->getEstadisticas($idsEmpresa, $filtros);
 
         try {

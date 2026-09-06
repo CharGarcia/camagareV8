@@ -211,6 +211,9 @@
                         <button type="button" id="cxc-btn-agrupado" class="btn btn-outline-success" onclick="CXC_setVista('agrupado')" title="Agrupar facturas por cliente">
                             <i class="bi bi-people"></i> Por cliente
                         </button>
+                        <button type="button" id="cxc-btn-producto" class="btn btn-outline-success" onclick="CXC_setVista('producto')" title="Agrupar la cartera por producto: qué documentos pendientes contienen cada producto">
+                            <i class="bi bi-box-seam"></i> Por producto
+                        </button>
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
