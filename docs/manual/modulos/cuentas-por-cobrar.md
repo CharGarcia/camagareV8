@@ -80,13 +80,20 @@ asignado a cada factura o recibo (vacía en los saldos iniciales).
 
 ## Filtrar por producto
 
-El filtro **Producto** de la tarjeta de filtros acota la cartera a los
-documentos que tienen al menos una línea cuyo **nombre o código** contenga el
-texto escrito (por ejemplo, "ACEITE" o "PRD-001"). Sirve para ver qué se debe
-por un producto o una familia de productos y para sacar el PDF o el Excel de esa
-cartera: el encabezado de ambos indica el producto filtrado.
+El buscador **Producto** de la tarjeta de filtros funciona como el de Cliente:
+al escribir dos o más letras aparece la lista de productos de la empresa (por
+nombre o código) y al elegir uno queda como una etiqueta; se pueden elegir
+varios. La cartera se acota a los documentos que tienen al menos una línea de
+ese producto. Sirve para ver qué se debe por un producto o una familia y para
+sacar el PDF o el Excel de esa cartera: el encabezado de ambos indica los
+productos filtrados.
 
+- Si se escribe un texto y se presiona **Enter** sin elegir de la lista, se
+  filtra por ese texto sobre el **nombre o código de las líneas** (útil para
+  familias: "ACEITE" trae todos los aceites).
 - Aplica a **facturas y recibos de venta**, buscando en sus líneas de detalle.
+- En el consolidado de establecimientos, el producto elegido se cruza con los
+  productos de las sucursales por **código**.
 - Los **saldos iniciales** no tienen líneas, así que mientras haya un producto
   escrito quedan fuera del listado, de las tarjetas y del gráfico de antigüedad
   (igual que ocurre con el filtro Vendedor).

@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
+    CXC_initBuscadorProductos();
 });
 
 /* ════════════════════════════════════════════════════
@@ -74,7 +75,8 @@ async function CXC_cargar() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value  || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
-        producto:    (document.getElementById('cxc-producto')?.value || '').trim(),
+        id_producto: CXC_getProductosSeleccionados(),
+        producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
     });
 
@@ -1014,6 +1016,89 @@ function CXC_getClientesSeleccionados() {
 }
 
 /* ════════════════════════════════════════════════════
+   BUSCADOR DE PRODUCTOS (filtro por producto: lista con
+   sugerencias y chips, igual que el de clientes)
+════════════════════════════════════════════════════ */
+let CXC_productosSeleccionados = []; // [{id, codigo, nombre}]
+
+function CXC_initBuscadorProductos() {
+    const input = document.getElementById('cxc-search-producto');
+    const drop  = document.getElementById('cxc-dropdown-productos');
+    if (!input || !drop) return;
+
+    let timer;
+    input.addEventListener('input', () => {
+        clearTimeout(timer);
+        const q = input.value.trim();
+        if (q.length < 2) { drop.classList.add('d-none'); return; }
+        timer = setTimeout(() => CXC_buscarProductos(q), 280);
+    });
+    // Enter sin elegir de la lista: filtra por el texto escrito (nombre o código de la línea)
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); drop.classList.add('d-none'); CXC_cargar(); }
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('#cxc-search-producto') && !e.target.closest('#cxc-dropdown-productos')) {
+            drop.classList.add('d-none');
+        }
+    });
+}
+
+async function CXC_buscarProductos(q) {
+    const drop = document.getElementById('cxc-dropdown-productos');
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getProductosAjax?q=${encodeURIComponent(q)}&alcance=${CXC_getAlcance()}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await r.json();
+        const list = data.productos || [];
+        if (!list.length) {
+            drop.innerHTML = '<div class="list-group-item text-muted small py-1">Sin resultados (Enter filtra por el texto escrito)</div>';
+        } else {
+            drop.innerHTML = list.map(p => `
+                <button type="button" class="list-group-item list-group-item-action py-1 small"
+                        onclick="CXC_agregarProducto(${p.id}, '${esc(p.codigo)}', '${esc(p.nombre)}')">
+                    <strong>${esc(p.nombre)}</strong> <span class="text-muted">${esc(p.codigo)}</span>
+                </button>`).join('');
+        }
+        drop.classList.remove('d-none');
+    } catch {}
+}
+
+function CXC_agregarProducto(id, codigo, nombre) {
+    const drop = document.getElementById('cxc-dropdown-productos');
+    if (!CXC_productosSeleccionados.find(p => p.id === id)) {
+        CXC_productosSeleccionados.push({ id, codigo, nombre });
+    }
+    // Al elegir de la lista, el texto libre se limpia: manda el producto elegido
+    document.getElementById('cxc-search-producto').value = '';
+    drop.classList.add('d-none');
+    CXC_renderChipsProductos();
+    CXC_cargar();
+}
+
+function CXC_renderChipsProductos() {
+    const cont = document.getElementById('cxc-chips-producto');
+    if (!cont) return;
+    cont.innerHTML = CXC_productosSeleccionados.map(p => `
+        <span style="display:inline-flex;align-items:center;gap:4px;background:#e3f2fd;color:#0d47a1;border:1px solid #90caf9;border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:500;" title="${esc(p.codigo)}">
+            ${esc(p.nombre)}
+            <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem;"
+                    onclick="CXC_quitarProducto(${p.id})"></button>
+        </span>`).join('');
+}
+
+function CXC_quitarProducto(id) {
+    CXC_productosSeleccionados = CXC_productosSeleccionados.filter(p => p.id !== id);
+    CXC_renderChipsProductos();
+    CXC_cargar();
+}
+
+function CXC_getProductosSeleccionados() {
+    return CXC_productosSeleccionados.map(p => p.id).join(',');
+}
+
+/* ════════════════════════════════════════════════════
    LIMPIAR FILTROS
 ════════════════════════════════════════════════════ */
 function CXC_limpiarFiltros() {
@@ -1030,8 +1115,10 @@ function CXC_limpiarFiltros() {
     if (selVend) selVend.value = '';
     const selAlc = document.getElementById('cxc-alcance');
     if (selAlc) selAlc.value = 'ESTABLECIMIENTO';
-    const inpProd = document.getElementById('cxc-producto');
+    const inpProd = document.getElementById('cxc-search-producto');
     if (inpProd) inpProd.value = '';
+    CXC_productosSeleccionados = [];
+    CXC_renderChipsProductos();
 
     CXC_clientesSeleccionados = [];
     CXC_renderChipsClientes();
@@ -1053,7 +1140,8 @@ function CXC_exportarExcel() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
-        producto:    (document.getElementById('cxc-producto')?.value || '').trim(),
+        id_producto: CXC_getProductosSeleccionados(),
+        producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`, '_blank');
@@ -1067,7 +1155,8 @@ function CXC_exportarPDF() {
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
-        producto:    (document.getElementById('cxc-producto')?.value || '').trim(),
+        id_producto: CXC_getProductosSeleccionados(),
+        producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`, '_blank');

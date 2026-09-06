@@ -9,7 +9,8 @@
     .badge-proxima  { background:rgba(255,193,7,.15);  color:#856404; border:1px solid rgba(255,193,7,.35); }
     .badge-pagada   { background:rgba(108,117,125,.12);color:#6c757d; border:1px solid rgba(108,117,125,.25); }
     /* Evita que el contenedor de chips (vacío hasta que se elige un cliente) desalinee la fila de filtros */
-    #cxc-chips-cliente:empty { margin-top:0; }
+    #cxc-chips-cliente:empty,
+    #cxc-chips-producto:empty { margin-top:0; }
     /* Altura idéntica y explícita para todos los controles de filtros (selects, inputs, buscador y botones),
        para que queden alineados sin depender de que cada variante -sm de Bootstrap renderice igual. */
     #form-filtros-cxc .form-select,
@@ -69,11 +70,18 @@
                     </select>
                 </div>
 
-                <!-- Producto: nombre o código de las líneas (facturas y recibos; los saldos iniciales no tienen líneas) -->
-                <div>
+                <!-- Producto: buscador con lista (nombre o código); se filtra por las líneas de facturas y recibos.
+                     Los saldos iniciales no tienen líneas y quedan fuera mientras haya un producto elegido o escrito. -->
+                <div class="position-relative" style="width:260px;">
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
-                    <input type="text" id="cxc-producto" name="producto" class="form-control form-control-sm shadow-none border" style="width:180px;"
-                           placeholder="Nombre o código..." autocomplete="off" onchange="CXC_cargar()">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-box-seam"></i></span>
+                        <input type="text" id="cxc-search-producto" class="form-control border-start-0 px-1 shadow-none"
+                               placeholder="Buscar producto..." autocomplete="off">
+                    </div>
+                    <div id="cxc-chips-producto" class="d-flex flex-wrap gap-1 mt-1"></div>
+                    <div id="cxc-dropdown-productos" class="list-group shadow position-absolute d-none"
+                         style="z-index:1050;width:100%;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
                 </div>
 
                 <?php if (!empty($puedeConsolidar)): ?>

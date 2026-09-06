@@ -158,6 +158,11 @@ class CuentasPorCobrarController extends BaseModuloController
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
             $filtros['id_cliente'] = $this->repo->expandirClientesPorIdentificacion($raw, $idsEmpresa);
         }
+        if ($consolidado && !empty($filtros['id_producto'])) {
+            // `productos` también es por establecimiento: se cruza por código
+            $raw = is_array($filtros['id_producto']) ? $filtros['id_producto'] : explode(',', (string)$filtros['id_producto']);
+            $filtros['id_producto'] = $this->repo->expandirProductosPorCodigo($raw, $idsEmpresa);
+        }
         return [$idsEmpresa, $consolidado];
     }
 
@@ -1181,6 +1186,26 @@ $plantillasFiltradas = [];
         $this->jsonSuccess(['clientes' => $this->repo->buscarClientes($idsEmpresa, $idEmpresa, $q)]);
     }
 
+    /**
+     * Buscador del filtro Producto (nombre o código). En consolidado busca en todos los
+     * establecimientos del grupo y devuelve una fila por código.
+     */
+    public function getProductosAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+
+        if (strlen($q) < 2) {
+            $this->jsonSuccess(['productos' => []]);
+            return;
+        }
+
+        $filtros = ['alcance' => strtoupper(trim((string)($_GET['alcance'] ?? '')))];
+        [$idsEmpresa] = $this->resolverAlcance($idEmpresa, $filtros);
+        $this->jsonSuccess(['productos' => $this->repo->buscarProductos($idsEmpresa, $idEmpresa, $q)]);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // EXPORTACIÓN EXCEL
     // ─────────────────────────────────────────────────────────────────────
@@ -1415,6 +1440,9 @@ $plantillasFiltradas = [];
             // Texto del producto (nombre o código de las líneas del documento). Con este
             // filtro los saldos iniciales quedan fuera: no tienen líneas de detalle.
             'producto'    => trim((string)($_REQUEST['producto'] ?? '')),
+            // Productos elegidos en el buscador (ids separados por coma); en consolidado se
+            // expanden a los hermanos con el mismo código (ver resolverAlcance()).
+            'id_producto' => $_REQUEST['id_producto'] ?? '',
             // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
             // solo se honra desde la matriz — ver resolverAlcance()).
             'alcance'     => strtoupper(trim((string)($_REQUEST['alcance'] ?? ''))),
@@ -1494,10 +1522,40 @@ $plantillasFiltradas = [];
             'Tipo de documento' => $tipoDocLbl[$filtros['tipo_doc'] ?? 'TODOS'] ?? 'Todos',
             'Estado'            => $estadoLbl[$filtros['estado'] ?? 'PENDIENTES'] ?? (string)($filtros['estado'] ?? ''),
             'Vendedor'          => $vendedorTxt,
-            'Producto'          => trim((string)($filtros['producto'] ?? '')) !== '' ? (string)$filtros['producto'] : 'Todos',
+            'Producto'          => $this->describirProductos($filtros, $idsEmpresa),
             'Período'           => $periodo,
             'Cliente'           => $clienteTxt,
         ];
+    }
+
+    /**
+     * Texto del filtro Producto para PDF/Excel: productos elegidos (una vez por código) y,
+     * si además hay texto libre, se agrega entre comillas.
+     */
+    private function describirProductos(array $filtros, array $idsEmpresa): string
+    {
+        $partes = [];
+        $ids = $filtros['id_producto'] ?? '';
+        $ids = array_values(array_unique(array_filter(array_map('intval', is_array($ids) ? $ids : explode(',', (string)$ids)))));
+        if ($ids) {
+            $vistos = [];
+            foreach ($this->repo->getProductosPorIds($ids, $idsEmpresa) as $id => $p) {
+                $clave = $p['codigo'] !== '' ? 'c:' . $p['codigo'] : 'id:' . $id;
+                if (isset($vistos[$clave])) {
+                    continue;
+                }
+                $vistos[$clave] = true;
+                $partes[] = trim(($p['codigo'] !== '' ? $p['codigo'] . ' - ' : '') . $p['nombre']);
+            }
+            if (!$partes) {
+                $partes = array_map(static fn ($i) => "#{$i}", $ids);
+            }
+        }
+        $txt = trim((string)($filtros['producto'] ?? ''));
+        if ($txt !== '') {
+            $partes[] = "\"{$txt}\"";
+        }
+        return $partes ? implode(', ', $partes) : 'Todos';
     }
 
     /** Etiqueta legible del origen de una fila del listado unificado. */

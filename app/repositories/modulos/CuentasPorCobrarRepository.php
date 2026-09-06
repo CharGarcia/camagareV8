@@ -255,7 +255,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         // Tampoco aplican con el filtro Producto: un saldo inicial no tiene líneas de detalle.
         return in_array($this->getTipoDoc($filtros), ['TODOS', 'SALDO_INICIAL'], true)
             && empty($filtros['id_vendedor'])
-            && trim((string)($filtros['producto'] ?? '')) === '';
+            && !$this->tieneFiltroProducto($filtros);
     }
 
     /**
@@ -1258,17 +1258,122 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     private function condProducto(string $tablaDetalle, string $fk, string $aliasCab, array $filtros, array &$params, string $prefijo): string
     {
-        $txt = trim((string)($filtros['producto'] ?? ''));
-        if ($txt === '') {
-            return '';
+        $sql = '';
+        // (a) Productos elegidos en el buscador (ids; en consolidado ya vienen expandidos por código)
+        $ids = $filtros['id_producto'] ?? '';
+        $ids = array_values(array_unique(array_filter(array_map('intval', is_array($ids) ? $ids : explode(',', (string)$ids)))));
+        if ($ids) {
+            $in = $this->phIn($ids, "{$prefijo}_id", $params);
+            $sql .= " AND EXISTS (
+                    SELECT 1 FROM {$tablaDetalle} dpi
+                    WHERE dpi.{$fk} = {$aliasCab}.id AND dpi.id_producto IN ({$in})
+                )";
         }
-        $params[":{$prefijo}_txt1"] = '%' . $txt . '%';
-        $params[":{$prefijo}_txt2"] = '%' . $txt . '%';
-        return " AND EXISTS (
+        // (b) Texto libre escrito sin elegir de la lista: nombre o código de la línea
+        $txt = trim((string)($filtros['producto'] ?? ''));
+        if ($txt !== '') {
+            $params[":{$prefijo}_txt1"] = '%' . $txt . '%';
+            $params[":{$prefijo}_txt2"] = '%' . $txt . '%';
+            $sql .= " AND EXISTS (
                     SELECT 1 FROM {$tablaDetalle} dp
                     WHERE dp.{$fk} = {$aliasCab}.id
                       AND (dp.descripcion ILIKE :{$prefijo}_txt1 OR dp.codigo_principal ILIKE :{$prefijo}_txt2)
                 )";
+        }
+        return $sql;
+    }
+
+    /** ¿Hay filtro de producto activo (ids elegidos o texto libre)? */
+    public function tieneFiltroProducto(array $filtros): bool
+    {
+        $ids = $filtros['id_producto'] ?? '';
+        $ids = array_filter(array_map('intval', is_array($ids) ? $ids : explode(',', (string)$ids)));
+        return !empty($ids) || trim((string)($filtros['producto'] ?? '')) !== '';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PRODUCTOS (buscador del filtro)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Buscador del filtro Producto (nombre o código). Con varios establecimientos devuelve
+     * UNA fila por código (prefiere la de la empresa activa); el filtro luego se expande a
+     * los productos hermanos con expandirProductosPorCodigo().
+     */
+    public function buscarProductos(int|array $idsEmpresa, int $idEmpresaActual, string $q, int $limite = 15): array
+    {
+        $ids = $this->idsEmpresa($idsEmpresa);
+        $q   = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':q' => '%' . mb_strtolower($q) . '%', ':q2' => '%' . mb_strtolower($q) . '%', ':actual' => $idEmpresaActual];
+        $inEmp  = $this->phIn($ids, 'bpr', $params);
+        $sql = "SELECT id, COALESCE(codigo, '') AS codigo, nombre, id_empresa
+                FROM productos
+                WHERE id_empresa IN ({$inEmp})
+                  AND eliminado = false
+                  AND (LOWER(nombre) LIKE :q OR LOWER(COALESCE(codigo, '')) LIKE :q2)
+                ORDER BY (id_empresa = :actual) DESC, nombre
+                LIMIT " . max(15, $limite * count($ids));
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        $out = [];
+        $vistos = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $clave = trim((string)$p['codigo']) !== '' ? 'c:' . trim((string)$p['codigo']) : 'id:' . (int)$p['id'];
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $out[] = ['id' => (int)$p['id'], 'codigo' => (string)$p['codigo'], 'nombre' => (string)$p['nombre']];
+            if (count($out) >= $limite) {
+                break;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Consolidado: `productos` es por establecimiento; expande los ids elegidos a los
+     * productos hermanos con el MISMO código en las empresas del alcance.
+     */
+    public function expandirProductosPorCodigo(array $idsProducto, int|array $idsEmpresa): array
+    {
+        $idsProducto = array_values(array_unique(array_filter(array_map('intval', $idsProducto))));
+        if (!$idsProducto) {
+            return [];
+        }
+        $params = [];
+        $inP = $this->phIn($idsProducto, 'xpr', $params);
+        $inE = $this->phIn($this->idsEmpresa($idsEmpresa), 'xpe', $params);
+        $st = $this->db->prepare("SELECT DISTINCT p2.id
+                                  FROM productos p1
+                                  JOIN productos p2 ON p2.codigo = p1.codigo AND p2.eliminado = false AND p2.id_empresa IN ({$inE})
+                                  WHERE p1.id IN ({$inP}) AND COALESCE(TRIM(p1.codigo), '') <> ''");
+        $st->execute($params);
+        return array_values(array_unique(array_merge($idsProducto, array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)))));
+    }
+
+    /** Código y nombre de varios productos (para describir el filtro en PDF/Excel): id => [codigo, nombre]. */
+    public function getProductosPorIds(array $idsProducto, int|array $idsEmpresa): array
+    {
+        $idsProducto = array_values(array_unique(array_filter(array_map('intval', $idsProducto))));
+        if (!$idsProducto) {
+            return [];
+        }
+        $params = [];
+        $inP = $this->phIn($idsProducto, 'npr', $params);
+        $inE = $this->phIn($this->idsEmpresa($idsEmpresa), 'npe', $params);
+        $st = $this->db->prepare("SELECT id, COALESCE(codigo, '') AS codigo, nombre FROM productos
+                                  WHERE id IN ({$inP}) AND id_empresa IN ({$inE})");
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $out[(int)$p['id']] = ['codigo' => (string)$p['codigo'], 'nombre' => (string)$p['nombre']];
+        }
+        return $out;
     }
 
     // ─────────────────────────────────────────────────────────────────────
