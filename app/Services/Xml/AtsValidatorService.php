@@ -65,9 +65,9 @@ class AtsValidatorService
             $err[] = "Informante: IdInformante debe tener 13 dígitos (actual: '{$id}').";
         } elseif (substr($id, -3) !== '001') {
             $err[] = "Informante: IdInformante debe terminar en 001 (actual: '{$id}').";
-        } elseif (!$this->rucValido($id)) {
-            $err[] = "Informante: IdInformante '{$id}' no supera el dígito verificador.";
         }
+        // No se valida el dígito verificador: los RUC nuevos emitidos por el SRI
+        // ya no cumplen el algoritmo módulo 10/11 y rechazarían informantes válidos.
 
         $rs = $this->texto($iva, 'razonSocial');
         if (mb_strlen($rs) < 5) {
@@ -344,53 +344,5 @@ class AtsValidatorService
     {
         [$d, $m, $a] = explode('/', $ddmmaaaa);
         return (int) mktime(0, 0, 0, (int) $m, (int) $d, (int) $a);
-    }
-
-    /** Dígito verificador de RUC/cédula (módulo 10/11 según tercer dígito). */
-    private function rucValido(string $ruc): bool
-    {
-        if (!preg_match('/^\d{13}$/', $ruc)) {
-            return false;
-        }
-        $tercero = (int) $ruc[2];
-        $cedula = substr($ruc, 0, 10);
-
-        if ($tercero < 6) { // persona natural → validar cédula (módulo 10)
-            return $this->cedulaValida($cedula);
-        }
-        if ($tercero === 6) { // público → módulo 11, 9 dígitos, verif. en pos 9
-            return $this->modulo11($ruc, [3,2,7,6,5,4,3,2], 8);
-        }
-        if ($tercero === 9) { // jurídica/extranjero → módulo 11, verif. en pos 10
-            return $this->modulo11($ruc, [4,3,2,7,6,5,4,3,2], 9);
-        }
-        return false;
-    }
-
-    private function cedulaValida(string $ced): bool
-    {
-        if (!preg_match('/^\d{10}$/', $ced)) {
-            return false;
-        }
-        $coef = [2,1,2,1,2,1,2,1,2];
-        $suma = 0;
-        for ($i = 0; $i < 9; $i++) {
-            $p = ((int) $ced[$i]) * $coef[$i];
-            $suma += $p > 9 ? $p - 9 : $p;
-        }
-        $ver = (10 - ($suma % 10)) % 10;
-        return $ver === (int) $ced[9];
-    }
-
-    private function modulo11(string $ruc, array $coef, int $posVerif): bool
-    {
-        $suma = 0;
-        foreach ($coef as $i => $c) {
-            $suma += ((int) $ruc[$i]) * $c;
-        }
-        $res = 11 - ($suma % 11);
-        if ($res === 11) { $res = 0; }
-        if ($res === 10) { return false; }
-        return $res === (int) $ruc[$posVerif];
     }
 }

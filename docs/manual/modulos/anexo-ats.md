@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
 etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri
-version: 1.0
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -55,7 +55,13 @@ al cargarlo.
 - **Los totales no cuadran con la declaración de IVA**: compare el Excel de
   revisión contra la declaración; suele ser un documento con fecha fuera del
   periodo.
+- **"IdInformante debe tener 13 dígitos" o "debe terminar en 001"**: el RUC de
+  la empresa está mal registrado en su ficha. El sistema solo comprueba el
+  largo y la terminación; ya no aplica el algoritmo del dígito verificador,
+  porque los RUC nuevos emitidos por el SRI no lo cumplen.
 
 ## Historial de cambios
 
+- **1.1** — Se elimina la validación del dígito verificador del RUC del
+  informante; los RUC nuevos del SRI ya no siguen el algoritmo módulo 10/11.
 - **1.0** — Versión inicial.

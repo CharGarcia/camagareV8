@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante, datos para la factura, precuenta, cuenta previa, llenar a mano, direccion, telefono
-version: 1.25
+version: 1.26
 orden: 20
 estado: activo
 ---
@@ -542,6 +542,11 @@ tocarlas cada vez.
 
 ## Historial de cambios
 
+- **1.26** — Los datos de facturación que el cliente llena desde el QR de la
+  mesa ya no rechazan la cédula o el RUC por el dígito verificador: los
+  documentos nuevos emitidos por el SRI no cumplen ese algoritmo. Se sigue
+  comprobando el largo (10 o 13 dígitos) y que el RUC termine en 001, igual que
+  en el módulo Clientes.
 - **1.25** — La ventana de la tirilla ya no desaparece al cancelar la
   impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
   ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.

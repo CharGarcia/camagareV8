@@ -94,12 +94,13 @@ class FacturaExpressQrRules
 
         $id = preg_replace('/\D/', '', $id);
 
+        // Solo largo y sufijo: no se valida el dígito verificador (módulo 10),
+        // porque las cédulas/RUC nuevos emitidos por el SRI ya no cumplen ese
+        // algoritmo y rechazarían identificaciones válidas. Mismo criterio que
+        // ClienteRules / ProveedorRules.
         if ($tipo === 'cedula') {
             if (strlen($id) !== 10) {
                 throw new \InvalidArgumentException('La cédula debe tener 10 dígitos.');
-            }
-            if (!$this->validarCedula($id)) {
-                throw new \InvalidArgumentException('La cédula ingresada no es válida.');
             }
         } elseif ($tipo === 'ruc') {
             if (strlen($id) !== 13) {
@@ -109,25 +110,6 @@ class FacturaExpressQrRules
             if (substr($id, -3) !== '001') {
                 throw new \InvalidArgumentException('El RUC debe terminar en 001.');
             }
-            if (!$this->validarCedula(substr($id, 0, 10))) {
-                throw new \InvalidArgumentException('El RUC ingresado no es válido.');
-            }
         }
-    }
-
-    private function validarCedula(string $cedula): bool
-    {
-        if (strlen($cedula) !== 10) return false;
-        $provincia = (int) substr($cedula, 0, 2);
-        if ($provincia < 1 || $provincia > 24) return false;
-
-        $coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
-        $suma = 0;
-        for ($i = 0; $i < 9; $i++) {
-            $val = (int) $cedula[$i] * $coeficientes[$i];
-            $suma += $val > 9 ? $val - 9 : $val;
-        }
-        $verificador = (10 - ($suma % 10)) % 10;
-        return $verificador === (int) $cedula[9];
     }
 }

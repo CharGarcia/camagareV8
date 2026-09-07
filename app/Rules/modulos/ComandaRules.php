@@ -196,7 +196,11 @@ class ComandaRules
         }
     }
 
-    /** Mismo algoritmo módulo-10 que usa Factura Express QR — cédula/RUC ecuatorianos. */
+    /**
+     * Mismo criterio que Factura Express QR y ClienteRules: solo largo y sufijo.
+     * No se valida el dígito verificador (módulo 10) porque las cédulas/RUC nuevos
+     * emitidos por el SRI ya no cumplen ese algoritmo y rechazarían identificaciones válidas.
+     */
     private function validarIdentificacionQr(string $id, string $tipo): void
     {
         if ($tipo === 'sin_ruc' || $tipo === 'pasaporte') {
@@ -208,9 +212,6 @@ class ComandaRules
             if (strlen($id) !== 10) {
                 throw new Exception('La cédula debe tener 10 dígitos.');
             }
-            if (!$this->validarDigitoCedula($id)) {
-                throw new Exception('La cédula ingresada no es válida.');
-            }
         } elseif ($tipo === 'ruc') {
             if (strlen($id) !== 13) {
                 throw new Exception('El RUC debe tener 13 dígitos.');
@@ -218,26 +219,7 @@ class ComandaRules
             if (substr($id, -3) !== '001') {
                 throw new Exception('El RUC debe terminar en 001.');
             }
-            if (!$this->validarDigitoCedula(substr($id, 0, 10))) {
-                throw new Exception('El RUC ingresado no es válido.');
-            }
         }
-    }
-
-    private function validarDigitoCedula(string $cedula): bool
-    {
-        if (strlen($cedula) !== 10) return false;
-        $provincia = (int) substr($cedula, 0, 2);
-        if ($provincia < 1 || $provincia > 24) return false;
-
-        $coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
-        $suma = 0;
-        for ($i = 0; $i < 9; $i++) {
-            $val = (int) $cedula[$i] * $coeficientes[$i];
-            $suma += $val > 9 ? $val - 9 : $val;
-        }
-        $verificador = (10 - ($suma % 10)) % 10;
-        return $verificador === (int) $cedula[9];
     }
 
     /** Orden de avance de una línea en cocina/barra; 'anulado' se maneja aparte (anularLinea). */
