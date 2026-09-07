@@ -5,6 +5,23 @@
 /** @var array  $vistaConfig */
 /** @var array  $puntos */
 /** @var string $base */
+
+// Permisos de Clientes y Transportistas para los botones "crear al vuelo" de la
+// barra del modal. Se resuelven aquí (y no en el controlador) porque este modal
+// también se incluye desde Facturas de Venta, que no los pasa. Mismo patrón que
+// clientes/modal_cliente.php.
+$grPermCrearCliente       = false;
+$grPermCrearTransportista = false;
+if ((int)($_SESSION['nivel'] ?? 1) >= 3) {
+    $grPermCrearCliente = $grPermCrearTransportista = true;
+} else {
+    $grModelPerm = new \App\models\PermisoSubmodulo();
+    $grMapPerm   = $grModelPerm->getPermisosDeUsuario((int)($_SESSION['id_usuario'] ?? 0), (int)($_SESSION['id_empresa'] ?? 0));
+    $grSubCli    = $grModelPerm->getIdSubmoduloPorRutaMvc('modulos/clientes');
+    $grSubTr     = $grModelPerm->getIdSubmoduloPorRutaMvc('modulos/transportistas');
+    $grPermCrearCliente       = $grSubCli && !empty($grMapPerm[$grSubCli]) && (!empty($grMapPerm[$grSubCli]['crear']) || !empty($grMapPerm[$grSubCli]['t']));
+    $grPermCrearTransportista = $grSubTr  && !empty($grMapPerm[$grSubTr])  && (!empty($grMapPerm[$grSubTr]['crear'])  || !empty($grMapPerm[$grSubTr]['t']));
+}
 ?>
 
 <!-- ═══════════════════════ MODAL GUÍA DE REMISIÓN ═══════════════════════ -->
@@ -26,30 +43,47 @@
 
             <div class="modal-body p-0">
                 <!-- BARRA DE ACCIONES -->
-                <div id="gr-acciones-existente" class="px-3 py-2 bg-light border-0 d-none d-flex gap-1 align-items-center flex-wrap">
-                    <?php if ($perm['actualizar']): ?>
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn-gr-enviar-sri" onclick="GR_enviarSri()">
-                            <i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI
+                <!-- Siempre visible. Las acciones del documento (SRI/PDF/XML/Excel/Anular) van
+                     dentro de #gr-acciones-existente y solo aparecen en una guía ya guardada
+                     (lo alterna el JS con d-none/d-flex); los botones de crear cliente y
+                     transportista se ven también en una guía nueva, igual que en Facturas de Venta. -->
+                <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap" id="gr-acciones-bar">
+                    <div id="gr-acciones-existente" class="d-none gap-1 align-items-center flex-wrap">
+                        <?php if ($perm['actualizar']): ?>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn-gr-enviar-sri" onclick="GR_enviarSri()">
+                                <i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI
+                            </button>
+                        <?php endif; ?>
+                        <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="GR_exportarPdf()" title="Exportar PDF">
+                            <i class="bi bi-file-earmark-pdf"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="GR_exportarXml()" title="Exportar XML">
+                            <i class="bi bi-file-earmark-code"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="GR_exportarExcel()" title="Exportar Excel">
+                            <i class="bi bi-file-earmark-excel"></i>
+                        </button>
+                        <?php if ($perm['actualizar']): ?>
+                            <button type="button" class="btn btn-outline-warning btn-sm" id="btn-gr-anular" onclick="GR_anular()">
+                                <i class="bi bi-slash-circle me-1"></i>Anular
+                            </button>
+                        <?php endif; ?>
+                        <?php if ($grPermCrearCliente || $grPermCrearTransportista): ?>
+                            <div class="vr mx-1"></div>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($grPermCrearCliente): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2"
+                            onclick="GR_abrirCrearCliente()" title="Registrar nuevo cliente / destinatario">
+                            <i class="bi bi-person-plus fs-6"></i>
                         </button>
                     <?php endif; ?>
-                    <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="GR_exportarPdf()" title="Exportar PDF">
-                        <i class="bi bi-file-earmark-pdf"></i>
-                    </button>
-                    <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="GR_exportarXml()" title="Exportar XML">
-                        <i class="bi bi-file-earmark-code"></i>
-                    </button>
-                    <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="GR_exportarExcel()" title="Exportar Excel">
-                        <i class="bi bi-file-earmark-excel"></i>
-                    </button>
-                    <?php if ($perm['actualizar']): ?>
-                        <button type="button" class="btn btn-outline-warning btn-sm" id="btn-gr-anular" onclick="GR_anular()">
-                            <i class="bi bi-slash-circle me-1"></i>Anular
+                    <?php if ($grPermCrearTransportista): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2"
+                            onclick="TR_abrirCrear()" title="Registrar nuevo transportista">
+                            <i class="bi bi-truck fs-6"></i>
                         </button>
                     <?php endif; ?>
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2"
-                        onclick="TR_abrirCrear()" title="Nuevo transportista">
-                        <i class="bi bi-person-plus fs-6"></i>
-                    </button>
                 </div>
 
                 <!-- PESTAÑAS -->

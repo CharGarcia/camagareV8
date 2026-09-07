@@ -6,7 +6,7 @@ ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
 etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos
-version: 1.6
+version: 1.7
 orden: 55
 estado: activo
 ---
@@ -32,6 +32,19 @@ Necesita tener registrados:
 5. Indique la **fecha de emisión** y la **fecha de inicio del transporte**.
 6. Añada los productos que se trasladan.
 7. Guarde y envíe al SRI.
+
+### Crear el cliente o el transportista sin salir de la guía
+
+Si el destinatario o el transportista todavía no existen, no hace falta ir a
+sus módulos: en la **barra superior del modal** de la guía hay dos botones,
+**Registrar nuevo cliente** (ícono de persona) y **Registrar nuevo
+transportista** (ícono de camión), igual que en Facturas de Venta. Abren la
+ficha correspondiente encima de la guía y, al guardarla, el registro nuevo
+queda **seleccionado automáticamente** como destinatario o transportista (en
+el caso del transportista también se copia su placa si el campo estaba vacío).
+
+Cada botón aparece solo si el usuario tiene permiso de **crear** en
+**Clientes** o en **Transportistas**, respectivamente.
 
 ## Documento de sustento
 
@@ -127,7 +140,8 @@ traslado entre bodegas).
 
 - **"Ingrese la placa del vehículo transportista"**: es obligatoria aunque el
   transporte sea propio.
-- **"Seleccione el transportista"**: regístrelo primero en Transportistas.
+- **"Seleccione el transportista"**: regístrelo primero en Transportistas o con
+  el botón **Registrar nuevo transportista** de la barra del modal.
 - **"La fecha de inicio de transporte ya pasó"**: el SRI toma esa fecha como la
   fecha del comprobante —es la que va dentro de la clave de acceso—, así que
   debe ser hoy o posterior. Corríjala en la guía y vuelva a enviar.
@@ -148,6 +162,10 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.7** — La barra superior del modal se ve también en una guía **nueva** e
+  incluye los botones **Registrar nuevo cliente** y **Registrar nuevo
+  transportista** (según permiso de crear en cada módulo). El registro creado
+  queda seleccionado en la guía al guardarlo.
 - **1.6** — La guía se puede precargar desde una **Transferencia de Inventario**
   entre establecimientos (productos, direcciones y motivo ya cargados).
 - **1.5** — Nuevo botón **Excel** junto al de PDF en el modal: descarga el mismo

@@ -216,9 +216,20 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?php include 'modal_gr.php'; ?>
 <?php include __DIR__ . '/../transportistas/modal_transportista.php'; ?>
+<?php
+// Modal de cliente (botón "Registrar nuevo cliente" de la barra del modal de guía).
+// modal_cliente.php resuelve solo sus permisos cuando $rutaModulo no es
+// 'modulos/clientes'; se respalda/restaura $perm y $rutaModulo por si los pisa.
+$grPermRespaldo = $perm;
+$grRutaRespaldo = $rutaModulo;
+include __DIR__ . '/../clientes/modal_cliente.php';
+$perm       = $grPermRespaldo;
+$rutaModulo = $grRutaRespaldo;
+?>
 
 <!-- ═══════════════════════════ JAVASCRIPT ═══════════════════════════ -->
 <script src="<?= $base ?>/js/modulos/transportistas_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/guias_remision_modal.js?v=<?= time() ?>"></script>
 <script>
     const GR_urlBase   = '<?= $urlBase ?>';

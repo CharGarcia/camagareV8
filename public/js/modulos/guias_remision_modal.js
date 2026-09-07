@@ -104,6 +104,11 @@
 
         const acBar = document.getElementById('gr-acciones-existente');
         if (acBar) { acBar.classList.add('d-none'); acBar.classList.remove('d-flex'); }
+        // En una guía nueva la barra solo tiene los botones de crear cliente /
+        // transportista; si el usuario no tiene permiso para ninguno, se oculta
+        // entera para no dejar una franja vacía.
+        const barGr = document.getElementById('gr-acciones-bar');
+        if (barGr) barGr.classList.toggle('d-none', !barGr.querySelector(':scope > button'));
 
         const btnEl = document.getElementById('btn-gr-eliminar');
         if (btnEl) btnEl.classList.add('d-none');
@@ -184,6 +189,8 @@
 
         const acBar = document.getElementById('gr-acciones-existente');
         if (acBar) { acBar.classList.remove('d-none'); acBar.classList.add('d-flex'); }
+        const barGr = document.getElementById('gr-acciones-bar');
+        if (barGr) barGr.classList.remove('d-none');
 
         const btnEl = document.getElementById('btn-gr-eliminar');
         if (btnEl) {
@@ -1158,6 +1165,75 @@
         const n = parseFloat(v);
         return (isNaN(n) ? 1 : n).toFixed(dec);
     }
+
+    // ── Crear cliente / transportista al vuelo desde la barra del modal ──────
+    // El modal de cliente (clientes/modal_cliente.php + clientes_modal.js) y el de
+    // transportista (transportistas/modal_transportista.php + transportistas_modal.js)
+    // los incluye la página que aloja este modal. Al guardar, cada uno dispara un
+    // CustomEvent ('clienteGuardado' / 'transportistaGuardado') y aquí se toma el
+    // registro nuevo como Destinatario / Transportista de la guía abierta.
+    window.GR_abrirCrearCliente = function () {
+        if (typeof window.abrirModalClienteCrear === 'function') {
+            window.abrirModalClienteCrear();
+        } else if (typeof Swal !== 'undefined') {
+            Swal.fire({ icon: 'warning', title: 'No disponible', text: 'El formulario de clientes no se cargó en esta pantalla.' });
+        }
+    };
+
+    function grModalAbierto() {
+        const m = document.getElementById('modalGuiaRemision');
+        return !!(m && m.classList.contains('show'));
+    }
+
+    document.addEventListener('clienteGuardado', function (e) {
+        if (!grModalAbierto()) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.data || !res.data.id) return;
+        // El mismo evento se dispara al crear y al editar. Se toma el registro si es
+        // nuevo (msg "creado") o si es la ficha del cliente ya seleccionado (para
+        // refrescar nombre/dirección); una edición de otro cliente no pisa la guía.
+        const idSel   = document.getElementById('gr-id-cliente')?.value || '';
+        const esNuevo = /cread/i.test(res.msg || '');
+        if (!esNuevo && String(idSel) !== String(res.data.id)) return;
+        const c = res.data;
+        window.GR_seleccionarCliente(c.id, c.nombre || '', c.identificacion || '', c.direccion || '', c.email || '');
+    });
+
+    // app.css fuerza `.modal { z-index:5060 !important }` y `.modal-backdrop { 5055 }`
+    // para TODOS los modales, así que un modal abierto encima de otro solo queda
+    // delante si va después en el DOM. Cuando Cliente/Transportista se abren desde
+    // la guía (y en Facturas de Venta el modal de cliente va ANTES en el DOM), se
+    // elevan con inline !important, igual que en proformas/modal_proforma.php.
+    const GR_SUBMODALES = ['modalCliente', 'modalTransportista'];
+    document.addEventListener('show.bs.modal', function (ev) {
+        if (!grModalAbierto() || GR_SUBMODALES.indexOf(ev.target.id) === -1) return;
+        ev.target.style.setProperty('z-index', '5080', 'important');
+        setTimeout(function () {
+            const bds = document.querySelectorAll('.modal-backdrop');
+            if (bds.length) bds[bds.length - 1].style.setProperty('z-index', '5075', 'important');
+        }, 0);
+    });
+    document.addEventListener('hidden.bs.modal', function (ev) {
+        if (GR_SUBMODALES.indexOf(ev.target.id) === -1) return;
+        ev.target.style.removeProperty('z-index');
+        // Bootstrap quita modal-open al cerrar cualquier modal; si la guía sigue
+        // abierta hay que conservar el bloqueo de scroll de la página.
+        if (document.querySelectorAll('.modal.show').length > 0) document.body.classList.add('modal-open');
+    });
+
+    document.addEventListener('transportistaGuardado', function (e) {
+        if (!grModalAbierto()) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.id) return; // al editar no viene id: no se toca la guía
+        fetch(urlBaseGR + '/get-transportista-ajax?id=' + encodeURIComponent(res.id))
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok && d.data) {
+                    window.GR_seleccionarTransportista(d.data.id, d.data.nombre, d.data.identificacion || '', d.data.placa || '');
+                }
+            })
+            .catch(() => {});
+    });
 
     function initGrEvents() {
         ['gr-motivo', 'gr-partida', 'gr-destino', 'gr-ruta', 'gr-placa'].forEach(id => {
