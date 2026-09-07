@@ -5,7 +5,7 @@
  */
 ?>
 <!-- Modal Principal (Edit/Create) -->
-<div class="modal fade" id="modalPC" tabindex="-1" aria-hidden="true" data-bs-backdrop="static text-dark">
+<div class="modal fade" id="modalPC" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
             <form id="formPC" novalidate>
@@ -137,8 +137,25 @@
             return modalPCInst;
         }
 
-        // Exponer funciones al global
-        window.abrirModalPCGeneral = function(data = null) {
+        // Campos editables del formulario (el código y el nivel son siempre de solo lectura:
+        // el código de una cuenta nunca se modifica una vez creada; lo refuerza el Service).
+        const camposEditablesPC = ['pc_status', 'pc_nombre_edit', 'pc_id_centro_costos', 'pc_id_proyecto',
+            'pc_codigo_sri', 'pc_supercias_esf', 'pc_supercias_eri', 'pc_supercias_ecp_codigo', 'pc_supercias_ecp_subcodigo'];
+
+        function setSoloLecturaPC(soloLectura) {
+            camposEditablesPC.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = !!soloLectura;
+            });
+            document.getElementById('btnGuardarPC').classList.toggle('d-none', !!soloLectura);
+        }
+
+        /**
+         * Abre el modal. `data` = cuenta a editar (null = crear).
+         * `opts.soloLectura` = true abre en modo consulta (campos deshabilitados, sin Guardar),
+         * para usuarios sin permiso de actualizar en Plan de Cuentas.
+         */
+        window.abrirModalPCGeneral = function(data = null, opts = {}) {
             const form = document.getElementById('formPC');
             form.reset();
             document.getElementById('pc_id').value = '';
@@ -146,16 +163,23 @@
             document.getElementById('wrapper-parent-info-pc').classList.add('d-none');
             document.getElementById('wrapper-existing-accounts-pc').classList.add('d-none');
             document.getElementById('modalAlertPC').classList.add('d-none');
-            
+            setSoloLecturaPC(!!opts.soloLectura);
+
             if (data) {
                 // Modo Edición
-                document.getElementById('tituloModalPC').textContent = 'Editar Cuenta';
+                document.getElementById('tituloModalPC').textContent = opts.soloLectura ? 'Cuenta Contable' : 'Editar Cuenta';
                 document.getElementById('pc_id').value = data.id;
                 document.getElementById('pc_codigo_edit').value = data.codigo;
                 document.getElementById('pc_nivel_edit').value = data.nivel;
                 document.getElementById('pc_nombre_edit').value = data.nombre;
                 document.getElementById('pc_status').checked = (parseInt(data.status) === 1);
-                
+
+                if (data.creado_at) {
+                    document.getElementById('info_creado_at_pc').textContent = data.creado_at;
+                    document.getElementById('info_creado_por_pc').textContent = data.creado_por || '';
+                    document.getElementById('wrapper-auditoria-pc').classList.remove('d-none');
+                }
+
                 if (parseInt(data.nivel) === 5) {
                     document.querySelectorAll('.wrapper-nivel-5-pc').forEach(el => el.classList.remove('d-none'));
                     document.getElementById('pc_id_centro_costos').value = data.id_centro_costos || '';

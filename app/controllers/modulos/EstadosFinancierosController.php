@@ -60,6 +60,9 @@ class EstadosFinancierosController extends BaseModuloController
             'aniosDisponibles' => $aniosDisponibles,
             'centrosCosto' => $centrosCosto,
             'proyectos' => $proyectos,
+            // Modal reutilizable de Plan de Cuentas (abrir/editar una cuenta desde el reporte)
+            'centros' => $centrosCosto,
+            'permPlanCuentas' => \App\Helpers\Permisos::porRuta('modulos/plan-cuentas'),
             'rutaModulo' => $this->getRutaModulo(),
             'perm' => $perm,
             'hayGrupoRuc' => count($idsGrupoRuc) > 1,

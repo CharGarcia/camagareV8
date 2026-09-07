@@ -56,8 +56,18 @@ class PlanCuentaService
 
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
-        $this->rules->validate($data);
         $old = $this->repository->findById($id, $idEmpresa);
+        if (!$old) {
+            throw new Exception('Cuenta no encontrada.');
+        }
+
+        // Regla: el código (y por tanto el nivel) de una cuenta NUNCA se modifica una vez
+        // creada. Se conservan los valores guardados, ignorando lo que traiga la petición:
+        // el "readonly" del formulario es solo visual y no protege contra una petición alterada.
+        $data['codigo'] = (string) $old['codigo'];
+        $data['nivel']  = (string) $old['nivel'];
+
+        $this->rules->validate($data);
 
         $this->repository->beginTransaction();
         try {

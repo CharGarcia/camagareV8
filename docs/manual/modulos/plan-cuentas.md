@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/plan-cuentas
 tipo: modulo
 visibilidad: todos
-etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa
-version: 1.1
+etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -47,6 +47,20 @@ cuentas de **nivel 5**: son las únicas que llevan saldo.
 5. Guarde.
 
 Los tres campos son obligatorios.
+
+### Qué se puede cambiar de una cuenta ya creada
+
+- **El código y el nivel no se modifican nunca.** Definen la posición de la
+  cuenta en el árbol y son la referencia de todos los asientos que la usan. Si
+  una cuenta quedó con un código equivocado, cree la cuenta correcta y, si la
+  errada no tiene movimientos, elimínela.
+- **Sí se pueden cambiar**: el nombre, el estado (activa/inactiva) y, en cuentas
+  de nivel 5, el centro de costo, el proyecto y los **códigos de entidades de
+  control** (Código SRI y Supercias ESF, ERI y ECP).
+
+La ficha de la cuenta también se abre desde los reportes de **Estados
+Financieros**, pulsando el código de una cuenta de nivel 5. Aplican las mismas
+reglas y el mismo permiso de *actualizar* de este módulo.
 
 ## Cargar el plan modelo
 
@@ -142,6 +156,9 @@ módulo y, en el peor caso, a reclasificar movimientos.
 
 ## Historial de cambios
 
+- **1.2** — El código y el nivel de una cuenta ya no se pueden modificar al
+  editarla (el servidor conserva los guardados aunque la petición traiga otros).
+  La ficha de la cuenta se puede abrir también desde Estados Financieros.
 - **1.1** — El botón *Cargar Plan Modelo* ahora configura automáticamente los
   tipos de asiento de ventas, recibos de venta, compras y nómina, y el IVA por
   tarifa, sin sobrescribir lo ya configurado. Se reemplazó el plan modelo por el

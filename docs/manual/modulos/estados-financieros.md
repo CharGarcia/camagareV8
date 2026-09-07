@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes
-version: 1.4
+etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control
+version: 1.5
 orden: 50
 estado: activo
 ---
@@ -35,6 +35,27 @@ para una consulta rápida, pero no para presentar nada.
 1. Indique el **rango de fechas** (o la fecha de corte).
 2. Genere el estado que necesite.
 3. Expórtelo si va a presentarlo o archivarlo.
+
+## Ver o editar una cuenta desde el reporte
+
+En cualquiera de los cuatro reportes, el **código** de cada cuenta de nivel 5
+(cuenta de movimiento) es un enlace. Al pulsarlo se abre la ficha de esa cuenta,
+la misma del módulo Plan de Cuentas, sin salir del balance:
+
+- **Código y nivel**: solo lectura. El código de una cuenta nunca se cambia una
+  vez creada, ni desde aquí ni desde Plan de Cuentas.
+- **Nombre, estado, centro de costo y proyecto**: editables.
+- **Códigos de entidades de control** (sección *Configurar códigos entidades de
+  control*): Código SRI, Supercias ESF, ERI y ECP (código y subcódigo). Son los
+  que usan los formatos de exportación **Renta SRI** y **Supercias**, así que
+  este es el lugar natural para completarlos cuando, al revisar el balance, una
+  cuenta aparece sin mapear.
+
+Al guardar, el reporte se vuelve a generar para reflejar el nombre nuevo.
+
+El **nombre** de la cuenta sigue abriendo el **mayor auxiliar**; el código abre
+la ficha. Si el usuario no tiene permiso de *actualizar* en Plan de Cuentas, la
+ficha se abre en modo consulta: se ven todos los datos pero sin botón Guardar.
 
 ## Reportes por periodos (comparativo mensual)
 
@@ -139,6 +160,11 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.5** — El código de cada cuenta de nivel 5 del reporte abre la ficha de la
+  cuenta (modal de Plan de Cuentas): se pueden ver y editar nombre, estado,
+  centro de costo, proyecto y los códigos SRI / Supercias sin salir del balance.
+  El código y el nivel son de solo lectura. Sin permiso de actualizar en Plan de
+  Cuentas la ficha se abre en modo consulta.
 - **1.4** — Cuando el asiento de un ingreso o un egreso no se puede generar por
   cuentas sin configurar, el aviso dice **qué cuenta falta y en qué sección de
   Configuración Contable se asigna**, en lugar del genérico "El asiento no está

@@ -699,6 +699,7 @@ class EstadosFinancierosService
             }
 
             $grupos[$prefijoCuenta][] = [
+                'id_cuenta' => (int) ($cta['id_cuenta'] ?? 0),
                 'codigo' => $cta['codigo'],
                 'nombre' => $cta['nombre'],
                 'nivel' => $cta['nivel'],

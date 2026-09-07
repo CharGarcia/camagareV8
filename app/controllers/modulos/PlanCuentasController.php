@@ -204,6 +204,59 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Devuelve una cuenta completa por id (datos + códigos de entidades de control).
+     * Lo usan otros módulos (p. ej. Estados Financieros) para abrir el modal reutilizable
+     * de Plan de Cuentas (views/modulos/plan_cuentas/modal.php) sobre una cuenta.
+     */
+    public function getCuentaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            if ($id <= 0) throw new \Exception('ID no válido');
+
+            $repo = new PlanCuentaRepository();
+            $p = $repo->getDetalleCompleto($id, $idEmpresa);
+            if (!$p) throw new \Exception('Cuenta no encontrada');
+
+            $fmt = fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime($d)) : '—';
+
+            echo json_encode([
+                'ok' => true,
+                'data' => [
+                    'id'                      => (int) $p['id'],
+                    'codigo'                  => $p['codigo'],
+                    'nombre'                  => $p['nombre'],
+                    'nivel'                   => (int) $p['nivel'],
+                    'status'                  => (int) ($p['status'] ?? 1),
+                    'id_centro_costos'        => $p['id_centro_costos'] ?? null,
+                    'id_proyecto'             => $p['id_proyecto'] ?? null,
+                    'codigo_sri'              => $p['codigo_sri'] ?? '',
+                    'supercias_esf'           => $p['supercias_esf'] ?? '',
+                    'supercias_eri'           => $p['supercias_eri'] ?? '',
+                    'supercias_ecp_codigo'    => $p['supercias_ecp_codigo'] ?? '',
+                    'supercias_ecp_subcodigo' => $p['supercias_ecp_subcodigo'] ?? '',
+                    'creado_at'               => $fmt($p['created_at'] ?? null),
+                    'creado_por'              => $p['creado_por_nombre'] ?? 'Sistema',
+                    'actualizado_at'          => $fmt($p['updated_at'] ?? null),
+                    'actualizado_por'         => $p['actualizado_por_nombre'] ?? '—',
+                ],
+                'permisos' => [
+                    'actualizar' => !empty($this->getPermisos()['actualizar']),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getFaltantesAjax(): void
     {
         $this->requireLeer();

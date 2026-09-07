@@ -481,6 +481,18 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         }
     }
 
+    // Celda del código: en cuentas de nivel 5 (de movimiento) es clicable y abre la ficha de la
+    // cuenta (modal reutilizable de Plan de Cuentas) con sus códigos de entidades de control.
+    function celdaCodigo(item, esPadre, fwClass) {
+        const nivelItem = parseInt(item.nivel);
+        const idCuenta = parseInt(item.id_cuenta || 0);
+        if (nivelItem === 5 && !esPadre && idCuenta > 0) {
+            const titulo = PC_PUEDE_ACTUALIZAR ? 'Ver / editar la cuenta contable' : 'Ver la cuenta contable';
+            return `<td class="${fwClass}"><a href="javascript:void(0)" class="text-decoration-none fw-medium" onclick="abrirCuentaContable(${idCuenta})" title="${titulo}"><i class="bi bi-pencil-square small me-1 text-muted"></i>${item.codigo}</a></td>`;
+        }
+        return `<td class="${fwClass}">${item.codigo}</td>`;
+    }
+
     function generarCabecera(nivelFiltro) {
         const nf = parseInt(nivelFiltro);
         let html = `<thead><tr><th width="10%">Código</th><th>Cuenta</th>`;
@@ -504,7 +516,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             cursorClass = 'text-primary cursor-pointer fw-medium';
             onclickAttr = `onclick="verMayorAuxiliar('${item.codigo}', '${item.nombre}')" style="cursor:pointer; text-decoration: underline;" title="Ver detalle del Mayor"`;
         }
-        
+
         let tdsNiveles = '';
         for (let i = nivelFiltro; i >= 1; i--) {
             if (i === nivelItem) {
@@ -513,9 +525,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                 tdsNiveles += `<td></td>`;
             }
         }
-        
+
         return `<tr>
-            <td class="${fwClass}">${item.codigo}</td>
+            ${celdaCodigo(item, esPadre, fwClass)}
             <td style="${paddingStyle}" class="${fwClass} ${cursorClass}" ${onclickAttr}>${item.nombre}</td>
             ${tdsNiveles}
         </tr>`;
@@ -655,7 +667,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         if (conTotal) tds += `<td class="text-end fw-bold ${fwClass}">${formatMoney(item.total || 0)}</td>`;
 
         return `<tr>
-            <td class="${fwClass}">${item.codigo}</td>
+            ${celdaCodigo(item, esPadre, fwClass)}
             <td style="padding-left: ${15 + indent}px !important;" class="${fwClass} ${cursorClass}" ${onclickAttr}>${item.nombre}</td>
             ${tds}
         </tr>`;
@@ -836,6 +848,36 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
 <script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= time() ?>"></script>
+
+<!-- Modal reutilizable de Plan de Cuentas: lo abre el código de cada cuenta de nivel 5 del reporte.
+     Necesita $centros y $proyectos (los envía el controlador). -->
+<?php include __DIR__ . '/../plan_cuentas/modal.php'; ?>
+<script>
+    const PC_PUEDE_ACTUALIZAR = <?= !empty($permPlanCuentas['actualizar']) ? 'true' : 'false' ?>;
+    const urlPlanCuentas = '<?= rtrim($base, '/') ?>/modulos/plan-cuentas';
+
+    // Abre la ficha de la cuenta contable (código, nombre, estado, centro de costo, proyecto y
+    // códigos SRI / Supercias). El código y el nivel nunca se editan; el resto solo si el usuario
+    // tiene permiso de actualizar en Plan de Cuentas (lo confirma también el servidor).
+    async function abrirCuentaContable(idCuenta) {
+        try {
+            const resp = await fetch(`${urlPlanCuentas}/getCuentaAjax?id=${idCuenta}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await resp.json();
+            if (!json.ok) { Swal.fire('Error', json.error || 'No se pudo cargar la cuenta.', 'error'); return; }
+            const puedeEditar = PC_PUEDE_ACTUALIZAR && !!(json.permisos && json.permisos.actualizar);
+            abrirModalPCGeneral(json.data, { soloLectura: !puedeEditar });
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Error de red al cargar la cuenta.', 'error');
+        }
+    }
+
+    // Tras guardar desde el modal, regenerar el reporte para reflejar el nombre/estado nuevos.
+    window.onAccountSaved = function(json) {
+        Swal.fire({ icon: 'success', title: 'Cuenta actualizada', text: json.msg || '', timer: 1500, showConfirmButton: false });
+        if (document.getElementById('content-reporte').innerHTML.trim() !== '') generarReporte();
+    };
+</script>
 
 <!-- Modal del documento origen: lo abre la columna Documento Ref. del mayor auxiliar -->
 <?php include __DIR__ . '/../documento_origen/modal_documento.php'; ?>
