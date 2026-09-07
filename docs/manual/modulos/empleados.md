@@ -6,7 +6,7 @@ ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
 etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion
-version: 1.1
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -33,6 +33,23 @@ la ficha, el empleado no existe para ninguno de esos procesos.
 | Nombres y apellidos | Obligatorios |
 | Correo electrónico | Si se llena, debe tener formato válido |
 | Sexo | Debe ser uno de los valores admitidos |
+| Cargas familiares | Número entero, 0 o más. Vacío equivale a 0 |
+
+## Cargas familiares
+
+En la pestaña **General**, en la última fila junto al contacto de emergencia,
+se registra el **número de cargas familiares** del empleado (0 si no tiene). Es
+un dato general de la ficha y sale en el PDF y el Excel del empleado.
+
+También se puede cargar por Excel: la plantilla del botón *Importar* del módulo
+trae la columna **CARGAS_FAMILIARES** al final, y la entidad *Empleados* del
+Importador desde Excel (Configuración) tiene la misma columna. En ambos casos es
+opcional: las plantillas antiguas sin esa columna siguen funcionando y dejan el
+valor en 0.
+
+> No confundir con las cargas que se declaran **por año** en la pestaña de
+> gastos personales (formulario SRI-GP): esas son las que determinan la rebaja
+> del Impuesto a la Renta y se registran aparte, año por año.
 
 ## Ficha en PDF y Excel
 
@@ -58,5 +75,7 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.2** — Campo *Cargas familiares* en la pestaña General, en la ficha
+  PDF/Excel y como columna opcional en las plantillas de importación.
 - **1.1** — Botón para exportar la ficha del empleado a Excel, junto al de PDF.
 - **1.0** — Versión inicial.

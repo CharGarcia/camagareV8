@@ -92,6 +92,7 @@
                 document.getElementById('emp_telefono').value = d.telefono || '';
                 document.getElementById('emp_direccion').value = d.direccion || '';
                 document.getElementById('emp_contacto_emergencia').value = d.contacto_emergencia || '';
+                document.getElementById('emp_cargas_familiares').value = parseInt(d.cargas_familiares || 0, 10) || 0;
                 document.getElementById('emp_fecha_nacimiento').value = d.fecha_nacimiento || '';
                 document.getElementById('emp_sexo').value = d.sexo || 'M';
                 document.getElementById('emp_estado').value = d.estado || 'activo';

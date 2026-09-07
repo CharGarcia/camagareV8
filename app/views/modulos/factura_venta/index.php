@@ -3394,23 +3394,38 @@ $totalPages = $totalPagesOriginal;
             const fmt = (n) => parseFloat(n || 0).toFixed(2);
             const esc = (s) => String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-            // Calcular totales
-            let subtotal = 0,
-                totalIva = 0,
-                totalIce = 0,
-                totalDescuento = 0;
+            // Totales: se usan los valores PERSISTIDOS de la cabecera (misma fuente
+            // de verdad que el PDF y el modal para un documento ya guardado), no una
+            // suma en vivo de las líneas. Sumar el IVA línea por línea puede diferir
+            // 1-5 centavos del total real cuando la empresa calcula el IVA sobre el
+            // subtotal (ver FacturaVentaPdfService) — así la tirilla nunca muestra un
+            // total distinto al que ve el usuario en el modal o en el PDF.
+            const subtotal = parseFloat(cab.total_sin_impuestos) || 0;
+            const totalDescuento = parseFloat(cab.total_descuento) || 0;
+            const totalIce = parseFloat(cab.total_ice) || 0;
+            const propinaVal = parseFloat(cab.propina) || 0;
+            const total = parseFloat(cab.importe_total) || 0;
+
+            // Desglose de IVA por tarifa: se reconstruye desde los impuestos
+            // REALMENTE guardados por línea y se absorbe en el grupo de mayor IVA el
+            // desfase de redondeo (1-5 centavos) contra el total real — mismo
+            // criterio que ya usan el modal y el PDF.
             const impMap = {};
             detalles.forEach(d => {
-                subtotal += parseFloat(d.precio_total_sin_impuesto || 0);
-                totalDescuento += parseFloat(d.descuento || 0);
                 (d.impuestos || []).forEach(imp => {
+                    if (String(imp.codigo_impuesto) !== '2') return; // solo IVA
                     const lbl = `IVA ${parseFloat(imp.tarifa||0).toFixed(0)}%`;
-                    impMap[lbl] = (impMap[lbl] || 0) + parseFloat(imp.valor || 0);
-                    if (String(imp.codigo_impuesto) === '3') totalIce += parseFloat(imp.valor || 0);
+                    impMap[lbl] = r2((impMap[lbl] || 0) + parseFloat(imp.valor || 0));
                 });
             });
-            Object.values(impMap).forEach(v => totalIva += v);
-            const total = subtotal + totalIva + totalIce + parseFloat(cab.propina || 0);
+            const ivaObjetivo = r2(total - subtotal - totalIce - propinaVal);
+            const sumaIvaActual = r2(Object.values(impMap).reduce((s, v) => s + v, 0));
+            const desfaseIva = r2(ivaObjetivo - sumaIvaActual);
+            if (Math.abs(desfaseIva) >= 0.01 && Math.abs(desfaseIva) <= 0.05) {
+                let lblMax = null, ivaMax = -Infinity;
+                Object.entries(impMap).forEach(([k, v]) => { if (v > ivaMax) { ivaMax = v; lblMax = k; } });
+                if (lblMax !== null) impMap[lblMax] = r2(impMap[lblMax] + desfaseIva);
+            }
 
             const logoHtml = EMPRESA_INFO.logo ?
                 `<img src="${B_URL}/${EMPRESA_INFO.logo}" style="max-width:120px;max-height:60px;margin-bottom:4px;">` :

@@ -13,20 +13,15 @@
  * llamada HTTP es corta, así que "cancelar" simplemente deja de pedir el siguiente paso.
  *
  * Endpoints esperados en el controlador del módulo (mismo urlBase):
- *   GET {urlBase}/contarPendientesAjax        → { ok: true, pendientes: <int>, migrados_sin_asiento: <int>,
- *                                                 migrados_detalle: ["Ingresos: 1 (001-001-000000050)", …] }
+ *   GET {urlBase}/contarPendientesAjax        → { ok: true, pendientes: <int> }
  *   GET {urlBase}/sincronizarPasoAjax?paso=N  → { ok: true, paso, totalPasos, nombrePaso,
  *                                                 terminado, generados, warnings, detalle,
  *                                                 resumenPorModulo, info }
  *
- * `migrados_sin_asiento` e `info` son el canal INFORMATIVO (azul, no es error ni pendiente):
- * documentos traídos de la migración que siguen sin asiento. La generación automática no los
- * toca (su contabilidad debía venir en el histórico migrado), así que no cuentan como
- * pendientes, pero el usuario debe saber que existen y cómo resolverlo.
+ * `info` es un canal INFORMATIVO (azul): notas que no son error ni pendiente. Los documentos
+ * traídos por la migración NO se revisan ni se cuentan: su contabilidad es el histórico migrado
+ * tal cual (decisión del usuario, 2026-09-07).
  *   GET {urlBase}/sincronizarAjax             → (respaldo sin barra de progreso, solo si no hay SweetAlert2)
- *   GET {urlBase}/sincronizarMigradosPasoAjax?paso=N → igual que sincronizarPasoAjax, pero SOLO para los
- *                                                 documentos migrados sin asiento (acción explícita, con
- *                                                 confirmación; ver confirmarYGenerarMigrados()).
  *
  * Uso:
  *   CMG_verificarAsientosPendientes({ urlBase: '<...>', onGenerado: () => { ... } });
@@ -109,8 +104,7 @@
             .catch(() => { /* silencioso: no hay Swal para avisar el error */ });
     }
 
-    function generar(urlBase, onGenerado, accion) {
-        accion = accion || 'sincronizarPasoAjax';
+    function generar(urlBase, onGenerado) {
         if (!window.Swal) {
             return generarSinProgreso(urlBase, onGenerado);
         }
@@ -146,7 +140,7 @@
 
                 let json;
                 try {
-                    const res = await fetch(`${urlBase}/${accion}?paso=${n}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const res = await fetch(`${urlBase}/sincronizarPasoAjax?paso=${n}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
                     json = await res.json();
                 } catch (e) {
                     errorMsg = 'No se pudo completar la generación de asientos (error de red).';
@@ -189,34 +183,6 @@
     }
 
     /**
-     * Generación EXPLÍCITA de asientos para documentos migrados que siguen sin asiento. Pide
-     * confirmar que la migración de contabilidad ya se corrió con el rango completo: si no, un
-     * documento cuyo asiento histórico todavía no se enlazó recibiría un segundo asiento.
-     */
-    function confirmarYGenerarMigrados(urlBase, onGenerado) {
-        Swal.fire({
-            icon: 'warning',
-            title: 'Generar asientos a documentos migrados',
-            html: `<div class="text-start small">
-                <p class="mb-2">Se generarán asientos, con la configuración contable actual, para los documentos traídos del sistema anterior que <strong>no tienen asiento</strong>.</p>
-                <p class="mb-2">Hágalo solo si ya volvió a correr la <strong>migración de contabilidad</strong> con el rango completo de fechas: ese paso enlaza los documentos que sí tenían asiento en el sistema anterior, y los que siguen sin asiento después son los que nunca se contabilizaron.</p>
-                <p class="mb-0 text-danger">Si la migración de contabilidad no se ha vuelto a correr, algunos documentos podrían quedar con dos asientos.</p>
-            </div>`,
-            input: 'checkbox',
-            inputPlaceholder: 'Ya volví a correr la migración de contabilidad con el rango completo',
-            inputValidator: (v) => v ? undefined : 'Debe confirmar para continuar.',
-            showCancelButton: true,
-            confirmButtonText: '<i class="bi bi-gear-fill me-1"></i> Generar',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#dc3545',
-            cancelButtonColor: '#6c757d',
-            width: 600,
-        }).then(res => {
-            if (res.isConfirmed) generar(urlBase, onGenerado, 'sincronizarMigradosPasoAjax');
-        });
-    }
-
-    /**
      * @param {Object} opts
      * @param {string} opts.urlBase      Base del módulo (p. ej. ".../modulos/asientos_contables").
      * @param {Function} [opts.onGenerado] Callback tras generar con éxito (p. ej. refrescar la tabla/reporte).
@@ -232,61 +198,20 @@
             .then(json => {
                 if (!json || !json.ok) return;
                 const n = parseInt(json.pendientes, 10) || 0;
-                const m = parseInt(json.migrados_sin_asiento, 10) || 0;
-                if (n < 1 && m < 1) return;
-
-                // Documentos migrados sin asiento: informativo. La generación no los contabiliza
-                // (su contabilidad debía venir en el histórico migrado), así que no se ofrece
-                // "generar": se explica qué son y cómo resolverlos.
-                // Módulo y números de documento: sin esto el usuario no sabe cuál es ni dónde buscarlo.
-                const listaMigrados = (Array.isArray(json.migrados_detalle) && json.migrados_detalle.length)
-                    ? `<ul class="mb-2 mt-1 ps-3">${json.migrados_detalle.map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul>`
-                    : '';
-                const textoMigrados = m > 0
-                    ? `Hay <strong>${m}</strong> documento(s) traídos del sistema anterior que siguen <strong>sin asiento contable</strong>:`
-                      + listaMigrados
-                      + `La generación automática no los contabiliza para no duplicar el histórico migrado. `
-                      + `Para resolverlo, vuelva a correr la <strong>migración de contabilidad</strong> de la empresa (enlaza cada documento con su asiento histórico); `
-                      + `los que sigan sin asiento después de eso nunca se contabilizaron en el sistema anterior: `
-                      + `genérelos con <strong>Generar asientos a los migrados</strong> o regístrelos desde la pestaña <em>Asiento contable</em> del documento.`
-                    : '';
+                if (n < 1) return;
 
                 if (!window.Swal) {
-                    // Sin SweetAlert: confirm/alert nativos como respaldo.
-                    if (n >= 1 && window.confirm(`Hay ${n} documento(s) sin asiento contable generado. ¿Desea generarlos ahora?`)) {
+                    // Sin SweetAlert: confirm nativo como respaldo.
+                    if (window.confirm(`Hay ${n} documento(s) sin asiento contable generado. ¿Desea generarlos ahora?`)) {
                         generar(urlBase, onGenerado);
                     }
-                    if (m >= 1) window.alert(`Hay ${m} documento(s) migrados sin asiento contable. Vuelva a correr la migración de contabilidad o registre el asiento desde el documento.`);
-                    return;
-                }
-
-                if (n < 1) {
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Documentos migrados sin asiento',
-                        html: `<div class="text-start small">${textoMigrados}</div>`,
-                        showCancelButton: true,
-                        confirmButtonText: '<i class="bi bi-gear-fill me-1"></i> Generar asientos a los migrados',
-                        cancelButtonText: 'Entendido',
-                        confirmButtonColor: '#0d6efd',
-                        cancelButtonColor: '#6c757d',
-                        reverseButtons: true,
-                        width: 560,
-                    }).then(res => {
-                        if (res.isConfirmed) confirmarYGenerarMigrados(urlBase, onGenerado);
-                    });
                     return;
                 }
 
                 Swal.fire({
                     icon: 'question',
                     title: 'Asientos pendientes',
-                    html: `Hay <strong>${n}</strong> documento(s) sin asiento contable generado.<br>¿Desea generarlos ahora?`
-                        + (m > 0 ? `<div class="text-start small alert alert-info py-2 px-3 mt-3 mb-0">${textoMigrados}</div>` : ''),
-                    width: m > 0 ? 560 : undefined,
-                    showDenyButton: m > 0,
-                    denyButtonText: '<i class="bi bi-box-arrow-in-down me-1"></i> Migrados sin asiento…',
-                    denyButtonColor: '#0dcaf0',
+                    html: `Hay <strong>${n}</strong> documento(s) sin asiento contable generado.<br>¿Desea generarlos ahora?`,
                     showCancelButton: true,
                     confirmButtonText: '<i class="bi bi-gear-fill me-1"></i> Generar ahora',
                     cancelButtonText: 'Continuar sin generar',
@@ -296,7 +221,6 @@
                     reverseButtons: true,
                 }).then(res => {
                     if (res.isConfirmed) generar(urlBase, onGenerado);
-                    else if (res.isDenied) confirmarYGenerarMigrados(urlBase, onGenerado);
                 });
             })
             .catch(() => { /* Silencioso: no bloquear el módulo por el aviso. */ });

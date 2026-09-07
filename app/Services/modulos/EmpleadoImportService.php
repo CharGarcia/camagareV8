@@ -17,7 +17,8 @@ use Exception;
  * Columnas (orden): TIPO_ID, IDENTIFICACION, NOMBRES_APELLIDOS, EMAIL, TELEFONO,
  * DIRECCION, FECHA_NACIMIENTO, SEXO, CARGO, DEPARTAMENTO, SUELDO_BASE,
  * VALOR_SEMANAL, VALOR_QUINCENA, REGION, APORTA_IESS, FONDOS_RESERVA,
- * DECIMO_TERCERO, DECIMO_CUARTO, BANCO, TIPO_CUENTA, NUMERO_CUENTA, FECHA_INGRESO.
+ * DECIMO_TERCERO, DECIMO_CUARTO, BANCO, TIPO_CUENTA, NUMERO_CUENTA, FECHA_INGRESO,
+ * CARGAS_FAMILIARES (opcional; las plantillas antiguas sin esta columna siguen valiendo).
  */
 class EmpleadoImportService
 {
@@ -113,6 +114,7 @@ class EmpleadoImportService
             'id_banco_ecuador'      => $this->resolverBanco($f[18] ?? ''),
             'tipo_cuenta'           => $tipoCuenta,
             'numero_cuenta'         => trim((string) ($f[20] ?? '')),
+            'cargas_familiares'     => max(0, (int) trim((string) ($f[22] ?? 0))),
             'estado'                => 'activo',
             'periodos'              => $periodos,
         ];

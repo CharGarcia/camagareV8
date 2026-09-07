@@ -130,8 +130,8 @@ class ImportadorExcelService
             'empleados' => [
                 'nombre' => 'Empleados',
                 'global' => false,
-                'col_numericas' => [7], // SUELDO_BASE
-                'columnas' => ['TIPO_IDENTIFICACION', 'IDENTIFICACION', 'NOMBRES_APELLIDOS', 'EMAIL', 'TELEFONO', 'DIRECCION', 'CARGO', 'SUELDO_BASE']
+                'col_numericas' => [7, 8], // SUELDO_BASE, CARGAS_FAMILIARES
+                'columnas' => ['TIPO_IDENTIFICACION', 'IDENTIFICACION', 'NOMBRES_APELLIDOS', 'EMAIL', 'TELEFONO', 'DIRECCION', 'CARGO', 'SUELDO_BASE', 'CARGAS_FAMILIARES (opcional)']
             ],
             // Una sola entidad para las dos tablas: la plantilla trae la hoja
             // "Tipos_Medida" y la hoja "Unidades" en el mismo archivo.
@@ -1467,6 +1467,12 @@ class ImportadorExcelService
         $direccion = trim((string)($fila[5] ?? ''));
         $cargo = $this->campoTexto($fila, 6, 'CARGO', 100, $numeroFila);
         $sueldo = floatval($fila[7] ?? 0);
+        // Opcional; las plantillas antiguas (8 columnas) siguen funcionando.
+        $cargasRaw = trim((string)($fila[8] ?? ''));
+        if ($cargasRaw !== '' && (!is_numeric($cargasRaw) || (int)$cargasRaw < 0 || (float)$cargasRaw != (int)$cargasRaw)) {
+            throw new Exception("Fila {$numeroFila}: CARGAS_FAMILIARES debe ser un número entero mayor o igual a 0 (valor recibido: \"{$cargasRaw}\").");
+        }
+        $cargas = $cargasRaw === '' ? 0 : (int)$cargasRaw;
 
         if (empty($identificacion) || empty($nombres)) throw new Exception("Fila {$numeroFila}: Identificación y Nombres son obligatorios.");
 
@@ -1474,9 +1480,9 @@ class ImportadorExcelService
         $stCheck->execute([$idEmpresa, $identificacion]);
         if ($stCheck->fetchColumn()) throw new Exception("Fila {$numeroFila}: El empleado {$identificacion} ya existe.");
 
-        $sql = "INSERT INTO empleados (id_empresa, tipo_id, identificacion, nombres_apellidos, email, telefono, direccion, cargo, sueldo_base, created_by, updated_by, eliminado, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false, 'activo') RETURNING id";
+        $sql = "INSERT INTO empleados (id_empresa, tipo_id, identificacion, nombres_apellidos, email, telefono, direccion, cargo, sueldo_base, cargas_familiares, created_by, updated_by, eliminado, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false, 'activo') RETURNING id";
         $st = $this->db->prepare($sql);
-        $st->execute([$idEmpresa, $tipoId, $identificacion, $nombres, $email, $telefono, $direccion, $cargo, $sueldo, $idUsuario, $idUsuario]);
+        $st->execute([$idEmpresa, $tipoId, $identificacion, $nombres, $email, $telefono, $direccion, $cargo, $sueldo, $cargas, $idUsuario, $idUsuario]);
         return (int) $st->fetchColumn();
     }
 

@@ -666,6 +666,7 @@ class EmpleadosController extends BaseModuloController
             $fila('Correo', $emp['email'] ?? '');
             $fila('Teléfono', $emp['telefono'] ?? '');
             $fila('Contacto Emergencia', $emp['contacto_emergencia'] ?? '');
+            $fila('Cargas Familiares', (string) (int) ($emp['cargas_familiares'] ?? 0));
             $fila('Dirección', $emp['direccion'] ?? '');
             $fila('Estado', $cap($emp['estado'] ?? ''));
             $row++;
@@ -780,15 +781,16 @@ class EmpleadosController extends BaseModuloController
             'FECHA_NACIMIENTO', 'SEXO', 'CARGO', 'DEPARTAMENTO', 'SUELDO_BASE', 'VALOR_SEMANAL',
             'VALOR_QUINCENA', 'REGION', 'APORTA_IESS', 'FONDOS_RESERVA', 'DECIMO_TERCERO',
             'DECIMO_CUARTO', 'BANCO', 'TIPO_CUENTA', 'NUMERO_CUENTA', 'FECHA_INGRESO',
+            'CARGAS_FAMILIARES',
         ];
         $hoja->fromArray($headers, null, 'A1');
-        $hoja->getStyle('A1:V1')->getFont()->setBold(true);
+        $hoja->getStyle('A1:W1')->getFont()->setBold(true);
         $hoja->fromArray([[
             'cedula', '1717136574', 'JUAN PEREZ', 'juan@correo.com', '0999999999', 'Av. Siempre Viva',
             '1990-05-20', 'M', 'VENDEDOR', 'VENTAS', 460, 0, 0, 'costa', 'si', 'no_se_paga',
-            'acumula', 'acumula', 'PICHINCHA', 'ahorros', '2200123456', '2020-03-01',
+            'acumula', 'acumula', 'PICHINCHA', 'ahorros', '2200123456', '2020-03-01', 0,
         ]], null, 'A2');
-        foreach (range('A', 'V') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
+        foreach (range('A', 'W') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
 
         // Hoja de referencia con valores válidos
         $ref = $ss->createSheet();
@@ -806,6 +808,7 @@ class EmpleadosController extends BaseModuloController
             ['BANCO', 'Nombre exacto del banco (ver módulo Bancos)'],
             ['FECHA_NACIMIENTO', 'Formato AAAA-MM-DD'],
             ['FECHA_INGRESO', 'Formato AAAA-MM-DD (crea el periodo laboral)'],
+            ['CARGAS_FAMILIARES', 'Número entero (0 si no tiene). Opcional'],
         ], null, 'A1');
         $ref->getStyle('A1:B1')->getFont()->setBold(true);
         $ref->getColumnDimension('A')->setAutoSize(true);
@@ -852,6 +855,7 @@ class EmpleadosController extends BaseModuloController
             'email'                 => trim($_POST['email'] ?? ''),
             'telefono'              => trim($_POST['telefono'] ?? ''),
             'contacto_emergencia'    => trim($_POST['contacto_emergencia'] ?? ''),
+            'cargas_familiares'     => max(0, (int) ($_POST['cargas_familiares'] ?? 0)),
             'fecha_nacimiento'      => trim($_POST['fecha_nacimiento'] ?? ''),
             'sexo'                  => trim($_POST['sexo'] ?? 'M'),
             'estado'                => trim($_POST['estado'] ?? 'activo'),

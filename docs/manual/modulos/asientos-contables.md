@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados sin asiento, migración, sistema anterior, aviso informativo
-version: 1.13
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior
+version: 1.14
 orden: 20
 estado: activo
 ---
@@ -188,59 +188,18 @@ revisar el balance.
 ## Documentos migrados sin asiento contable
 
 Los documentos que llegaron desde el sistema anterior por la migración **no
-generan asiento automático**. Su contabilidad viene en el diario histórico
-migrado, y contabilizarlos otra vez duplicaría los saldos. Por eso la generación
-en masa los deja de lado y no los cuenta como pendientes.
+generan asiento automático** y **no se revisan** como pendientes. Su
+contabilidad es el diario histórico migrado tal cual: lo que vino sin asiento
+queda así. La generación en masa y el aviso al abrir los módulos contables solo
+miran los documentos **creados en este sistema**.
 
-Lo normal es que cada documento migrado quede **enlazado** a su asiento
-histórico y lo muestre en su pestaña *Asiento contable*. Cuando eso no ocurre,
-el documento aparece sin asiento aunque no haya ningún error de configuración.
-Para que no pase desapercibido, el sistema avisa en dos momentos:
+Si un documento migrado necesita asiento por alguna razón puntual, se registra a
+mano desde su pestaña *Asiento contable*.
 
-- **Al abrir** Asientos Contables, Estados Financieros, Balance de Comprobación
-  o Mayores: si hay documentos migrados sin asiento, aparece una nota azul con
-  la cantidad y, por módulo, los números de documento (hasta 15 por módulo). Si
-  además hay pendientes normales, la nota va dentro de la misma pregunta de
-  "¿Desea generarlos ahora?".
-- **Al terminar la generación en masa**: el resumen incluye un bloque
-  *Información* con el total por módulo y los primeros números de documento.
-
-Es un aviso informativo, no un error: el botón *Generar* de los pendientes
-normales no los contabiliza. Para resolverlo, en este orden:
-
-1. **Volver a correr la migración de contabilidad** de la empresa, con el rango
-   completo de fechas. Es segura de repetir: no duplica asientos y vuelve a
-   enlazar cada documento con su asiento histórico por el código del diario. Los
-   que sí tenían asiento en el sistema anterior desaparecen del aviso con este
-   paso.
-2. **Generar asientos a los migrados** que sigan sin asiento después de
-   re-migrar. Son documentos que el sistema anterior nunca contabilizó, así que
-   generarlos con la configuración contable actual no duplica nada. El botón
-   está en el propio aviso azul al abrir el módulo y pide marcar una casilla de
-   confirmación de que la migración de contabilidad ya se volvió a correr.
-   Procesa módulo por módulo con barra de progreso, igual que la generación
-   normal, y al final muestra lo generado y lo que no pudo generarse (por
-   ejemplo, una cuenta sin configurar). La acción queda registrada en la
-   auditoría del sistema.
-3. **Registrar el asiento desde el propio documento**, en su pestaña *Asiento
-   contable*, para los casos puntuales que la generación no pudo resolver.
-
-**Cuidado con el orden.** Si se usa *Generar asientos a los migrados* antes de
-volver a correr la migración de contabilidad, un documento que sí tenía asiento
-histórico pero todavía no estaba enlazado recibiría un segundo asiento. Por eso
-la casilla de confirmación.
-
-Si después de re-migrar el aviso persiste, los documentos que quedan son los que
-no tenían asiento en el sistema anterior, o cuyo tipo no lo enlaza la migración
-(por ejemplo roles de pago). Para verlos uno por uno, con estado y total, está la
-consulta `database/diagnosticos/20260904_migrados_sin_asiento.sql`.
-
-**Consignaciones migradas: nunca.** El sistema anterior no contabilizaba las
-consignaciones, así que las que llegaron por migración no se cuentan en este
-aviso ni las toca el botón de generar, aunque estén emitidas o entregadas. Solo
-las consignaciones creadas en este sistema generan su asiento de reclasificación
-de inventario. Lo mismo aplica a sus retornos, cambios de producto y
-facturaciones.
+**Cómo saber si un documento es migrado.** Se creó en bloque el día de la
+migración (todos los de esa carga comparten fecha y hora de creación) y su fecha
+de emisión es anterior. La generación en masa nunca lo incluye, así que si
+aparece en un aviso de "asiento por generar" es porque se creó en este sistema.
 
 ## Diferencias de centavos
 
@@ -311,6 +270,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.14** — Los documentos migrados ya no se revisan: se retiran el aviso azul de "migrados sin asiento" y el botón **Generar asientos a los migrados**. Lo que vino de la migración sin asiento queda así; solo se revisan los documentos creados en este sistema.
 - **1.13** — El aviso al abrir el módulo indica el módulo y los números de los documentos migrados sin asiento, no solo la cantidad.
 - **1.12** — Las consignaciones migradas (y sus retornos, cambios y facturaciones) quedan fuera del aviso de migrados sin asiento y del botón de generar: el sistema anterior no las contabilizaba.
 - **1.11** — Botón **Generar asientos a los migrados** en el aviso de documentos migrados sin asiento: genera, previa confirmación de que la migración de contabilidad ya se volvió a correr, los asientos de los migrados que el sistema anterior nunca contabilizó. Queda en la auditoría.

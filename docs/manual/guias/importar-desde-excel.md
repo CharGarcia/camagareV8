@@ -5,7 +5,7 @@ categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
 etiquetas: importar, excel, xlsx, carga masiva, plantilla, subir datos, migrar, cargar clientes, cargar vendedores, asignar vendedor a clientes, cargar productos, unidades de medida, tipos de medida, importador, varios precios, lista de precios, precios por producto, mayorista
-version: 1.2
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -199,6 +199,8 @@ nombres, abreviaturas o factores del catálogo actual.
 
 ## Historial de cambios
 
+- **1.3** — La plantilla de *Empleados* incorpora la columna opcional
+  CARGAS_FAMILIARES (número entero).
 - **1.2** — La plantilla de *Productos* incorpora la hoja de datos *Precios*
   (varios precios con nombre por producto, con vigencia y estado) y la hoja de
   consulta *Nombres_Precio*.
