@@ -2091,8 +2091,16 @@ class SriEnvioService
                         ->generarBytes($cabecera, $detalles, $infoAdicional, $empresa);
                 }
 
+                // Destinatarios: el cliente que recibe la mercadería Y el
+                // transportista (ambos correos vienen de getPorId). Si se deja
+                // en null, enviarSiAplica() solo tomaría cliente_email.
+                $correosGuia = implode(', ', array_filter(array_map('trim', [
+                    (string) ($cabecera['cliente_email']       ?? ''),
+                    (string) ($cabecera['transportista_email'] ?? ''),
+                ])));
+
                 $emailSvc = new \App\Services\EnvioDocumentosSRIService();
-                $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'guia_remision', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'guia_remision', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut, false, $correosGuia ?: null);
                 if ($enviado) {
                     $db->prepare("UPDATE guias_remision_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
                        ->execute([$idGuia]);

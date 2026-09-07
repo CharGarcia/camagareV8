@@ -6,7 +6,7 @@ ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
 etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos
-version: 1.7
+version: 1.8
 orden: 55
 estado: activo
 ---
@@ -45,6 +45,30 @@ el caso del transportista también se copia su placa si el campo estaba vacío).
 
 Cada botón aparece solo si el usuario tiene permiso de **crear** en
 **Clientes** o en **Transportistas**, respectivamente.
+
+### Guía enviada al SRI: solo lectura
+
+Una vez que la guía se envió al SRI (autorizada, no autorizada, devuelta o
+anulada) **ya no se puede editar**, igual que las facturas de venta: todos los
+campos, las líneas de productos y la información adicional quedan bloqueados y
+desaparecen los botones **Guardar**, **Agregar línea** y los de crear cliente o
+transportista. El servidor aplica la misma regla, así que no hay forma de
+modificarla desde otra pantalla. Solo se editan las guías en **borrador**.
+
+## Correo al destinatario y al transportista
+
+Al quedar **autorizada** por el SRI, la guía se envía por correo (XML y PDF)
+si la empresa tiene activo el **envío automático** en su configuración de
+correo. Los destinatarios son el **correo del cliente** (destinatario de la
+mercadería) **y el correo del transportista**, tal como constan en sus fichas;
+si alguna ficha tiene varios correos separados por coma, se envía a todos.
+
+Para reenviarla en cualquier momento, en la barra superior del modal está el
+botón **Enviar por correo** (ícono de sobre), disponible solo en guías
+autorizadas. Propone esos mismos correos y permite editarlos antes de enviar.
+
+El listado muestra la columna **Correo** (Pendiente / Enviado) y el buscador
+admite el filtro `correo:pendiente` o `correo:enviado`.
 
 ## Documento de sustento
 
@@ -102,8 +126,11 @@ comprobantes electrónicos (factura, nota de crédito, retención):
   y, a la derecha, RUC, número de la guía, número de autorización, fecha y hora
   de autorización, ambiente, tipo de emisión y la clave de acceso con su código
   de barras.
-- **Transportista y traslado**: nombre e identificación del transportista,
-  placa, fechas de inicio y fin del transporte y punto de partida.
+- **Transportista y traslado**: nombre del transportista y, debajo, su
+  **correo** (si en su ficha hay varios correos, se imprimen uno por línea);
+  luego identificación, placa, fechas de inicio y fin del transporte y punto
+  de partida. En plantillas personalizadas el correo está disponible como el
+  campo `{gr_transportista_email}`.
 - **Destinatario**: nombre, identificación, punto de llegada, motivo del
   traslado, ruta, documento aduanero, código de establecimiento de destino y el
   documento de sustento (tipo, número, fecha y autorización) cuando se registró.
@@ -162,6 +189,22 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.8** — Al elegir el transportista, debajo de su nombre se muestra ahora su
+  **correo** junto a la identificación y la placa; el RIDE imprime el correo
+  debajo del nombre del transportista (varios correos, uno por línea) y las
+  plantillas personalizadas cuentan con el campo `{gr_transportista_email}`.
+  Al abrir una guía cuyo documento de sustento es una factura del sistema y no
+  tiene grabada la **fecha del documento de sustento** (o su autorización), se
+  completan desde la factura, tanto en el formulario como en el RIDE; al
+  guardar la guía quedan registradas. Se corrige además que, al reabrir una
+  guía guardada, la identificación del transportista aparecía vacía.
+  El correo automático tras la autorización va ahora **también al
+  transportista** (antes solo al cliente); se agrega el botón **Enviar por
+  correo** en el modal y la columna **Correo** (con filtro `correo:`) en el
+  listado. Una guía que ya se envió al SRI queda **totalmente en solo lectura**
+  (antes algunos campos, como la fecha del documento de sustento, seguían
+  editables y una guía nueva abierta después heredaba los controles
+  bloqueados).
 - **1.7** — La barra superior del modal se ve también en una guía **nueva** e
   incluye los botones **Registrar nuevo cliente** y **Registrar nuevo
   transportista** (según permiso de crear en cada módulo). El registro creado

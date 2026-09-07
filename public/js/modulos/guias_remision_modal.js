@@ -68,7 +68,7 @@
             .then(r => r.json())
             .then(d => {
                 if (d.ok && d.data) {
-                    window.GR_seleccionarTransportista(d.data.id, d.data.nombre, d.data.identificacion || '', d.data.placa || '');
+                    window.GR_seleccionarTransportista(d.data.id, d.data.nombre, d.data.identificacion || '', d.data.placa || '', d.data.email || '');
                 }
             })
             .catch(() => {});
@@ -120,6 +120,9 @@
         });
         document.getElementById('gr-secuencial').value = '';
         document.getElementById('gr-cod-doc-sustento').value = '01';
+        // Guía NUEVA: siempre editable. Si se venía de ver una autorizada, sus
+        // controles quedaron bloqueados y nada más los rehabilitaba.
+        window.GR_aplicarSoloLectura(true);
 
         const hoy = CMG_fechaLocal();
         document.getElementById('gr-fecha-emision').value = hoy;
@@ -141,6 +144,9 @@
         
         const lblTranspPlaca = document.getElementById('gr-lbl-transp-placa');
         if (lblTranspPlaca) lblTranspPlaca.textContent = '';
+
+        const lblTranspEmail = document.getElementById('gr-lbl-transp-email');
+        if (lblTranspEmail) lblTranspEmail.textContent = '';
 
         const infoCli = document.getElementById('gr-info-cliente');
         if (infoCli) infoCli.classList.add('d-none');
@@ -219,8 +225,9 @@
         document.getElementById('gr-id-transportista').value    = cab.id_transportista || '';
         document.getElementById('gr-search-transportista').value = cab.transportista_nombre || '';
         if (cab.transportista_nombre) {
-            document.getElementById('gr-lbl-transp-id').textContent    = cab.transportista_identificacion || '';
+            document.getElementById('gr-lbl-transp-id').textContent    = cab.transportista_ruc || cab.transportista_identificacion || '';
             document.getElementById('gr-lbl-transp-placa').textContent = cab.placa || '';
+            document.getElementById('gr-lbl-transp-email').textContent = cab.transportista_email || '';
             document.getElementById('gr-info-transportista').classList.remove('d-none');
         }
 
@@ -279,6 +286,7 @@
          'gr-search-transportista','gr-search-cliente'
         ].forEach(id => { const el = document.getElementById(id); if (el) el.readOnly = !esBorrador; });
         document.getElementById('gr-cod-doc-sustento').disabled = !esBorrador;
+        window.GR_aplicarSoloLectura(esBorrador);
 
         const grSerie = document.getElementById('gr-serie');
         if (grSerie) {
@@ -296,6 +304,13 @@
         // Anular solo aplica a guías autorizadas por el SRI: un borrador se elimina.
         const btnAnular = document.getElementById('btn-gr-anular');
         if (btnAnular) btnAnular.style.display = estadoActual === 'autorizado' ? 'inline-block' : 'none';
+
+        // Correo: solo una guía autorizada se puede enviar. Se proponen como
+        // destinatarios el correo del destinatario y el del transportista.
+        const btnCorreo = document.getElementById('btn-gr-correo');
+        if (btnCorreo) btnCorreo.disabled = estadoActual !== 'autorizado';
+        window.GR_CORREOS_DEFAULT = [cab.cliente_email, cab.transportista_email]
+            .map(c => (c || '').trim()).filter(Boolean).join(', ');
 
         // Ocultar botones de agregar cuando no es borrador
         const btnAgrLin = document.getElementById('btn-gr-agregar-linea');
@@ -315,6 +330,32 @@
         window.GR_cargarHistorialSri(cab.id);
 
         window.GR_ID_ACTIVO = cab.id;
+    };
+
+    /**
+     * Bloquea o libera TODO el formulario de la pestaña "Guía de Remisión". Una
+     * guía que ya no es borrador (enviada, autorizada, anulada) no se edita —
+     * la misma regla que aplica el backend en GuiaRemisionService::actualizar()
+     * y que ya tienen Facturas de Venta y el resto de comprobantes. Cubre
+     * cualquier control del formulario (también los que no están en la lista
+     * de ids de arriba, p. ej. la fecha del documento de sustento) y, vía la
+     * clase `gr-solo-lectura` del modal, oculta los botones de quitar línea y
+     * de crear cliente/transportista al vuelo.
+     */
+    window.GR_aplicarSoloLectura = function (esBorrador) {
+        const pane = document.getElementById('gr-tab-guia');
+        if (pane) {
+            pane.querySelectorAll('input, select, textarea').forEach(el => {
+                if (el.type === 'hidden') return;
+                if (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio') {
+                    el.disabled = !esBorrador;
+                } else if (el.id !== 'gr-secuencial') { // el secuencial es solo lectura siempre
+                    el.readOnly = !esBorrador;
+                }
+            });
+        }
+        const modalEl = document.getElementById('modalGuiaRemision');
+        if (modalEl) modalEl.classList.toggle('gr-solo-lectura', !esBorrador);
     };
 
     /**
@@ -515,7 +556,7 @@
                     if (!d.ok || !d.data.length) { dd.style.display = 'none'; return; }
                     dd.innerHTML = d.data.map(t =>
                         `<div class="p-2 border-bottom" style="cursor:pointer"
-                              onmousedown="GR_seleccionarTransportista(${t.id},'${GR_esc(t.nombre)}','${GR_esc(t.identificacion||'')}','${GR_esc(t.placa||'')}')">
+                              onmousedown="GR_seleccionarTransportista(${t.id},'${GR_esc(t.nombre)}','${GR_esc(t.identificacion||'')}','${GR_esc(t.placa||'')}','${GR_esc(t.email||'')}')">
                             <strong>${t.nombre}</strong> <small class="text-muted ms-2">${t.identificacion||''}</small>
                             ${t.placa ? `<span class="badge bg-primary bg-opacity-10 text-primary ms-2">${t.placa}</span>` : ''}
                         </div>`
@@ -525,12 +566,13 @@
         }, 250);
     };
 
-    window.GR_seleccionarTransportista = function (id, nombre, identificacion, placa) {
+    window.GR_seleccionarTransportista = function (id, nombre, identificacion, placa, email) {
         document.getElementById('gr-id-transportista').value    = id;
         document.getElementById('gr-search-transportista').value = nombre;
         if (placa && !document.getElementById('gr-placa').value) document.getElementById('gr-placa').value = placa;
         document.getElementById('gr-lbl-transp-id').textContent    = identificacion;
         document.getElementById('gr-lbl-transp-placa').textContent = placa;
+        document.getElementById('gr-lbl-transp-email').textContent = email || '';
         document.getElementById('gr-info-transportista').classList.remove('d-none');
         document.getElementById('gr-dropdown-transportista').style.display = 'none';
     };
@@ -998,6 +1040,47 @@
         a.click();
         document.body.removeChild(a);
     };
+    // Reenvío manual por correo (mismo flujo que enviarPorCorreo() en Facturas de Venta).
+    window.GR_enviarCorreo = async function () {
+        if (!idActual) return;
+        if (estadoActual !== 'autorizado') {
+            Swal.fire({ icon: 'info', title: 'Guía no autorizada', text: 'Solo se puede enviar por correo una guía autorizada por el SRI.', target: document.getElementById('modalGuiaRemision') });
+            return;
+        }
+        const { value: correos, isConfirmed } = await Swal.fire({
+            title: 'Enviar por correo',
+            input: 'text',
+            inputLabel: 'Correos electrónicos (separados por coma o espacio)',
+            inputValue: window.GR_CORREOS_DEFAULT || '',
+            target: document.getElementById('modalGuiaRemision'),
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-send me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            inputValidator: (value) => { if (!value.trim()) return 'Ingrese al menos un correo.'; },
+        });
+        if (!isConfirmed) return;
+
+        Swal.fire({
+            title: 'Enviando correo...', text: 'Por favor espere', allowOutsideClick: false,
+            target: document.getElementById('modalGuiaRemision'),
+            didOpen: () => Swal.showLoading(),
+        });
+        try {
+            const fd = new FormData();
+            fd.append('id', idActual);
+            fd.append('correos', correos);
+            const resp = await fetch(urlBaseGR + '/reenviar-correo-ajax', { method: 'POST', body: fd });
+            const json = await resp.json();
+            if (json.ok) {
+                Swal.fire({ icon: 'success', title: '¡Enviado!', text: json.mensaje, timer: 2500, showConfirmButton: false, target: document.getElementById('modalGuiaRemision') });
+                if (typeof window.GR_cargar === 'function') window.GR_cargar(window.GR_page || 1);
+            } else {
+                Swal.fire({ icon: 'error', title: 'No se pudo enviar', text: json.mensaje || 'Error al enviar el correo.', target: document.getElementById('modalGuiaRemision') });
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalGuiaRemision') });
+        }
+    };
     window.GR_exportarXml = function () { if (idActual) window.open(urlBaseGR + '/exportar-xml-ajax?id=' + idActual, '_blank'); };
     window.GR_exportarExcel = function () { if (idActual) window.open(urlBaseGR + '/exportar-excel-ajax?id=' + idActual, '_blank'); };
 
@@ -1061,6 +1144,7 @@
             id_transportista:              document.getElementById('gr-id-transportista').value,
             transportista_nombre:          document.getElementById('gr-search-transportista').value,
             transportista_identificacion:  document.getElementById('gr-lbl-transp-id')?.textContent || '',
+            transportista_email:           document.getElementById('gr-lbl-transp-email')?.textContent || '',
             placa:                         document.getElementById('gr-placa').value,
             fecha_inicio_transporte:       document.getElementById('gr-fecha-inicio').value,
             fecha_fin_transporte:          document.getElementById('gr-fecha-fin').value,
@@ -1118,7 +1202,7 @@
         document.getElementById('gr-secuencial').value = data.secuencial || '';
         document.getElementById('gr-fecha-emision').value = data.fecha_emision || '';
         window.GR_seleccionarCliente(data.id_cliente, data.cliente_nombre, data.cliente_identificacion, data.cliente_direccion);
-        window.GR_seleccionarTransportista(data.id_transportista, data.transportista_nombre, data.transportista_identificacion, data.placa);
+        window.GR_seleccionarTransportista(data.id_transportista, data.transportista_nombre, data.transportista_identificacion, data.placa, data.transportista_email);
         document.getElementById('gr-placa').value = data.placa || '';
         document.getElementById('gr-fecha-inicio').value = data.fecha_inicio_transporte || '';
         document.getElementById('gr-fecha-fin').value = data.fecha_fin_transporte || '';
@@ -1186,7 +1270,7 @@
     }
 
     document.addEventListener('clienteGuardado', function (e) {
-        if (!grModalAbierto()) return;
+        if (!grModalAbierto() || estadoActual !== 'borrador') return;
         const res = e.detail;
         if (!res || !res.ok || !res.data || !res.data.id) return;
         // El mismo evento se dispara al crear y al editar. Se toma el registro si es
@@ -1222,14 +1306,14 @@
     });
 
     document.addEventListener('transportistaGuardado', function (e) {
-        if (!grModalAbierto()) return;
+        if (!grModalAbierto() || estadoActual !== 'borrador') return;
         const res = e.detail;
         if (!res || !res.ok || !res.id) return; // al editar no viene id: no se toca la guía
         fetch(urlBaseGR + '/get-transportista-ajax?id=' + encodeURIComponent(res.id))
             .then(r => r.json())
             .then(d => {
                 if (d.ok && d.data) {
-                    window.GR_seleccionarTransportista(d.data.id, d.data.nombre, d.data.identificacion || '', d.data.placa || '');
+                    window.GR_seleccionarTransportista(d.data.id, d.data.nombre, d.data.identificacion || '', d.data.placa || '', d.data.email || '');
                 }
             })
             .catch(() => {});

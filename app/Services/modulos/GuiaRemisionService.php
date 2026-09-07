@@ -214,6 +214,42 @@ class GuiaRemisionService
         }
     }
 
+    /**
+     * Completa la fecha de emisión y la autorización del documento de sustento
+     * cuando la guía no las tiene grabadas (guías anteriores a la versión que
+     * añadió esos campos, migradas, o guardadas sin fecha) y el sustento es una
+     * factura de venta del sistema: se resuelven por el número (est-pto-sec).
+     * No escribe en BD; solo enriquece la cabecera para el modal y el RIDE. Si
+     * el usuario guarda la guía, el valor completado queda persistido.
+     */
+    public function completarDocSustento(array $cab, int $idEmpresa): array
+    {
+        $cod = trim((string)($cab['cod_doc_sustento'] ?? ''));
+        $num = trim((string)($cab['num_doc_sustento'] ?? ''));
+        $faltaFecha = trim((string)($cab['fecha_emision_doc_sustento'] ?? '')) === '';
+        $faltaAut   = trim((string)($cab['num_autorizacion_doc_sustento'] ?? '')) === '';
+
+        if (($cod !== '' && $cod !== '01') || $num === '' || (!$faltaFecha && !$faltaAut)) {
+            return $cab;
+        }
+        if (!preg_match('/^\d{3}-\d{3}-\d{9}$/', $num)) {
+            return $cab;
+        }
+
+        $factura = (new \App\repositories\modulos\FacturaVentaRepository())->getPorNumeroCompleto($num, $idEmpresa);
+        if (!$factura) {
+            return $cab;
+        }
+        if ($faltaFecha && !empty($factura['fecha_emision'])) {
+            $cab['fecha_emision_doc_sustento'] = substr((string)$factura['fecha_emision'], 0, 10);
+        }
+        if ($faltaAut) {
+            $aut = trim((string)($factura['numero_autorizacion'] ?? '')) ?: trim((string)($factura['clave_acceso'] ?? ''));
+            if ($aut !== '') $cab['num_autorizacion_doc_sustento'] = $aut;
+        }
+        return $cab;
+    }
+
     private function prepararData(array $data): array
     {
         $data['placa']           = mb_strtoupper(trim($data['placa'] ?? ''));

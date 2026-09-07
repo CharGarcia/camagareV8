@@ -115,7 +115,7 @@ class GuiasRemisionController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron guías de remisión.</td></tr>';
+            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron guías de remisión.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $rowData     = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
@@ -131,6 +131,11 @@ class GuiasRemisionController extends BaseModuloController
                     default           => 'bg-primary bg-opacity-10 text-primary border-primary',
                 };
                 $estadoBadge = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . ucfirst(str_replace('_', ' ', $estado)) . '</span>';
+                $estadoCorreo = $r['estado_correo'] ?: 'pendiente';
+                $correoClass  = $estadoCorreo === 'enviado'
+                    ? 'bg-success bg-opacity-10 text-success border-success'
+                    : 'bg-secondary bg-opacity-10 text-secondary border-secondary';
+                $correoBadge  = '<span class="badge ' . $correoClass . ' border border-opacity-25">' . ucfirst($estadoCorreo) . '</span>';
 
                 echo "<tr class='gr-row' role='button' tabindex='0' data-row='{$rowData}' onclick='abrirModalGR(this)'>
                     <td class='ps-3' data-col='numero'><code class='text-secondary'>{$numero}</code></td>
@@ -142,7 +147,8 @@ class GuiasRemisionController extends BaseModuloController
                     <td data-col='motivo_traslado' class='text-truncate' style='max-width:150px'>" . htmlspecialchars($r['motivo_traslado'] ?? '—') . "</td>
                     <td data-col='fecha_inicio_transporte'>" . (!empty($r['fecha_inicio_transporte']) ? date('d-m-Y', strtotime($r['fecha_inicio_transporte'])) : '—') . "</td>
                     <td data-col='usuario_nombre'>" . htmlspecialchars($r['usuario_nombre'] ?? '—') . "</td>
-                    <td class='text-center pe-3' data-col='estado'>{$estadoBadge}</td>
+                    <td class='text-center' data-col='estado'>{$estadoBadge}</td>
+                    <td class='text-center pe-3' data-col='estado_correo'>{$correoBadge}</td>
                 </tr>";
             }
         }
@@ -183,6 +189,10 @@ class GuiasRemisionController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => 'Guía no encontrada']); exit;
         }
 
+        // Fecha/autorización del documento de sustento: si la guía no las tiene
+        // grabadas se completan desde la factura de venta (no escribe en BD).
+        $cabecera = $this->service->completarDocSustento($cabecera, $idEmpresa);
+
         echo json_encode([
             'ok'             => true,
             'cabecera'       => $cabecera,
@@ -215,6 +225,76 @@ class GuiasRemisionController extends BaseModuloController
                 echo json_encode(['ok' => true, 'mensaje' => 'Guía de remisión guardada correctamente.', 'id' => $newId]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Reenvío manual del correo de una guía autorizada (botón "Enviar por
+     * correo" del modal, igual que en Facturas de Venta). Los destinatarios los
+     * escribe el usuario en el diálogo; por defecto se proponen el correo del
+     * destinatario y el del transportista.
+     */
+    public function reenviarCorreoAjax(): void
+    {
+        ob_start();
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+
+        try {
+            $cabecera = $this->repo->getPorId($id);
+            if (!$cabecera || (int)($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
+                ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Guía no encontrada.']); exit;
+            }
+            if (($cabecera['estado'] ?? '') !== 'autorizado') {
+                ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'La guía debe estar autorizada por el SRI para enviar el correo.']); exit;
+            }
+
+            $detalles      = $this->repo->getDetalles($id);
+            $infoAdicional = $this->repo->getInfoAdicional($id);
+            $cabecera      = $this->service->completarDocSustento($cabecera, $idEmpresa);
+
+            [$empresa, $dirEst] = $this->construirEmpresaComprobante($idEmpresa, $cabecera);
+            if ($dirEst !== null) {
+                $cabecera['direccion_establecimiento'] = $dirEst;
+            }
+
+            $renderer  = new \App\Services\PlantillasPdfRendererService();
+            $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'guia_remision');
+            if ($plantilla) {
+                $pdfString = $renderer->generar($plantilla, $cabecera, $detalles, [], $infoAdicional, $empresa, 'S');
+            } else {
+                $pdfString = (new \App\Services\modulos\GuiaRemisionPdfService())->generarBytes($cabecera, $detalles, $infoAdicional, $empresa);
+            }
+
+            $xmlString = (string) ($cabecera['detalle_xml'] ?? '');
+            if ($xmlString === '') {
+                $xmlString = (new \App\Services\Xml\XmlGuiaRemisionService())
+                    ->generar($cabecera, $detalles, $infoAdicional, $empresa, $dirEst);
+                try { $this->repo->updateDetalleXml($id, $xmlString); } catch (\Throwable) {}
+            }
+            $numAut = (string) ($cabecera['numero_autorizacion'] ?: ($cabecera['clave_acceso'] ?? ''));
+
+            $correosDestino = trim($_POST['correos'] ?? '');
+            $enviado = (new \App\Services\EnvioDocumentosSRIService())
+                ->enviarSiAplica($idEmpresa, 'guia_remision', $cabecera, $xmlString, $pdfString, $numAut, true, $correosDestino);
+
+            ob_end_clean();
+            if ($enviado) {
+                $this->repo->actualizarEstadoCorreo($id, 'enviado');
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifique la configuración de correo o los destinatarios.']);
+            }
+        } catch (\Throwable $e) {
+            ob_end_clean();
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -312,6 +392,7 @@ class GuiasRemisionController extends BaseModuloController
 
             $detalles      = $this->repo->getDetalles($id);
             $infoAdicional = $this->repo->getInfoAdicional($id);
+            $cabecera      = $this->service->completarDocSustento($cabecera, $idEmpresa);
 
             // El logo, la leyenda y la dirección viven en el establecimiento,
             // no en la empresa (igual que el RIDE de factura de venta).

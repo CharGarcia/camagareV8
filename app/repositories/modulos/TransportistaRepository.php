@@ -168,7 +168,7 @@ class TransportistaRepository extends BaseRepository
 
     public function buscarParaSelect(int $idEmpresa, string $q): array
     {
-        $sql = "SELECT id, nombre, identificacion, tipo_id, placa
+        $sql = "SELECT id, nombre, identificacion, tipo_id, placa, email
                 FROM {$this->table}
                 WHERE id_empresa = :id_empresa AND eliminado = FALSE AND estado = 'activo'
                   AND (nombre ILIKE :q OR identificacion ILIKE :q OR placa ILIKE :q)

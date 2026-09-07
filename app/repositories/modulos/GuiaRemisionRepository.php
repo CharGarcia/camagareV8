@@ -67,6 +67,7 @@ class GuiaRemisionRepository extends BaseRepository
             ],
             'exacto' => [
                 'estado' => 'g.estado',
+                'correo' => 'g.estado_correo',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
                 'serie'  => "CONCAT(g.establecimiento,'-',g.punto_emision)",
@@ -246,6 +247,15 @@ class GuiaRemisionRepository extends BaseRepository
             ':created_by'                    => $data['id_usuario'],
             ':updated_by'                    => $data['id_usuario'],
         ])->fetchColumn();
+    }
+
+    /** Estado del envío por correo del comprobante ('pendiente' | 'enviado'). */
+    public function actualizarEstadoCorreo(int $id, string $estadoCorreo): void
+    {
+        $this->query(
+            "UPDATE guias_remision_cabecera SET estado_correo = :estado_correo, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
+            [':estado_correo' => $estadoCorreo, ':id' => $id]
+        );
     }
 
     public function actualizarCabecera(int $id, array $data): void

@@ -117,6 +117,7 @@ class PlantillasPdfService
                 '{observaciones}'                       => 'Observaciones',
                 '{gr_transportista_nombre}'            => 'Transportista (razón social)',
                 '{gr_transportista_ruc}'                => 'Transportista (identificación)',
+                '{gr_transportista_email}'              => 'Transportista (correo; varios → uno por línea)',
                 '{gr_placa}'                             => 'Placa',
                 '{gr_fecha_inicio_transporte}'         => 'Fecha inicio transporte',
                 '{gr_fecha_fin_transporte}'            => 'Fecha fin transporte',

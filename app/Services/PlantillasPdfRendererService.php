@@ -787,6 +787,8 @@ class PlantillasPdfRendererService
             'guia_remision' => [
                 '{gr_transportista_nombre}'         => (string) ($cabecera['transportista_nombre'] ?? ''),
                 '{gr_transportista_ruc}'             => (string) ($cabecera['transportista_ruc'] ?? ''),
+                // Varios correos (coma, punto y coma o espacio) → uno por línea.
+                '{gr_transportista_email}'           => implode("\n", preg_split('/[\s,;]+/', trim((string) ($cabecera['transportista_email'] ?? '')), -1, PREG_SPLIT_NO_EMPTY) ?: []),
                 '{gr_placa}'                          => (string) ($cabecera['placa'] ?? ''),
                 '{gr_fecha_inicio_transporte}'       => $fmtFecha($cabecera['fecha_inicio_transporte'] ?? ''),
                 '{gr_fecha_fin_transporte}'          => $fmtFecha($cabecera['fecha_fin_transporte'] ?? ''),

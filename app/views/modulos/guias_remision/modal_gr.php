@@ -24,6 +24,13 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
 ?>
 
 <!-- ═══════════════════════ MODAL GUÍA DE REMISIÓN ═══════════════════════ -->
+<style>
+    /* Guía que ya no es borrador (enviada/autorizada/anulada): solo lectura.
+       La clase la alterna GR_aplicarSoloLectura() en guias_remision_modal.js. */
+    #modalGuiaRemision.gr-solo-lectura .remove-row-gr,
+    #modalGuiaRemision.gr-solo-lectura #btn-gr-crear-cliente,
+    #modalGuiaRemision.gr-solo-lectura #btn-gr-crear-transportista { display: none !important; }
+</style>
 <div class="modal fade modal-gr" id="modalGuiaRemision" tabindex="-1" aria-labelledby="modalGRLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
@@ -56,6 +63,9 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                         <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="GR_exportarPdf()" title="Exportar PDF">
                             <i class="bi bi-file-earmark-pdf"></i>
                         </button>
+                        <button type="button" class="btn btn-outline-info btn-sm px-2" id="btn-gr-correo" onclick="GR_enviarCorreo()" title="Enviar por correo (guía autorizada)">
+                            <i class="bi bi-envelope"></i>
+                        </button>
                         <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="GR_exportarXml()" title="Exportar XML">
                             <i class="bi bi-file-earmark-code"></i>
                         </button>
@@ -72,13 +82,13 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                         <?php endif; ?>
                     </div>
                     <?php if ($grPermCrearCliente): ?>
-                        <button type="button" class="btn btn-outline-primary btn-sm px-2"
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" id="btn-gr-crear-cliente"
                             onclick="GR_abrirCrearCliente()" title="Registrar nuevo cliente / destinatario">
                             <i class="bi bi-person-plus fs-6"></i>
                         </button>
                     <?php endif; ?>
                     <?php if ($grPermCrearTransportista): ?>
-                        <button type="button" class="btn btn-outline-primary btn-sm px-2"
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" id="btn-gr-crear-transportista"
                             onclick="TR_abrirCrear()" title="Registrar nuevo transportista">
                             <i class="bi bi-truck fs-6"></i>
                         </button>
@@ -221,6 +231,7 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                                     <div id="gr-info-transportista" class="d-none position-absolute mt-1 w-100" style="font-size:0.7rem;color:#6c757d;z-index:10; line-height: 1.1;">
                                         <span class="fw-bold text-dark me-2" id="gr-lbl-transp-id"></span>
                                         <i class="bi bi-truck"></i> <span id="gr-lbl-transp-placa"></span>
+                                        <span class="ms-2"><i class="bi bi-envelope"></i> <span id="gr-lbl-transp-email"></span></span>
                                     </div>
                                 </div>
                                 <div class="col-md-2">

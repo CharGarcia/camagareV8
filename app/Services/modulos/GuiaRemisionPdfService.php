@@ -348,6 +348,19 @@ class GuiaRemisionPdfService
         $pdf->Cell($cW - 50, $lh, $cab['transportista_nombre'] ?? '', 0, 1, 'L');
         $yBox += $lh + 1;
 
+        // Fila 1b: Correo(s) del transportista, justo debajo del nombre. La ficha
+        // del transportista admite varios correos separados por coma, punto y
+        // coma o espacio: se imprime uno por línea para que ninguno se corte.
+        $correos = preg_split('/[\s,;]+/', trim((string)($cab['transportista_email'] ?? '')), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($correos) {
+            $pdf->SetFont('helvetica', '', 7.5);
+            $pdf->SetXY($mL + 2, $yBox + 1);
+            $pdf->Cell(48, $lh, 'Correo Transportista:', 0, 0, 'L');
+            $pdf->SetFont('helvetica', 'B', 7.5);
+            $pdf->MultiCell($cW - 52, $lh, implode("\n", $correos), 0, 'L', false, 1);
+            $yBox = max($pdf->GetY(), $yBox + $lh) + 1;
+        }
+
         // Fila 2: Identificación | Placa | Fecha emisión
         $pdf->SetFont('helvetica', '', 7.5);
         $pdf->SetXY($mL + 2, $yBox + 1);

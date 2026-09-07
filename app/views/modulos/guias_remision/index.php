@@ -77,6 +77,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { v: 'devuelta',      l: 'Devuelta' },
                                 { v: 'anulado',       l: 'Anulado' },
                             ]},
+                            { key: 'correo',        label: 'Correo',        icon: 'bi-envelope',        type: 'select', options: [
+                                { v: 'pendiente', l: 'Pendiente' },
+                                { v: 'enviado',   l: 'Enviado' },
+                            ]},
                             { key: 'serie',         label: 'Serie',         icon: 'bi-upc-scan', type: 'select', options: [
                                 <?php foreach ($seriesFiltro as $s): ?>
                                 { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
@@ -110,6 +114,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     'fecha_inicio_transporte' => 'F. Inicio',
                     'usuario_nombre'          => 'Usuario',
                     'estado'                  => 'Estado',
+                    'estado_correo'           => 'Correo',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -173,14 +178,17 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="gr-sortable-header" data-sort="usuario_nombre" data-col="usuario_nombre">
                             Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="text-center pe-3 gr-sortable-header" data-sort="estado" data-col="estado">
+                        <th class="text-center gr-sortable-header" data-sort="estado" data-col="estado">
                             Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        </th>
+                        <th class="text-center pe-3 gr-sortable-header" data-sort="estado_correo" data-col="estado_correo">
+                            Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                     </tr>
                 </thead>
                 <tbody id="gr-tbody">
                 <?php if (empty($rows)): ?>
-                    <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron guías de remisión.</td></tr>
+                    <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron guías de remisión.</td></tr>
                 <?php else: foreach ($rows as $r):
                     $rowData = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                     $numero  = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
@@ -192,6 +200,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         'borrador'                => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
                         default                   => 'bg-primary bg-opacity-10 text-primary border-primary',
                     };
+                    $estadoCorreo = $r['estado_correo'] ?: 'pendiente';
+                    $correoClass  = $estadoCorreo === 'enviado'
+                        ? 'bg-success bg-opacity-10 text-success border-success'
+                        : 'bg-secondary bg-opacity-10 text-secondary border-secondary';
                 ?>
                     <tr class="gr-row" role="button" tabindex="0" data-row='<?= $rowData ?>' onclick="abrirModalGR(this)">
                         <td class="ps-3" data-col="numero"><code class="text-secondary"><?= htmlspecialchars($numero) ?></code></td>
@@ -203,8 +215,11 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <td data-col="motivo_traslado" class="text-truncate" style="max-width:130px"><?= htmlspecialchars($r['motivo_traslado'] ?? '-') ?></td>
                         <td data-col="fecha_inicio_transporte"><?= !empty($r['fecha_inicio_transporte']) ? date('d-m-Y', strtotime($r['fecha_inicio_transporte'])) : '-' ?></td>
                         <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
-                        <td class="text-center pe-3" data-col="estado">
+                        <td class="text-center" data-col="estado">
                             <span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst(str_replace('_', ' ', $estado)) ?></span>
+                        </td>
+                        <td class="text-center pe-3" data-col="estado_correo">
+                            <span class="badge <?= $correoClass ?> border border-opacity-25"><?= ucfirst($estadoCorreo) ?></span>
                         </td>
                     </tr>
                 <?php endforeach; endif; ?>
