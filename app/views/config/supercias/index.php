@@ -9,6 +9,31 @@ $tabActivo = $tabActivo ?? 'ESF';
 .supercias-row:hover { background-color: rgba(0,0,0,.04); }
 .supercias-scroll { max-height: calc(100dvh - 360px); overflow-y: auto; }
 .supercias-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
+
+/* App-shell (app.css, body.cmg-has-table): el layout a pantalla completa
+   espera que .cmg-table-card sea hija directa del contenedor para estirarla
+   con flex. Aquí la tarjeta vive dentro de .tab-content > .tab-pane, así que
+   hay que propagar la cadena flex (flex:1 + min-height:0 + overflow:hidden)
+   hasta la pestaña activa; si no, la tarjeta crece a su alto natural, el
+   body queda bloqueado y la tabla no se puede desplazar hacia abajo.
+   Solo desktop/tablet (≥768px), igual que el app-shell; en móvil la tabla
+   usa el max-height propio de .supercias-scroll. */
+@media (min-width: 768px) {
+    body:not(.cmg-no-app-shell) #superciasTabsContent {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    body:not(.cmg-no-app-shell) #superciasTabsContent > .tab-pane.active {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+}
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
