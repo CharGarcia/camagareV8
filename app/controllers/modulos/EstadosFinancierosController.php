@@ -308,6 +308,19 @@ class EstadosFinancierosController extends BaseModuloController
             return;
         }
 
+        // TXT Supercías (ESF/ERI/ECP/EFE): mismos valores que el reporte en pantalla (fechas,
+        // centro de costo y proyecto; solo asientos contabilizados del ambiente activo).
+        if (str_starts_with($formato, 'supercias_')) {
+            try {
+                $this->service->exportarSupercias(substr($formato, 10), $idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+            } catch (\Throwable $th) {
+                \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+                http_response_code(400);
+                echo htmlspecialchars($th->getMessage());
+            }
+            return;
+        }
+
         if ($tipo === 'resultados') {
             $datos = $this->service->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
         } else {
@@ -319,36 +332,6 @@ class EstadosFinancierosController extends BaseModuloController
         } else if ($formato === 'sri') {
             $ruc = $empresa['ruc'] ?? '';
             $this->service->exportarSri($tipo, $datos, $empresaNombre, $rangoFechas, $ruc);
-        } else if (str_starts_with($formato, 'supercias_')) {
-            $superciasTipo = strtoupper(substr($formato, 10)); // 'ESF', 'ERI', 'ECP', 'EFE'
-            $anio = (int) substr($fechaFin, 0, 4);
-            
-            $superciasService = new \App\Services\SuperciasEvaluatorService(\App\core\Database::getConnection());
-            $resultados = $superciasService->evaluar($idEmpresa, $anio);
-            $datosTipo = $resultados[$superciasTipo] ?? [];
-
-            header('Content-Type: text/plain; charset=utf-8');
-            header('Content-Disposition: attachment; filename="SUPERCIAS_' . $superciasTipo . '_' . $anio . '.txt"');
-
-            $out = fopen('php://output', 'w');
-            foreach ($datosTipo as $key => $casillero) {
-                $valor = $casillero['valor'];
-                
-                if ($superciasTipo === 'ECP') {
-                    $partes = explode('.', (string)$key);
-                    $codigo = $partes[0];
-                    $subcodigo = $partes[1] ?? '';
-                    if ($subcodigo !== '') {
-                        fwrite($out, $codigo . "\t" . $subcodigo . "\t" . number_format((float)$valor, 2, '.', '') . "\r\n");
-                    } else {
-                        fwrite($out, $codigo . "\t" . number_format((float)$valor, 2, '.', '') . "\r\n");
-                    }
-                } else {
-                    fwrite($out, $key . "\t" . number_format((float)$valor, 2, '.', '') . "\r\n");
-                }
-            }
-            fclose($out);
-            exit;
         } else {
             $this->service->exportarExcel($tipo, $datos, $empresaNombre, $rangoFechas);
         }

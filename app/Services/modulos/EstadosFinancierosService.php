@@ -781,6 +781,104 @@ class EstadosFinancierosService
         return $items;
     }
 
+    /**
+     * TXT de Supercías (ESF / ERI / ECP / EFE) con los MISMOS valores que el usuario ve en pantalla:
+     * parte del Estado de Resultados y del Estado de Situación Financiera calculados con los
+     * filtros de la pantalla (fechas, centro de costo, proyecto; solo asientos contabilizados del
+     * ambiente activo), agrupa las cuentas de nivel 5 por su casillero Supercías y resuelve las
+     * fórmulas de la estructura con SuperciasEvaluatorService.
+     *
+     * Formato de línea: codigo<TAB>valor (ECP: codigo<TAB>subcodigo<TAB>valor), 2 decimales, CRLF.
+     */
+    public function exportarSupercias(string $superciasTipo, int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): void
+    {
+        $superciasTipo = strtoupper($superciasTipo);
+        if (!in_array($superciasTipo, ['ESF', 'ERI', 'ECP', 'EFE'], true)) {
+            throw new Exception('Tipo Supercías no válido.');
+        }
+
+        // Nivel 5: se necesitan las cuentas de movimiento (el nivel de pantalla solo agrupa la vista).
+        $resultados = $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, 5);
+        $situacion  = $this->getEstadoSituacionFinanciera($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, 5);
+
+        $valoresBase = ['ESF' => [], 'ERI' => [], 'ECP' => [], 'EFE' => []];
+        $acumular = function (array $item) use (&$valoresBase): void {
+            $valor = (float) ($item['saldo_final'] ?? 0);
+            if (!empty($item['supercias_esf'])) {
+                $cas = (string) $item['supercias_esf'];
+                $valoresBase['ESF'][$cas] = ($valoresBase['ESF'][$cas] ?? 0.0) + $valor;
+            }
+            if (!empty($item['supercias_eri'])) {
+                $cas = (string) $item['supercias_eri'];
+                $valoresBase['ERI'][$cas] = ($valoresBase['ERI'][$cas] ?? 0.0) + $valor;
+            }
+            if (!empty($item['supercias_ecp_codigo'])) {
+                $cas = (string) $item['supercias_ecp_codigo'];
+                if (!empty($item['supercias_ecp_subcodigo'])) {
+                    $cas .= '.' . $item['supercias_ecp_subcodigo'];
+                }
+                $valoresBase['ECP'][$cas] = ($valoresBase['ECP'][$cas] ?? 0.0) + $valor;
+            }
+        };
+
+        foreach (['ingresos', 'costos', 'gastos'] as $sec) {
+            foreach ($resultados[$sec] ?? [] as $item) {
+                if ((int) ($item['nivel'] ?? 0) === 5) $acumular($item);
+            }
+        }
+        foreach (['activos', 'pasivos', 'patrimonio'] as $sec) {
+            foreach ($situacion[$sec] ?? [] as $item) {
+                if ((int) ($item['nivel'] ?? 0) === 5) $acumular($item);
+            }
+        }
+
+        // La fila "Utilidad / Pérdida del Ejercicio" del balance no es una cuenta con movimiento
+        // (getEstadoSituacionFinanciera la agrega sintética, sin id_cuenta): se suma al casillero
+        // que tenga mapeado la cuenta de cierre configurada, la misma que se muestra en pantalla.
+        $resultadoEjercicio = 0.0;
+        foreach ($situacion['patrimonio'] ?? [] as $p) {
+            if (!isset($p['id_cuenta'])) {
+                $resultadoEjercicio = (float) ($p['saldo_final'] ?? 0);
+                break;
+            }
+        }
+        $ctasCierre = $this->repository->getCuentasCierreEjercicio($idEmpresa);
+        $ctaCierre = $resultadoEjercicio >= 0 ? ($ctasCierre['utilidad'] ?? null) : ($ctasCierre['perdida'] ?? null);
+        if ($ctaCierre && !empty($ctaCierre['id']) && round($resultadoEjercicio, 2) != 0) {
+            $catalogo = $this->indexarPorId($this->repository->getPlanCuentas($idEmpresa));
+            $ctaMapeo = $catalogo[(int) $ctaCierre['id']] ?? null;
+            if ($ctaMapeo) {
+                $acumular(array_merge($ctaMapeo, ['saldo_final' => $resultadoEjercicio]));
+            }
+        }
+
+        $evaluador = new \App\Services\SuperciasEvaluatorService(\App\core\Database::getConnection());
+        $casilleros = $evaluador->evaluarConValoresBase($valoresBase)[$superciasTipo] ?? [];
+
+        $filename = 'SUPERCIAS_' . $superciasTipo . '_' . str_replace('-', '', $fechaInicio) . '_' . str_replace('-', '', $fechaFin) . '.txt';
+        if (ob_get_length()) ob_end_clean();
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+
+        $out = fopen('php://output', 'w');
+        foreach ($casilleros as $key => $casillero) {
+            $valorTxt = number_format((float) $casillero['valor'], 2, '.', '');
+            if ($superciasTipo === 'ECP') {
+                $partes = explode('.', (string) $key);
+                $codigo = $partes[0];
+                $subcodigo = $partes[1] ?? '';
+                fwrite($out, $subcodigo !== ''
+                    ? $codigo . "\t" . $subcodigo . "\t" . $valorTxt . "\r\n"
+                    : $codigo . "\t" . $valorTxt . "\r\n");
+            } else {
+                fwrite($out, $key . "\t" . $valorTxt . "\r\n");
+            }
+        }
+        fclose($out);
+        exit;
+    }
+
     public function exportarSri(string $tipo, array $datos, string $empresaNombre, string $rangoFechas, string $rucEmpresa = ''): void
     {
         $agrupadoSri = [];

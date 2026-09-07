@@ -29,7 +29,26 @@ class SuperciasEvaluatorService
     {
         $this->cargarEstructuras();
         $this->calcularValoresBase($id_empresa, $anio);
-        
+        return $this->resolverFormulas();
+    }
+
+    /**
+     * Igual que evaluar(), pero con los valores base por casillero calculados fuera
+     * (p. ej. a partir del Estado de Resultados / Situación Financiera que ve el usuario,
+     * con sus filtros de fechas, centro de costo, proyecto, estado y ambiente).
+     * Formato: ['ESF' => ['10101' => 123.45, ...], 'ERI' => [...], 'ECP' => ['301.1' => ...], 'EFE' => []]
+     */
+    public function evaluarConValoresBase(array $valoresBase): array
+    {
+        $this->cargarEstructuras();
+        $this->valoresBase = array_merge(['ESF' => [], 'ERI' => [], 'ECP' => [], 'EFE' => []], $valoresBase);
+        $this->cache = [];
+        return $this->resolverFormulas();
+    }
+
+    /** Asigna los valores base a los casilleros sin fórmula y resuelve los que sí la tienen. */
+    private function resolverFormulas(): array
+    {
         // Asignar los valores base a la estructura
         foreach ($this->estructuras as $tipo => $casilleros) {
             foreach ($casilleros as $codigo => $datos) {

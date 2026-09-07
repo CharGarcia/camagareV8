@@ -36,6 +36,31 @@ para una consulta rápida, pero no para presentar nada.
 2. Genere el estado que necesite.
 3. Expórtelo si va a presentarlo o archivarlo.
 
+### Formatos de exportación
+
+- **PDF** y **Excel**: el reporte tal como se ve, con el nivel de agrupación
+  elegido.
+- **Formato SRI**: archivo XML para el formulario de renta. Agrupa las cuentas
+  de nivel 5 por su **Código SRI** y suma sus saldos; el RUC va en el concepto
+  80. Las cuentas sin Código SRI no se incluyen.
+- **Supercias ESF, ERI, ECP y EFE**: archivos de texto (`.txt`) para cargar en
+  el portal de la Superintendencia de Compañías. Cada línea es
+  `casillero <tab> valor`; en ECP es `código <tab> subcódigo <tab> valor`.
+
+Los archivos Supercias se calculan **con los mismos datos que el reporte en
+pantalla**: mismo rango de fechas, mismo centro de costo y proyecto, y solo
+asientos contabilizados del ambiente activo. Cada cuenta de nivel 5 aporta su
+saldo al casillero que tenga asignado en **Supercias ESF**, **ERI** o **ECP**
+(código y subcódigo); la fila *Utilidad o Pérdida del Ejercicio* del balance se
+suma al casillero de la cuenta de cierre configurada. Después se resuelven las
+fórmulas de la estructura (`/config/supercias`) para obtener los casilleros de
+totales. El filtro de nivel no altera el archivo.
+
+Si un casillero sale en cero cuando debería tener valor, revise que las cuentas
+correspondientes tengan asignado el código Supercias (columna *Ent. control* del
+reporte, o pulse el código de la cuenta para completarlo). El EFE solo se llena
+por fórmulas, porque las cuentas no tienen un casillero EFE propio.
+
 ## Ver o editar una cuenta desde el reporte
 
 En cualquiera de los cuatro reportes, el **código** de cada cuenta de nivel 2 a
@@ -178,7 +203,11 @@ Revise en este orden:
   la cuenta (modal de Plan de Cuentas): se pueden ver y editar nombre y estado y,
   en nivel 5, centro de costo, proyecto y los códigos SRI / Supercias sin salir
   del balance. Se agrega la columna **Ent. control** con los códigos SRI, ESF,
-  ERI y ECP de cada cuenta.
+  ERI y ECP de cada cuenta. Los archivos **Supercias** (ESF/ERI/ECP/EFE) se
+  calculan ahora con los mismos datos del reporte en pantalla (fechas, centro
+  de costo, proyecto, solo asientos contabilizados del ambiente activo) e
+  incluyen el resultado del ejercicio; antes tomaban el año calendario completo
+  sin esos filtros.
   El código y el nivel son de solo lectura. Sin permiso de actualizar en Plan de
   Cuentas la ficha se abre en modo consulta.
 - **1.4** — Cuando el asiento de un ingreso o un egreso no se puede generar por
