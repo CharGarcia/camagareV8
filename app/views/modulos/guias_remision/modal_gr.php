@@ -8,20 +8,19 @@
 
 // Permisos de Clientes y Transportistas para los botones "crear al vuelo" de la
 // barra del modal. Se resuelven aquí (y no en el controlador) porque este modal
-// también se incluye desde Facturas de Venta, que no los pasa. Mismo patrón que
-// clientes/modal_cliente.php.
-$grPermCrearCliente       = false;
-$grPermCrearTransportista = false;
-if ((int)($_SESSION['nivel'] ?? 1) >= 3) {
-    $grPermCrearCliente = $grPermCrearTransportista = true;
-} else {
-    $grModelPerm = new \App\models\PermisoSubmodulo();
-    $grMapPerm   = $grModelPerm->getPermisosDeUsuario((int)($_SESSION['id_usuario'] ?? 0), (int)($_SESSION['id_empresa'] ?? 0));
-    $grSubCli    = $grModelPerm->getIdSubmoduloPorRutaMvc('modulos/clientes');
-    $grSubTr     = $grModelPerm->getIdSubmoduloPorRutaMvc('modulos/transportistas');
-    $grPermCrearCliente       = $grSubCli && !empty($grMapPerm[$grSubCli]) && (!empty($grMapPerm[$grSubCli]['crear']) || !empty($grMapPerm[$grSubCli]['t']));
-    $grPermCrearTransportista = $grSubTr  && !empty($grMapPerm[$grSubTr])  && (!empty($grMapPerm[$grSubTr]['crear'])  || !empty($grMapPerm[$grSubTr]['t']));
-}
+// también se incluye desde Facturas de Venta, que no los pasa.
+//
+// Usar el helper canónico (y no reimplementar la resolución a mano): antes esto
+// llamaba a getIdSubmoduloPorRutaMvc() (SINGULAR), que solo mira el PRIMER
+// submódulo con esa ruta en submodulos_menu. Si "Transportistas" (o "Clientes")
+// cuelga de más de un menú —el mismo caso ya documentado en
+// PermisoSubmodulo::getIdsSubmoduloPorRutaMvc(), p. ej. "Vehículos" colgado de
+// Mecánica y de Car-Wash— y el permiso del usuario quedó asignado en la fila
+// que NO es la primera, el botón se ocultaba aunque el usuario sí tuviera
+// "Crear" marcado en /config/permisos-modulos. Permisos::puedeCrear() ya
+// prueba TODAS las filas con esa ruta antes de darlo por sin permiso.
+$grPermCrearCliente       = \App\Helpers\Permisos::puedeCrear('modulos/clientes');
+$grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transportistas');
 ?>
 
 <!-- ═══════════════════════ MODAL GUÍA DE REMISIÓN ═══════════════════════ -->

@@ -3,35 +3,21 @@
 /** @var string $rutaModulo */
 /** @var array $vistaConfig */
 
-// Asegurar consistencia si el modal se incluye desde otro módulo
-$idUsuarioAct = (int)($_SESSION['id_usuario'] ?? 0);
-$idEmpresaAct = (int)($_SESSION['id_empresa'] ?? 0);
-$nivelAct = (int)($_SESSION['nivel'] ?? 1);
-
 // 1. Forzar vistaConfig de vehículos para ocultar pestañas correctamente
 $vistaConfigVeh = \App\Helpers\PreferenciasHelper::getPreferenciasVista('vehiculos');
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigVeh, 'estiloVistaPestanasVeh');
 
 // 2. Forzar permisos de vehículos
+// Usar el helper canónico (y no reimplementar la resolución a mano): antes esto
+// llamaba a getIdSubmoduloPorRutaMvc() (SINGULAR), que solo mira la PRIMERA fila
+// de submodulos_menu con esa ruta. "Vehículos" cuelga de dos menús (Mecánica y
+// Car-Wash) y si el permiso del usuario quedó asignado en la fila que no es la
+// primera, esto se ocultaba aunque el usuario sí tuviera el permiso marcado en
+// /config/permisos-modulos. Permisos::porRuta() ya prueba TODAS las filas con
+// esa ruta antes de darlo por sin permiso (ver PermisoSubmodulo::getIdsSubmoduloPorRutaMvc()).
 $permVeh = $perm ?? [];
 if (($rutaModulo ?? '') !== 'modulos/vehiculos') {
-    $modelPerm = new \App\models\PermisoSubmodulo();
-    $idSubVeh = $modelPerm->getIdSubmoduloPorRutaMvc('modulos/vehiculos');
-    if ($idSubVeh) {
-        $mapPerm = $modelPerm->getPermisosDeUsuario($idUsuarioAct, $idEmpresaAct);
-        if (isset($mapPerm[$idSubVeh])) {
-            $p = $mapPerm[$idSubVeh];
-            $permVeh = [
-                'ver' => !empty($p['ver']),
-                'crear' => !empty($p['crear']),
-                'actualizar' => !empty($p['actualizar']),
-                'eliminar' => !empty($p['eliminar']),
-                'todo' => !empty($p['t']),
-            ];
-        } else if ($nivelAct >= 3) {
-            $permVeh = ['ver' => true, 'crear' => true, 'actualizar' => true, 'eliminar' => true, 'todo' => true];
-        }
-    }
+    $permVeh = \App\Helpers\Permisos::porRuta('modulos/vehiculos');
 }
 
 $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';

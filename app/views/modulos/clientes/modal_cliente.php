@@ -3,11 +3,6 @@
 /** @var string $rutaModulo */
 /** @var array $vistaConfig */
 
-// Asegurar consistencia si el modal se incluye desde otro módulo
-$idUsuarioAct = (int)($_SESSION['id_usuario'] ?? 0);
-$idEmpresaAct = (int)($_SESSION['id_empresa'] ?? 0);
-$nivelAct = (int)($_SESSION['nivel'] ?? 1);
-
 // 1. Forzar vistaConfig de clientes para ocultar pestañas correctamente
 $vistaConfigCli = \App\Helpers\PreferenciasHelper::getPreferenciasVista('clientes');
 
@@ -30,25 +25,16 @@ if (!empty($vistaConfigCli['__pestanas_ocultas__']) && is_array($vistaConfigCli[
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigCli, 'estiloVistaPestanasCli');
 
 // 2. Forzar permisos de clientes
+// Usar el helper canónico (y no reimplementar la resolución a mano): antes esto
+// llamaba a getIdSubmoduloPorRutaMvc() (SINGULAR), que solo mira la PRIMERA fila
+// de submodulos_menu con esa ruta. Si "Clientes" cuelga de más de un menú y el
+// permiso del usuario quedó asignado en la fila que no es la primera, esto se
+// ocultaba aunque el usuario sí tuviera el permiso marcado en
+// /config/permisos-modulos. Permisos::porRuta() ya prueba TODAS las filas con
+// esa ruta antes de darlo por sin permiso (ver PermisoSubmodulo::getIdsSubmoduloPorRutaMvc()).
 $permCli = $perm ?? [];
 if (($rutaModulo ?? '') !== 'modulos/clientes') {
-    $modelPerm = new \App\models\PermisoSubmodulo();
-    $idSubCli = $modelPerm->getIdSubmoduloPorRutaMvc('modulos/clientes');
-    if ($idSubCli) {
-        $mapPerm = $modelPerm->getPermisosDeUsuario($idUsuarioAct, $idEmpresaAct);
-        if (isset($mapPerm[$idSubCli])) {
-            $p = $mapPerm[$idSubCli];
-            $permCli = [
-                'ver' => !empty($p['ver']),
-                'crear' => !empty($p['crear']),
-                'actualizar' => !empty($p['actualizar']),
-                'eliminar' => !empty($p['eliminar']),
-                'todo' => !empty($p['t']),
-            ];
-        } else if ($nivelAct >= 3) {
-            $permCli = ['ver' => true, 'crear' => true, 'actualizar' => true, 'eliminar' => true, 'todo' => true];
-        }
-    }
+    $permCli = \App\Helpers\Permisos::porRuta('modulos/clientes');
 }
 
 $urlBaseCliShared = BASE_URL . '/modulos/clientes';

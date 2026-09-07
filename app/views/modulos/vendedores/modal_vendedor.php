@@ -3,35 +3,21 @@
 /** @var string $rutaModulo */
 /** @var array $vistaConfig */
 
-// Asegurar consistencia si el modal se incluye desde otro módulo
-$idUsuarioAct = (int)($_SESSION['id_usuario'] ?? 0);
-$idEmpresaAct = (int)($_SESSION['id_empresa'] ?? 0);
-$nivelAct = (int)($_SESSION['nivel'] ?? 1);
-
 // 1. Forzar vistaConfig de vendedores para ocultar pestañas correctamente
 $vistaConfigVend = \App\Helpers\PreferenciasHelper::getPreferenciasVista('vendedores');
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigVend, 'estiloVistaPestanasVend');
 
 // 2. Forzar permisos de vendedores
+// Usar el helper canónico (y no reimplementar la resolución a mano): antes esto
+// llamaba a getIdSubmoduloPorRutaMvc() (SINGULAR), que solo mira la PRIMERA fila
+// de submodulos_menu con esa ruta. Si "Vendedores" cuelga de más de un menú y el
+// permiso del usuario quedó asignado en la fila que no es la primera, esto se
+// ocultaba aunque el usuario sí tuviera el permiso marcado en
+// /config/permisos-modulos. Permisos::porRuta() ya prueba TODAS las filas con
+// esa ruta antes de darlo por sin permiso (ver PermisoSubmodulo::getIdsSubmoduloPorRutaMvc()).
 $permVend = $perm ?? [];
 if (($rutaModulo ?? '') !== 'modulos/vendedores') {
-    $modelPerm = new \App\models\PermisoSubmodulo();
-    $idSubVend = $modelPerm->getIdSubmoduloPorRutaMvc('modulos/vendedores');
-    if ($idSubVend) {
-        $mapPerm = $modelPerm->getPermisosDeUsuario($idUsuarioAct, $idEmpresaAct);
-        if (isset($mapPerm[$idSubVend])) {
-            $p = $mapPerm[$idSubVend];
-            $permVend = [
-                'ver' => !empty($p['ver']),
-                'crear' => !empty($p['crear']),
-                'actualizar' => !empty($p['actualizar']),
-                'eliminar' => !empty($p['eliminar']),
-                'todo' => !empty($p['t']),
-            ];
-        } else if ($nivelAct >= 3) {
-            $permVend = ['ver' => true, 'crear' => true, 'actualizar' => true, 'eliminar' => true, 'todo' => true];
-        }
-    }
+    $permVend = \App\Helpers\Permisos::porRuta('modulos/vendedores');
 }
 
 $urlBaseVendShared = BASE_URL . '/modulos/vendedores';
