@@ -243,6 +243,10 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     .tabla-reporte th { padding: 8px 12px; background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; color: #495057; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; }
     .tabla-reporte td { padding: 6px 12px; border-bottom: 1px solid #e9ecef; color: #212529; }
     .tabla-reporte tr:hover td { background-color: #f8f9fa; }
+    /* Anchos: código y entidades de control al mínimo, valores compactos (1%: el ancho lo fija
+       el contenido con nowrap), y la columna Cuenta se queda con todo el espacio restante. */
+    .tabla-reporte th.th-codigo, .tabla-reporte th.th-ent-control, .tabla-reporte th.th-valor { width: 1%; white-space: nowrap; }
+    .tabla-reporte td.text-end, .tabla-reporte td:first-child { white-space: nowrap; }
     .tabla-reporte td.td-ent-control { white-space: nowrap; font-size: 0.7rem; }
     .tabla-reporte td.td-ent-control .badge { font-size: 0.68rem; padding: 2px 5px; }
     .tr-grupo td { font-weight: bold; background-color: rgba(0,0,0,0.02); }
@@ -511,9 +515,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
     function generarCabecera(nivelFiltro) {
         const nf = parseInt(nivelFiltro);
-        let html = `<thead><tr><th width="10%">Código</th><th width="14%">Ent. control</th><th>Cuenta</th>`;
+        let html = `<thead><tr><th class="th-codigo">Código</th><th class="th-ent-control">Ent. control</th><th>Cuenta</th>`;
         for (let i = nf; i >= 1; i--) {
-            html += `<th width="13%" class="text-end">Nivel ${i}</th>`;
+            html += `<th class="text-end th-valor">Nivel ${i}</th>`;
         }
         return html + `</tr></thead><tbody>`;
     }
@@ -659,9 +663,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     // ── Reportes horizontales "por periodos" (una columna por mes) ─────────────────────────
 
     function generarCabeceraPeriodos(periodos, conTotal) {
-        let html = `<thead><tr><th width="10%">Código</th><th width="14%">Ent. control</th><th>Cuenta</th>`;
-        Object.values(periodos).forEach(lbl => { html += `<th class="text-end">${lbl}</th>`; });
-        if (conTotal) html += `<th class="text-end">Total</th>`;
+        let html = `<thead><tr><th class="th-codigo">Código</th><th class="th-ent-control">Ent. control</th><th>Cuenta</th>`;
+        Object.values(periodos).forEach(lbl => { html += `<th class="text-end th-valor">${lbl}</th>`; });
+        if (conTotal) html += `<th class="text-end th-valor">Total</th>`;
         return html + `</tr></thead><tbody>`;
     }
 
