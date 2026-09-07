@@ -38,18 +38,32 @@ para una consulta rápida, pero no para presentar nada.
 
 ## Ver o editar una cuenta desde el reporte
 
-En cualquiera de los cuatro reportes, el **código** de cada cuenta de nivel 5
-(cuenta de movimiento) es un enlace. Al pulsarlo se abre la ficha de esa cuenta,
-la misma del módulo Plan de Cuentas, sin salir del balance:
+En cualquiera de los cuatro reportes, el **código** de cada cuenta de nivel 2 a
+5 es un enlace. Al pulsarlo se abre la ficha de esa cuenta, la misma del módulo
+Plan de Cuentas, sin salir del balance:
 
 - **Código y nivel**: solo lectura. El código de una cuenta nunca se cambia una
   vez creada, ni desde aquí ni desde Plan de Cuentas.
-- **Nombre, estado, centro de costo y proyecto**: editables.
+- **Nombre y estado**: editables en todos los niveles (en niveles 2 a 4 el
+  nombre va en mayúsculas).
+- **Centro de costo y proyecto**: solo en cuentas de nivel 5.
 - **Códigos de entidades de control** (sección *Configurar códigos entidades de
-  control*): Código SRI, Supercias ESF, ERI y ECP (código y subcódigo). Son los
-  que usan los formatos de exportación **Renta SRI** y **Supercias**, así que
-  este es el lugar natural para completarlos cuando, al revisar el balance, una
-  cuenta aparece sin mapear.
+  control*, solo nivel 5): Código SRI, Supercias ESF, ERI y ECP (código y
+  subcódigo). Son los que usan los formatos de exportación **Renta SRI** y
+  **Supercias**, así que este es el lugar natural para completarlos cuando, al
+  revisar el balance, una cuenta aparece sin mapear.
+
+Los grupos de nivel 1 (Activo, Pasivo, Patrimonio, Ingresos, Costos, Gastos) no
+se editan desde el reporte.
+
+### Columna "Ent. control"
+
+Junto al código, la columna **Ent. control** muestra en etiquetas los códigos
+de entidades de control que la cuenta tiene asignados: **SRI** (casillero del
+formulario de renta), **ESF**, **ERI** y **ECP** (casilleros Supercias; el ECP
+se ve como `código.subcódigo`). Una cuenta de nivel 5 con la celda vacía es una
+cuenta que todavía no se ha mapeado: pulse su código para completarla. Esta
+columna es solo de pantalla; no sale en las exportaciones a PDF y Excel.
 
 Al guardar, el reporte se vuelve a generar para reflejar el nombre nuevo.
 
@@ -160,9 +174,11 @@ Revise en este orden:
 
 ## Historial de cambios
 
-- **1.5** — El código de cada cuenta de nivel 5 del reporte abre la ficha de la
-  cuenta (modal de Plan de Cuentas): se pueden ver y editar nombre, estado,
-  centro de costo, proyecto y los códigos SRI / Supercias sin salir del balance.
+- **1.5** — El código de cada cuenta de nivel 2 a 5 del reporte abre la ficha de
+  la cuenta (modal de Plan de Cuentas): se pueden ver y editar nombre y estado y,
+  en nivel 5, centro de costo, proyecto y los códigos SRI / Supercias sin salir
+  del balance. Se agrega la columna **Ent. control** con los códigos SRI, ESF,
+  ERI y ECP de cada cuenta.
   El código y el nivel son de solo lectura. Sin permiso de actualizar en Plan de
   Cuentas la ficha se abre en modo consulta.
 - **1.4** — Cuando el asiento de un ingreso o un egreso no se puede generar por

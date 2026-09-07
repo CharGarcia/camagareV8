@@ -51,6 +51,10 @@ class EstadosFinancierosRepository
                 pc.nombre,
                 pc.nivel,
                 pc.codigo_sri,
+                pc.supercias_esf,
+                pc.supercias_eri,
+                pc.supercias_ecp_codigo,
+                pc.supercias_ecp_subcodigo,
                 COALESCE(SUM(CASE WHEN ac.estado = 'contabilizado' AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin THEN ad.debe ELSE 0 END), 0) AS total_debe,
                 COALESCE(SUM(CASE WHEN ac.estado = 'contabilizado' AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin THEN ad.haber ELSE 0 END), 0) AS total_haber
             FROM plan_cuentas pc
@@ -60,7 +64,7 @@ class EstadosFinancierosRepository
             LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id AND ac.eliminado = false AND ac.id_empresa = pc.id_empresa AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
             WHERE pc.id_empresa = :id_empresa 
               AND pc.eliminado = false
-            GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel
+            GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.codigo_sri, pc.supercias_esf, pc.supercias_eri, pc.supercias_ecp_codigo, pc.supercias_ecp_subcodigo
             ORDER BY pc.codigo ASC
         ";
 
@@ -76,7 +80,8 @@ class EstadosFinancierosRepository
      */
     public function getPlanCuentas(int $idEmpresa): array
     {
-        $sql = "SELECT id AS id_cuenta, codigo, nombre, nivel, codigo_sri
+        $sql = "SELECT id AS id_cuenta, codigo, nombre, nivel, codigo_sri,
+                       supercias_esf, supercias_eri, supercias_ecp_codigo, supercias_ecp_subcodigo
                 FROM plan_cuentas
                 WHERE id_empresa = :id_empresa AND eliminado = false
                 ORDER BY codigo ASC";

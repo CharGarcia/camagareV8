@@ -704,6 +704,10 @@ class EstadosFinancierosService
                 'nombre' => $cta['nombre'],
                 'nivel' => $cta['nivel'],
                 'codigo_sri' => $cta['codigo_sri'] ?? null,
+                'supercias_esf' => $cta['supercias_esf'] ?? null,
+                'supercias_eri' => $cta['supercias_eri'] ?? null,
+                'supercias_ecp_codigo' => $cta['supercias_ecp_codigo'] ?? null,
+                'supercias_ecp_subcodigo' => $cta['supercias_ecp_subcodigo'] ?? null,
                 'valores' => $valores,
             ];
         }

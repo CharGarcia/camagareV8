@@ -243,6 +243,8 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     .tabla-reporte th { padding: 8px 12px; background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; color: #495057; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; }
     .tabla-reporte td { padding: 6px 12px; border-bottom: 1px solid #e9ecef; color: #212529; }
     .tabla-reporte tr:hover td { background-color: #f8f9fa; }
+    .tabla-reporte td.td-ent-control { white-space: nowrap; font-size: 0.7rem; }
+    .tabla-reporte td.td-ent-control .badge { font-size: 0.68rem; padding: 2px 5px; }
     .tr-grupo td { font-weight: bold; background-color: rgba(0,0,0,0.02); }
     .tr-total td { font-weight: bold; background-color: rgba(13, 110, 253, 0.05); color: #0d6efd; border-top: 2px solid #dee2e6; }
     .tr-total-general td { font-weight: 800; background-color: #f8f9fa; border-top: 2px solid #343a40; font-size: 0.95rem; }
@@ -481,21 +483,35 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         }
     }
 
-    // Celda del código: en cuentas de nivel 5 (de movimiento) es clicable y abre la ficha de la
-    // cuenta (modal reutilizable de Plan de Cuentas) con sus códigos de entidades de control.
+    // Celda del código: en cuentas de nivel 2 a 5 es clicable y abre la ficha de la cuenta
+    // (modal reutilizable de Plan de Cuentas). En nivel 5 incluye además los códigos de
+    // entidades de control; en niveles 2 a 4 solo nombre y estado. Nivel 1 (grupos raíz) no.
     function celdaCodigo(item, esPadre, fwClass) {
         const nivelItem = parseInt(item.nivel);
         const idCuenta = parseInt(item.id_cuenta || 0);
-        if (nivelItem === 5 && !esPadre && idCuenta > 0) {
+        if (nivelItem >= 2 && idCuenta > 0) {
             const titulo = PC_PUEDE_ACTUALIZAR ? 'Ver / editar la cuenta contable' : 'Ver la cuenta contable';
             return `<td class="${fwClass}"><a href="javascript:void(0)" class="text-decoration-none fw-medium" onclick="abrirCuentaContable(${idCuenta})" title="${titulo}"><i class="bi bi-pencil-square small me-1 text-muted"></i>${item.codigo}</a></td>`;
         }
         return `<td class="${fwClass}">${item.codigo}</td>`;
     }
 
+    // Celda con los códigos de entidades de control de la cuenta (SRI, Supercias ESF/ERI/ECP).
+    // Solo muestra los que están asignados; en cuentas sin ninguno queda vacía.
+    function celdaEntidadesControl(item) {
+        const partes = [];
+        const add = (lbl, val, cls) => { if (val) partes.push(`<span class="badge ${cls} fw-normal" title="${lbl}">${lbl} ${val}</span>`); };
+        add('SRI', item.codigo_sri, 'bg-secondary bg-opacity-10 text-secondary border');
+        add('ESF', item.supercias_esf, 'bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25');
+        add('ERI', item.supercias_eri, 'bg-success bg-opacity-10 text-success border border-success border-opacity-25');
+        const ecp = item.supercias_ecp_codigo ? item.supercias_ecp_codigo + (item.supercias_ecp_subcodigo ? '.' + item.supercias_ecp_subcodigo : '') : '';
+        add('ECP', ecp, 'bg-info bg-opacity-10 text-info border border-info border-opacity-25');
+        return `<td class="td-ent-control">${partes.join(' ')}</td>`;
+    }
+
     function generarCabecera(nivelFiltro) {
         const nf = parseInt(nivelFiltro);
-        let html = `<thead><tr><th width="10%">Código</th><th>Cuenta</th>`;
+        let html = `<thead><tr><th width="10%">Código</th><th width="14%">Ent. control</th><th>Cuenta</th>`;
         for (let i = nf; i >= 1; i--) {
             html += `<th width="13%" class="text-end">Nivel ${i}</th>`;
         }
@@ -528,6 +544,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
         return `<tr>
             ${celdaCodigo(item, esPadre, fwClass)}
+            ${celdaEntidadesControl(item)}
             <td style="${paddingStyle}" class="${fwClass} ${cursorClass}" ${onclickAttr}>${item.nombre}</td>
             ${tdsNiveles}
         </tr>`;
@@ -544,16 +561,16 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                 tdsNiveles += `<td></td>`;
             }
         }
-        return `<tr class="${claseFila}"><td colspan="2" class="text-end ${colorClass}">${titulo}</td>${tdsNiveles}</tr>`;
+        return `<tr class="${claseFila}"><td colspan="3" class="text-end ${colorClass}">${titulo}</td>${tdsNiveles}</tr>`;
     }
 
     function generarFilaGrupo(titulo, icono, nivelFiltro) {
-        const cols = 2 + parseInt(nivelFiltro);
+        const cols = 3 + parseInt(nivelFiltro);
         return `<tr class="tr-grupo"><td colspan="${cols}"><i class="${icono} me-2"></i> ${titulo}</td></tr>`;
     }
 
     function generarFilaEspacio(nivelFiltro, h = 15) {
-        const cols = 2 + parseInt(nivelFiltro);
+        const cols = 3 + parseInt(nivelFiltro);
         return `<tr><td colspan="${cols}" style="height:${h}px; border:none;"></td></tr>`;
     }
 
@@ -642,7 +659,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     // ── Reportes horizontales "por periodos" (una columna por mes) ─────────────────────────
 
     function generarCabeceraPeriodos(periodos, conTotal) {
-        let html = `<thead><tr><th width="10%">Código</th><th>Cuenta</th>`;
+        let html = `<thead><tr><th width="10%">Código</th><th width="14%">Ent. control</th><th>Cuenta</th>`;
         Object.values(periodos).forEach(lbl => { html += `<th class="text-end">${lbl}</th>`; });
         if (conTotal) html += `<th class="text-end">Total</th>`;
         return html + `</tr></thead><tbody>`;
@@ -668,6 +685,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
         return `<tr>
             ${celdaCodigo(item, esPadre, fwClass)}
+            ${celdaEntidadesControl(item)}
             <td style="padding-left: ${15 + indent}px !important;" class="${fwClass} ${cursorClass}" ${onclickAttr}>${item.nombre}</td>
             ${tds}
         </tr>`;
@@ -677,16 +695,16 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         let tds = '';
         periodosClaves.forEach(p => { tds += `<td class="text-end ${colorClass}">${formatMoney(porPeriodo[p] || 0)}</td>`; });
         if (conTotal) tds += `<td class="text-end ${colorClass}">${formatMoney(porPeriodo.total || 0)}</td>`;
-        return `<tr class="${claseFila}"><td colspan="2" class="text-end ${colorClass}">${titulo}</td>${tds}</tr>`;
+        return `<tr class="${claseFila}"><td colspan="3" class="text-end ${colorClass}">${titulo}</td>${tds}</tr>`;
     }
 
     function generarFilaGrupoPeriodos(titulo, icono, periodosClaves, conTotal) {
-        const cols = 2 + periodosClaves.length + (conTotal ? 1 : 0);
+        const cols = 3 + periodosClaves.length + (conTotal ? 1 : 0);
         return `<tr class="tr-grupo"><td colspan="${cols}"><i class="${icono} me-2"></i> ${titulo}</td></tr>`;
     }
 
     function generarFilaEspacioPeriodos(periodosClaves, conTotal, h = 15) {
-        const cols = 2 + periodosClaves.length + (conTotal ? 1 : 0);
+        const cols = 3 + periodosClaves.length + (conTotal ? 1 : 0);
         return `<tr><td colspan="${cols}" style="height:${h}px; border:none;"></td></tr>`;
     }
 

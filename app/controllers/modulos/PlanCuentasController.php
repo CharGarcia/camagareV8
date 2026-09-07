@@ -224,8 +224,6 @@ class PlanCuentasController extends BaseModuloController
             $p = $repo->getDetalleCompleto($id, $idEmpresa);
             if (!$p) throw new \Exception('Cuenta no encontrada');
 
-            $fmt = fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime($d)) : '—';
-
             echo json_encode([
                 'ok' => true,
                 'data' => [
@@ -241,10 +239,6 @@ class PlanCuentasController extends BaseModuloController
                     'supercias_eri'           => $p['supercias_eri'] ?? '',
                     'supercias_ecp_codigo'    => $p['supercias_ecp_codigo'] ?? '',
                     'supercias_ecp_subcodigo' => $p['supercias_ecp_subcodigo'] ?? '',
-                    'creado_at'               => $fmt($p['created_at'] ?? null),
-                    'creado_por'              => $p['creado_por_nombre'] ?? 'Sistema',
-                    'actualizado_at'          => $fmt($p['updated_at'] ?? null),
-                    'actualizado_por'         => $p['actualizado_por_nombre'] ?? '—',
                 ],
                 'permisos' => [
                     'actualizar' => !empty($this->getPermisos()['actualizar']),

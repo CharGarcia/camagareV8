@@ -111,9 +111,6 @@
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between bg-light border-0 px-4 py-3">
-                    <div id="wrapper-auditoria-pc" class="small text-muted d-none">
-                        <i class="bi bi-info-circle me-1"></i> <span id="info_creado_at_pc" title="Creado"></span> | <span id="info_creado_por_pc"></span>
-                    </div>
                     <div class="ms-auto">
                         <button type="button" class="btn btn-link text-muted btn-sm text-decoration-none px-3" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnGuardarPC"><i class="bi bi-check-lg me-1"></i> Guardar</button>
@@ -159,7 +156,6 @@
             const form = document.getElementById('formPC');
             form.reset();
             document.getElementById('pc_id').value = '';
-            document.getElementById('wrapper-auditoria-pc').classList.add('d-none');
             document.getElementById('wrapper-parent-info-pc').classList.add('d-none');
             document.getElementById('wrapper-existing-accounts-pc').classList.add('d-none');
             document.getElementById('modalAlertPC').classList.add('d-none');
@@ -173,12 +169,6 @@
                 document.getElementById('pc_nivel_edit').value = data.nivel;
                 document.getElementById('pc_nombre_edit').value = data.nombre;
                 document.getElementById('pc_status').checked = (parseInt(data.status) === 1);
-
-                if (data.creado_at) {
-                    document.getElementById('info_creado_at_pc').textContent = data.creado_at;
-                    document.getElementById('info_creado_por_pc').textContent = data.creado_por || '';
-                    document.getElementById('wrapper-auditoria-pc').classList.remove('d-none');
-                }
 
                 if (parseInt(data.nivel) === 5) {
                     document.querySelectorAll('.wrapper-nivel-5-pc').forEach(el => el.classList.remove('d-none'));
