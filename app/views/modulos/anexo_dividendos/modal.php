@@ -100,7 +100,17 @@ use App\Helpers\PreferenciasHelper;
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="col-md-10">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold d-block">Salario básico del año</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light">$</span>
+                                    <input type="text" id="adi-sbu-texto" class="form-control bg-light" readonly value="0.00">
+                                </div>
+                                <div class="form-text adi-nota" id="adi-sbu-ayuda">
+                                    Franja exenta: 3 SBU por persona natural residente.
+                                </div>
+                            </div>
+                            <div class="col-md-7">
                                 <label class="form-label small fw-bold d-block">Informante</label>
                                 <div class="border rounded bg-light-subtle px-3 py-2 d-flex flex-wrap gap-4 align-items-center"
                                      style="min-height: 31px;">
@@ -117,16 +127,13 @@ use App\Helpers\PreferenciasHelper;
                                         <span id="adi-info-tipo-informante">—</span>
                                     </span>
                                 </div>
-                                <div class="form-text adi-nota" id="adi-info-ayuda">
-                                    Se toman de la empresa activa. Para cambiarlos, edite el RUC o el tipo de
-                                    contribuyente en la configuración de la empresa.
-                                </div>
                             </div>
                             <div class="col-md-12">
                                 <label class="form-label small fw-bold d-block">Razón social o apellidos y nombres</label>
-                                <input type="text" id="adi-razon-social" class="form-control form-control-sm" maxlength="500">
-                                <div class="form-text adi-nota">
-                                    Debe coincidir con el registro del SRI; por eso es el único dato del informante que se edita aquí.
+                                <input type="text" id="adi-info-razon-social" class="form-control form-control-sm bg-light" readonly>
+                                <div class="form-text adi-nota" id="adi-info-ayuda">
+                                    Los datos del informante se toman de la empresa activa. Para cambiarlos, edite el
+                                    nombre, el RUC o el tipo de contribuyente en la configuración de la empresa.
                                 </div>
                             </div>
                         </div>
@@ -167,15 +174,7 @@ use App\Helpers\PreferenciasHelper;
                         </div>
 
                         <div class="row g-3 mt-1">
-                            <div class="col-md-3">
-                                <label class="form-label small fw-bold d-block">Salario básico unificado del año</label>
-                                <input type="number" step="0.01" min="0" id="adi-sbu" class="form-control form-control-sm text-end">
-                                <div class="form-text adi-nota">
-                                    Franja exenta = 3 SBU por persona natural residente (art. 39.2 LRTI, desde
-                                    septiembre de 2025).
-                                </div>
-                            </div>
-                            <div class="col-md-9">
+                            <div class="col-md-12">
                                 <label class="form-label small fw-bold d-block">Observaciones internas</label>
                                 <input type="text" id="adi-observaciones" class="form-control form-control-sm" maxlength="500">
                             </div>

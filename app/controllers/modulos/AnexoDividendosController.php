@@ -83,6 +83,9 @@ class AnexoDividendosController extends BaseModuloController
             'vistaConfig' => $prefsVista,
             'anios'       => $listo ? $this->service->getAniosDisponibles($idEmpresa) : [],
             'defaults'    => $this->defaultsInformante($idEmpresa),
+            // Salario básico por año: la pantalla lo muestra al cambiar el
+            // período sin volver al servidor.
+            'sbus'        => $listo ? $this->repo->getSalariosBasicos() : [],
             'rutaModulo'  => $this->getRutaModulo(),
             'sinTablas'   => !$listo,
             'catalogo'    => $this->catalogoParaVista(),

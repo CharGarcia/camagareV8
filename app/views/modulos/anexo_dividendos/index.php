@@ -198,6 +198,7 @@ $pestanas = [
     window.ADI_MODULO    = '<?= $rutaModulo ?>';
     window.ADI_SORT_INI  = { col: '<?= htmlspecialchars($ordenCol) ?>', dir: '<?= htmlspecialchars($ordenDir) ?>' };
     window.ADI_DEFAULTS  = <?= json_encode($defaults ?? [], JSON_UNESCAPED_UNICODE) ?>;
+    window.ADI_SBUS      = <?= json_encode((object) ($sbus ?? []), JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <?= PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <script src="<?= $base ?>/js/modulos/anexo_dividendos.js?v=<?= time() ?>"></script>

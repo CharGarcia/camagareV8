@@ -135,8 +135,6 @@
         el('adi-id').value = '';
         el('adi-titulo-anio').textContent = '';
         pintarInformante(defaults);
-        el('adi-razon-social').value = defaults.razon_social || '';
-        el('adi-sbu').value = '0.00';
         el('adi-observaciones').value = '';
 
         ['adi-b1', 'adi-b2', 'adi-b3', 'adi-b4', 'adi-b5', 'adi-b6', 'adi-b7', 'adi-b8']
@@ -145,6 +143,7 @@
         // Un año ya usado no puede repetirse: el SRI presenta un anexo por
         // período y la base lo impide con un índice único.
         marcarAniosUsados();
+        pintarSbu(el('adi-anio')?.value);
 
         el('tbodyAdi') && (el('adi-badge-detalles').textContent = '0');
         el('adi-tbody-dividendos').innerHTML =
@@ -261,10 +260,9 @@
             selAnio.value = String(a.anio);
         }
         aplicarModoNuevo(false);
+        pintarSbu(a.anio);
 
         pintarInformante(a);
-        el('adi-razon-social').value = a.razon_social || '';
-        el('adi-sbu').value = parseFloat(a.sbu || 0).toFixed(2);
         el('adi-observaciones').value = a.observaciones || '';
 
         el('adi-b1').value = parseFloat(a.utilidad_ejercicio).toFixed(2);
@@ -298,6 +296,7 @@
             (CAT.tipo_identificacion || {})[tipoIdentificacion] || tipoIdentificacion || '—';
         el('adi-info-tipo-informante').textContent =
             (CAT.tipo_informante || {})[tipo] || tipo || '—';
+        el('adi-info-razon-social').value = datos.razon_social || '';
 
         const ayuda = el('adi-info-ayuda');
         if (!ayuda) return;
@@ -331,6 +330,36 @@
         ayuda.textContent = 'Se toman de la empresa activa. Para cambiarlos, edite el RUC o el tipo de ' +
             'contribuyente en la configuración de la empresa.';
     }
+
+    /**
+     * Muestra el salario básico del año seleccionado. Sale del catálogo global
+     * `salarios` —el mismo que usa la nómina—, así que no se captura: al cambiar
+     * el período se actualiza solo, y con él la franja exenta de tres SBU.
+     */
+    function pintarSbu(anio) {
+        const campo = el('adi-sbu-texto');
+        if (!campo) return;
+
+        const sbu = parseFloat((window.ADI_SBUS || {})[String(anio)] || 0);
+        campo.value = sbu.toFixed(2);
+
+        const ayuda = el('adi-sbu-ayuda');
+        if (!ayuda) return;
+
+        if (sbu > 0) {
+            ayuda.className = 'form-text adi-nota';
+            ayuda.innerHTML = 'Franja exenta: <strong>' + money(sbu * 3) +
+                '</strong> (3 SBU) por persona natural residente.';
+        } else {
+            ayuda.className = 'form-text adi-nota text-danger';
+            ayuda.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>El año ' + esc(anio) +
+                ' no tiene salario básico registrado en la tabla de salarios; sin él no se puede ' +
+                'descontar la franja exenta.';
+        }
+    }
+
+    // Al cambiar el período, el salario básico que le corresponde.
+    el('adi-anio')?.addEventListener('change', function () { pintarSbu(this.value); });
 
     function pintarEstado(estadoAnexo) {
         const badge = el('adi-badge-estado');
@@ -534,7 +563,6 @@
             // El tipo de informante, el tipo de identificación y la
             // identificación no se envían: el servidor los toma de la empresa
             // activa en cada guardado.
-            razon_social: el('adi-razon-social').value.trim(),
             utilidad_ejercicio: el('adi-b1').value,
             utilidad_distribuida_distinta_reinv: el('adi-b2').value,
             utilidad_reinvertida_con_derecho: el('adi-b3').value,
@@ -544,7 +572,6 @@
             utilidad_distrib_ejercicios_ant: el('adi-b8').value,
             cuentas_dividendos: cuentas.div,
             cuentas_resultados_acum: cuentas.res,
-            sbu: el('adi-sbu').value,
             observaciones: el('adi-observaciones').value.trim(),
         };
     }

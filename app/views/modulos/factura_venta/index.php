@@ -815,14 +815,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <div class="col-md-4">
                                         <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
 
-                                            <!-- Total Descuento: se muestra ANTES del Subtotal porque el Subtotal ya
-                                                 está neto (con el descuento de cada línea restado) — mostrarlo después
-                                                 daría la impresión de que se resta dos veces. -->
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="text-muted">(-) Descuento</span>
-                                                <span class="fw-bold text-dark" id="m-lbl-descuento">0.00</span>
-                                            </div>
-
                                             <!-- Subtotal General (neto: suma de los subtotales de línea) -->
                                             <div class="d-flex justify-content-between align-items-center mb-1 fw-bold border-bottom pb-1">
                                                 <span class="text-muted">Subtotal</span>
@@ -831,6 +823,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                                             <!-- Subtotales agrupados por tarifa IVA -->
                                             <div id="m-lbl-subtotales-iva" class="mb-1"></div>
+
+                                            <!-- Total Descuento (informativo: ya está restado dentro del Subtotal de arriba) -->
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="text-muted">(-) Descuento</span>
+                                                <span class="fw-bold text-dark" id="m-lbl-descuento">0.00</span>
+                                            </div>
 
                                             <!-- IVA agrupado por tarifa (solo los > 0) -->
                                             <div id="m-lbl-ivas-grupo" class="mb-1"></div>

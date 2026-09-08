@@ -45,19 +45,20 @@ en **SRI en Línea → Anexos → Envío y consulta de anexos → Anexo de Divid
   distribución debe tener asignado el cliente, proveedor o empleado que recibe el
   dividendo. De ahí salen la identificación y el nombre del beneficiario; las
   líneas sin tercero se reportan aparte para completarlas a mano.
-- **Salario básico unificado del año**, para calcular la franja exenta de las
-  personas naturales residentes.
+- **Salario básico del año registrado** en la tabla de salarios (la misma que
+  usa la nómina). De ahí sale la franja exenta de tres SBU de las personas
+  naturales residentes.
 
 ## Cómo se usa
 
 1. Pulse **Nuevo**. Se abre el anexo en blanco con el RUC y la razón social de la
    empresa activa ya cargados.
-2. En la pestaña **Informante y origen**, elija el **año informado** —es el
-   primer campo, igual que en la ficha del SRI— y escriba el salario básico del
-   año. Los datos del informante ya vienen de la empresa activa y solo se
-   muestran. Pulse **Guardar**: ahí se crea el anexo y el módulo propone las
-   cuentas contables que reconoce. Marque las de dividendos y las de resultados
-   acumulados, y guarde otra vez.
+2. En la pestaña **Informante y origen**, elija el **año informado**: es el
+   primer campo, igual que en la ficha del SRI. Los datos del informante y el
+   salario básico se rellenan solos —los primeros desde la empresa activa, el
+   segundo desde la tabla de salarios del año elegido—. Pulse **Guardar**: ahí se
+   crea el anexo y el módulo propone las cuentas contables que reconoce. Marque
+   las de dividendos y las de resultados acumulados, y guarde otra vez.
 3. Pulse **Importar de contabilidad**. El módulo lee los asientos del año en esas
    cuentas, crea un beneficiario por cada tercero y un dividendo por cada línea.
    Al terminar muestra qué movimientos quedaron sin beneficiario asignado.
@@ -80,20 +81,21 @@ botón de columnas y quedan guardadas para cada usuario, igual que el orden.
 
 ### Informante (sección A)
 
-El anexo se presenta siempre a nombre de la **empresa activa**, así que el tipo
-de informante, el tipo de identificación y la identificación no se capturan: se
-toman de ella y solo se muestran. El tipo de informante se obtiene del **tipo de
-contribuyente** configurado en la empresa (*Persona natural* y *Persona natural
-obligada a llevar contabilidad* → informante 02; *Sociedad*, *Contribuyente
-especial* y *Sector público* → informante 01) y, si ese dato falta, del propio
-RUC. Para corregirlos se editan los datos de la empresa, no el anexo.
+El anexo se presenta siempre a nombre de la **empresa activa**, así que ningún
+dato del informante se captura: identificación, tipo de identificación, tipo de
+informante y razón social se toman de ella y solo se muestran. El tipo de
+informante sale del **tipo de contribuyente** configurado en la empresa
+(*Persona natural* y *Persona natural obligada a llevar contabilidad* →
+informante 02; *Sociedad*, *Contribuyente especial* y *Sector público* →
+informante 01) y, si ese dato falta, del propio RUC. Para corregir cualquiera de
+ellos se editan los datos de la empresa, no el anexo.
 
 | Campo | Obligatorio | Qué significa |
 |-------|-------------|---------------|
 | Año informado | Sí | Período que se declara, desde 2010 y nunca posterior al año en curso. Se elige al crear el anexo y después queda bloqueado: es parte de su identidad y solo puede haber un anexo por año. Para otro período, cree uno nuevo. |
 | Informante | Derivado | Identificación, tipo de identificación y tipo de informante de la empresa activa. Si a la empresa le falta el RUC o el tipo de contribuyente, la pantalla lo advierte. |
-| Razón social | Sí | Entre 5 y 500 caracteres. Es el único dato del informante que se edita aquí, porque debe coincidir con el registro del SRI y a veces difiere del nombre guardado en la empresa. |
-| Salario básico unificado | Recomendado | Del año informado. La franja exenta es tres veces este valor por cada persona natural residente. |
+| Razón social | Derivado | Nombre de la empresa activa. Para cambiarlo, edítelo en la configuración de la empresa. |
+| Salario básico del año | Derivado | Se toma de la tabla de salarios según el año elegido y cambia con él. La franja exenta es tres veces ese valor por cada persona natural residente. Si el año no está en la tabla, la pantalla lo advierte. |
 
 ### Información de utilidades (sección B)
 
@@ -214,6 +216,9 @@ del sistema.
 - **«Falta el RUC o el tipo de contribuyente en la configuración de la
   empresa»**: el informante sale de esos datos, así que hay que completarlos
   antes de presentar el anexo.
+- **«El año no tiene salario básico registrado»**: falta ese año en la tabla de
+  salarios. Sin el SBU no se puede descontar la franja exenta de las personas
+  naturales residentes, y el ingreso gravado saldría por el monto completo.
 - **«N movimientos no tienen un cliente, proveedor o empleado asignado»**: el
   asiento de distribución no identifica al accionista en la línea. Corrija el
   asiento y vuelva a importar, o registre esos dividendos a mano.
@@ -234,9 +239,10 @@ del sistema.
 ## Historial de cambios
 
 - **1.2** — El año informado se elige dentro del anexo, como primer campo de la
-  pestaña *Informante y origen*, siguiendo el orden de la ficha del SRI. Los
-  datos del informante dejan de capturarse: salen de la empresa activa y de su
-  tipo de contribuyente.
+  pestaña *Informante y origen*, siguiendo el orden de la ficha del SRI. Dejan de
+  capturarse los datos del informante (salen de la empresa activa y de su tipo de
+  contribuyente) y el salario básico, que se toma de la tabla de salarios según
+  el año elegido.
 - **1.1** — El listado adopta el estándar del sistema: buscador con filtros,
   ordenamiento por columna, paginación y exportación a PDF y Excel.
 - **1.0** — Versión inicial. Secciones A, B y C del anexo con el esquema 2020 en

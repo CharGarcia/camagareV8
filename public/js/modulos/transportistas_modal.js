@@ -141,6 +141,31 @@
         }
     }
 
+    /**
+     * Cierra el modal y ejecuta `despues` SOLO cuando Bootstrap terminó de
+     * ocultarlo (hidden.bs.modal). Antes se llamaba hide() y en la misma línea
+     * Swal.fire(): el aviso abría mientras el modal aún se desvanecía y ambos
+     * manipulan <body> (modal-open / overflow / backdrop), con lo que a veces
+     * quedaba un fondo gris huérfano y la pantalla "bloqueada" hasta F5.
+     * Además limpia cualquier .modal-backdrop suelto si ya no hay modales abiertos.
+     */
+    function TR_cerrarModal(despues) {
+        const modalEl = document.getElementById('modalTransportista');
+        const inst    = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+        const limpiar = () => {
+            if (!document.querySelector('.modal.show')) {
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+            }
+            if (typeof despues === 'function') despues();
+        };
+        if (!inst || !modalEl.classList.contains('show')) { limpiar(); return; }
+        modalEl.addEventListener('hidden.bs.modal', limpiar, { once: true });
+        inst.hide();
+    }
+
     window.TR_validarEmails = function () {
         const campo = document.getElementById('tr-email');
         const errEl = document.getElementById('tr-email-error');
@@ -203,14 +228,14 @@
                     btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
                 }
                 if (d.ok) {
-                    const modalEl = document.getElementById('modalTransportista');
-                    if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
+                    TR_cerrarModal(() => {
+                        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', timer: 2500, showConfirmButton: false, timerProgressBar: true });
+                    });
                     
                     if (typeof window.TR_fetchSearch === 'function') {
                         window.TR_fetchSearch(id ? window.TR_currentPage : 1);
                     }
                     
-                    Swal.fire({ icon: 'success', title: '¡Guardado!', text: d.mensaje, timer: 2000, showConfirmButton: false });
                     
                     // Disparar evento por si otros módulos lo necesitan
                     document.dispatchEvent(new CustomEvent('transportistaGuardado', { detail: d }));
@@ -247,11 +272,10 @@
         .then(r => r.json())
         .then(d => {
             if (d.ok) {
-                const modalEl = document.getElementById('modalTransportista');
-                if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
-                
-                if (typeof window.TR_fetchSearch === 'function') window.TR_fetchSearch(1);
-                Swal.fire({ icon: 'success', title: 'Eliminado', text: d.mensaje, timer: 2000, showConfirmButton: false });
+                TR_cerrarModal(() => {
+                    if (typeof window.TR_fetchSearch === 'function') window.TR_fetchSearch(1);
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Eliminado', timer: 2500, showConfirmButton: false, timerProgressBar: true });
+                });
             } else {
                 Swal.fire({ icon: 'error', title: 'Error', text: d.mensaje });
             }

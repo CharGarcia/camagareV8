@@ -135,10 +135,9 @@ class AnexoDividendosService
             'id_usuario'              => $idUsuario,
             'anio'                    => $anio,
             'tipo_ambiente'           => $ambiente,
-            'razon_social'            => $this->razonSocialEmpresa($idEmpresa),
             'cuentas_dividendos'      => $this->cuentasSugeridas($this->repo->getCuentasSugeridasDividendos($idEmpresa)),
             'cuentas_resultados_acum' => $this->cuentasSugeridas($this->repo->getCuentasSugeridasResultados($idEmpresa)),
-            'sbu'                     => 0,
+            'sbu'                     => $this->repo->getSbuPorAnio($anio),
             'estado'                  => 'borrador',
         ]);
 
@@ -198,7 +197,6 @@ class AnexoDividendosService
         // en Configuración → Empresa, el anexo se pone al día solo.
         $datos = array_merge($this->informanteDeEmpresa($idEmpresa), [
             'anio'                                => (int) $actual['anio'],
-            'razon_social'                        => trim((string) ($data['razon_social'] ?? $actual['razon_social'])),
             'utilidad_ejercicio'                  => $this->num($data['utilidad_ejercicio'] ?? $actual['utilidad_ejercicio']),
             'utilidad_distribuida_distinta_reinv' => $this->num($data['utilidad_distribuida_distinta_reinv'] ?? $actual['utilidad_distribuida_distinta_reinv']),
             'utilidad_reinvertida_con_derecho'    => $this->num($data['utilidad_reinvertida_con_derecho'] ?? $actual['utilidad_reinvertida_con_derecho']),
@@ -208,7 +206,7 @@ class AnexoDividendosService
             'utilidad_distrib_ejercicios_ant'     => $this->num($data['utilidad_distrib_ejercicios_ant'] ?? $actual['utilidad_distrib_ejercicios_ant']),
             'cuentas_dividendos'                  => $this->normalizarCuentas($data['cuentas_dividendos'] ?? null, $actual['cuentas_dividendos']),
             'cuentas_resultados_acum'             => $this->normalizarCuentas($data['cuentas_resultados_acum'] ?? null, $actual['cuentas_resultados_acum']),
-            'sbu'                                 => $this->num($data['sbu'] ?? $actual['sbu']),
+            'sbu'                                 => $this->repo->getSbuPorAnio((int) $actual['anio']),
             'estado'                              => trim((string) ($data['estado'] ?? $actual['estado'])),
             'observaciones'                       => $data['observaciones'] ?? $actual['observaciones'],
             'id_usuario'                          => $idUsuario,
@@ -612,7 +610,6 @@ class AnexoDividendosService
 
         $datos = array_merge($this->informanteDeEmpresa($idEmpresa), [
             'anio'                                => $anio,
-            'razon_social'                        => (string) $anexo['razon_social'],
             'utilidad_ejercicio'                  => $utilidad,
             'utilidad_distribuida_distinta_reinv' => round($delEjercicio, 2),
             'utilidad_reinvertida_con_derecho'    => $this->num($anexo['utilidad_reinvertida_con_derecho']),
@@ -622,7 +619,7 @@ class AnexoDividendosService
             'utilidad_distrib_ejercicios_ant'     => round($anteriores, 2),
             'cuentas_dividendos'                  => $this->decodificarCuentas($anexo['cuentas_dividendos']),
             'cuentas_resultados_acum'             => $this->decodificarCuentas($anexo['cuentas_resultados_acum']),
-            'sbu'                                 => $this->num($anexo['sbu']),
+            'sbu'                                 => $this->repo->getSbuPorAnio($anio),
             'estado'                              => (string) $anexo['estado'],
             'observaciones'                       => $anexo['observaciones'],
             'id_usuario'                          => $idUsuario,
@@ -1148,18 +1145,14 @@ class AnexoDividendosService
     }
 
     /**
-     * Identificación del informante (sección A.2) tomada de la empresa activa.
+     * Datos del informante (sección A.2) tomados de la empresa activa.
      *
      * El anexo siempre se presenta a nombre de la empresa con la que se está
-     * trabajando, así que estos tres campos no se capturan: se derivan en cada
+     * trabajando, así que ninguno de estos campos se captura: se derivan en cada
      * guardado. El tipo de informante sale del tipo de contribuyente configurado
      * en la empresa y, si falta, del propio RUC.
      *
-     * La razón social queda fuera a propósito: es el único dato que a veces hay
-     * que ajustar para que coincida con el registro del SRI, así que se edita en
-     * la pantalla.
-     *
-     * @return array{tipo_informante:string, tipo_id_informante:string, id_informante:string}
+     * @return array{tipo_informante:string, tipo_id_informante:string, id_informante:string, razon_social:string}
      */
     private function informanteDeEmpresa(int $idEmpresa): array
     {
@@ -1171,15 +1164,8 @@ class AnexoDividendosService
             // Una empresa del sistema siempre se identifica con RUC.
             'tipo_id_informante' => 'R',
             'id_informante'      => $ruc,
+            'razon_social'       => trim((string) ($empresa['nombre'] ?? '')),
         ];
-    }
-
-    /** Razón social con la que se abre un anexo nuevo. */
-    private function razonSocialEmpresa(int $idEmpresa): string
-    {
-        $empresa = (new Empresa())->getPorId($idEmpresa) ?: [];
-
-        return trim((string) ($empresa['nombre'] ?? ''));
     }
 
     /** Cuentas sugeridas → formato de almacenamiento [{id, lado}]. */

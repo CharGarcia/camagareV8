@@ -856,6 +856,35 @@ class AnexoDividendosRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Salario básico unificado por año, del catálogo global `salarios` (el mismo
+     * que usa la nómina). Con él se calcula la franja exenta de tres SBU del
+     * art. 39.2 LRTI, así que se lee de una sola fuente y no se retipea.
+     *
+     * @return array<int,float> anio => sbu
+     */
+    public function getSalariosBasicos(): array
+    {
+        if (!$this->tablaExiste('salarios')) {
+            return [];
+        }
+
+        $filas = $this->query("SELECT ano, sbu FROM salarios ORDER BY ano DESC")->fetchAll(PDO::FETCH_ASSOC);
+
+        $salarios = [];
+        foreach ($filas as $f) {
+            $salarios[(int) $f['ano']] = round((float) $f['sbu'], 2);
+        }
+
+        return $salarios;
+    }
+
+    /** SBU del año, o 0.00 si ese año no está en el catálogo. */
+    public function getSbuPorAnio(int $anio): float
+    {
+        return $this->getSalariosBasicos()[$anio] ?? 0.0;
+    }
+
     /** Años con movimientos contabilizados, para el selector de período. */
     public function getAniosDisponibles(int $idEmpresa, string $tipoAmbiente): array
     {
