@@ -232,6 +232,81 @@ class EstadosFinancierosRepository
     }
 
     /**
+     * Cuentas de nivel 5 CON movimiento contabilizado en el rango (mismos filtros de pantalla), con
+     * su mapeo Supercías, el nombre de su cuenta padre (para sugerir casilleros) y el neto del año.
+     * Base del diagnóstico Supercías.
+     */
+    public function getCuentasConMovimientoParaDiagnostico(int $idEmpresa, string $fechaInicio, string $fechaFin): array
+    {
+        $sql = "
+            SELECT pc.id AS id_cuenta, pc.codigo, pc.nombre, pc.nivel,
+                   pc.codigo_sri, pc.supercias_esf, pc.supercias_eri, pc.supercias_ecp_codigo, pc.supercias_ecp_subcodigo,
+                   (SELECT p4.nombre FROM plan_cuentas p4
+                     WHERE p4.id_empresa = pc.id_empresa AND p4.eliminado = false
+                       AND p4.codigo = substring(pc.codigo from '^(.*)\\.[^.]+$')
+                     LIMIT 1) AS nombre_padre,
+                   SUM(ad.debe) AS debe, SUM(ad.haber) AS haber,
+                   SUM(CASE WHEN COALESCE(ac.tipo_comprobante, '') = 'apertura' THEN 1 ELSE 0 END) AS lineas_apertura
+            FROM plan_cuentas pc
+            JOIN asientos_contables_detalle ad ON ad.id_cuenta_contable = pc.id AND ad.eliminado = false
+            JOIN asientos_contables_cabecera ac ON ac.id = ad.id_asiento
+                AND ac.eliminado = false
+                AND ac.estado = 'contabilizado'
+                AND ac.id_empresa = pc.id_empresa
+                AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
+                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+            WHERE pc.id_empresa = :id_empresa
+              AND pc.eliminado = false
+            GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.codigo_sri, pc.supercias_esf, pc.supercias_eri,
+                     pc.supercias_ecp_codigo, pc.supercias_ecp_subcodigo, pc.id_empresa
+            ORDER BY pc.codigo ASC
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute(['id_empresa' => $idEmpresa, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Asientos contabilizados en la fecha de inicio del rango que NO son de tipo 'apertura' pero
+     * parecen saldos iniciales: solo cuentas de balance (1, 2, 3) y varias líneas. Diagnóstico.
+     */
+    public function getAsientosAperturaSospechosos(int $idEmpresa, string $fechaInicio): array
+    {
+        $sql = "
+            SELECT ac.id, ac.fecha_asiento, ac.tipo_comprobante, ac.concepto,
+                   COUNT(ad.id) AS lineas, SUM(ad.debe) AS total_debe
+            FROM asientos_contables_cabecera ac
+            JOIN asientos_contables_detalle ad ON ad.id_asiento = ac.id AND ad.eliminado = false
+            JOIN plan_cuentas pc ON pc.id = ad.id_cuenta_contable
+            WHERE ac.id_empresa = :id_empresa
+              AND ac.eliminado = false
+              AND ac.estado = 'contabilizado'
+              AND ac.fecha_asiento = :fecha_inicio
+              AND COALESCE(ac.tipo_comprobante, '') <> 'apertura'
+              AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+            GROUP BY ac.id, ac.fecha_asiento, ac.tipo_comprobante, ac.concepto
+            HAVING COUNT(ad.id) >= 4
+               AND SUM(CASE WHEN pc.codigo ~ '^[4567]' THEN 1 ELSE 0 END) = 0
+            ORDER BY ac.id
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute(['id_empresa' => $idEmpresa, 'fecha_inicio' => $fechaInicio]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /** Casilleros de la estructura Supercías por tipo: codigo => formula (o '' si no tiene). */
+    public function getCasillerosEstructura(string $tipo): array
+    {
+        $st = $this->db->prepare("SELECT codigo, COALESCE(formula, '') AS formula FROM supercias_estructuras WHERE tipo = :tipo AND eliminado = false AND COALESCE(subcodigo, '') = ''");
+        $st->execute([':tipo' => $tipo]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(string) $r['codigo']] = trim((string) $r['formula']);
+        }
+        return $out;
+    }
+
+    /**
      * Catálogo de cuentas de la empresa (todas, sin filtrar por movimiento). Base para armar
      * la matriz cuenta × periodo del reporte "por periodos" (getSaldosPorPeriodo).
      */

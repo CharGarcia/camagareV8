@@ -93,6 +93,50 @@ class PlanCuentaService
         }
     }
 
+    /**
+     * Actualiza SOLO los códigos de entidades de control de una cuenta. Los campos null se conservan.
+     * Pasa por la normalización del mapeo ECP y por las reglas, y deja auditoría.
+     * Devuelve la cuenta con sus códigos finales.
+     */
+    public function actualizarCodigosControl(int $id, int $idEmpresa, int $idUsuario, array $codigos): array
+    {
+        $old = $this->repository->findById($id, $idEmpresa);
+        if (!$old) {
+            throw new Exception('Cuenta no encontrada.');
+        }
+
+        $data = $old;
+        foreach (['codigo_sri', 'supercias_esf', 'supercias_eri', 'supercias_ecp_codigo', 'supercias_ecp_subcodigo'] as $campo) {
+            if (array_key_exists($campo, $codigos) && $codigos[$campo] !== null) {
+                $data[$campo] = trim((string) $codigos[$campo]);
+            }
+        }
+        $data = \App\Helpers\SuperciasEcp::normalizarMapeo($data);
+        $this->rules->validate($data);
+
+        $this->repository->beginTransaction();
+        try {
+            $this->repository->actualizarCodigosControl($id, $idEmpresa, $data, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR', 'plan_cuentas', $id,
+                array_intersect_key($old, array_flip(['codigo', 'codigo_sri', 'supercias_esf', 'supercias_eri', 'supercias_ecp_codigo', 'supercias_ecp_subcodigo'])),
+                array_intersect_key($data, array_flip(['codigo', 'codigo_sri', 'supercias_esf', 'supercias_eri', 'supercias_ecp_codigo', 'supercias_ecp_subcodigo'])));
+            $this->repository->commit();
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+
+        return [
+            'id'                      => $id,
+            'codigo'                  => $data['codigo'],
+            'codigo_sri'              => (string) ($data['codigo_sri'] ?? ''),
+            'supercias_esf'           => (string) ($data['supercias_esf'] ?? ''),
+            'supercias_eri'           => (string) ($data['supercias_eri'] ?? ''),
+            'supercias_ecp_codigo'    => (string) ($data['supercias_ecp_codigo'] ?? ''),
+            'supercias_ecp_subcodigo' => (string) ($data['supercias_ecp_subcodigo'] ?? ''),
+        ];
+    }
+
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
     {
         $old = $this->repository->findById($id, $idEmpresa);

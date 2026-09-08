@@ -381,6 +381,30 @@ class EstadosFinancierosController extends BaseModuloController
         }
     }
 
+    /**
+     * Diagnóstico Supercías: qué falta mapear o corregir para que los TXT (ESF/ERI/ECP/EFE)
+     * salgan completos y cuadrados, con sugerencias de casillero por cuenta.
+     */
+    public function diagnosticoSuperciasAjax(): void
+    {
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
+            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
+            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
+            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+
+            $diag = new \App\Services\modulos\SuperciasDiagnosticoService(new EstadosFinancierosRepository(), $this->service);
+            $datos = $diag->diagnosticar($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+            $datos['puede_corregir'] = \App\Helpers\Permisos::puedeActualizar('modulos/plan-cuentas');
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     protected function getRutaModulo(): string
     {
         return 'modulos/estados-financieros';

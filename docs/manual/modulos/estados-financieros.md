@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados
-version: 1.8
+version: 1.9
 orden: 50
 estado: activo
 ---
@@ -77,6 +77,24 @@ correspondientes tengan asignado el código Supercias (columna *Ent. control* de
 reporte, o pulse el código de la cuenta para completarlo). El ECP y el EFE no
 usan un casillero propio por cuenta: se calculan a partir de los asientos y del
 mapeo ESF/ERI, como se explica en las dos secciones siguientes.
+
+### Revisar Supercias: qué falta configurar
+
+El botón **Revisar Supercias** revisa la empresa para el rango elegido y lista
+todo lo que impide que los cuatro archivos salgan completos y cuadrados:
+cuentas con movimiento sin casillero ESF o ERI, casilleros que no existen o
+que son de totales, patrimonio sin columna ECP, caja y bancos sin identificar,
+cuenta de cierre del ejercicio sin configurar, saldos iniciales sin tipo
+*apertura*, impuesto o participación registrados solo como pasivo, fórmulas de
+totales pendientes en la estructura global, y los cuadres del balance, del ECP
+y del EFE.
+
+Para cada cuenta el sistema **sugiere el casillero** según su nombre. Con
+permiso de actualizar en Plan de Cuentas se aplica con un clic, fila por fila
+o todo el hallazgo; la sugerencia nunca se guarda sola. Al pulsar cualquier
+descarga de Supercias la revisión se ejecuta antes; si hay hallazgos en rojo
+se muestran y el usuario decide si descarga de todos modos. El recorrido
+completo está en la guía *Presentar los estados financieros a Supercías*.
 
 ### Supercias ECP (Estado de Cambios en el Patrimonio)
 
@@ -312,6 +330,10 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.9** — Nuevo botón **Revisar Supercias**: diagnóstico de la empresa con
+  sugerencias de casillero por cuenta aplicables con un clic, y revisión
+  automática antes de cada descarga Supercias. Guía nueva *Presentar los
+  estados financieros a Supercías*.
 - **1.8** — El **Supercias EFE** se calcula automáticamente: método directo
   clasificando cada asiento de efectivo por el casillero ESF/ERI de su
   contrapartida, y conciliación desde el ERI y la variación del capital de

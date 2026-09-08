@@ -132,6 +132,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Ver en pantalla el Estado de Flujos de Efectivo (Supercias EFE) antes de descargarlo" onclick="verEfe()">
                 <i class="bi bi-cash-stack text-info"></i> Ver EFE
             </button>
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Revisar qué falta configurar para que los archivos Supercias salgan completos y cuadrados" onclick="revisarSupercias()">
+                <i class="bi bi-clipboard2-check text-warning"></i> Revisar Supercias
+            </button>
         </div>
         <?php if (!empty($hayGrupoRuc)): ?>
         <button type="button" class="btn btn-outline-primary btn-sm shadow-sm ms-2" onclick="verConsolidadoRuc()">
@@ -295,6 +298,34 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <div class="modal-footer bg-light py-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
                 <button type="button" class="btn btn-primary btn-sm" onclick="exportar('supercias_efe')"><i class="bi bi-download me-1"></i> Descargar TXT</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: diagnóstico Supercias (qué falta configurar para los TXT) -->
+<div class="modal fade" id="modalDiagSupercias" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-ecp modal-fullscreen-xl-down modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold"><i class="bi bi-clipboard2-check text-warning me-2"></i>Revisión Supercias</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loader-diag" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+                    <p class="text-muted small mt-2">Revisando cuentas, mapeos y cuadres del período...</p>
+                </div>
+                <div id="content-diag" class="d-none">
+                    <div id="diag-resumen" class="d-flex flex-wrap gap-2 align-items-center mb-3"></div>
+                    <div id="diag-hallazgos"></div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <span class="me-auto small text-muted" id="diag-pie"></span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="revisarSupercias()"><i class="bi bi-arrow-clockwise me-1"></i> Volver a revisar</button>
+                <button type="button" class="btn btn-primary btn-sm d-none" id="btn-diag-descargar"><i class="bi bi-download me-1"></i> Descargar de todos modos</button>
             </div>
         </div>
     </div>
@@ -1052,7 +1083,137 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         tb2.innerHTML = html;
     }
 
-    function exportar(formato) {
+    // ── Diagnóstico Supercias ──────────────────────────────────────────────────────────────
+    let diagFormatoPendiente = null; // formato supercias_* que se quiso descargar y quedó a la espera del diagnóstico
+
+    async function revisarSupercias(formatoPendiente = null) {
+        const fInicio = document.getElementById('fecha_inicio').value;
+        const fFin = document.getElementById('fecha_fin').value;
+        if (!fInicio || !fFin) {
+            Swal.fire({ icon: 'warning', title: 'Atención', text: 'Por favor seleccione un rango de fechas válido.' });
+            return false;
+        }
+        diagFormatoPendiente = formatoPendiente;
+        const centro = document.getElementById('filtro_centro_costo').value;
+        const proyecto = document.getElementById('filtro_proyecto').value;
+        const modalEl = document.getElementById('modalDiagSupercias');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        document.getElementById('loader-diag').classList.remove('d-none');
+        document.getElementById('content-diag').classList.add('d-none');
+        document.getElementById('btn-diag-descargar').classList.add('d-none');
+        modal.show();
+        try {
+            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto });
+            const res = await fetch(`${urlBase}/diagnosticoSuperciasAjax?${params.toString()}`).then(r => r.json());
+            if (!res.success) { Swal.fire('Error', res.error || 'No se pudo hacer la revisión.', 'error'); modal.hide(); return false; }
+            renderDiagSupercias(res.data);
+            document.getElementById('loader-diag').classList.add('d-none');
+            document.getElementById('content-diag').classList.remove('d-none');
+            return res.data.resumen.bloqueantes === 0;
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Error de red o servidor al hacer la revisión.', 'error');
+            modal.hide();
+            return false;
+        }
+    }
+
+    function renderDiagSupercias(d) {
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const r = d.resumen;
+        const puede = !!d.puede_corregir;
+        document.getElementById('diag-resumen').innerHTML =
+            `<span class="badge ${r.bloqueantes ? 'bg-danger' : 'bg-success'} fs-6">${r.bloqueantes} por corregir</span>
+             <span class="badge ${r.advertencias ? 'bg-warning text-dark' : 'bg-success'} fs-6">${r.advertencias} advertencias</span>
+             <span class="badge bg-success bg-opacity-75 fs-6">${r.ok} en orden</span>
+             <span class="small text-muted ms-2">${r.bloqueantes === 0 ? 'Los archivos Supercias pueden generarse completos.' : 'Hay valores que no saldrán en los archivos hasta corregir lo marcado en rojo.'}</span>`;
+        document.getElementById('diag-pie').textContent = puede ? 'Puede aplicar las sugerencias o abrir cada cuenta para editarla.' : 'No tiene permiso para modificar el Plan de Cuentas: entregue esta lista a quien lo administre.';
+
+        const btnDesc = document.getElementById('btn-diag-descargar');
+        if (diagFormatoPendiente) {
+            btnDesc.classList.remove('d-none');
+            btnDesc.onclick = () => { const f = diagFormatoPendiente; diagFormatoPendiente = null; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiagSupercias')).hide(); exportar(f, true); };
+        } else {
+            btnDesc.classList.add('d-none');
+        }
+
+        const sev = { bloqueante: ['danger', 'bi-x-octagon-fill', 'Por corregir'], advertencia: ['warning', 'bi-exclamation-triangle-fill', 'Advertencia'], ok: ['success', 'bi-check-circle-fill', 'En orden'] };
+        let html = '';
+        d.hallazgos.forEach((h, idx) => {
+            const [color, icon, label] = sev[h.severidad] || sev.ok;
+            const abierto = h.severidad !== 'ok';
+            const conSug = h.items.some(i => i.sugerencia && (i.sugerencia.esf || i.sugerencia.eri || i.sugerencia.ecp_columna));
+            html += `<div class="card mb-2 border-${color} border-opacity-50">
+                <div class="card-header py-2 px-3 d-flex align-items-center gap-2 bg-${color} bg-opacity-10" style="cursor:pointer" onclick="this.nextElementSibling.classList.toggle('d-none')">
+                    <i class="bi ${icon} text-${color}"></i>
+                    <strong class="small">${esc(h.titulo)}</strong>
+                    <span class="badge bg-${color} bg-opacity-75">${label}${h.items.length ? ' · ' + h.items.length : ''}</span>
+                    <span class="ms-auto small text-muted">Afecta: ${h.afecta.join(', ')}</span>
+                </div>
+                <div class="card-body py-2 px-3 small ${abierto ? '' : 'd-none'}">
+                    <p class="text-muted mb-2">${esc(h.descripcion)}</p>`;
+            if (h.items.length) {
+                html += `<div class="d-flex justify-content-between align-items-center mb-1">
+                    <span><i class="bi bi-arrow-right-short"></i> <strong>${esc(h.accion)}</strong>${h.enlace ? ` <a href="${esc(BASE_URL + h.enlace)}" target="_blank" class="ms-1">Abrir <i class="bi bi-box-arrow-up-right"></i></a>` : ''}</span>
+                    ${puede && conSug ? `<button class="btn btn-sm btn-outline-primary py-0" onclick="aplicarSugerenciasHallazgo(${idx})"><i class="bi bi-magic me-1"></i>Aplicar todas las sugerencias</button>` : ''}
+                </div>
+                <div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:.75rem;"><thead class="table-light"><tr>
+                    <th>Cuenta</th><th>Nombre</th><th>Problema</th>${conSug ? '<th>Sugerencia</th><th style="width:170px"></th>' : ''}</tr></thead><tbody>`;
+                h.items.forEach((it, j) => {
+                    const s = it.sugerencia || {};
+                    const partes = [];
+                    if (s.esf) partes.push(`ESF <code>${esc(s.esf)}</code>`);
+                    if (s.eri) partes.push(`ERI <code>${esc(s.eri)}</code>`);
+                    if (s.ecp_columna) partes.push(`ECP col. <code>${esc(s.ecp_columna)}</code>`);
+                    const sugTxt = partes.length ? partes.join(' · ') + (s.motivo ? `<br><span class="text-muted">${esc(s.motivo)}</span>` : '') : '<span class="text-muted">Sin sugerencia: elija el casillero en la ficha</span>';
+                    const idCta = it.id_cuenta ? parseInt(it.id_cuenta) : 0;
+                    html += `<tr id="diag-item-${idx}-${j}"><td class="text-nowrap">${esc(it.codigo)}</td><td>${esc(it.nombre)}</td><td>${esc(it.problema || '')}</td>`;
+                    if (conSug) {
+                        html += `<td>${sugTxt}</td><td class="text-nowrap">`;
+                        if (idCta > 0 && puede && partes.length) html += `<button class="btn btn-sm btn-primary py-0 me-1" onclick="aplicarSugerencia(${idx}, ${j})" title="Guardar la sugerencia en la cuenta"><i class="bi bi-check-lg"></i> Aplicar</button>`;
+                        if (idCta > 0) html += `<button class="btn btn-sm btn-outline-secondary py-0" onclick="abrirCuentaContable(${idCta})" title="Abrir la ficha de la cuenta"><i class="bi bi-pencil-square"></i></button>`;
+                        html += '</td>';
+                    }
+                    html += '</tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+            html += '</div></div>';
+        });
+        document.getElementById('diag-hallazgos').innerHTML = html;
+        window.__diagSupercias = d;
+    }
+
+    async function aplicarSugerencia(idx, j, silencioso = false) {
+        const d = window.__diagSupercias; if (!d) return false;
+        const it = d.hallazgos[idx].items[j]; const s = it.sugerencia || {};
+        const body = new URLSearchParams({ id: it.id_cuenta });
+        if (s.esf) body.append('supercias_esf', s.esf);
+        if (s.eri) body.append('supercias_eri', s.eri);
+        if (s.ecp_columna) body.append('supercias_ecp_subcodigo', s.ecp_columna);
+        try {
+            const res = await fetch(`${urlPlanCuentas}/actualizarCodigosControlAjax`, { method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(r => r.json());
+            if (!res.ok) { if (!silencioso) Swal.fire('No se pudo aplicar', res.error || 'Error', 'error'); return false; }
+            const tr = document.getElementById(`diag-item-${idx}-${j}`);
+            if (tr) { tr.classList.add('table-success'); tr.lastElementChild.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Aplicado</span>'; }
+            return true;
+        } catch (e) { console.error(e); if (!silencioso) Swal.fire('Error', 'Error de red al guardar.', 'error'); return false; }
+    }
+
+    async function aplicarSugerenciasHallazgo(idx) {
+        const d = window.__diagSupercias; if (!d) return;
+        const items = d.hallazgos[idx].items;
+        const aplicables = items.map((it, j) => ({ it, j })).filter(x => x.it.id_cuenta && x.it.sugerencia && (x.it.sugerencia.esf || x.it.sugerencia.eri || x.it.sugerencia.ecp_columna));
+        if (!aplicables.length) return;
+        const c = await Swal.fire({ icon: 'question', title: `¿Aplicar ${aplicables.length} sugerencia(s)?`, text: 'Se guardarán los casilleros sugeridos en esas cuentas. Podrá cambiarlos después desde la ficha de cada cuenta.', showCancelButton: true, confirmButtonText: 'Sí, aplicar', cancelButtonText: 'Cancelar' });
+        if (!c.isConfirmed) return;
+        let ok = 0, fallo = 0;
+        for (const x of aplicables) { (await aplicarSugerencia(idx, x.j, true)) ? ok++ : fallo++; }
+        Swal.fire({ icon: fallo ? 'warning' : 'success', title: `${ok} aplicada(s)${fallo ? ', ' + fallo + ' con error' : ''}`, timer: 1800, showConfirmButton: false });
+        setTimeout(() => revisarSupercias(diagFormatoPendiente), 1900);
+    }
+
+    async function exportar(formato, omitirRevision = false) {
         const fInicio = document.getElementById('fecha_inicio').value;
         const fFin = document.getElementById('fecha_fin').value;
         const nivel = document.getElementById('filtro_nivel').value;
@@ -1062,7 +1223,15 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             Swal.fire({ icon: 'warning', title: 'Atención', text: 'Por favor seleccione un rango de fechas válido.' });
             return;
         }
-        
+        // Antes de descargar un archivo Supercias se revisa la empresa; si hay bloqueantes se
+        // muestra la revisión y el usuario decide (botón "Descargar de todos modos").
+        if (!omitirRevision && formato.startsWith('supercias_')) {
+            const limpio = await revisarSupercias(formato);
+            if (!limpio) return;
+            diagFormatoPendiente = null;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiagSupercias')).hide();
+        }
+
         let url = `${urlBase}/exportar?tipo=${tipoReporteActivo}&formato=${formato}&fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`;
         window.open(url, '_blank');
     }

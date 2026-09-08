@@ -251,6 +251,37 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Actualiza solo los códigos de entidades de control de una cuenta (SRI / Supercías ESF, ERI,
+     * columna y fila ECP). Lo usa el diagnóstico Supercías de Estados Financieros para aplicar una
+     * sugerencia. Los campos que no vengan en el POST se conservan.
+     */
+    public function actualizarCodigosControlAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($id <= 0) throw new \Exception('ID no válido.');
+            $ok = $this->service->actualizarCodigosControl($id, $idEmpresa, $idUsuario, [
+                'codigo_sri'              => $_POST['codigo_sri'] ?? null,
+                'supercias_esf'           => $_POST['supercias_esf'] ?? null,
+                'supercias_eri'           => $_POST['supercias_eri'] ?? null,
+                'supercias_ecp_codigo'    => $_POST['supercias_ecp_codigo'] ?? null,
+                'supercias_ecp_subcodigo' => $_POST['supercias_ecp_subcodigo'] ?? null,
+            ]);
+            echo json_encode(['ok' => true, 'msg' => 'Códigos actualizados.', 'cuenta' => $ok]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getFaltantesAjax(): void
     {
         $this->requireLeer();

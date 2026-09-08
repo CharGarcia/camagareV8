@@ -827,7 +827,7 @@ class EstadosFinancierosService
      * pantalla. Devuelve ['casilleros' => resultado del evaluador por tipo, 'ecp' => detalle del
      * cálculo del ECP (ver calcularEcp)]. Lo usan la exportación TXT y la vista previa del ECP.
      */
-    private function evaluarSupercias(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto): array
+    public function evaluarSupercias(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto): array
     {
         // Nivel 5: se necesitan las cuentas de movimiento (el nivel de pantalla solo agrupa la vista).
         $resultados = $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, 5);
