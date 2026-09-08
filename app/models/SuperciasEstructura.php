@@ -39,17 +39,38 @@ class SuperciasEstructura
         return $result ?: null;
     }
 
+    /**
+     * Un casillero se identifica por tipo + código + subcódigo. En ECP el mismo código se
+     * repite en varias filas (una por componente del patrimonio) y lo que cambia es el
+     * subcódigo; por eso la unicidad NO es solo por código.
+     */
+    private function validarClaveUnica(array $datos, ?int $idExcluir = null): void
+    {
+        $sql = "SELECT id FROM supercias_estructuras
+                WHERE tipo = :tipo AND codigo = :codigo AND COALESCE(subcodigo, '') = :subcodigo AND eliminado = false";
+        $params = [
+            ':tipo' => $datos['tipo'],
+            ':codigo' => $datos['codigo'],
+            ':subcodigo' => (string) ($datos['subcodigo'] ?? ''),
+        ];
+        if ($idExcluir !== null) {
+            $sql .= " AND id != :id";
+            $params[':id'] = $idExcluir;
+        }
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        if ($stmt->fetchColumn()) {
+            $clave = $datos['codigo'] . ($params[':subcodigo'] !== '' ? ' / subcódigo ' . $params[':subcodigo'] : '');
+            throw new \Exception("El casillero {$clave} ya existe en el tipo {$datos['tipo']}");
+        }
+    }
+
     public function actualizar(int $id, array $datos, int $usuarioId): bool
     {
         try {
             $this->db->beginTransaction();
 
-            // Verificar si el código ya existe en otro ID
-            $stmt = $this->db->prepare("SELECT id FROM supercias_estructuras WHERE tipo = :tipo AND codigo = :codigo AND id != :id AND eliminado = false");
-            $stmt->execute([':tipo' => $datos['tipo'], ':codigo' => $datos['codigo'], ':id' => $id]);
-            if ($stmt->fetchColumn()) {
-                throw new \Exception("El código {$datos['codigo']} ya existe en el tipo {$datos['tipo']}");
-            }
+            $this->validarClaveUnica($datos, $id);
 
             $orden = null;
             if (!empty($datos['codigo_anterior'])) {
@@ -111,6 +132,8 @@ class SuperciasEstructura
     {
         try {
             $this->db->beginTransaction();
+
+            $this->validarClaveUnica($datos);
 
             $orden = null;
             if (!empty($datos['codigo_anterior'])) {
