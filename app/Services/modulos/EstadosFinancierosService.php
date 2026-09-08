@@ -1326,6 +1326,18 @@ class EstadosFinancierosService
         ];
     }
 
+    /**
+     * Sufijo de período para nombres de archivo, a partir del texto "2025-01-01 al 2025-12-31":
+     * "20250101_20251231". Si no encuentra fechas, devuelve la fecha y hora actual.
+     */
+    private function sufijoPeriodo(string $rangoFechas): string
+    {
+        if (preg_match_all('/\d{4}-\d{2}-\d{2}/', $rangoFechas, $m) && count($m[0]) >= 1) {
+            return implode('_', array_map(fn($d) => str_replace('-', '', $d), array_slice($m[0], 0, 2)));
+        }
+        return date('YmdHis');
+    }
+
     public function exportarSri(string $tipo, array $datos, string $empresaNombre, string $rangoFechas, string $rucEmpresa = ''): void
     {
         $agrupadoSri = [];
@@ -1346,7 +1358,7 @@ class EstadosFinancierosService
 
         ksort($agrupadoSri);
 
-        $filename = 'reporte_sri_imp_renta_' . ($rucEmpresa ?: 'sin_ruc') . '.xml';
+        $filename = 'reporte_sri_imp_renta_' . ($rucEmpresa ?: 'sin_ruc') . '_' . $this->sufijoPeriodo($rangoFechas) . '.xml';
         
         // Limpiar el búfer de salida
         if (ob_get_length()) ob_end_clean();
@@ -1405,7 +1417,7 @@ class EstadosFinancierosService
             $lblNeta = $datos['totales']['utilidad_neta'] >= 0 ? 'UTILIDAD DEL EJERCICIO' : 'PÉRDIDA DEL EJERCICIO';
             $dataExport[] = ['', $lblNeta, $datos['totales']['utilidad_neta']];
             
-            $this->reportService->exportToExcel('Estado_Resultados', $headers, $dataExport, 'Estado Resultados', "{$empresaNombre} - Estado de Resultados ({$rangoFechas})");
+            $this->reportService->exportToExcel('Estado_Resultados_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Estado Resultados', "{$empresaNombre} - Estado de Resultados ({$rangoFechas})");
         } else {
             $dataExport[] = ['ACTIVOS', '', ''];
             foreach ($datos['activos'] as $item) {
@@ -1430,7 +1442,7 @@ class EstadosFinancierosService
 
             $dataExport[] = ['', 'TOTAL PASIVO + PATRIMONIO', $datos['totales']['pasivo_patrimonio']];
 
-            $this->reportService->exportToExcel('Estado_Situacion_Financiera', $headers, $dataExport, 'Situacion Financiera', "{$empresaNombre} - Estado de Situación Financiera ({$rangoFechas})");
+            $this->reportService->exportToExcel('Estado_Situacion_Financiera_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Situacion Financiera', "{$empresaNombre} - Estado de Situación Financiera ({$rangoFechas})");
         }
     }
 
@@ -1489,7 +1501,7 @@ class EstadosFinancierosService
 
             $dataExport[] = $filaTotal('UTILIDAD/PÉRDIDA DEL EJERCICIO', $datos['totales']['utilidad_neta']);
 
-            $this->reportService->exportToExcel('Estado_Resultados_Periodos', $headers, $dataExport, 'Resultados x Periodo', "{$empresaNombre} - Estado de Resultados por Periodos ({$rangoFechas})");
+            $this->reportService->exportToExcel('Estado_Resultados_Periodos_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Resultados x Periodo', "{$empresaNombre} - Estado de Resultados por Periodos ({$rangoFechas})");
         } else {
             $dataExport[] = array_merge(['ACTIVOS'], array_fill(0, count($headers) - 1, ''));
             foreach ($datos['activos'] as $item) $dataExport[] = $filaItem($item);
@@ -1508,7 +1520,7 @@ class EstadosFinancierosService
 
             $dataExport[] = $filaTotal('TOTAL PASIVO + PATRIMONIO', $datos['totales']['pasivo_patrimonio']);
 
-            $this->reportService->exportToExcel('Estado_Situacion_Financiera_Periodos', $headers, $dataExport, 'Situación x Periodo', "{$empresaNombre} - Estado de Situación Financiera por Periodos ({$rangoFechas})");
+            $this->reportService->exportToExcel('Estado_Situacion_Financiera_Periodos_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Situación x Periodo', "{$empresaNombre} - Estado de Situación Financiera por Periodos ({$rangoFechas})");
         }
     }
 

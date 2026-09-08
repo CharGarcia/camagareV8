@@ -95,7 +95,9 @@ class EstadosFinancierosPdfService
 
         $this->dibujarFirmas();
 
-        $nombreArchivo = str_replace(' ', '_', ucwords(mb_strtolower($this->titulo))) . '_' . date('YmdHis') . '.pdf';
+        // Nombre con el período mostrado: Estado_De_Resultados_20250101_20251231.pdf
+        $periodo = str_replace('-', '', (string)($filtros['fecha_inicio'] ?? '')) . '_' . str_replace('-', '', (string)($filtros['fecha_fin'] ?? ''));
+        $nombreArchivo = str_replace(' ', '_', ucwords(mb_strtolower($this->titulo))) . '_' . trim($periodo, '_') . '.pdf';
         if (ob_get_length()) {
             ob_end_clean();
         }

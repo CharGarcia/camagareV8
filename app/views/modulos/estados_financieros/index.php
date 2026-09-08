@@ -120,17 +120,11 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ERI" onclick="exportar('supercias_eri')">
                 <i class="bi bi-bank text-info"></i> Supercias ERI
             </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ECP" onclick="exportar('supercias_ecp')">
-                <i class="bi bi-bank text-info"></i> Supercias ECP
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Estado de Cambios en el Patrimonio (Supercias ECP): ver la matriz y descargar el TXT" onclick="verEcp()">
+                <i class="bi bi-grid-3x3 text-info"></i> Supercias ECP
             </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Ver en pantalla el Estado de Cambios en el Patrimonio (Supercias ECP) antes de descargarlo" onclick="verEcp()">
-                <i class="bi bi-grid-3x3 text-info"></i> Ver ECP
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias EFE" onclick="exportar('supercias_efe')">
-                <i class="bi bi-bank text-info"></i> Supercias EFE
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Ver en pantalla el Estado de Flujos de Efectivo (Supercias EFE) antes de descargarlo" onclick="verEfe()">
-                <i class="bi bi-cash-stack text-info"></i> Ver EFE
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Estado de Flujos de Efectivo (Supercias EFE): ver el detalle y descargar el TXT" onclick="verEfe()">
+                <i class="bi bi-cash-stack text-info"></i> Supercias EFE
             </button>
             <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Revisar qué falta configurar para que los archivos Supercias salgan completos y cuadrados" onclick="revisarSupercias()">
                 <i class="bi bi-clipboard2-check text-warning"></i> Revisar Supercias
