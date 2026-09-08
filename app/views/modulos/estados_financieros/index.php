@@ -123,6 +123,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ECP" onclick="exportar('supercias_ecp')">
                 <i class="bi bi-bank text-info"></i> Supercias ECP
             </button>
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Ver en pantalla el Estado de Cambios en el Patrimonio (Supercias ECP) antes de descargarlo" onclick="verEcp()">
+                <i class="bi bi-grid-3x3 text-info"></i> Ver ECP
+            </button>
             <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias EFE" onclick="exportar('supercias_efe')">
                 <i class="bi bi-bank text-info"></i> Supercias EFE
             </button>
@@ -198,6 +201,46 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                         </table>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: vista previa del Estado de Cambios en el Patrimonio (Supercias ECP) -->
+<div class="modal fade" id="modalEcp" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold"><i class="bi bi-grid-3x3 text-info me-2"></i>Estado de Cambios en el Patrimonio (Supercias ECP)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loader-ecp" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+                </div>
+                <div id="content-ecp" class="d-none">
+                    <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>
+                        Cada <strong>columna</strong> es el componente del patrimonio que tiene asignado la cuenta (campo <em>Supercias ECP Columna</em>).
+                        <strong>990101</strong> es el saldo de apertura del rango, las filas <strong>9902xx</strong> son los movimientos del año
+                        (en la fila fijada en la cuenta o en la fila por defecto de su columna) y <strong>990210</strong> es el resultado del ejercicio del balance.
+                        La fila <strong>99</strong> sale de la fórmula del casillero (normalmente el ESF); la fila <em>Diferencia</em> compara 99 con 9901 + 9902 y debe ser cero.
+                    </p>
+                    <div class="table-responsive mb-3" id="ecp-matriz-wrap"></div>
+                    <h6 class="fw-bold small text-uppercase text-muted">Cuentas que alimentan el ECP</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0" id="tabla-ecp-detalle">
+                            <thead class="table-light"><tr>
+                                <th>Cuenta</th><th>Nombre</th><th>Columna</th><th>Fila de cambios</th>
+                                <th class="text-end">Saldo inicial</th><th class="text-end">Movimiento del año</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="exportar('supercias_ecp')"><i class="bi bi-download me-1"></i> Descargar TXT</button>
             </div>
         </div>
     </div>
@@ -786,6 +829,80 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
         html += '</tbody></table>';
         document.getElementById('content-reporte').innerHTML = html;
+    }
+
+    // Vista previa del ECP (Supercias): matriz fila × columna con los filtros de pantalla.
+    async function verEcp() {
+        const fInicio = document.getElementById('fecha_inicio').value;
+        const fFin = document.getElementById('fecha_fin').value;
+        if (!fInicio || !fFin) {
+            Swal.fire({ icon: 'warning', title: 'Atención', text: 'Por favor seleccione un rango de fechas válido.' });
+            return;
+        }
+        const centro = document.getElementById('filtro_centro_costo').value;
+        const proyecto = document.getElementById('filtro_proyecto').value;
+
+        const modal = new bootstrap.Modal(document.getElementById('modalEcp'));
+        document.getElementById('loader-ecp').classList.remove('d-none');
+        document.getElementById('content-ecp').classList.add('d-none');
+        modal.show();
+
+        try {
+            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto });
+            const res = await fetch(`${urlBase}/generarEcpAjax?${params.toString()}`).then(r => r.json());
+            if (!res.success) { Swal.fire('Error', res.error || 'No se pudo calcular el ECP.', 'error'); modal.hide(); return; }
+            renderEcp(res.data);
+            document.getElementById('loader-ecp').classList.add('d-none');
+            document.getElementById('content-ecp').classList.remove('d-none');
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Error de red o servidor al calcular el ECP.', 'error');
+            modal.hide();
+        }
+    }
+
+    function renderEcp(d) {
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const cols = Object.keys(d.columnas);
+        const filasTotal = ['99', '9901', '9902'];
+        const cell = (v, bold) => {
+            const n = parseFloat(v) || 0;
+            const cls = 'text-end text-nowrap' + (bold ? ' fw-bold' : '') + (n < 0 ? ' text-danger' : '');
+            return `<td class="${cls}">${Math.abs(n) < 0.005 ? '' : formatMoney(n)}</td>`;
+        };
+
+        let html = '<table class="table table-sm table-bordered mb-0" style="font-size:.75rem;"><thead class="table-light"><tr>';
+        html += '<th style="min-width:260px">Concepto</th><th>Código</th>';
+        cols.forEach(c => { html += `<th class="text-end" title="${esc(d.columnas[c])}">${esc(c)}<br><span class="fw-normal text-muted" style="font-size:.65rem;">${esc(d.columnas[c])}</span></th>`; });
+        html += '<th class="text-end">Total</th></tr></thead><tbody>';
+
+        Object.keys(d.filas).forEach(f => {
+            const esTotal = filasTotal.includes(f);
+            const indent = f.length === 6 ? 'ps-4' : (f.length === 4 ? 'ps-2' : '');
+            html += `<tr class="${esTotal ? 'table-light' : ''}"><td class="${indent} ${esTotal ? 'fw-bold' : ''}">${esc(d.filas[f])}</td><td class="text-muted">${f}</td>`;
+            cols.forEach(c => { html += cell(d.valores[f] ? d.valores[f][c] : 0, esTotal); });
+            html += cell(d.totales_fila[f], true) + '</tr>';
+        });
+
+        let hayDif = false;
+        let difRow = '<tr class="table-warning"><td class="fw-bold">Diferencia (99 − 9901 − 9902)</td><td></td>';
+        let difTotal = 0;
+        cols.forEach(c => { const v = parseFloat(d.diferencias[c]) || 0; difTotal += v; if (Math.abs(v) >= 0.01) hayDif = true; difRow += cell(v, true); });
+        difRow += cell(difTotal, true) + '</tr>';
+        html += (hayDif ? difRow : difRow.replace('table-warning', 'table-success')) + '</tbody></table>';
+        document.getElementById('ecp-matriz-wrap').innerHTML = html;
+
+        const tb = document.querySelector('#tabla-ecp-detalle tbody');
+        if (!d.detalle || d.detalle.length === 0) {
+            tb.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Ninguna cuenta de patrimonio tiene asignada una columna ECP (campo <em>Supercias ECP Columna</em> en Plan de Cuentas).</td></tr>';
+            return;
+        }
+        tb.innerHTML = d.detalle.map(x => `<tr>
+            <td class="text-nowrap">${esc(x.codigo)}</td><td>${esc(x.nombre)}</td>
+            <td>${esc(x.columna)} <span class="text-muted small">${esc(d.columnas[x.columna] || '')}</span></td>
+            <td>${esc(x.fila_cambio)} <span class="text-muted small">${esc(d.filas[x.fila_cambio] || '')}</span></td>
+            ${cell(x.saldo_inicial)}${cell(x.movimiento)}
+        </tr>`).join('');
     }
 
     function exportar(formato) {

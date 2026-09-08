@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control
-version: 1.5
+version: 1.6
 orden: 50
 estado: activo
 ---
@@ -60,6 +60,36 @@ Si un casillero sale en cero cuando debería tener valor, revise que las cuentas
 correspondientes tengan asignado el código Supercias (columna *Ent. control* del
 reporte, o pulse el código de la cuenta para completarlo). El EFE solo se llena
 por fórmulas, porque las cuentas no tienen un casillero EFE propio.
+
+### Supercias ECP (Estado de Cambios en el Patrimonio)
+
+El ECP es una matriz: **filas** por concepto del cambio y **columnas** por
+componente del patrimonio (301 Capital, 302 Aportes, 303 Prima, 30401 y 30402
+Reservas, 30501 a 30504 Otros resultados integrales, 30601 a 30607 Resultados
+acumulados, 30701 Ganancia neta, 30702 Pérdida neta). El sistema lo arma así:
+
+- **Columna**: la que tiene cada cuenta de patrimonio en *Supercias ECP
+  Columna* (Plan de Cuentas). Sin ese dato la cuenta no entra al ECP.
+- **990101 Saldo del período anterior**: los asientos de tipo **apertura**
+  dentro del rango, que es como este sistema registra el saldo con que arranca
+  el período.
+- **9902xx Cambios del año**: el resto de asientos del rango, en la fila que
+  corresponde a la columna: capital a 990201, aportes a 990202, prima a 990203,
+  reservas y resultados acumulados a 990205, otros resultados integrales a
+  990209. Si el movimiento de una cuenta va a otra fila (por ejemplo una cuenta
+  de dividendos declarados a 990204), fíjela en *Supercias ECP Fila de cambios*.
+- **990210 Resultado del año**: la utilidad o pérdida del ejercicio del
+  balance, en 30701 si es ganancia o en 30702 (negativo) si es pérdida.
+- **9901, 9902 y 99**: totales. La fila 99 suele tener fórmula `[ESF:…]` en
+  `/config/supercias`, y en ese caso toma el valor del balance.
+
+El botón **Ver ECP** muestra la matriz completa antes de descargar el archivo,
+con una fila *Diferencia* que compara 99 con 9901 + 9902 por columna. Debe ser
+cero; si no lo es, abajo se listan las cuentas que alimentan cada columna con su
+saldo inicial y su movimiento, para ubicar la que falta o sobra. Lo que la
+contabilidad no puede distinguir por sí sola (un dividendo frente a una
+transferencia a reservas, cambios de políticas, corrección de errores) se
+resuelve con cuentas separadas y su fila fijada, o retocando en el portal.
 
 ## Ver o editar una cuenta desde el reporte
 
@@ -199,6 +229,11 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.6** — El **Supercias ECP** se calcula como matriz: saldo de apertura
+  (990101), movimientos del año por fila según la columna o la fila fijada en
+  la cuenta (9902xx), resultado del ejercicio (990210) y totales. Nuevo botón
+  **Ver ECP** con la matriz, la fila *Diferencia* y las cuentas que alimentan
+  cada columna.
 - **1.5** — El código de cada cuenta de nivel 2 a 5 del reporte abre la ficha de
   la cuenta (modal de Plan de Cuentas): se pueden ver y editar nombre y estado y,
   en nivel 5, centro de costo, proyecto y los códigos SRI / Supercias sin salir

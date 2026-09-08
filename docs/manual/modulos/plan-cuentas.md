@@ -6,7 +6,7 @@ ruta_modulo: modulos/plan-cuentas
 tipo: modulo
 visibilidad: todos
 etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control
-version: 1.2
+version: 1.3
 orden: 10
 estado: activo
 ---
@@ -57,6 +57,19 @@ Los tres campos son obligatorios.
 - **Sí se pueden cambiar**: el nombre, el estado (activa/inactiva) y, en cuentas
   de nivel 5, el centro de costo, el proyecto y los **códigos de entidades de
   control** (Código SRI y Supercias ESF, ERI y ECP).
+
+### Códigos de entidades de control (nivel 5)
+
+| Campo | Qué indica |
+|---|---|
+| Código SRI | Casillero del formulario de renta al que suma la cuenta. |
+| Supercias ESF | Casillero del Estado de Situación Financiera. |
+| Supercias ERI | Casillero del Estado de Resultado Integral. |
+| Supercias ECP Columna | Solo cuentas de patrimonio: componente del patrimonio en el Estado de Cambios en el Patrimonio (301 Capital, 302 Aportes, 303 Prima, 30401 Reserva legal, 30402 Reservas facultativas, 30501 a 30504, 30601 Ganancias acumuladas, 30602 Pérdidas acumuladas, 30603 a 30607, 30701, 30702). |
+| Supercias ECP Fila de cambios | Opcional. Solo si el movimiento del año de esta cuenta no va a la fila por defecto de su columna. Valores admitidos: 990102, 990103, 990201 a 990209. Ejemplo: una cuenta "Dividendos declarados" con columna 30601 y fila 990204. |
+
+Cómo se usan estos datos en los archivos de Supercías está explicado en el
+manual de Estados Financieros.
 
 La ficha de la cuenta también se abre desde los reportes de **Estados
 Financieros**, pulsando el código de una cuenta de nivel 5. Aplican las mismas
@@ -156,6 +169,9 @@ módulo y, en el peor caso, a reclasificar movimientos.
 
 ## Historial de cambios
 
+- **1.3** — Los campos *Supercias ECP* pasan a llamarse **Columna** (componente
+  del patrimonio, obligatorio para entrar al ECP) y **Fila de cambios**
+  (opcional, solo filas 990102, 990103 y 990201 a 990209). Se valida al guardar.
 - **1.2** — El código y el nivel de una cuenta ya no se pueden modificar al
   editarla (el servidor conserva los guardados aunque la petición traiga otros).
   La ficha de la cuenta se puede abrir también desde Estados Financieros.

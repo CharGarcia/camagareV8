@@ -337,6 +337,28 @@ class EstadosFinancierosController extends BaseModuloController
         }
     }
 
+    /**
+     * Vista previa del Estado de Cambios en el Patrimonio (Supercías): matriz fila × columna ya
+     * evaluada con los mismos filtros de pantalla, para revisar antes de descargar el TXT.
+     */
+    public function generarEcpAjax(): void
+    {
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
+            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
+            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
+            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+
+            $datos = $this->service->getEcpMatriz($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     protected function getRutaModulo(): string
     {
         return 'modulos/estados-financieros';

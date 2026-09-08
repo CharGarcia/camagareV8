@@ -75,6 +75,67 @@ class EstadosFinancierosRepository
     }
 
     /**
+     * Cuentas de PATRIMONIO (clase 3) con las dos cifras que necesita el Estado de Cambios en el
+     * Patrimonio (ECP) de Supercías, con los mismos filtros que los reportes en pantalla (rango de
+     * fechas, centro de costo, proyecto, solo asientos contabilizados del ambiente activo):
+     *  - saldo_inicial: asientos de tipo 'apertura' dentro del rango (así registra este sistema el
+     *    saldo con que arranca el período; ver getEstadoSituacionFinanciera).
+     *  - movimiento: el resto de asientos del rango (cambios del año).
+     * Ambos con signo acreedor (haber - debe), la naturaleza del patrimonio.
+     */
+    public function getMovimientosPatrimonioEcp(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): array
+    {
+        $params = [
+            'id_empresa'   => $idEmpresa,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin'    => $fechaFin,
+        ];
+        $centroCostoFilter = '';
+        if ($idCentroCosto !== null) {
+            $centroCostoFilter = " AND ad.id_centro_costo = :id_centro_costo";
+            $params['id_centro_costo'] = $idCentroCosto;
+        }
+        $proyectoFilter = '';
+        if ($idProyecto !== null) {
+            $proyectoFilter = " AND ad.id_proyecto = :id_proyecto";
+            $params['id_proyecto'] = $idProyecto;
+        }
+
+        $sql = "
+            SELECT
+                pc.id AS id_cuenta,
+                pc.codigo,
+                pc.nombre,
+                pc.nivel,
+                pc.supercias_ecp_codigo,
+                pc.supercias_ecp_subcodigo,
+                COALESCE(SUM(CASE WHEN ac.id IS NOT NULL AND COALESCE(ac.tipo_comprobante, '') = 'apertura'
+                                  THEN ad.haber - ad.debe ELSE 0 END), 0) AS saldo_inicial,
+                COALESCE(SUM(CASE WHEN ac.id IS NOT NULL AND COALESCE(ac.tipo_comprobante, '') <> 'apertura'
+                                  THEN ad.haber - ad.debe ELSE 0 END), 0) AS movimiento
+            FROM plan_cuentas pc
+            LEFT JOIN asientos_contables_detalle ad ON pc.id = ad.id_cuenta_contable AND ad.eliminado = false
+                $centroCostoFilter
+                $proyectoFilter
+            LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                AND ac.eliminado = false
+                AND ac.estado = 'contabilizado'
+                AND ac.id_empresa = pc.id_empresa
+                AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
+                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+            WHERE pc.id_empresa = :id_empresa
+              AND pc.eliminado = false
+              AND pc.codigo LIKE '3%'
+            GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.supercias_ecp_codigo, pc.supercias_ecp_subcodigo
+            ORDER BY pc.codigo ASC
+        ";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
      * Catálogo de cuentas de la empresa (todas, sin filtrar por movimiento). Base para armar
      * la matriz cuenta × periodo del reporte "por periodos" (getSaldosPorPeriodo).
      */

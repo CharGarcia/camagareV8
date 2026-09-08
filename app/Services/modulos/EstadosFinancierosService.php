@@ -797,63 +797,7 @@ class EstadosFinancierosService
             throw new Exception('Tipo Supercías no válido.');
         }
 
-        // Nivel 5: se necesitan las cuentas de movimiento (el nivel de pantalla solo agrupa la vista).
-        $resultados = $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, 5);
-        $situacion  = $this->getEstadoSituacionFinanciera($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, 5);
-
-        $valoresBase = ['ESF' => [], 'ERI' => [], 'ECP' => [], 'EFE' => []];
-        $acumular = function (array $item) use (&$valoresBase): void {
-            $valor = (float) ($item['saldo_final'] ?? 0);
-            if (!empty($item['supercias_esf'])) {
-                $cas = (string) $item['supercias_esf'];
-                $valoresBase['ESF'][$cas] = ($valoresBase['ESF'][$cas] ?? 0.0) + $valor;
-            }
-            if (!empty($item['supercias_eri'])) {
-                $cas = (string) $item['supercias_eri'];
-                $valoresBase['ERI'][$cas] = ($valoresBase['ERI'][$cas] ?? 0.0) + $valor;
-            }
-            if (!empty($item['supercias_ecp_codigo'])) {
-                $cas = (string) $item['supercias_ecp_codigo'];
-                if (!empty($item['supercias_ecp_subcodigo'])) {
-                    $cas .= '.' . $item['supercias_ecp_subcodigo'];
-                }
-                $valoresBase['ECP'][$cas] = ($valoresBase['ECP'][$cas] ?? 0.0) + $valor;
-            }
-        };
-
-        foreach (['ingresos', 'costos', 'gastos'] as $sec) {
-            foreach ($resultados[$sec] ?? [] as $item) {
-                if ((int) ($item['nivel'] ?? 0) === 5) $acumular($item);
-            }
-        }
-        foreach (['activos', 'pasivos', 'patrimonio'] as $sec) {
-            foreach ($situacion[$sec] ?? [] as $item) {
-                if ((int) ($item['nivel'] ?? 0) === 5) $acumular($item);
-            }
-        }
-
-        // La fila "Utilidad / Pérdida del Ejercicio" del balance no es una cuenta con movimiento
-        // (getEstadoSituacionFinanciera la agrega sintética, sin id_cuenta): se suma al casillero
-        // que tenga mapeado la cuenta de cierre configurada, la misma que se muestra en pantalla.
-        $resultadoEjercicio = 0.0;
-        foreach ($situacion['patrimonio'] ?? [] as $p) {
-            if (!isset($p['id_cuenta'])) {
-                $resultadoEjercicio = (float) ($p['saldo_final'] ?? 0);
-                break;
-            }
-        }
-        $ctasCierre = $this->repository->getCuentasCierreEjercicio($idEmpresa);
-        $ctaCierre = $resultadoEjercicio >= 0 ? ($ctasCierre['utilidad'] ?? null) : ($ctasCierre['perdida'] ?? null);
-        if ($ctaCierre && !empty($ctaCierre['id']) && round($resultadoEjercicio, 2) != 0) {
-            $catalogo = $this->indexarPorId($this->repository->getPlanCuentas($idEmpresa));
-            $ctaMapeo = $catalogo[(int) $ctaCierre['id']] ?? null;
-            if ($ctaMapeo) {
-                $acumular(array_merge($ctaMapeo, ['saldo_final' => $resultadoEjercicio]));
-            }
-        }
-
-        $evaluador = new \App\Services\SuperciasEvaluatorService(\App\core\Database::getConnection());
-        $casilleros = $evaluador->evaluarConValoresBase($valoresBase)[$superciasTipo] ?? [];
+        $casilleros = $this->evaluarSupercias($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto)['casilleros'][$superciasTipo] ?? [];
 
         $filename = 'SUPERCIAS_' . $superciasTipo . '_' . str_replace('-', '', $fechaInicio) . '_' . str_replace('-', '', $fechaFin) . '.txt';
         if (ob_get_length()) ob_end_clean();
@@ -877,6 +821,239 @@ class EstadosFinancierosService
         }
         fclose($out);
         exit;
+    }
+
+    /**
+     * Evalúa TODOS los casilleros Supercías (ESF, ERI, ECP, EFE) con los valores del reporte en
+     * pantalla. Devuelve ['casilleros' => resultado del evaluador por tipo, 'ecp' => detalle del
+     * cálculo del ECP (ver calcularEcp)]. Lo usan la exportación TXT y la vista previa del ECP.
+     */
+    private function evaluarSupercias(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto): array
+    {
+        // Nivel 5: se necesitan las cuentas de movimiento (el nivel de pantalla solo agrupa la vista).
+        $resultados = $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, 5);
+        $situacion  = $this->getEstadoSituacionFinanciera($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, 5);
+
+        // ESF / ERI: cada cuenta de nivel 5 aporta su saldo al casillero que tiene mapeado.
+        $valoresBase = ['ESF' => [], 'ERI' => [], 'ECP' => [], 'EFE' => []];
+        $acumular = function (array $item) use (&$valoresBase): void {
+            $valor = (float) ($item['saldo_final'] ?? 0);
+            if (!empty($item['supercias_esf'])) {
+                $cas = (string) $item['supercias_esf'];
+                $valoresBase['ESF'][$cas] = ($valoresBase['ESF'][$cas] ?? 0.0) + $valor;
+            }
+            if (!empty($item['supercias_eri'])) {
+                $cas = (string) $item['supercias_eri'];
+                $valoresBase['ERI'][$cas] = ($valoresBase['ERI'][$cas] ?? 0.0) + $valor;
+            }
+        };
+
+        foreach (['ingresos', 'costos', 'gastos'] as $sec) {
+            foreach ($resultados[$sec] ?? [] as $item) {
+                if ((int) ($item['nivel'] ?? 0) === 5) $acumular($item);
+            }
+        }
+        foreach (['activos', 'pasivos', 'patrimonio'] as $sec) {
+            foreach ($situacion[$sec] ?? [] as $item) {
+                if ((int) ($item['nivel'] ?? 0) === 5) $acumular($item);
+            }
+        }
+
+        // La fila "Utilidad / Pérdida del Ejercicio" del balance no es una cuenta con movimiento
+        // (getEstadoSituacionFinanciera la agrega sintética, sin id_cuenta): se suma al casillero
+        // ESF que tenga mapeado la cuenta de cierre configurada, la misma que se muestra en pantalla.
+        $resultadoEjercicio = 0.0;
+        foreach ($situacion['patrimonio'] ?? [] as $p) {
+            if (!isset($p['id_cuenta'])) {
+                $resultadoEjercicio = (float) ($p['saldo_final'] ?? 0);
+                break;
+            }
+        }
+        $ctasCierre = $this->repository->getCuentasCierreEjercicio($idEmpresa);
+        $ctaCierre = $resultadoEjercicio >= 0 ? ($ctasCierre['utilidad'] ?? null) : ($ctasCierre['perdida'] ?? null);
+        if ($ctaCierre && !empty($ctaCierre['id']) && round($resultadoEjercicio, 2) != 0) {
+            $catalogo = $this->indexarPorId($this->repository->getPlanCuentas($idEmpresa));
+            $ctaMapeo = $catalogo[(int) $ctaCierre['id']] ?? null;
+            if ($ctaMapeo) {
+                $acumular(array_merge($ctaMapeo, ['saldo_final' => $resultadoEjercicio]));
+            }
+        }
+
+        // ECP: matriz fila × columna calculada a partir de saldo inicial, movimientos y resultado.
+        $ecp = $this->calcularEcp($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $resultadoEjercicio);
+        $valoresBase['ECP'] = $ecp['valores_base'];
+
+        $evaluador = new \App\Services\SuperciasEvaluatorService(\App\core\Database::getConnection());
+        return [
+            'casilleros' => $evaluador->evaluarConValoresBase($valoresBase),
+            'ecp'        => $ecp,
+        ];
+    }
+
+    /** Filas del ECP (Supercías) en el orden del formulario oficial. */
+    public const ECP_FILAS = [
+        '99'     => 'Saldo al final del período',
+        '9901'   => 'Saldo reexpresado del período inmediato anterior',
+        '990101' => 'Saldo del período inmediato anterior',
+        '990102' => 'Cambios en políticas contables',
+        '990103' => 'Corrección de errores',
+        '9902'   => 'Cambios del año en el patrimonio',
+        '990201' => 'Aumento (disminución) de capital social',
+        '990202' => 'Aportes para futuras capitalizaciones',
+        '990203' => 'Prima por emisión primaria de acciones',
+        '990204' => 'Dividendos',
+        '990205' => 'Transferencia de resultados a otras cuentas patrimoniales',
+        '990206' => 'Realización de la reserva por valuación de activos financieros',
+        '990207' => 'Realización de la reserva por valuación de propiedades, planta y equipo',
+        '990208' => 'Realización de la reserva por valuación de activos intangibles',
+        '990209' => 'Otros cambios (detallar)',
+        '990210' => 'Resultado integral total del año (ganancia o pérdida)',
+    ];
+
+    /** Filas de "cambios del año" que una cuenta puede fijar en su mapeo (Supercias ECP Fila). */
+    public const ECP_FILAS_CAMBIO = ['990102', '990103', '990201', '990202', '990203', '990204', '990205', '990206', '990207', '990208', '990209'];
+
+    /**
+     * Fila por defecto de "cambios del año" según la columna (componente del patrimonio):
+     * capital → aumento de capital; aportes → aportes; prima → prima; reservas y resultados
+     * acumulados → transferencia de resultados; otros resultados integrales → otros cambios.
+     */
+    private function ecpFilaPorDefecto(string $columna): string
+    {
+        if ($columna === '301') return '990201';
+        if ($columna === '302') return '990202';
+        if ($columna === '303') return '990203';
+        if (str_starts_with($columna, '305')) return '990209';
+        return '990205'; // 304xx reservas, 306xx resultados acumulados, 307xx resultado del ejercicio
+    }
+
+    /**
+     * Estado de Cambios en el Patrimonio (Supercías): valores base por celda "fila.columna".
+     *  - Columna: el campo Supercias ECP Subcódigo de cada cuenta de patrimonio (301 … 30702).
+     *  - 990101 = saldo inicial (asientos de apertura del rango) de las cuentas de la columna.
+     *  - 9902xx = movimiento del año de cada cuenta, en la fila fijada en su mapeo (Supercias ECP
+     *    Código, si es una fila de cambio) o en la fila por defecto de su columna.
+     *  - 990210 = resultado del ejercicio en 30701 (ganancia) o 30702 (pérdida), igual que el balance.
+     *  - 9901, 9902 y 99 se totalizan aquí; si el casillero tiene fórmula en /config/supercias
+     *    (p. ej. 99 = [ESF:301]), la fórmula manda y este valor solo sirve para comparar.
+     */
+    public function calcularEcp(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto, float $resultadoEjercicio): array
+    {
+        $cuentas = $this->repository->getMovimientosPatrimonioEcp($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+
+        $base = [];
+        $columnas = [];
+        $detalle = [];
+        $add = function (string $fila, string $col, float $v) use (&$base): void {
+            $k = $fila . '.' . $col;
+            $base[$k] = ($base[$k] ?? 0.0) + $v;
+        };
+
+        foreach ($cuentas as $c) {
+            if ((int) $c['nivel'] !== 5) continue;
+            $col = trim((string) ($c['supercias_ecp_subcodigo'] ?? ''));
+            if ($col === '') continue;
+            $columnas[$col] = true;
+
+            $saldoInicial = (float) $c['saldo_inicial'];
+            $movimiento   = (float) $c['movimiento'];
+            $filaFijada   = trim((string) ($c['supercias_ecp_codigo'] ?? ''));
+            $filaCambio   = in_array($filaFijada, self::ECP_FILAS_CAMBIO, true) ? $filaFijada : $this->ecpFilaPorDefecto($col);
+
+            if (round($saldoInicial, 2) != 0) $add('990101', $col, $saldoInicial);
+            if (round($movimiento, 2) != 0)   $add($filaCambio, $col, $movimiento);
+
+            if (round($saldoInicial, 2) != 0 || round($movimiento, 2) != 0) {
+                $detalle[] = [
+                    'codigo'        => $c['codigo'],
+                    'nombre'        => $c['nombre'],
+                    'columna'       => $col,
+                    'fila_cambio'   => $filaCambio,
+                    'saldo_inicial' => $saldoInicial,
+                    'movimiento'    => $movimiento,
+                ];
+            }
+        }
+
+        // Resultado del ejercicio: ganancia en 30701 (positivo) o pérdida en 30702 (negativo).
+        if (round($resultadoEjercicio, 2) != 0) {
+            $colRes = $resultadoEjercicio >= 0 ? '30701' : '30702';
+            $columnas[$colRes] = true;
+            $add('990210', $colRes, $resultadoEjercicio);
+        }
+
+        // Totales por columna: 9901 = 990101+990102+990103; 9902 = Σ 9902xx; 99 = 9901 + 9902.
+        foreach (array_keys($columnas) as $col) {
+            $s9901 = 0.0;
+            foreach (['990101', '990102', '990103'] as $f) $s9901 += $base[$f . '.' . $col] ?? 0.0;
+            $s9902 = 0.0;
+            foreach (array_keys(self::ECP_FILAS) as $f) {
+                $f = (string) $f; // PHP convierte las claves numéricas a int
+                if (str_starts_with($f, '9902') && $f !== '9902') $s9902 += $base[$f . '.' . $col] ?? 0.0;
+            }
+            $base['9901.' . $col] = $s9901;
+            $base['9902.' . $col] = $s9902;
+            $base['99.' . $col]   = $s9901 + $s9902;
+        }
+
+        return [
+            'valores_base'        => $base,
+            'columnas'            => array_keys($columnas),
+            'detalle'             => $detalle,
+            'resultado_ejercicio' => $resultadoEjercicio,
+        ];
+    }
+
+    /**
+     * Matriz del ECP ya evaluada (fórmulas incluidas) para la vista previa en pantalla:
+     * columnas (de la estructura ECP de /config/supercias), filas (orden oficial), valor por celda,
+     * total por fila, y por columna la diferencia entre la fila 99 (saldo final, normalmente
+     * fórmula = ESF) y 9901 + 9902 (saldo inicial + cambios calculados desde los asientos).
+     */
+    public function getEcpMatriz(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): array
+    {
+        $ev = $this->evaluarSupercias($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+        $casilleros = $ev['casilleros']['ECP'] ?? [];
+
+        // Columnas y nombres desde la estructura (fila 99 = "SALDO AL FINAL … / <componente>").
+        $columnas = [];
+        foreach ($casilleros as $key => $cas) {
+            $partes = explode('.', (string) $key, 2);
+            if (count($partes) < 2 || $partes[1] === '') continue;
+            $col = $partes[1];
+            if (!isset($columnas[$col])) {
+                $nombre = (string) ($cas['nombre'] ?? '');
+                $pos = strrpos($nombre, '/');
+                $columnas[$col] = $pos !== false ? trim(substr($nombre, $pos + 1)) : $col;
+            }
+        }
+        ksort($columnas, SORT_STRING);
+
+        $valores = [];
+        $totalesFila = [];
+        foreach (self::ECP_FILAS as $fila => $_) {
+            $totalesFila[$fila] = 0.0;
+            foreach (array_keys($columnas) as $col) {
+                $v = (float) ($casilleros[$fila . '.' . $col]['valor'] ?? 0);
+                $valores[$fila][$col] = $v;
+                $totalesFila[$fila] += $v;
+            }
+        }
+
+        $diferencias = [];
+        foreach (array_keys($columnas) as $col) {
+            $diferencias[$col] = round(($valores['99'][$col] ?? 0) - (($valores['9901'][$col] ?? 0) + ($valores['9902'][$col] ?? 0)), 2);
+        }
+
+        return [
+            'columnas'            => $columnas,
+            'filas'               => self::ECP_FILAS,
+            'valores'             => $valores,
+            'totales_fila'        => $totalesFila,
+            'diferencias'         => $diferencias,
+            'detalle'             => $ev['ecp']['detalle'],
+            'resultado_ejercicio' => $ev['ecp']['resultado_ejercicio'],
+        ];
     }
 
     public function exportarSri(string $tipo, array $datos, string $empresaNombre, string $rangoFechas, string $rucEmpresa = ''): void

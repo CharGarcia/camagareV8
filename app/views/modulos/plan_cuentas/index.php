@@ -187,12 +187,14 @@ $proyectos  = $proyectos ?? [];
                                                 <input type="text" class="form-control form-control-sm shadow-none" name="supercias_eri" id="pc_supercias_eri">
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label small fw-bold text-muted">Supercias ECP Subcódigo</label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_ecp_subcodigo" id="pc_supercias_ecp_subcodigo">
+                                                <label class="form-label small fw-bold text-muted">Supercias ECP Columna</label>
+                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_ecp_subcodigo" id="pc_supercias_ecp_subcodigo" placeholder="Ej: 301" title="Componente del patrimonio en el Estado de Cambios en el Patrimonio: 301, 302, 303, 30401, 30402, 30501-30504, 30601-30607, 30701, 30702">
+                                                <div class="form-text" style="font-size:.65rem;">Componente del patrimonio (301 Capital, 30401 Reserva legal, 30601 Ganancias acumuladas…).</div>
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label small fw-bold text-muted">Supercias ECP Código</label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_ecp_codigo" id="pc_supercias_ecp_codigo">
+                                                <label class="form-label small fw-bold text-muted">Supercias ECP Fila de cambios <span class="fw-normal">(opcional)</span></label>
+                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_ecp_codigo" id="pc_supercias_ecp_codigo" placeholder="Ej: 990204" title="Solo si el movimiento del año de esta cuenta no va a la fila por defecto de su columna. Filas: 990102, 990103, 990201 a 990209">
+                                                <div class="form-text" style="font-size:.65rem;">Solo si el movimiento del año no va a la fila por defecto (ej. 990204 Dividendos).</div>
                                             </div>
                                         </div>
                                     </div>
@@ -325,7 +327,7 @@ $proyectos  = $proyectos ?? [];
                 const sriTag = node.codigo_sri ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-2 px-2" style="font-size: 0.6rem;">SRI: ${node.codigo_sri}</span>` : '';
                 const esfTag = node.supercias_esf ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;">ESF: ${node.supercias_esf}</span>` : '';
                 const eriTag = node.supercias_eri ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;">ERI: ${node.supercias_eri}</span>` : '';
-                const ecpTag = node.supercias_ecp_codigo ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;">ECP: ${node.supercias_ecp_subcodigo ? node.supercias_ecp_subcodigo + '-' : ''}${node.supercias_ecp_codigo}</span>` : '';
+                const ecpTag = (node.supercias_ecp_subcodigo || node.supercias_ecp_codigo) ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;" title="ECP: columna ${node.supercias_ecp_subcodigo || '—'}${node.supercias_ecp_codigo ? ', fila de cambios ' + node.supercias_ecp_codigo : ''}">ECP: ${node.supercias_ecp_subcodigo || '?'}${node.supercias_ecp_codigo ? ' → ' + node.supercias_ecp_codigo : ''}</span>` : '';
                 
                 const controlTags = `${sriTag}${esfTag}${eriTag}${ecpTag}`;
 
