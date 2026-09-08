@@ -2064,6 +2064,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
             });
             docsEgreso.forEach(g => { if (!g._hasItems) g.items = null; delete g._hasItems; });
+
+            // Rellenar la cuenta contable del concepto en líneas manuales sin cuenta propia
+            // (mismo fix que egCambiarConcepto/manejarCambioConceptoEgreso): al ABRIR un
+            // egreso ya guardado, el concepto se fija por código (línea 2010) y el select
+            // queda deshabilitado — nunca dispara esos handlers, así que las líneas MANUAL
+            // que nunca tuvieron cuenta persistida (registros de antes de esta corrección, o
+            // sin match en la inferencia por descripción) se quedaban sin cuenta al editar.
+            if (docsEgreso.length === 0) {
+                const cuentaEd = egConceptoCuentaActual();
+                if (cuentaEd.id_cuenta) {
+                    manualEgreso.forEach(m => {
+                        if (!m.id_cuenta) {
+                            m.id_cuenta = cuentaEd.id_cuenta;
+                            m.cuenta_codigo = cuentaEd.cuenta_codigo;
+                            m.cuenta_nombre = cuentaEd.cuenta_nombre;
+                        }
+                    });
+                }
+            }
+
             // Renderizado diferido hasta que se definan los permisos visuales más abajo
             // (isReadOnly depende de eg-input-obs, que aún no se ha fijado en este punto).
 

@@ -438,7 +438,7 @@ class EmpresaService
 
         // Agrupación de ítems en PDF/XML: solo valores del catálogo cerrado.
         $agrupar = strtolower(trim((string) ($data['factura_agrupar_items'] ?? 'no')));
-        $data['factura_agrupar_items'] = in_array($agrupar, ['lote', 'nup'], true) ? $agrupar : 'no';
+        $data['factura_agrupar_items'] = in_array($agrupar, ['lote', 'nup', 'nombre'], true) ? $agrupar : 'no';
 
         // Forma de pago SRI predeterminada
         $fpSri = $data['id_forma_pago_sri_def'] ?? '';

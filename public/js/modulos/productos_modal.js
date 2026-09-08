@@ -560,6 +560,12 @@
 
         document.getElementById('prod_inventariable').checked = (data.inventariable === true || data.inventariable === 'true' || data.inventariable == 1 || data.inventariable === 't');
         document.getElementById('prod_excluir_recargo_servicio').checked = (data.excluir_recargo_servicio === true || data.excluir_recargo_servicio === 'true' || data.excluir_recargo_servicio == 1 || data.excluir_recargo_servicio === 't');
+        // Si la migración de "precio editable en comanda" todavía no está aplicada,
+        // el dato no viene y el switch queda apagado, que es el comportamiento actual.
+        const $precioEditable = document.getElementById('prod_precio_editable_comanda');
+        if ($precioEditable) {
+            $precioEditable.checked = (data.precio_editable_comanda === true || data.precio_editable_comanda === 'true' || data.precio_editable_comanda == 1 || data.precio_editable_comanda === 't');
+        }
         document.getElementById('prod_stock_minimo').value = parseFloat(data.stock_minimo || 0).toFixed(4);
         document.getElementById('prod_stock_maximo').value = parseFloat(data.stock_maximo || 0).toFixed(4);
         document.getElementById('prod_stock_actual').value = '0.00'; // Se llenará en fetchDetalleExtra

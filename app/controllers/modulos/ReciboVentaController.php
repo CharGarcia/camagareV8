@@ -209,6 +209,16 @@ class ReciboVentaController extends BaseModuloController
         }
         unset($d);
 
+        // Presentación de ítems (pestaña Facturación de la empresa). Igual que en
+        // Facturas de Venta: solo bajo pedido, porque este endpoint también sirve
+        // al modal de edición y a las vistas previas, que necesitan las líneas
+        // reales. Lo piden las tirillas —el recibo del POS Restaurante sale por
+        // aquí cuando el cobro no genera factura—.
+        if (!empty($_GET['presentacion'])) {
+            $detalles = (new \App\Services\modulos\FacturaItemsPresentacionService())
+                ->prepararParaEmpresa($detalles, $idEmpresa);
+        }
+
         echo json_encode([
             'ok'             => true,
             'cabecera'       => $cabecera,

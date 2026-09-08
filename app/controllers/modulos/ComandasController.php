@@ -386,6 +386,30 @@ class ComandasController extends BaseModuloController
     }
 
     /**
+     * Precio por línea. Solo para los productos marcados con "Permitir cambiar
+     * el precio en la comanda" en su ficha — el Service lo revalida contra la
+     * base, así que la marca de la pantalla no alcanza para saltárselo.
+     */
+    public function actualizarPrecioLineaAjax(): void
+    {
+        $this->requireActualizar();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $idLinea   = (int) ($_POST['id_linea'] ?? 0);
+            $idComanda = (int) ($_POST['id_comanda'] ?? 0);
+            $precio    = (float) ($_POST['precio_unitario'] ?? 0);
+            if ($idLinea <= 0 || $idComanda <= 0) throw new Exception('Línea no válida.');
+            $this->service->actualizarPrecioLinea($idLinea, $idComanda, $idEmpresa, $idUsuario, $precio);
+            $this->json(['ok' => true, 'msg' => 'Precio actualizado.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * Propina voluntaria de la comanda (un monto libre que deja el cliente).
      * Pide permiso de crear, no de actualizar: es equivalente a agregar un ítem
      * más a la cuenta, que es exactamente lo que hace por dentro.

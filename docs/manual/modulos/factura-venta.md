@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos
-version: 2.1
+version: 2.2
 orden: 20
 estado: activo
 ---
@@ -141,6 +141,14 @@ y asiento contable) según la configuración de la empresa.
   PDF (casilla *Placa / Matrícula*). Ficha Técnica SRI v2.34, Anexo 25.
 
 ## Historial de cambios
+
+- **2.2** — La **tirilla** respeta la *Presentación de los ítems* configurada en
+  el módulo Empresa (pestaña Facturación): agrupa las líneas por **nombre**
+  —opción nueva, junta el mismo producto sin importar lote ni NUP—, por lote o
+  por NUP, y anexa a la descripción la unidad, el lote, la caducidad o el NUP.
+  Antes esa configuración solo llegaba al PDF y al XML, así que el ticket podía
+  mostrar seis líneas donde la factura impresa mostraba una. Con la
+  configuración por defecto la tirilla sale igual que antes: una línea por ítem.
 
 - **2.1** — Al abrir una **guía de remisión desde la factura** (con sus líneas
   cargadas) y cerrarla, el modal de la factura quedaba inactivo hasta recargar

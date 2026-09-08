@@ -264,6 +264,17 @@ class FacturaVentaController extends BaseModuloController
         }
         unset($d);
 
+        // Presentación de ítems (pestaña Facturación de la empresa: agrupar por
+        // nombre/lote/NUP y etiquetas en la descripción). Solo cuando el llamador
+        // lo pide: este mismo endpoint alimenta el modal de edición, Ingresos,
+        // Egresos y las vistas previas, que necesitan las líneas REALES del
+        // documento, no la versión agrupada para imprimir. Lo piden las tirillas,
+        // para que el ticket diga lo mismo que el PDF y el XML.
+        if (!empty($_GET['presentacion'])) {
+            $detalles = (new \App\Services\modulos\FacturaItemsPresentacionService())
+                ->prepararParaEmpresa($detalles, $idEmpresa);
+        }
+
         echo json_encode([
             'ok'             => true,
             'cabecera'       => $cabecera,

@@ -502,6 +502,60 @@ class ComandaService
         }
     }
 
+    /**
+     * Precio unitario de una línea, para los productos marcados como "precio
+     * editable en la comanda" (ficha del producto). Pensado para los servicios
+     * cuyo valor se pacta en cada venta: el envío a domicilio, que depende de la
+     * distancia.
+     *
+     * Cambia SOLO esa línea: ni el precio del producto ni el de la carta se
+     * tocan, así que el siguiente pedido vuelve a nacer con el precio de lista.
+     * El descuento que la línea ya tuviera se conserva, pero se recorta si el
+     * precio nuevo lo deja por encima del importe (un descuento mayor que la
+     * línea dejaría un subtotal negativo).
+     */
+    public function actualizarPrecioLinea(int $idLinea, int $idComanda, int $idEmpresa, int $idUsuario, float $precio): void
+    {
+        $comanda = $this->repository->find($idComanda, $idEmpresa);
+        $this->rules->validarPuedeModificar($comanda);
+
+        $linea = $this->repository->getLinea($idLinea, $idEmpresa);
+        if ($linea && (int) $linea['id_comanda'] !== $idComanda) {
+            $linea = null;
+        }
+        $this->rules->validarPuedeEditarLinea($linea);
+        $this->rules->validarPrecioEditable($linea);
+
+        if ($precio < 0) {
+            throw new Exception('El precio no puede ser negativo.');
+        }
+
+        // 6 decimales: los mismos que admite la columna. Así, si el mesero fija
+        // el precio CON impuestos (2.00 con IVA 15% → 1.739130 sin IVA), el
+        // importe de la línea vuelve a dar exactamente 2.00 y la cuenta cuadra.
+        $precio    = round($precio, 6);
+        $cantidad  = (float) $linea['cantidad'];
+        $base      = round($precio * $cantidad, 2);
+        $descuento = min((float) $linea['descuento'], $base);
+        $descuento = round($descuento, 2);
+        $subtotal  = round($base - $descuento, 2);
+        if ($subtotal < 0) $subtotal = 0.0;
+
+        $this->db->beginTransaction();
+        try {
+            $this->repository->actualizarPrecioLinea($idLinea, $idEmpresa, $precio, $descuento, $subtotal);
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'PRECIO_LINEA_COMANDA', 'comanda_detalle', $idLinea,
+                ['precio_unitario' => $linea['precio_unitario'], 'descuento' => $linea['descuento'], 'subtotal' => $linea['subtotal']],
+                ['precio_unitario' => $precio, 'descuento' => $descuento, 'subtotal' => $subtotal]
+            );
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
+    }
+
     /** El mesero abrió la comanda: ya vio lo que pidió el cliente desde el QR, se apaga el aviso del tablero. */
     public function marcarPedidoQrVisto(int $idComanda, int $idEmpresa): void
     {

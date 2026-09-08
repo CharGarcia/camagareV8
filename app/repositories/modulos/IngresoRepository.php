@@ -185,7 +185,8 @@ class IngresoRepository extends BaseRepository
         $sql = "SELECT d.*,
                        COALESCE(cv.id, cr.id, cs.id, cfr.id, s.id_cliente)                 AS id_cliente,
                        COALESCE(cv.nombre, cr.nombre, cs.nombre, cfr.nombre, s.nombre_cliente)  AS cliente_nombre,
-                       COALESCE(v.fecha_emision, rv.fecha_emision, fr.fecha_emision, s.fecha_emision) AS fecha_documento
+                       COALESCE(v.fecha_emision, rv.fecha_emision, fr.fecha_emision, s.fecha_emision) AS fecha_documento,
+                       pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                 FROM ingresos_detalle d
                 LEFT JOIN ventas_cabecera v        ON d.id_referencia_documento = v.id  AND d.tipo_documento = 'FACTURA'
                 LEFT JOIN clientes cv              ON v.id_cliente = cv.id
@@ -195,6 +196,7 @@ class IngresoRepository extends BaseRepository
                 LEFT JOIN clientes cfr             ON fr.id_cliente = cfr.id
                 LEFT JOIN saldos_iniciales_cxc s   ON d.id_referencia_documento = s.id  AND d.tipo_documento = 'SALDO_INICIAL'
                 LEFT JOIN clientes cs              ON s.id_cliente = cs.id
+                LEFT JOIN plan_cuentas pc          ON pc.id = d.id_cuenta_contable
                 WHERE d.id_ingreso = ?
                 ORDER BY d.id ASC";
         return $this->query($sql, [$idIngreso])->fetchAll(PDO::FETCH_ASSOC);
@@ -614,11 +616,11 @@ class IngresoRepository extends BaseRepository
     public function insertDetalle(array $data): void
     {
         $sql = "INSERT INTO ingresos_detalle (
-                    id_ingreso, tipo_documento, id_referencia_documento, numero_documento, 
-                    descripcion, monto_documento, saldo_anterior, monto_cobrado, saldo_actual
+                    id_ingreso, tipo_documento, id_referencia_documento, numero_documento,
+                    descripcion, monto_documento, saldo_anterior, monto_cobrado, saldo_actual, id_cuenta_contable
                 ) VALUES (
                     :id_ingreso, :tipo_documento, :id_ref, :num_doc,
-                    :desc, :monto_doc, :saldo_ant, :monto_cob, :saldo_act
+                    :desc, :monto_doc, :saldo_ant, :monto_cob, :saldo_act, :id_cuenta
                 )";
         $this->query($sql, [
             ':id_ingreso'   => (int) $data['id_ingreso'],
@@ -630,6 +632,7 @@ class IngresoRepository extends BaseRepository
             ':saldo_ant'    => (float) ($data['saldo_anterior'] ?? 0),
             ':monto_cob'    => (float) ($data['monto_cobrado'] ?? 0),
             ':saldo_act'    => (float) ($data['saldo_actual'] ?? 0),
+            ':id_cuenta'    => !empty($data['id_cuenta_contable']) ? (int) $data['id_cuenta_contable'] : null,
         ]);
     }
 

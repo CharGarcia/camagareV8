@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
-etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante, datos para la factura, precuenta, cuenta previa, llenar a mano, direccion, telefono
-version: 1.26
+etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante, datos para la factura, precuenta, cuenta previa, llenar a mano, direccion, telefono, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, servicio a domicilio, precio variable
+version: 1.28
 orden: 20
 estado: activo
 ---
@@ -255,6 +255,43 @@ embotellada o de un servicio.
 
 Si un plato no llega a la pantalla de cocina, casi siempre es esto: revise su
 campo *Preparar en* en el módulo **Menú**.
+
+## Cambiar el precio de una línea (envío a domicilio y similares)
+
+Los precios del salón salen de la carta y no se tocan. La excepción son los
+**servicios cuyo valor se pacta en cada venta** —el caso típico es el **envío a
+domicilio**, que depende de la distancia—: en esos ítems aparece un botón con
+una **etiqueta** (🏷) junto a la línea, que abre la ventana para fijarle el
+precio.
+
+Para que un ítem lo tenga hay que marcarlo primero en su ficha, en **Productos →
+Permitir cambiar el precio de este producto en la comanda**. Mientras no se
+marque nada, el salón funciona exactamente igual que antes: ninguna línea
+muestra el botón.
+
+La ventana pide dos precios que se calculan entre sí, para no tener que hacer la
+cuenta a mano:
+
+- **Precio sin impuestos**: es el que se guarda.
+- **Precio con IVA**: lo que va a cobrar. Escriba aquí y el de arriba se ajusta
+  solo; si fija $2,00 con IVA, la cuenta dice $2,00 exactos, no $2,01.
+
+Si el ítem no tiene IVA —lo normal en un servicio de envío—, se muestra un solo
+campo.
+
+Reglas:
+
+- Cambia **solo esa línea**. El precio del producto y el de la carta quedan
+  como estaban, así que el siguiente pedido vuelve a nacer con el precio de
+  lista.
+- No se puede si la línea **ya está en una cuenta** (se generó el pedido de
+  cobro) ni si está anulada — igual que con el descuento.
+- Si la línea tenía un descuento mayor que el importe nuevo, el descuento se
+  recorta hasta ese importe para que no quede en negativo.
+- Queda **auditado**: quién lo cambió, cuándo, y de qué precio a cuál.
+- Los ítems de la carta heredan el permiso del producto que tienen vinculado; un
+  ítem del Menú sin producto vinculado no permite editar el precio.
+- El cliente que pide desde el **QR de la mesa** nunca ve este botón.
 
 ## Forma de pago favorita
 
@@ -541,6 +578,21 @@ tocarlas cada vez.
   es probable que el cobro ya se haya emitido.
 
 ## Historial de cambios
+
+- **1.28** — Se puede **cambiar el precio de una línea** en los productos
+  marcados para ello en su ficha (*Productos → Permitir cambiar el precio de
+  este producto en la comanda*), pensado para el **envío a domicilio** y demás
+  servicios cuyo valor se pacta en cada venta. Solo esos ítems muestran el
+  botón, y solo mientras la línea no esté en una cuenta; el cambio queda
+  auditado y no altera el precio del producto ni el de la carta. Ver *Cambiar el
+  precio de una línea*.
+
+- **1.27** — La **tirilla del cobro** respeta la *Presentación de los ítems*
+  configurada en el módulo Empresa (pestaña Facturación): con **Agrupar por
+  nombre** activo, las cinco cervezas que se pidieron en cinco rondas distintas
+  salen como una sola línea de 5, en vez de cinco líneas de 1. Es lo mismo que
+  ya hacían el PDF y el XML del documento. Con la configuración por defecto la
+  tirilla sale exactamente igual que antes: una línea por ítem.
 
 - **1.26** — Los datos de facturación que el cliente llena desde el QR de la
   mesa ya no rechazan la cédula o el RUC por el dígito verificador: los

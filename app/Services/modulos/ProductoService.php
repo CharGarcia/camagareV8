@@ -105,6 +105,7 @@ class ProductoService
                 'opciones'              => !empty($data['opciones']) ? $data['opciones'] : '{"compra":true,"venta":true}',
                 'ubicacion'             => !empty($data['ubicacion']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['ubicacion'])) : null,
                 'excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']),
+                'precio_editable_comanda'  => !empty($data['precio_editable_comanda']),
             ];
 
             $id = $this->repository->create($insertData);
@@ -389,6 +390,7 @@ class ProductoService
                 'opciones'              => !empty($data['opciones']) ? $data['opciones'] : '{"compra":true,"venta":true}',
                 'ubicacion'             => !empty($data['ubicacion']) ? trim(preg_replace('/\s+/u', ' ', (string) $data['ubicacion'])) : null,
                 'excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']),
+                'precio_editable_comanda'  => !empty($data['precio_editable_comanda']),
             ];
 
             $this->repository->update($id, $idEmpresa, $updateData);

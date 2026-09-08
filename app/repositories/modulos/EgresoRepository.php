@@ -179,11 +179,13 @@ class EgresoRepository extends BaseRepository
 
     public function getDetalles(int $idEgreso): array
     {
-        $sql = "SELECT ed.*, COALESCE(c.fecha_emision, l.fecha_emision) AS fecha_documento
+        $sql = "SELECT ed.*, COALESCE(c.fecha_emision, l.fecha_emision) AS fecha_documento,
+                       pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                 FROM egresos_detalle ed
                 LEFT JOIN compras_cabecera c ON ed.tipo_documento = 'COMPRA' AND ed.id_referencia_documento = c.id
                 LEFT JOIN liquidaciones_cabecera l ON ed.tipo_documento = 'LIQUIDACION' AND ed.id_referencia_documento = l.id
-                WHERE ed.id_egreso = ? AND ed.eliminado = FALSE 
+                LEFT JOIN plan_cuentas pc ON pc.id = ed.id_cuenta_contable
+                WHERE ed.id_egreso = ? AND ed.eliminado = FALSE
                 ORDER BY ed.id ASC";
         return $this->query($sql, [$idEgreso])->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -545,10 +547,10 @@ class EgresoRepository extends BaseRepository
     public function insertDetalle(array $data): void
     {
         $sql = "INSERT INTO egresos_detalle (
-                    id_egreso, tipo_documento, id_referencia_documento, numero_documento, 
-                    descripcion, monto_documento, saldo_anterior, monto_pagado, saldo_actual
+                    id_egreso, tipo_documento, id_referencia_documento, numero_documento,
+                    descripcion, monto_documento, saldo_anterior, monto_pagado, saldo_actual, id_cuenta_contable
                 ) VALUES (
-                    :id_egreso, :tipo_doc, :id_ref, :num_doc, :desc, :monto_doc, :saldo_ant, :monto_pag, :saldo_act
+                    :id_egreso, :tipo_doc, :id_ref, :num_doc, :desc, :monto_doc, :saldo_ant, :monto_pag, :saldo_act, :id_cuenta
                 )";
         $this->query($sql, [
             ':id_egreso'    => (int) $data['id_egreso'],
@@ -560,6 +562,7 @@ class EgresoRepository extends BaseRepository
             ':saldo_ant'    => (float) ($data['saldo_anterior'] ?? 0),
             ':monto_pag'    => (float) ($data['monto_pagado'] ?? 0),
             ':saldo_act'    => (float) ($data['saldo_actual'] ?? 0),
+            ':id_cuenta'    => !empty($data['id_cuenta_contable']) ? (int) $data['id_cuenta_contable'] : null,
         ]);
     }
 

@@ -35,6 +35,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         z-index: 10;
         background: #f8f9fa;
     }
+    .nov-cargas-scroll {
+        max-height: 240px;
+        overflow-y: auto;
+    }
+    .nov-cargas-scroll table {
+        margin-bottom: 0;
+        font-size: .78rem;
+    }
     .novedad-row { cursor: pointer; }
     .novedad-row:hover { background-color: rgba(0, 0, 0, .04); }
 </style>
@@ -248,6 +256,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 </div>
                 <input type="file" id="nov_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
                 <div id="nov_import_result" class="mt-3"></div>
+
+                <hr class="my-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-clock-history me-1 text-secondary"></i>Cargas realizadas</h6>
+                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" onclick="window.cargarCargasNov()" title="Actualizar">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div class="small text-muted mb-2">
+                    Una carga se puede eliminar completa mientras <b>ninguna</b> de sus novedades se haya usado
+                    (rol del período pagado, o anticipo/préstamo ya desembolsado por egreso).
+                </div>
+                <div id="nov_cargas_lista" class="nov-cargas-scroll border rounded-2"></div>
             </div>
             <div class="modal-footer bg-light border-top p-2">
                 <a href="<?= $urlBaseNov ?>/plantilla-excel" class="btn btn-outline-secondary btn-sm me-auto"><i class="bi bi-download me-1"></i>Plantilla</a>
@@ -263,13 +284,98 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         'use strict';
         const urlImport = '<?= $urlBaseNov ?>';
         let modalImp = null;
-        const esc = (s) => (s == null ? '' : String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])));
+        const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 
         window.abrirImportNov = function () {
             document.getElementById('nov_import_file').value = '';
             document.getElementById('nov_import_result').innerHTML = '';
             if (!modalImp && typeof bootstrap !== 'undefined') modalImp = new bootstrap.Modal(document.getElementById('modalImportNov'));
             modalImp?.show();
+            window.cargarCargasNov();
+        };
+
+        // ── Cargas realizadas: listado y reversión ───────────────────────────
+        function filaCarga(c, puedeEliminar) {
+            const usadas = c.usadas > 0
+                ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">${c.usadas} usada(s)</span>`
+                : '';
+            let accion;
+            if (!puedeEliminar) {
+                accion = '<span class="text-muted" title="No tiene permiso para eliminar"><i class="bi bi-lock-fill"></i></span>';
+            } else if (c.reversible) {
+                accion = `<button type="button" class="btn btn-outline-danger btn-sm border-0 px-2"
+                                  onclick="window.eliminarCargaNov(${c.id}, ${c.vigentes})" title="Eliminar toda la carga">
+                              <i class="bi bi-trash"></i></button>`;
+            } else {
+                accion = `<span class="text-muted" title="${esc(c.motivo_bloqueo)}"><i class="bi bi-lock-fill"></i></span>`;
+            }
+            return `<tr>
+                        <td class="ps-2">${esc(c.fecha)}</td>
+                        <td class="text-truncate" style="max-width:180px;" title="${esc(c.archivo)}">${esc(c.archivo) || '—'}</td>
+                        <td class="text-center">${c.vigentes} / ${c.creadas} ${usadas}</td>
+                        <td class="text-truncate" style="max-width:130px;">${esc(c.usuario)}</td>
+                        <td class="text-center pe-2">${accion}</td>
+                    </tr>`;
+        }
+
+        window.cargarCargasNov = async function () {
+            const cont = document.getElementById('nov_cargas_lista');
+            if (!cont) return;
+            cont.innerHTML = '<div class="text-center text-muted small py-3"><span class="spinner-border spinner-border-sm me-1"></span>Cargando…</div>';
+            try {
+                const resp = await fetch(`${urlImport}/cargas-ajax`);
+                const json = await resp.json();
+                if (!json.ok) {
+                    cont.innerHTML = `<div class="text-center text-muted small py-3">${esc(json.error)}</div>`;
+                    return;
+                }
+                if (!json.data.length) {
+                    cont.innerHTML = '<div class="text-center text-muted small py-3">Todavía no hay cargas registradas.</div>';
+                    return;
+                }
+                cont.innerHTML = `<table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-2">Fecha</th><th>Archivo</th>
+                                <th class="text-center">Vigentes / Creadas</th><th>Usuario</th>
+                                <th class="text-center pe-2" style="width:40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>${json.data.map(c => filaCarga(c, json.puede_eliminar)).join('')}</tbody>
+                    </table>`;
+            } catch (e) {
+                cont.innerHTML = '<div class="text-center text-muted small py-3">No se pudo cargar el historial.</div>';
+            }
+        };
+
+        window.eliminarCargaNov = async function (id, vigentes) {
+            const result = await Swal.fire({
+                title: '¿Eliminar toda la carga?',
+                html: `Se eliminarán <b>${vigentes}</b> novedad(es) importadas en esa carga.<br>Esta acción no se puede revertir.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sí, eliminar la carga',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!result.isConfirmed) return;
+
+            try {
+                const fd = new FormData();
+                fd.append('id_carga', id);
+                const resp = await fetch(`${urlImport}/eliminar-carga`, { method: 'POST', body: fd });
+                const json = await resp.json();
+                if (json.ok) {
+                    Swal.fire({ icon: 'success', title: 'Carga eliminada', text: json.msg, timer: 2000, showConfirmButton: false });
+                    window.cargarCargasNov();
+                    window.dispatchEvent(new CustomEvent('novedadGuardada'));
+                } else {
+                    Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: json.error || 'Error al eliminar la carga.' });
+                }
+            } catch (e) {
+                Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
+            }
         };
 
         window.importarNov = async function () {
@@ -293,6 +399,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         html += '</ul></div>';
                     }
                     cont.innerHTML = html;
+                    window.cargarCargasNov();
                     if (json.creadas > 0) window.dispatchEvent(new CustomEvent('novedadGuardada'));
                 }
             } catch (e) {

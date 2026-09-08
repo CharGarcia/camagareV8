@@ -6,7 +6,7 @@ ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
 etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre
-version: 1.7
+version: 1.8
 orden: 25
 estado: activo
 ---
@@ -212,6 +212,12 @@ venta no deja cobrar y lo dice: hay que crearlas antes en **Formas de Cobros y
 Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba sin
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
+
+- **1.8** — La **tirilla de la venta** respeta la *Presentación de los ítems*
+  configurada en el módulo Empresa (pestaña Facturación): agrupa las líneas por
+  nombre, lote o NUP y anexa a la descripción la unidad, el lote, la caducidad o
+  el NUP, igual que ya lo hacían el PDF y el XML. Con la configuración por
+  defecto la tirilla sale exactamente igual que antes: una línea por ítem.
 
 - **1.7** — El cierre de caja se hace ahora **forma de pago por forma de pago**:
   la pantalla lista lo cobrado en cada una y una columna al lado para confirmar

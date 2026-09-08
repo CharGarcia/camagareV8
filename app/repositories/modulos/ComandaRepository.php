@@ -371,7 +371,8 @@ class ComandaRepository extends BaseRepository
      */
     private const SQL_SELECT_IVA = "COALESCE(tm.porcentaje_iva, tp.porcentaje_iva, 0) AS porcentaje_iva,
                 COALESCE(mi.id_tarifa_iva, p.tarifa_iva) AS id_tarifa_iva,
-                COALESCE(p.excluir_recargo_servicio, false) AS excluir_recargo_servicio";
+                COALESCE(p.excluir_recargo_servicio, false) AS excluir_recargo_servicio,
+                COALESCE(p.precio_editable_comanda, false) AS precio_editable";
     private const SQL_JOIN_IVA = "LEFT JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN tarifa_iva tp ON tp.id = p.tarifa_iva
                 LEFT JOIN menu_items mi ON mi.id = d.id_menu_item
@@ -503,6 +504,19 @@ class ComandaRepository extends BaseRepository
         $this->db->prepare($sql)->execute([':d' => $descuento, ':s' => $subtotal, ':id' => $idLinea, ':e' => $idEmpresa]);
     }
 
+    /**
+     * Precio unitario de una línea (solo productos marcados como "precio editable
+     * en la comanda") — recalcula el subtotal con el descuento que ya tenía.
+     */
+    public function actualizarPrecioLinea(int $idLinea, int $idEmpresa, float $precio, float $descuento, float $subtotal): void
+    {
+        $sql = "UPDATE comanda_detalle SET precio_unitario = :p, descuento = :d, subtotal = :s
+                WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $this->db->prepare($sql)->execute([
+            ':p' => $precio, ':d' => $descuento, ':s' => $subtotal, ':id' => $idLinea, ':e' => $idEmpresa,
+        ]);
+    }
+
     /** Anula todas las líneas activas de la comanda (usado al anular la comanda completa: saca todo del KDS). */
     /** Cuenta las líneas de la comanda (agregadas o ya anuladas) — usado para exigir motivo al anular la comanda completa. */
     public function contarLineas(int $idComanda, int $idEmpresa): int
@@ -606,9 +620,18 @@ class ComandaRepository extends BaseRepository
         $this->db->prepare($sql)->execute([':estado' => $estado, ':id' => $idLinea, ':e' => $idEmpresa]);
     }
 
+    /**
+     * Una línea de la comanda. Trae también `precio_editable` del producto —el
+     * permiso para cambiarle el precio en el salón— porque quien valida esa
+     * edición es el Service, y tiene que decidirlo con el dato de la base, no
+     * con lo que diga la pantalla.
+     */
     public function getLinea(int $idLinea, int $idEmpresa): ?array
     {
-        $sql = "SELECT * FROM comanda_detalle WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $sql = "SELECT d.*, COALESCE(p.precio_editable_comanda, false) AS precio_editable
+                FROM comanda_detalle d
+                LEFT JOIN productos p ON p.id = d.id_producto AND p.id_empresa = d.id_empresa
+                WHERE d.id = :id AND d.id_empresa = :e AND d.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $idLinea, ':e' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

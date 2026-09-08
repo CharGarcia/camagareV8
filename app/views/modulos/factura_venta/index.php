@@ -3366,7 +3366,7 @@ $totalPages = $totalPagesOriginal;
         if (!id) return;
 
         try {
-            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getFacturaAjax?id=${id}`);
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getFacturaAjax?id=${id}&presentacion=1`);
             const json = await resp.json();
             if (!json.ok) {
                 Swal.fire({

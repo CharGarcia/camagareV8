@@ -16,25 +16,35 @@ use Exception;
  *
  * Columnas esperadas (orden): IDENTIFICACION, TIPO, VALOR, MES, ANIO, AFECTA_A,
  * FECHA (opcional), OBSERVACION (opcional), MOTIVO (opcional).
+ *
+ * Cada importación queda registrada como una CARGA (novedades_cargas) y todas sus
+ * novedades guardan el id_carga, para poder revertirla completa desde el módulo
+ * mientras ninguna haya sido usada (ver NovedadCargaService).
  */
 class NovedadImportService
 {
     private NovedadService $svc;
     private NovedadRepository $repo;
+    private ?NovedadCargaService $cargaSvc;
 
-    public function __construct(NovedadService $svc, NovedadRepository $repo)
+    public function __construct(NovedadService $svc, NovedadRepository $repo, ?NovedadCargaService $cargaSvc = null)
     {
         $this->svc = $svc;
         $this->repo = $repo;
+        $this->cargaSvc = $cargaSvc;
     }
 
-    public function procesar(string $archivoTmp, int $idEmpresa, int $idUsuario): array
+    public function procesar(string $archivoTmp, int $idEmpresa, int $idUsuario, string $nombreArchivo = ''): array
     {
         $spreadsheet = IOFactory::load($archivoTmp);
         $filas = $spreadsheet->getActiveSheet()->toArray();
         if (count($filas) <= 1) {
             throw new Exception('El archivo está vacío o solo contiene los encabezados.');
         }
+
+        // Registro de la carga: permite revertirla después en bloque. Si la tabla
+        // aún no está desplegada, $idCarga queda null y la importación sigue igual.
+        $idCarga = $this->cargaSvc?->abrirCarga($idEmpresa, $idUsuario, $nombreArchivo);
 
         $creadas = 0;
         $errores = [];
@@ -46,13 +56,18 @@ class NovedadImportService
             $nf = $i + 1;
             try {
                 $data = $this->mapearFila($fila, $idEmpresa, $idUsuario, $nf);
+                $data['id_carga'] = $idCarga;
                 $this->svc->crear($data);
                 $creadas++;
             } catch (\Throwable $e) {
                 $errores[] = ['fila' => $nf, 'error' => $e->getMessage()];
             }
         }
-        return ['creadas' => $creadas, 'errores' => $errores, 'total' => $creadas + count($errores)];
+
+        $total = $creadas + count($errores);
+        $this->cargaSvc?->cerrarCarga($idCarga, $idEmpresa, $idUsuario, $total, $creadas, count($errores));
+
+        return ['creadas' => $creadas, 'errores' => $errores, 'total' => $total, 'id_carga' => $idCarga];
     }
 
     private function mapearFila(array $f, int $idEmpresa, int $idUsuario, int $nf): array

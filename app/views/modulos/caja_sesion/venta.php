@@ -877,7 +877,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         const rutaDoc = tipoDocumento === 'FACTURA' ? 'modulos/factura-venta' : 'modulos/recibo-venta';
 
         try {
-            const resp = await fetch(`${BASE}/${rutaDoc}/getFacturaAjax?id=${idDocumento}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const resp = await fetch(`${BASE}/${rutaDoc}/getFacturaAjax?id=${idDocumento}&presentacion=1`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const json = await resp.json();
             if (!json.ok) {
                 swalError(json.error || 'No se pudo cargar el documento.');

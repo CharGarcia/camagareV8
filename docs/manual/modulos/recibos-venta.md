@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos
-version: 1.3
+version: 1.4
 orden: 35
 estado: activo
 ---
@@ -62,6 +62,12 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
 - **El stock bajó dos veces**: se emitió recibo *y* factura por la misma entrega.
 
 ## Historial de cambios
+
+- **1.4** — La **tirilla** respeta la *Presentación de los ítems* configurada en
+  el módulo Empresa (pestaña Facturación): agrupa las líneas por nombre, lote o
+  NUP y anexa a la descripción la unidad, el lote, la caducidad o el NUP, igual
+  que ya lo hacían el PDF y el XML. Con la configuración por defecto la tirilla
+  sale exactamente igual que antes: una línea por ítem.
 
 - **1.3** — La ventana de la tirilla ya no desaparece al cancelar la
   impresión: antes el navegador avisaba igual al imprimir que al cancelar y la

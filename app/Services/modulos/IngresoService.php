@@ -556,9 +556,10 @@ class IngresoService
     }
 
     /**
-     * Agrega a cada línea manual del ingreso la cuenta contable con la que se contabilizó en el
-     * asiento (match por descripción ↔ referencia_detalle del lado Haber). No persiste nada: solo
-     * enriquece la respuesta para que el modal muestre la cuenta elegida.
+     * Fallback para detalles OTRO sin id_cuenta_contable propio (registros de antes de que
+     * ingresos_detalle tuviera esa columna): infiere la cuenta con la que se contabilizó en el
+     * asiento (match por descripción ↔ referencia_detalle del lado Haber). No persiste nada, y
+     * nunca pisa un id_cuenta_contable ya persistido (getDetalles() lo trae directo vía JOIN).
      */
     private function enriquecerCuentasDetalle(array &$ingreso, int $idIngreso, int $idEmpresa): void
     {
@@ -582,6 +583,7 @@ class IngresoService
         }
         foreach ($ingreso['detalles'] as &$d) {
             if (($d['tipo_documento'] ?? '') !== 'OTRO') continue;
+            if (!empty($d['id_cuenta_contable'])) continue; // ya viene persistido, no inferir
             $ref = trim((string) ($d['descripcion'] ?? ''));
             if (isset($mapa[$ref])) {
                 $d['id_cuenta_contable'] = $mapa[$ref]['id'];

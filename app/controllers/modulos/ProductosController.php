@@ -854,6 +854,7 @@ class ProductosController extends BaseModuloController
             'nombre_ice'            => trim($_POST['nombre_ice'] ?? ''),
             'inventariable'         => isset($_POST['inventariable']) && $_POST['inventariable'] == '1',
             'excluir_recargo_servicio' => isset($_POST['excluir_recargo_servicio']) && $_POST['excluir_recargo_servicio'] == '1',
+            'precio_editable_comanda'  => isset($_POST['precio_editable_comanda']) && $_POST['precio_editable_comanda'] == '1',
 
             'id_categoria'          => empty($_POST['id_categoria']) ? null : (int)$_POST['id_categoria'],
             'id_marca'              => empty($_POST['id_marca']) ? null : (int)$_POST['id_marca'],

@@ -122,6 +122,26 @@ class ComandaRules
         }
     }
 
+    /**
+     * El precio de una línea solo se cambia en los productos marcados con
+     * "Permitir cambiar el precio en la comanda" (ficha del producto). Es la
+     * excepción, no la regla: la carta y la lista de precios son las que mandan,
+     * y esto existe para los servicios cuyo valor se pacta en cada venta (envío
+     * a domicilio, alquiler). Un ítem de la carta sin producto vinculado no
+     * tiene dónde llevar la marca, así que tampoco se edita.
+     *
+     * @param array $linea Línea leída del repositorio (trae `precio_editable`)
+     */
+    public function validarPrecioEditable(array $linea): void
+    {
+        $v = $linea['precio_editable'] ?? false;
+        $permitido = $v === true || $v === 1 || $v === '1' || $v === 't' || strtolower((string) $v) === 'true';
+
+        if (!$permitido) {
+            throw new Exception('Este ítem no permite cambiar el precio. Actívelo en la ficha del producto.');
+        }
+    }
+
     /** Solo se puede restaurar un ítem que esté eliminado ("anulado"). */
     public function validarPuedeRestaurarLinea(?array $linea): void
     {

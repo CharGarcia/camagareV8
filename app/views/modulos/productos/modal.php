@@ -483,6 +483,17 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                             </label>
                                             <div class="small text-muted mt-1">Aplica para restaurantes y caja POS.</div>
                                         </div>
+                                        <div class="form-check mt-2 pt-2 border-top">
+                                            <input class="form-check-input" type="checkbox" name="precio_editable_comanda" id="prod_precio_editable_comanda" value="1">
+                                            <label class="form-check-label fw-bold text-muted" for="prod_precio_editable_comanda">
+                                                Permitir cambiar el precio de este producto en la comanda
+                                            </label>
+                                            <div class="small text-muted mt-1">
+                                                Para servicios cuyo valor cambia en cada venta (envío a domicilio, alquiler, etc.).
+                                                El mesero podrá fijar el precio de esa línea en el salón; el precio del producto y el
+                                                de la carta no cambian.
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

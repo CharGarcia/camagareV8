@@ -12,7 +12,7 @@ namespace App\Services\modulos;
  * la representación impresa y el comprobante electrónico no puedan divergir.
  *
  * Reglas:
- *  - Agrupación (`factura_agrupar_items`): 'no' | 'lote' | 'nup'.
+ *  - Agrupación (`factura_agrupar_items`): 'no' | 'lote' | 'nup' | 'nombre'.
  *    Solo se fusionan líneas del mismo producto que además coinciden en precio
  *    unitario, unidad de medida e impuestos. Así la suma es exacta y el precio
  *    unitario nunca se recalcula (un precio recalculado descuadraría el XML).
@@ -21,9 +21,10 @@ namespace App\Services\modulos;
  */
 class FacturaItemsPresentacionService
 {
-    public const AGRUPAR_NO   = 'no';
-    public const AGRUPAR_LOTE = 'lote';
-    public const AGRUPAR_NUP  = 'nup';
+    public const AGRUPAR_NO     = 'no';
+    public const AGRUPAR_LOTE   = 'lote';
+    public const AGRUPAR_NUP    = 'nup';
+    public const AGRUPAR_NOMBRE = 'nombre';
 
     /** Longitud máxima de <descripcion> según el XSD del SRI. */
     private const MAX_DESCRIPCION = 300;
@@ -58,10 +59,43 @@ class FacturaItemsPresentacionService
         return $grupos;
     }
 
+    /**
+     * Igual que preparar(), pero resolviendo la configuración de la empresa por
+     * su cuenta. Es el atajo para quien solo imprime —las tirillas térmicas—, que
+     * de otro modo tendría que repetir el armado de `empresa_config` que hacen los
+     * endpoints de PDF.
+     */
+    public function prepararParaEmpresa(array $detalles, int $idEmpresa): array
+    {
+        return $this->preparar($detalles, $this->configEmpresa($idEmpresa));
+    }
+
+    /**
+     * Configuración de presentación del establecimiento ACTIVO de la empresa
+     * (`getEstablecimientos()` ya devuelve primero el activo), que es el mismo
+     * criterio con el que el PDF y el XML arman su `empresa_config`.
+     *
+     * Devuelve el establecimiento completo: las columnas `factura_*` viven en
+     * `empresa_establecimiento`. Si la migración de presentación de ítems todavía
+     * no está desplegada, esas claves simplemente no vienen y preparar() asume
+     * los valores por defecto ('no' + todo apagado).
+     */
+    public function configEmpresa(int $idEmpresa): array
+    {
+        try {
+            $establecimientos = (new \App\models\Empresa())->getEstablecimientos($idEmpresa);
+            return $establecimientos[0] ?? [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     public function modoAgrupacion(array $empresaConfig): string
     {
         $modo = strtolower(trim((string) ($empresaConfig['factura_agrupar_items'] ?? self::AGRUPAR_NO)));
-        return in_array($modo, [self::AGRUPAR_LOTE, self::AGRUPAR_NUP], true) ? $modo : self::AGRUPAR_NO;
+        $validos = [self::AGRUPAR_LOTE, self::AGRUPAR_NUP, self::AGRUPAR_NOMBRE];
+
+        return in_array($modo, $validos, true) ? $modo : self::AGRUPAR_NO;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -98,9 +132,14 @@ class FacturaItemsPresentacionService
      */
     private function clave(array $d, string $modo): string
     {
-        $discriminante = $modo === self::AGRUPAR_LOTE
-            ? $this->norm((string) ($d['numero_lote'] ?? ''))
-            : $this->norm((string) ($d['nup'] ?? ''));
+        // En modo 'nombre' no hay discriminante: la descripción ya forma parte de
+        // la clave, así que dos líneas del mismo producto se fusionan aunque
+        // vengan de lotes o NUP distintos.
+        $discriminante = match ($modo) {
+            self::AGRUPAR_LOTE => $this->norm((string) ($d['numero_lote'] ?? '')),
+            self::AGRUPAR_NUP  => $this->norm((string) ($d['nup'] ?? '')),
+            default            => '',
+        };
 
         return implode('|', [
             (string) ($d['id_producto'] ?? ''),

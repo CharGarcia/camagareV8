@@ -2254,6 +2254,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 });
                 // Los documentos sin renglones de ítem se muestran como documento simple
                 docPendientes.forEach(g => { if (!g._hasItems) g.items = null; delete g._hasItems; });
+
+                // Rellenar la cuenta contable del concepto en líneas manuales sin cuenta propia
+                // (mismo fix que manejarCambioConceptoIngreso): al ABRIR un ingreso ya guardado,
+                // el concepto se fija por código y el select queda deshabilitado — nunca dispara
+                // ese handler, así que las líneas OTRO que nunca tuvieron cuenta persistida
+                // (registros de antes de esta corrección, o sin match en la inferencia por
+                // descripción) se quedaban sin cuenta al editar.
+                if (docPendientes.length === 0) {
+                    const cuentaEd = ingConceptoCuentaActual();
+                    if (cuentaEd.id_cuenta) {
+                        detalleManual.forEach(d => {
+                            if (!d.id_cuenta) {
+                                d.id_cuenta = cuentaEd.id_cuenta;
+                                d.cuenta_codigo = cuentaEd.cuenta_codigo;
+                                d.cuenta_nombre = cuentaEd.cuenta_nombre;
+                            }
+                        });
+                    }
+                }
+
                 actualizarInfoClientesCargados();
                 renderDetalles();
                 renderPagos();

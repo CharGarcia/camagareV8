@@ -1790,8 +1790,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         </div>
                                     </div>
                                     <div class="col-md-6">
-                                        <!-- Ambos switches comparten name: agrupar es excluyente. Si los dos
+                                        <!-- Los tres switches comparten name: agrupar es excluyente. Si los tres
                                              quedan apagados no se envía el campo y el servicio asume 'no'. -->
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input sw-agrupar-items" type="checkbox" role="switch" name="factura_agrupar_items" value="nombre" id="sw_agrupar_nombre" <?= $fvAgrupar === 'nombre' ? 'checked' : '' ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_agrupar_nombre">Agrupar los ítems por nombre</label>
+                                        </div>
                                         <div class="form-check form-switch mb-3">
                                             <input class="form-check-input sw-agrupar-items" type="checkbox" role="switch" name="factura_agrupar_items" value="lote" id="sw_agrupar_lote" <?= $fvAgrupar === 'lote' ? 'checked' : '' ?>>
                                             <label class="form-check-label small fw-bold" for="sw_agrupar_lote">Agrupar los ítems por lote</label>
@@ -1801,10 +1805,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <label class="form-check-label small fw-bold" for="sw_agrupar_nup">Agrupar los ítems por NUP / Serie</label>
                                         </div>
                                         <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">
-                                            Con los dos apagados se emite una línea por cada ítem. Al agrupar se suman las cantidades y los totales
+                                            Con los tres apagados se emite una línea por cada ítem. Al agrupar se suman las cantidades y los totales
                                             de las líneas del mismo producto que comparten el criterio elegido; solo se fusionan si además coinciden
                                             en precio unitario, unidad de medida e impuestos, para que los totales del comprobante sigan cuadrando.
-                                            Los dos criterios son excluyentes: al encender uno se apaga el otro.
+                                            <strong>Por nombre</strong> junta todas las líneas del mismo producto sin importar el lote ni el NUP.
+                                            Los tres criterios son excluyentes: al encender uno se apagan los otros.
                                         </div>
                                     </div>
                                     <div class="col-md-6 ps-4">

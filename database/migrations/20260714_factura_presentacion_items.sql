@@ -3,9 +3,10 @@
 -- Módulo: modulos/empresa → pestaña Facturación
 --
 -- factura_agrupar_items:
---   'no'   → una línea por cada detalle (comportamiento actual, por defecto)
---   'lote' → fusiona líneas del mismo producto que comparten número de lote
---   'nup'  → fusiona líneas del mismo producto que comparten NUP/serie
+--   'no'     → una línea por cada detalle (comportamiento actual, por defecto)
+--   'lote'   → fusiona líneas del mismo producto que comparten número de lote
+--   'nup'    → fusiona líneas del mismo producto que comparten NUP/serie
+--   'nombre' → fusiona TODAS las líneas del mismo producto, sin mirar lote ni NUP
 --
 -- La fusión solo ocurre si además coinciden precio unitario, unidad de medida
 -- e impuestos; de lo contrario las líneas quedan separadas para que la suma

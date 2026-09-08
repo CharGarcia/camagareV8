@@ -255,14 +255,14 @@ class ProductoRepository extends BaseRepository
                     tarifa_iva, id_medida, id_tipo_medida, status, valor_ice, codigo_ice,
                     nombre_ice, inventariable, id_categoria, id_marca, imagen, costo_producto,
                     eliminado, created_at, stock_minimo, stock_maximo, id_ice, opciones, ubicacion,
-                    excluir_recargo_servicio
+                    excluir_recargo_servicio, precio_editable_comanda
                 ) VALUES (
                     :id_empresa, :id_usuario, :created_by, :codigo, :nombre,
                     :codigo_auxiliar, :codigo_barras, :precio_base, :tipo_produccion,
                     :tarifa_iva, :id_medida, :id_tipo_medida, :status, :valor_ice, :codigo_ice,
                     :nombre_ice, :inventariable, :id_categoria, :id_marca, :imagen, :costo_producto,
                     :eliminado, CURRENT_TIMESTAMP, :stock_minimo, :stock_maximo, :id_ice, :opciones, :ubicacion,
-                    :excluir_recargo_servicio
+                    :excluir_recargo_servicio, :precio_editable_comanda
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -294,6 +294,7 @@ class ProductoRepository extends BaseRepository
             ':opciones'               => $data['opciones'] ?? '{"compra":true,"venta":true}',
             ':ubicacion'              => !empty($data['ubicacion']) ? $data['ubicacion'] : null,
             ':excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']) ? 'true' : 'false',
+            ':precio_editable_comanda'  => !empty($data['precio_editable_comanda']) ? 'true' : 'false',
         ]);
         return (int) $this->lastInsertId();
     }
@@ -325,6 +326,7 @@ class ProductoRepository extends BaseRepository
                 opciones = :opciones,
                 ubicacion = :ubicacion,
                 excluir_recargo_servicio = :excluir_recargo_servicio,
+                precio_editable_comanda = :precio_editable_comanda,
                 id_usuario = :id_usuario,
                 updated_by = :updated_by,
                 updated_at = CURRENT_TIMESTAMP
@@ -355,6 +357,7 @@ class ProductoRepository extends BaseRepository
             ':opciones'               => $data['opciones'] ?? '{"compra":true,"venta":true}',
             ':ubicacion'              => !empty($data['ubicacion']) ? $data['ubicacion'] : null,
             ':excluir_recargo_servicio' => !empty($data['excluir_recargo_servicio']) ? 'true' : 'false',
+            ':precio_editable_comanda'  => !empty($data['precio_editable_comanda']) ? 'true' : 'false',
             ':id_usuario'             => $data['id_usuario'],
             ':updated_by'             => $data['id_usuario'],
             ':id'                     => $id,

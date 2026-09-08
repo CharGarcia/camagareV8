@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\repositories\modulos\NovedadRepository;
+use App\repositories\modulos\NovedadCargaRepository;
 use App\repositories\modulos\EmpleadoRepository;
 use App\Rules\modulos\NovedadRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\NovedadService;
 use App\Services\modulos\NovedadImportService;
+use App\Services\modulos\NovedadCargaService;
 use App\models\CatalogoNovedades;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -28,6 +30,23 @@ class NovedadesController extends BaseModuloController
     protected function getRutaModulo(): string
     {
         return self::RUTA_MODULO;
+    }
+
+    /** Service de cargas masivas (se arma bajo demanda: solo lo usa el flujo de importación). */
+    private function cargaService(): NovedadCargaService
+    {
+        return new NovedadCargaService(
+            new NovedadCargaRepository(),
+            new NovedadRepository(),
+            $this->service,
+            new LogSistemaService()
+        );
+    }
+
+    /** id del usuario cuando NO tiene acceso total (ve/gestiona solo lo suyo); null si lo tiene. */
+    private function usuarioFiltro(): ?int
+    {
+        return empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
     }
 
     public function index(): void
@@ -386,9 +405,72 @@ class NovedadesController extends BaseModuloController
             if (!in_array($ext, ['xlsx', 'xls'], true)) {
                 throw new \Exception('El archivo debe ser Excel (.xlsx o .xls).');
             }
-            $import = new NovedadImportService($this->service, new NovedadRepository());
-            $res = $import->procesar($_FILES['archivo']['tmp_name'], (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            $import = new NovedadImportService($this->service, new NovedadRepository(), $this->cargaService());
+            $res = $import->procesar(
+                $_FILES['archivo']['tmp_name'],
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                (string) ($_FILES['archivo']['name'] ?? '')
+            );
             echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Cargas masivas realizadas, con el estado de reversión de cada una. */
+    public function cargasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $cargas = $this->cargaService()->getListado((int) $_SESSION['id_empresa'], 50, $this->usuarioFiltro());
+            $data = array_map(fn($c) => [
+                'id'             => (int) $c['id'],
+                'fecha'          => $c['created_at'] ? date('d-m-Y H:i:s', strtotime((string) $c['created_at'])) : '',
+                'archivo'        => (string) ($c['archivo'] ?? ''),
+                'creadas'        => (int) $c['creadas'],
+                'vigentes'       => (int) $c['vigentes'],
+                'usadas'         => (int) $c['usadas'],
+                'usuario'        => (string) ($c['usuario_nombre'] ?? ''),
+                'reversible'     => (bool) $c['reversible'],
+                'motivo_bloqueo' => (string) $c['motivo_bloqueo'],
+            ], $cargas);
+            echo json_encode([
+                'ok'             => true,
+                'data'           => $data,
+                'puede_eliminar' => !empty($this->getPermisos()['eliminar']),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Revierte una carga masiva completa (solo si ninguna de sus novedades ya se usó). */
+    public function eliminarCarga(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idCarga = (int) ($_POST['id_carga'] ?? 0);
+
+        try {
+            if ($idCarga <= 0) throw new \Exception('Carga no válida.');
+            $res = $this->cargaService()->eliminarCarga(
+                $idCarga,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                $this->usuarioFiltro()
+            );
+            echo json_encode([
+                'ok'  => true,
+                'msg' => $res['eliminadas'] . ' novedad(es) de la carga fueron eliminadas.',
+            ] + $res);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

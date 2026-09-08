@@ -69,7 +69,8 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .cm-linea .total { font-size: .82rem; font-weight: 600; min-width: 56px; text-align: right; }
         .cm-linea .rm { color: #dc3545; cursor: pointer; }
         .cm-linea .entregar { font-size: .68rem; padding: 2px 8px; }
-        .cm-linea .btn-desc { width: 26px; height: 22px; line-height: 1; padding: 0; font-size: .68rem; flex-shrink: 0; }
+        .cm-linea .btn-desc,
+        .cm-linea .btn-precio { width: 26px; height: 22px; line-height: 1; padding: 0; font-size: .68rem; flex-shrink: 0; }
         .cm-totales { flex: 0 0 auto; padding: 12px 16px; border-top: 1px dashed #dee2e6; font-size: .85rem; }
         .cm-totales .row div { display: flex; justify-content: space-between; padding: 2px 0; }
         .cm-totales .row.total div { font-size: 1.15rem; font-weight: 700; border-top: 1px solid #dee2e6; margin-top: 6px; padding-top: 8px; }
@@ -605,6 +606,13 @@ window.addEventListener('pageshow', function (e) {
     const excluyeRecargo = (d) => d.excluir_recargo_servicio === true || d.excluir_recargo_servicio === 'true'
         || d.excluir_recargo_servicio == 1 || d.excluir_recargo_servicio === 't';
 
+    // Producto marcado "permitir cambiar el precio en la comanda" (ficha del
+    // producto): servicios cuyo valor se pacta en cada venta, como el envío a
+    // domicilio. Solo decide si se muestra el botón — quien manda es el Service,
+    // que vuelve a comprobarlo contra la base antes de guardar.
+    const precioEditable = (d) => d.precio_editable === true || d.precio_editable === 'true'
+        || d.precio_editable == 1 || d.precio_editable === 't';
+
     /**
      * ¿Esta línea todavía se puede tocar? Sí mientras no esté en una cuenta, o
      * esté en una que aún no se cobró: el cliente puede pedir la cuenta y
@@ -838,6 +846,7 @@ window.addEventListener('pageshow', function (e) {
                         ${puedeEntregar ? '<button type="button" class="btn btn-sm btn-success entregar mt-1" data-id="' + d.id + '"><i class="bi bi-check2-circle me-1"></i>Entregar</button>' : ''}
                         ${d.estado_linea === 'anulado' && PUEDE_ACTUALIZAR ? '<button type="button" class="btn btn-sm btn-outline-secondary restaurar mt-1" data-id="' + d.id + '"><i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar</button>' : ''}
                     </div>
+                    ${puedeEditar && precioEditable(d) ? '<button type="button" class="btn btn-outline-primary btn-precio" data-id="' + d.id + '" title="Cambiar el precio"><i class="bi bi-tag"></i></button>' : ''}
                     ${puedeEditar ? '<button type="button" class="btn btn-outline-secondary btn-desc" data-id="' + d.id + '" title="Aplicar descuento"><i class="bi bi-percent"></i></button>' : ''}
                     <div class="total" title="IVA incluido">${totalHtml}</div>
                     ${puedeEditar ? '<span class="rm" data-id="' + d.id + '" title="Eliminar ítem"><i class="bi bi-x-lg"></i></span>' : ''}
@@ -1073,11 +1082,89 @@ window.addEventListener('pageshow', function (e) {
         } catch (e) { swalError('Error de conexión.'); }
     }
 
+    /**
+     * Precio de una línea, solo en los productos marcados como "precio editable
+     * en la comanda" (ficha del producto): el envío a domicilio y demás servicios
+     * cuyo valor se pacta en cada venta.
+     *
+     * Se piden los dos precios —sin y con impuestos— y se mantienen
+     * sincronizados, porque el mesero piensa en lo que va a cobrar (con IVA) y
+     * lo que se guarda es el precio sin impuestos. La columna admite 6
+     * decimales, así que fijar "2.00 con IVA" da exactamente $2.00 en la cuenta
+     * en vez de $2.01. Si el ítem no tiene IVA, se muestra un solo campo.
+     */
+    async function abrirPrecioLinea(idLinea) {
+        const linea = detalles.find(d => d.id === idLinea);
+        if (!linea) return;
+
+        const pct = parseFloat(linea.porcentaje_iva) || 0;
+        const factor = 1 + pct / 100;
+        const actual = parseFloat(linea.precio_unitario || 0);
+        const actualIva = round2(actual * factor);
+        const cant = parseFloat(linea.cantidad || 0);
+
+        const campoConIva = pct > 0
+            ? '<label class="form-label small fw-semibold text-uppercase text-muted mb-1 mt-2">Precio con IVA (' + pct + '%)</label>' +
+              '<input type="number" id="cm-precio-iva" class="form-control form-control-sm" value="' + actualIva.toFixed(2) + '" step="any" min="0">'
+            : '';
+
+        const res = await Swal.fire({
+            title: 'Cambiar el precio',
+            html: '<div class="text-start">' +
+                  '<div class="small text-muted mb-2">' + escapeHtml(linea.descripcion) + ' — ' + cantidad(cant) + ' x</div>' +
+                  '<label class="form-label small fw-semibold text-uppercase text-muted mb-1">Precio sin impuestos</label>' +
+                  '<input type="number" id="cm-precio-base" class="form-control form-control-sm" value="' + actual.toFixed(2) + '" step="any" min="0">' +
+                  campoConIva +
+                  '<div class="small text-muted mt-2">Cambia solo esta línea: el precio del producto y el de la carta no se tocan.</div>' +
+                  '</div>',
+            showCancelButton: true,
+            confirmButtonText: 'Guardar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            focusConfirm: false,
+            didOpen: () => {
+                const $base = document.getElementById('cm-precio-base');
+                const $iva = document.getElementById('cm-precio-iva');
+                if ($iva) {
+                    // El campo con IVA es el que suele usar el mesero; el otro se
+                    // recalcula con 6 decimales para que el importe cuadre exacto.
+                    $base.addEventListener('input', () => {
+                        $iva.value = (Math.round((parseFloat($base.value) || 0) * factor * 100) / 100).toFixed(2);
+                    });
+                    $iva.addEventListener('input', () => {
+                        $base.value = ((parseFloat($iva.value) || 0) / factor).toFixed(6);
+                    });
+                }
+                $base.focus();
+                $base.select();
+            },
+            preConfirm: () => {
+                const valor = parseFloat(document.getElementById('cm-precio-base').value);
+                if (isNaN(valor) || valor < 0) { Swal.showValidationMessage('El precio no puede ser negativo.'); return false; }
+                return valor;
+            },
+        });
+        if (!res.isConfirmed) return;
+
+        try {
+            const fd = new FormData();
+            fd.append('id_linea', idLinea);
+            fd.append('id_comanda', ID_COMANDA);
+            fd.append('precio_unitario', res.value);
+            const r = await fetch(AJAX + '/actualizarPrecioLineaAjax', { method: 'POST', body: fd });
+            const dJson = await r.json();
+            if (!dJson.ok) { swalError(dJson.error || 'No se pudo cambiar el precio.'); return; }
+            await refrescarComanda();
+        } catch (e) { swalError('Error de conexión.'); }
+    }
+
     $lineas.addEventListener('click', async (ev) => {
         const rm = ev.target.closest('.rm');
         const entregar = ev.target.closest('.entregar');
         const restaurar = ev.target.closest('.restaurar');
         const desc = ev.target.closest('.btn-desc');
+        const precio = ev.target.closest('.btn-precio');
+        if (precio) { abrirPrecioLinea(parseInt(precio.dataset.id, 10)); return; }
         if (desc) { abrirDescuentoLinea(parseInt(desc.dataset.id, 10)); return; }
         // La propina se quita poniéndola en 0: mismo camino que el campo del pie,
         // así la línea desaparece en vez de quedar anulada.
@@ -2204,7 +2291,7 @@ window.addEventListener('pageshow', function (e) {
         const rutaDoc = tipoDocumento === 'FACTURA' ? 'modulos/factura-venta' : 'modulos/recibo-venta';
 
         try {
-            const resp = await fetch(`${BASE}/${rutaDoc}/getFacturaAjax?id=${idDocumento}`);
+            const resp = await fetch(`${BASE}/${rutaDoc}/getFacturaAjax?id=${idDocumento}&presentacion=1`);
             const json = await resp.json();
             if (!json.ok) { swalError(json.error || 'No se pudo cargar el documento.'); return; }
 

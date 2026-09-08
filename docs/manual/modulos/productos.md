@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos
-version: 1.3
+etiquetas: productos, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -105,6 +105,24 @@ quieren cargar variantes, componentes o stock por bodega. En ambos, si un
 producto aparece en la hoja de precios, esa es su lista completa; si no
 aparece, conserva la que tenía.
 
+## Marcas para el restaurante
+
+Al pie de la pestaña donde se carga la imagen hay dos marcas que solo tienen
+efecto en el salón y en el punto de venta:
+
+- **No aplicar el recargo por servicio (propina) a este producto**: el producto
+  se cobra normal, pero queda fuera de la base sobre la que se calcula el 10%
+  de servicio. Pensado para envases, empaques y similares.
+- **Permitir cambiar el precio de este producto en la comanda**: habilita un
+  botón junto a esa línea en la comanda para fijarle un precio distinto. Es para
+  los servicios cuyo valor se pacta en cada venta —el **envío a domicilio**, que
+  depende de la distancia—, no para negociar el precio de los platos.
+
+La segunda marca **no cambia el precio del producto ni el de la carta**: afecta
+solo a la línea de esa comanda. Los ítems del menú la heredan del producto que
+tienen vinculado; un ítem de la carta sin producto vinculado no permite editar
+el precio. Ver *Comandas* para cómo se usa en el salón.
+
 ## Buscar en el listado
 
 Además del texto libre, el buscador acepta filtros `clave:valor`
@@ -142,6 +160,10 @@ aparecer al facturar.
   compras que lo afectan quedaron vinculadas a este producto del catálogo.
 
 ## Historial de cambios
+
+- **1.4** — Nueva marca **"Permitir cambiar el precio de este producto en la
+  comanda"** y se documenta la de *No aplicar el recargo por servicio*, que ya
+  existía sin explicación en el manual. Ver *Marcas para el restaurante*.
 
 - **1.3** — Sección *Varios precios por producto* y carga masiva de precios
   desde la hoja *Precios* del Importador desde Excel.

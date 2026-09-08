@@ -70,7 +70,21 @@ class NovedadRepository extends BaseRepository
         $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        // Anexar estado de pago (derivado del rol): la novedad está pagada si aparece
+        return ['rows' => $this->anexarEstadoPago($rows, $idEmpresa), 'total' => $total];
+    }
+
+    /**
+     * Anexa a cada fila los flags derivados `pagada` y `bloqueada` (en lote, sin
+     * N+1). Se usa en el listado y también al revisar las novedades de una carga
+     * masiva antes de revertirla, para no duplicar el criterio de "ya usada".
+     */
+    public function anexarEstadoPago(array $rows, int $idEmpresa): array
+    {
+        if (empty($rows)) {
+            return $rows;
+        }
+
+        // Estado de pago (derivado del rol): la novedad está pagada si aparece
         // como rubro en una línea de rol que fue pagada vía egreso.
         $pagadas = $this->idsNovedadesPagadas(array_column($rows, 'id'), $idEmpresa);
         // Anexar si la novedad está BLOQUEADA para editar/eliminar: mismo criterio que
@@ -96,7 +110,7 @@ class NovedadRepository extends BaseRepository
         }
         unset($r);
 
-        return ['rows' => $rows, 'total' => $total];
+        return $rows;
     }
 
     /** Clave [id_empleado|tipo_rol|anio|mes] para cruzar una novedad con su corrida de rol. */
@@ -246,18 +260,23 @@ class NovedadRepository extends BaseRepository
 
     public function create(array $d): int
     {
+        // La columna id_carga solo se escribe cuando la novedad viene de una carga
+        // masiva; así el alta normal no depende de que el SQL de cargas esté aplicado.
+        $idCarga    = isset($d['id_carga']) && (int) $d['id_carga'] > 0 ? (int) $d['id_carga'] : null;
+        $colCarga   = $idCarga !== null ? ', id_carga' : '';
+        $valCarga   = $idCarga !== null ? ', :id_carga' : '';
+
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_empleado, tipo_codigo, tipo_nombre, fecha,
                     periodo_mes, periodo_anio, valor, aplica_en, motivo_codigo, motivo_nombre,
-                    observacion, estado, tipo_ambiente, created_by, updated_by, created_at, updated_at, eliminado
+                    observacion, estado, tipo_ambiente, created_by, updated_by, created_at, updated_at, eliminado{$colCarga}
                 ) VALUES (
                     :id_empresa, :id_empleado, :tipo_codigo, :tipo_nombre, :fecha,
                     :periodo_mes, :periodo_anio, :valor, :aplica_en, :motivo_codigo, :motivo_nombre,
                     :observacion, :estado, (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa),
-                    :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false
+                    :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false{$valCarga}
                 )";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $params = [
             ':id_empresa'    => $d['id_empresa'],
             ':id_empleado'   => $d['id_empleado'],
             ':tipo_codigo'   => $d['tipo_codigo'],
@@ -272,7 +291,12 @@ class NovedadRepository extends BaseRepository
             ':observacion'   => $d['observacion'] ?? null,
             ':estado'        => $d['estado'] ?? 'activo',
             ':id_u'          => $d['id_usuario'],
-        ]);
+        ];
+        if ($idCarga !== null) {
+            $params[':id_carga'] = $idCarga;
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $this->lastInsertId();
     }
 
@@ -356,6 +380,53 @@ class NovedadRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Novedades vigentes de una carga masiva, con datos del empleado y los flags
+     * `pagada`/`bloqueada` (mismo criterio del listado): es lo que se revisa antes
+     * de permitir revertir la carga completa.
+     */
+    public function getPorCarga(int $idCarga, int $idEmpresa): array
+    {
+        return $this->getPorCargas([$idCarga], $idEmpresa);
+    }
+
+    /**
+     * Igual que getPorCarga() pero para VARIAS cargas a la vez: una sola consulta
+     * y una sola pasada de anexarEstadoPago() para todo el historial, en vez de
+     * repetirlas por carga (el listado del modal muestra decenas).
+     */
+    public function getPorCargas(array $idsCarga, int $idEmpresa): array
+    {
+        $idsCarga = array_values(array_unique(array_filter(array_map('intval', $idsCarga))));
+        if (empty($idsCarga) || !$this->columnaExiste('novedades', 'id_carga')) {
+            return [];
+        }
+        $in = implode(',', $idsCarga);
+        $sql = "SELECT n.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion
+                  FROM {$this->table} n
+                  JOIN empleados e ON e.id = n.id_empleado
+                 WHERE n.id_carga IN ($in) AND n.id_empresa = :id_empresa AND n.eliminado = false
+                 ORDER BY n.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        return $this->anexarEstadoPago($rows, $idEmpresa);
+    }
+
+    /**
+     * Eliminación lógica en bloque de todas las novedades vigentes de una carga.
+     * Devuelve cuántas filas se marcaron. El Service ya validó que ninguna esté
+     * usada (rol pagado / desembolso registrado) y abre la transacción.
+     */
+    public function deleteLogicPorCarga(int $idCarga, int $idEmpresa, int $idUsuario): int
+    {
+        $sql = "UPDATE {$this->table}
+                   SET eliminado = true, deleted_by = :id_u, deleted_at = CURRENT_TIMESTAMP
+                 WHERE id_carga = :id_carga AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_carga' => $idCarga, ':id_empresa' => $idEmpresa, ':id_u' => $idUsuario]);
+        return $st->rowCount();
+    }
     /** Resuelve el id de un empleado por su identificación exacta (para importar). */
     public function getIdEmpleadoPorIdentificacion(int $idEmpresa, string $identificacion): ?int
     {

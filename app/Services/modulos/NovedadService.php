@@ -211,8 +211,12 @@ class NovedadService
         }
     }
 
-    /** Auto-regenera el rol 'generado' afectado por el cambio de novedad (silencioso si falla). */
-    private function sincronizarRol(int $idEmpresa, ?string $aplicaEn, $anio, $mes, int $idUsuario): void
+    /**
+     * Auto-regenera el rol 'generado' afectado por el cambio de novedad (silencioso
+     * si falla). Público para que la reversión de una carga masiva
+     * (NovedadCargaService) resincronice los mismos períodos sin duplicar la lógica.
+     */
+    public function sincronizarRol(int $idEmpresa, ?string $aplicaEn, $anio, $mes, int $idUsuario): void
     {
         if ((int) $mes < 1 || (int) $anio < 2000) return;
         try {

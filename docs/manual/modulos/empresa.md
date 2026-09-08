@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion
-version: 1.21
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica
+version: 1.22
 orden: 5
 estado: activo
 ---
@@ -132,6 +132,40 @@ razón social si no tiene nombre comercial).
 
 En ambos modos el correo lleva adjuntos el **PDF** y el **XML** autorizado del
 comprobante.
+
+## Presentación de los ítems en el comprobante
+
+En la pestaña **Facturación** se decide cómo salen las líneas de la factura en
+el documento emitido. No cambia lo que se captura en el modal: la factura sigue
+guardando sus líneas tal cual, con su lote y su NUP, para el inventario, la
+cartera y la contabilidad. Solo cambia **lo que se imprime y lo que se envía**.
+
+**Agrupar los ítems** (los tres interruptores son excluyentes: al encender uno
+se apagan los otros):
+
+| Opción | Qué hace |
+|---|---|
+| *(los tres apagados)* | Una línea por cada ítem capturado. Es el comportamiento por defecto. |
+| **Por nombre** | Junta todas las líneas del mismo producto, **sin importar el lote ni el NUP**. |
+| **Por lote** | Junta las líneas del mismo producto que comparten número de lote. |
+| **Por NUP / Serie** | Junta las líneas del mismo producto que comparten NUP o serie. |
+
+Al agrupar se **suman** las cantidades, los descuentos, los totales y los
+impuestos. Dos líneas solo se fusionan si además coinciden en **precio unitario,
+unidad de medida e impuestos**: si difieren, quedan separadas. Es a propósito —
+fusionarlas obligaría a recalcular el precio unitario como total ÷ cantidad, que
+casi nunca cuadra al centavo y puede hacer que el SRI rechace el comprobante. El
+total del documento no cambia nunca: agrupar solo redistribuye las mismas líneas.
+
+**Mostrar en cada ítem**: unidad de medida, lote, fecha de caducidad y NUP se
+anexan a la **descripción** del ítem, por ejemplo *Aceite 20W50 (Gal | Lote:
+L-2024A | Caduca: 31-12-2027)*. Si la línea agrupa varios lotes o caducidades,
+se listan todos separados por coma.
+
+Lo configurado aplica al **PDF**, al **XML enviado al SRI** y a las **tirillas
+térmicas** de Facturas de Venta, Recibos de Venta, Comandas y el POS de caja: el
+comprobante electrónico y la representación impresa siempre dicen lo mismo.
+
 ## Errores frecuentes
 
 - **Los comprobantes salen con numeración equivocada**: revise establecimiento y
@@ -261,6 +295,14 @@ Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
 de taxis.
 
 ## Historial de cambios
+
+- **1.22** — Se documenta **Presentación de los ítems en el comprobante** y se
+  agrega la opción **Agrupar los ítems por nombre**, que junta las líneas del
+  mismo producto sin importar el lote ni el NUP (antes solo se podía agrupar
+  por lote o por NUP). Lo configurado ahora también se aplica a las **tirillas
+  térmicas** —Facturas de Venta, Recibos de Venta, Comandas y POS de caja—, que
+  hasta ahora imprimían siempre una línea por ítem aunque el PDF saliera
+  agrupado.
 
 - **1.21** — Se explica con ejemplos **cómo se elige el siguiente número** de un
   comprobante: el sistema rellena el primer hueco libre a partir del inicial
