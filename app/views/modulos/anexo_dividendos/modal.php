@@ -16,7 +16,7 @@ use App\Helpers\PreferenciasHelper;
  */
 ?>
 <div class="modal fade" id="modalAdi" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
 
             <div class="modal-header bg-light py-2">
@@ -148,12 +148,24 @@ use App\Helpers\PreferenciasHelper;
                             distribución: <strong>haber</strong> en cuentas de pasivo (dividendos por pagar) y
                             <strong>debe</strong> en cuentas de patrimonio (resultados acumulados), para que el pago
                             posterior no vuelva a contarse.
+                            Las cuentas que el sistema reconoce aparecen ya listadas; si su plan las nombra de otro modo,
+                            búsquelas con el buscador: se puede elegir <strong>cualquier cuenta</strong>, tenga o no el
+                            mapeo de SuperCías.
                         </p>
 
                         <div class="row g-3">
                             <div class="col-md-7">
                                 <label class="form-label small fw-bold d-block">Cuentas de dividendos distribuidos</label>
-                                <div class="border rounded p-2" style="max-height: 240px; overflow-y: auto;">
+                                <div class="position-relative mb-2">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                        <input type="text" id="adi-buscar-cuenta-div" class="form-control"
+                                               placeholder="Buscar cualquier cuenta del plan por código o nombre..."
+                                               autocomplete="off">
+                                    </div>
+                                    <div class="list-group adi-cuenta-lista d-none shadow" id="adi-lista-cuenta-div"></div>
+                                </div>
+                                <div class="border rounded p-2">
                                     <table class="table table-sm table-borderless mb-0" id="adi-tabla-cuentas-div">
                                         <tbody><tr><td class="text-muted small">Cargando cuentas...</td></tr></tbody>
                                     </table>
@@ -161,7 +173,15 @@ use App\Helpers\PreferenciasHelper;
                             </div>
                             <div class="col-md-5">
                                 <label class="form-label small fw-bold d-block">Cuentas de resultados acumulados</label>
-                                <div class="border rounded p-2" style="max-height: 240px; overflow-y: auto;">
+                                <div class="position-relative mb-2">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                        <input type="text" id="adi-buscar-cuenta-res" class="form-control"
+                                               placeholder="Buscar cuenta..." autocomplete="off">
+                                    </div>
+                                    <div class="list-group adi-cuenta-lista d-none shadow" id="adi-lista-cuenta-res"></div>
+                                </div>
+                                <div class="border rounded p-2">
                                     <table class="table table-sm table-borderless mb-0" id="adi-tabla-cuentas-res">
                                         <tbody><tr><td class="text-muted small">Cargando cuentas...</td></tr></tbody>
                                     </table>
@@ -241,7 +261,7 @@ use App\Helpers\PreferenciasHelper;
                             <span class="small text-muted" id="adi-resumen-dividendos"></span>
                         </div>
 
-                        <div class="adi-sub-scroll border rounded">
+                        <div class="adi-tabla-dividendos border rounded">
                             <table class="table table-sm table-hover mb-0 align-middle">
                                 <thead class="table-light">
                                     <tr>

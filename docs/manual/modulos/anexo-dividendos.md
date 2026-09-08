@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-dividendos
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo dividendos, ADI, dividendos, utilidades, accionistas, socios, participes, reparto de utilidades, retencion dividendos, impuesto unico dividendos, articulo 39.2, anexo anual SRI, ADI-2025.zip, dimm anexos
-version: 1.2
+version: 1.3
 orden: 31
 estado: activo
 ---
@@ -38,9 +38,9 @@ en **SRI en Línea → Anexos → Envío y consulta de anexos → Anexo de Divid
   en estado *contabilizado*; los borradores no cuentan.
 - **Cuentas contables identificadas.** Debe existir en el plan una cuenta donde
   se registre la distribución de dividendos (normalmente *Dividendos por pagar*)
-  y otra de *resultados acumulados*. El módulo las propone solo si están
-  mapeadas al casillero SuperCías correspondiente (2010706 y 3060x) o si su
-  nombre las delata.
+  y otra de *resultados acumulados*. El módulo propone las que reconoce, pero no
+  hace falta que la empresa lleve el mapeo de SuperCías: cualquier cuenta del
+  plan se puede elegir con el buscador.
 - **Accionistas registrados como terceros.** Cada línea del asiento de
   distribución debe tener asignado el cliente, proveedor o empleado que recibe el
   dividendo. De ahí salen la identificación y el nombre del beneficiario; las
@@ -142,6 +142,29 @@ ellos se editan los datos de la empresa, no el anexo.
 - **Acceso total**: sin él, el usuario solo ve los anexos que él mismo creó. Con
   acceso total ve los de toda la empresa. El superadministrador ve todo siempre.
 
+## Para qué sirve cada grupo de cuentas
+
+**Cuentas de dividendos distribuidos.** Son el origen de toda la sección C. Al
+importar, el módulo lee los asientos *contabilizados* del año en esas cuentas y
+de cada línea toma el importe (del lado configurado), la fecha del asiento como
+fecha de distribución y el tercero de la línea como beneficiario. Es lo único
+para lo que se usan; sin ellas el módulo sigue sirviendo, pero los dividendos se
+registran a mano.
+
+**Cuentas de resultados acumulados.** Alimentan un solo campo: el B.7, *utilidad
+de ejercicios anteriores pendiente de distribución*, calculado como el saldo
+acreedor de esas cuentas al 31 de diciembre del año anterior. No es un dato
+menor: el SRI valida que lo distribuido de ejercicios anteriores (B.8) no supere
+ese B.7, así que si queda en cero y hay dividendos de años previos el anexo no se
+genera.
+
+**Elegir las cuentas.** El módulo marca como *sugeridas* las que reconoce por su
+mapeo de SuperCías (casillero 2010706 o fila 990204 del ECP para dividendos; 306
+y sus subcasilleros para resultados acumulados) o por su nombre. Es solo una
+ayuda: con el buscador de cada lista se elige **cualquier cuenta del plan**, de
+modo que una empresa que no esté bajo el control de la Superintendencia, o que
+nombre sus cuentas a su manera, las selecciona igual.
+
 ## Reglas de negocio
 
 **Qué se importa de la contabilidad.** Solo las líneas de asientos
@@ -205,9 +228,9 @@ del sistema.
 ## Errores frecuentes
 
 - **«Seleccione al menos una cuenta contable de dividendos»**: no se marcó
-  ninguna cuenta en la pestaña *Informante y origen*. Si la lista aparece vacía,
-  el plan de cuentas no tiene ninguna cuenta con «dividendo» en el nombre ni
-  mapeada al casillero 2010706 de SuperCías.
+  ninguna cuenta en la pestaña *Informante y origen*. Si la lista aparece vacía
+  es que el sistema no reconoció ninguna por su nombre ni por su mapeo; búsquela
+  con el buscador de la lista, que ofrece todo el plan de cuentas.
 - **«Ese tipo de informante no reporta utilidades ni dividendos distribuidos»**:
   la empresa está registrada como *Persona natural* o *Sucesión indivisa*, y para
   ellas el anexo se limita a los dividendos recibidos del exterior (sección F,
@@ -238,6 +261,10 @@ del sistema.
 
 ## Historial de cambios
 
+- **1.3** — El origen contable admite cualquier cuenta del plan mediante un
+  buscador, no solo las que el sistema reconoce, para las empresas que no llevan
+  el mapeo de SuperCías. Se corrigió además la detección de las cuentas de
+  resultados acumulados, que dejaba fuera las mapeadas al casillero 306.
 - **1.2** — El año informado se elige dentro del anexo, como primer campo de la
   pestaña *Informante y origen*, siguiendo el orden de la ficha del SRI. Dejan de
   capturarse los datos del informante (salen de la empresa activa y de su tipo de

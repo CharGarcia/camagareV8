@@ -69,11 +69,22 @@ $pestanas = [
     .adi-row:hover { background-color: rgba(0, 0, 0, .04); }
 
     #modalAdi .table-sm td { vertical-align: middle; }
-    #modalAdi .adi-sub-scroll { max-height: 46vh; overflow: auto; }
-    #modalAdi .adi-sub-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; }
+
+    /* El modal no tiene scroll vertical propio: crece con su contenido y quien
+       se desplaza es la ventana del modal. La tabla de dividendos solo conserva
+       el desplazamiento horizontal para cuando las columnas no caben.
+       El nombre de la clase evita a propósito el sufijo "-scroll": el app-shell
+       fuerza height:100% y overflow-y:auto sobre cualquier clase que lo lleve
+       (app.css), y eso volvería a meter una barra vertical dentro del modal. */
+    #modalAdi .adi-tabla-dividendos { overflow-x: auto; }
+    #modalAdi .adi-tabla-dividendos thead th { background: #f8f9fa; }
 
     .adi-nota { font-size: .78rem; }
     .adi-tercero-lista { position: absolute; z-index: 5090; width: 100%; max-height: 220px; overflow-y: auto; }
+
+    /* Resultados del buscador de cuentas: desplegable acotado, igual que el de
+       terceros, para que no empuje el contenido del modal. */
+    .adi-cuenta-lista { position: absolute; z-index: 5090; width: 100%; max-height: 240px; overflow-y: auto; }
 </style>
 <?= PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 <?= PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>

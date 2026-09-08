@@ -228,15 +228,23 @@
                     btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
                 }
                 if (d.ok) {
-                    TR_cerrarModal(() => {
-                        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', timer: 2500, showConfirmButton: false, timerProgressBar: true });
-                    });
-                    
+                    // El modal NO se cierra al guardar (igual que Clientes y Guías):
+                    // el usuario lo cierra con Cancelar. Si era nuevo, queda en modo
+                    // edición con el id recién creado y el botón Eliminar visible.
+                    if (!id && d.id) {
+                        document.getElementById('tr-id').value = d.id;
+                        document.getElementById('tr-modal-titulo').textContent = 'Editar Transportista';
+                        const btnEl = document.getElementById('btn-tr-eliminar');
+                        if (btnEl) btnEl.classList.remove('d-none');
+                    }
+                    // Correos normalizados por el servidor (minúsculas, sin repetidos, separados por coma)
+                    if (typeof d.email !== 'undefined') document.getElementById('tr-email').value = d.email || '';
+
                     if (typeof window.TR_fetchSearch === 'function') {
                         window.TR_fetchSearch(id ? window.TR_currentPage : 1);
                     }
-                    
-                    
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', timer: 2500, showConfirmButton: false, timerProgressBar: true });
+
                     // Disparar evento por si otros módulos lo necesitan
                     document.dispatchEvent(new CustomEvent('transportistaGuardado', { detail: d }));
                 } else {

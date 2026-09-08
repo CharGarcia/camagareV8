@@ -65,5 +65,9 @@ Si elige otro, el sistema lo rechaza indicando estos tres.
   punto y coma o espacio). Antes el formulario lo permitía, pero al guardar el
   servidor rechazaba la ficha con "El email no tiene un formato válido"; ahora
   valida cada correo por separado y los guarda normalizados. Aplica también al
-  formulario que se abre desde la guía de remisión.
+  formulario que se abre desde la guía de remisión. Se corrige además que,
+  tras guardar, buscar u ordenar, el listado quedaba **inactivo** (no se podía
+  abrir ningún registro ni paginar hasta recargar la página). Al **Guardar**,
+  el modal ya no se cierra: queda abierto en modo edición (como en Clientes) y
+  se cierra con **Cancelar**.
 - **1.0** — Versión inicial.

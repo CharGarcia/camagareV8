@@ -88,7 +88,7 @@ class TransportistasController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron transportistas.</td></tr>';
+            echo '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron transportistas.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $rowData     = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
@@ -97,13 +97,16 @@ class TransportistasController extends BaseModuloController
                     : 'bg-secondary bg-opacity-10 text-secondary border-secondary';
                 $tipoIdLabel = $tiposId[$r['tipo_id']] ?? $r['tipo_id'];
 
-                echo "<tr class='transp-row' role='button' tabindex='0' data-row='{$rowData}' onclick='abrirModalTransportistaEditar(this)'>
-                    <td class='ps-3' data-col='nombre'>" . htmlspecialchars($r['nombre']) . "</td>
+                // Mismas funciones y formato que las filas iniciales de index.php
+                // (TR_abrirEditar / TR_fetchSearch). Antes llamaba a funciones
+                // inexistentes y, tras el primer refresco, la lista quedaba muerta.
+                echo "<tr class='transp-row' role='button' tabindex='0' data-row='{$rowData}' onclick='TR_abrirEditar(this)'>
+                    <td class='ps-3 fw-medium text-truncate' style='max-width:250px' data-col='nombre'>" . htmlspecialchars($r['nombre']) . "</td>
                     <td data-col='tipo_id'><small class='text-muted'>{$tipoIdLabel}</small></td>
-                    <td data-col='identificacion'><small class='text-muted'>" . htmlspecialchars($r['identificacion']) . "</small></td>
-                    <td data-col='placa'>" . htmlspecialchars($r['placa'] ?? '—') . "</td>
-                    <td data-col='telefono'>" . htmlspecialchars($r['telefono'] ?? '—') . "</td>
-                    <td data-col='email'>" . htmlspecialchars($r['email'] ?? '—') . "</td>
+                    <td data-col='identificacion'><code class='text-secondary'>" . htmlspecialchars($r['identificacion']) . "</code></td>
+                    <td data-col='placa'>" . htmlspecialchars($r['placa'] ?? '-') . "</td>
+                    <td data-col='telefono'>" . htmlspecialchars($r['telefono'] ?? '-') . "</td>
+                    <td class='text-truncate' style='max-width:180px' data-col='email'>" . htmlspecialchars($r['email'] ?? '-') . "</td>
                     <td class='text-center pe-3' data-col='estado'><span class='badge {$estadoClass} border border-opacity-25'>" . ucfirst($r['estado']) . "</span></td>
                 </tr>";
             }
@@ -113,8 +116,8 @@ class TransportistasController extends BaseModuloController
         ob_start();
         $prevDis = ($page <= 1)           ? 'disabled' : '';
         $nextDis = ($page >= $totalPages) ? 'disabled' : '';
-        echo "<button type='button' class='btn btn-outline-secondary' {$prevDis} onclick='TR_cambiarPagina(" . ($page - 1) . ")'><i class='bi bi-chevron-left'></i></button>
-              <button type='button' class='btn btn-outline-secondary' {$nextDis} onclick='TR_cambiarPagina(" . ($page + 1) . ")'><i class='bi bi-chevron-right'></i></button>";
+        echo "<button type='button' class='btn btn-outline-secondary' {$prevDis} onclick='TR_fetchSearch(" . ($page - 1) . ")'><i class='bi bi-chevron-left'></i></button>
+              <button type='button' class='btn btn-outline-secondary' {$nextDis} onclick='TR_fetchSearch(" . ($page + 1) . ")'><i class='bi bi-chevron-right'></i></button>";
         $paginationHtml = ob_get_clean();
 
         echo json_encode([
@@ -141,11 +144,13 @@ class TransportistasController extends BaseModuloController
                 $this->requireActualizar();
                 $data['id'] = $id;
                 $this->service->actualizar($id, $data);
-                echo json_encode(['ok' => true, 'mensaje' => 'Transportista actualizado correctamente.']);
+                $guardado = $this->repo->getPorId($id, (int) $data['id_empresa']);
+                echo json_encode(['ok' => true, 'mensaje' => 'Transportista actualizado correctamente.', 'email' => $guardado['email'] ?? null]);
             } else {
                 $this->requireCrear();
-                $newId = $this->service->crear($data);
-                echo json_encode(['ok' => true, 'mensaje' => 'Transportista creado correctamente.', 'id' => $newId]);
+                $newId    = $this->service->crear($data);
+                $guardado = $this->repo->getPorId($newId, (int) $data['id_empresa']);
+                echo json_encode(['ok' => true, 'mensaje' => 'Transportista creado correctamente.', 'id' => $newId, 'email' => $guardado['email'] ?? null]);
             }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

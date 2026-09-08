@@ -499,49 +499,148 @@
 
     // ── Origen contable ──────────────────────────────────────────────────────
 
+    /** Plan de cuentas completo de la empresa, para el buscador de cada caja. */
+    let cuentasPlan = [];
+
+    /**
+     * Cuentas visibles en cada caja. Arrancan con las que el sistema reconoce y
+     * las ya guardadas en el anexo, y crecen con las que el usuario añade desde
+     * el buscador: así una empresa que nombra sus cuentas de otro modo —o que no
+     * lleva el mapeo de SuperCías— puede elegir cualquiera del plan.
+     */
+    const cuentasVisibles = { div: new Set(), res: new Set() };
+
     function cargarCuentas() {
         const id = el('adi-id').value;
         if (!id) return;
 
         pedir(`${URL_BASE}/cuentasAjax?id=${id}`)
-            .then(res => pintarCuentas(res.data))
+            .then(res => {
+                cuentasPlan = res.data || [];
+                cuentasVisibles.div = new Set(
+                    cuentasPlan.filter(c => c.sugerida_div || c.sel_dividendos).map(c => c.id)
+                );
+                cuentasVisibles.res = new Set(
+                    cuentasPlan.filter(c => c.sugerida_res || c.sel_resultados).map(c => c.id)
+                );
+                pintarCuentas();
+            })
             .catch(() => {
                 el('adi-tabla-cuentas-div').innerHTML =
                     '<tbody><tr><td class="text-danger small">No se pudo cargar el plan de cuentas.</td></tr></tbody>';
             });
     }
 
-    function pintarCuentas(cuentas) {
-        // Para no volcar cientos de cuentas, se muestran las sugeridas por el
-        // sistema más las que ya estén marcadas en este anexo.
-        const div = cuentas.filter(c => c.sugerida_div || c.sel_dividendos);
-        const res = cuentas.filter(c => c.sugerida_res || c.sel_resultados);
+    function pintarCuentas() {
+        // Lo que el usuario ya marcó en pantalla se conserva al repintar.
+        const marcadas = cuentasSeleccionadas();
+        const ladoDe = {};
+        marcadas.div.forEach(c => { ladoDe[c.id] = c.lado; });
+        const marcadasDiv = new Set(marcadas.div.map(c => c.id));
+        const marcadasRes = new Set(marcadas.res.map(c => c.id));
+        const huboRender = el('adi-tabla-cuentas-div').querySelector('.adi-cta-div') !== null;
 
-        el('adi-tabla-cuentas-div').innerHTML = '<tbody>' + (div.length ? div.map(c => `
-            <tr>
+        const div = cuentasPlan.filter(c => cuentasVisibles.div.has(c.id));
+        const res = cuentasPlan.filter(c => cuentasVisibles.res.has(c.id));
+
+        const filaDiv = c => {
+            const marcada = huboRender ? marcadasDiv.has(c.id) : c.sel_dividendos;
+            const lado = ladoDe[c.id] || c.lado_dividendos || 'haber';
+            return `<tr>
                 <td style="width:26px;">
-                    <input class="form-check-input adi-cta-div" type="checkbox" value="${c.id}"
-                           ${c.sel_dividendos ? 'checked' : ''}>
+                    <input class="form-check-input adi-cta-div" type="checkbox" value="${c.id}" ${marcada ? 'checked' : ''}>
                 </td>
-                <td><span class="text-muted small">${esc(c.codigo)}</span> ${esc(c.nombre)}</td>
+                <td><span class="text-muted small">${esc(c.codigo)}</span> ${esc(c.nombre)}
+                    ${c.sugerida_div ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-1">sugerida</span>' : ''}
+                </td>
                 <td style="width:92px;">
                     <select class="form-select form-select-sm adi-cta-div-lado" data-id="${c.id}">
-                        <option value="haber" ${c.lado_dividendos === 'haber' ? 'selected' : ''}>Haber</option>
-                        <option value="debe" ${c.lado_dividendos === 'debe' ? 'selected' : ''}>Debe</option>
+                        <option value="haber" ${lado === 'haber' ? 'selected' : ''}>Haber</option>
+                        <option value="debe" ${lado === 'debe' ? 'selected' : ''}>Debe</option>
                     </select>
                 </td>
-            </tr>`).join('') : '<tr><td class="text-muted small">No se encontraron cuentas de dividendos en el plan. ' +
-            'Cree una cuenta con «dividendo» en el nombre o mapeada al casillero 2010706 de SuperCías.</td></tr>') + '</tbody>';
+            </tr>`;
+        };
 
-        el('adi-tabla-cuentas-res').innerHTML = '<tbody>' + (res.length ? res.map(c => `
-            <tr>
+        const filaRes = c => {
+            const marcada = huboRender ? marcadasRes.has(c.id) : c.sel_resultados;
+            return `<tr>
                 <td style="width:26px;">
-                    <input class="form-check-input adi-cta-res" type="checkbox" value="${c.id}"
-                           ${c.sel_resultados ? 'checked' : ''}>
+                    <input class="form-check-input adi-cta-res" type="checkbox" value="${c.id}" ${marcada ? 'checked' : ''}>
                 </td>
-                <td><span class="text-muted small">${esc(c.codigo)}</span> ${esc(c.nombre)}</td>
-            </tr>`).join('') : '<tr><td class="text-muted small">No se encontraron cuentas de resultados acumulados.</td></tr>') + '</tbody>';
+                <td><span class="text-muted small">${esc(c.codigo)}</span> ${esc(c.nombre)}
+                    ${c.sugerida_res ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-1">sugerida</span>' : ''}
+                </td>
+            </tr>`;
+        };
+
+        const vacio = texto => `<tr><td class="text-muted small">${texto}</td></tr>`;
+
+        el('adi-tabla-cuentas-div').innerHTML = '<tbody>' + (div.length
+            ? div.map(filaDiv).join('')
+            : vacio('El sistema no reconoció ninguna cuenta de dividendos en el plan. Búsquela arriba por código o nombre.')
+        ) + '</tbody>';
+
+        el('adi-tabla-cuentas-res').innerHTML = '<tbody>' + (res.length
+            ? res.map(filaRes).join('')
+            : vacio('El sistema no reconoció ninguna cuenta de resultados acumulados. Búsquela arriba por código o nombre.')
+        ) + '</tbody>';
     }
+
+    /**
+     * Buscador de cuentas de cada caja: filtra el plan ya cargado (sin ir al
+     * servidor) y, al elegir una, la agrega marcada a la lista.
+     */
+    function activarBuscadorCuentas(idInput, idLista, grupo) {
+        const input = el(idInput);
+        const lista = el(idLista);
+        if (!input || !lista) return;
+
+        const cerrar = () => { lista.classList.add('d-none'); lista.innerHTML = ''; };
+
+        input.addEventListener('input', function () {
+            const texto = this.value.trim().toLowerCase();
+            if (texto.length < 2) { cerrar(); return; }
+
+            const coincidencias = cuentasPlan.filter(c =>
+                !cuentasVisibles[grupo].has(c.id) &&
+                ((c.codigo + ' ' + c.nombre).toLowerCase().includes(texto))
+            ).slice(0, 15);
+
+            if (!coincidencias.length) {
+                lista.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias en el plan de cuentas.</div>';
+                lista.classList.remove('d-none');
+                return;
+            }
+
+            lista.innerHTML = coincidencias.map(c => `
+                <button type="button" class="list-group-item list-group-item-action py-1" data-id="${c.id}">
+                    <span class="text-muted small">${esc(c.codigo)}</span>
+                    <span class="small">${esc(c.nombre)}</span>
+                </button>`).join('');
+            lista.classList.remove('d-none');
+
+            lista.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = Number(btn.dataset.id);
+                    cuentasVisibles[grupo].add(id);
+                    pintarCuentas();
+                    // Se marca sola: si la buscó, es porque la quiere usar.
+                    const chk = document.querySelector(
+                        (grupo === 'div' ? '.adi-cta-div' : '.adi-cta-res') + `[value="${id}"]`
+                    );
+                    if (chk) chk.checked = true;
+                    input.value = '';
+                    cerrar();
+                });
+            });
+        });
+
+        input.addEventListener('blur', () => setTimeout(cerrar, 200));
+    }
+
+    activarBuscadorCuentas('adi-buscar-cuenta-div', 'adi-lista-cuenta-div', 'div');
+    activarBuscadorCuentas('adi-buscar-cuenta-res', 'adi-lista-cuenta-res', 'res');
 
     function cuentasSeleccionadas() {
         const div = Array.from(document.querySelectorAll('.adi-cta-div:checked')).map(chk => {

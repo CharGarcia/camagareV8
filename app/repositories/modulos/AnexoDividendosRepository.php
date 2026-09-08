@@ -606,6 +606,10 @@ class AnexoDividendosRepository extends BaseRepository
      * Cuentas candidatas a registrar la distribución de dividendos: las mapeadas
      * al casillero SuperCías de dividendos por pagar (2010706) o a la fila 990204
      * del ECP, más las que se llaman así en el plan.
+     *
+     * Es solo una sugerencia para ahorrar búsquedas: el usuario puede elegir
+     * cualquier cuenta del plan desde el buscador de la pantalla, así que una
+     * empresa que no lleve el mapeo de SuperCías no queda bloqueada.
      */
     public function getCuentasSugeridasDividendos(int $idEmpresa): array
     {
@@ -618,7 +622,9 @@ class AnexoDividendosRepository extends BaseRepository
                  OR supercias_ecp_codigo = '990204'
                  OR nombre ILIKE '%dividendo%'
                  OR nombre ILIKE '%utilidades por pagar%'
-                 OR nombre ILIKE '%participes%'
+                 OR nombre ILIKE '%particip%socio%'
+                 OR nombre ILIKE '%por pagar%socio%'
+                 OR nombre ILIKE '%por pagar%accionista%'
                )
              ORDER BY codigo ASC",
             [':id_empresa' => $idEmpresa]
@@ -627,8 +633,13 @@ class AnexoDividendosRepository extends BaseRepository
 
     /**
      * Cuentas candidatas a contener las utilidades pendientes de distribución:
-     * resultados acumulados del patrimonio (SuperCías 3060x) o cuentas que se
-     * llaman así en el plan.
+     * resultados acumulados del patrimonio o cuentas que se llaman así en el
+     * plan.
+     *
+     * El casillero de SuperCías se compara con '306%' y no con '3060%': los
+     * planes reales mapean tanto al grupo '306' (Resultados acumulados) como a
+     * sus subcasilleros '30601', '30602'…, y el patrón largo dejaba fuera
+     * justamente las cuentas de movimiento.
      */
     public function getCuentasSugeridasResultados(int $idEmpresa): array
     {
@@ -637,11 +648,13 @@ class AnexoDividendosRepository extends BaseRepository
              FROM plan_cuentas
              WHERE id_empresa = :id_empresa AND eliminado = false
                AND (
-                    supercias_esf LIKE '3060%'
+                    supercias_esf LIKE '306%'
                  OR nombre ILIKE '%resultados acumulados%'
                  OR nombre ILIKE '%utilidades acumuladas%'
                  OR nombre ILIKE '%utilidades retenidas%'
                  OR nombre ILIKE '%ganancias acumuladas%'
+                 OR nombre ILIKE '%utilidad acumulada%'
+                 OR nombre ILIKE '%ejercicios anteriores%'
                )
              ORDER BY codigo ASC",
             [':id_empresa' => $idEmpresa]
