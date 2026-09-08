@@ -347,15 +347,12 @@ class ComprobanteCajaPdfService
         $mL  = $this->marginL;
         $montoKey = $cfg['monto_key'];
 
-        // Columnas (mm). Descripción es flexible.
+        // Columnas (mm). Descripción es flexible: ocupa todo el ancho que sobra.
         $cols = [
-            ['t' => 'Tipo',        'w' => 20, 'a' => 'L'],
-            ['t' => 'N.° Doc.',    'w' => 28, 'a' => 'L'],
+            ['t' => 'Tipo',        'w' => 22, 'a' => 'L'],
+            ['t' => 'N.° Doc.',    'w' => 30, 'a' => 'L'],
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L'],
-            ['t' => 'Monto Doc.',  'w' => 22, 'a' => 'R'],
-            ['t' => 'Saldo Ant.',  'w' => 22, 'a' => 'R'],
-            ['t' => $cfg['monto_col'], 'w' => 22, 'a' => 'R'],
-            ['t' => 'Saldo Act.',  'w' => 22, 'a' => 'R'],
+            ['t' => 'Valor',       'w' => 26, 'a' => 'R'],
         ];
         $fixed = 0.0;
         foreach ($cols as $c) { $fixed += $c['w']; }
@@ -392,10 +389,7 @@ class ComprobanteCajaPdfService
                 (string)($d['tipo_documento'] ?? ''),
                 (string)($d['numero_documento'] ?? ''),
                 (string)($d['descripcion'] ?? ''),
-                number_format((float)($d['monto_documento'] ?? 0), 2),
-                number_format((float)($d['saldo_anterior'] ?? 0), 2),
                 number_format((float)($d[$montoKey] ?? 0), 2),
-                number_format((float)($d['saldo_actual'] ?? 0), 2),
             ];
 
             // Altura según descripción
@@ -426,9 +420,17 @@ class ComprobanteCajaPdfService
         $mL  = $this->marginL;
         $formaKey = $cfg['forma_key'];
 
-        // Media tabla (izquierda): forma | referencia | valor
-        $w1 = 60; $w2 = 66; $w3 = 30; // = 156, cabe en 186
-        $totalW = $w1 + $w2 + $w3;
+        // Tabla a todo el ancho de la hoja: Forma | Banco | Tipo | Cheque | Fecha Cobro | Valor
+        $cols = [
+            ['t' => 'Forma',       'w' => 36, 'a' => 'L'],
+            ['t' => 'Banco',       'w' => 36, 'a' => 'L'],
+            ['t' => 'Tipo',        'w' => 28, 'a' => 'L'],
+            ['t' => 'Cheque',      'w' => 26, 'a' => 'L'],
+            ['t' => 'Fecha Cobro', 'w' => 26, 'a' => 'C'],
+            ['t' => 'Valor',       'w' => 34, 'a' => 'R'],
+        ];
+        $totalW = 0.0;
+        foreach ($cols as $c) { $totalW += $c['w']; }
 
         $pdf->SetXY($mL, $y);
         $pdf->SetFont('helvetica', 'B', 7.5);
@@ -439,9 +441,10 @@ class ComprobanteCajaPdfService
 
         $pdf->SetX($mL);
         $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell($w1, 5, 'Forma', 1, 0, 'L', true);
-        $pdf->Cell($w2, 5, 'Referencia', 1, 0, 'L', true);
-        $pdf->Cell($w3, 5, 'Valor', 1, 1, 'R', true);
+        foreach ($cols as $c) {
+            $pdf->Cell($c['w'], 5, $c['t'], 1, 0, $c['a'] === 'R' ? 'R' : 'C', true);
+        }
+        $pdf->Ln();
 
         $pdf->SetFont('helvetica', '', 7);
         $pdf->SetTextColor(0, 0, 0);
@@ -450,19 +453,25 @@ class ComprobanteCajaPdfService
             $pdf->Cell($totalW, 5, 'Sin formas registradas.', 1, 1, 'C');
         }
         foreach ($pagos as $p) {
-            $ref = trim((string)($p['referencia'] ?? ''));
             $tipoOp = trim((string)($p['tipo_operacion_bancaria'] ?? ''));
-            if ($tipoOp !== '') {
-                $extra = $tipoOp;
-                if (strtoupper($tipoOp) === 'CHEQUE' && !empty($p['numero_cheque'])) {
-                    $extra = 'CHEQUE #' . $p['numero_cheque'];
-                }
-                $ref = $ref !== '' ? ($extra . ' — ' . $ref) : $extra;
+            $fechaCobro = '';
+            if (!empty($p['fecha_cobro'])) {
+                $tsFc = strtotime((string)$p['fecha_cobro']);
+                $fechaCobro = $tsFc ? date('d/m/Y', $tsFc) : (string)$p['fecha_cobro'];
             }
+            $vals = [
+                (string)($p[$formaKey] ?? ''),
+                (string)($p['banco_nombre'] ?? ''),
+                $tipoOp,
+                (string)($p['numero_cheque'] ?? ''),
+                $fechaCobro,
+                number_format((float)($p['monto'] ?? 0), 2),
+            ];
             $pdf->SetX($mL);
-            $pdf->Cell($w1, 5, (string)($p[$formaKey] ?? ''), 1, 0, 'L');
-            $pdf->Cell($w2, 5, $ref, 1, 0, 'L');
-            $pdf->Cell($w3, 5, number_format((float)($p['monto'] ?? 0), 2), 1, 1, 'R');
+            foreach ($cols as $i => $c) {
+                $pdf->Cell($c['w'], 5, $vals[$i], 1, 0, $c['a']);
+            }
+            $pdf->Ln();
         }
 
         return $pdf->GetY();

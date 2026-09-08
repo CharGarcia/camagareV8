@@ -220,9 +220,11 @@ class IngresoRepository extends BaseRepository
 
     public function getPagos(int $idIngreso): array
     {
-        $sql = "SELECT ip.*, efc.nombre AS forma_cobro_nombre
+        $sql = "SELECT ip.*, efc.nombre AS forma_cobro_nombre, efc.tipo AS forma_cobro_tipo,
+                       be.nombre_banco AS banco_nombre
                 FROM ingresos_pagos ip
                 INNER JOIN empresa_formas_pago efc ON ip.id_forma_cobro = efc.id
+                LEFT JOIN bancos_ecuador be ON be.id = efc.id_banco
                 WHERE ip.id_ingreso = ?
                 ORDER BY ip.id ASC";
         return $this->query($sql, [$idIngreso])->fetchAll(PDO::FETCH_ASSOC);

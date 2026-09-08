@@ -196,10 +196,12 @@ class EgresoRepository extends BaseRepository
                        ep.tipo_operacion_bancaria, ep.numero_cheque, ep.fecha_cobro, ep.beneficiario_cheque,
                        ep.estado_cheque, ep.motivo_anulacion_cheque, ep.anulado_cheque_at,
                        efc.nombre AS forma_pago_nombre, efc.tipo AS forma_pago_tipo,
+                       be.nombre_banco AS banco_nombre,
                        " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado,
                        " . $this->sqlChequeFechaBanco('ep', 'efc') . " AS cheque_fecha_banco
                 FROM egresos_pagos ep
                 INNER JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
+                LEFT JOIN bancos_ecuador be ON be.id = efc.id_banco
                 WHERE ep.id_egreso = ? AND ep.eliminado = FALSE
                 ORDER BY ep.id ASC";
         return $this->query($sql, [$idEgreso])->fetchAll(PDO::FETCH_ASSOC);
