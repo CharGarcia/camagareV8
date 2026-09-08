@@ -814,6 +814,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             sel.value = id;
             sincronizarBotonesConceptoEgreso(id);
             document.getElementById('eg-input-tipo-egreso').value = comp;
+
+            // Rellenar la cuenta contable del concepto en las líneas manuales que aún no
+            // tienen una propia (mismo fix que manejarCambioConceptoEgreso): como sel.value
+            // se fija por código en vez de por interacción del usuario, no dispara el evento
+            // 'change' de ese handler, así que hay que repetirlo aquí antes de renderizar.
+            if (docsEgreso.length === 0) {
+                const cuenta = egConceptoCuentaActual();
+                if (cuenta.id_cuenta) {
+                    manualEgreso.forEach(m => {
+                        if (!m.id_cuenta) {
+                            m.id_cuenta = cuenta.id_cuenta;
+                            m.cuenta_codigo = cuenta.cuenta_codigo;
+                            m.cuenta_nombre = cuenta.cuenta_nombre;
+                        }
+                    });
+                }
+            }
+
             if (nuevoSujeto !== selSuj.value) {
                 selSuj.value = nuevoSujeto;
                 toggleBuscadorSujeto(nuevoSujeto); // limpia sujeto + arrays (solo corre si hubo choque confirmado)
