@@ -888,7 +888,7 @@ class EstadosFinancierosService
         $pasada1 = $evaluador->evaluarConValoresBase($valoresBase);
 
         // EFE: método directo desde los asientos de efectivo + conciliación desde ESF/ERI.
-        $efe = $this->calcularEfe($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $pasada1);
+        $efe = $this->calcularEfe($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $pasada1, $resultadoEjercicio);
         $valoresBase['EFE'] = $efe['valores_base'];
 
         // Pasada 2: todo junto (las fórmulas que el usuario ponga en EFE mandan sobre lo calculado).
@@ -918,7 +918,7 @@ class EstadosFinancierosService
      * Totales: 9501/9502/9503/9505, 9506 = efectivo en la apertura, 9507 = 9506 + 9505,
      * 97, 98 y 9820 = 96 + 97 + 98.
      */
-    public function calcularEfe(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto, array $casillerosEvaluados): array
+    public function calcularEfe(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto, array $casillerosEvaluados, float $resultadoEjercicio = 0.0): array
     {
         $base = [];
         $add = function (string $cas, float $v) use (&$base): void {
@@ -1043,7 +1043,10 @@ class EstadosFinancierosService
         $base['9507'] = $base['9506'] + $base['9505'];
 
         $eri = fn(string $cod) => (float) ($casillerosEvaluados['ERI'][$cod]['valor'] ?? 0);
-        $base['96']   = $eri('600');
+        // 96 = ERI 600 (ganancia antes de participación e impuesto). Si ese casillero no tiene
+        // fórmula en /config/supercias vale 0: se reconstruye desde el resultado del balance
+        // sumando de vuelta la participación (601) y el impuesto a la renta (603).
+        $base['96']   = round($eri('600'), 2) != 0 ? $eri('600') : ($resultadoEjercicio + $eri('601') + $eri('603'));
         $base['9701'] = $eri('5010401') + $eri('5020120') + $eri('5020121') + $eri('5020221') + $eri('5020222');
         $base['9709'] = $eri('603') + $eri('5020126') + $eri('5020227');
         $base['9710'] = $eri('601');
