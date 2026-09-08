@@ -58,6 +58,14 @@ class XmlAnexoDividendosService
     public const MES_CABECERA = '12';
 
     /**
+     * Código operativo del anexo, el último campo de la cabecera. En el ATS este
+     * campo vale 'IVA'; aquí se emite 'ADI' por analogía, porque ni la ficha ni
+     * el catálogo lo documentan. Si el portal lo rechaza, el valor se cambia
+     * aquí (candidatos: 'DIV', 'ADI-DIV').
+     */
+    public const CODIGO_OPERATIVO = 'ADI';
+
+    /**
      * Genera el contenido del archivo ADI-aaaa.xml.
      *
      * @param array $informante  anio, tipo_informante, tipo_id_informante, id_informante, razon_social
@@ -111,6 +119,7 @@ class XmlAnexoDividendosService
         $this->add($dom, $raiz, 'Mes', self::MES_CABECERA);
         $this->add($dom, $raiz, 'razonSocial', $inf['razon_social']);
         $this->add($dom, $raiz, 'tipoInformante', $inf['tipo_informante']);
+        $this->add($dom, $raiz, 'codigoOperativo', self::CODIGO_OPERATIVO);
     }
 
     // ── B. Información de utilidades ─────────────────────────────────────────
