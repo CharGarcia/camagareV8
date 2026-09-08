@@ -847,6 +847,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const opt = sel.options[sel.selectedIndex];
         const comp = opt.dataset.comportamiento || 'GENERAL';
         document.getElementById('eg-input-tipo-egreso').value = comp;
+
+        // Rellenar la cuenta contable del concepto en las líneas manuales que todavía no
+        // tienen una propia: la fila en blanco que crea renderManualEgreso() al abrir el
+        // modal se genera ANTES de elegir concepto (egConceptoCuentaActual() no tiene nada
+        // que copiar en ese momento), y como ya existe una fila, no se vuelve a crear otra
+        // al seleccionar el concepto — sin esto, esa fila se quedaba sin cuenta para siempre.
+        if (docsEgreso.length === 0) {
+            const cuenta = egConceptoCuentaActual();
+            if (cuenta.id_cuenta) {
+                manualEgreso.forEach(m => {
+                    if (!m.id_cuenta) {
+                        m.id_cuenta = cuenta.id_cuenta;
+                        m.cuenta_codigo = cuenta.cuenta_codigo;
+                        m.cuenta_nombre = cuenta.cuenta_nombre;
+                    }
+                });
+            }
+        }
+
         renderDocsEgreso();
         renderPagosEgreso();
         recalcEgresoTot();

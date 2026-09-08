@@ -232,6 +232,15 @@ class AnexoDividendosRules
                 'primera sociedad y forma de pago) que este anexo no reporta.';
         }
 
+        // La cabecera y la sección B están calcadas de un archivo del DIMM; el
+        // bloque de dividendos todavía no se ha contrastado con uno, así que sus
+        // etiquetas de agrupación podrían no coincidir con las del esquema.
+        if ($detalles !== []) {
+            $advertencias[] = 'La estructura XML de la sección de dividendos aún no se ha verificado contra un ' .
+                'archivo del DIMM: si el portal rechaza el archivo por esquema, avise para ajustarla. La sección ' .
+                'de utilidades sí está verificada.';
+        }
+
         // ── A.2 Informante ───────────────────────────────────────────────────
         // No se comprueba el dígito verificador de su identificación: el RUC sale
         // de la empresa activa, que ya lo validó al registrarse, y aquí no se

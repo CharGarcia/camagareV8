@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-dividendos
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo dividendos, ADI, dividendos, utilidades, accionistas, socios, participes, reparto de utilidades, retencion dividendos, impuesto unico dividendos, articulo 39.2, anexo anual SRI, ADI-2025.zip, dimm anexos
-version: 1.5
+version: 1.6
 orden: 31
 estado: activo
 ---
@@ -270,12 +270,19 @@ del sistema.
   identificación como parte de la clave del registro. Si la misma persona recibió
   varios dividendos, agréguelos como líneas del mismo beneficiario, no como
   beneficiarios repetidos.
-- **El portal rechaza el archivo por esquema**: descargue el esquema oficial
-  desde SRI en Línea y déjelo en `storage/anexos/dividendos/ADI.xsd`. Si está
-  presente, el módulo valida el XML contra él al generarlo y muestra los errores.
+- **El portal rechaza el archivo por esquema**: la cabecera y la sección de
+  utilidades están calcadas de un archivo generado con el DIMM Anexos, así que un
+  anexo **sin dividendos** debería pasar. La sección de dividendos todavía no se
+  ha contrastado con un ejemplo del DIMM y el módulo lo advierte al generar; si el
+  portal la rechaza, hace falta un ejemplo con al menos un dividendo para
+  ajustarla. También ayuda descargar el esquema oficial desde SRI en Línea y
+  dejarlo en `storage/anexos/dividendos/ADI.xsd`: el módulo valida contra él al
+  generar y muestra los errores antes de subir el archivo.
 
 ## Historial de cambios
 
+- **1.6** — La cabecera y la sección de utilidades se ajustaron a la estructura
+  real del anexo, verificada contra un archivo del DIMM Anexos del SRI.
 - **1.5** — El anexo se genera aunque no haya dividendos distribuidos, con la
   sección de utilidades sola. Se retiró la comprobación del dígito verificador
   del RUC del informante, que venía de la empresa y no era editable aquí.

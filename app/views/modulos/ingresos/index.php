@@ -744,6 +744,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         sincronizarBotonesConcepto(sel.value);
         document.getElementById('m-input-tipo-ingreso').value = comp;
+
+        // Rellenar la cuenta contable del concepto en las líneas manuales que todavía no
+        // tienen una propia: la fila en blanco que crea renderDetalles() al abrir el modal
+        // se genera ANTES de elegir concepto (ingConceptoCuentaActual() no tiene nada que
+        // copiar en ese momento), y como ya existe una fila, no se vuelve a crear otra al
+        // seleccionar el concepto — sin esto, esa fila se quedaba sin cuenta para siempre.
+        if (docPendientes.length === 0) {
+            const cuenta = ingConceptoCuentaActual();
+            if (cuenta.id_cuenta) {
+                detalleManual.forEach(d => {
+                    if (!d.id_cuenta) {
+                        d.id_cuenta = cuenta.id_cuenta;
+                        d.cuenta_codigo = cuenta.cuenta_codigo;
+                        d.cuenta_nombre = cuenta.cuenta_nombre;
+                    }
+                });
+            }
+        }
+
         renderDetalles();
         renderPagos();
         recalcularTotales();
