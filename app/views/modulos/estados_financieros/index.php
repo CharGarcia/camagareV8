@@ -208,7 +208,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
 <!-- Modal: vista previa del Estado de Cambios en el Patrimonio (Supercias ECP) -->
 <div class="modal fade" id="modalEcp" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-fullscreen-xl-down modal-dialog-centered modal-dialog-scrollable" style="max-width: calc(100vw - 40px);">
+    <div class="modal-dialog modal-dialog-ecp modal-fullscreen-xl-down modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content shadow">
             <div class="modal-header bg-light py-2">
                 <h5 class="modal-title fw-bold"><i class="bi bi-grid-3x3 text-info me-2"></i>Estado de Cambios en el Patrimonio (Supercias ECP)</h5>
@@ -292,6 +292,10 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     .tabla-reporte th.th-codigo, .tabla-reporte th.th-ent-control, .tabla-reporte th.th-valor { width: 1%; white-space: nowrap; }
     .tabla-reporte td.text-end, .tabla-reporte td:first-child { white-space: nowrap; }
     .tabla-reporte td.td-ent-control { white-space: nowrap; font-size: 0.7rem; }
+    /* Modal "Ver ECP": la matriz tiene 18 columnas, ocupa casi todo el ancho de la ventana. */
+    @media (min-width: 1200px) {
+        .modal-dialog.modal-dialog-ecp { width: calc(100vw - 40px) !important; max-width: calc(100vw - 40px) !important; }
+    }
     .tabla-reporte td.td-ent-control .badge { font-size: 0.68rem; padding: 2px 5px; }
     .tr-grupo td { font-weight: bold; background-color: rgba(0,0,0,0.02); }
     .tr-total td { font-weight: bold; background-color: rgba(13, 110, 253, 0.05); color: #0d6efd; border-top: 2px solid #dee2e6; }
