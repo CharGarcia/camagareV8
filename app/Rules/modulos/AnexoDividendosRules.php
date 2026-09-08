@@ -233,14 +233,11 @@ class AnexoDividendosRules
         }
 
         // ── A.2 Informante ───────────────────────────────────────────────────
-        $errIdent = $this->verificarDigitoVerificador(
-            (string) $anexo['tipo_id_informante'],
-            (string) $anexo['id_informante']
-        );
-        if ($errIdent !== null) {
-            $advertencias[] = 'Informante: ' . $errIdent;
-        }
-
+        // No se comprueba el dígito verificador de su identificación: el RUC sale
+        // de la empresa activa, que ya lo validó al registrarse, y aquí no se
+        // puede editar (se cambia en la configuración de la empresa), así que la
+        // advertencia no tendría ninguna acción asociada. Además hay RUCs reales
+        // en uso que no superan el módulo 11 y el aviso sería un falso positivo.
         $tipoInformante = (string) $anexo['tipo_informante'];
         $sinSeccionB = in_array($tipoInformante, CatalogoAdi::INFORMANTES_SIN_SECCION_B, true);
         $sinSeccionC = in_array($tipoInformante, CatalogoAdi::INFORMANTES_SIN_SECCION_C, true);

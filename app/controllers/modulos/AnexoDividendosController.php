@@ -226,22 +226,53 @@ class AnexoDividendosController extends BaseModuloController
     }
 
     /** POST: recalcula ingreso gravado, retención y la sección B. */
-    public function recalcularAjax(): void
+    /**
+     * POST: rehace la sección B con la contabilidad del año (pestaña Utilidades).
+     */
+    public function recalcularUtilidadesAjax(): void
     {
         $this->requireActualizar();
 
         try {
-            $id        = (int) ($_POST['id'] ?? 0);
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $idUsuario = (int) $_SESSION['id_usuario'];
-
-            $actualizados = $this->service->recalcularImpuestos($id, $idEmpresa, $idUsuario);
-            $notas        = $this->service->recalcularSeccionB($id, $idEmpresa, $idUsuario);
+            $id    = (int) ($_POST['id'] ?? 0);
+            $notas = $this->service->recalcularSeccionB(
+                $id,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
 
             $this->json([
                 'ok'      => true,
-                'mensaje' => 'Se recalcularon ' . $actualizados . ' registro(s).',
+                'mensaje' => 'Sección de utilidades recalculada con la contabilidad del año.',
                 'notas'   => $notas,
+                'data'    => $this->paquete($id),
+            ]);
+        } catch (\Throwable $e) {
+            ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * POST: recalcula el ingreso gravado y la retención de cada dividendo
+     * (pestaña Dividendos).
+     */
+    public function recalcularImpuestosAjax(): void
+    {
+        $this->requireActualizar();
+
+        try {
+            $id           = (int) ($_POST['id'] ?? 0);
+            $actualizados = $this->service->recalcularImpuestos(
+                $id,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
+
+            $this->json([
+                'ok'      => true,
+                'mensaje' => 'Se recalcularon el ingreso gravado y la retención de ' . $actualizados . ' dividendo(s).',
+                'notas'   => [],
                 'data'    => $this->paquete($id),
             ]);
         } catch (\Throwable $e) {

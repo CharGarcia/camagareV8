@@ -781,10 +781,24 @@
         }
     }
 
-    window.ADI_recalcular = function () {
-        post('recalcularAjax', { id: el('adi-id').value })
+    /**
+     * Recálculo. Antes de pedirlo se guarda la cabecera: el servidor rehace sus
+     * campos leyendo lo que hay en la base, así que sin guardar se perderían las
+     * casillas que el usuario acabara de escribir a mano (las 3, 4 y 5).
+     */
+    function recalcular(accion, pestana) {
+        guardarCabecera()
+            .then(previo => {
+                if (previo && previo.soloAbrir) {
+                    pintar(previo.data);
+                    throw new Error(previo.mensaje);
+                }
+                return post(accion, { id: el('adi-id').value });
+            })
             .then(res => {
                 pintar(res.data);
+                document.querySelector(pestana)?.click();
+
                 const notas = (res.notas || []).map(n => `<li>${esc(n)}</li>`).join('');
                 if (window.Swal) {
                     Swal.fire({
@@ -796,6 +810,16 @@
                 }
             })
             .catch(e => aviso('No se pudo recalcular', e.message, 'error'));
+    }
+
+    /** Sección B: campos 1, 2, 7 y 8 desde la contabilidad y el detalle. */
+    window.ADI_recalcularUtilidades = function () {
+        recalcular('recalcularUtilidadesAjax', '#adi-tab-utilidades');
+    };
+
+    /** Ingreso gravado y retención de cada dividendo. */
+    window.ADI_recalcularImpuestos = function () {
+        recalcular('recalcularImpuestosAjax', '#adi-tab-dividendos');
     };
 
     window.ADI_generar = function () {

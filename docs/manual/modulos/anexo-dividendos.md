@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-dividendos
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo dividendos, ADI, dividendos, utilidades, accionistas, socios, participes, reparto de utilidades, retencion dividendos, impuesto unico dividendos, articulo 39.2, anexo anual SRI, ADI-2025.zip, dimm anexos
-version: 1.3
+version: 1.4
 orden: 31
 estado: activo
 ---
@@ -65,8 +65,10 @@ en **SRI en Línea → Anexos → Envío y consulta de anexos → Anexo de Divid
 4. En la pestaña **Dividendos**, corrija lo que haga falta: el año que generó la
    utilidad (por defecto el anterior), el tipo de dividendo, si está pagado y el
    ISD. Agregue a mano los que no salieron de la contabilidad.
-5. Pulse **Recalcular** para que el sistema proponga el ingreso gravado, la
-   retención y cuadre la sección B con el detalle.
+5. En esa misma pestaña, pulse **Recalcular impuestos** para que el sistema
+   proponga el ingreso gravado y la retención de cada dividendo. Después, en la
+   pestaña **Utilidades**, pulse **Recalcular utilidades** para cuadrar la
+   sección B con la contabilidad y con ese detalle.
 6. Revise la pestaña **Validaciones**. Los errores impiden generar; las
    advertencias conviene revisarlas pero no bloquean.
 7. Pulse **Generar anexo** y descargue el **ZIP** para subirlo al portal.
@@ -101,10 +103,10 @@ ellos se editan los datos de la empresa, no el anexo.
 
 | Campo | Obligatorio | Qué significa |
 |-------|-------------|---------------|
-| 1. Utilidad del ejercicio informado | Sí | Se toma del estado de resultados del año. |
-| 2. Utilidad distribuida del ejercicio | Condicional | Lo repartido que corresponde a la utilidad del mismo año informado. Se cuadra con el detalle al recalcular. |
-| 3 y 4. Utilidad reinvertida | Condicional | Con o sin derecho a la reducción del artículo 37 de la LRTI. Se capturan a mano. |
-| 5. Utilidad distribuida por anticipado | Opcional | Dividendos anticipados y préstamos a accionistas (secciones D y E, aún no generadas). |
+| 1. Utilidad del ejercicio informado | Sí | Se toma del estado de resultados del año: ingresos menos costos y gastos de los asientos contabilizados. |
+| 2. Utilidad distribuida del ejercicio | Condicional | Lo repartido que corresponde a la utilidad del mismo año informado. Sale de los dividendos cuyo año de generación es el período informado. |
+| 3 y 4. Utilidad reinvertida | Condicional | Con o sin derecho a la reducción del artículo 37 de la LRTI. Se capturan a mano y el recálculo no las toca. |
+| 5. Utilidad distribuida por anticipado | Opcional | Dividendos anticipados y préstamos a accionistas (secciones D y E, aún no generadas). Se captura a mano. |
 | 6. Utilidad no distribuida | Derivado | Utilidad del ejercicio menos lo distribuido y lo reinvertido. No se edita. |
 | 7. Utilidad de ejercicios anteriores pendiente | Sí | Saldo acreedor de las cuentas de resultados acumulados al 31 de diciembre del año anterior. |
 | 8. Utilidad distribuida de ejercicios anteriores | Condicional | Suma de los dividendos cuyo año de generación es anterior al período informado. |
@@ -166,6 +168,14 @@ modo que una empresa que no esté bajo el control de la Superintendencia, o que
 nombre sus cuentas a su manera, las selecciona igual.
 
 ## Reglas de negocio
+
+**Los dos recálculos.** Son acciones distintas y cada una vive en su pestaña.
+*Recalcular utilidades* (pestaña Utilidades) rehace los campos 1, 2, 7 y 8 de la
+sección B y deja intactos el 3, 4 y 5, que solo se escriben a mano. *Recalcular
+impuestos* (pestaña Dividendos) rehace el ingreso gravado y la retención de cada
+dividendo, sin tocar la sección B. Ambos guardan antes lo que haya en pantalla,
+así que no se pierde nada de lo escrito; pero conviene saber que el recálculo de
+utilidades **sí sobrescribe** los campos 1, 2, 7 y 8 si los había ajustado a mano.
 
 **Qué se importa de la contabilidad.** Solo las líneas de asientos
 *contabilizados* del año, en las cuentas marcadas, y solo por el lado
@@ -261,6 +271,9 @@ del sistema.
 
 ## Historial de cambios
 
+- **1.4** — El botón único de recálculo se separa en dos, cada uno en su
+  pestaña: *Recalcular utilidades* (sección B) y *Recalcular impuestos* (ingreso
+  gravado y retención del detalle).
 - **1.3** — El origen contable admite cualquier cuenta del plan mediante un
   buscador, no solo las que el sistema reconoce, para las empresas que no llevan
   el mapeo de SuperCías. Se corrigió además la detección de las cuentas de

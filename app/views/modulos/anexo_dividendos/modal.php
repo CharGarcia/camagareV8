@@ -35,10 +35,6 @@ use App\Helpers\PreferenciasHelper;
                             onclick="ADI_importar()" title="Traer los dividendos desde los asientos contables del año">
                         <i class="bi bi-cloud-download"></i> Importar de contabilidad
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary adi-requiere-anexo" onclick="ADI_recalcular()"
-                            title="Recalcular ingreso gravado, retención y la sección B">
-                        <i class="bi bi-calculator"></i> Recalcular
-                    </button>
                     <div class="vr mx-1"></div>
                 <?php endif; ?>
                 <button type="button" class="btn btn-sm btn-outline-success adi-requiere-anexo" onclick="ADI_generar()"
@@ -195,11 +191,22 @@ use App\Helpers\PreferenciasHelper;
 
                     <!-- ── Sección B: utilidades ──────────────────────────── -->
                     <div class="tab-pane fade" id="adi-pane-utilidades" role="tabpanel">
-                        <p class="text-muted adi-nota">
-                            La utilidad del ejercicio se toma del estado de resultados y los dos campos de utilidad
-                            distribuida se cuadran con el detalle de dividendos al pulsar <strong>Recalcular</strong>.
-                            La utilidad no distribuida es un campo derivado y no se edita.
-                        </p>
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                            <p class="text-muted adi-nota mb-0" style="max-width: 720px;">
+                                Los campos <strong>1, 2, 7 y 8</strong> los llena el botón de la derecha: el 1 desde el
+                                estado de resultados del año, el 7 desde el saldo de las cuentas de resultados
+                                acumulados, y el 2 y el 8 cuadrando con el detalle de dividendos. El <strong>6</strong>
+                                es derivado y no se edita. Los campos <strong>3, 4 y 5</strong> se escriben a mano y el
+                                recálculo no los toca.
+                            </p>
+                            <?php if ($perm['actualizar']): ?>
+                                <button type="button" class="btn btn-sm btn-outline-secondary adi-requiere-anexo flex-shrink-0"
+                                        onclick="ADI_recalcularUtilidades()"
+                                        title="Rehacer los campos 1, 2, 7 y 8 con la contabilidad del año">
+                                    <i class="bi bi-calculator"></i> Recalcular utilidades
+                                </button>
+                            <?php endif; ?>
+                        </div>
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold d-block">1. Utilidad del ejercicio informado</label>
@@ -247,6 +254,11 @@ use App\Helpers\PreferenciasHelper;
                                     </button>
                                     <button type="button" class="btn btn-outline-success adi-requiere-anexo" onclick="ADI_modalDetalle()">
                                         <i class="bi bi-plus-circle"></i> Nuevo dividendo
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary adi-requiere-anexo"
+                                            onclick="ADI_recalcularImpuestos()"
+                                            title="Recalcular el ingreso gravado y la retención de cada dividendo">
+                                        <i class="bi bi-calculator"></i> Recalcular impuestos
                                     </button>
                                 <?php endif; ?>
                             </div>
