@@ -225,6 +225,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                         (en la fila fijada en la cuenta o en la fila por defecto de su columna) y <strong>990210</strong> es el resultado del ejercicio del balance.
                         La fila <strong>99</strong> sale de la fórmula del casillero (normalmente el ESF); la fila <em>Diferencia</em> compara 99 con 9901 + 9902 y debe ser cero.
                     </p>
+                    <div id="ecp-sin-mapeo" class="alert alert-warning py-2 small d-none"></div>
                     <div class="table-responsive mb-3" id="ecp-matriz-wrap"></div>
                     <h6 class="fw-bold small text-uppercase text-muted">Cuentas que alimentan el ECP</h6>
                     <div class="table-responsive">
@@ -891,6 +892,18 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         difRow += cell(difTotal, true) + '</tr>';
         html += (hayDif ? difRow : difRow.replace('table-warning', 'table-success')) + '</tbody></table>';
         document.getElementById('ecp-matriz-wrap').innerHTML = html;
+
+        // Cuentas de patrimonio con valor que NO entran al ECP (sin columna o columna inválida)
+        const alerta = document.getElementById('ecp-sin-mapeo');
+        if (d.sin_mapeo && d.sin_mapeo.length > 0) {
+            alerta.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>${d.sin_mapeo.length} cuenta(s) de patrimonio con valor no entran al ECP.</strong>
+                Corríjalas en Plan de Cuentas (campo <em>Supercias ECP Columna</em>; columnas válidas: 301, 302, 303, 30401, 30402, 30501-30504, 30601-30607, 30701, 30702):<ul class="mb-0 mt-1">`
+                + d.sin_mapeo.map(x => `<li><code>${esc(x.codigo)}</code> ${esc(x.nombre)} — ${esc(x.motivo)}${x.columna ? ' (' + esc(x.columna) + ')' : ''}: saldo inicial ${formatMoney(x.saldo_inicial)}, movimiento ${formatMoney(x.movimiento)}</li>`).join('')
+                + '</ul>';
+            alerta.classList.remove('d-none');
+        } else {
+            alerta.classList.add('d-none');
+        }
 
         const tb = document.querySelector('#tabla-ecp-detalle tbody');
         if (!d.detalle || d.detalle.length === 0) {

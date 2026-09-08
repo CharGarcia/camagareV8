@@ -890,28 +890,11 @@ class EstadosFinancierosService
         ];
     }
 
-    /** Filas del ECP (Supercías) en el orden del formulario oficial. */
-    public const ECP_FILAS = [
-        '99'     => 'Saldo al final del período',
-        '9901'   => 'Saldo reexpresado del período inmediato anterior',
-        '990101' => 'Saldo del período inmediato anterior',
-        '990102' => 'Cambios en políticas contables',
-        '990103' => 'Corrección de errores',
-        '9902'   => 'Cambios del año en el patrimonio',
-        '990201' => 'Aumento (disminución) de capital social',
-        '990202' => 'Aportes para futuras capitalizaciones',
-        '990203' => 'Prima por emisión primaria de acciones',
-        '990204' => 'Dividendos',
-        '990205' => 'Transferencia de resultados a otras cuentas patrimoniales',
-        '990206' => 'Realización de la reserva por valuación de activos financieros',
-        '990207' => 'Realización de la reserva por valuación de propiedades, planta y equipo',
-        '990208' => 'Realización de la reserva por valuación de activos intangibles',
-        '990209' => 'Otros cambios (detallar)',
-        '990210' => 'Resultado integral total del año (ganancia o pérdida)',
-    ];
+    /** Filas del ECP (Supercías) en el orden del formulario oficial. Fuente: App\Helpers\SuperciasEcp. */
+    public const ECP_FILAS = \App\Helpers\SuperciasEcp::FILAS;
 
     /** Filas de "cambios del año" que una cuenta puede fijar en su mapeo (Supercias ECP Fila). */
-    public const ECP_FILAS_CAMBIO = ['990102', '990103', '990201', '990202', '990203', '990204', '990205', '990206', '990207', '990208', '990209'];
+    public const ECP_FILAS_CAMBIO = \App\Helpers\SuperciasEcp::FILAS_CAMBIO;
 
     /**
      * Fila por defecto de "cambios del año" según la columna (componente del patrimonio):
@@ -949,21 +932,36 @@ class EstadosFinancierosService
             $base[$k] = ($base[$k] ?? 0.0) + $v;
         };
 
+        $sinMapeo = []; // cuentas de patrimonio con saldo/movimiento que NO entran al ECP (sin columna o columna inválida)
         foreach ($cuentas as $c) {
             if ((int) $c['nivel'] !== 5) continue;
-            $col = trim((string) ($c['supercias_ecp_subcodigo'] ?? ''));
-            if ($col === '') continue;
-            $columnas[$col] = true;
-
             $saldoInicial = (float) $c['saldo_inicial'];
             $movimiento   = (float) $c['movimiento'];
-            $filaFijada   = trim((string) ($c['supercias_ecp_codigo'] ?? ''));
-            $filaCambio   = in_array($filaFijada, self::ECP_FILAS_CAMBIO, true) ? $filaFijada : $this->ecpFilaPorDefecto($col);
+            $tieneValor   = round($saldoInicial, 2) != 0 || round($movimiento, 2) != 0;
+
+            $col = trim((string) ($c['supercias_ecp_subcodigo'] ?? ''));
+            if ($col === '' || !in_array($col, \App\Helpers\SuperciasEcp::COLUMNAS, true)) {
+                if ($tieneValor) {
+                    $sinMapeo[] = [
+                        'codigo'        => $c['codigo'],
+                        'nombre'        => $c['nombre'],
+                        'columna'       => $col,
+                        'motivo'        => $col === '' ? 'Sin columna ECP' : 'Columna ECP no válida',
+                        'saldo_inicial' => $saldoInicial,
+                        'movimiento'    => $movimiento,
+                    ];
+                }
+                continue;
+            }
+            $columnas[$col] = true;
+
+            $filaFijada = trim((string) ($c['supercias_ecp_codigo'] ?? ''));
+            $filaCambio = in_array($filaFijada, self::ECP_FILAS_CAMBIO, true) ? $filaFijada : $this->ecpFilaPorDefecto($col);
 
             if (round($saldoInicial, 2) != 0) $add('990101', $col, $saldoInicial);
             if (round($movimiento, 2) != 0)   $add($filaCambio, $col, $movimiento);
 
-            if (round($saldoInicial, 2) != 0 || round($movimiento, 2) != 0) {
+            if ($tieneValor) {
                 $detalle[] = [
                     'codigo'        => $c['codigo'],
                     'nombre'        => $c['nombre'],
@@ -1000,6 +998,7 @@ class EstadosFinancierosService
             'valores_base'        => $base,
             'columnas'            => array_keys($columnas),
             'detalle'             => $detalle,
+            'sin_mapeo'           => $sinMapeo,
             'resultado_ejercicio' => $resultadoEjercicio,
         ];
     }
@@ -1052,6 +1051,7 @@ class EstadosFinancierosService
             'totales_fila'        => $totalesFila,
             'diferencias'         => $diferencias,
             'detalle'             => $ev['ecp']['detalle'],
+            'sin_mapeo'           => $ev['ecp']['sin_mapeo'],
             'resultado_ejercicio' => $ev['ecp']['resultado_ejercicio'],
         ];
     }

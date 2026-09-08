@@ -39,13 +39,16 @@ class PlanCuentaRules
     {
         $columna = trim((string) ($data['supercias_ecp_subcodigo'] ?? ''));
         $fila    = trim((string) ($data['supercias_ecp_codigo'] ?? ''));
+        $esPatrimonio = str_starts_with((string) ($data['codigo'] ?? ''), '3');
 
-        if ($columna !== '' && !ctype_digit($columna)) {
-            throw new \Exception('Supercias ECP Columna debe ser numérica (ej. 301, 30401, 30601).');
+        if ($columna !== '' && !$esPatrimonio) {
+            throw new \Exception('Supercias ECP Columna solo aplica a cuentas de patrimonio (código que empieza por 3).');
         }
-        if ($fila !== '' && $fila !== '99'
-            && !in_array($fila, \App\Services\modulos\EstadosFinancierosService::ECP_FILAS_CAMBIO, true)) {
-            throw new \Exception('Supercias ECP Fila de cambios no válida. Use una de: ' . implode(', ', \App\Services\modulos\EstadosFinancierosService::ECP_FILAS_CAMBIO) . ' o déjela vacía.');
+        if ($columna !== '' && !in_array($columna, \App\Helpers\SuperciasEcp::COLUMNAS, true)) {
+            throw new \Exception('Supercias ECP Columna no válida. Use una de: ' . implode(', ', \App\Helpers\SuperciasEcp::COLUMNAS) . '.');
+        }
+        if ($fila !== '' && !in_array($fila, \App\Helpers\SuperciasEcp::FILAS_CAMBIO, true)) {
+            throw new \Exception('Supercias ECP Fila de cambios no válida. Use una de: ' . implode(', ', \App\Helpers\SuperciasEcp::FILAS_CAMBIO) . ' o déjela vacía.');
         }
         if ($fila !== '' && $columna === '') {
             throw new \Exception('Para fijar la fila de cambios del ECP primero indique la columna (Supercias ECP Columna).');

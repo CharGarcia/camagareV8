@@ -29,6 +29,7 @@ class PlanCuentaService
 
     public function crear(array $data): int
     {
+        $data = \App\Helpers\SuperciasEcp::normalizarMapeo($data);
         $this->rules->validate($data);
         
         $this->repository->beginTransaction();
@@ -67,6 +68,7 @@ class PlanCuentaService
         $data['codigo'] = (string) $old['codigo'];
         $data['nivel']  = (string) $old['nivel'];
 
+        $data = \App\Helpers\SuperciasEcp::normalizarMapeo($data);
         $this->rules->validate($data);
 
         $this->repository->beginTransaction();
@@ -255,7 +257,11 @@ class PlanCuentaService
                 $detalle[] = $codigo . ' - ' . $nombre;
             }
 
-            if ($creadas > 0 || $restauradas > 0) {
+            // Completar códigos de entidades de control VACÍOS (SRI / Supercías) desde el plan modelo
+            // y deducir la columna ECP del ESF en patrimonio. Nunca sobrescribe un código ya cargado.
+            $completadas = $this->completarCodigosControl($idEmpresa, $idUsuario, $detalle);
+
+            if ($creadas > 0 || $restauradas > 0 || $completadas > 0) {
                 $this->logService->registrar(
                     $idUsuario,
                     $idEmpresa,
@@ -263,16 +269,63 @@ class PlanCuentaService
                     'plan_cuentas',
                     null,
                     null,
-                    ['creadas' => $creadas, 'restauradas' => $restauradas, 'detalle' => $detalle]
+                    ['creadas' => $creadas, 'restauradas' => $restauradas, 'codigos_completados' => $completadas, 'detalle' => $detalle]
                 );
             }
 
             $this->repository->commit();
-            return ['creadas' => $creadas, 'restauradas' => $restauradas, 'detalle' => $detalle];
+            return ['creadas' => $creadas, 'restauradas' => $restauradas, 'codigos_completados' => $completadas, 'detalle' => $detalle];
         } catch (Exception $e) {
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Completa los códigos de entidades de control (SRI, Supercías ESF/ERI, columna y fila ECP) que
+     * estén VACÍOS en las cuentas de nivel 5 de la empresa:
+     *  1) con el valor del plan modelo cuando el código de cuenta coincide;
+     *  2) la columna ECP, deducida del ESF en cuentas de patrimonio (SuperciasEcp::normalizarMapeo).
+     * No sobrescribe ningún código ya cargado. Corre dentro de la transacción del llamador.
+     * Devuelve cuántas cuentas se actualizaron y agrega el detalle a $detalle.
+     */
+    private function completarCodigosControl(int $idEmpresa, int $idUsuario, array &$detalle): int
+    {
+        $modelo = [];
+        foreach (self::getCuentasModeloArray() as $m) {
+            $modelo[$m['codigo']] = $m;
+        }
+
+        $campos = ['codigo_sri', 'supercias_esf', 'supercias_eri', 'supercias_ecp_codigo', 'supercias_ecp_subcodigo'];
+        $completadas = 0;
+        foreach ($this->repository->getCodigosControlPorCodigo($idEmpresa) as $codigo => $cta) {
+            if ((int) $cta['nivel'] !== 5) continue;
+
+            $nuevo = $cta;
+            $m = $modelo[$codigo] ?? null;
+            if ($m) {
+                foreach ($campos as $campo) {
+                    if (trim((string) ($nuevo[$campo] ?? '')) === '' && trim((string) ($m[$campo] ?? '')) !== '') {
+                        $nuevo[$campo] = trim((string) $m[$campo]);
+                    }
+                }
+            }
+            $nuevo = \App\Helpers\SuperciasEcp::normalizarMapeo($nuevo);
+
+            $cambio = false;
+            foreach ($campos as $campo) {
+                if (trim((string) ($nuevo[$campo] ?? '')) !== trim((string) ($cta[$campo] ?? ''))) {
+                    $cambio = true;
+                    break;
+                }
+            }
+            if (!$cambio) continue;
+
+            $this->repository->actualizarCodigosControl((int) $cta['id'], $idEmpresa, $nuevo, $idUsuario);
+            $completadas++;
+            $detalle[] = $codigo . ' (códigos de control completados)';
+        }
+        return $completadas;
     }
 
     public static function getCuentasModeloArray(): array
@@ -282,8 +335,8 @@ class PlanCuentaService
             ['codigo' => '1.1',            'nivel' => '2', 'nombre' => 'ACTIVOS CORRIENTES',                                        'codigo_sri' => ''],
             ['codigo' => '1.1.1',          'nivel' => '3', 'nombre' => 'EFECTIVO Y EQUIVALENTES DE EFECTIVO',                       'codigo_sri' => ''],
             ['codigo' => '1.1.1.01',       'nivel' => '4', 'nombre' => 'CAJA GENERAL',                                              'codigo_sri' => ''],
-            ['codigo' => '1.1.1.01.001',   'nivel' => '5', 'nombre' => 'Caja Chica',                                  'codigo_sri' => '311', 'supercias_esf' => '1010101', 'supercias_eri' => '6555', 'supercias_ecp_codigo' => '99', 'supercias_ecp_subcodigo' => '555'],
-            ['codigo' => '1.1.1.01.002',   'nivel' => '5', 'nombre' => 'Caja General',                                'codigo_sri' => '311', 'supercias_esf' => '1010101', 'supercias_eri' => '6555', 'supercias_ecp_codigo' => '99', 'supercias_ecp_subcodigo' => '555'],
+            ['codigo' => '1.1.1.01.001',   'nivel' => '5', 'nombre' => 'Caja Chica',                                  'codigo_sri' => '311', 'supercias_esf' => '1010101'],
+            ['codigo' => '1.1.1.01.002',   'nivel' => '5', 'nombre' => 'Caja General',                                'codigo_sri' => '311', 'supercias_esf' => '1010101'],
             ['codigo' => '1.1.1.02',       'nivel' => '4', 'nombre' => 'BANCOS LOCALES',                                            'codigo_sri' => ''],
             ['codigo' => '1.1.1.02.001',   'nivel' => '5', 'nombre' => 'Banco Pichincha',                             'codigo_sri' => '311', 'supercias_esf' => '1010103'],
             ['codigo' => '1.1.1.02.002',   'nivel' => '5', 'nombre' => 'Banco Guayaquil',                             'codigo_sri' => '311', 'supercias_esf' => '1010103'],
@@ -293,7 +346,7 @@ class PlanCuentaService
             ['codigo' => '1.1.2.02',       'nivel' => '4', 'nombre' => 'ANTICIPOS A PROVEEDORES',                                   'codigo_sri' => ''],
             ['codigo' => '1.1.2.02.001',   'nivel' => '5', 'nombre' => 'Anticipo proveedores',                        'codigo_sri' => '325', 'supercias_esf' => '1010403'],
             ['codigo' => '1.1.2.03',       'nivel' => '4', 'nombre' => 'ANTICIPOS A EMPLEADOS',                                     'codigo_sri' => ''],
-            ['codigo' => '1.1.2.03.001',   'nivel' => '5', 'nombre' => 'Anticipos a Empleados',                       'codigo_sri' => '', 'map_asiento' => 'ANTICIPOSDESCUENTOSNOMINA'],
+            ['codigo' => '1.1.2.03.001',   'nivel' => '5', 'nombre' => 'Anticipos a Empleados',                       'codigo_sri' => '', 'supercias_esf' => '10102050221', 'map_asiento' => 'ANTICIPOSDESCUENTOSNOMINA'],
             ['codigo' => '1.1.3',          'nivel' => '3', 'nombre' => 'INVENTARIOS',                                               'codigo_sri' => ''],
             ['codigo' => '1.1.3.01',       'nivel' => '4', 'nombre' => 'INVENTARIO DE MERCADERÍAS',                                'codigo_sri' => ''],
             ['codigo' => '1.1.3.01.001',   'nivel' => '5', 'nombre' => 'Mercadería para la Venta',                   'codigo_sri' => '342', 'supercias_esf' => '10103', 'map_asiento' => 'INVENTARIOFACTURAVENTA,INVENTARIORECIBOVENTA,INVENTARIOFACTURACOMPRA'],
@@ -346,7 +399,7 @@ class PlanCuentaService
             ['codigo' => '2.1.3.03',       'nivel' => '4', 'nombre' => 'IMPUESTO A LA RENTA POR PAGAR',                             'codigo_sri' => ''],
             ['codigo' => '2.1.3.03.001',   'nivel' => '5', 'nombre' => 'Impuesto a la Renta Ejercicio',               'codigo_sri' => '532', 'supercias_esf' => '2010701'],
             ['codigo' => '2.1.3.04',       'nivel' => '4', 'nombre' => 'ICE POR PAGAR',                                             'codigo_sri' => ''],
-            ['codigo' => '2.1.3.04.001',   'nivel' => '5', 'nombre' => 'ICE por Pagar',                               'codigo_sri' => '', 'map_asiento' => 'ICEFACTURAVENTA,ICERECIBOVENTA'],
+            ['codigo' => '2.1.3.04.001',   'nivel' => '5', 'nombre' => 'ICE por Pagar',                               'codigo_sri' => '', 'supercias_esf' => '2010701', 'map_asiento' => 'ICEFACTURAVENTA,ICERECIBOVENTA'],
             ['codigo' => '2.1.4',          'nivel' => '3', 'nombre' => 'BENEFICIOS A EMPLEADOS POR PAGAR',                          'codigo_sri' => ''],
             ['codigo' => '2.1.4.01',       'nivel' => '4', 'nombre' => 'PARTICIPACIÓN TRABAJADORES',                               'codigo_sri' => ''],
             ['codigo' => '2.1.4.01.001',   'nivel' => '5', 'nombre' => 'Participación Trabajadores 15%',             'codigo_sri' => '533', 'supercias_esf' => '2010705'],
@@ -363,28 +416,28 @@ class PlanCuentaService
             ['codigo' => '3.1',            'nivel' => '2', 'nombre' => 'CAPITAL SOCIAL',                                            'codigo_sri' => ''],
             ['codigo' => '3.1.1',          'nivel' => '3', 'nombre' => 'CAPITAL SUSCRITO Y/O ASIGNADO',                             'codigo_sri' => ''],
             ['codigo' => '3.1.1.01',       'nivel' => '4', 'nombre' => 'CAPITAL SUSCRITO',                                          'codigo_sri' => ''],
-            ['codigo' => '3.1.1.01.001',   'nivel' => '5', 'nombre' => 'Capital suscrito y/o asignado',               'codigo_sri' => '601', 'supercias_esf' => '30101', 'supercias_ecp_codigo' => '990101', 'supercias_ecp_subcodigo' => '301'],
+            ['codigo' => '3.1.1.01.001',   'nivel' => '5', 'nombre' => 'Capital suscrito y/o asignado',               'codigo_sri' => '601', 'supercias_esf' => '30101', 'supercias_ecp_subcodigo' => '301'],
             ['codigo' => '3.1.2',          'nivel' => '3', 'nombre' => 'RESERVAS',                                                  'codigo_sri' => ''],
             ['codigo' => '3.1.2.01',       'nivel' => '4', 'nombre' => 'RESERVA LEGAL Y FACULTATIVA',                               'codigo_sri' => ''],
-            ['codigo' => '3.1.2.01.001',   'nivel' => '5', 'nombre' => 'Reserva Legal',                               'codigo_sri' => '604', 'supercias_esf' => '30401', 'supercias_ecp_codigo' => '990101', 'supercias_ecp_subcodigo' => '30401'],
+            ['codigo' => '3.1.2.01.001',   'nivel' => '5', 'nombre' => 'Reserva Legal',                               'codigo_sri' => '604', 'supercias_esf' => '30401', 'supercias_ecp_subcodigo' => '30401'],
             ['codigo' => '3.2',            'nivel' => '2', 'nombre' => 'RESULTADOS ACUMULADOS',                                     'codigo_sri' => ''],
             ['codigo' => '3.2.1',          'nivel' => '3', 'nombre' => 'GANANCIAS O PÉRDIDAS ACUMULADAS',                          'codigo_sri' => ''],
             ['codigo' => '3.2.1.01',       'nivel' => '4', 'nombre' => 'UTILIDADES DE EJERCICIOS ANTERIORES',                       'codigo_sri' => ''],
-            ['codigo' => '3.2.1.01.001',   'nivel' => '5', 'nombre' => 'Utilidad Acumulada',                          'codigo_sri' => '611', 'supercias_esf' => '30601', 'supercias_ecp_codigo' => '990101', 'supercias_ecp_subcodigo' => '30601'],
+            ['codigo' => '3.2.1.01.001',   'nivel' => '5', 'nombre' => 'Utilidad Acumulada',                          'codigo_sri' => '611', 'supercias_esf' => '30601', 'supercias_ecp_subcodigo' => '30601'],
             ['codigo' => '3.3',            'nivel' => '2', 'nombre' => 'RESULTADOS DEL EJERCICIO',                                  'codigo_sri' => ''],
             ['codigo' => '3.3.1',          'nivel' => '3', 'nombre' => 'UTILIDAD O PÉRDIDA DEL EJERCICIO',                         'codigo_sri' => ''],
             ['codigo' => '3.3.1.01',       'nivel' => '4', 'nombre' => 'RESULTADO DEL EJERCICIO',                                   'codigo_sri' => ''],
-            ['codigo' => '3.3.1.01.001',   'nivel' => '5', 'nombre' => 'Utilidad del Ejercicio',                      'codigo_sri' => '615', 'supercias_esf' => '30701', 'supercias_ecp_codigo' => '990101', 'supercias_ecp_subcodigo' => '30701', 'map_asiento' => 'UTILIDADEJERCICIOCIERRE'],
-            ['codigo' => '3.3.1.01.002',   'nivel' => '5', 'nombre' => 'Pérdida del Ejercicio',                      'codigo_sri' => '616', 'supercias_esf' => '30602', 'supercias_ecp_codigo' => '990101', 'supercias_ecp_subcodigo' => '30702', 'map_asiento' => 'PERDIDAEJERCICIOCIERRE'],
+            ['codigo' => '3.3.1.01.001',   'nivel' => '5', 'nombre' => 'Utilidad del Ejercicio',                      'codigo_sri' => '615', 'supercias_esf' => '30701', 'supercias_ecp_subcodigo' => '30701', 'map_asiento' => 'UTILIDADEJERCICIOCIERRE'],
+            ['codigo' => '3.3.1.01.002',   'nivel' => '5', 'nombre' => 'Pérdida del Ejercicio',                      'codigo_sri' => '616', 'supercias_esf' => '30702', 'supercias_ecp_subcodigo' => '30702', 'map_asiento' => 'PERDIDAEJERCICIOCIERRE'],
             ['codigo' => '4',              'nivel' => '1', 'nombre' => 'INGRESOS',                                                  'codigo_sri' => ''],
             ['codigo' => '4.1',            'nivel' => '2', 'nombre' => 'INGRESOS OPERACIONALES',                                    'codigo_sri' => ''],
             ['codigo' => '4.1.1',          'nivel' => '3', 'nombre' => 'VENTAS LOCALES',                                            'codigo_sri' => ''],
             ['codigo' => '4.1.1.01',       'nivel' => '4', 'nombre' => 'VENTAS DEL NEGOCIO',                                        'codigo_sri' => ''],
             ['codigo' => '4.1.1.01.001',   'nivel' => '5', 'nombre' => 'VENTAS DEL NEGOCIO',                          'codigo_sri' => '6001', 'supercias_eri' => '40101', 'map_asiento' => 'SUBTOTALFACTURAVENTA,SUBTOTALRECIBOVENTA'],
             ['codigo' => '4.1.1.02',       'nivel' => '4', 'nombre' => 'DESCUENTOS EN VENTAS',                                      'codigo_sri' => ''],
-            ['codigo' => '4.1.1.02.001',   'nivel' => '5', 'nombre' => 'Descuento en Ventas',                         'codigo_sri' => '', 'map_asiento' => 'DESCUENTOFACTURAVENTA,DESCUENTORECIBOVENTA'],
+            ['codigo' => '4.1.1.02.001',   'nivel' => '5', 'nombre' => 'Descuento en Ventas',                         'codigo_sri' => '', 'supercias_eri' => '40112', 'map_asiento' => 'DESCUENTOFACTURAVENTA,DESCUENTORECIBOVENTA'],
             ['codigo' => '4.1.1.03',       'nivel' => '4', 'nombre' => 'PROPINAS',                                                  'codigo_sri' => ''],
-            ['codigo' => '4.1.1.03.001',   'nivel' => '5', 'nombre' => 'Propina en Ventas',                           'codigo_sri' => '', 'map_asiento' => 'PROPINAFACTURAVENTA,PROPINARECIBOVENTA'],
+            ['codigo' => '4.1.1.03.001',   'nivel' => '5', 'nombre' => 'Propina en Ventas',                           'codigo_sri' => '', 'supercias_eri' => '40303', 'map_asiento' => 'PROPINAFACTURAVENTA,PROPINARECIBOVENTA'],
             ['codigo' => '4.2',            'nivel' => '2', 'nombre' => 'INGRESOS NO OPERACIONALES',                                 'codigo_sri' => ''],
             ['codigo' => '4.2.1',          'nivel' => '3', 'nombre' => 'INGRESOS FINANCIEROS',                                      'codigo_sri' => ''],
             ['codigo' => '4.2.1.01',       'nivel' => '4', 'nombre' => 'INTERESES GANADOS',                                         'codigo_sri' => ''],
@@ -393,9 +446,9 @@ class PlanCuentaService
             ['codigo' => '5.1',            'nivel' => '2', 'nombre' => 'COSTO DE VENTAS Y PRODUCCIÓN',                             'codigo_sri' => ''],
             ['codigo' => '5.1.1',          'nivel' => '3', 'nombre' => 'COSTO DE VENTAS',                                           'codigo_sri' => ''],
             ['codigo' => '5.1.1.01',       'nivel' => '4', 'nombre' => 'COSTO DE VENTAS LOCALES',                                   'codigo_sri' => ''],
-            ['codigo' => '5.1.1.01.001',   'nivel' => '5', 'nombre' => 'Costo de Mercadería',                        'codigo_sri' => '7004', 'supercias_eri' => '5010105', 'map_asiento' => 'COSTOFACTURAVENTA,COSTORECIBOVENTA'],
+            ['codigo' => '5.1.1.01.001',   'nivel' => '5', 'nombre' => 'Costo de Mercadería',                        'codigo_sri' => '7004', 'supercias_eri' => '5010102', 'map_asiento' => 'COSTOFACTURAVENTA,COSTORECIBOVENTA'],
             ['codigo' => '5.1.1.02',       'nivel' => '4', 'nombre' => 'DESCUENTOS EN COMPRAS',                                     'codigo_sri' => ''],
-            ['codigo' => '5.1.1.02.001',   'nivel' => '5', 'nombre' => 'Descuento en Compras',                        'codigo_sri' => '', 'map_asiento' => 'DESCUENTOFACTURACOMPRA'],
+            ['codigo' => '5.1.1.02.001',   'nivel' => '5', 'nombre' => 'Descuento en Compras',                        'codigo_sri' => '', 'supercias_eri' => '5010102', 'map_asiento' => 'DESCUENTOFACTURACOMPRA'],
             ['codigo' => '5.2',            'nivel' => '2', 'nombre' => 'GASTOS OPERACIONALES',                                      'codigo_sri' => ''],
             ['codigo' => '5.2.1',          'nivel' => '3', 'nombre' => 'GASTOS DEL PERSONAL',                                       'codigo_sri' => ''],
             ['codigo' => '5.2.1.01',       'nivel' => '4', 'nombre' => 'SUELDOS Y SALARIOS',                                        'codigo_sri' => ''],
@@ -417,9 +470,9 @@ class PlanCuentaService
             ['codigo' => '5.2.1.05.001',   'nivel' => '5', 'nombre' => 'Suministros y Materiales de Oficina',         'codigo_sri' => '7190', 'supercias_eri' => '5020127'],
             ['codigo' => '5.2.1.05.002',   'nivel' => '5', 'nombre' => 'Mantenimiento y Reparaciones',                'codigo_sri' => '7196', 'supercias_eri' => '5020208'],
             ['codigo' => '5.2.1.05.003',   'nivel' => '5', 'nombre' => 'Seguros y Reaseguros',                        'codigo_sri' => '7202', 'supercias_eri' => '5020214'],
-            ['codigo' => '5.2.1.05.004',   'nivel' => '5', 'nombre' => 'Compras y Gastos Generales',                  'codigo_sri' => '', 'map_asiento' => 'SUBTOTALFACTURACOMPRA'],
-            ['codigo' => '5.2.1.05.005',   'nivel' => '5', 'nombre' => 'ICE en Compras',                              'codigo_sri' => '', 'map_asiento' => 'ICEFACTURACOMPRA'],
-            ['codigo' => '5.2.1.05.006',   'nivel' => '5', 'nombre' => 'Propina en Compras',                          'codigo_sri' => '', 'map_asiento' => 'PROPINAFACTURACOMPRA'],
+            ['codigo' => '5.2.1.05.004',   'nivel' => '5', 'nombre' => 'Compras y Gastos Generales',                  'codigo_sri' => '', 'supercias_eri' => '5020229', 'map_asiento' => 'SUBTOTALFACTURACOMPRA'],
+            ['codigo' => '5.2.1.05.005',   'nivel' => '5', 'nombre' => 'ICE en Compras',                              'codigo_sri' => '', 'supercias_eri' => '5020229', 'map_asiento' => 'ICEFACTURACOMPRA'],
+            ['codigo' => '5.2.1.05.006',   'nivel' => '5', 'nombre' => 'Propina en Compras',                          'codigo_sri' => '', 'supercias_eri' => '5020229', 'map_asiento' => 'PROPINAFACTURACOMPRA'],
             ['codigo' => '5.2.2',          'nivel' => '3', 'nombre' => 'GASTOS DE VENTAS',                                          'codigo_sri' => ''],
             ['codigo' => '5.2.2.01',       'nivel' => '4', 'nombre' => 'GASTOS DE COMERCIALIZACIÓN',                               'codigo_sri' => ''],
             ['codigo' => '5.2.2.01.001',   'nivel' => '5', 'nombre' => 'Promoción y Publicidad',                     'codigo_sri' => '7173', 'supercias_eri' => '5020211'],
@@ -459,11 +512,13 @@ class PlanCuentaService
         try {
             foreach ($cuentas as $c) {
                 $nivel = (int)$c['nivel'];
+                // Mapeo ECP normalizado (columna deducida del ESF en patrimonio; sin ECP fuera de patrimonio)
+                $c = \App\Helpers\SuperciasEcp::normalizarMapeo($c);
                 $sriVal = $nivel === 5 ? ($c['codigo_sri'] ?? '') : '';
                 $esfVal = $nivel === 5 ? ($c['supercias_esf'] ?? null) : null;
                 $eriVal = $nivel === 5 ? ($c['supercias_eri'] ?? null) : null;
-                $ecpCod = $nivel === 5 ? ($c['supercias_ecp_codigo'] ?? null) : null;
-                $ecpSub = $nivel === 5 ? ($c['supercias_ecp_subcodigo'] ?? null) : null;
+                $ecpCod = $nivel === 5 ? (($c['supercias_ecp_codigo'] ?? '') !== '' ? $c['supercias_ecp_codigo'] : null) : null;
+                $ecpSub = $nivel === 5 ? (($c['supercias_ecp_subcodigo'] ?? '') !== '' ? $c['supercias_ecp_subcodigo'] : null) : null;
 
                 $id = null;
 

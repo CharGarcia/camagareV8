@@ -359,6 +359,48 @@ class PlanCuentaRepository extends BaseRepository
      * como mapa codigo => ['id' => int, 'nombre' => string, 'eliminado' => bool].
      * Usado para reparar la jerarquía (detectar y restaurar/crear cuentas padre faltantes).
      */
+    /**
+     * Cuentas activas de la empresa con sus códigos de entidades de control (SRI / Supercías),
+     * indexadas por código. Para completar códigos vacíos desde el plan modelo.
+     */
+    public function getCodigosControlPorCodigo(int $idEmpresa): array
+    {
+        $sql = "SELECT id, codigo, nivel, codigo_sri, supercias_esf, supercias_eri, supercias_ecp_codigo, supercias_ecp_subcodigo
+                FROM {$this->table} WHERE id_empresa = :id_e AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_e' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(string) $row['codigo']] = $row;
+        }
+        return $out;
+    }
+
+    /** Actualiza solo los códigos de entidades de control de una cuenta (no toca nombre ni estado). */
+    public function actualizarCodigosControl(int $id, int $idEmpresa, array $codigos, int $idUsuario): bool
+    {
+        $sql = "UPDATE {$this->table} SET
+                    codigo_sri = :codigo_sri,
+                    supercias_esf = :supercias_esf,
+                    supercias_eri = :supercias_eri,
+                    supercias_ecp_codigo = :supercias_ecp_codigo,
+                    supercias_ecp_subcodigo = :supercias_ecp_subcodigo,
+                    updated_by = :updated_by,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        return $st->execute([
+            ':codigo_sri'              => (string) ($codigos['codigo_sri'] ?? ''),
+            ':supercias_esf'           => ($codigos['supercias_esf'] ?? '') !== '' ? $codigos['supercias_esf'] : null,
+            ':supercias_eri'           => ($codigos['supercias_eri'] ?? '') !== '' ? $codigos['supercias_eri'] : null,
+            ':supercias_ecp_codigo'    => ($codigos['supercias_ecp_codigo'] ?? '') !== '' ? $codigos['supercias_ecp_codigo'] : null,
+            ':supercias_ecp_subcodigo' => ($codigos['supercias_ecp_subcodigo'] ?? '') !== '' ? $codigos['supercias_ecp_subcodigo'] : null,
+            ':updated_by'              => $idUsuario,
+            ':id'                      => $id,
+            ':id_empresa'              => $idEmpresa,
+        ]);
+    }
+
     public function getMapaCodigos(int $idEmpresa): array
     {
         $sql = "SELECT id, codigo, nombre, eliminado FROM {$this->table} WHERE id_empresa = :id_e";

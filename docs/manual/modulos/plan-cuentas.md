@@ -6,7 +6,7 @@ ruta_modulo: modulos/plan-cuentas
 tipo: modulo
 visibilidad: todos
 etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control
-version: 1.3
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -70,6 +70,26 @@ Los tres campos son obligatorios.
 
 Cómo se usan estos datos en los archivos de Supercías está explicado en el
 manual de Estados Financieros.
+
+### De dónde salen los códigos en una empresa nueva
+
+- **Cargar Plan Modelo** crea las cuentas con sus códigos SRI, ESF, ERI y la
+  columna ECP ya puestos. Es el camino recomendado para una empresa nueva.
+- **Importar desde Excel** toma los códigos de las columnas del archivo. Si el
+  archivo no los trae, las cuentas quedan sin mapear.
+- **Reparar Jerarquía** además de crear las cuentas padre faltantes, completa
+  los códigos **vacíos** de las cuentas de nivel 5 que coinciden por código con
+  el plan modelo. Nunca sobrescribe un código ya cargado. Sirve para empresas
+  que cargaron el modelo antes de que existieran estos códigos o que crearon
+  cuentas a mano.
+
+En todos los caminos, y también al crear o editar una cuenta, aplica una regla
+automática: si una cuenta de **patrimonio** tiene casillero ESF y no tiene
+columna ECP, la columna se deduce del ESF (30101 da 301, 30401 da 30401, 30601
+da 30601). Las cuentas que no son de patrimonio no llevan columna ni fila ECP,
+y si las traen se limpian. Un valor heredado en la fila ECP que no sea una
+fila de cambios (por ejemplo 99 o 990101) se limpia y equivale a "fila por
+defecto".
 
 La ficha de la cuenta también se abre desde los reportes de **Estados
 Financieros**, pulsando el código de una cuenta de nivel 5. Aplican las mismas
@@ -169,6 +189,13 @@ módulo y, en el peor caso, a reclasificar movimientos.
 
 ## Historial de cambios
 
+- **1.4** — La columna ECP de las cuentas de patrimonio se deduce sola del
+  casillero ESF al crear, editar, importar o cargar el modelo. *Reparar
+  Jerarquía* completa los códigos SRI/Supercías vacíos desde el plan modelo.
+  Plan modelo corregido: sin códigos de prueba en Caja, ESF 30702 en Pérdida
+  del Ejercicio, y casilleros ESF/ERI en Anticipos a Empleados, ICE por Pagar,
+  Descuento en Ventas, Propina en Ventas, Costo de Mercadería (5010102),
+  Descuento en Compras, Compras y Gastos Generales, ICE y Propina en Compras.
 - **1.3** — Los campos *Supercias ECP* pasan a llamarse **Columna** (componente
   del patrimonio, obligatorio para entrar al ECP) y **Fila de cambios**
   (opcional, solo filas 990102, 990103 y 990201 a 990209). Se valida al guardar.

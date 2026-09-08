@@ -52,7 +52,7 @@ $proyectos  = $proyectos ?? [];
             </button>
         <?php endif; ?>
         <?php if ($perm['crear'] && $conteoTotal > 0 && $jerarquiaIncompleta): ?>
-            <button type="button" id="btnRepararPlan" class="btn btn-outline-secondary shadow-sm btn-sm px-3" onclick="repararJerarquia()" title="Crea las cuentas padre faltantes (útil tras una migración)">
+            <button type="button" id="btnRepararPlan" class="btn btn-outline-secondary shadow-sm btn-sm px-3" onclick="repararJerarquia()" title="Crea las cuentas padre faltantes (útil tras una migración) y completa los códigos SRI/Supercías vacíos desde el plan modelo">
                 <i class="bi bi-diagram-3"></i> Reparar Jerarquía
             </button>
         <?php endif; ?>
@@ -498,7 +498,7 @@ $proyectos  = $proyectos ?? [];
         window.repararJerarquia = async function() {
             const result = await Swal.fire({
                 title: '¿Reparar jerarquía?',
-                html: 'Se crearán las cuentas <b>padre faltantes</b> para las cuentas existentes (útil tras una migración).<br>Las cuentas padre que no coincidan con el plan modelo quedarán con un nombre provisional que podrás editar.',
+                html: 'Se crearán las cuentas <b>padre faltantes</b> para las cuentas existentes (útil tras una migración).<br>Las cuentas padre que no coincidan con el plan modelo quedarán con un nombre provisional que podrás editar.<br><br>Además se <b>completan los códigos SRI y Supercías vacíos</b> de las cuentas de nivel 5 que coinciden con el plan modelo, y la columna ECP de las cuentas de patrimonio a partir de su casillero ESF. No se sobrescribe ningún código ya cargado.',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Sí, reparar',

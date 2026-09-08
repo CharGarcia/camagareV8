@@ -455,18 +455,19 @@ class PlanCuentasController extends BaseModuloController
 
         try {
             $r = $this->service->repararCuentasFaltantes($idEmpresa, $idUsuario);
-            $total = $r['creadas'] + $r['restauradas'];
+            $total = $r['creadas'] + $r['restauradas'] + ($r['codigos_completados'] ?? 0);
 
+            $completadas = (int) ($r['codigos_completados'] ?? 0);
             if ($total === 0) {
-                $msg = 'No se encontraron cuentas padre faltantes; la jerarquía ya está completa.';
+                $msg = 'No se encontraron cuentas padre faltantes ni códigos de control por completar; el plan ya está completo.';
             } else {
-                $msg = "Jerarquía reparada: {$r['creadas']} cuentas creadas";
-                if ($r['restauradas'] > 0) {
-                    $msg .= " y {$r['restauradas']} restauradas";
-                }
-                $msg .= '.';
+                $partes = [];
+                if ($r['creadas'] > 0)     $partes[] = "{$r['creadas']} cuentas creadas";
+                if ($r['restauradas'] > 0) $partes[] = "{$r['restauradas']} restauradas";
+                if ($completadas > 0)      $partes[] = "{$completadas} cuentas con códigos SRI/Supercías completados";
+                $msg = 'Plan reparado: ' . implode(', ', $partes) . '.';
             }
-            echo json_encode(['ok' => true, 'msg' => $msg, 'creadas' => $r['creadas'], 'restauradas' => $r['restauradas']]);
+            echo json_encode(['ok' => true, 'msg' => $msg, 'creadas' => $r['creadas'], 'restauradas' => $r['restauradas'], 'codigos_completados' => $completadas]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -692,7 +693,9 @@ class PlanCuentasController extends BaseModuloController
                     'status'        => 1,
                     'created_by'    => $idUsuario
                 ];
-                
+                // Mapeo ECP: columna deducida del ESF en patrimonio; sin ECP fuera de patrimonio
+                $data = \App\Helpers\SuperciasEcp::normalizarMapeo($data);
+
                 $repo->create($data);
                 $importados++;
             }
