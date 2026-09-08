@@ -152,7 +152,8 @@
             campo.classList.add('is-invalid');
             return false;
         }
-        const correos  = raw.split(',').map(s => s.trim()).filter(s => s);
+        // Coma, punto y coma o espacio: mismo separador que el backend (TransportistaRules).
+        const correos  = raw.split(/[\s,;]+/).map(s => s.trim()).filter(s => s);
         const invalidos = correos.filter(c => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c));
         if (invalidos.length) {
             errEl.textContent = 'Correos inválidos: ' + invalidos.join(', ');

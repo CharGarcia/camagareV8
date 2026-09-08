@@ -672,7 +672,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                     <!-- ─── Bloques Condicionales (Se muestran vía JS) ─── -->
                     <div id="bloque-realizada" class="col-12 d-none">
                         <hr class="my-1">
-                        <label class="form-label-sm fw-bold">Resumen de lo realizado <span class="text-danger">*</span></label>
+                        <label class="form-label-sm fw-bold">Resumen de lo realizado <span class="text-muted fw-normal">(opcional)</span></label>
                         <textarea id="tarea-resumen" class="form-control form-control-sm" rows="2" placeholder="Describe lo que hiciste…"></textarea>
                         <div class="mt-2">
                             <label class="form-label-sm">Documentos adjuntos</label>
@@ -1723,7 +1723,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
             hasta: hasta
         });
 
-        document.getElementById('tbody-tareas').innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</td></tr>';
+        document.getElementById('tbody-tareas').innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</td></tr>';
         fetch(BASE + '/config/tareas-obligaciones?action=tareas-search-ajax&' + params.toString())
             .then(function(r) {
                 return r.json();

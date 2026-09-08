@@ -413,6 +413,15 @@ return [
         'id_submodulo' => 0, // Actualizar con el id real después de ejecutar create_retenciones_ventas.sql
         'legacy_rutas' => [],
     ],
+    // ─── ANEXO DE DIVIDENDOS (ADI) ───────────────────────────────────────────
+    // El submódulo lo crea database/2026-09-08_anexo_dividendos_adi.sql bajo el
+    // módulo SRI. Se deja en 0 a propósito: así se resuelve por
+    // submodulos_menu.ruta y el id no tiene que coincidir entre desarrollo y
+    // producción, donde el script lo insertará con otro número.
+    'modulos/anexo-dividendos' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/anexo-ats' => [
         'id_submodulo' => 27, // submodulos_menu.id donde ruta='modulos/anexo-ats' (Anexo ATS)
         'legacy_rutas' => [

@@ -692,7 +692,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <div class="col-md-4">
                                         <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
 
-                                            <!-- Subtotal General -->
+                                            <!-- Total Descuento: se muestra ANTES del Subtotal porque el Subtotal ya
+                                                 está neto (con el descuento de cada línea restado) — mostrarlo después
+                                                 daría la impresión de que se resta dos veces. -->
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="text-muted">(-) Descuento</span>
+                                                <span class="fw-bold text-dark" id="m-lbl-descuento">0.00</span>
+                                            </div>
+
+                                            <!-- Subtotal General (neto: suma de los subtotales de línea) -->
                                             <div class="d-flex justify-content-between align-items-center mb-1 fw-bold border-bottom pb-1">
                                                 <span class="text-muted">Subtotal</span>
                                                 <span id="m-lbl-subtotal">0.00</span>
@@ -700,12 +708,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                                             <!-- Subtotales agrupados por tarifa IVA -->
                                             <div id="m-lbl-subtotales-iva" class="mb-1"></div>
-
-                                            <!-- Total Descuento -->
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="text-muted">(-) Descuento</span>
-                                                <span class="fw-bold text-dark" id="m-lbl-descuento">0.00</span>
-                                            </div>
 
                                             <!-- IVA agrupado por tarifa (solo los > 0) -->
                                             <div id="m-lbl-ivas-grupo" class="mb-1"></div>
@@ -3991,7 +3993,11 @@ $totalPages = $totalPagesOriginal;
     function calcTotales() {
         const modoIva = EMPRESA_CONFIG.calculo_iva ?? 'linea_linea';
 
-        let subtotalGeneral = 0; // suma de (cant - prec) antes de descuento - para mostrar bruto
+        // Suma de los subtotales de LÍNEA (neto, ya con el descuento de cada línea
+        // restado) — debe coincidir exactamente con sumar a mano la columna
+        // "Subtotal" que se ve en cada ítem de la tabla, y con total_sin_impuestos
+        // (mismo criterio que el listado y el PDF).
+        let subtotalGeneral = 0;
         let descuentoTotal = 0;
         let iceTotal = 0;
 
@@ -4021,7 +4027,7 @@ $totalPages = $totalPagesOriginal;
             const subtotalNeto = r2(subtotalBruto - desc);
             const baseIvaFila = r2(subtotalNeto + iceVal); // base imponible IVA (incluye ICE)
 
-            subtotalGeneral = r2(subtotalGeneral + subtotalBruto);
+            subtotalGeneral = r2(subtotalGeneral + subtotalNeto);
             descuentoTotal = r2(descuentoTotal + desc);
             iceTotal = r2(iceTotal + iceVal);
 
@@ -4064,11 +4070,14 @@ $totalPages = $totalPagesOriginal;
         }
 
         const propina = r2(parseFloat(document.getElementById('m-input-propina')?.value) || 0);
-        const totalFactura = r2((subtotalGeneral - descuentoTotal) + ivaTotal + iceTotal + propina);
+        // subtotalGeneral ya es neto (el descuento de línea ya está restado en cada
+        // subtotalNeto sumado arriba) — NO volver a restar descuentoTotal aquí, o el
+        // descuento se aplicaría dos veces.
+        const totalFactura = r2(subtotalGeneral + ivaTotal + iceTotal + propina);
 
         // ”€”€ Actualizar DOM ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
 
-        // Subtotal general (bruto, antes de descuento)
+        // Subtotal general (neto: suma de los subtotales de línea, ya con descuento restado)
         const lblSubTotal = document.getElementById('m-lbl-subtotal');
         if (lblSubTotal) lblSubTotal.textContent = subtotalGeneral.toFixed(2);
 
@@ -4922,8 +4931,10 @@ $totalPages = $totalPagesOriginal;
                     });
                 }
 
+                // totSinImp (cab.total_sin_impuestos) ya es neto — es exactamente lo que
+                // debe mostrar "Subtotal" (igual criterio que calcTotales() en vivo).
                 const lblSub = document.getElementById('m-lbl-subtotal');
-                if (lblSub) lblSub.textContent = (totSinImp + totDesc).toFixed(2);
+                if (lblSub) lblSub.textContent = totSinImp.toFixed(2);
 
                 const lblDescElem = document.getElementById('m-lbl-descuento');
                 if (lblDescElem) lblDescElem.textContent = totDesc.toFixed(2);

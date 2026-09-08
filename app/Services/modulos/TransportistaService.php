@@ -51,6 +51,7 @@ class TransportistaService
             $data['nombre']          = mb_strtoupper(trim($data['nombre']));
             $data['identificacion']  = trim($data['identificacion']);
             $data['placa']           = !empty($data['placa']) ? mb_strtoupper(trim($data['placa'])) : null;
+            $data['email']           = $this->normalizarCorreos($data['email'] ?? null);
 
             $id = $this->repo->insertar($data);
 
@@ -90,6 +91,7 @@ class TransportistaService
             $data['nombre']         = mb_strtoupper(trim($data['nombre']));
             $data['identificacion'] = trim($data['identificacion']);
             $data['placa']          = !empty($data['placa']) ? mb_strtoupper(trim($data['placa'])) : null;
+            $data['email']          = $this->normalizarCorreos($data['email'] ?? null);
 
             $this->repo->actualizar($id, $data);
 
@@ -107,6 +109,19 @@ class TransportistaService
             $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Varios correos por transportista: se aceptan separados por coma, punto y
+     * coma o espacio y se guardan normalizados como "a@x.com, b@y.com" (en
+     * minúsculas, sin duplicados). Los lee así EnvioDocumentosSRIService al
+     * enviar la guía de remisión, que vuelve a separar por [\s,;]+.
+     */
+    private function normalizarCorreos(?string $raw): ?string
+    {
+        $correos = preg_split('/[\s,;]+/', trim((string)$raw), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $correos = array_values(array_unique(array_map('mb_strtolower', $correos)));
+        return $correos ? implode(', ', $correos) : null;
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void

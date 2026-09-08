@@ -95,7 +95,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigT
                                     <small class="text-muted fw-normal ms-1">- varios separados por coma</small>
                                 </label>
                                 <input type="text" id="tr-email" class="form-control form-control-sm"
-                                       maxlength="500" placeholder="correo@ejemplo.com, otro@ejemplo.com"
+                                       maxlength="200" placeholder="correo@ejemplo.com, otro@ejemplo.com"
                                        onblur="TR_validarEmails()">
                                 <div id="tr-email-error" class="text-danger small mt-1 d-none"></div>
                             </div>

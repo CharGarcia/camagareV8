@@ -218,7 +218,7 @@ class SuperciasDiagnosticoService
                 if (str_starts_with((string) $c['codigo'], '7')) $pivote += $neto;
                 if (in_array((int) $c['id_cuenta'], $ctaCierreIds, true) && round($neto, 2) != 0) {
                     $itemsRes[] = ['codigo' => $c['codigo'], 'nombre' => (string) $c['nombre'],
-                        'problema' => 'Cuenta de cierre con movimiento propio en el período (' . number_format($neto, 2) . '): su saldo se suma al resultado calculado y el ESF lo cuenta dos veces'];
+                        'problema' => 'La cuenta de cierre recibió ' . number_format($neto, 2) . ' dentro del período: el resultado ya se distribuyó (reservas, resultados acumulados) en el mismo ejercicio que se presenta'];
                 }
             }
             if (round($pivote, 2) != 0) {
@@ -240,7 +240,7 @@ class SuperciasDiagnosticoService
         }
         $hallazgos[] = $this->hallazgo('resultado_esf_eri', 'El resultado del ejercicio coincide entre el ESF y el ERI', empty($itemsRes) ? 'ok' : 'bloqueante', ['ESF', 'ERI', 'ECP'],
             'La ganancia (pérdida) neta del período del balance (ESF 30701 / 30702) debe ser igual a la del estado de resultados (ERI 707). Supercías rechaza los estados si no cuadran entre sí.',
-            $itemsRes, 'Revise las cuentas listadas: mapee las que falten, y si la cuenta de cierre tiene saldo propio, el resultado se está contando dos veces.');
+            $itemsRes, 'Si el asiento de cierre distribuyó el resultado (reserva legal, resultados acumulados) dentro del mismo ejercicio, muévalo al año siguiente: Supercías espera el resultado sin distribuir. Si hay cuentas de resultados listadas, asígneles su casillero ERI.');
 
         $ecpDif = [];
         foreach ($cas['ECP'] ?? [] as $key => $x) {

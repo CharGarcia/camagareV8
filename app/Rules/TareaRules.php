@@ -80,13 +80,7 @@ class TareaRules
             throw new InvalidArgumentException('El estado indicado no es válido.');
         }
 
-        // Resumen obligatorio si estado es realizada_continua o realizada_finalizada
-        if (in_array($estado, ['realizada_continua', 'realizada_finalizada'], true)) {
-            $resumen = trim($data['resumen'] ?? '');
-            if ($resumen === '') {
-                throw new InvalidArgumentException('El resumen es obligatorio cuando la tarea fue realizada.');
-            }
-        }
+        // El resumen de lo realizado es opcional en cualquier estado.
 
         // Motivo obligatorio si estado es cancelada
         if ($estado === 'cancelada') {
