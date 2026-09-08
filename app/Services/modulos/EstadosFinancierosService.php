@@ -1025,18 +1025,38 @@ class EstadosFinancierosService
         $efectivoApertura = 0.0;
         $efectivoMovimiento = 0.0;
         $hayCuentasEfectivo = false;
+        $sinConciliar = []; // cuentas con movimiento que no entran a la conciliación (diagnóstico)
         foreach ($cuentas as $c) {
             if ((int) $c['nivel'] !== 5) continue;
             $esf = trim((string) ($c['supercias_esf'] ?? ''));
+            $eri = trim((string) ($c['supercias_eri'] ?? ''));
+            $mov = (float) $c['movimiento'];
             if (\App\Helpers\SuperciasEfe::esEfectivo($esf)) {
                 $hayCuentasEfectivo = true;
                 $efectivoApertura   += (float) $c['apertura'];
-                $efectivoMovimiento += (float) $c['movimiento'];
+                $efectivoMovimiento += $mov;
                 continue;
             }
+            if (round($mov, 2) == 0) continue;
             $cas = \App\Helpers\SuperciasEfe::casilleroCambio($esf);
-            if ($cas !== null && round((float) $c['movimiento'], 2) != 0) {
-                $add($cas, -(float) $c['movimiento']); // aumento de activo resta efectivo; aumento de pasivo lo suma
+            if ($cas !== null) {
+                $add($cas, -$mov); // aumento de activo resta efectivo; aumento de pasivo lo suma
+                continue;
+            }
+            // Diagnóstico: sin ESF ni ERI la cuenta no entra ni al ERI (96) ni a los cambios (98xx).
+            // Con ESF de activo/pasivo que no es efectivo, inversión, financiación ni capital de
+            // trabajo reconocido, tampoco: se lista para revisar el mapeo.
+            $esInversionOFinanciacion = $esf !== '' && \App\Helpers\SuperciasEfe::esInversionOFinanciacion($esf);
+            $esPatrimonioOResultado = $esf !== '' && str_starts_with($esf, '3');
+            if (($esf === '' && $eri === '') || ($esf !== '' && !$esInversionOFinanciacion && !$esPatrimonioOResultado)) {
+                $sinConciliar[] = [
+                    'codigo'     => $c['codigo'],
+                    'nombre'     => $c['nombre'],
+                    'esf'        => $esf,
+                    'eri'        => $eri,
+                    'movimiento' => round($mov, 2),
+                    'motivo'     => ($esf === '' && $eri === '') ? 'Sin casillero ESF ni ERI' : 'ESF ' . $esf . ' no reconocido como capital de trabajo',
+                ];
             }
         }
         $base['9506'] = round($efectivoApertura, 2);
@@ -1066,10 +1086,11 @@ class EstadosFinancierosService
         ];
 
         return [
-            'valores_base' => $base,
-            'asientos'     => $asientos,
-            'controles'    => $controles,
-            'sin_efectivo' => !$hayCuentasEfectivo,
+            'valores_base'  => $base,
+            'asientos'      => $asientos,
+            'controles'     => $controles,
+            'sin_efectivo'  => !$hayCuentasEfectivo,
+            'sin_conciliar' => $sinConciliar,
         ];
     }
 
@@ -1106,8 +1127,9 @@ class EstadosFinancierosService
             'filas'        => $filas,
             'controles'    => $ev['efe']['controles'],
             'asientos'     => $ev['efe']['asientos'],
-            'sin_efectivo' => $ev['efe']['sin_efectivo'],
-            'total_otros'  => round($totalOtros, 2),
+            'sin_efectivo'  => $ev['efe']['sin_efectivo'],
+            'sin_conciliar' => $ev['efe']['sin_conciliar'],
+            'total_otros'   => round($totalOtros, 2),
         ];
     }
 

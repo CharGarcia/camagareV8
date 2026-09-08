@@ -1020,7 +1020,11 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         const avisos = [];
         if (d.sin_efectivo) avisos.push('Ninguna cuenta tiene casillero ESF 10101 (Caja / Bancos). Sin eso no hay flujo de efectivo: asigne el ESF a las cuentas de caja y bancos en Plan de Cuentas.');
         if ((d.total_otros || 0) > 0) avisos.push(`Hay ${formatMoney(d.total_otros)} clasificados en <em>otros cobros / otros pagos</em> (filas amarillas). Revise esas contrapartidas: normalmente les falta el casillero ESF o ERI.`);
-        if (Math.abs(c.dif_9820_vs_9501 || 0) >= 0.01) avisos.push('La conciliación (9820) no coincide con el flujo de operación (9501). Causas típicas: cuentas de capital de trabajo sin ESF, asientos de apertura sin tipo <em>apertura</em>, o ajustes sin efectivo (9702 a 9711) que hay que completar con fórmula en /config/supercias.');
+        if (d.sin_conciliar && d.sin_conciliar.length > 0) {
+            avisos.push(`<strong>${d.sin_conciliar.length} cuenta(s) con movimiento no entran a la conciliación</strong> (ni al ERI ni a los cambios en activos y pasivos). Asígneles el casillero ESF/ERI correcto:<ul class="mb-0 mt-1">`
+                + d.sin_conciliar.map(x => `<li><code>${esc(x.codigo)}</code> ${esc(x.nombre)} — ${esc(x.motivo)}: movimiento ${formatMoney(x.movimiento)}</li>`).join('') + '</ul>');
+        }
+        if (Math.abs(c.dif_9820_vs_9501 || 0) >= 0.01) avisos.push('La conciliación (9820) no coincide con el flujo de operación (9501). Causas típicas: cuentas listadas arriba sin mapeo, depreciación mapeada a un casillero hijo sin fórmula en su total (revise 9701), asientos de apertura sin tipo <em>apertura</em>, o ajustes sin efectivo (9702 a 9711) que hay que completar con fórmula en /config/supercias.');
         if (avisos.length) { alerta.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>' + avisos.join('<br>'); alerta.classList.remove('d-none'); }
         else alerta.classList.add('d-none');
 

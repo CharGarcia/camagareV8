@@ -126,6 +126,24 @@ final class SuperciasEfe
     }
 
     /**
+     * ¿El ESF corresponde a inversión (activos no corrientes, activos financieros) o financiación
+     * (deuda financiera, arrendamientos, dividendos, préstamos de relacionadas)? Esas cuentas no
+     * entran a "cambios en activos y pasivos": su efectivo va a 9502 / 9503 por el método directo.
+     */
+    public static function esInversionOFinanciacion(string $esf): bool
+    {
+        $esf = trim($esf);
+        if ($esf === '') return false;
+        foreach (['1010201', '1010202', '1010203', '1010204', '10201', '10202', '10203', '10204', '10206', '10207',
+                  '1020801', '1020803', '1020805', '1020806', '1020807', '1020808', '1020809', '1020810',
+                  '20101', '20102', '20104', '20106', '20109', '20201', '20202', '20203', '20204', '20206',
+                  '2010706', '201080101', '201080102', '201080201', '201080202', '202080101', '202080102'] as $p) {
+            if (str_starts_with($esf, $p)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Casillero de "cambios en activos y pasivos" (98xx) para una cuenta según su ESF, o null si la
      * cuenta no es capital de trabajo (efectivo, inversiones, activo fijo, deuda financiera,
      * dividendos, patrimonio, resultados). El valor del casillero es −(variación debe−haber).
