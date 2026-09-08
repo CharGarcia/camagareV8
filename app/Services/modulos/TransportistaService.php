@@ -60,6 +60,7 @@ class TransportistaService
                 (int) $data['id_empresa'],
                 'CREAR',
                 'transportistas',
+                $id,
                 null,
                 ['id' => $id, 'nombre' => $data['nombre'], 'identificacion' => $data['identificacion']]
             );
@@ -100,6 +101,7 @@ class TransportistaService
                 (int) $data['id_empresa'],
                 'ACTUALIZAR',
                 'transportistas',
+                $id,
                 $actual,
                 $data
             );
@@ -136,7 +138,7 @@ class TransportistaService
         try {
             $this->repo->eliminar($id, $idEmpresa, $idUsuario);
 
-            $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'transportistas', $actual, null);
+            $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'transportistas', $id, $actual, null);
 
             $db->commit();
         } catch (\Throwable $e) {
