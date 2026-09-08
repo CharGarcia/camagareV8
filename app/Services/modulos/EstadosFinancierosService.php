@@ -1026,6 +1026,7 @@ class EstadosFinancierosService
         $efectivoMovimiento = 0.0;
         $hayCuentasEfectivo = false;
         $sinConciliar = []; // cuentas con movimiento que no entran a la conciliación (diagnóstico)
+        $saldoPivot = 0.0;  // clase 7 "Resumen de resultados" (cierre virtual de datos migrados)
         foreach ($cuentas as $c) {
             if ((int) $c['nivel'] !== 5) continue;
             $esf = trim((string) ($c['supercias_esf'] ?? ''));
@@ -1038,6 +1039,12 @@ class EstadosFinancierosService
                 continue;
             }
             if (round($mov, 2) == 0) continue;
+            // Cuenta pivote clase 7: el resultado de los asientos de cierre migrados vive aquí y no
+            // en 4/5/6. El balance la suma al resultado (calcularResultadoEjercicio); el 96 también.
+            if (str_starts_with((string) $c['codigo'], '7')) {
+                $saldoPivot += -$mov; // haber - debe
+                continue;
+            }
             $cas = \App\Helpers\SuperciasEfe::casilleroCambio($esf);
             if ($cas !== null) {
                 $add($cas, -$mov); // aumento de activo resta efectivo; aumento de pasivo lo suma
@@ -1066,7 +1073,8 @@ class EstadosFinancierosService
         // 96 = ERI 600 (ganancia antes de participación e impuesto). Si ese casillero no tiene
         // fórmula en /config/supercias vale 0: se reconstruye desde el resultado del balance
         // sumando de vuelta la participación (601) y el impuesto a la renta (603).
-        $base['96']   = round($eri('600'), 2) != 0 ? $eri('600') : ($resultadoEjercicio + $eri('601') + $eri('603'));
+        // El resultado del balance ($resultadoEjercicio) ya incluye el pivote; el ERI 600 no.
+        $base['96']   = round($eri('600'), 2) != 0 ? ($eri('600') + $saldoPivot) : ($resultadoEjercicio + $eri('601') + $eri('603'));
         $base['9701'] = $eri('5010401') + $eri('5020120') + $eri('5020121') + $eri('5020221') + $eri('5020222');
         $base['9709'] = $eri('603') + $eri('5020126') + $eri('5020227');
         $base['9710'] = $eri('601');
