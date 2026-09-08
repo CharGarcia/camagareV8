@@ -50,6 +50,14 @@ class XmlAnexoDividendosService
     public const RESPUESTA_COMO_TEXTO = true;
 
     /**
+     * Mes que se declara en la cabecera. El ADI es un anexo ANUAL y la ficha no
+     * menciona este campo, pero el esquema lo exige después del año, así que se
+     * emite el mes de cierre del ejercicio. Si el portal rechazara el valor,
+     * aquí se cambia (los otros candidatos son '00' y '01').
+     */
+    public const MES_CABECERA = '12';
+
+    /**
      * Genera el contenido del archivo ADI-aaaa.xml.
      *
      * @param array $informante  anio, tipo_informante, tipo_id_informante, id_informante, razon_social
@@ -100,6 +108,7 @@ class XmlAnexoDividendosService
         $this->add($dom, $raiz, 'TipoIdInformante', $inf['tipo_id_informante']);
         $this->add($dom, $raiz, 'IdInformante', $inf['id_informante']);
         $this->add($dom, $raiz, 'Anio', $inf['anio']);
+        $this->add($dom, $raiz, 'Mes', self::MES_CABECERA);
         $this->add($dom, $raiz, 'razonSocial', $inf['razon_social']);
         $this->add($dom, $raiz, 'tipoInformante', $inf['tipo_informante']);
     }
