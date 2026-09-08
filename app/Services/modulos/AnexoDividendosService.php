@@ -1295,12 +1295,22 @@ class AnexoDividendosService
         return CatalogoAdi::RESPUESTA[$codigo] ?? $codigo;
     }
 
-    /** El anexo no admite símbolos extraños en los campos de texto. */
+    /**
+     * Limpieza de los campos de texto del anexo, igual que en el ATS
+     * (AtsService::limpiar): mayúsculas, sin tildes ni Ñ, y solo letras, dígitos
+     * y espacios. El validador del SRI rechaza cualquier otro carácter — por
+     * ejemplo los puntos de "VECAINTEGRAL S.A.S.", que pasa a ser
+     * "VECAINTEGRAL S A S".
+     */
     private function limpiarTexto(string $texto): string
     {
-        $texto = (string) preg_replace('/\s+/u', ' ', trim($texto));
+        $texto = mb_strtoupper(trim($texto), 'UTF-8');
+        $texto = strtr($texto, [
+            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U', 'Ñ' => 'N', 'Ü' => 'U',
+        ]);
+        $texto = (string) preg_replace('/[^A-Z0-9 ]/', ' ', $texto);
 
-        return (string) preg_replace('/[^\p{L}\p{N}\s\.\,\-\&\/]/u', '', $texto);
+        return trim((string) preg_replace('/\s+/', ' ', $texto));
     }
 
     private function dirSalida(int $idEmpresa): string

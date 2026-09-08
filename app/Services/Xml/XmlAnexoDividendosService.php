@@ -85,13 +85,21 @@ class XmlAnexoDividendosService
 
     // ── A. Período informado y datos del informante ──────────────────────────
 
+    /**
+     * Orden confirmado por el validador del SRI, que exige TipoIdInformante como
+     * primer elemento del documento (no el año, como sugiere el orden de la
+     * ficha). Es el mismo arranque que el ATS —TipoIDInformante, IdInformante,
+     * razonSocial, Anio—, con el tipo de informante después, que es propio de
+     * este anexo. Ojo con las mayúsculas: el esquema distingue 'TipoIdInformante'
+     * e 'IdInformante' de los demás campos, que van en minúscula inicial.
+     */
     private function construirInformante(DOMDocument $dom, DOMElement $raiz, array $inf): void
     {
-        $this->add($dom, $raiz, 'Anio', $inf['anio']);
-        $this->add($dom, $raiz, 'tipoInformante', $inf['tipo_informante']);
-        $this->add($dom, $raiz, 'tipoIdInformante', $inf['tipo_id_informante']);
+        $this->add($dom, $raiz, 'TipoIdInformante', $inf['tipo_id_informante']);
         $this->add($dom, $raiz, 'IdInformante', $inf['id_informante']);
         $this->add($dom, $raiz, 'razonSocial', $inf['razon_social']);
+        $this->add($dom, $raiz, 'Anio', $inf['anio']);
+        $this->add($dom, $raiz, 'tipoInformante', $inf['tipo_informante']);
     }
 
     // ── B. Información de utilidades ─────────────────────────────────────────
