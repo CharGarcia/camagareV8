@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos
-version: 2.0
+version: 2.1
 orden: 20
 estado: activo
 ---
@@ -142,6 +142,14 @@ y asiento contable) según la configuración de la empresa.
 
 ## Historial de cambios
 
+- **2.1** — Al abrir una **guía de remisión desde la factura** (con sus líneas
+  cargadas) y cerrarla, el modal de la factura quedaba inactivo hasta recargar
+  la página: el cálculo de totales y el armado de las líneas leían las filas de
+  detalle de **toda la pantalla**, incluidas las de la guía, que no tienen
+  precio. Ahora solo leen las filas de la propia factura. Esto evitaba además
+  que, en ese estado, las líneas de la guía pudieran colarse en la factura al
+  guardar. Al crear la guía desde la factura se completa la fecha del documento
+  de sustento y se copian dirección y correo del cliente.
 - **2.0** — El **estado de pago** (pendiente / abonada / pagada) y las columnas
   de cobrado, notas y retención usan la misma regla que Cuentas por Cobrar: una
   retención que sustenta varias facturas reparte lo retenido por línea, y las

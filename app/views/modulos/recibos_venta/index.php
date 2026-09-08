@@ -1284,7 +1284,7 @@ $totalPages = $totalPagesOriginal;
         const detalles = [];
         const idBodega = document.getElementById('m-select-bodega')?.value || '';
 
-        document.querySelectorAll('.row-detalle').forEach(tr => {
+        document.querySelectorAll('#m-tbodyDetalle .row-detalle').forEach(tr => {
             if (hayError) return;
             const idProd = tr.querySelector('.input-id-producto').value;
             const esLibre = tr.querySelector('.input-es-libre')?.value === '1';
@@ -4007,7 +4007,7 @@ $totalPages = $totalPagesOriginal;
          */
         const grupos = {};
 
-        document.querySelectorAll('.row-detalle').forEach(tr => {
+        document.querySelectorAll('#m-tbodyDetalle .row-detalle').forEach(tr => {
             const cant = parseFloat(tr.querySelector('.input-cantidad').value) || 0;
             const prec = parseFloat(tr.querySelector('.input-precio').value) || 0;
             const desc = parseFloat(tr.querySelector('.input-desc').value) || 0;
@@ -4125,7 +4125,7 @@ $totalPages = $totalPagesOriginal;
 
         // Contador de ítems
         const countItems = document.getElementById('m-count-items');
-        if (countItems) countItems.textContent = document.querySelectorAll('.row-detalle').length;
+        if (countItems) countItems.textContent = document.querySelectorAll('#m-tbodyDetalle .row-detalle').length;
 
         // Sincronizar monto si hay un solo pago registrado — SOLO en borrador/nuevo.
         // En un recibo autorizado/anulado esto pisaba el monto REAL ya guardado
@@ -5494,7 +5494,7 @@ $totalPages = $totalPagesOriginal;
 
     // Actualizar saldos de todos los Ã­tems al cambiar la bodega de la cabecera
     document.getElementById('m-select-bodega')?.addEventListener('change', function() {
-        document.querySelectorAll('.row-detalle').forEach(row => {
+        document.querySelectorAll('#m-tbodyDetalle .row-detalle').forEach(row => {
             if (row.dataset.idProducto) {
                 cargarLotesFila(row);
             }
