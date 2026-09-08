@@ -208,7 +208,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
 <!-- Modal: vista previa del Estado de Cambios en el Patrimonio (Supercias ECP) -->
 <div class="modal fade" id="modalEcp" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-fullscreen-xl-down modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-dialog-centered modal-dialog-scrollable" style="max-width: calc(100vw - 40px);">
         <div class="modal-content shadow">
             <div class="modal-header bg-light py-2">
                 <h5 class="modal-title fw-bold"><i class="bi bi-grid-3x3 text-info me-2"></i>Estado de Cambios en el Patrimonio (Supercias ECP)</h5>
