@@ -953,13 +953,22 @@ class EstadosFinancierosService
             if (round($efectivo, 2) == 0) {
                 continue; // transferencia entre cuentas de efectivo o asiento sin efecto neto
             }
-            if (empty($principales)) {
-                $principales = $accesorias; // solo había IVA/retenciones: se clasifican solas
-                $accesorias = [];
-            }
-
             // Efecto en efectivo de cada contrapartida, agrupado por cuenta
             $porCuenta = [];
+            if (empty($principales)) {
+                // Solo había IVA / retenciones (liquidación de impuestos con el SRI): se netean en
+                // una sola contrapartida, porque lo que salió (o entró) de caja es el neto.
+                $mayor = null; $max = -1.0;
+                foreach ($accesorias as $l) {
+                    $a = abs((float) $l['debe'] - (float) $l['haber']);
+                    if ($a > $max) { $max = $a; $mayor = $l; }
+                }
+                $porCuenta[(int) $mayor['id_cuenta']] = ['codigo' => $mayor['codigo'], 'nombre' => 'Liquidación de impuestos (IVA / retenciones)', 'esf' => $mayor['supercias_esf'], 'eri' => $mayor['supercias_eri'], 'valor' => 0.0];
+                foreach ($accesorias as $l) {
+                    $porCuenta[(int) $mayor['id_cuenta']]['valor'] += -((float) $l['debe'] - (float) $l['haber']);
+                }
+                $accesorias = [];
+            }
             foreach ($principales as $l) {
                 $id = (int) $l['id_cuenta'];
                 if (!isset($porCuenta[$id])) {
@@ -1127,11 +1136,19 @@ class EstadosFinancierosService
         }
 
         $totalOtros = 0.0;
+        $revisarPorCasillero = []; // casillero => monto que cayó ahí por falta de regla
         foreach ($ev['efe']['asientos'] as $a) {
             foreach ($a['asignaciones'] as $x) {
-                if ($x['otros']) $totalOtros += abs($x['valor']);
+                if ($x['otros']) {
+                    $totalOtros += abs($x['valor']);
+                    $revisarPorCasillero[$x['casillero']] = ($revisarPorCasillero[$x['casillero']] ?? 0.0) + abs($x['valor']);
+                }
             }
         }
+        foreach ($filas as &$f) {
+            $f['otros'] = ($revisarPorCasillero[$f['codigo']] ?? 0.0) >= 0.005;
+        }
+        unset($f);
 
         return [
             'filas'        => $filas,
