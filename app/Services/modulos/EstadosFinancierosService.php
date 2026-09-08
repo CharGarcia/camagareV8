@@ -1039,10 +1039,11 @@ class EstadosFinancierosService
                 continue;
             }
             if (round($mov, 2) == 0) continue;
-            // Cuenta pivote clase 7: el resultado de los asientos de cierre migrados vive aquí y no
-            // en 4/5/6. El balance la suma al resultado (calcularResultadoEjercicio); el 96 también.
+            // Cuenta pivote clase 7 ("Resumen de resultados" de los cierres migrados): traslada el
+            // resultado al patrimonio. No es efectivo, ni resultado del año, ni capital de trabajo:
+            // el EFE la ignora (el 96 sale del ERI, que sí tiene los ingresos y gastos del año).
             if (str_starts_with((string) $c['codigo'], '7')) {
-                $saldoPivot += -$mov; // haber - debe
+                $saldoPivot += -$mov; // solo informativo
                 continue;
             }
             $cas = \App\Helpers\SuperciasEfe::casilleroCambio($esf);
@@ -1073,11 +1074,12 @@ class EstadosFinancierosService
         // 96 = ERI 600 (ganancia antes de participación e impuesto). Si ese casillero no tiene
         // fórmula en /config/supercias vale 0: se reconstruye desde el resultado del balance
         // sumando de vuelta la participación (601) y el impuesto a la renta (603).
-        // El resultado del balance ($resultadoEjercicio) ya incluye el pivote; el ERI 600 no.
-        $base['96']   = round($eri('600'), 2) != 0 ? ($eri('600') + $saldoPivot) : ($resultadoEjercicio + $eri('601') + $eri('603'));
+        $base['96']   = round($eri('600'), 2) != 0 ? $eri('600') : ($resultadoEjercicio + $eri('601') + $eri('603'));
         $base['9701'] = $eri('5010401') + $eri('5020120') + $eri('5020121') + $eri('5020221') + $eri('5020222');
-        $base['9709'] = $eri('603') + $eri('5020126') + $eri('5020227');
-        $base['9710'] = $eri('601');
+        // 96 está ANTES de participación e impuesto: 9709/9710 los RESTAN (gasto devengado que no
+        // salió de caja; el pago real entra por 950107 o por la variación del pasivo en 9807).
+        $base['9709'] = -($eri('603') + $eri('5020126') + $eri('5020227'));
+        $base['9710'] = -$eri('601');
         $base['97']   = $suma(\App\Helpers\SuperciasEfe::AJUSTES);
         $base['98']   = $suma(\App\Helpers\SuperciasEfe::CAMBIOS);
         $base['9820'] = $base['96'] + $base['97'] + $base['98'];

@@ -146,9 +146,12 @@ contado con IVA entra completa en cobros de ventas. Los asientos de nómina y de
 alta de activos fijos se clasifican por su origen aunque la contrapartida sea
 genérica. Las transferencias entre caja y bancos no generan flujo.
 
-**Conciliación.** 96 es la ganancia antes de participación e impuesto (ERI 600).
-9701 suma las depreciaciones y amortizaciones del ERI, 9709 el impuesto a la
-renta (ERI 603) y 9710 la participación de trabajadores (ERI 601). Los casilleros
+**Conciliación.** 96 es la ganancia antes de participación e impuesto (ERI 600;
+si ese casillero no tiene fórmula se reconstruye desde la utilidad del balance).
+9701 suma las depreciaciones y amortizaciones del ERI. 9709 y 9710 llevan en
+**negativo** el impuesto a la renta (ERI 603) y la participación de trabajadores
+(ERI 601): son gasto devengado que no salió de caja, y su pago real entra por
+950107 o por la variación del pasivo en 9807. Los casilleros
 9801 a 9810 toman la variación del año de las cuentas de capital de trabajo
 según su ESF: clientes (9801), otras cuentas por cobrar (9802), anticipos a
 proveedores (9803), inventarios (9804), otros activos corrientes (9805),
