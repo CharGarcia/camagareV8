@@ -826,8 +826,11 @@
         post('generarAjax', { id: el('adi-id').value })
             .then(res => {
                 pintar(res.data);
-                let html = `<p>Se generó <strong>${esc(res.xml)}</strong> con ${res.registros} dividendo(s) ` +
-                    `de ${res.beneficiarios} beneficiario(s).</p>`;
+                let html = res.registros > 0
+                    ? `<p>Se generó <strong>${esc(res.xml)}</strong> con ${res.registros} dividendo(s) ` +
+                      `de ${res.beneficiarios} beneficiario(s).</p>`
+                    : `<p>Se generó <strong>${esc(res.xml)}</strong> solo con la información de utilidades: ` +
+                      `en el período no se distribuyeron dividendos.</p>`;
                 if (res.errores && res.errores.length) {
                     html += '<div class="alert alert-danger text-start small">El archivo no valida contra el esquema:' +
                         '<ul class="mb-0 mt-1">' + res.errores.map(e => `<li>${esc(e)}</li>`).join('') + '</ul></div>';

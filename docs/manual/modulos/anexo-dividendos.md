@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-dividendos
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo dividendos, ADI, dividendos, utilidades, accionistas, socios, participes, reparto de utilidades, retencion dividendos, impuesto unico dividendos, articulo 39.2, anexo anual SRI, ADI-2025.zip, dimm anexos
-version: 1.4
+version: 1.5
 orden: 31
 estado: activo
 ---
@@ -169,6 +169,11 @@ nombre sus cuentas a su manera, las selecciona igual.
 
 ## Reglas de negocio
 
+**Un anexo sin dividendos es válido.** La sociedad que generó utilidades y no
+las repartió igual debe presentar el ADI informando su sección B; el archivo sale
+sin el bloque de dividendos. Solo se rechaza cuando no hay nada que declarar: ni
+utilidades ni dividendos distribuidos.
+
 **Los dos recálculos.** Son acciones distintas y cada una vive en su pestaña.
 *Recalcular utilidades* (pestaña Utilidades) rehace los campos 1, 2, 7 y 8 de la
 sección B y deja intactos el 3, 4 y 5, que solo se escriben a mano. *Recalcular
@@ -271,6 +276,9 @@ del sistema.
 
 ## Historial de cambios
 
+- **1.5** — El anexo se genera aunque no haya dividendos distribuidos, con la
+  sección de utilidades sola. Se retiró la comprobación del dígito verificador
+  del RUC del informante, que venía de la empresa y no era editable aquí.
 - **1.4** — El botón único de recálculo se separa en dos, cada uno en su
   pestaña: *Recalcular utilidades* (sección B) y *Recalcular impuestos* (ingreso
   gravado y retención del detalle).

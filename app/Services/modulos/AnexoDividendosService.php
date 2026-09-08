@@ -880,10 +880,15 @@ class AnexoDividendosService
                 'advertencias' => $completo['advertencias'],
             ];
         }
-        if ($detalles === []) {
+        // Un anexo sin dividendos es válido y frecuente: la sociedad que generó
+        // utilidades y no las repartió igual debe informarlas (sección B). Solo
+        // se rechaza cuando no hay absolutamente nada que declarar, porque
+        // entonces el archivo llevaría únicamente al informante.
+        if ($detalles === [] && $this->seccionBVacia($anexo)) {
             return [
                 'ok'           => false,
-                'mensaje'      => 'No hay dividendos registrados: el anexo quedaría vacío.',
+                'mensaje'      => 'El anexo no tiene nada que informar: no hay utilidades registradas '
+                                . 'en la sección B ni dividendos distribuidos.',
                 'errores'      => [],
                 'advertencias' => $completo['advertencias'],
             ];
@@ -1166,6 +1171,25 @@ class AnexoDividendosService
             'id_informante'      => $ruc,
             'razon_social'       => trim((string) ($empresa['nombre'] ?? '')),
         ];
+    }
+
+    /** Los ocho campos de la sección B están en cero (nada que informar). */
+    private function seccionBVacia(array $anexo): bool
+    {
+        $campos = [
+            'utilidad_ejercicio', 'utilidad_distribuida_distinta_reinv',
+            'utilidad_reinvertida_con_derecho', 'utilidad_reinvertida_sin_derecho',
+            'utilidad_pagada_anticipado', 'utilidad_no_distribuida',
+            'utilidad_no_distrib_ejer_ant', 'utilidad_distrib_ejercicios_ant',
+        ];
+
+        foreach ($campos as $campo) {
+            if (abs($this->num($anexo[$campo] ?? 0)) >= 0.005) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** Cuentas sugeridas → formato de almacenamiento [{id, lado}]. */
