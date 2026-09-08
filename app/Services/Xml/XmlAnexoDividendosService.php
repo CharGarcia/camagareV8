@@ -16,13 +16,13 @@ use DOMElement;
  * técnica. No calcula ni valida nada.
  *
  * ─── ESTRUCTURA DEL DOCUMENTO ────────────────────────────────────────────────
- * El catálogo del SRI publica los NOMBRES de cada campo (Anio, tipoInformante,
- * montoDividendoDistribuido, …) pero no la jerarquía que los contiene. Los
- * nombres de los nodos CONTENEDORES están agrupados abajo en constantes para
- * poder calzarlos con el esquema oficial (SRI en Línea → Anexos → Anexo de
- * Dividendos → descarga del esquema) sin tocar el resto del serializador:
- * cambiar esas constantes es todo lo que hace falta si el XSD nombra distinto
- * las etiquetas de agrupación.
+ * El catálogo del SRI publica los NOMBRES de cada campo pero no la jerarquía que
+ * los contiene, así que los nodos CONTENEDORES viven en constantes, arriba.
+ *
+ * La cabecera y la sección B están calcadas de un archivo generado con el DIMM
+ * Anexos del SRI, así que su orden y sus nombres son los definitivos. La sección
+ * C (dividendos) sigue deducida: falta contrastarla con un ejemplo del DIMM que
+ * tenga al menos un dividendo distribuido.
  *
  * Los nombres de los campos hoja SÍ provienen del catálogo oficial y no deben
  * cambiarse.
@@ -35,8 +35,14 @@ use DOMElement;
 class XmlAnexoDividendosService
 {
     // ── Nodos contenedores (ajustar contra el XSD oficial) ───────────────────
-    public const NODO_RAIZ           = 'adi';
-    public const NODO_UTILIDADES     = 'utilidades';
+    public const NODO_RAIZ = 'adi';
+
+    /**
+     * Contenedor de la sección B, confirmado con un archivo generado por el
+     * DIMM Anexos del SRI. Vacío haría que los ocho campos colgaran de la raíz.
+     */
+    public const NODO_UTILIDADES = 'informacionUtilidad';
+
     public const NODO_DIVIDENDOS     = 'dividendos';
     public const NODO_DIVIDENDO      = 'detalleDividendo';
     public const NODO_DISTRIBUCIONES = 'detalleDistribucion';
@@ -50,18 +56,14 @@ class XmlAnexoDividendosService
     public const RESPUESTA_COMO_TEXTO = true;
 
     /**
-     * Mes que se declara en la cabecera. El ADI es un anexo ANUAL y la ficha no
-     * menciona este campo, pero el esquema lo exige después del año, así que se
-     * emite el mes de cierre del ejercicio. Si el portal rechazara el valor,
-     * aquí se cambia (los otros candidatos son '00' y '01').
+     * Mes de la cabecera. El ADI es anual y la ficha no menciona este campo,
+     * pero el esquema lo exige tras el año y el DIMM del SRI lo emite en '00'.
      */
-    public const MES_CABECERA = '12';
+    public const MES_CABECERA = '00';
 
     /**
-     * Código operativo del anexo, el último campo de la cabecera. En el ATS este
-     * campo vale 'IVA'; aquí se emite 'ADI' por analogía, porque ni la ficha ni
-     * el catálogo lo documentan. Si el portal lo rechaza, el valor se cambia
-     * aquí (candidatos: 'DIV', 'ADI-DIV').
+     * Código operativo, último campo de la cabecera: el ATS usa 'IVA' y el DIMM
+     * emite 'ADI' para este anexo.
      */
     public const CODIGO_OPERATIVO = 'ADI';
 
@@ -85,7 +87,7 @@ class XmlAnexoDividendosService
         $this->construirInformante($dom, $raiz, $informante);
 
         if ($utilidades !== []) {
-            $raiz->appendChild($this->construirUtilidades($dom, $utilidades));
+            $this->construirUtilidades($dom, $raiz, $utilidades);
         }
 
         if ($dividendos !== []) {
@@ -102,11 +104,9 @@ class XmlAnexoDividendosService
     // ── A. Período informado y datos del informante ──────────────────────────
 
     /**
-     * Orden que exige el esquema del SRI, distinto al de la ficha técnica: el
-     * documento empieza por la identificación del informante, luego el año y por
-     * último la razón social. Se fue afinando con los mensajes del validador
-     * ("se encontró X cuando se esperaba Y"), que confirmaron TipoIdInformante e
-     * IdInformante en las dos primeras posiciones y Anio en la tercera.
+     * Orden que exige el esquema del SRI, distinto al de la ficha técnica y
+     * verificado contra un archivo del DIMM: la identificación del informante va
+     * primero, luego el período, la razón social y el código del anexo.
      *
      * Ojo con las mayúsculas: el esquema distingue 'TipoIdInformante' e
      * 'IdInformante' de los demás campos, que llevan minúscula inicial.
@@ -124,20 +124,24 @@ class XmlAnexoDividendosService
 
     // ── B. Información de utilidades ─────────────────────────────────────────
 
-    private function construirUtilidades(DOMDocument $dom, array $u): DOMElement
+    /**
+     * Escribe la sección B dentro de <informacionUtilidad>. Si NODO_UTILIDADES
+     * quedara vacío, los campos colgarían directamente de la raíz.
+     */
+    private function construirUtilidades(DOMDocument $dom, DOMElement $raiz, array $u): void
     {
-        $n = $dom->createElement(self::NODO_UTILIDADES);
+        $destino = self::NODO_UTILIDADES !== ''
+            ? $raiz->appendChild($dom->createElement(self::NODO_UTILIDADES))
+            : $raiz;
 
-        $this->add($dom, $n, 'utilidadEjercicioInformado', $u['utilidad_ejercicio']);
-        $this->add($dom, $n, 'utilidadDistribuidaDistintaReinv', $u['utilidad_distribuida_distinta_reinv']);
-        $this->add($dom, $n, 'utilidadReinvertidaConDerechoReduccion', $u['utilidad_reinvertida_con_derecho']);
-        $this->add($dom, $n, 'utilidadReinvertidaSinDerechoReduccion', $u['utilidad_reinvertida_sin_derecho']);
-        $this->add($dom, $n, 'utilidadPagadaAnticipado', $u['utilidad_pagada_anticipado']);
-        $this->add($dom, $n, 'utilidadNoDistribuidaEjerInfor', $u['utilidad_no_distribuida']);
-        $this->add($dom, $n, 'utilidadNoDistribEjerAntPeriodoInfor', $u['utilidad_no_distrib_ejer_ant']);
-        $this->add($dom, $n, 'utilidadDistribEjerciciosAnteriores', $u['utilidad_distrib_ejercicios_ant']);
-
-        return $n;
+        $this->add($dom, $destino, 'utilidadEjercicioInformado', $u['utilidad_ejercicio']);
+        $this->add($dom, $destino, 'utilidadDistribuidaDistintaReinv', $u['utilidad_distribuida_distinta_reinv']);
+        $this->add($dom, $destino, 'utilidadReinvertidaConDerechoReduccion', $u['utilidad_reinvertida_con_derecho']);
+        $this->add($dom, $destino, 'utilidadReinvertidaSinDerechoReduccion', $u['utilidad_reinvertida_sin_derecho']);
+        $this->add($dom, $destino, 'utilidadPagadaAnticipado', $u['utilidad_pagada_anticipado']);
+        $this->add($dom, $destino, 'utilidadNoDistribuidaEjerInfor', $u['utilidad_no_distribuida']);
+        $this->add($dom, $destino, 'utilidadNoDistribEjerAntPeriodoInfor', $u['utilidad_no_distrib_ejer_ant']);
+        $this->add($dom, $destino, 'utilidadDistribEjerciciosAnteriores', $u['utilidad_distrib_ejercicios_ant']);
     }
 
     // ── C.1. Datos del beneficiario del dividendo distribuido ────────────────
