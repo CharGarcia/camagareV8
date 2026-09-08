@@ -804,6 +804,10 @@ class EstadosFinancierosService
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Cache-Control: max-age=0');
 
+        // Formato exigido por el portal de Supercías (verificado contra archivos aceptados):
+        // separador ESPACIO simple (no tabulador), fin de línea CRLF, sin cabecera, punto decimal,
+        // y TODOS los casilleros del catálogo oficial, incluidos los que valen 0.00.
+        // En ECP cada línea es "fila columna valor".
         $out = fopen('php://output', 'w');
         foreach ($casilleros as $key => $casillero) {
             $valorTxt = number_format((float) $casillero['valor'], 2, '.', '');
@@ -812,10 +816,10 @@ class EstadosFinancierosService
                 $codigo = $partes[0];
                 $subcodigo = $partes[1] ?? '';
                 fwrite($out, $subcodigo !== ''
-                    ? $codigo . "\t" . $subcodigo . "\t" . $valorTxt . "\r\n"
-                    : $codigo . "\t" . $valorTxt . "\r\n");
+                    ? $codigo . ' ' . $subcodigo . ' ' . $valorTxt . "\r\n"
+                    : $codigo . ' ' . $valorTxt . "\r\n");
             } else {
-                fwrite($out, $key . "\t" . $valorTxt . "\r\n");
+                fwrite($out, $key . ' ' . $valorTxt . "\r\n");
             }
         }
         fclose($out);

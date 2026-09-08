@@ -7,7 +7,7 @@ tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
 etiquetas: supercias, superintendencia de compañias, casilleros, formulario niif, estado de situacion financiera, estado de resultado integral, estado de cambios en el patrimonio, flujo de efectivo, esf, eri, ecp, efe, formulas, txt supercias, carga de balances
-version: 1.1
+version: 1.2
 orden: 60
 estado: activo
 ---
@@ -83,7 +83,7 @@ y copie el resultado al campo Fórmula:
 |---|---|
 | Tipo de Estado | ESF, ERI, ECP o EFE. |
 | Código | Código del casillero en el formulario oficial. En ECP es la **fila** (99, 9901, 990101, 9902, 990201…). |
-| Subcódigo | Solo ECP: la **columna**, es decir el componente del patrimonio (301, 302, 303, 30401, 30402, 30501 a 30504, 30601 a 30607, 30701, 30702). |
+| Subcódigo | Solo ECP: la **columna** (301, 302, 303, 30401, 30402, 30501 a 30504, 30601 a 30607, 30701, 30702, más 30 y 31). |
 | Descripción | Nombre del casillero. En ECP se usa `fila / columna`, por ejemplo `SALDO AL FINAL DEL PERÍODO / CAPITAL`. |
 | Ubicar después del código | Opcional. Reordena el casillero detrás del indicado. Vacío al crear lo deja al final; vacío al editar conserva su posición. |
 | Fórmula | Opcional. Si está vacía, el casillero toma su valor de las cuentas mapeadas. |
@@ -98,6 +98,13 @@ Solo superadministradores. No pasa por permisos de submódulo.
   EFE el subcódigo va vacío, así que el código no se repite. En ECP el mismo
   código se repite en todas las columnas y lo que no puede repetirse es la
   pareja código y subcódigo.
+- **La estructura debe estar completa.** El portal exige que el archivo traiga
+  todos los casilleros del formulario, incluidos los que valen 0.00: **376** en
+  ESF, **246** en ERI, **320** en ECP (16 filas × 20 columnas) y **83** en EFE.
+  Si falta uno, rechaza el archivo entero. El botón *Revisar Supercias* de
+  Estados Financieros avisa cuando el catálogo está incompleto.
+- El **orden** de los casilleros (campo *orden*) es el del formulario oficial y
+  así se escriben las líneas del archivo.
 - Los casilleros no se borran físicamente: quedan marcados como eliminados.
 - Un casillero con fórmula ignora las cuentas que lo tengan mapeado; manda la
   fórmula.
@@ -126,19 +133,26 @@ los componentes del patrimonio. Las filas que reconoce el sistema:
 | 990209 | Otros cambios (detallar) |
 | 990210 | Resultado integral total del año (ganancia o pérdida) |
 
-Recomendación: la fila **99** de cada columna con fórmula `[ESF:<columna>]`
+Las **columnas** son los 18 componentes del patrimonio (301, 302, 303, 30401,
+30402, 30501 a 30504, 30601 a 30607, 30701 y 30702) más **30** (patrimonio neto
+atribuible a los propietarios de la controladora) y **31** (participación
+controladora). Son 16 × 20 = 320 celdas.
+
+Recomendación: la fila **99** de cada componente con fórmula `[ESF:<columna>]`
 (por ejemplo `[ESF:301]`), para que el saldo final del ECP sea exactamente el
-del balance. El resto de filas las calcula Estados Financieros a partir de los
-asientos (ver el manual de ese módulo). Si una fila tiene fórmula, la fórmula
-manda sobre ese cálculo.
+del balance. Las columnas **30 y 31 no llevan fórmula**: van en 0.00 salvo que
+la compañía consolide. Ponerles `[ESF:30]` hace que tomen el patrimonio total y
+descuadra el estado. El resto de filas las calcula Estados Financieros a partir
+de los asientos (ver el manual de ese módulo). Si una fila tiene fórmula, la
+fórmula manda sobre ese cálculo.
 
 ## Integraciones con otros módulos
 
 - **Plan de Cuentas**: cada cuenta de nivel 5 indica su casillero ESF, ERI y,
   para el ECP, su columna y opcionalmente su fila de cambios.
-- **Estados Financieros**: botones *Supercias ESF / ERI / ECP / EFE* que
-  descargan los TXT con los datos del reporte en pantalla, y *Ver ECP* para
-  revisar la matriz antes de bajar el archivo.
+- **Estados Financieros**: botones *Supercias ESF* y *ERI*, que descargan el
+  TXT directamente, y *Supercias ECP* y *EFE*, que abren la vista previa y
+  descargan desde ahí. *Revisar Supercias* diagnostica qué falta configurar.
 
 ## Errores frecuentes
 
@@ -152,6 +166,10 @@ manda sobre ese cálculo.
 
 ## Historial de cambios
 
+- **1.2** — Se completa el catálogo oficial (ESF 376, ERI 246, ECP 320, EFE 83)
+  y se fija el orden del formulario. Las columnas 30 y 31 del ECP (patrimonio
+  atribuible a la controladora y participación controladora) forman parte del
+  formulario y van sin fórmula, en 0.00, salvo consolidación.
 - **1.1** — La clave única de un casillero pasa a ser tipo + código +
   subcódigo (antes solo código, lo que impedía editar las filas del ECP). Se
   documenta la estructura del ECP y la fórmula `[ESF:…]` para su fila 99.

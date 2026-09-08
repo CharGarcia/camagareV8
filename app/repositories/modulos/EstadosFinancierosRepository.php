@@ -294,6 +294,14 @@ class EstadosFinancierosRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /** Cuántos casilleros activos tiene la estructura Supercías de un tipo (ESF, ERI, ECP, EFE). */
+    public function contarCasilleros(string $tipo): int
+    {
+        $st = $this->db->prepare("SELECT COUNT(*) FROM supercias_estructuras WHERE tipo = :tipo AND eliminado = false");
+        $st->execute([':tipo' => $tipo]);
+        return (int) $st->fetchColumn();
+    }
+
     /** Casilleros de la estructura Supercías por tipo: codigo => formula (o '' si no tiene). */
     public function getCasillerosEstructura(string $tipo): array
     {

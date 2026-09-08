@@ -17,6 +17,13 @@ use App\repositories\modulos\EstadosFinancierosRepository;
  */
 class SuperciasDiagnosticoService
 {
+    /**
+     * Número de casilleros que exige el portal en cada archivo (verificado contra archivos
+     * aceptados del ejercicio 2025). Si el archivo no los trae todos, el portal responde
+     * "El número total de cuentas no es el correcto" y lista cada casillero faltante.
+     */
+    public const CASILLEROS_OFICIALES = ['ESF' => 376, 'ERI' => 246, 'ECP' => 320, 'EFE' => 83];
+
     public function __construct(
         private EstadosFinancierosRepository $repository,
         private EstadosFinancierosService $estadosService
@@ -34,6 +41,23 @@ class SuperciasDiagnosticoService
         $hallazgos = [];
         $esfEstructura = $this->repository->getCasillerosEstructura('ESF');
         $eriEstructura = $this->repository->getCasillerosEstructura('ERI');
+
+        // ── 0. La estructura debe tener el catálogo COMPLETO: el portal rechaza el archivo con
+        //       "El número total de cuentas no es el correcto" si falta un solo casillero. ────────
+        $itemsCatalogo = [];
+        foreach (self::CASILLEROS_OFICIALES as $tipo => $esperado) {
+            $tiene = $this->repository->contarCasilleros($tipo);
+            if ($tiene !== $esperado) {
+                $itemsCatalogo[] = [
+                    'codigo'   => $tipo,
+                    'nombre'   => 'Catálogo de casilleros incompleto',
+                    'problema' => "La estructura tiene $tiene casilleros y el portal exige $esperado",
+                ];
+            }
+        }
+        $hallazgos[] = $this->hallazgo('catalogo_incompleto', 'Catálogo de casilleros de la estructura', empty($itemsCatalogo) ? 'ok' : 'bloqueante', ['ESF', 'ERI', 'ECP', 'EFE'],
+            'El portal exige que el archivo contenga TODOS los casilleros oficiales, incluidos los que valen 0.00. Si falta alguno, rechaza el archivo completo. Esto es configuración global.',
+            $itemsCatalogo, 'Solicite al administrador del sistema que complete la estructura en /config/supercias.');
         $cuentas = $this->repository->getCuentasConMovimientoParaDiagnostico($idEmpresa, $fechaInicio, $fechaFin);
 
         // ── 1. Cuentas con movimiento sin casillero / con casillero inválido / con casillero de fórmula ──

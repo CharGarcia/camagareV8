@@ -61,7 +61,12 @@ para una consulta rápida, pero no para presentar nada.
   80. Las cuentas sin Código SRI no se incluyen.
 - **Supercias ESF, ERI, ECP y EFE**: archivos de texto (`.txt`) para cargar en
   el portal de la Superintendencia de Compañías. Cada línea es
-  `casillero <tab> valor`; en ECP es `código <tab> subcódigo <tab> valor`.
+  `casillero espacio valor` (en ECP, `fila espacio columna espacio valor`), con
+  punto decimal y sin separador de miles. El archivo trae **todos** los
+  casilleros del formulario, incluidos los que valen 0.00: el portal los exige
+  completos (376 en ESF, 246 en ERI, 320 en ECP y 83 en EFE) y rechaza el
+  archivo entero si falta uno, con el mensaje "El número total de cuentas no es
+  el correcto".
 
 Los archivos Supercias se calculan **con los mismos datos que el reporte en
 pantalla**: mismo rango de fechas, mismo centro de costo y proyecto, y solo
