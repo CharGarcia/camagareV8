@@ -106,35 +106,27 @@ use App\Helpers\PreferenciasHelper;
                                     <span class="input-group-text bg-light">$</span>
                                     <input type="text" id="adi-sbu-texto" class="form-control bg-light" readonly value="0.00">
                                 </div>
-                                <div class="form-text adi-nota" id="adi-sbu-ayuda">
-                                    Franja exenta: 3 SBU por persona natural residente.
-                                </div>
+                                <!-- Solo se usa para avisar cuando el año no tiene salario básico registrado. -->
+                                <div class="form-text adi-nota" id="adi-sbu-ayuda"></div>
                             </div>
-                            <div class="col-md-7">
-                                <label class="form-label small fw-bold d-block">Informante</label>
-                                <div class="border rounded bg-light-subtle px-3 py-2 d-flex flex-wrap gap-4 align-items-center"
-                                     style="min-height: 31px;">
-                                    <span>
-                                        <span class="text-muted adi-nota d-block">Identificación</span>
-                                        <code class="text-secondary" id="adi-info-identificacion">—</code>
-                                    </span>
-                                    <span>
-                                        <span class="text-muted adi-nota d-block">Tipo de identificación</span>
-                                        <span id="adi-info-tipo-id">—</span>
-                                    </span>
-                                    <span>
-                                        <span class="text-muted adi-nota d-block">Tipo de informante</span>
-                                        <span id="adi-info-tipo-informante">—</span>
-                                    </span>
-                                </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold d-block">Identificación</label>
+                                <input type="text" id="adi-info-identificacion" class="form-control form-control-sm bg-light" readonly>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold d-block">Tipo de identificación</label>
+                                <input type="text" id="adi-info-tipo-id" class="form-control form-control-sm bg-light" readonly>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold d-block">Tipo de informante</label>
+                                <input type="text" id="adi-info-tipo-informante" class="form-control form-control-sm bg-light" readonly>
                             </div>
                             <div class="col-md-12">
                                 <label class="form-label small fw-bold d-block">Razón social o apellidos y nombres</label>
                                 <input type="text" id="adi-info-razon-social" class="form-control form-control-sm bg-light" readonly>
-                                <div class="form-text adi-nota" id="adi-info-ayuda">
-                                    Los datos del informante se toman de la empresa activa. Para cambiarlos, edite el
-                                    nombre, el RUC o el tipo de contribuyente en la configuración de la empresa.
-                                </div>
+                                <!-- Solo se usa para avisar si a la empresa le falta el RUC o el tipo de
+                                     contribuyente, o si ese tipo no reporta las secciones que genera el módulo. -->
+                                <div class="form-text adi-nota" id="adi-info-ayuda"></div>
                             </div>
                         </div>
 

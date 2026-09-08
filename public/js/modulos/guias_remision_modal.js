@@ -44,6 +44,9 @@
 
         if (typeof window.aplicarFavoritosModal === 'function') window.aplicarFavoritosModal('#modalGuiaRemision');
         window.GR_aplicarFavoritoTransportista();
+        // Valores por defecto de una guía nueva (después de los favoritos, que mandan):
+        // motivo VENTA y punto de partida = dirección del establecimiento de la serie.
+        window.GR_aplicarDefaultsNueva();
 
         const modalEl = document.getElementById('modalGuiaRemision');
         if (modalEl) {
@@ -116,7 +119,7 @@
         ['gr-motivo','gr-partida','gr-destino','gr-ruta',
          'gr-num-doc-sustento','gr-fecha-doc-sustento','gr-num-aut-doc-sustento',
          'gr-doc-aduanero','gr-cod-est-destino'].forEach(id => {
-            const el = document.getElementById(id); if (el) el.value = '';
+            const el = document.getElementById(id); if (el) { el.value = ''; delete el.dataset.auto; }
         });
         document.getElementById('gr-secuencial').value = '';
         document.getElementById('gr-cod-doc-sustento').value = '01';
@@ -389,7 +392,48 @@
         }
     };
 
+    /**
+     * Autocompletado "suave": escribe `valor` en el campo solo si está vacío o si
+     * su contenido actual es el que puso este mismo mecanismo (data-auto). Así un
+     * texto escrito a mano por el usuario nunca se pisa, pero al cambiar de
+     * cliente o de serie el valor propuesto sí se actualiza.
+     */
+    function GR_setAuto(id, valor) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        valor = (valor || '').toString().trim();
+        if (el.value.trim() === '' || el.value === el.dataset.auto) {
+            el.value = valor;
+            if (valor) el.dataset.auto = valor; else delete el.dataset.auto;
+        }
+    }
+
+    /** Dirección del establecimiento de la serie elegida (data-direccion del <option>). */
+    window.GR_direccionEstablecimiento = function () {
+        const sel = document.getElementById('gr-serie');
+        const opt = sel?.selectedOptions?.[0];
+        if (!opt) return '';
+        if (opt.dataset.direccion) return opt.dataset.direccion;
+        if (window.GR_establecimientos && opt.dataset.idEst) {
+            const est = window.GR_establecimientos.find(e => parseInt(e.id) === parseInt(opt.dataset.idEst));
+            if (est) return est.direccion || '';
+        }
+        return '';
+    };
+
+    /**
+     * Defaults de una guía NUEVA (módulo de guías y desde Facturas de Venta):
+     *   motivo = VENTA, punto de partida = dirección del establecimiento.
+     * Destino y ruta se completan al elegir el cliente (GR_seleccionarCliente).
+     */
+    window.GR_aplicarDefaultsNueva = function () {
+        GR_setAuto('gr-motivo', 'VENTA');
+        GR_setAuto('gr-partida', window.GR_direccionEstablecimiento());
+    };
+
     window.GR_actualizarSecuencial = function () {
+        // Al cambiar de serie en una guía nueva, el punto de partida sigue al establecimiento.
+        if (!idActual) GR_setAuto('gr-partida', window.GR_direccionEstablecimiento());
         if (bloquearSecuencial) return;
         const sel = document.getElementById('gr-serie');
         const idPunto = sel?.value;
@@ -486,22 +530,16 @@
                     // "Correo Destinatario" de Información Adicional (ver GR_seleccionarCliente).
                     window.GR_seleccionarCliente(cab.id_cliente, cab.cliente_nombre, cab.cliente_ruc, cab.cliente_direccion || '', cab.cliente_email || '');
 
-                    // 3. Origen (Dirección del establecimiento actual)
-                    const selSerie = document.getElementById('gr-serie');
-                    if (selSerie) {
-                        const idEst = selSerie.selectedOptions[0]?.dataset.idEst;
-                        // Si GR_establecimientos no está definido, se puede omitir o buscar vía AJAX
-                        if (window.GR_establecimientos) {
-                            const est = window.GR_establecimientos.find(e => parseInt(e.id) === parseInt(idEst));
-                            if (est) document.getElementById('gr-partida').value = est.direccion || '';
-                        }
-                    }
+                    // 3. Origen (dirección del establecimiento de la serie)
+                    GR_setAuto('gr-partida', window.GR_direccionEstablecimiento());
 
-                    // 4. Destino (Dirección del cliente)
-                    document.getElementById('gr-destino').value = cab.cliente_direccion || '';
+                    // 4. Destino y ruta (dirección del cliente) — GR_seleccionarCliente ya
+                    //    los propuso; se reafirman por si el cliente no traía dirección.
+                    GR_setAuto('gr-destino', cab.cliente_direccion || '');
+                    GR_setAuto('gr-ruta',    cab.cliente_direccion || '');
 
-                    // 5. Motivo: Venta
-                    document.getElementById('gr-motivo').value = 'Venta';
+                    // 5. Motivo: VENTA
+                    GR_setAuto('gr-motivo', 'VENTA');
 
                     // 6. Cód. est. destino: 001
                     document.getElementById('gr-cod-est-destino').value = '001';
@@ -605,7 +643,9 @@
         document.getElementById('gr-lbl-cliente-ruc').textContent = identificacion;
         document.getElementById('gr-lbl-cliente-direccion').textContent = direccion;
         document.getElementById('gr-info-cliente').classList.remove('d-none');
-        if (!document.getElementById('gr-destino').value) document.getElementById('gr-destino').value = direccion || '';
+        // Destino y ruta = dirección del cliente (solo si el usuario no escribió otra cosa).
+        GR_setAuto('gr-destino', direccion || '');
+        GR_setAuto('gr-ruta',    direccion || '');
         document.getElementById('gr-dropdown-cliente').style.display = 'none';
 
         // Campos de la pestaña SRI (usados como default al "Enviar por correo"): solo se

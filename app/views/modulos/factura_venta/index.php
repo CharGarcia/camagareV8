@@ -6650,18 +6650,24 @@ $totalPages = $totalPagesOriginal;
             setTimeout(() => {
                 // Pre-seleccionar factura y cliente en el modal de GR
                 if (typeof window.GR_seleccionarCliente === 'function') {
-                    window.GR_seleccionarCliente(idCliente, nombreCliente, rucCliente);
+                    const dirCliente    = document.getElementById('m-lbl-cliente-direccion')?.textContent?.trim() || '';
+                    const correoLbl     = document.getElementById('m-lbl-cliente-correo')?.textContent?.trim() || '';
+                    const correoCliente = /@/.test(correoLbl) ? correoLbl : '';
+                    window.GR_seleccionarCliente(idCliente, nombreCliente, rucCliente, dirCliente, correoCliente);
                 }
-                
+
                 // Llenar datos de sustento
                 const inpNumDoc = document.getElementById('gr-num-doc-sustento');
                 if (inpNumDoc) inpNumDoc.value = `${establecimiento}-${puntoEmision}-${secuencial}`;
-                
+
                 const inpAutDoc = document.getElementById('gr-num-aut-doc-sustento');
                 if (inpAutDoc) inpAutDoc.value = numAutorizacion;
 
-                const inpFechaDoc = document.getElementById('gr-fecha-emision-doc-sustento');
-                if (inpFechaDoc) inpFechaDoc.value = fechaEmision;
+                // Fecha del documento de sustento = fecha de emisión de la factura.
+                // (El id del input de la guía es gr-fecha-doc-sustento; antes se
+                // apuntaba a un id inexistente y la fecha quedaba vacía.)
+                const inpFechaDoc = document.getElementById('gr-fecha-doc-sustento');
+                if (inpFechaDoc) inpFechaDoc.value = (fechaEmision || '').substring(0, 10);
 
                 // Seleccionar tipo 01 (Factura)
                 const selTipo = document.getElementById('gr-cod-doc-sustento');

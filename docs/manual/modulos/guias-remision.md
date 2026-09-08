@@ -33,6 +33,22 @@ Necesita tener registrados:
 6. Añada los productos que se trasladan.
 7. Guarde y envíe al SRI.
 
+### Valores que se completan solos en una guía nueva
+
+Al crear una guía, tanto desde el módulo como desde el modal de Facturas de
+Venta, el sistema propone:
+
+| Campo | Valor propuesto |
+|-------|-----------------|
+| Motivo traslado | `VENTA` |
+| Punto de partida | Dirección del establecimiento de la serie elegida (cambia si cambia la serie) |
+| Punto de llegada (destino) | Dirección del cliente seleccionado |
+| Ruta | Dirección del cliente seleccionado |
+
+Son solo propuestas: si escribe otro texto, el sistema no lo vuelve a pisar
+aunque cambie de cliente o de serie. Los favoritos de campo tienen prioridad
+sobre estos valores.
+
 ### Crear el cliente o el transportista sin salir de la guía
 
 Si el destinatario o el transportista todavía no existen, no hace falta ir a
@@ -204,7 +220,12 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
   listado. Una guía que ya se envió al SRI queda **totalmente en solo lectura**
   (antes algunos campos, como la fecha del documento de sustento, seguían
   editables y una guía nueva abierta después heredaba los controles
-  bloqueados).
+  bloqueados). Al crear la guía **desde el modal de Facturas de Venta**, la
+  **fecha del documento de sustento** se completa con la fecha de la factura
+  (antes quedaba vacía) y se copian también la dirección y el correo del
+  cliente. Toda guía nueva propone **motivo VENTA**, **partida** = dirección
+  del establecimiento y **destino** y **ruta** = dirección del cliente, sin
+  pisar lo que el usuario escriba a mano.
 - **1.7** — La barra superior del modal se ve también en una guía **nueva** e
   incluye los botones **Registrar nuevo cliente** y **Registrar nuevo
   transportista** (según permiso de crear en cada módulo). El registro creado

@@ -145,7 +145,8 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                                             <option value="<?= $p['id'] ?>"
                                                 data-id-est="<?= $p['id_establecimiento'] ?>"
                                                 data-cod-est="<?= htmlspecialchars($p['cod_establecimiento'] ?? '001') ?>"
-                                                data-cod-punto="<?= htmlspecialchars($p['codigo_punto'] ?? '001') ?>">
+                                                data-cod-punto="<?= htmlspecialchars($p['codigo_punto'] ?? '001') ?>"
+                                                data-direccion="<?= htmlspecialchars($p['direccion_establecimiento'] ?? '') ?>">
                                                 <?= htmlspecialchars(($p['cod_establecimiento'] ?? '') . '-' . ($p['codigo_punto'] ?? '')) ?>
                                             </option>
                                         <?php endforeach; ?>

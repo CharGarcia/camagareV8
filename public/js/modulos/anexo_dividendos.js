@@ -291,11 +291,11 @@
         const tipo = datos.tipo_informante || '';
         const tipoIdentificacion = datos.tipo_id_informante || 'R';
 
-        el('adi-info-identificacion').textContent = datos.id_informante || '—';
-        el('adi-info-tipo-id').textContent =
-            (CAT.tipo_identificacion || {})[tipoIdentificacion] || tipoIdentificacion || '—';
-        el('adi-info-tipo-informante').textContent =
-            (CAT.tipo_informante || {})[tipo] || tipo || '—';
+        el('adi-info-identificacion').value = datos.id_informante || '';
+        el('adi-info-tipo-id').value =
+            (CAT.tipo_identificacion || {})[tipoIdentificacion] || tipoIdentificacion || '';
+        el('adi-info-tipo-informante').value =
+            (CAT.tipo_informante || {})[tipo] || tipo || '';
         el('adi-info-razon-social').value = datos.razon_social || '';
 
         const ayuda = el('adi-info-ayuda');
@@ -327,8 +327,7 @@
         }
 
         ayuda.className = 'form-text adi-nota';
-        ayuda.textContent = 'Se toman de la empresa activa. Para cambiarlos, edite el RUC o el tipo de ' +
-            'contribuyente en la configuración de la empresa.';
+        ayuda.innerHTML = '';
     }
 
     /**
@@ -348,8 +347,7 @@
 
         if (sbu > 0) {
             ayuda.className = 'form-text adi-nota';
-            ayuda.innerHTML = 'Franja exenta: <strong>' + money(sbu * 3) +
-                '</strong> (3 SBU) por persona natural residente.';
+            ayuda.innerHTML = '';
         } else {
             ayuda.className = 'form-text adi-nota text-danger';
             ayuda.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>El año ' + esc(anio) +
