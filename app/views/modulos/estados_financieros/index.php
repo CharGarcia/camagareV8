@@ -1019,7 +1019,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         const alerta = document.getElementById('efe-alerta');
         const avisos = [];
         if (d.sin_efectivo) avisos.push('Ninguna cuenta tiene casillero ESF 10101 (Caja / Bancos). Sin eso no hay flujo de efectivo: asigne el ESF a las cuentas de caja y bancos en Plan de Cuentas.');
-        if ((d.total_otros || 0) > 0) avisos.push(`Hay ${formatMoney(d.total_otros)} clasificados en <em>otros cobros / otros pagos</em> (filas amarillas). Revise esas contrapartidas: normalmente les falta el casillero ESF o ERI.`);
+        if ((d.total_otros || 0) > 0) avisos.push(`Hay ${formatMoney(d.total_otros)} clasificados en <em>otros cobros / otros pagos</em> sin una regla que lo justifique (filas amarillas). Revise esas contrapartidas: les falta el casillero ESF o ERI, o tienen uno que no existe en el formulario.`);
         if (d.sin_conciliar && d.sin_conciliar.length > 0) {
             avisos.push(`<strong>${d.sin_conciliar.length} cuenta(s) con movimiento no entran a la conciliación</strong> (ni al ERI ni a los cambios en activos y pasivos). Asígneles el casillero ESF/ERI correcto:<ul class="mb-0 mt-1">`
                 + d.sin_conciliar.map(x => `<li><code>${esc(x.codigo)}</code> ${esc(x.nombre)} — ${esc(x.motivo)}: movimiento ${formatMoney(x.movimiento)}</li>`).join('') + '</ul>');

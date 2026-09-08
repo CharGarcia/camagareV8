@@ -54,15 +54,17 @@ final class SuperciasEfe
      * @param string|null $eri    Casillero ERI de la cuenta de contrapartida.
      * @param bool   $entrada     true si el efectivo entró (valor positivo), false si salió.
      * @param string|null $moduloOrigen modulo_origen de la cabecera (desempate: nómina, activos fijos).
-     * @return array{casillero:string, regla:string}
+     * @return array{casillero:string, regla:string, revisar:bool}  revisar = cayó en "otros" por falta
+     *         de una regla (conviene revisar el mapeo), no porque el casillero "otros" sea el correcto.
      */
     public static function clasificar(?string $esf, ?string $eri, bool $entrada, ?string $moduloOrigen = null): array
     {
         $esf = trim((string) $esf);
         $eri = trim((string) $eri);
-        $pick = fn(?string $cobro, ?string $pago, string $regla) => [
+        $pick = fn(?string $cobro, ?string $pago, string $regla, bool $revisar = false) => [
             'casillero' => $entrada ? ($cobro ?? $pago) : ($pago ?? $cobro),
             'regla'     => $regla,
+            'revisar'   => $revisar,
         ];
         $sw = fn(string $s, array $prefijos) => array_reduce($prefijos, fn($c, $p) => $c || str_starts_with($s, $p), false);
 
@@ -71,6 +73,10 @@ final class SuperciasEfe
         if ($moduloOrigen === 'activos_fijos_alta') return $pick('950208', '950209', 'Alta de activo fijo');
 
         if ($esf !== '') {
+            // IVA, retenciones y crédito tributario liquidados con el SRI: el formulario no tiene
+            // casillero propio; van a "otros" de operación y NO requieren revisión.
+            if (self::esAccesoria($esf))
+                return $pick('95010105', '95010205', 'Impuestos y retenciones liquidados con el SRI (ESF ' . $esf . ')');
             if (in_array($esf, ['2010702', '1010503'], true) || $eri === '603')
                 return $pick('950107', '950107', 'Impuesto a la renta (ESF ' . $esf . ')');
             if ($sw($esf, ['2010703', '2010704', '2010705', '20112', '20207']))
@@ -104,7 +110,7 @@ final class SuperciasEfe
             if (str_starts_with($esf, '3'))
                 return $pick('950301', '950308', 'Patrimonio: resultados / dividendos (ESF ' . $esf . ')');
             if (str_starts_with($esf, '1') || str_starts_with($esf, '2'))
-                return $pick('95010105', '95010205', 'Otros activos / pasivos (ESF ' . $esf . ')');
+                return $pick('95010105', '95010205', 'Otros activos / pasivos (ESF ' . $esf . ' no contemplado)', true);
         }
 
         if ($eri !== '') {
@@ -122,7 +128,7 @@ final class SuperciasEfe
                 return $pick('95010201', '95010201', 'Costos y gastos (ERI ' . $eri . ')');
         }
 
-        return $pick('95010105', '95010205', 'Sin regla: cuenta sin casillero ESF/ERI reconocido');
+        return $pick('95010105', '95010205', 'Sin regla: cuenta sin casillero ESF/ERI reconocido', true);
     }
 
     /**

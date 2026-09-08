@@ -991,7 +991,7 @@ class EstadosFinancierosService
                     'casillero' => $cl['casillero'],
                     'regla'     => $cl['regla'],
                     'valor'     => $v,
-                    'otros'     => in_array($cl['casillero'], \App\Helpers\SuperciasEfe::OTROS, true),
+                    'otros'     => !empty($cl['revisar']), // amarillo solo cuando cayó en "otros" por falta de regla
                 ];
             }
             $asientos[] = [
