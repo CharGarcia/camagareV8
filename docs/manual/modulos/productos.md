@@ -114,14 +114,16 @@ efecto en el salón y en el punto de venta:
   se cobra normal, pero queda fuera de la base sobre la que se calcula el 10%
   de servicio. Pensado para envases, empaques y similares.
 - **Permitir cambiar el precio de este producto en la comanda**: habilita un
-  botón junto a esa línea en la comanda para fijarle un precio distinto. Es para
-  los servicios cuyo valor se pacta en cada venta —el **envío a domicilio**, que
+  botón junto a esa línea —tanto en la **comanda** del salón como en el
+  **carrito del punto de venta**— para fijarle un precio distinto. Es para los
+  servicios cuyo valor se pacta en cada venta —el **envío a domicilio**, que
   depende de la distancia—, no para negociar el precio de los platos.
 
 La segunda marca **no cambia el precio del producto ni el de la carta**: afecta
-solo a la línea de esa comanda. Los ítems del menú la heredan del producto que
-tienen vinculado; un ítem de la carta sin producto vinculado no permite editar
-el precio. Ver *Comandas* para cómo se usa en el salón.
+solo a esa línea de esa venta, así que la siguiente vuelve a nacer con el precio
+de lista. Los ítems del menú la heredan del producto que tienen vinculado; un
+ítem de la carta sin producto vinculado no permite editar el precio. Ver
+*Comandas* y *Punto de venta (POS)* para cómo se usa.
 
 ## Buscar en el listado
 
@@ -162,7 +164,8 @@ aparecer al facturar.
 ## Historial de cambios
 
 - **1.4** — Nueva marca **"Permitir cambiar el precio de este producto en la
-  comanda"** y se documenta la de *No aplicar el recargo por servicio*, que ya
+  comanda"**, que también habilita el botón de precio en el carrito del punto de
+  venta, y se documenta la de *No aplicar el recargo por servicio*, que ya
   existía sin explicación en el manual. Ver *Marcas para el restaurante*.
 
 - **1.3** — Sección *Varios precios por producto* y carga masiva de precios

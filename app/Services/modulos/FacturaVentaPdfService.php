@@ -788,7 +788,7 @@ class FacturaVentaPdfService
 
         $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'IRBPNR', 0.0);
         $yTot += $lh;
-        $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'PROPINA', $propina);
+        $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SERVICIO', $propina);
         $yTot += $lh;
 
         // VALOR TOTAL (negrita, fondo)

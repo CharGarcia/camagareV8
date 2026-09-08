@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
-etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre
-version: 1.8
+etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, precio variable
+version: 1.9
 orden: 25
 estado: activo
 ---
@@ -76,6 +76,27 @@ SRI y el cobro sigue siendo instantáneo.
 > avisa de que la venta pudo haberse registrado igual y pide comprobarlo en
 > *Facturas de Venta* antes de volver a cobrar. Cobrar de nuevo emitiría un
 > segundo comprobante del mismo consumo.
+
+## Cambiar el precio de una línea (envío a domicilio y similares)
+
+Los precios del carrito salen de la lista de precios y no se tocan. La excepción
+son los **servicios cuyo valor se pacta en cada venta** —el caso típico es el
+**envío a domicilio**, que depende de la distancia—: en esos ítems aparece un
+botón con una **etiqueta** (🏷) junto a la línea, que abre la ventana para
+fijarle el precio.
+
+Para que un ítem lo tenga hay que marcarlo primero en su ficha, en **Productos →
+Permitir cambiar el precio de este producto en la comanda**. Mientras no se
+marque nada, el punto de venta funciona exactamente igual que antes.
+
+La ventana pide dos precios que se calculan entre sí: el **precio sin
+impuestos** y el **precio con IVA**, que es en el que piensa el cajero. Si fija
+$2,00 con IVA, la línea queda en $2,00 exactos. Si el ítem no tiene IVA se
+muestra un solo campo.
+
+Cambia **solo esa línea de esa venta**: el precio del producto no se altera, así
+que la siguiente venta vuelve a nacer con el precio de lista. Si la línea tenía
+un descuento mayor que el importe nuevo, el descuento se recorta.
 
 ## El recargo por servicio (el 10%)
 
@@ -212,6 +233,12 @@ venta no deja cobrar y lo dice: hay que crearlas antes en **Formas de Cobros y
 Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba sin
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
+
+- **1.9** — Se puede **cambiar el precio de una línea** del carrito en los
+  productos marcados para ello en su ficha (*Productos → Permitir cambiar el
+  precio de este producto en la comanda*), pensado para el **envío a domicilio**
+  y demás servicios cuyo valor se pacta en cada venta. Solo esos ítems muestran
+  el botón. Ver *Cambiar el precio de una línea*.
 
 - **1.8** — La **tirilla de la venta** respeta la *Presentación de los ítems*
   configurada en el módulo Empresa (pestaña Facturación): agrupa las líneas por

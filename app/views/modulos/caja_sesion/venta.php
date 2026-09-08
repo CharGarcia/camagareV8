@@ -91,7 +91,8 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .pv-qty { display: flex; align-items: center; gap: 4px; }
         .pv-qty button { width: 22px; height: 22px; line-height: 1; padding: 0; }
         .pv-qty span { min-width: 20px; text-align: center; font-size: .8rem; }
-        .pv-linea .btn-desc { width: 30px; height: 22px; line-height: 1; padding: 0; font-size: .7rem; }
+        .pv-linea .btn-desc,
+        .pv-linea .btn-precio { width: 30px; height: 22px; line-height: 1; padding: 0; font-size: .7rem; }
         .pv-linea .total { font-size: .82rem; font-weight: 600; min-width: 56px; text-align: right; }
         .pv-linea .rm { color: #dc3545; cursor: pointer; }
 
@@ -1251,6 +1252,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
             // El cobro real lo decide siempre el servidor (PosVentaService::cobrar());
             // esto solo evita que la vista previa muestre un recargo mayor al que se va a cobrar.
             excluir_recargo: (p.excluir_recargo_servicio === true || p.excluir_recargo_servicio === 'true' || p.excluir_recargo_servicio == 1 || p.excluir_recargo_servicio === 't'),
+            // "Permitir cambiar el precio en la comanda" (ficha del producto):
+            // habilita el botón de precio en esta línea del carrito. Es para los
+            // servicios cuyo valor se pacta en cada venta (envío a domicilio).
+            precio_editable: (p.precio_editable_comanda === true || p.precio_editable_comanda === 'true' || p.precio_editable_comanda == 1 || p.precio_editable_comanda === 't'),
         });
         renderCart();
         enfocarBuscador();
@@ -1648,6 +1653,72 @@ $rutaAjax = $base . '/' . $rutaModulo;
         renderCart();
     }
 
+    /**
+     * Precio de una línea, solo en los productos marcados con "Permitir cambiar
+     * el precio en la comanda" en su ficha: el envío a domicilio y demás
+     * servicios cuyo valor se pacta en cada venta.
+     *
+     * Se piden los dos precios —sin y con impuestos— y se mantienen
+     * sincronizados, porque el cajero piensa en lo que va a cobrar. Fijar "2.00
+     * con IVA" deja la línea en $2.00 exactos, no en $2.01. Mismo modal que en
+     * Comandas; aquí la línea vive en el carrito, así que se guarda al cobrar.
+     */
+    async function abrirPrecioLinea(uid) {
+        const linea = cart.find(l => l.uid === uid);
+        if (!linea) return;
+
+        const pct = parseFloat(linea.pct_iva) || 0;
+        const factor = 1 + pct / 100;
+        const actual = parseFloat(linea.precio_unitario) || 0;
+
+        const campoConIva = pct > 0
+            ? '<label class="form-label small fw-semibold text-uppercase text-muted mb-1 mt-2">Precio con IVA (' + pct + '%)</label>' +
+              '<input type="number" id="pv-precio-iva" class="form-control form-control-sm" value="' + (Math.round(actual * factor * 100) / 100).toFixed(2) + '" step="any" min="0">'
+            : '';
+
+        const res = await Swal.fire({
+            title: 'Cambiar el precio',
+            html: '<div class="text-start">' +
+                  '<div class="small text-muted mb-2">' + escapeHtml(linea.descripcion) + ' — ' + linea.cantidad + ' x</div>' +
+                  '<label class="form-label small fw-semibold text-uppercase text-muted mb-1">Precio sin impuestos</label>' +
+                  '<input type="number" id="pv-precio-base" class="form-control form-control-sm" value="' + actual.toFixed(2) + '" step="any" min="0">' +
+                  campoConIva +
+                  '<div class="small text-muted mt-2">Cambia solo esta línea: el precio del producto no se toca.</div>' +
+                  '</div>',
+            showCancelButton: true,
+            confirmButtonText: 'Guardar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            focusConfirm: false,
+            didOpen: () => {
+                const $base = document.getElementById('pv-precio-base');
+                const $iva = document.getElementById('pv-precio-iva');
+                if ($iva) {
+                    $base.addEventListener('input', () => {
+                        $iva.value = (Math.round((parseFloat($base.value) || 0) * factor * 100) / 100).toFixed(2);
+                    });
+                    $iva.addEventListener('input', () => {
+                        $base.value = ((parseFloat($iva.value) || 0) / factor).toFixed(6);
+                    });
+                }
+                $base.focus();
+                $base.select();
+            },
+            preConfirm: () => {
+                const valor = parseFloat(document.getElementById('pv-precio-base').value);
+                if (isNaN(valor) || valor < 0) { Swal.showValidationMessage('El precio no puede ser negativo.'); return false; }
+                return valor;
+            },
+        });
+        if (!res.isConfirmed) return;
+
+        linea.precio_unitario = res.value;
+        // Un descuento mayor que el importe nuevo dejaría la línea en negativo.
+        const base = linea.precio_unitario * linea.cantidad;
+        if ((linea.descuento || 0) > base) { linea.descuento = Math.round(base * 100) / 100; }
+        renderCart();
+    }
+
     function renderCart() {
         if (!cart.length) {
             $lineas.innerHTML = '<div class="text-center py-4 pv-empty small">El carrito está vacío.<br>Toca un producto para agregarlo.</div>';
@@ -1675,11 +1746,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 row.innerHTML =
                     '<div class="desc"><div class="n">' + escapeHtml(l.descripcion) + loteTag + nupTag + descTag + '</div><div class="p">' + money(l.precio_unitario) + ' c/u</div></div>' +
                     qtyHtml +
+                    (l.precio_editable ? '<button type="button" class="btn btn-outline-primary btn-precio" data-act="precio" title="Cambiar el precio"><i class="bi bi-tag"></i></button>' : '') +
                     '<button type="button" class="btn btn-outline-secondary btn-desc" data-act="desc" title="Aplicar descuento"><i class="bi bi-percent"></i></button>' +
                     '<div class="total">' + totalHtml + '</div>' +
                     '<i class="bi bi-x-lg rm" data-act="rm"></i>';
                 row.querySelector('[data-act="menos"]')?.addEventListener('click', () => cambiarCantidad(l.uid, -1));
                 row.querySelector('[data-act="mas"]')?.addEventListener('click', () => cambiarCantidad(l.uid, 1));
+                row.querySelector('[data-act="precio"]')?.addEventListener('click', () => abrirPrecioLinea(l.uid));
                 row.querySelector('[data-act="desc"]').addEventListener('click', () => abrirDescuentoLinea(l.uid));
                 row.querySelector('[data-act="rm"]').addEventListener('click', () => quitarLinea(l.uid));
                 $lineas.appendChild(row);

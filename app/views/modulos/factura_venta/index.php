@@ -3501,7 +3501,7 @@ $totalPages = $totalPagesOriginal;
                     ${totalDescuento > 0 ? `<tr><td>Descuento</td><td class="num">-$${fmt(totalDescuento)}</td></tr>` : ''}
                     ${ivaLineas}
                     ${totalIce > 0 ? `<tr><td>ICE</td><td class="num">$${fmt(totalIce)}</td></tr>` : ''}
-                    ${parseFloat(cab.propina||0) > 0 ? `<tr><td>Propina</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
+                    ${parseFloat(cab.propina||0) > 0 ? `<tr><td>Servicio</td><td class="num">$${fmt(cab.propina)}</td></tr>` : ''}
                     <tr><td>TOTAL</td><td class="num">$${fmt(total)}</td></tr>
                 </table>
                 ${cab.observaciones ? `<hr class="sep"><div style="font-size:10px;">${esc(cab.observaciones)}</div>` : ''}
