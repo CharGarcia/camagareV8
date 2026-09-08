@@ -196,6 +196,52 @@ class SuperciasDiagnosticoService
             $itemsImp,
             'Registre al último día del período un asiento de diario: Debe en la cuenta de gasto (ERI 603 o 601) y Haber en la cuenta pivote de cierre (clase 7) o en la que recibió el resultado.');
 
+        // Resultado del ejercicio: el ESF (30701 ganancia / 30702 pérdida) y el ERI (707) deben
+        // coincidir. El ESF lo toma del balance (ingresos − costos − gastos de las cuentas 4/5/6,
+        // más la cuenta pivote de cierre) y el ERI de sus propios casilleros, así que difieren
+        // cuando hay cuentas de resultados sin mapear, la cuenta de cierre tiene saldo propio
+        // (doble conteo) o hay saldo en la cuenta pivote de los cierres migrados.
+        $resEsf = $v('ESF', '30701') + $v('ESF', '30702');
+        $resEri = $v('ERI', '707');
+        $difRes = round($resEsf - $resEri, 2);
+        $itemsRes = [];
+        if (abs($difRes) >= 0.01) {
+            $itemsRes[] = ['codigo' => 'ESF 30701/30702', 'nombre' => 'Ganancia (pérdida) neta del período en el balance', 'problema' => number_format($resEsf, 2)];
+            $itemsRes[] = ['codigo' => 'ERI 707', 'nombre' => 'Ganancia (pérdida) neta del período en resultados', 'problema' => number_format($resEri, 2)];
+            $itemsRes[] = ['codigo' => 'Diferencia', 'nombre' => 'ESF − ERI', 'problema' => number_format($difRes, 2)];
+
+            // Pistas concretas sobre el origen de la diferencia
+            $ctaCierreIds = array_filter([$ctasCierre['utilidad']['id'] ?? null, $ctasCierre['perdida']['id'] ?? null]);
+            $pivote = 0.0;
+            foreach ($cuentas as $c) {
+                $neto = (float) $c['haber'] - (float) $c['debe'];
+                if (str_starts_with((string) $c['codigo'], '7')) $pivote += $neto;
+                if (in_array((int) $c['id_cuenta'], $ctaCierreIds, true) && round($neto, 2) != 0) {
+                    $itemsRes[] = ['codigo' => $c['codigo'], 'nombre' => (string) $c['nombre'],
+                        'problema' => 'Cuenta de cierre con movimiento propio en el período (' . number_format($neto, 2) . '): su saldo se suma al resultado calculado y el ESF lo cuenta dos veces'];
+                }
+            }
+            if (round($pivote, 2) != 0) {
+                $itemsRes[] = ['codigo' => 'Clase 7', 'nombre' => 'Cuenta pivote de cierres migrados',
+                    'problema' => 'Saldo ' . number_format($pivote, 2) . ': el balance lo suma al resultado y el ERI no lo ve'];
+            }
+            foreach ($cuentas as $c) {
+                if ((int) $c['nivel'] !== 5) continue;
+                $clase = substr((string) $c['codigo'], 0, 1);
+                if (!in_array($clase, ['4', '5', '6'], true)) continue;
+                $eri = trim((string) ($c['supercias_eri'] ?? ''));
+                $neto = round((float) $c['debe'] - (float) $c['haber'], 2);
+                if ($neto == 0) continue;
+                if ($eri === '' || !isset($eriEstructura[$eri]) || $eriEstructura[$eri] !== '') {
+                    $itemsRes[] = ['codigo' => $c['codigo'], 'nombre' => (string) $c['nombre'],
+                        'problema' => 'Cuenta de resultados que entra al balance pero no al ERI (' . number_format($neto, 2) . ')'];
+                }
+            }
+        }
+        $hallazgos[] = $this->hallazgo('resultado_esf_eri', 'El resultado del ejercicio coincide entre el ESF y el ERI', empty($itemsRes) ? 'ok' : 'bloqueante', ['ESF', 'ERI', 'ECP'],
+            'La ganancia (pérdida) neta del período del balance (ESF 30701 / 30702) debe ser igual a la del estado de resultados (ERI 707). Supercías rechaza los estados si no cuadran entre sí.',
+            $itemsRes, 'Revise las cuentas listadas: mapee las que falten, y si la cuenta de cierre tiene saldo propio, el resultado se está contando dos veces.');
+
         $ecpDif = [];
         foreach ($cas['ECP'] ?? [] as $key => $x) {
             $partes = explode('.', (string) $key, 2);

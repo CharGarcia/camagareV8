@@ -1080,7 +1080,12 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     // ── Diagnóstico Supercias ──────────────────────────────────────────────────────────────
     let diagFormatoPendiente = null; // formato supercias_* que se quiso descargar y quedó a la espera del diagnóstico
 
-    async function revisarSupercias(formatoPendiente = null) {
+    /**
+     * Ejecuta la revisión. `silenciosa` = true (antes de una descarga): no abre el modal si no hay
+     * hallazgos bloqueantes, para no interponer un paso cuando la empresa ya está en orden.
+     * Devuelve true si se puede descargar sin problemas.
+     */
+    async function revisarSupercias(formatoPendiente = null, silenciosa = false) {
         const fInicio = document.getElementById('fecha_inicio').value;
         const fFin = document.getElementById('fecha_fin').value;
         if (!fInicio || !fFin) {
@@ -1090,25 +1095,29 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         diagFormatoPendiente = formatoPendiente;
         const centro = document.getElementById('filtro_centro_costo').value;
         const proyecto = document.getElementById('filtro_proyecto').value;
-        const modalEl = document.getElementById('modalDiagSupercias');
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiagSupercias'));
         document.getElementById('loader-diag').classList.remove('d-none');
         document.getElementById('content-diag').classList.add('d-none');
         document.getElementById('btn-diag-descargar').classList.add('d-none');
-        modal.show();
+        if (!silenciosa) modal.show();
         try {
             const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto });
             const res = await fetch(`${urlBase}/diagnosticoSuperciasAjax?${params.toString()}`).then(r => r.json());
-            if (!res.success) { Swal.fire('Error', res.error || 'No se pudo hacer la revisión.', 'error'); modal.hide(); return false; }
+            if (!res.success) {
+                if (!silenciosa) { Swal.fire('Error', res.error || 'No se pudo hacer la revisión.', 'error'); modal.hide(); }
+                return silenciosa; // si falla la revisión previa, no bloquear la descarga
+            }
+            const limpio = res.data.resumen.bloqueantes === 0;
+            if (silenciosa && limpio) return true; // todo en orden: se descarga sin mostrar nada
             renderDiagSupercias(res.data);
             document.getElementById('loader-diag').classList.add('d-none');
             document.getElementById('content-diag').classList.remove('d-none');
-            return res.data.resumen.bloqueantes === 0;
+            if (silenciosa) modal.show();
+            return limpio;
         } catch (e) {
             console.error(e);
-            Swal.fire('Error', 'Error de red o servidor al hacer la revisión.', 'error');
-            modal.hide();
-            return false;
+            if (!silenciosa) { Swal.fire('Error', 'Error de red o servidor al hacer la revisión.', 'error'); modal.hide(); }
+            return silenciosa;
         }
     }
 
@@ -1217,13 +1226,13 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             Swal.fire({ icon: 'warning', title: 'Atención', text: 'Por favor seleccione un rango de fechas válido.' });
             return;
         }
-        // Antes de descargar un archivo Supercias se revisa la empresa; si hay bloqueantes se
-        // muestra la revisión y el usuario decide (botón "Descargar de todos modos").
+        // Antes de descargar un archivo Supercias se revisa la empresa en silencio: si todo está en
+        // orden la descarga sigue sin interrupción; si hay algo que corregir se muestra la revisión
+        // y el usuario decide (botón "Descargar de todos modos").
         if (!omitirRevision && formato.startsWith('supercias_')) {
-            const limpio = await revisarSupercias(formato);
+            const limpio = await revisarSupercias(formato, true);
             if (!limpio) return;
             diagFormatoPendiente = null;
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiagSupercias')).hide();
         }
 
         let url = `${urlBase}/exportar?tipo=${tipoReporteActivo}&formato=${formato}&fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`;
