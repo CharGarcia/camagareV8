@@ -30,6 +30,11 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
     #modalGuiaRemision.gr-solo-lectura .remove-row-gr,
     #modalGuiaRemision.gr-solo-lectura #btn-gr-crear-cliente,
     #modalGuiaRemision.gr-solo-lectura #btn-gr-crear-transportista { display: none !important; }
+    /* Inputs de las tablas (detalle / info adicional) bloqueados: mismo aspecto que
+       los .form-control:disabled de Bootstrap que usa Facturas de Venta, en vez del
+       gris apagado por defecto del navegador. Va aquí (y no en index.php) porque
+       este modal también se incluye desde Facturas de Venta. */
+    #modalGuiaRemision .input-detalle:disabled { background-color: var(--bs-secondary-bg); color: var(--bs-body-color); opacity: 1; }
 </style>
 <div class="modal fade modal-gr" id="modalGuiaRemision" tabindex="-1" aria-labelledby="modalGRLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered">

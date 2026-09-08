@@ -284,7 +284,7 @@
          'gr-partida','gr-destino','gr-ruta','gr-placa',
          'gr-num-doc-sustento','gr-doc-aduanero','gr-cod-est-destino',
          'gr-search-transportista','gr-search-cliente'
-        ].forEach(id => { const el = document.getElementById(id); if (el) el.readOnly = !esBorrador; });
+        ].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !esBorrador; });
         document.getElementById('gr-cod-doc-sustento').disabled = !esBorrador;
         window.GR_aplicarSoloLectura(esBorrador);
 
@@ -327,6 +327,9 @@
         document.getElementById('gr-tbody-adicional').innerHTML = '';
         (adicional || []).forEach(a => window.GR_agregarAdicionalLinea(a));
         window.GR_asegurarLineaAdicional();
+        // Segunda pasada ya con las filas de detalle/adicionales en el DOM, para
+        // que todo el formulario quede uniformemente bloqueado (o libre).
+        window.GR_aplicarSoloLectura(esBorrador);
         window.GR_cargarHistorialSri(cab.id);
 
         window.GR_ID_ACTIVO = cab.id;
@@ -345,13 +348,12 @@
     window.GR_aplicarSoloLectura = function (esBorrador) {
         const pane = document.getElementById('gr-tab-guia');
         if (pane) {
-            pane.querySelectorAll('input, select, textarea').forEach(el => {
-                if (el.type === 'hidden') return;
-                if (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio') {
-                    el.disabled = !esBorrador;
-                } else if (el.id !== 'gr-secuencial') { // el secuencial es solo lectura siempre
-                    el.readOnly = !esBorrador;
-                }
+            // `disabled` (no `readonly`), igual que fvAplicarSoloLectura() en
+            // Facturas de Venta: Bootstrap 5.3 solo pinta el fondo gris de
+            // "bloqueado" en :disabled; un [readonly] se ve como un input normal.
+            pane.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(el => {
+                if (el.id === 'gr-secuencial') return; // readonly siempre, no se toca
+                el.disabled = !esBorrador;
             });
         }
         const modalEl = document.getElementById('modalGuiaRemision');
@@ -628,7 +630,7 @@
         if (!tbody) return;
         const tr = document.createElement('tr');
         tr.className = 'row-detalle';
-        const ro = esBorrador ? '' : 'readonly';
+        const ro = esBorrador ? '' : 'disabled';
         tr.innerHTML = `
             <td class="p-0 text-center align-middle" style="width:36px;font-size:.78rem;color:#6c757d"></td>
             <td class="p-0" style="width:110px">
@@ -711,7 +713,7 @@
         if (!tbody) return;
         const tr = document.createElement('tr');
         tr.className = 'row-adicional';
-        const ro = esBorrador ? '' : 'readonly';
+        const ro = esBorrador ? '' : 'disabled';
 
         // Manejar tanto objeto {nombre, valor} como pasar nombre y valor como argumentos (legacy)
         let n = '', v = '';
@@ -720,7 +722,9 @@
 
         const esProtegido = GR_ADIC_PROTEGIDOS.includes(n.trim().toLowerCase());
         if (esProtegido) tr.classList.add('row-adicional-protegida');
-        const roNombre = (ro || esProtegido) ? 'readonly' : '';
+        // Guía bloqueada → disabled (mismo aspecto que FV); línea de sistema en
+        // borrador → solo readonly (se puede seguir editando el valor, no el nombre).
+        const roNombre = ro || (esProtegido ? 'readonly' : '');
 
         tr.innerHTML = `
             <td class="p-0">
