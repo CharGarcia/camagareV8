@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
-etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, precio variable
-version: 1.9
+etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, precio variable, servicio del turno, propina voluntaria, reparto al personal
+version: 1.10
 orden: 25
 estado: activo
 ---
@@ -157,11 +157,16 @@ El **fondo inicial no entra en el arqueo** —no es un cobro—, pero se recuerd
 bajo la tabla porque sí está en el cajón: al contar el efectivo hay que
 separarlo de lo cobrado.
 
-Bajo el total aparece **"Propina"**: cuánto de lo cobrado en el turno es
-propina y se reparte al personal. Suma las dos que maneja el sistema —el
-**recargo por servicio** y la **propina voluntaria** que deja el cliente—, que
-viajan en sitios distintos del comprobante. **No se suma al total**: ya está
-dentro de él.
+Bajo el total aparecen dos líneas con lo que se reparte al personal, separadas
+porque no son lo mismo ni se fijan igual:
+
+- **Servicio**: el recargo del local (el 10%), que viaja en el campo de propina
+  del comprobante.
+- **Propina voluntaria**: la que deja el cliente por su cuenta, que se factura
+  como una línea más.
+
+Ninguna de las dos **se suma al total**: ya están dentro de él. Son un "de lo
+cobrado, tanto va al personal".
 
 Ese arqueo es el que permite detectar faltantes el mismo día, no a fin de mes; y
 ahora dice además **por qué medio** falta el dinero, no solo cuánto.
@@ -177,8 +182,9 @@ que registrarlo desde el módulo *Ingresos*.
 Al confirmar, el sistema envía automáticamente el detalle del cierre al **correo
 registrado en la empresa** (*Empresa → Datos generales*). El mensaje lleva el
 turno y el cajero, las horas de apertura y cierre, el cobrado por forma de pago,
-el total de propina del turno, y el arqueo completo: fondo inicial, esperado,
-contado y diferencia, más las observaciones si las hubo.
+el **servicio** y la **propina voluntaria** del turno —cada uno en su línea, igual
+que en pantalla—, y el arqueo completo: fondo inicial, esperado, contado y
+diferencia, más las observaciones si las hubo.
 
 Si la empresa no tiene correo configurado —o el envío falla— **la caja se cierra
 igual**: solo aparece un aviso explicando que el detalle no salió. El cierre
@@ -233,6 +239,13 @@ venta no deja cobrar y lo dice: hay que crearlas antes en **Formas de Cobros y
 Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba sin
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
+
+- **1.10** — El cierre ya no muestra una sola línea de "Propina": ahora separa
+  el **Servicio** (el recargo del local) de la **Propina voluntaria** (la que
+  deja el cliente), tanto en la pantalla del arqueo como en el correo del
+  cierre. Antes se sumaban en un único importe y no había forma de saber cuánto
+  venía de cada origen. La suma de las dos es exactamente lo que antes salía en
+  esa línea.
 
 - **1.9** — Se puede **cambiar el precio de una línea** del carrito en los
   productos marcados para ello en su ficha (*Productos → Permitir cambiar el

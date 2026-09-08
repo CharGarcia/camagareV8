@@ -143,7 +143,13 @@ class CajaSesionService
 
             $sesionCerrada = $this->repository->findById($id, $idEmpresa) ?? $updateData;
             $sesionCerrada['formas_pago'] = $this->cruzarContado($formasPago, $contadas);
-            $sesionCerrada['propina']     = $this->repository->getPropinaDelTurno($id);
+
+            // Separadas por origen: el recargo por servicio del local y la propina
+            // que dejó el cliente. `propina` se conserva como la suma de las dos.
+            $propinas = $this->repository->getPropinasDelTurno($id);
+            $sesionCerrada['propina_servicio']   = $propinas['servicio'];
+            $sesionCerrada['propina_voluntaria'] = $propinas['voluntaria'];
+            $sesionCerrada['propina']            = round($propinas['servicio'] + $propinas['voluntaria'], 2);
 
             // El correo va DESPUÉS del commit y no puede tumbar el cierre: la
             // caja ya está cuadrada y cerrada; si el correo falla, se avisa.
@@ -232,13 +238,17 @@ class CajaSesionService
 
         $formasPago = $this->repository->getCobrosPorFormaPagoEnTurno($id);
         $efectivo   = $this->efectivoDelTurno($id, $formasPago);
+        $propinas   = $this->repository->getPropinasDelTurno($id);
 
         return [
             'formas_pago'     => $formasPago,
             'total_cobrado'   => round(array_sum(array_column($formasPago, 'total')), 2),
-            // Va dentro del total cobrado, no se suma aparte: es un "de esto,
-            // tanto es propina" para saber qué se reparte al personal.
-            'propina'         => $this->repository->getPropinaDelTurno($id),
+            // Van dentro del total cobrado, no se suman aparte: son un "de esto,
+            // tanto se reparte al personal". Separadas por origen, porque el
+            // recargo por servicio lo fija el local y la propina la deja el cliente.
+            'propina_servicio'   => $propinas['servicio'],
+            'propina_voluntaria' => $propinas['voluntaria'],
+            'propina'            => round($propinas['servicio'] + $propinas['voluntaria'], 2),
             'efectivo'        => $efectivo,
             'fondo_inicial'   => round((float) $sesion['fondo_inicial'], 2),
             'monto_esperado'  => round((float) $sesion['fondo_inicial'] + $efectivo, 2),
@@ -328,7 +338,18 @@ class CajaSesionService
         }
 
         $totalCobrado = array_sum(array_column($formasPago, 'total'));
-        $propina      = (float) ($sesion['propina'] ?? 0);
+        // El recargo del local y la propina que dejó el cliente se muestran por
+        // separado: no se fijan igual ni se explican igual a quien reparte.
+        $servicio     = (float) ($sesion['propina_servicio']   ?? $sesion['propina'] ?? 0);
+        $voluntaria   = (float) ($sesion['propina_voluntaria'] ?? 0);
+        $filaPropina  = fn(string $etiqueta, float $valor) => '
+                        <tr>
+                            <td colspan="2" style="padding:2px 12px 8px;text-align:left;color:#666;font-size:13px;">
+                                ' . $etiqueta . '
+                            </td>
+                            <td style="padding:2px 12px 8px;text-align:right;color:#666;font-size:13px;">' . $m($valor) . '</td>
+                            <td colspan="2"></td>
+                        </tr>';
         $diferencia   = (float) ($sesion['diferencia'] ?? 0);
         $colorDif     = abs($diferencia) < 0.01 ? '#198754' : '#dc3545';
 
@@ -364,13 +385,8 @@ class CajaSesionService
                             <th style="padding:8px 12px;text-align:right;">' . $m($sesion['monto_contado'] ?? 0) . '</th>
                             <th style="padding:8px 12px;text-align:right;color:' . $colorDif . ';">' . $m($diferencia) . '</th>
                         </tr>
-                        <tr>
-                            <td colspan="2" style="padding:2px 12px 8px;text-align:left;color:#666;font-size:13px;">
-                                Propina
-                            </td>
-                            <td style="padding:2px 12px 8px;text-align:right;color:#666;font-size:13px;">' . $m($propina) . '</td>
-                            <td colspan="2"></td>
-                        </tr>
+                        ' . $filaPropina('Servicio', $servicio) . '
+                        ' . $filaPropina('Propina voluntaria', $voluntaria) . '
                     </tfoot>
                 </table>
 

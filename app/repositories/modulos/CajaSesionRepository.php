@@ -231,9 +231,28 @@ class CajaSesionRepository extends BaseRepository
      * No se suma al total cobrado: ya está dentro de él. Es un "de lo cobrado,
      * esto es propina".
      */
+    /** Suma de las dos (lo que se reparte al personal). */
     public function getPropinaDelTurno(int $idCajaSesion): float
     {
-        $total = 0.0;
+        $p = $this->getPropinasDelTurno($idCajaSesion);
+
+        return round($p['servicio'] + $p['voluntaria'], 2);
+    }
+
+    /**
+     * Lo que se reparte al personal, separado por origen: el **recargo por
+     * servicio** (el 10% del local, que viaja en el campo `propina` del
+     * comprobante) y la **propina voluntaria** (la que deja el cliente, que se
+     * factura como una línea del producto configurado para ello). Son dos cosas
+     * distintas para el cajero y para quien reparte, aunque las dos salgan del
+     * mismo bolsillo del cliente.
+     *
+     * @return array{servicio: float, voluntaria: float}
+     */
+    public function getPropinasDelTurno(int $idCajaSesion): array
+    {
+        $servicio   = 0.0;
+        $voluntaria = 0.0;
 
         // 1) Campo <propina> del comprobante (recargo por servicio).
         try {
@@ -246,7 +265,7 @@ class CajaSesionRepository extends BaseRepository
                                      AND r.estado <> 'anulado'), 0)"
             );
             $st->execute([':id1' => $idCajaSesion, ':id2' => $idCajaSesion]);
-            $total += (float) $st->fetchColumn();
+            $servicio = (float) $st->fetchColumn();
         } catch (\Throwable $e) {
             error_log('[CajaSesion] No se pudo sumar el recargo por servicio del turno: ' . $e->getMessage());
         }
@@ -256,7 +275,7 @@ class CajaSesionRepository extends BaseRepository
         //    voluntaria.sql), así que solo se consulta si ya existe.
         try {
             if (!(new EmpresaRepository())->tieneColumnaProductoPropina()) {
-                return round($total, 2);
+                return ['servicio' => round($servicio, 2), 'voluntaria' => 0.0];
             }
 
             $st = $this->db->prepare(
@@ -276,12 +295,12 @@ class CajaSesionRepository extends BaseRepository
                   WHERE cs.id = :id AND ee.id_producto_propina IS NOT NULL"
             );
             $st->execute([':id' => $idCajaSesion]);
-            $total += (float) ($st->fetchColumn() ?: 0);
+            $voluntaria = (float) ($st->fetchColumn() ?: 0);
         } catch (\Throwable $e) {
             error_log('[CajaSesion] No se pudo sumar la propina voluntaria del turno: ' . $e->getMessage());
         }
 
-        return round($total, 2);
+        return ['servicio' => round($servicio, 2), 'voluntaria' => round($voluntaria, 2)];
     }
 
     public function cerrar(int $id, int $idEmpresa, array $data): bool

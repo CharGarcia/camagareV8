@@ -131,12 +131,19 @@ $volverA = $volverA ?? null;
                                         <td class="border-0 pt-0"></td>
                                         <td class="border-0 pt-0 text-end fw-bold" id="cx-diferencia">$0.00</td>
                                     </tr>
-                                    <!-- La propina ya está dentro del total: es un
-                                         "de esto, tanto se reparte al personal". -->
+                                    <!-- Las dos ya están dentro del total: son un
+                                         "de esto, tanto se reparte al personal".
+                                         Separadas porque el recargo lo fija el local
+                                         y la propina la deja el cliente. -->
                                     <tr class="text-muted">
-                                        <td class="border-0 pt-0">Propina</td>
+                                        <td class="border-0 pt-0">Servicio</td>
                                         <td class="border-0 pt-0"></td>
-                                        <td class="border-0 pt-0 text-end" id="cx-propina">$0.00</td>
+                                        <td class="border-0 pt-0 text-end" id="cx-propina-servicio">$0.00</td>
+                                    </tr>
+                                    <tr class="text-muted">
+                                        <td class="border-0 pt-0">Propina voluntaria</td>
+                                        <td class="border-0 pt-0"></td>
+                                        <td class="border-0 pt-0 text-end" id="cx-propina-voluntaria">$0.00</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -360,7 +367,10 @@ $volverA = $volverA ?? null;
                 : '<tr><td colspan="3" class="text-muted text-center py-2">Sin cobros en este turno.</td></tr>';
 
             document.getElementById('cx-total-cobrado').textContent = money(r.total_cobrado);
-            document.getElementById('cx-propina').textContent       = money(r.propina);
+            // Si el servidor todavía no manda el desglose (versión anterior), el
+            // recargo cae en la línea de Servicio y la voluntaria queda en cero.
+            document.getElementById('cx-propina-servicio').textContent   = money(r.propina_servicio ?? r.propina);
+            document.getElementById('cx-propina-voluntaria').textContent = money(r.propina_voluntaria ?? 0);
 
             // El fondo inicial no es un cobro: no entra en el arqueo, pero sí
             // está en el cajón, así que se recuerda para no confundir al contar.
