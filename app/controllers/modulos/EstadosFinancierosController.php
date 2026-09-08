@@ -301,7 +301,7 @@ class EstadosFinancierosController extends BaseModuloController
                 : $this->service->getEstadoSituacionFinancieraPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
 
             if ($formato === 'pdf') {
-                $this->service->exportarPdfPorPeriodos($tipo, $datos, $empresaNombre, $rangoFechas);
+                $this->service->exportarPdfPorPeriodos($tipo, $datos, $empresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
             } else {
                 $this->service->exportarExcelPorPeriodos($tipo, $datos, $empresaNombre, $rangoFechas);
             }
@@ -328,7 +328,7 @@ class EstadosFinancierosController extends BaseModuloController
         }
 
         if ($formato === 'pdf') {
-            $this->service->exportarPdf($tipo, $datos, $empresaNombre, $rangoFechas);
+            $this->service->exportarPdf($tipo, $datos, $empresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
         } else if ($formato === 'sri') {
             $ruc = $empresa['ruc'] ?? '';
             $this->service->exportarSri($tipo, $datos, $empresaNombre, $rangoFechas, $ruc);
@@ -352,6 +352,28 @@ class EstadosFinancierosController extends BaseModuloController
             $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
 
             $datos = $this->service->getEcpMatriz($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
+    /**
+     * Vista previa del Estado de Flujos de Efectivo (Supercías): casilleros evaluados, cuadres y
+     * detalle de cada asiento de efectivo con su clasificación.
+     */
+    public function generarEfeAjax(): void
+    {
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
+            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
+            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
+            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+
+            $datos = $this->service->getEfeDetalle($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);

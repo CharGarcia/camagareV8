@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control
-version: 1.6
+etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados
+version: 1.8
 orden: 50
 estado: activo
 ---
@@ -40,6 +40,22 @@ para una consulta rápida, pero no para presentar nada.
 
 - **PDF** y **Excel**: el reporte tal como se ve, con el nivel de agrupación
   elegido.
+- **Formato del PDF**: cada página lleva en la cabecera el **logo** de la
+  empresa, su razón social, RUC, dirección y contacto, el nombre del estado y
+  el periodo ("Del … al …" en resultados, "Al …" en situación financiera), más
+  la línea de filtros aplicados (nivel, centro de costo y proyecto). Las
+  cuentas se muestran con sangría y peso según su nivel, y los **valores van
+  escalonados** al estilo contable: los de nivel 1 y los totales pegados al
+  borde derecho y cada nivel más profundo un poco más a la izquierda (en el
+  comparativo por meses solo cuando la columna del mes deja espacio). Los
+  totales y el resultado del ejercicio van resaltados (verde utilidad, rojo
+  pérdida). Al
+  final aparecen las **firmas del Representante Legal y del Contador** con su
+  nombre y C.I./RUC. Esos datos, igual que el logo, se toman de
+  **Configuración › Empresas** (campos *Representante legal*, *Cédula/RUC del
+  representante*, *Contador* y *RUC del contador*); si están vacíos, la línea
+  de firma sale sin nombre para llenarla a mano. El pie muestra la fecha de
+  emisión y "Página N de M".
 - **Formato SRI**: archivo XML para el formulario de renta. Agrupa las cuentas
   de nivel 5 por su **Código SRI** y suma sus saldos; el RUC va en el concepto
   80. Las cuentas sin Código SRI no se incluyen.
@@ -58,8 +74,9 @@ totales. El filtro de nivel no altera el archivo.
 
 Si un casillero sale en cero cuando debería tener valor, revise que las cuentas
 correspondientes tengan asignado el código Supercias (columna *Ent. control* del
-reporte, o pulse el código de la cuenta para completarlo). El EFE solo se llena
-por fórmulas, porque las cuentas no tienen un casillero EFE propio.
+reporte, o pulse el código de la cuenta para completarlo). El ECP y el EFE no
+usan un casillero propio por cuenta: se calculan a partir de los asientos y del
+mapeo ESF/ERI, como se explica en las dos secciones siguientes.
 
 ### Supercias ECP (Estado de Cambios en el Patrimonio)
 
@@ -90,6 +107,69 @@ saldo inicial y su movimiento, para ubicar la que falta o sobra. Lo que la
 contabilidad no puede distinguir por sí sola (un dividendo frente a una
 transferencia a reservas, cambios de políticas, corrección de errores) se
 resuelve con cuentas separadas y su fila fijada, o retocando en el portal.
+
+### Supercias EFE (Estado de Flujos de Efectivo)
+
+El EFE tiene dos bloques que deben cuadrar entre sí: el **método directo**
+(casilleros 95xx) y la **conciliación** con la utilidad (96 a 9820). El sistema
+los arma sin ningún mapeo adicional, a partir de los asientos y de los
+casilleros ESF y ERI que ya tienen las cuentas.
+
+**Cuentas de efectivo.** Son las que tienen casillero ESF que empieza por 10101
+(Caja, bancos públicos y privados). Sin ese mapeo no hay flujo que calcular.
+
+**Método directo.** Se toma cada asiento contabilizado del rango (sin los de
+apertura) que mueva una cuenta de efectivo. El efecto en efectivo de cada
+contrapartida es su importe con signo contrario, y esa contrapartida se
+clasifica según su casillero:
+
+| Contrapartida | Entrada | Salida |
+|---|---|---|
+| Clientes, anticipos de clientes, ingresos (ERI 4) | 95010101 cobros de ventas | |
+| Proveedores, inventario, anticipos a proveedores, costos y gastos (ERI 5 y 6) | | 95010201 pagos a proveedores |
+| Sueldos y beneficios, IESS, participación trabajadores | | 95010203 pagos a empleados |
+| Impuesto a la renta por pagar o anticipado | | 950107 |
+| Intereses ganados / gastos financieros | 950106 | 950105 |
+| Propiedad, planta y equipo, propiedades de inversión, activos biológicos | 950208 | 950209 |
+| Activos intangibles | 950210 | 950211 |
+| Inversiones y activos financieros | 950204 | 950205 |
+| Préstamos bancarios y de accionistas | 950304 | 950305 |
+| Valores emitidos | 950302 | 950305 |
+| Arrendamientos | 950310 | 950306 |
+| Capital y aportes | 950301 | 950303 |
+| Dividendos por pagar y otras cuentas de patrimonio | 950301 | 950308 |
+| Cualquier otra | 95010105 otros cobros | 95010205 otros pagos |
+
+Las líneas de IVA, retenciones y crédito tributario no se clasifican solas: su
+importe se suma a la contrapartida principal del asiento, así una venta de
+contado con IVA entra completa en cobros de ventas. Los asientos de nómina y de
+alta de activos fijos se clasifican por su origen aunque la contrapartida sea
+genérica. Las transferencias entre caja y bancos no generan flujo.
+
+**Conciliación.** 96 es la ganancia antes de participación e impuesto (ERI 600).
+9701 suma las depreciaciones y amortizaciones del ERI, 9709 el impuesto a la
+renta (ERI 603) y 9710 la participación de trabajadores (ERI 601). Los casilleros
+9801 a 9810 toman la variación del año de las cuentas de capital de trabajo
+según su ESF: clientes (9801), otras cuentas por cobrar (9802), anticipos a
+proveedores (9803), inventarios (9804), otros activos corrientes (9805),
+proveedores (9806), otras cuentas por pagar (9807), beneficios a empleados
+(9808), anticipos de clientes (9809) y otros pasivos (9810). Un aumento de
+activo resta y un aumento de pasivo suma. Los ajustes que la contabilidad no
+identifica (deterioro, provisiones, diferencias de cambio, 9702 a 9711) quedan
+en cero; si aplican, se completan con fórmula en `/config/supercias`.
+
+**Totales.** 9506 es el efectivo de los asientos de apertura, 9505 la suma de
+operación, inversión y financiación, 9507 = 9506 + 9505, y 9820 = 96 + 97 + 98.
+
+El botón **Ver EFE** muestra los casilleros con su valor, tres controles que
+deben estar en cero (9507 contra el ESF 10101, 9505 contra el movimiento
+contable del efectivo, y 9820 contra 9501) y, a la derecha, cada asiento de
+efectivo con sus contrapartidas y el casillero asignado. Lo que cae en *otros
+cobros* u *otros pagos* se marca en amarillo: casi siempre es una cuenta sin
+casillero ESF o ERI, y se corrige asignándoselo desde Plan de Cuentas o pulsando
+el código en el reporte. Si el tercer control no cuadra, revise cuentas de
+capital de trabajo sin ESF, asientos de saldos iniciales sin tipo *apertura* y
+ajustes sin efectivo pendientes de fórmula.
 
 ## Ver o editar una cuenta desde el reporte
 
@@ -229,6 +309,18 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.8** — El **Supercias EFE** se calcula automáticamente: método directo
+  clasificando cada asiento de efectivo por el casillero ESF/ERI de su
+  contrapartida, y conciliación desde el ERI y la variación del capital de
+  trabajo del ESF. Nuevo botón **Ver EFE** con casilleros, controles de cuadre y
+  el detalle de asientos clasificados.
+- **1.7** — Nuevo diseño del **PDF** de los estados financieros (un periodo y
+  por periodos): cabecera con el logo y los datos de la empresa en todas las
+  páginas, título y periodo del estado, filtros aplicados, filas con sangría
+  por nivel de cuenta, totales resaltados y aviso de descuadre en situación
+  financiera, pie con fecha de emisión y paginación, y bloque final de
+  **firmas del Representante Legal y del Contador** con nombre y C.I./RUC
+  tomados de Configuración › Empresas.
 - **1.6** — El **Supercias ECP** se calcula como matriz: saldo de apertura
   (990101), movimientos del año por fila según la columna o la fila fijada en
   la cuenta (9902xx), resultado del ejercicio (990210) y totales. Nuevo botón

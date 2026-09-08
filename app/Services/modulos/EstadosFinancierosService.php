@@ -8,7 +8,6 @@ use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\EstadosFinancierosRepository;
 use App\Services\ReportService;
 use Exception;
-use TCPDF;
 
 class EstadosFinancierosService
 {
@@ -883,10 +882,229 @@ class EstadosFinancierosService
         $ecp = $this->calcularEcp($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $resultadoEjercicio);
         $valoresBase['ECP'] = $ecp['valores_base'];
 
+        // Pasada 1: ESF / ERI / ECP evaluados (con fórmulas). El EFE necesita casilleros del ERI
+        // (utilidad antes de impuestos, depreciación, participación, impuesto) y el ESF 10101.
         $evaluador = new \App\Services\SuperciasEvaluatorService(\App\core\Database::getConnection());
+        $pasada1 = $evaluador->evaluarConValoresBase($valoresBase);
+
+        // EFE: método directo desde los asientos de efectivo + conciliación desde ESF/ERI.
+        $efe = $this->calcularEfe($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $pasada1);
+        $valoresBase['EFE'] = $efe['valores_base'];
+
+        // Pasada 2: todo junto (las fórmulas que el usuario ponga en EFE mandan sobre lo calculado).
         return [
             'casilleros' => $evaluador->evaluarConValoresBase($valoresBase),
             'ecp'        => $ecp,
+            'efe'        => $efe,
+        ];
+    }
+
+    /**
+     * Estado de Flujos de Efectivo (Supercías). Devuelve ['valores_base' => [casillero => valor],
+     * 'asientos' => detalle por asiento de efectivo, 'controles' => cuadres, 'sin_efectivo' => bool].
+     *
+     * Método directo (95xx): por cada asiento contabilizado del rango (sin apertura) que toca una
+     * cuenta de efectivo (ESF 10101xx), el efecto en efectivo de cada contrapartida es
+     * −(debe − haber) de esa línea; las líneas accesorias (IVA, retenciones) se suman a la
+     * contrapartida principal; cada contrapartida se clasifica con SuperciasEfe::clasificar().
+     * Entradas positivas, salidas negativas. Las transferencias entre cuentas de efectivo no
+     * generan flujo.
+     *
+     * Conciliación (96-9820): 96 = ERI 600 (ganancia antes de participación e impuesto);
+     * 9701 = depreciaciones y amortizaciones del ERI; 9709 = impuesto a la renta (ERI 603);
+     * 9710 = participación trabajadores (ERI 601); 98xx = −(variación del año) de las cuentas de
+     * capital de trabajo según su ESF (SuperciasEfe::casilleroCambio()).
+     *
+     * Totales: 9501/9502/9503/9505, 9506 = efectivo en la apertura, 9507 = 9506 + 9505,
+     * 97, 98 y 9820 = 96 + 97 + 98.
+     */
+    public function calcularEfe(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto, array $casillerosEvaluados): array
+    {
+        $base = [];
+        $add = function (string $cas, float $v) use (&$base): void {
+            $base[$cas] = ($base[$cas] ?? 0.0) + $v;
+        };
+
+        // ── Método directo ────────────────────────────────────────────────────────────────────
+        $lineas = $this->repository->getLineasAsientosConEfectivo($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+        $porAsiento = [];
+        foreach ($lineas as $l) {
+            $porAsiento[(int) $l['id_asiento']][] = $l;
+        }
+
+        $asientos = [];
+        $totalEfectivoDirecto = 0.0;
+        foreach ($porAsiento as $idAsiento => $ls) {
+            $cab = $ls[0];
+            $efectivo = 0.0;
+            $principales = [];
+            $accesorias = [];
+            foreach ($ls as $l) {
+                $esf = trim((string) ($l['supercias_esf'] ?? ''));
+                $neto = (float) $l['debe'] - (float) $l['haber'];
+                if (\App\Helpers\SuperciasEfe::esEfectivo($esf)) {
+                    $efectivo += $neto;
+                } elseif (\App\Helpers\SuperciasEfe::esAccesoria($esf)) {
+                    $accesorias[] = $l;
+                } else {
+                    $principales[] = $l;
+                }
+            }
+            if (round($efectivo, 2) == 0) {
+                continue; // transferencia entre cuentas de efectivo o asiento sin efecto neto
+            }
+            if (empty($principales)) {
+                $principales = $accesorias; // solo había IVA/retenciones: se clasifican solas
+                $accesorias = [];
+            }
+
+            // Efecto en efectivo de cada contrapartida, agrupado por cuenta
+            $porCuenta = [];
+            foreach ($principales as $l) {
+                $id = (int) $l['id_cuenta'];
+                if (!isset($porCuenta[$id])) {
+                    $porCuenta[$id] = ['codigo' => $l['codigo'], 'nombre' => $l['nombre'], 'esf' => $l['supercias_esf'], 'eri' => $l['supercias_eri'], 'valor' => 0.0];
+                }
+                $porCuenta[$id]['valor'] += -((float) $l['debe'] - (float) $l['haber']);
+            }
+            // Accesorias → a la contrapartida principal de mayor importe
+            if (!empty($accesorias)) {
+                $idMax = null; $max = -1.0;
+                foreach ($porCuenta as $id => $c) {
+                    if (abs($c['valor']) > $max) { $max = abs($c['valor']); $idMax = $id; }
+                }
+                foreach ($accesorias as $l) {
+                    $porCuenta[$idMax]['valor'] += -((float) $l['debe'] - (float) $l['haber']);
+                }
+            }
+
+            $asignaciones = [];
+            foreach ($porCuenta as $c) {
+                $v = round($c['valor'], 2);
+                if ($v == 0) continue;
+                $cl = \App\Helpers\SuperciasEfe::clasificar($c['esf'], $c['eri'], $v > 0, $cab['modulo_origen'] ?? null);
+                $add($cl['casillero'], $v);
+                $totalEfectivoDirecto += $v;
+                $asignaciones[] = [
+                    'codigo'    => $c['codigo'],
+                    'nombre'    => $c['nombre'],
+                    'casillero' => $cl['casillero'],
+                    'regla'     => $cl['regla'],
+                    'valor'     => $v,
+                    'otros'     => in_array($cl['casillero'], \App\Helpers\SuperciasEfe::OTROS, true),
+                ];
+            }
+            $asientos[] = [
+                'id_asiento'   => $idAsiento,
+                'fecha'        => substr((string) $cab['fecha_asiento'], 0, 10),
+                'origen'       => (string) ($cab['modulo_origen'] ?? ''),
+                'concepto'     => (string) ($cab['concepto'] ?? ''),
+                'efectivo'     => round($efectivo, 2),
+                'asignaciones' => $asignaciones,
+            ];
+        }
+
+        // Totales del método directo. Closure con referencia: $base sigue creciendo después de definirla
+        // (una función flecha capturaría una copia y los totales 97/98 saldrían en cero).
+        $suma = function (array $cods) use (&$base): float {
+            $s = 0.0;
+            foreach ($cods as $c) $s += $base[$c] ?? 0.0;
+            return $s;
+        };
+        $base['950101'] = $suma(\App\Helpers\SuperciasEfe::OPERACION_COBROS);
+        $base['950102'] = $suma(\App\Helpers\SuperciasEfe::OPERACION_PAGOS);
+        $base['9501']   = $base['950101'] + $base['950102'] + $suma(\App\Helpers\SuperciasEfe::OPERACION_OTROS);
+        $base['9502']   = $suma(\App\Helpers\SuperciasEfe::INVERSION);
+        $base['9503']   = $suma(\App\Helpers\SuperciasEfe::FINANCIACION);
+        $base['9504']   = $base['950401'] ?? 0.0;
+        $base['9505']   = $base['9501'] + $base['9502'] + $base['9503'] + $base['9504'];
+        $base['95']     = $base['9501'] + $base['9502'] + $base['9503'];
+
+        // ── Efectivo inicial / final y conciliación ──────────────────────────────────────────
+        $cuentas = $this->repository->getAperturaYMovimientoPorCuenta($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+        $efectivoApertura = 0.0;
+        $efectivoMovimiento = 0.0;
+        $hayCuentasEfectivo = false;
+        foreach ($cuentas as $c) {
+            if ((int) $c['nivel'] !== 5) continue;
+            $esf = trim((string) ($c['supercias_esf'] ?? ''));
+            if (\App\Helpers\SuperciasEfe::esEfectivo($esf)) {
+                $hayCuentasEfectivo = true;
+                $efectivoApertura   += (float) $c['apertura'];
+                $efectivoMovimiento += (float) $c['movimiento'];
+                continue;
+            }
+            $cas = \App\Helpers\SuperciasEfe::casilleroCambio($esf);
+            if ($cas !== null && round((float) $c['movimiento'], 2) != 0) {
+                $add($cas, -(float) $c['movimiento']); // aumento de activo resta efectivo; aumento de pasivo lo suma
+            }
+        }
+        $base['9506'] = round($efectivoApertura, 2);
+        $base['9507'] = $base['9506'] + $base['9505'];
+
+        $eri = fn(string $cod) => (float) ($casillerosEvaluados['ERI'][$cod]['valor'] ?? 0);
+        $base['96']   = $eri('600');
+        $base['9701'] = $eri('5010401') + $eri('5020120') + $eri('5020121') + $eri('5020221') + $eri('5020222');
+        $base['9709'] = $eri('603') + $eri('5020126') + $eri('5020227');
+        $base['9710'] = $eri('601');
+        $base['97']   = $suma(\App\Helpers\SuperciasEfe::AJUSTES);
+        $base['98']   = $suma(\App\Helpers\SuperciasEfe::CAMBIOS);
+        $base['9820'] = $base['96'] + $base['97'] + $base['98'];
+
+        foreach ($base as $k => $v) $base[$k] = round($v, 2);
+
+        $efectivoFinalEsf = round((float) ($casillerosEvaluados['ESF']['10101']['valor'] ?? 0), 2);
+        $controles = [
+            'efectivo_final_esf'      => $efectivoFinalEsf,
+            'dif_9507_vs_esf'         => round($base['9507'] - $efectivoFinalEsf, 2),
+            'movimiento_efectivo'     => round($efectivoMovimiento, 2),
+            'dif_9505_vs_movimiento'  => round($base['9505'] - $efectivoMovimiento, 2),
+            'dif_9820_vs_9501'        => round($base['9820'] - $base['9501'], 2),
+        ];
+
+        return [
+            'valores_base' => $base,
+            'asientos'     => $asientos,
+            'controles'    => $controles,
+            'sin_efectivo' => !$hayCuentasEfectivo,
+        ];
+    }
+
+    /**
+     * Detalle del EFE para la vista previa: casilleros en el orden de la estructura con su valor
+     * ya evaluado, controles de cuadre y el detalle de asientos con su clasificación.
+     */
+    public function getEfeDetalle(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): array
+    {
+        $ev = $this->evaluarSupercias($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
+        $casilleros = $ev['casilleros']['EFE'] ?? [];
+
+        $filas = [];
+        foreach ($casilleros as $cod => $cas) {
+            $cod = (string) $cod;
+            $filas[] = [
+                'codigo'  => $cod,
+                'nombre'  => (string) ($cas['nombre'] ?? ''),
+                'valor'   => round((float) ($cas['valor'] ?? 0), 2),
+                'formula' => (string) ($cas['formula'] ?? ''),
+                'nivel'   => strlen($cod) <= 2 ? 1 : (strlen($cod) <= 4 ? 2 : (strlen($cod) <= 6 ? 3 : 4)),
+                'otros'   => in_array($cod, \App\Helpers\SuperciasEfe::OTROS, true),
+            ];
+        }
+
+        $totalOtros = 0.0;
+        foreach ($ev['efe']['asientos'] as $a) {
+            foreach ($a['asignaciones'] as $x) {
+                if ($x['otros']) $totalOtros += abs($x['valor']);
+            }
+        }
+
+        return [
+            'filas'        => $filas,
+            'controles'    => $ev['efe']['controles'],
+            'asientos'     => $ev['efe']['asientos'],
+            'sin_efectivo' => $ev['efe']['sin_efectivo'],
+            'total_otros'  => round($totalOtros, 2),
         ];
     }
 
@@ -1243,205 +1461,53 @@ class EstadosFinancierosService
     }
 
     /**
-     * PDF horizontal por periodos. Usa orientación horizontal (Landscape) porque el número de
-     * columnas (una por mes) no cabe en A4 vertical.
+     * PDF horizontal por periodos (una columna por mes). El diseño (logo, cabecera de la
+     * empresa, filas por nivel, pie y firmas) vive en EstadosFinancierosPdfService.
+     *
+     * @param array $empresa Fila completa de `empresas` (logo, RUC, representante legal, contador)
      */
-    public function exportarPdfPorPeriodos(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void
+    public function exportarPdfPorPeriodos(string $tipo, array $datos, array $empresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivel = 5): void
     {
-        $esResultados = $tipo === 'resultados_periodos';
-        $labels = array_values($datos['periodos']);
-        $claves = array_keys($datos['periodos']);
-
-        $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8', false);
-        $pdf->SetCreator('Sistema Contable');
-        $pdf->SetAuthor($empresaNombre);
-        $tituloReporte = $esResultados ? 'Estado de Resultados por Periodos' : 'Estado de Situación Financiera por Periodos';
-        $pdf->SetTitle($tituloReporte);
-
-        $pdf->setPrintHeader(false);
-        $pdf->setPrintFooter(false);
-        $pdf->SetAutoPageBreak(TRUE, 15);
-        $pdf->AddPage();
-
-        $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 10, strtoupper($empresaNombre), 0, 1, 'C');
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(0, 8, strtoupper($tituloReporte), 0, 1, 'C');
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(0, 8, "Período: " . $rangoFechas, 0, 1, 'C');
-        $pdf->Ln(5);
-
-        $formatoDinero = function ($val) {
-            return number_format((float)$val, 2, '.', ',');
-        };
-
-        $numColsPeriodo = count($labels) + ($esResultados ? 1 : 0);
-        $anchoCodigo = 8;
-        $anchoCuenta = 25;
-        $anchoPeriodo = max(6, (int)((100 - $anchoCodigo - $anchoCuenta) / max(1, $numColsPeriodo)));
-
-        $html = '<table border="1" cellpadding="2" style="font-size:7px;">
-                    <thead>
-                        <tr style="background-color:#f0f0f0; font-weight:bold;">
-                            <th width="' . $anchoCodigo . '%">Código</th>
-                            <th width="' . $anchoCuenta . '%">Cuenta</th>';
-        foreach ($labels as $lbl) {
-            $html .= '<th width="' . $anchoPeriodo . '%" align="right">' . htmlspecialchars($lbl) . '</th>';
-        }
-        if ($esResultados) {
-            $html .= '<th width="' . $anchoPeriodo . '%" align="right">Total</th>';
-        }
-        $html .= '</tr></thead><tbody>';
-
-        $filaItemHtml = function (array $item) use ($claves, $esResultados, $formatoDinero) {
-            $fila = "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td>";
-            foreach ($claves as $p) {
-                $fila .= '<td align="right">' . $formatoDinero($item['valores'][$p] ?? 0) . '</td>';
-            }
-            if ($esResultados) {
-                $fila .= '<td align="right">' . $formatoDinero($item['total'] ?? array_sum($item['valores'])) . '</td>';
-            }
-            return $fila . '</tr>';
-        };
-
-        $filaTotalHtml = function (string $titulo, array $porPeriodo) use ($claves, $esResultados, $formatoDinero) {
-            $fila = "<tr><td colspan=\"2\" style=\"font-weight:bold;\">{$titulo}</td>";
-            foreach ($claves as $p) {
-                $fila .= '<td align="right" style="font-weight:bold;">' . $formatoDinero($porPeriodo[$p] ?? 0) . '</td>';
-            }
-            if ($esResultados) {
-                $fila .= '<td align="right" style="font-weight:bold;">' . $formatoDinero($porPeriodo['total'] ?? array_sum(array_intersect_key($porPeriodo, array_flip($claves)))) . '</td>';
-            }
-            return $fila . '</tr>';
-        };
-
-        if ($esResultados) {
-            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">INGRESOS</td></tr>';
-            foreach ($datos['ingresos'] as $item) $html .= $filaItemHtml($item);
-            $html .= $filaTotalHtml('TOTAL INGRESOS', $datos['totales']['ingresos']);
-
-            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">COSTOS</td></tr>';
-            foreach ($datos['costos'] as $item) $html .= $filaItemHtml($item);
-            $html .= $filaTotalHtml('TOTAL COSTOS', $datos['totales']['costos']);
-            $html .= $filaTotalHtml('UTILIDAD/PÉRDIDA BRUTA', $datos['totales']['utilidad_bruta']);
-
-            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">GASTOS</td></tr>';
-            foreach ($datos['gastos'] as $item) $html .= $filaItemHtml($item);
-            $html .= $filaTotalHtml('TOTAL GASTOS', $datos['totales']['gastos']);
-            $html .= $filaTotalHtml('UTILIDAD/PÉRDIDA DEL EJERCICIO', $datos['totales']['utilidad_neta']);
-        } else {
-            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">ACTIVOS</td></tr>';
-            foreach ($datos['activos'] as $item) $html .= $filaItemHtml($item);
-            $html .= $filaTotalHtml('TOTAL ACTIVOS', $datos['totales']['activos']);
-
-            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">PASIVOS</td></tr>';
-            foreach ($datos['pasivos'] as $item) $html .= $filaItemHtml($item);
-            $html .= $filaTotalHtml('TOTAL PASIVOS', $datos['totales']['pasivos']);
-
-            $html .= '<tr><td colspan="' . (2 + $numColsPeriodo) . '" style="font-weight:bold;">PATRIMONIO</td></tr>';
-            foreach ($datos['patrimonio'] as $item) $html .= $filaItemHtml($item);
-            $html .= $filaTotalHtml('TOTAL PATRIMONIO', $datos['totales']['patrimonio']);
-            $html .= $filaTotalHtml('TOTAL PASIVO + PATRIMONIO', $datos['totales']['pasivo_patrimonio']);
-        }
-
-        $html .= '</tbody></table>';
-
-        $pdf->writeHTML($html, true, false, true, false, '');
-        $filename = "{$tituloReporte}_" . date('YmdHis') . ".pdf";
-        if (ob_get_length()) ob_end_clean();
-        $pdf->Output($filename, 'D');
-        exit;
+        $filtros = $this->filtrosParaPdf((int)($empresa['id'] ?? 0), $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+        (new EstadosFinancierosPdfService())->exportar($tipo, $datos, $empresa, $filtros);
     }
 
-    public function exportarPdf(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void
+    /**
+     * PDF vertical de un solo periodo. Ver EstadosFinancierosPdfService.
+     *
+     * @param array $empresa Fila completa de `empresas` (logo, RUC, representante legal, contador)
+     */
+    public function exportarPdf(string $tipo, array $datos, array $empresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivel = 5): void
     {
-        $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
-        $pdf->SetCreator('Sistema Contable');
-        $pdf->SetAuthor($empresaNombre);
-        $tituloReporte = $tipo === 'resultados' ? 'Estado de Resultados' : 'Estado de Situación Financiera';
-        $pdf->SetTitle($tituloReporte);
-        
-        $pdf->setPrintHeader(false);
-        $pdf->setPrintFooter(false);
-        $pdf->SetAutoPageBreak(TRUE, 15);
-        $pdf->AddPage();
-        
-        $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 10, strtoupper($empresaNombre), 0, 1, 'C');
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(0, 8, strtoupper($tituloReporte), 0, 1, 'C');
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(0, 8, "Período: " . $rangoFechas, 0, 1, 'C');
-        $pdf->Ln(5);
+        $filtros = $this->filtrosParaPdf((int)($empresa['id'] ?? 0), $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+        (new EstadosFinancierosPdfService())->exportar($tipo, $datos, $empresa, $filtros);
+    }
 
-        $html = '<table border="1" cellpadding="4">
-                    <thead>
-                        <tr style="background-color:#f0f0f0; font-weight:bold;">
-                            <th width="20%">Código</th>
-                            <th width="60%">Cuenta</th>
-                            <th width="20%" align="right">Saldo</th>
-                        </tr>
-                    </thead>
-                    <tbody>';
-
-        $formatoDinero = function($val) {
-            return number_format((float)$val, 2, '.', ',');
+    /**
+     * Filtros del reporte en forma legible para la cabecera del PDF: fechas y nivel, y el
+     * nombre (no el id) del centro de costo y del proyecto seleccionados.
+     */
+    private function filtrosParaPdf(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto, ?int $idProyecto, int $nivel): array
+    {
+        $nombreDe = function (array $lista, ?int $id): ?string {
+            if ($id === null || $id <= 0) {
+                return null;
+            }
+            foreach ($lista as $fila) {
+                if ((int)$fila['id'] === $id) {
+                    return trim(($fila['codigo'] ?? '') . ' - ' . ($fila['nombre'] ?? ''), ' -');
+                }
+            }
+            return '#' . $id;
         };
 
-        if ($tipo === 'resultados') {
-            $html .= '<tr><td colspan="3" style="font-weight:bold;">INGRESOS</td></tr>';
-            foreach ($datos['ingresos'] as $item) {
-                $html .= "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td><td align=\"right\">{$formatoDinero($item['saldo_final'])}</td></tr>";
-            }
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">TOTAL INGRESOS</td><td align=\"right\" style=\"font-weight:bold;\">{$formatoDinero($datos['totales']['ingresos'])}</td></tr>";
-            
-            $html .= '<tr><td colspan="3" style="font-weight:bold;">COSTOS</td></tr>';
-            foreach ($datos['costos'] as $item) {
-                $html .= "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td><td align=\"right\">{$formatoDinero($item['saldo_final'])}</td></tr>";
-            }
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">TOTAL COSTOS</td><td align=\"right\" style=\"font-weight:bold;\">{$formatoDinero($datos['totales']['costos'])}</td></tr>";
-            
-            $lblBruta = $datos['totales']['utilidad_bruta'] >= 0 ? 'UTILIDAD BRUTA' : 'PÉRDIDA BRUTA';
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">{$lblBruta}</td><td align=\"right\" style=\"font-weight:bold; color: ".($datos['totales']['utilidad_bruta'] < 0 ? 'red' : 'black').";\">{$formatoDinero($datos['totales']['utilidad_bruta'])}</td></tr>";
-
-            $html .= '<tr><td colspan="3" style="font-weight:bold;">GASTOS</td></tr>';
-            foreach ($datos['gastos'] as $item) {
-                $html .= "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td><td align=\"right\">{$formatoDinero($item['saldo_final'])}</td></tr>";
-            }
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">TOTAL GASTOS</td><td align=\"right\" style=\"font-weight:bold;\">{$formatoDinero($datos['totales']['gastos'])}</td></tr>";
-            
-            $lblNeta = $datos['totales']['utilidad_neta'] >= 0 ? 'UTILIDAD DEL EJERCICIO' : 'PÉRDIDA DEL EJERCICIO';
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">{$lblNeta}</td><td align=\"right\" style=\"font-weight:bold; color: ".($datos['totales']['utilidad_neta'] < 0 ? 'red' : 'black').";\">{$formatoDinero($datos['totales']['utilidad_neta'])}</td></tr>";
-        } else {
-            $html .= '<tr><td colspan="3" style="font-weight:bold;">ACTIVOS</td></tr>';
-            foreach ($datos['activos'] as $item) {
-                $html .= "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td><td align=\"right\">{$formatoDinero($item['saldo_final'])}</td></tr>";
-            }
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">TOTAL ACTIVOS</td><td align=\"right\" style=\"font-weight:bold;\">{$formatoDinero($datos['totales']['activos'])}</td></tr>";
-            
-            $html .= '<tr><td colspan="3" style="font-weight:bold;">PASIVOS</td></tr>';
-            foreach ($datos['pasivos'] as $item) {
-                $html .= "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td><td align=\"right\">{$formatoDinero($item['saldo_final'])}</td></tr>";
-            }
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">TOTAL PASIVOS</td><td align=\"right\" style=\"font-weight:bold;\">{$formatoDinero($datos['totales']['pasivos'])}</td></tr>";
-            
-            $html .= '<tr><td colspan="3" style="font-weight:bold;">PATRIMONIO</td></tr>';
-            foreach ($datos['patrimonio'] as $item) {
-                $html .= "<tr><td>{$item['codigo']}</td><td>{$item['nombre']}</td><td align=\"right\">{$formatoDinero($item['saldo_final'])}</td></tr>";
-            }
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">TOTAL PATRIMONIO</td><td align=\"right\" style=\"font-weight:bold;\">{$formatoDinero($datos['totales']['patrimonio'])}</td></tr>";
-            
-            $html .= "<tr><td colspan=\"2\" align=\"right\" style=\"font-weight:bold;\">TOTAL PASIVO + PATRIMONIO</td><td align=\"right\" style=\"font-weight:bold;\">{$formatoDinero($datos['totales']['pasivo_patrimonio'])}</td></tr>";
-        }
-
-        $html .= '</tbody></table>';
-
-        $pdf->writeHTML($html, true, false, true, false, '');
-        $filename = "{$tituloReporte}_".date('YmdHis').".pdf";
-        // Limpiar el output buffer
-        if (ob_get_length()) ob_end_clean();
-        $pdf->Output($filename, 'D');
-        exit;
+        return [
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin'    => $fechaFin,
+            'nivel'        => $nivel,
+            'centro_costo' => $nombreDe($idCentroCosto ? $this->repository->getCentrosCostoActivos($idEmpresa) : [], $idCentroCosto),
+            'proyecto'     => $nombreDe($idProyecto ? $this->repository->getProyectosActivos($idEmpresa) : [], $idProyecto),
+        ];
     }
 
     public function generarMayorAuxiliar(

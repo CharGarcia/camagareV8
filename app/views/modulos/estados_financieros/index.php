@@ -129,6 +129,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias EFE" onclick="exportar('supercias_efe')">
                 <i class="bi bi-bank text-info"></i> Supercias EFE
             </button>
+            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Ver en pantalla el Estado de Flujos de Efectivo (Supercias EFE) antes de descargarlo" onclick="verEfe()">
+                <i class="bi bi-cash-stack text-info"></i> Ver EFE
+            </button>
         </div>
         <?php if (!empty($hayGrupoRuc)): ?>
         <button type="button" class="btn btn-outline-primary btn-sm shadow-sm ms-2" onclick="verConsolidadoRuc()">
@@ -242,6 +245,56 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <div class="modal-footer bg-light py-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
                 <button type="button" class="btn btn-primary btn-sm" onclick="exportar('supercias_ecp')"><i class="bi bi-download me-1"></i> Descargar TXT</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: vista previa del Estado de Flujos de Efectivo (Supercias EFE) -->
+<div class="modal fade" id="modalEfe" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-ecp modal-fullscreen-xl-down modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold"><i class="bi bi-cash-stack text-info me-2"></i>Estado de Flujos de Efectivo (Supercias EFE)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loader-efe" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+                </div>
+                <div id="content-efe" class="d-none">
+                    <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>
+                        <strong>Método directo (95xx)</strong>: cada asiento que toca una cuenta de efectivo (ESF 10101) se reparte entre sus contrapartidas y cada una se clasifica por su casillero ESF/ERI. Entradas positivas, salidas negativas.
+                        <strong>Conciliación (96 a 9820)</strong>: utilidad antes de impuestos del ERI, más depreciación, participación e impuesto, más la variación de las cuentas de capital de trabajo del ESF.
+                        Lo que cae en <em>otros cobros / otros pagos</em> se marca en amarillo: conviene revisarlo.
+                    </p>
+                    <div id="efe-controles" class="row g-2 mb-3"></div>
+                    <div id="efe-alerta" class="alert alert-warning py-2 small d-none"></div>
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <h6 class="fw-bold small text-uppercase text-muted">Casilleros</h6>
+                            <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
+                                <table class="table table-sm table-bordered mb-0" id="tabla-efe-casilleros" style="font-size:.75rem;">
+                                    <thead class="table-light"><tr><th>Código</th><th>Concepto</th><th class="text-end" style="width:130px">Valor</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <h6 class="fw-bold small text-uppercase text-muted">Asientos de efectivo y su clasificación</h6>
+                            <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
+                                <table class="table table-sm table-bordered mb-0" id="tabla-efe-asientos" style="font-size:.72rem;">
+                                    <thead class="table-light"><tr><th>Fecha</th><th>Asiento</th><th>Contrapartida</th><th>Casillero</th><th class="text-end" style="width:110px">Valor</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="exportar('supercias_efe')"><i class="bi bi-download me-1"></i> Descargar TXT</button>
             </div>
         </div>
     </div>
@@ -920,6 +973,79 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             <td>${esc(x.fila_cambio)} <span class="text-muted small">${esc(d.filas[x.fila_cambio] || '')}</span></td>
             ${cell(x.saldo_inicial)}${cell(x.movimiento)}
         </tr>`).join('');
+    }
+
+    // Vista previa del EFE (Supercias): casilleros, cuadres y asientos de efectivo clasificados.
+    async function verEfe() {
+        const fInicio = document.getElementById('fecha_inicio').value;
+        const fFin = document.getElementById('fecha_fin').value;
+        if (!fInicio || !fFin) {
+            Swal.fire({ icon: 'warning', title: 'Atención', text: 'Por favor seleccione un rango de fechas válido.' });
+            return;
+        }
+        const centro = document.getElementById('filtro_centro_costo').value;
+        const proyecto = document.getElementById('filtro_proyecto').value;
+
+        const modal = new bootstrap.Modal(document.getElementById('modalEfe'));
+        document.getElementById('loader-efe').classList.remove('d-none');
+        document.getElementById('content-efe').classList.add('d-none');
+        modal.show();
+
+        try {
+            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto });
+            const res = await fetch(`${urlBase}/generarEfeAjax?${params.toString()}`).then(r => r.json());
+            if (!res.success) { Swal.fire('Error', res.error || 'No se pudo calcular el EFE.', 'error'); modal.hide(); return; }
+            renderEfe(res.data);
+            document.getElementById('loader-efe').classList.add('d-none');
+            document.getElementById('content-efe').classList.remove('d-none');
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Error de red o servidor al calcular el EFE.', 'error');
+            modal.hide();
+        }
+    }
+
+    function renderEfe(d) {
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const money = (v) => { const n = parseFloat(v) || 0; return Math.abs(n) < 0.005 ? '' : formatMoney(n); };
+        const c = d.controles || {};
+        const chip = (titulo, valor, ok) => `<div class="col-md-4"><div class="border rounded p-2 small ${ok ? 'bg-success bg-opacity-10 border-success' : 'bg-warning bg-opacity-10 border-warning'}">
+            <div class="text-muted">${titulo}</div><div class="fw-bold ${ok ? 'text-success' : 'text-warning'}">${formatMoney(valor)}</div></div></div>`;
+        document.getElementById('efe-controles').innerHTML =
+            chip('9507 Efectivo al final − ESF 10101 (debe ser 0)', c.dif_9507_vs_esf, Math.abs(c.dif_9507_vs_esf || 0) < 0.01) +
+            chip('9505 Flujo neto − movimiento contable del efectivo (debe ser 0)', c.dif_9505_vs_movimiento, Math.abs(c.dif_9505_vs_movimiento || 0) < 0.01) +
+            chip('9820 Conciliación − 9501 Operación (debe ser 0)', c.dif_9820_vs_9501, Math.abs(c.dif_9820_vs_9501 || 0) < 0.01);
+
+        const alerta = document.getElementById('efe-alerta');
+        const avisos = [];
+        if (d.sin_efectivo) avisos.push('Ninguna cuenta tiene casillero ESF 10101 (Caja / Bancos). Sin eso no hay flujo de efectivo: asigne el ESF a las cuentas de caja y bancos en Plan de Cuentas.');
+        if ((d.total_otros || 0) > 0) avisos.push(`Hay ${formatMoney(d.total_otros)} clasificados en <em>otros cobros / otros pagos</em> (filas amarillas). Revise esas contrapartidas: normalmente les falta el casillero ESF o ERI.`);
+        if (Math.abs(c.dif_9820_vs_9501 || 0) >= 0.01) avisos.push('La conciliación (9820) no coincide con el flujo de operación (9501). Causas típicas: cuentas de capital de trabajo sin ESF, asientos de apertura sin tipo <em>apertura</em>, o ajustes sin efectivo (9702 a 9711) que hay que completar con fórmula en /config/supercias.');
+        if (avisos.length) { alerta.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>' + avisos.join('<br>'); alerta.classList.remove('d-none'); }
+        else alerta.classList.add('d-none');
+
+        const tb1 = document.querySelector('#tabla-efe-casilleros tbody');
+        tb1.innerHTML = (d.filas || []).map(f => {
+            const bold = f.nivel <= 2 ? 'fw-bold' : '';
+            const bg = f.nivel === 1 ? 'table-light' : (f.otros && Math.abs(f.valor) >= 0.005 ? 'table-warning' : '');
+            const pad = 'ps-' + Math.min(4, f.nivel);
+            const n = parseFloat(f.valor) || 0;
+            return `<tr class="${bg}"><td class="text-muted">${esc(f.codigo)}</td><td class="${pad} ${bold}" title="${esc(f.formula ? 'Fórmula: ' + f.formula : '')}">${esc(f.nombre)}${f.formula ? ' <i class="bi bi-calculator text-primary small"></i>' : ''}</td><td class="text-end ${bold} ${n < 0 ? 'text-danger' : ''}">${money(n)}</td></tr>`;
+        }).join('');
+
+        const tb2 = document.querySelector('#tabla-efe-asientos tbody');
+        if (!d.asientos || d.asientos.length === 0) {
+            tb2.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No hay asientos contabilizados que toquen cuentas de efectivo en el rango.</td></tr>';
+            return;
+        }
+        let html = '';
+        d.asientos.forEach(a => {
+            html += `<tr class="table-light"><td class="text-nowrap">${esc(a.fecha)}</td><td colspan="3"><strong>#${a.id_asiento}</strong> <span class="text-muted">${esc(a.origen)}</span> ${esc(a.concepto).substring(0, 80)}</td><td class="text-end fw-bold ${a.efectivo < 0 ? 'text-danger' : ''}">${money(a.efectivo)}</td></tr>`;
+            a.asignaciones.forEach(x => {
+                html += `<tr class="${x.otros ? 'table-warning' : ''}"><td></td><td></td><td>${esc(x.codigo)} ${esc(x.nombre)}</td><td title="${esc(x.regla)}">${esc(x.casillero)} <span class="text-muted">${esc(x.regla).substring(0, 40)}</span></td><td class="text-end ${x.valor < 0 ? 'text-danger' : ''}">${money(x.valor)}</td></tr>`;
+            });
+        });
+        tb2.innerHTML = html;
     }
 
     function exportar(formato) {

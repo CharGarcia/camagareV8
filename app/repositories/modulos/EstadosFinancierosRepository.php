@@ -136,6 +136,102 @@ class EstadosFinancierosRepository
     }
 
     /**
+     * Todas las cuentas de nivel 5 con saldo de apertura (asientos tipo 'apertura' del rango) y
+     * movimiento del resto del rango, ambos con signo DEUDOR (debe - haber). Mismos filtros que los
+     * reportes en pantalla. Base del Estado de Flujos de Efectivo (efectivo inicial, variaciones
+     * de capital de trabajo).
+     */
+    public function getAperturaYMovimientoPorCuenta(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): array
+    {
+        $params = ['id_empresa' => $idEmpresa, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin];
+        $centroCostoFilter = '';
+        if ($idCentroCosto !== null) {
+            $centroCostoFilter = " AND ad.id_centro_costo = :id_centro_costo";
+            $params['id_centro_costo'] = $idCentroCosto;
+        }
+        $proyectoFilter = '';
+        if ($idProyecto !== null) {
+            $proyectoFilter = " AND ad.id_proyecto = :id_proyecto";
+            $params['id_proyecto'] = $idProyecto;
+        }
+
+        $sql = "
+            SELECT
+                pc.id AS id_cuenta, pc.codigo, pc.nombre, pc.nivel, pc.supercias_esf, pc.supercias_eri,
+                COALESCE(SUM(CASE WHEN ac.id IS NOT NULL AND COALESCE(ac.tipo_comprobante, '') = 'apertura'
+                                  THEN ad.debe - ad.haber ELSE 0 END), 0) AS apertura,
+                COALESCE(SUM(CASE WHEN ac.id IS NOT NULL AND COALESCE(ac.tipo_comprobante, '') <> 'apertura'
+                                  THEN ad.debe - ad.haber ELSE 0 END), 0) AS movimiento
+            FROM plan_cuentas pc
+            LEFT JOIN asientos_contables_detalle ad ON pc.id = ad.id_cuenta_contable AND ad.eliminado = false
+                $centroCostoFilter
+                $proyectoFilter
+            LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                AND ac.eliminado = false
+                AND ac.estado = 'contabilizado'
+                AND ac.id_empresa = pc.id_empresa
+                AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
+                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+            WHERE pc.id_empresa = :id_empresa
+              AND pc.eliminado = false
+            GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.supercias_esf, pc.supercias_eri
+            ORDER BY pc.codigo ASC
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Líneas de los asientos contabilizados del rango (sin apertura) que tocan al menos una cuenta
+     * de EFECTIVO (ESF 10101xx), con los datos de la cabecera y el mapeo ESF/ERI de cada cuenta.
+     * Base del método directo del Estado de Flujos de Efectivo.
+     */
+    public function getLineasAsientosConEfectivo(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): array
+    {
+        $params = ['id_empresa' => $idEmpresa, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin];
+        $centroCostoFilter = '';
+        if ($idCentroCosto !== null) {
+            $centroCostoFilter = " AND ad.id_centro_costo = :id_centro_costo";
+            $params['id_centro_costo'] = $idCentroCosto;
+        }
+        $proyectoFilter = '';
+        if ($idProyecto !== null) {
+            $proyectoFilter = " AND ad.id_proyecto = :id_proyecto";
+            $params['id_proyecto'] = $idProyecto;
+        }
+
+        $sql = "
+            SELECT
+                ac.id AS id_asiento, ac.fecha_asiento, ac.modulo_origen, ac.tipo_comprobante, ac.concepto,
+                pc.id AS id_cuenta, pc.codigo, pc.nombre, pc.supercias_esf, pc.supercias_eri,
+                ad.debe, ad.haber
+            FROM asientos_contables_cabecera ac
+            JOIN asientos_contables_detalle ad ON ad.id_asiento = ac.id AND ad.eliminado = false
+                $centroCostoFilter
+                $proyectoFilter
+            JOIN plan_cuentas pc ON pc.id = ad.id_cuenta_contable
+            WHERE ac.id_empresa = :id_empresa
+              AND ac.eliminado = false
+              AND ac.estado = 'contabilizado'
+              AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
+              AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+              AND COALESCE(ac.tipo_comprobante, '') <> 'apertura'
+              AND EXISTS (
+                    SELECT 1
+                    FROM asientos_contables_detalle x
+                    JOIN plan_cuentas p2 ON p2.id = x.id_cuenta_contable
+                    WHERE x.id_asiento = ac.id AND x.eliminado = false
+                      AND p2.supercias_esf LIKE '10101%'
+              )
+            ORDER BY ac.fecha_asiento ASC, ac.id ASC, ad.id ASC
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
      * Catálogo de cuentas de la empresa (todas, sin filtrar por movimiento). Base para armar
      * la matriz cuenta × periodo del reporte "por periodos" (getSaldosPorPeriodo).
      */
