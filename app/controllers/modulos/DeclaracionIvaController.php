@@ -215,6 +215,31 @@ class DeclaracionIvaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Extrae de $_GET/$_POST los valores de los casilleros editables ("ajuste_615" => "12.34").
+     *
+     * Acepta CUALQUIER casillero marcado como editable en /config/sri-casilleros-etiquetas, no
+     * solo los seis que tienen columna propia en declaracion_iva_cabecera: los ajustes del
+     * resumen impositivo (610-614, 622, 623) y la imputación al pago (898) también son campos
+     * que solo el contribuyente puede llenar.
+     *
+     * @return array<string,string> código de casillero => valor tal como llegó
+     */
+    private function ajustesRecibidos(array $fuente): array
+    {
+        $ajustes = [];
+        foreach ($fuente as $clave => $valor) {
+            if (!is_string($clave) || !preg_match('/^ajuste_(\d{3})$/', $clave, $m)) {
+                continue;
+            }
+            if (is_array($valor) || $valor === '' || $valor === null) {
+                continue;
+            }
+            $ajustes[$m[1]] = (string) $valor;
+        }
+        return $ajustes;
+    }
+
     public function exportarExcel(): void
     {
         $this->requireLeer();
@@ -243,14 +268,8 @@ class DeclaracionIvaController extends BaseModuloController
 
         // Casilleros editables tal como están en el formulario abierto (los envía la vista en la
         // URL). Sin esto el Excel exportaba el valor por defecto del servidor y no lo que el
-        // usuario tiene en pantalla cuando ajustó 615/617/481/484/486/902 sin guardar todavía.
-        $ajustes = [];
-        foreach (['615', '617', '481', '484', '486', '902'] as $codigo) {
-            $v = $_GET['ajuste_' . $codigo] ?? '';
-            if ($v !== '' && $v !== null) {
-                $ajustes[$codigo] = $v;
-            }
-        }
+        // usuario tiene en pantalla cuando ajustó un casillero sin guardar todavía.
+        $ajustes = $this->ajustesRecibidos($_GET);
 
         try {
             $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo, $idUsuario, true, $ajustes);
@@ -691,6 +710,9 @@ class DeclaracionIvaController extends BaseModuloController
                 'ajuste_484'    => $_POST['ajuste_484'] ?? '',
                 'ajuste_486'    => $_POST['ajuste_486'] ?? '',
                 'ajuste_902'    => $_POST['ajuste_902'] ?? '',
+                // Resto de casilleros editables (610-614, 622, 623, 898…): no tienen columna
+                // propia, se guardan dentro del snapshot valores_casilleros.
+                'ajustes'       => $this->ajustesRecibidos($_POST),
             ]);
             echo json_encode(['ok' => true, 'declaracion' => $declaracion]);
         } catch (\Throwable $e) {

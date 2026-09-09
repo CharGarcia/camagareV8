@@ -412,15 +412,21 @@
             });
         }
 
+        // Todos los casilleros marcados como editables en /config/sri-casilleros-etiquetas y su
+        // valor actual. No es una lista fija: si mañana se marca otro casillero como editable,
+        // se guarda y se exporta solo, sin tocar código.
+        function ajustesEnPantalla() {
+            return Array.from(formSRI.querySelectorAll('input[data-casillero-editable]'))
+                .map(inp => [inp.getAttribute('data-casillero-editable'), inp.value])
+                .filter(([codigo, valor]) => codigo && valor !== '');
+        }
+
         window.exportarExcel = function() {
             const params = new URLSearchParams(new FormData(form));
             // Los casilleros editables van con el valor que tienen AHORA en pantalla: si no se
             // envían, el Excel exporta el valor por defecto del servidor y no coincide con lo
-            // que el usuario está viendo (ajustes de 615/617/481/484/486/902 sin guardar).
-            ['615', '617', '481', '484', '486', '902'].forEach(codigo => {
-                const inp = formSRI.querySelector('input[data-casillero-editable="' + codigo + '"]');
-                if (inp && inp.value !== '') params.append('ajuste_' + codigo, inp.value);
-            });
+            // que el usuario está viendo (ajustes sin guardar todavía).
+            ajustesEnPantalla().forEach(([codigo, valor]) => params.append('ajuste_' + codigo, valor));
             window.open(`<?= $base ?>/<?= $rutaModulo ?>/exportar-excel?${params.toString()}`, '_blank');
         };
 
@@ -1203,14 +1209,12 @@
                 fd.append('periodo', p.periodo);
                 fd.append('tipo_periodo', p.tipo_periodo);
 
-                // Casilleros editables (615/617 arrastre, 481/484/486 liquidación diferida,
-                // 902 total a pagar): si la tabla ya se generó, se envía el valor actual de cada
-                // input (autocalculado o ajustado a mano por el usuario).
-                const mapaAjustes = { '615': 'ajuste_615', '617': 'ajuste_617', '481': 'ajuste_481', '484': 'ajuste_484', '486': 'ajuste_486', '902': 'ajuste_902' };
-                Object.keys(mapaAjustes).forEach(codigo => {
-                    const inp = formSRI.querySelector('input[data-casillero-editable="' + codigo + '"]');
-                    if (inp) fd.append(mapaAjustes[codigo], inp.value);
-                });
+                // Casilleros editables (615/617 arrastre, 481/484/486 liquidación diferida, 902
+                // total a pagar, y los ajustes del resumen impositivo 610-614/622/623 o la
+                // imputación al pago 898): se envía el valor actual de cada input, autocalculado
+                // o ajustado a mano. Los seis primeros tienen columna propia en la tabla; el
+                // resto se guarda dentro del snapshot de casilleros.
+                ajustesEnPantalla().forEach(([codigo, valor]) => fd.append('ajuste_' + codigo, valor));
 
                 btnGuardar.disabled = true;
                 fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/guardar-ajax`, { method: 'POST', body: fd }).then(data => {

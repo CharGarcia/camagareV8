@@ -270,6 +270,7 @@ class DeclaracionIvaService
         // 2c. Casilleros de arrastre de crédito tributario (605/606 entrante, 615/617 saliente).
         // Solo se calculan si se recibió el contexto del período (tipo_periodo/anio/periodo_valor);
         // sin eso (llamadas antiguas) simplemente no se pintan estos casilleros.
+        $declActual = null; // declaración ya guardada de este período, si la hay (ver 2c y 2d-bis)
         if ($tipoPeriodo !== '' && $anio > 0 && $periodoValor > 0) {
             $ambiente = $this->ambienteEmpresa($idEmpresa);
             [$anioAnt, $periodoAnt] = $this->periodoAnterior($tipoPeriodo, $anio, $periodoValor);
@@ -319,15 +320,36 @@ class DeclaracionIvaService
             $sums['480'] = round($totalTransferencias - $sums['481'], 2);
         }
 
+        // 2d-bis. Casilleros editables SIN columna propia en declaracion_iva_cabecera (los
+        // ajustes del resumen impositivo 610-614/622/623, la imputación al pago 898…): su valor
+        // guardado vive dentro del snapshot valores_casilleros. Se restaura aquí para que al
+        // reabrir un período declarado se vea lo mismo que se guardó.
+        if ($respetarGuardado && !empty($declActual['valores_casilleros'])) {
+            $snapshot = is_array($declActual['valores_casilleros'])
+                ? $declActual['valores_casilleros']
+                : (json_decode((string) $declActual['valores_casilleros'], true) ?: []);
+            foreach ($estructura as $e) {
+                if (empty($e['editable'])) {
+                    continue;
+                }
+                foreach (['casillero_bruto', 'casillero_neto', 'casillero_impuesto'] as $campo) {
+                    $codigo = trim((string) ($e[$campo] ?? ''));
+                    if ($codigo !== '' && array_key_exists($codigo, $snapshot)) {
+                        $sums[$codigo] = round((float) $snapshot[$codigo], 2);
+                    }
+                }
+            }
+        }
+
         // 2e. Ajustes manuales del formulario abierto en el navegador. Se aplican después de
         // calcular los defaults y ANTES del motor de fórmulas (paso 3), para que 482/485/499 y
-        // demás derivados salgan con el mismo resultado que muestra la pantalla.
-        foreach (['615', '617', '481', '484', '486', '902'] as $codigo) {
-            $v = $ajustes[$codigo] ?? null;
-            if ($v === null || $v === '') {
+        // demás derivados salgan con el mismo resultado que muestra la pantalla. Vale cualquier
+        // casillero editable, no solo los seis que tienen columna propia.
+        foreach ($ajustes as $codigo => $v) {
+            if ($v === null || $v === '' || !preg_match('/^\d{3}$/', (string) $codigo)) {
                 continue;
             }
-            $sums[$codigo] = round((float) $v, 2);
+            $sums[(string) $codigo] = round((float) $v, 2);
         }
         if (isset($ajustes['481']) && $ajustes['481'] !== '' && isset($totalTransferencias)) {
             // 480 (contado) siempre es el complemento de 481 (crédito) sobre el mismo total.
@@ -380,44 +402,7 @@ class DeclaracionIvaService
             }
         }
 
-        // Ejecutar las fórmulas. Varias pasadas porque una fórmula puede depender de otra
-        // (485 usa 482, que a su vez sale de 429); se corta apenas deja de haber cambios.
-        $maxPasadas = 5;
-        for ($i = 0; $i < $maxPasadas; $i++) {
-            $cambio = false;
-            foreach ($formulas as $casilleroObj => $formulaStr) {
-                $desconocidos = [];
-                $errorFormula = null;
-                $resultado = $this->resolverFormula($formulaStr, $sums, $desconocidos, $errorFormula);
-
-                if ($resultado === null) {
-                    if ($i === 0) {
-                        $avisosFormulas[] = [
-                            'casillero'   => (string) $casilleroObj,
-                            'descripcion' => '',
-                            'formula'     => $formulaStr,
-                            'motivo'      => 'No se pudo calcular. ' . ($errorFormula ?? 'Revise la sintaxis: solo códigos de casillero y + - * / paréntesis.'),
-                        ];
-                    }
-                    continue;
-                }
-                if ($desconocidos && $i === 0) {
-                    $avisosFormulas[] = [
-                        'casillero'   => (string) $casilleroObj,
-                        'descripcion' => '',
-                        'formula'     => $formulaStr,
-                        'motivo'      => 'Usa casilleros que no existen en la estructura (' . implode(', ', $desconocidos) . '): cuentan como 0.',
-                    ];
-                }
-
-                $resultado = max(0, $resultado);
-                if (abs($sums[$casilleroObj] - $resultado) > 0.001) {
-                    $sums[$casilleroObj] = $resultado;
-                    $cambio = true;
-                }
-            }
-            if (!$cambio) break;
-        }
+        $sums = $this->ejecutarFormulas($formulas, $sums, $avisosFormulas);
 
         // 4. Formatear la respuesta final retornando la estructura Y los valores por separado
         // para que la interfaz dibuje las 7 columnas
@@ -527,6 +512,82 @@ class DeclaracionIvaService
     /**
      * Evaluador simple y seguro de expresiones matemáticas (+, -, *, /, paréntesis)
      */
+    /**
+     * Corre el motor de fórmulas hasta que los valores dejen de moverse.
+     *
+     * Varias pasadas porque una fórmula puede depender de otra (485 usa 482, que a su vez sale
+     * de 429); se corta apenas no hay cambios. Los avisos solo se acumulan en la primera pasada,
+     * para no repetir el mismo problema una vez por vuelta.
+     *
+     * @param array<string,string> $formulas casillero destino => fórmula
+     * @param array<string,float>  $sums     valores actuales
+     * @param array                $avisos   se le agregan las fórmulas que no se pudieron aplicar
+     * @return array<string,float>
+     */
+    private function ejecutarFormulas(array $formulas, array $sums, array &$avisos = []): array
+    {
+        for ($pasada = 0; $pasada < 5; $pasada++) {
+            $cambio = false;
+            foreach ($formulas as $casilleroObj => $formulaStr) {
+                $desconocidos = [];
+                $errorFormula = null;
+                $resultado = $this->resolverFormula($formulaStr, $sums, $desconocidos, $errorFormula);
+
+                if ($resultado === null) {
+                    if ($pasada === 0) {
+                        $avisos[] = [
+                            'casillero'   => (string) $casilleroObj,
+                            'descripcion' => '',
+                            'formula'     => $formulaStr,
+                            'motivo'      => 'No se pudo calcular. ' . ($errorFormula ?? 'Revise la sintaxis: solo códigos de casillero y + - * / paréntesis.'),
+                        ];
+                    }
+                    continue;
+                }
+                if ($desconocidos && $pasada === 0) {
+                    $avisos[] = [
+                        'casillero'   => (string) $casilleroObj,
+                        'descripcion' => '',
+                        'formula'     => $formulaStr,
+                        'motivo'      => 'Usa casilleros que no existen en la estructura (' . implode(', ', $desconocidos) . '): cuentan como 0.',
+                    ];
+                }
+
+                $resultado = max(0, $resultado);
+                if (abs(($sums[$casilleroObj] ?? 0.0) - $resultado) > 0.001) {
+                    $sums[$casilleroObj] = $resultado;
+                    $cambio = true;
+                }
+            }
+            if (!$cambio) break;
+        }
+        return $sums;
+    }
+
+    /**
+     * Vuelve a resolver todas las fórmulas de la estructura sobre un juego de valores dado.
+     * Lo usa guardarDeclaracion() después de aplicar los ajustes manuales que no tienen columna
+     * propia, para que los casilleros derivados (620, 699…) queden coherentes en el snapshot.
+     *
+     * @param array<string,float> $valores
+     * @return array<string,float>
+     */
+    private function resolverFormulasEstructura(array $estructura, array $valores): array
+    {
+        $formulas = [];
+        foreach ($estructura as $e) {
+            foreach ([['casillero_bruto', 'formula_bruto'], ['casillero_neto', 'formula_neto'], ['casillero_impuesto', 'formula_impuesto']] as [$campoCas, $campoFormula]) {
+                $casillero = trim((string) ($e[$campoCas] ?? ''));
+                $formula   = trim((string) ($e[$campoFormula] ?? ''));
+                if ($casillero !== '' && $formula !== '') {
+                    $formulas[$casillero] = $formula;
+                }
+            }
+        }
+        $sinAvisos = [];
+        return $this->ejecutarFormulas($formulas, $valores, $sinAvisos);
+    }
+
     /**
      * Resuelve una fórmula de casilleros ("401+421") contra los valores actuales.
      *
@@ -932,6 +993,25 @@ class DeclaracionIvaService
         $valoresCasilleros['486'] = $mesPagoCredito;
         $valoresCasilleros['902'] = $totalAPagar;
         $valoresCasilleros['499'] = $liq499;
+
+        // Casilleros editables sin columna propia (610-614, 622, 623, 898…): su único lugar de
+        // guardado es este snapshot. Se aplican al final, después de los que sí tienen columna,
+        // y se vuelven a resolver las fórmulas que dependan de ellos (620 = 601-…+610+…).
+        $ajustesExtra = [];
+        foreach ((array) ($data['ajustes'] ?? []) as $codigo => $valor) {
+            $codigo = (string) $codigo;
+            if ($valor === '' || $valor === null || !preg_match('/^\d{3}$/', $codigo)) {
+                continue;
+            }
+            if (in_array($codigo, ['615', '617', '481', '484', '486', '902'], true)) {
+                continue; // esos ya se resolvieron arriba, con su columna propia
+            }
+            $valoresCasilleros[$codigo] = round((float) $valor, 2);
+            $ajustesExtra[$codigo] = $valoresCasilleros[$codigo];
+        }
+        if ($ajustesExtra) {
+            $valoresCasilleros = $this->resolverFormulasEstructura($estructura, $valoresCasilleros);
+        }
 
         $toSave = [
             'id_empresa'                   => $idEmpresa,

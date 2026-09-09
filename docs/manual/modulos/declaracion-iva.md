@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
 etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, formula, suma de casilleros, casillero en blanco, no calcula
-version: 1.4
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -134,12 +134,40 @@ explicación:
   Hay que cambiarla a tipo *valor*.
 - **La fórmula menciona casilleros que no existen** en la estructura. Esos
   cuentan como cero; el aviso indica cuáles son. Si el resultado le importa, cree
-  la fila de esos casilleros.
+  la fila de esos casilleros (ver *Casilleros de ajuste* más abajo).
 - **Está mal escrita**: falta cerrar un paréntesis, sobra uno, o hay un operador
   sin su valor. El aviso dice cuál de esos es el caso.
 
 Las fórmulas pueden apoyarse unas en otras (el 485 usa el 482, que sale del 429):
 el sistema las resuelve en cadena.
+
+## Casilleros de ajuste (los que se llenan a mano)
+
+Algunos casilleros del 104 no salen de ningún documento: son ajustes
+excepcionales que solo el contribuyente conoce. En el sistema aparecen como un
+**campo escribible** (fondo amarillo) dentro del formulario, y lo que escriba se
+guarda junto con la declaración:
+
+| Casillero | Qué es |
+| --- | --- |
+| 623 | Saldo de crédito tributario del mes anterior por fusión o absorción de sociedades. |
+| 622 | IVA devuelto o descontado por ventas a adultos mayores o personas con discapacidad. |
+| 610 | Ajuste por IVA devuelto o descontado en adquisiciones con medio electrónico. |
+| 611 | Ajuste por IVA devuelto o descontado en adquisiciones en zonas afectadas (Ley de solidaridad). |
+| 612 | Ajuste por IVA devuelto y rechazado en adquisiciones e importaciones, imputable al crédito tributario. |
+| 613 | Ajuste por IVA devuelto y rechazado en retenciones de IVA, imputable al crédito tributario. |
+| 614 | Ajuste por IVA devuelto por otras instituciones del sector público. |
+| 898 | Imputación al pago: impuesto (solo en declaraciones sustitutivas). |
+| 615 / 617 | Saldo de crédito tributario que se arrastra al próximo mes. |
+| 481 / 484 / 486 | Liquidación diferida del IVA por ventas a crédito. |
+
+Al escribir en cualquiera de ellos, **los casilleros que dependen de él se
+recalculan al instante**: por ejemplo el 620 (subtotal a pagar) suma el 610 al 614
+y resta el 622 y el 623, y el 902 resta el 898 del 859. Mientras no se llenen
+valen cero, que es el caso normal.
+
+Cualquier casillero que se marque como *editable* en *Configuración → Casilleros
+SRI* se comporta así, sin necesidad de tocar el sistema.
 
 ## Saldo a favor
 
@@ -173,6 +201,10 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 
 ## Historial de cambios
 
+- **1.5** — Se agregan a la estructura los casilleros de ajuste que faltaban (623, 622,
+  610 a 614 y 898), con las descripciones del formulario oficial. Ahora cualquier casillero
+  marcado como editable se guarda con la declaración y se exporta al Excel, no solo los seis
+  que tienen columna propia en la tabla.
 - **1.4** — Las fórmulas que dividen ya no fallan cuando el denominador es cero (factores
   de proporcionalidad como el 563 e interruptores como (615/615)*609): esa división vale
   cero. El aviso de fórmula no aplicada dice ahora el motivo exacto (paréntesis sin cerrar,

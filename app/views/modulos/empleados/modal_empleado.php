@@ -27,18 +27,11 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
     /* Ancho del modal: un poco más angosto que modal-xl, pero suficiente para las pestañas */
     #modalEmpleado .modal-dialog { max-width: 1000px; }
 
-    /* Sin barra de scroll vertical visible en NINGUNA pestaña.
-       El modal es `modal-dialog-scrollable`, así que app.css le pone
-       `overflow-y: auto` al .modal-body: al abrir una pestaña más alta que el
-       resto (Credenciales) aparecía la barra y el modal "saltaba" de ancho.
-       Se oculta solo la barra —el contenido se sigue desplazando con la rueda,
-       el teclado o el gesto táctil—, y solo dentro de este modal: la regla
-       global la usan todos los demás. */
-    #modalEmpleado .modal-body {
-        scrollbar-width: none;      /* Firefox */
-        -ms-overflow-style: none;   /* Edge legacy */
-    }
-    #modalEmpleado .modal-body::-webkit-scrollbar { width: 0; height: 0; }
+    /* El diálogo NO lleva `modal-dialog-scrollable`: en escritorio se desplaza el
+       modal completo (header, cuerpo y pie juntos), como el resto de modales del
+       sistema —Factura de Venta, Clientes, Productos—, en vez de scrollear solo
+       el interior. En móvil/tablet a pantalla completa, scripts.php agrega esa
+       clase por su cuenta para pasar el scroll al cuerpo; eso no se toca. */
 
     /* Tooltip propio (amarillo). El `title` nativo no se puede colorear.
        El texto se pasa en data-tip; se muestra al pasar el mouse sobre el ícono.
@@ -147,7 +140,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 </style>
 <!-- Modal Empleado -->
 <div class="modal fade" id="modalEmpleado" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form id="formEmpleado" novalidate onsubmit="return false;">
                 <div class="modal-header bg-light py-3">
