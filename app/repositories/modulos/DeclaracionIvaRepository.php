@@ -244,7 +244,8 @@ class DeclaracionIvaRepository extends BaseRepository
                        COALESCE(v.establecimiento, com.establecimiento_prov, l.establecimiento, nc.establecimiento, rc.establecimiento, rv.establecimiento, nd.establecimiento, im.establecimiento) AS establecimiento,
                        COALESCE(v.punto_emision, com.punto_emision_prov, l.punto_emision, nc.punto_emision, rc.punto_emision, rv.punto_emision, nd.punto_emision, im.punto_emision) AS punto_emision,
                        COALESCE(v.secuencial, com.secuencial_prov, l.secuencial, nc.secuencial, rc.secuencial, rv.secuencial, nd.secuencial, im.secuencial) AS secuencial,
-                       COALESCE(cl_v.nombre, pr_com.razon_social, pr_com.nombre_comercial, pr_l.razon_social, pr_l.nombre_comercial, cl_nc.nombre, pr_rc.razon_social, pr_rc.nombre_comercial, cl_rv.nombre, cl_nd.nombre, pr_im.razon_social, pr_im.nombre_comercial) AS entidad
+                       COALESCE(cl_v.nombre, pr_com.razon_social, pr_com.nombre_comercial, pr_l.razon_social, pr_l.nombre_comercial, cl_nc.nombre, pr_rc.razon_social, pr_rc.nombre_comercial, cl_rv.nombre, cl_nd.nombre, pr_im.razon_social, pr_im.nombre_comercial) AS entidad,
+                       COALESCE(cl_v.identificacion, pr_com.identificacion, pr_l.identificacion, cl_nc.identificacion, pr_rc.identificacion, cl_rv.identificacion, cl_nd.identificacion, pr_im.identificacion) AS identificacion
                 FROM casilleros_declaracion_sri c
                 LEFT JOIN ventas_cabecera v ON c.id_origen = v.id AND c.origen = 'facturas de venta'
                 LEFT JOIN clientes cl_v ON v.id_cliente = cl_v.id

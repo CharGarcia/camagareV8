@@ -89,6 +89,10 @@ class ProformasController extends BaseModuloController
             'seriesFiltro'    => $seriesFiltro,
             'vendedores'      => $vendedores,
             'tarifasIva'      => $tarifasIva,
+            // Reabrir una proforma aprobada (volverla a borrador) es solo para
+            // administrador (2) y superadministrador (3); la regla real vive en
+            // ProformaService::cambiarEstado, esto solo decide si se ve el botón.
+            'puedeReabrir'    => (int) ($_SESSION['nivel'] ?? 1) >= 2,
             'fullWidth'       => true,
         ]);
     }
@@ -321,13 +325,16 @@ class ProformasController extends BaseModuloController
             $estado    = trim($_POST['estado'] ?? '');
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
+            // Nivel del usuario: hay transiciones (reabrir una aprobada) reservadas a
+            // administrador/superadministrador. Lo valida el Service.
+            $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 
             if (!$id || !$estado) {
                 throw new \RuntimeException('Parámetros inválidos.');
             }
 
             $this->requireActualizar();
-            $this->service->cambiarEstado($id, $estado, $idEmpresa, $idUsuario);
+            $this->service->cambiarEstado($id, $estado, $idEmpresa, $idUsuario, $nivel);
 
             $proforma = $this->repository->getPorId($id);
             $rowHtml  = $proforma ? $this->renderFilaHtml($proforma) : '';
@@ -354,6 +361,43 @@ class ProformasController extends BaseModuloController
             $ok = $this->service->eliminar($id, $idEmpresa, $idUsuario);
 
             echo json_encode(['ok' => $ok]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Duplica una proforma existente en una nueva proforma en borrador
+     * (mismo cliente e ítems, número nuevo y fecha de hoy).
+     */
+    public function duplicarAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $id        = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            if (!$id) throw new \RuntimeException('ID requerido.');
+
+            // Tipo de ambiente de la empresa (igual que en guardarAjax: lo necesita
+            // SecuencialRepository para resolver la serie correcta).
+            $empresa      = (new Empresa())->getPorId($idEmpresa);
+            $tipoAmbiente = (string) ($empresa['tipo_ambiente'] ?? '1');
+
+            $idNueva  = $this->service->duplicar($id, $idEmpresa, $idUsuario, $tipoAmbiente);
+            $proforma = $this->repository->getPorId($idNueva);
+            $rowHtml  = $proforma ? $this->renderFilaHtml($proforma) : '';
+
+            echo json_encode([
+                'ok'      => true,
+                'id'      => $idNueva,
+                'msg'     => 'Proforma duplicada correctamente.',
+                'rowHtml' => $rowHtml,
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.10
+etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.11
 orden: 15
 estado: activo
 ---
@@ -23,7 +23,7 @@ Una proforma pasa por estos estados, y el sistema controla el orden:
 | Desde | Puede pasar a |
 |-------|---------------|
 | Borrador | Aprobada, Anulada |
-| Aprobada | Rechazada, Anulada |
+| Aprobada | Rechazada, Anulada, **Borrador** (solo administradores, ver *Regresar a borrador*) |
 
 Cualquier otro salto se rechaza. El significado de cada uno:
 
@@ -60,7 +60,58 @@ se abre en modo solo lectura (cliente, detalle, información adicional y
 vigencia bloqueados; sin botón Guardar) — no solo se rechaza al guardar, se ve
 bloqueado desde que se abre. Si ya está aprobada y necesita cambiarla, tiene dos
 caminos: anularla y crear una nueva, o —cuando el cambio es menor— convertirla a
-factura y corregir en la factura antes de enviarla.
+factura y corregir en la factura antes de enviarla. Si es **administrador o
+superadministrador**, tiene un tercer camino: regresarla a borrador.
+
+## Regresar a borrador
+
+El botón **↺ Regresar a borrador**, junto a *Anular* en la barra de acciones del
+modal, devuelve una proforma **aprobada** al estado **borrador** para poder
+corregirla sin perder el número ni volver a capturarla.
+
+**Quién puede**: solo **administrador (nivel 2)** y **superadministrador (nivel 3)**,
+además del permiso de *actualizar* sobre el módulo. A un usuario de nivel 1 el
+botón ni siquiera le aparece, y si la petición llega por otra vía el servidor la
+rechaza igual.
+
+**Desde qué estados**: únicamente desde **aprobada**. Una proforma *rechazada*,
+*anulada* o ya *convertida* en factura no se reabre — para esos casos, duplíquela.
+
+Al reabrirla:
+
+- La proforma vuelve a ser editable y aparece otra vez el botón **Guardar**.
+- Conserva su número, su serie y su fecha de emisión.
+- Hay que **volver a aprobarla** antes de facturarla.
+- Si el cliente la había aprobado desde el correo, ese registro **se conserva**
+  como historial, pero el aviso pasa a mostrarse en gris advirtiendo que la
+  proforma se reabrió y debe aprobarse de nuevo. Si el cliente todavía tiene el
+  enlace del correo, puede volver a aprobarla desde ahí.
+- El cambio queda registrado en el historial del sistema (quién lo hizo y cuándo).
+
+## Duplicar
+
+El botón **Duplicar** (ícono de hojas, en la barra de acciones del modal) crea
+una **nueva proforma en borrador** con los mismos datos de la que está abierta,
+sin tocar la original. Sirve para volver a cotizar lo mismo: al mismo cliente
+cuando la cotización venció, o a otro cliente cambiando solo ese dato.
+
+Se copia: cliente, vendedor, vigencia, observaciones, condiciones, todos los
+ítems con sus cantidades, precios, descuentos e IVA, y la información adicional.
+
+**No** se copia nada propio del documento original:
+
+| Dato | En la copia |
+|---|---|
+| Número (secuencial) | Uno **nuevo**, el siguiente de la misma serie |
+| Fecha de emisión | La de **hoy** |
+| Estado | **Borrador** (aunque la original estuviera aprobada, rechazada o anulada) |
+| Aprobación del cliente por correo | Se descarta |
+| Factura generada | No se arrastra |
+
+Se puede duplicar una proforma en **cualquier** estado; lo que se copia es la
+cotización, no el recorrido del documento. Al terminar, el modal se queda abierto
+sobre la copia —ya en borrador y editable— para ajustar lo que haga falta antes
+de aprobarla. Requiere permiso de **crear**.
 
 ## Decimales y cálculo del IVA
 
@@ -212,6 +263,13 @@ Con **acceso total** se ven las proformas de toda la empresa; sin él, cada
 vendedor ve solo las suyas — que suele ser justo lo que se quiere en un equipo
 comercial.
 
+Dos acciones dependen además del **nivel del usuario**, no solo del permiso:
+
+| Acción | Requisito |
+|---|---|
+| **Duplicar** | Permiso de *crear* |
+| **Regresar a borrador** | Permiso de *actualizar* **y** ser administrador (nivel 2) o superadministrador (nivel 3) |
+
 ## Serie y secuencial
 
 La proforma se numera con la **serie** (establecimiento + punto de emisión) y su
@@ -260,6 +318,14 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.11** — El botón **Duplicar** ya funciona (antes solo avisaba "próximamente").
+  Crea una copia en borrador con número nuevo de la misma serie y fecha de hoy,
+  copiando cliente, ítems, condiciones e información adicional, y deja el modal
+  abierto sobre la copia. Nuevo botón **Regresar a borrador** junto a *Anular*,
+  que reabre una proforma aprobada para editarla conservando su número; es solo
+  para **administrador y superadministrador**. Nuevas secciones *Duplicar* y
+  *Regresar a borrador*.
 
 - **1.10** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se

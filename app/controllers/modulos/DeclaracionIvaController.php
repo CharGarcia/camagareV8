@@ -241,8 +241,19 @@ class DeclaracionIvaController extends BaseModuloController
             $nombreArchivo = "Declaracion_IVA_{$anio}_{$periodo}.xlsx";
         }
 
+        // Casilleros editables tal como están en el formulario abierto (los envía la vista en la
+        // URL). Sin esto el Excel exportaba el valor por defecto del servidor y no lo que el
+        // usuario tiene en pantalla cuando ajustó 615/617/481/484/486/902 sin guardar todavía.
+        $ajustes = [];
+        foreach (['615', '617', '481', '484', '486', '902'] as $codigo) {
+            $v = $_GET['ajuste_' . $codigo] ?? '';
+            if ($v !== '' && $v !== null) {
+                $ajustes[$codigo] = $v;
+            }
+        }
+
         try {
-            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo, $idUsuario);
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo, $idUsuario, true, $ajustes);
             $detalleDocumentos = $this->service->detalleDocumentosGrupo($idEmpresa, $fechaDesde, $fechaHasta, $idUsuario);
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
@@ -307,9 +318,25 @@ class DeclaracionIvaController extends BaseModuloController
 
             $rowIdx = 5;
             $currentSeccion = '';
-            
+
             $layout = $resumenCompleto['layout'] ?? [];
             $valores = $resumenCompleto['valores'] ?? [];
+
+            // Casilleros que aparecen en el formulario y descripción de cada uno: sirve para
+            // detectar los que tienen valor pero NO tienen fila en la estructura (se imprimen al
+            // final de la hoja) y para rotular las hojas 2 y 3.
+            $descripcionCasillero = [];
+            $casillerosEnLayout   = [];
+            foreach ($layout as $r) {
+                foreach (['casillero_bruto', 'casillero_neto', 'casillero_impuesto'] as $k) {
+                    if (!empty($r[$k])) {
+                        $casillerosEnLayout[$r[$k]] = true;
+                        if (!isset($descripcionCasillero[$r[$k]])) {
+                            $descripcionCasillero[$r[$k]] = trim((string)($r['descripcion'] ?? ''));
+                        }
+                    }
+                }
+            }
 
             foreach ($layout as $r) {
                 if ($r['seccion'] !== $currentSeccion) {
@@ -362,114 +389,232 @@ class DeclaracionIvaController extends BaseModuloController
                 $rowIdx++;
             }
 
-            // ==========================================
-            // HOJA 2: DETALLE DOCUMENTOS
-            // ==========================================
-            $sheet2 = $spreadsheet->createSheet();
-            $sheet2->setTitle('Detalle Documentos');
-
-            $sheet2->setCellValue('A1', 'Origen');
-            $sheet2->setCellValue('B1', 'Documento');
-            $sheet2->setCellValue('C1', 'Fecha');
-            $sheet2->setCellValue('D1', 'Entidad');
-            $sheet2->setCellValue('E1', 'Concepto');
-            $sheet2->setCellValue('F1', 'Establecimiento (propio)');
-
-            $sheet2->getColumnDimension('A')->setWidth(20);
-            $sheet2->getColumnDimension('B')->setWidth(20);
-            $sheet2->getColumnDimension('C')->setWidth(15);
-            $sheet2->getColumnDimension('D')->setWidth(40);
-            $sheet2->getColumnDimension('E')->setWidth(30);
-            $sheet2->getColumnDimension('F')->setWidth(30);
-
-            // Agrupar los detalles por documento y concepto (y por empresa: dos establecimientos
-            // del mismo RUC podrían coincidir en origen+documento+concepto por casualidad).
-            $grupos = [];
-            foreach ($detalleDocumentos as $d) {
-                $docNum = !empty($d['establecimiento']) ? "{$d['establecimiento']}-{$d['punto_emision']}-{$d['secuencial']}" : "ID: {$d['id_origen']}";
-                $keyDoc = "{$d['origen']}_{$docNum}";
-
-                $concepto = $d['concepto'] ?? 'Sin concepto';
-                $concepto = preg_replace('/\s*\((Base|IVA)\)$/i', '', $concepto);
-
-                $keyGrupo = "{$keyDoc}_{$concepto}_{$d['_id_empresa']}";
-
-                if (!isset($grupos[$keyGrupo])) {
-                    $grupos[$keyGrupo] = [
-                        'origen' => $d['origen'],
-                        'docNum' => $docNum,
-                        'fecha' => $d['fecha'],
-                        'entidad' => $d['entidad'],
-                        'concepto' => $concepto,
-                        'establecimiento_propio' => $d['_establecimiento_propio'] ?? '',
-                        'casilleros' => []
-                    ];
+            // Casilleros con valor que NO tienen fila en la estructura del formulario
+            // (/config/sri-casilleros-etiquetas). Antes desaparecían del Excel sin aviso: es la
+            // causa típica de "faltan casilleros" (p. ej. el 609 de retenciones de IVA si nadie
+            // creó su fila). Se listan aparte para que la exportación nunca pierda información.
+            $huerfanos = [];
+            foreach ($valores as $codigo => $valor) {
+                if (!isset($casillerosEnLayout[$codigo]) && round((float) $valor, 2) != 0.0) {
+                    $huerfanos[$codigo] = (float) $valor;
                 }
-
-                $grupos[$keyGrupo]['casilleros'][] = [
-                    'casillero' => $d['casillero'],
-                    'valor' => $d['valor'],
-                    'manual' => !empty($d['editado_manualmente'])
-                ];
+            }
+            if ($huerfanos) {
+                ksort($huerfanos, SORT_NATURAL);
+                $rowIdx++;
+                $sheet1->setCellValue('A' . $rowIdx, 'CASILLEROS CON VALOR SIN FILA EN LA ESTRUCTURA DEL FORMULARIO');
+                $sheet1->mergeCells("A{$rowIdx}:G{$rowIdx}");
+                $sheet1->getStyle("A{$rowIdx}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '842029']],
+                    'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F8D7DA']]
+                ]);
+                $rowIdx++;
+                $sheet1->setCellValue('A' . $rowIdx, 'Estos valores están sincronizados pero no se muestran en el formulario. Agregue la fila en Configuración → Casilleros SRI.');
+                $sheet1->mergeCells("A{$rowIdx}:G{$rowIdx}");
+                $sheet1->getStyle("A{$rowIdx}")->getFont()->setItalic(true)->setSize(9);
+                $rowIdx++;
+                foreach ($huerfanos as $codigo => $valor) {
+                    $sheet1->setCellValue('A' . $rowIdx, 'Casillero ' . $codigo . ' (sin descripción configurada)');
+                    $sheet1->setCellValueExplicit('B' . $rowIdx, (string) $codigo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet1->setCellValue('C' . $rowIdx, $valor);
+                    $sheet1->getStyle("C{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
+                    $rowIdx++;
+                }
             }
 
+            // Fórmulas configuradas que no se están aplicando (misma información que el aviso
+            // de la pantalla): un casillero puede estar configurado para sumar otros y salir en
+            // blanco porque la fórmula quedó en una columna sin casillero, la fila es de tipo
+            // "título" o referencia casilleros que no existen.
+            $avisosFormulas = $resumenCompleto['avisos_formulas'] ?? [];
+            if ($avisosFormulas) {
+                $rowIdx++;
+                $sheet1->setCellValue('A' . $rowIdx, 'FÓRMULAS CONFIGURADAS QUE NO SE ESTÁN APLICANDO');
+                $sheet1->mergeCells("A{$rowIdx}:G{$rowIdx}");
+                $sheet1->getStyle("A{$rowIdx}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '664D03']],
+                    'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFF3CD']]
+                ]);
+                $rowIdx++;
+                $sheet1->setCellValue('A' . $rowIdx, 'Casillero');
+                $sheet1->setCellValue('B' . $rowIdx, 'Fórmula');
+                $sheet1->setCellValue('C' . $rowIdx, 'Motivo');
+                $sheet1->mergeCells("C{$rowIdx}:G{$rowIdx}");
+                $sheet1->getStyle("A{$rowIdx}:G{$rowIdx}")->getFont()->setBold(true);
+                $rowIdx++;
+                foreach ($avisosFormulas as $a) {
+                    $etiqueta = ($a['casillero'] ?? '') !== '' ? 'Casillero ' . $a['casillero'] : 'Fila sin casillero';
+                    if (!empty($a['descripcion'])) {
+                        $etiqueta .= ' — ' . $a['descripcion'];
+                    }
+                    $sheet1->setCellValue('A' . $rowIdx, $etiqueta);
+                    $sheet1->setCellValueExplicit('B' . $rowIdx, (string) ($a['formula'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet1->setCellValue('C' . $rowIdx, (string) ($a['motivo'] ?? ''));
+                    $sheet1->mergeCells("C{$rowIdx}:G{$rowIdx}");
+                    $rowIdx++;
+                }
+            }
+
+            // ==========================================
+            // HOJA 2: DETALLE DE CASILLEROS (una fila por casillero)
+            // ==========================================
+            // Antes cada documento ocupaba UNA fila y sus casilleros se abrían en pares de
+            // columnas "Casillero 1 / Valor 1", "Casillero 2 / Valor 2"... Con ese formato el
+            // mismo casillero caía en columnas distintas según el documento, así que no se podía
+            // filtrar ni sumar por casillero y parecía que faltaba información. Ahora es una
+            // tabla plana con autofiltro: una fila por (documento, concepto, casillero).
+            $sheet2 = $spreadsheet->createSheet();
+            $sheet2->setTitle('Detalle Casilleros');
+
+            $colsDetalle = [
+                'A' => ['Origen', 22],
+                'B' => ['Documento', 20],
+                'C' => ['Fecha', 12],
+                'D' => ['Identificación', 16],
+                'E' => ['Cliente / Proveedor', 40],
+                'F' => ['Concepto', 34],
+                'G' => ['Casillero', 11],
+                'H' => ['Descripción del casillero', 45],
+                'I' => ['Valor', 15],
+                'J' => ['Editado manualmente', 12],
+                'K' => ['Establecimiento (propio)', 26],
+            ];
+            foreach ($colsDetalle as $col => $cfgCol) {
+                $sheet2->setCellValue($col . '1', $cfgCol[0]);
+                $sheet2->getColumnDimension($col)->setWidth($cfgCol[1]);
+            }
+            $sheet2->getStyle('A1:K1')->applyFromArray($headerStyle1);
+            $sheet2->getStyle('A1:K1')->getAlignment()->setWrapText(true);
+
             $rowIdx = 2;
-            $maxCasilleros = 0;
-
-            foreach ($grupos as $g) {
-                $sheet2->setCellValue('A' . $rowIdx, str_replace('_', ' ', $g['origen'] ?? ''));
-                $sheet2->setCellValueExplicit('B' . $rowIdx, $g['docNum'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet2->setCellValue('C' . $rowIdx, $g['fecha'] ?? '');
-                $sheet2->setCellValue('D' . $rowIdx, $g['entidad'] ?? '');
-                $sheet2->setCellValue('E' . $rowIdx, $g['concepto']);
-                $sheet2->setCellValue('F' . $rowIdx, $g['establecimiento_propio'] ?? '');
-
-                // Ordenar casilleros
-                usort($g['casilleros'], function($a, $b) {
-                    return (int)$a['casillero'] <=> (int)$b['casillero'];
-                });
-
-                $colIndex = 7; // G (F ya la ocupa "Establecimiento")
-
-                foreach ($g['casilleros'] as $cas) {
-                    $colLetterCasillero = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
-                    $sheet2->setCellValueExplicit($colLetterCasillero . $rowIdx, $cas['casillero'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                    
-                    $colIndex++;
-                    $colLetterValor = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
-                    $sheet2->setCellValue($colLetterValor . $rowIdx, (float)($cas['valor'] ?? 0));
-                    $sheet2->getStyle($colLetterValor . $rowIdx)->getNumberFormat()->setFormatCode('#,##0.00');
-                    
-                    $colIndex++;
+            foreach ($detalleDocumentos as $d) {
+                $docNum = !empty($d['establecimiento'])
+                    ? "{$d['establecimiento']}-{$d['punto_emision']}-{$d['secuencial']}"
+                    : "ID: {$d['id_origen']}";
+                // El concepto llega como "... (Base)" / "... (IVA)": el sufijo ya lo dice el
+                // casillero, así que se limpia igual que en la pantalla de Detalle.
+                $concepto = preg_replace('/\s*\((Base|IVA)\)$/i', '', (string) ($d['concepto'] ?? ''));
+                if (trim((string) $concepto) === '') {
+                    $concepto = 'Sin concepto';
                 }
+                $casillero = (string) ($d['casillero'] ?? '');
 
-                $numCasilleros = count($g['casilleros']);
-                if ($numCasilleros > $maxCasilleros) {
-                    $maxCasilleros = $numCasilleros;
-                }
-
+                $sheet2->setCellValue('A' . $rowIdx, str_replace('_', ' ', (string) ($d['origen'] ?? '')));
+                $sheet2->setCellValueExplicit('B' . $rowIdx, $docNum, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet2->setCellValue('C' . $rowIdx, !empty($d['fecha']) ? date('d-m-Y', strtotime((string) $d['fecha'])) : '');
+                $sheet2->setCellValueExplicit('D' . $rowIdx, (string) ($d['identificacion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet2->setCellValue('E' . $rowIdx, (string) ($d['entidad'] ?? ''));
+                $sheet2->setCellValue('F' . $rowIdx, $concepto);
+                $sheet2->setCellValueExplicit('G' . $rowIdx, $casillero, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet2->setCellValue('H' . $rowIdx, $descripcionCasillero[$casillero] ?? '');
+                $sheet2->setCellValue('I' . $rowIdx, (float) ($d['valor'] ?? 0));
+                $sheet2->getStyle('I' . $rowIdx)->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet2->setCellValue('J' . $rowIdx, !empty($d['editado_manualmente']) ? 'SI' : '');
+                $sheet2->setCellValue('K' . $rowIdx, (string) ($d['_establecimiento_propio'] ?? ''));
                 $rowIdx++;
             }
 
-            // Encabezados dinámicos para casilleros
-            $colIndex = 7;
-            for ($i = 1; $i <= $maxCasilleros; $i++) {
-                $colLetterCasillero = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
-                $sheet2->setCellValue($colLetterCasillero . '1', 'Casillero ' . $i);
-                $sheet2->getColumnDimension($colLetterCasillero)->setWidth(12);
-                $colIndex++;
-                
-                $colLetterValor = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
-                $sheet2->setCellValue($colLetterValor . '1', 'Valor ' . $i);
-                $sheet2->getColumnDimension($colLetterValor)->setWidth(15);
-                $colIndex++;
+            $ultimaFilaDetalle = $rowIdx - 1;
+            if ($ultimaFilaDetalle >= 2) {
+                $sheet2->setAutoFilter("A1:K{$ultimaFilaDetalle}");
+                // SUBTOTAL(109;...) suma solo las filas visibles: al usar el autofiltro por
+                // casillero, entidad o documento, el total se recalcula solo.
+                $filaTotal = $ultimaFilaDetalle + 2;
+                $sheet2->setCellValue('H' . $filaTotal, 'TOTAL FILTRADO:');
+                $sheet2->setCellValue('I' . $filaTotal, "=SUBTOTAL(109,I2:I{$ultimaFilaDetalle})");
+                $sheet2->setCellValue('J' . $filaTotal, "=SUBTOTAL(103,B2:B{$ultimaFilaDetalle})");
+                $sheet2->setCellValue('K' . $filaTotal, 'filas visibles');
+                $sheet2->getStyle("H{$filaTotal}:K{$filaTotal}")->getFont()->setBold(true);
+                $sheet2->getStyle("I{$filaTotal}")->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+            $sheet2->freezePane('A2');
+
+            // ==========================================
+            // HOJA 3: RESUMEN POR CASILLERO (cuadre detalle vs. formulario)
+            // ==========================================
+            $sheet3 = $spreadsheet->createSheet();
+            $sheet3->setTitle('Por Casillero');
+
+            // Suma del detalle por casillero.
+            $sumaDetalle   = [];
+            $conteoDetalle = [];
+            foreach ($detalleDocumentos as $d) {
+                $c = (string) ($d['casillero'] ?? '');
+                if ($c === '') {
+                    continue;
+                }
+                $sumaDetalle[$c]   = ($sumaDetalle[$c] ?? 0.0) + (float) ($d['valor'] ?? 0);
+                $conteoDetalle[$c] = ($conteoDetalle[$c] ?? 0) + 1;
             }
 
-            // Aplicar estilo al encabezado
-            if ($colIndex > 1) {
-                $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex - 1);
-                $sheet2->getStyle("A1:{$lastColLetter}1")->applyFromArray($headerStyle1);
+            // Universo de casilleros: todo lo que tenga valor en el formulario MÁS todo lo que
+            // aparezca en el detalle, aunque no exista en la estructura del 104.
+            $todosCasilleros = [];
+            foreach ($valores as $c => $v) {
+                if (round((float) $v, 2) != 0.0) {
+                    $todosCasilleros[(string) $c] = true;
+                }
             }
+            foreach ($sumaDetalle as $c => $v) {
+                $todosCasilleros[(string) $c] = true;
+            }
+            uksort($todosCasilleros, function ($a, $b) {
+                return strnatcmp((string) $a, (string) $b);
+            });
+
+            $colsCas = [
+                'A' => ['Casillero', 12],
+                'B' => ['Descripción', 55],
+                'C' => ['Documentos', 12],
+                'D' => ['Suma del detalle', 18],
+                'E' => ['Valor en el formulario', 20],
+                'F' => ['Diferencia', 14],
+                'G' => ['Observación', 45],
+            ];
+            foreach ($colsCas as $col => $cfgCol) {
+                $sheet3->setCellValue($col . '1', $cfgCol[0]);
+                $sheet3->getColumnDimension($col)->setWidth($cfgCol[1]);
+            }
+            $sheet3->getStyle('A1:G1')->applyFromArray($headerStyle1);
+            $sheet3->getStyle('A1:G1')->getAlignment()->setWrapText(true);
+
+            $rowIdx = 2;
+            foreach (array_keys($todosCasilleros) as $codigo) {
+                $sumDet       = round((float) ($sumaDetalle[$codigo] ?? 0), 2);
+                $valForm      = round((float) ($valores[$codigo] ?? 0), 2);
+                $enLayout     = isset($casillerosEnLayout[$codigo]);
+                $tieneDetalle = isset($sumaDetalle[$codigo]);
+
+                $observacion = '';
+                if (!$enLayout) {
+                    $observacion = 'Sin fila en la estructura: no se ve en el formulario';
+                } elseif (!$tieneDetalle) {
+                    $observacion = 'Calculado (fórmula, conteo o arrastre): no viene de documentos';
+                } elseif (abs($sumDet - $valForm) > 0.01) {
+                    $observacion = 'El formulario no coincide con la suma de los documentos';
+                }
+
+                $sheet3->setCellValueExplicit('A' . $rowIdx, (string) $codigo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet3->setCellValue('B' . $rowIdx, $descripcionCasillero[$codigo] ?? '');
+                $sheet3->setCellValue('C' . $rowIdx, (int) ($conteoDetalle[$codigo] ?? 0));
+                if ($tieneDetalle) {
+                    $sheet3->setCellValue('D' . $rowIdx, $sumDet);
+                    $sheet3->setCellValue('F' . $rowIdx, round($valForm - $sumDet, 2));
+                }
+                $sheet3->setCellValue('E' . $rowIdx, $valForm);
+                $sheet3->setCellValue('G' . $rowIdx, $observacion);
+                $sheet3->getStyle("D{$rowIdx}:F{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
+                if (!$enLayout) {
+                    $sheet3->getStyle("A{$rowIdx}:G{$rowIdx}")->applyFromArray([
+                        'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F8D7DA']]
+                    ]);
+                }
+                $rowIdx++;
+            }
+            if ($rowIdx > 2) {
+                $sheet3->setAutoFilter('A1:G' . ($rowIdx - 1));
+            }
+            $sheet3->freezePane('A2');
 
             // Descarga
             $spreadsheet->setActiveSheetIndex(0);
@@ -481,6 +626,7 @@ class DeclaracionIvaController extends BaseModuloController
             $writer->save('php://output');
 
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo "Error al generar Excel: " . $e->getMessage();
         }
         exit;

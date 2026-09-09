@@ -228,8 +228,15 @@ class DeclaracionIvaService
      *             usan el Excel/PDF y la carga inicial. Si false, esos casilleros se recalculan
      *             siempre desde cero: lo usa el botón "GENERAR"/"Recalcular desde documentos" de
      *             la vista, para que sea una reconstrucción real y no un espejo de lo guardado.
+     * @param array $ajustes Valores de los casilleros editables tal como están AHORA en el
+     *             formulario del navegador (615/617/481/484/486/902), en el mismo formato que
+     *             recibe guardarDeclaracion(): ['615' => '12.34', ...]. Las claves vacías o
+     *             ausentes se ignoran. Se aplican ANTES de resolver las fórmulas, para que los
+     *             casilleros derivados (480, 485, 499...) salgan coherentes. Sirve para que el
+     *             Excel exporte exactamente lo que el usuario está viendo, aunque todavía no
+     *             haya guardado la declaración.
      */
-    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $tipoPeriodo = '', int $anio = 0, int $periodoValor = 0, int $idUsuario = 0, bool $respetarGuardado = true): array
+    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $tipoPeriodo = '', int $anio = 0, int $periodoValor = 0, int $idUsuario = 0, bool $respetarGuardado = true, array $ajustes = []): array
     {
         // El F104 se presenta por RUC completo: se consolidan todas las empresas del grupo
         // accesibles al usuario (ver EmpresaRepository::getIdsGrupoRucAccesible()). El arrastre
@@ -312,38 +319,97 @@ class DeclaracionIvaService
             $sums['480'] = round($totalTransferencias - $sums['481'], 2);
         }
 
-        // 3. Extraer fórmulas y casilleros de la estructura matricial
+        // 2e. Ajustes manuales del formulario abierto en el navegador. Se aplican después de
+        // calcular los defaults y ANTES del motor de fórmulas (paso 3), para que 482/485/499 y
+        // demás derivados salgan con el mismo resultado que muestra la pantalla.
+        foreach (['615', '617', '481', '484', '486', '902'] as $codigo) {
+            $v = $ajustes[$codigo] ?? null;
+            if ($v === null || $v === '') {
+                continue;
+            }
+            $sums[$codigo] = round((float) $v, 2);
+        }
+        if (isset($ajustes['481']) && $ajustes['481'] !== '' && isset($totalTransferencias)) {
+            // 480 (contado) siempre es el complemento de 481 (crédito) sobre el mismo total.
+            $sums['480'] = round($totalTransferencias - $sums['481'], 2);
+        }
+
+        // 3. Extraer fórmulas y casilleros de la estructura matricial.
+        // Una fórmula solo se aplica si su MISMA columna tiene casillero: escribirla en la
+        // columna Bruto de una fila cuyo casillero vive en Impuesto la dejaba sin efecto y sin
+        // ningún aviso ("el casillero está configurado para sumar pero sale en blanco"). Ahora
+        // esos casos se recogen en $avisosFormulas y se devuelven a la vista y al Excel.
         $formulas = [];
+        $avisosFormulas = [];
+        $columnas = [
+            'Bruto'    => ['casillero_bruto', 'formula_bruto'],
+            'Neto'     => ['casillero_neto', 'formula_neto'],
+            'Impuesto' => ['casillero_impuesto', 'formula_impuesto'],
+        ];
         foreach ($estructura as $e) {
-            if ($e['casillero_bruto']) {
-                if ($e['formula_bruto']) $formulas[$e['casillero_bruto']] = $e['formula_bruto'];
-                if (!isset($sums[$e['casillero_bruto']])) $sums[$e['casillero_bruto']] = 0.0;
-            }
-            if ($e['casillero_neto']) {
-                if ($e['formula_neto']) $formulas[$e['casillero_neto']] = $e['formula_neto'];
-                if (!isset($sums[$e['casillero_neto']])) $sums[$e['casillero_neto']] = 0.0;
-            }
-            if ($e['casillero_impuesto']) {
-                if ($e['formula_impuesto']) $formulas[$e['casillero_impuesto']] = $e['formula_impuesto'];
-                if (!isset($sums[$e['casillero_impuesto']])) $sums[$e['casillero_impuesto']] = 0.0;
+            $esTitulo = (($e['tipo'] ?? 'valor') === 'titulo');
+            foreach ($columnas as $nombreCol => [$campoCas, $campoFormula]) {
+                $casillero = trim((string) ($e[$campoCas] ?? ''));
+                $formula   = trim((string) ($e[$campoFormula] ?? ''));
+
+                if ($casillero !== '') {
+                    if (!isset($sums[$casillero])) {
+                        $sums[$casillero] = 0.0;
+                    }
+                    if ($formula !== '') {
+                        $formulas[$casillero] = $formula;
+                        // Las filas 'titulo' se pintan como un texto a todo lo ancho, sin
+                        // columnas de valor: el resultado se calcula pero no se ve en ningún lado.
+                        if ($esTitulo) {
+                            $avisosFormulas[] = [
+                                'casillero'   => $casillero,
+                                'descripcion' => (string) ($e['descripcion'] ?? ''),
+                                'formula'     => $formula,
+                                'motivo'      => 'La fila es de tipo "título": se calcula pero no se muestra. Cámbiela a tipo "valor".',
+                            ];
+                        }
+                    }
+                } elseif ($formula !== '') {
+                    $avisosFormulas[] = [
+                        'casillero'   => '',
+                        'descripcion' => (string) ($e['descripcion'] ?? ''),
+                        'formula'     => $formula,
+                        'motivo'      => 'La fórmula está en la columna ' . $nombreCol . ', que no tiene casillero asignado: no se aplica a ningún campo.',
+                    ];
+                }
             }
         }
 
-        // Ejecutar las fórmulas (simple string replace and eval)
-        $maxPasadas = 3;
+        // Ejecutar las fórmulas. Varias pasadas porque una fórmula puede depender de otra
+        // (485 usa 482, que a su vez sale de 429); se corta apenas deja de haber cambios.
+        $maxPasadas = 5;
         for ($i = 0; $i < $maxPasadas; $i++) {
             $cambio = false;
             foreach ($formulas as $casilleroObj => $formulaStr) {
-                // Remplazar los códigos por los valores actuales
-                $expresion = preg_replace_callback('/\b(\d{3})\b/', function($matches) use ($sums) {
-                    $key = $matches[1];
-                    return isset($sums[$key]) ? (string)$sums[$key] : '0';
-                }, $formulaStr);
+                $desconocidos = [];
+                $resultado = $this->resolverFormula($formulaStr, $sums, $desconocidos);
 
-                // Evaluar la expresión matemática de forma segura
-                $resultado = $this->evaluarMatematica($expresion);
+                if ($resultado === null) {
+                    if ($i === 0) {
+                        $avisosFormulas[] = [
+                            'casillero'   => (string) $casilleroObj,
+                            'descripcion' => '',
+                            'formula'     => $formulaStr,
+                            'motivo'      => 'La fórmula no se pudo calcular: revise la sintaxis (solo códigos de casillero y + - * / paréntesis).',
+                        ];
+                    }
+                    continue;
+                }
+                if ($desconocidos && $i === 0) {
+                    $avisosFormulas[] = [
+                        'casillero'   => (string) $casilleroObj,
+                        'descripcion' => '',
+                        'formula'     => $formulaStr,
+                        'motivo'      => 'Usa casilleros que no existen en la estructura (' . implode(', ', $desconocidos) . '): cuentan como 0.',
+                    ];
+                }
+
                 $resultado = max(0, $resultado);
-
                 if (abs($sums[$casilleroObj] - $resultado) > 0.001) {
                     $sums[$casilleroObj] = $resultado;
                     $cambio = true;
@@ -360,6 +426,8 @@ class DeclaracionIvaService
             // Total fijo que 480 (contado) + 481 (crédito) deben sumar: al editar 481 en el
             // navegador, 480 se recalcula como total_480_481 - 481 (ver punto 3 del plan).
             'total_480_481' => $totalTransferencias ?? 0.0,
+            // Fórmulas configuradas que no llegan a verse en el formulario (ver paso 3).
+            'avisos_formulas' => $avisosFormulas,
         ];
     }
 
@@ -458,19 +526,64 @@ class DeclaracionIvaService
     /**
      * Evaluador simple y seguro de expresiones matemáticas (+, -, *, /, paréntesis)
      */
-    private function evaluarMatematica(string $expr): float
+    /**
+     * Resuelve una fórmula de casilleros ("401+421") contra los valores actuales.
+     *
+     * Devuelve null si la fórmula no se puede evaluar, para poder avisarlo en vez de dejar un
+     * 0 mudo en el formulario. En $desconocidos deja los códigos que la fórmula menciona pero
+     * que no existen en la estructura (se toman como 0).
+     *
+     * Tolera cómo escribe la gente las fórmulas en /config/sri-casilleros-etiquetas:
+     * `401,421` y `401;421` (separadores de lista) se entienden como suma, y los adornos
+     * (`=401+421`, `SUMA(401+421)`, `[401]+[421]`, `C401+C421`) se limpian ANTES de sustituir
+     * los códigos — si se limpiaban después, un código pegado a una letra no se reconocía y
+     * terminaba evaluándose como el número literal 401, dando totales absurdos.
+     */
+    private function resolverFormula(string $formula, array $sums, array &$desconocidos = []): ?float
     {
-        // Limpiar espacios y caracteres no permitidos
+        $desconocidos = [];
+
+        // Separadores de lista → suma.
+        $expr = str_replace([',', ';'], '+', $formula);
+
+        // Sanear primero: solo dígitos, operadores, punto decimal y paréntesis.
         $expr = preg_replace('/[^0-9\+\-\*\/\.\(\)]/', '', $expr);
-        if (empty($expr)) return 0.0;
+        if ($expr === null || trim($expr) === '') {
+            return null;
+        }
+
+        // Sustituir cada código de 3 dígitos por su valor, entre paréntesis para que un valor
+        // negativo no genere una expresión inválida ("401--5").
+        $faltantes = [];
+        $expr = preg_replace_callback('/\b(\d{3})\b/', function (array $m) use ($sums, &$faltantes): string {
+            $codigo = $m[1];
+            if (!array_key_exists($codigo, $sums)) {
+                $faltantes[] = $codigo;
+                return '(0)';
+            }
+            return '(' . (string) (float) $sums[$codigo] . ')';
+        }, $expr);
+        $desconocidos = array_values(array_unique($faltantes));
+
+        return $this->evaluarMatematica((string) $expr);
+    }
+
+    /** Evalúa una expresión aritmética ya saneada. null si no es evaluable. */
+    private function evaluarMatematica(string $expr): ?float
+    {
+        // Red de seguridad: la expresión ya viene saneada de resolverFormula(), pero este
+        // método también protege a cualquier llamador futuro.
+        $expr = preg_replace('/[^0-9\+\-\*\/\.\(\)]/', '', $expr);
+        if ($expr === null || $expr === '') return null;
 
         try {
-            // Evaluador seguro usando Tokenizer o eval controlado
-            // Por simplicidad en un entorno controlado sin variables:
             $result = @eval('return ' . $expr . ';');
-            return is_numeric($result) ? (float)$result : 0.0;
+            if ($result === false || !is_numeric($result) || !is_finite((float) $result)) {
+                return null;
+            }
+            return (float) $result;
         } catch (\Throwable $e) {
-            return 0.0;
+            return null;
         }
     }
 

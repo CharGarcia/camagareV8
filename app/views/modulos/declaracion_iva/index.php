@@ -7,6 +7,20 @@
     .sri-table .row-bold { background-color: #f2f2f2; font-weight: 700; }
     .nav-tabs .nav-link { font-weight: 700; font-size: 0.8rem; color: #555; }
     .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
+
+    /* Filtros y totales de la pestaña "Detalle de Casilleros": altura de controles forzada
+       (los -sm de Bootstrap no rinden igual entre select, input e input-group). */
+    #form-filtros-detalle .form-select,
+    #form-filtros-detalle .form-control,
+    #form-filtros-detalle .input-group-text,
+    #form-filtros-detalle .btn { height: 28px; font-size: 0.75rem; }
+    .dc-stat { display: flex; align-items: center; gap: 6px; }
+    .dc-stat i { width: 26px; height: 26px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; }
+    .dc-stat-value { font-weight: 700; font-size: 0.85rem; line-height: 1; }
+    .dc-stat-label { font-size: 0.62rem; text-transform: uppercase; color: #6c757d; letter-spacing: .3px; }
+    .dc-cas-chip { cursor: pointer; font-size: 0.7rem; }
+    .dc-cas-chip:hover { border-color: #0d6efd !important; }
+    .dc-cas-chip.activo { border-color: #0d6efd !important; background: #cfe2ff !important; }
 </style>
 
 <?php if (empty($esMatriz)): ?>
@@ -106,14 +120,57 @@
     <div class="tab-content border-top bg-white p-3 d-none" id="myTabContent">
         <!-- Pestaña 1 -->
         <div class="tab-pane fade show active" id="resumen" role="tabpanel">
+            <div id="avisoFormulas" class="alert alert-warning py-2 px-3 mb-2 d-none small"></div>
             <div id="formSRI" class="sri-container"></div>
         </div>
         
         <!-- Pestaña 2 -->
         <div class="tab-pane fade" id="detalle" role="tabpanel">
-            <div class="mb-2">
-                <input type="text" id="detalleBuscar" class="form-control form-control-sm" style="max-width:320px" placeholder="Buscar por número, entidad, concepto o casillero…">
+
+            <!-- Filtros del detalle -->
+            <div class="card border shadow-sm mb-2">
+                <div class="card-body p-2">
+                    <form id="form-filtros-detalle" class="d-flex flex-wrap align-items-start gap-2" onsubmit="return false;">
+                        <div style="width:170px;">
+                            <label class="form-label d-block fw-bold text-uppercase text-muted mb-1" style="font-size:0.6rem;">Tipo de documento</label>
+                            <select id="detalleOrigen" class="form-select form-select-sm"><option value="">Todos</option></select>
+                        </div>
+                        <div style="width:150px;">
+                            <label class="form-label d-block fw-bold text-uppercase text-muted mb-1" style="font-size:0.6rem;">Casillero</label>
+                            <select id="detalleCasillero" class="form-select form-select-sm"><option value="">Todos</option></select>
+                        </div>
+                        <div style="width:150px;">
+                            <label class="form-label d-block fw-bold text-uppercase text-muted mb-1" style="font-size:0.6rem;">Documento</label>
+                            <input type="text" id="detalleDocumento" class="form-control form-control-sm" placeholder="001-101-0000…" autocomplete="off">
+                        </div>
+                        <div style="width:300px;">
+                            <label class="form-label d-block fw-bold text-uppercase text-muted mb-1" style="font-size:0.6rem;">Cliente / Proveedor</label>
+                            <input type="text" id="detalleEntidad" class="form-control form-control-sm" list="detalleEntidadesLista" placeholder="Nombre o identificación" autocomplete="off">
+                            <datalist id="detalleEntidadesLista"></datalist>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-start gap-2">
+                            <div style="width:240px;">
+                                <label class="form-label d-block fw-bold text-uppercase text-muted mb-1" style="font-size:0.6rem;">Buscar (todo)</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                    <input type="text" id="detalleBuscar" class="form-control form-control-sm" placeholder="Número, entidad, concepto…" autocomplete="off">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="form-label d-block fw-bold text-uppercase text-muted mb-1" style="font-size:0.6rem;">&nbsp;</label>
+                                <button type="button" id="detalleLimpiar" class="btn btn-outline-secondary btn-sm fw-bold"><i class="bi bi-eraser"></i> Limpiar</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Totales de lo filtrado -->
+                <div class="card-footer bg-white border-top py-2 px-3">
+                    <div id="detalleTotales" class="d-flex flex-wrap align-items-center gap-3"></div>
+                    <div id="detalleTotalesCasilleros" class="mt-2"></div>
+                </div>
             </div>
+
             <div id="accordionDetalle" class="accordion accordion-flush" style="max-height: 50vh; overflow-y: auto;"></div>
         </div>
     </div>
@@ -315,8 +372,9 @@
                 if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
                 renderVentas(data.resumen_completo);
                 ultimoDetalle = data.detalle_documentos || [];
-                document.getElementById('detalleBuscar').value = '';
-                renderDetalle(ultimoDetalle);
+                poblarFiltrosDetalle(ultimoDetalle);
+                limpiarFiltrosDetalle();
+                aplicarFiltrosDetalle();
                 document.getElementById('btnExportarExcel').classList.remove('d-none');
                 yaGenerado = true;
                 actualizarBotonesDeclaracion();
@@ -324,14 +382,42 @@
         }
 
         window.exportarExcel = function() {
-            const params = new URLSearchParams(new FormData(form)).toString();
-            window.open(`<?= $base ?>/<?= $rutaModulo ?>/exportar-excel?${params}`, '_blank');
+            const params = new URLSearchParams(new FormData(form));
+            // Los casilleros editables van con el valor que tienen AHORA en pantalla: si no se
+            // envían, el Excel exporta el valor por defecto del servidor y no coincide con lo
+            // que el usuario está viendo (ajustes de 615/617/481/484/486/902 sin guardar).
+            ['615', '617', '481', '484', '486', '902'].forEach(codigo => {
+                const inp = formSRI.querySelector('input[data-casillero-editable="' + codigo + '"]');
+                if (inp && inp.value !== '') params.append('ajuste_' + codigo, inp.value);
+            });
+            window.open(`<?= $base ?>/<?= $rutaModulo ?>/exportar-excel?${params.toString()}`, '_blank');
         };
+
+        // Fórmulas configuradas en /config/sri-casilleros-etiquetas que no llegan a verse en el
+        // formulario (fórmula en una columna sin casillero, fila de tipo "título", códigos
+        // inexistentes o sintaxis que no se puede evaluar). Antes fallaban en silencio y el
+        // casillero salía en blanco sin explicación.
+        function renderAvisosFormulas(avisos) {
+            const cont = document.getElementById('avisoFormulas');
+            if (!avisos || !avisos.length) { cont.classList.add('d-none'); cont.innerHTML = ''; return; }
+            const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+            cont.innerHTML =
+                `<div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>` +
+                `${avisos.length} fórmula${avisos.length === 1 ? '' : 's'} configurada${avisos.length === 1 ? '' : 's'} que no se está${avisos.length === 1 ? '' : 'n'} aplicando</div>` +
+                '<ul class="mb-1 ps-3">' +
+                avisos.map(a => `<li><b>${a.casillero ? 'Casillero ' + esc(a.casillero) : 'Fila sin casillero'}</b>` +
+                    `${a.descripcion ? ' — ' + esc(a.descripcion) : ''}: <code>${esc(a.formula)}</code><br>${esc(a.motivo)}</li>`).join('') +
+                '</ul>' +
+                '<div class="text-muted" style="font-size:0.7rem;">Se corrige en Configuración → Casilleros SRI.</div>';
+            cont.classList.remove('d-none');
+        }
 
         function renderVentas(resumenData) {
             const layout = resumenData.layout;
             const valores = resumenData.valores;
             const isChecked = document.getElementById('checkSoloValores').checked;
+
+            renderAvisosFormulas(resumenData.avisos_formulas);
 
             ultimoLayout = layout;
             ultimosValores = valores;
@@ -468,13 +554,27 @@
         // ==========================================================================
         function evaluarMatematicaJS(expr) {
             const limpio = String(expr).replace(/[^0-9+\-*/.()]/g, '');
-            if (!limpio) return 0;
+            if (!limpio) return null;
             try {
                 const resultado = Function('"use strict"; return (' + limpio + ');')();
-                return typeof resultado === 'number' && isFinite(resultado) ? resultado : 0;
+                return typeof resultado === 'number' && isFinite(resultado) ? resultado : null;
             } catch (e) {
-                return 0;
+                return null;
             }
+        }
+
+        // Resuelve una fórmula de casilleros. Calca DeclaracionIvaService::resolverFormula():
+        // los separadores de lista valen como suma y la expresión se limpia ANTES de sustituir
+        // los códigos, para que un código pegado a una letra ("C401") no acabe evaluándose como
+        // el número literal 401.
+        function resolverFormulaJS(formula, valores) {
+            let expr = String(formula).replace(/[,;]/g, '+').replace(/[^0-9+\-*/.()]/g, '');
+            if (!expr) return null;
+            expr = expr.replace(/\b(\d{3})\b/g, (m, cod) => {
+                const v = valores[cod];
+                return '(' + (v === undefined || v === null ? 0 : parseFloat(v) || 0) + ')';
+            });
+            return evaluarMatematicaJS(expr);
         }
 
         function recalcularFormulasJS(valores, layout) {
@@ -485,13 +585,12 @@
                 if (r.casillero_impuesto && r.formula_impuesto) formulas[r.casillero_impuesto] = r.formula_impuesto;
             });
 
-            for (let pasada = 0; pasada < 3; pasada++) {
+            for (let pasada = 0; pasada < 5; pasada++) {
                 let cambio = false;
                 for (const casillero in formulas) {
-                    const expresion = formulas[casillero].replace(/\b(\d{3})\b/g, (m, cod) => {
-                        return (valores[cod] !== undefined ? valores[cod] : 0).toString();
-                    });
-                    let resultado = Math.max(0, evaluarMatematicaJS(expresion));
+                    const calculado = resolverFormulaJS(formulas[casillero], valores);
+                    if (calculado === null) continue; // fórmula inválida: se avisa desde el servidor
+                    const resultado = Math.max(0, calculado);
                     const actual = parseFloat(valores[casillero]) || 0;
                     if (Math.abs(actual - resultado) > 0.001) {
                         valores[casillero] = resultado;
@@ -570,9 +669,11 @@
             let html = '';
             const accordionDetalle = document.getElementById('accordionDetalle');
             if (detalle.length === 0) {
-                const hayBusqueda = document.getElementById('detalleBuscar').value.trim() !== '';
+                const hayFiltro = ['detalleBuscar', 'detalleDocumento', 'detalleEntidad'].some(id => document.getElementById(id).value.trim() !== '')
+                    || document.getElementById('detalleOrigen').value !== ''
+                    || document.getElementById('detalleCasillero').value !== '';
                 accordionDetalle.innerHTML = '<div class="text-center text-muted py-3">' +
-                    (hayBusqueda ? 'Sin resultados para la búsqueda.' : 'No hay documentos sincronizados.') + '</div>';
+                    (hayFiltro ? 'Sin resultados para los filtros aplicados.' : 'No hay documentos sincronizados.') + '</div>';
                 return;
             }
 
@@ -587,6 +688,7 @@
                         docNum: docNum,
                         fecha: d.fecha,
                         entidad: d.entidad || '',
+                        identificacion: d.identificacion || '',
                         items: [],
                         total: 0
                     };
@@ -666,9 +768,10 @@
                                 <div class="d-flex align-items-center gap-3">
                                     <span class="badge bg-${colorOrigen} bg-opacity-10 text-${colorOrigen} border border-${colorOrigen} border-opacity-25 px-2 py-1 text-uppercase" style="font-size: 0.7rem;">${g.origen.replace(/_/g, ' ')}</span>
                                     <span class="fw-bold text-dark font-monospace" style="font-size: 0.85rem;">#${g.docNum}</span>
-                                    <span class="fw-medium text-secondary" style="font-size: 0.85rem;"><i class="bi bi-person-fill text-muted me-1"></i>${g.entidad ? g.entidad : 'Sin entidad asignada'}</span>
+                                    <span class="fw-medium text-secondary" style="font-size: 0.85rem;"><i class="bi bi-person-fill text-muted me-1"></i>${g.entidad ? g.entidad : 'Sin entidad asignada'}${g.identificacion ? ' <span class="text-muted">(' + g.identificacion + ')</span>' : ''}</span>
                                     <span class="text-muted small"><i class="bi bi-calendar3 me-1"></i>${new Date(g.fecha).toLocaleDateString('es-ES', {day: '2-digit', month: 'short', year: 'numeric'})}</span>
                                 </div>
+                                <span class="fw-bold text-dark font-monospace" style="font-size: 0.85rem;" title="Suma de los casilleros visibles de este documento">${fmtMoneda(g.total)}</span>
                             </div>
                         </button>
                     </h2>
@@ -693,20 +796,162 @@
             accordionDetalle.innerHTML = html;
         }
 
-        // Filtra sobre el detalle ya cargado (sin volver a pedir el servidor): por número de
-        // documento, entidad, concepto o casillero.
-        document.getElementById('detalleBuscar').addEventListener('input', function () {
-            const q = this.value.trim().toLowerCase();
-            if (!q) { renderDetalle(ultimoDetalle); return; }
-            const filtrado = ultimoDetalle.filter(d => {
-                const docNum = d.establecimiento ? `${d.establecimiento}-${d.punto_emision}-${d.secuencial}` : `ID: ${d.id_origen}`;
-                return docNum.toLowerCase().includes(q)
-                    || (d.entidad || '').toLowerCase().includes(q)
-                    || (d.concepto || '').toLowerCase().includes(q)
-                    || (d.casillero || '').toLowerCase().includes(q)
-                    || (d.origen || '').toLowerCase().includes(q);
+        // ==========================================================================
+        // Filtros y totales de la pestaña "Detalle de Casilleros"
+        // Todo se resuelve sobre el detalle ya cargado (ultimoDetalle), sin volver a
+        // pedir al servidor: filtrar es instantáneo y los totales de abajo siempre
+        // corresponden EXACTAMENTE a lo que se está viendo.
+        // ==========================================================================
+        <?php
+        // Descripción oficial de cada casillero (para rotular los filtros y los chips de suma).
+        $mapaCasilleroDesc = [];
+        foreach (($estructura ?? []) as $e) {
+            foreach (['casillero_bruto', 'casillero_neto', 'casillero_impuesto'] as $k) {
+                if (!empty($e[$k]) && !isset($mapaCasilleroDesc[$e[$k]])) {
+                    $mapaCasilleroDesc[$e[$k]] = trim((string) ($e['descripcion'] ?? ''));
+                }
+            }
+        }
+        ?>
+        const CASILLERO_DESC = <?= json_encode($mapaCasilleroDesc, JSON_UNESCAPED_UNICODE) ?>;
+
+        const filtroOrigen    = document.getElementById('detalleOrigen');
+        const filtroCasillero = document.getElementById('detalleCasillero');
+        const filtroDocumento = document.getElementById('detalleDocumento');
+        const filtroEntidad   = document.getElementById('detalleEntidad');
+        const filtroBuscar    = document.getElementById('detalleBuscar');
+
+        function numeroDocumento(d) {
+            return d.establecimiento ? `${d.establecimiento}-${d.punto_emision}-${d.secuencial}` : `ID: ${d.id_origen}`;
+        }
+
+        function fmtMoneda(v) {
+            return (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Rellena los selectores con lo que realmente trae el período cargado.
+        function poblarFiltrosDetalle(detalle) {
+            const origenes = [...new Set(detalle.map(d => d.origen || '').filter(Boolean))].sort();
+            filtroOrigen.innerHTML = '<option value="">Todos</option>' +
+                origenes.map(o => `<option value="${o}">${o.replace(/_/g, ' ')}</option>`).join('');
+
+            const casilleros = [...new Set(detalle.map(d => d.casillero || '').filter(Boolean))]
+                .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+            filtroCasillero.innerHTML = '<option value="">Todos</option>' +
+                casilleros.map(c => {
+                    const desc = CASILLERO_DESC[c] ? ' — ' + CASILLERO_DESC[c].substring(0, 40) : '';
+                    return `<option value="${c}">${c}${desc}</option>`;
+                }).join('');
+
+            const entidades = [...new Set(detalle.map(d => d.entidad || '').filter(Boolean))].sort();
+            document.getElementById('detalleEntidadesLista').innerHTML =
+                entidades.map(e => `<option value="${e.replace(/"/g, '&quot;')}"></option>`).join('');
+        }
+
+        function limpiarFiltrosDetalle() {
+            filtroOrigen.value = '';
+            filtroCasillero.value = '';
+            filtroDocumento.value = '';
+            filtroEntidad.value = '';
+            filtroBuscar.value = '';
+        }
+
+        function filtrarDetalle() {
+            const fOrigen = filtroOrigen.value;
+            const fCas    = filtroCasillero.value;
+            const fDoc    = filtroDocumento.value.trim().toLowerCase();
+            const fEnt    = filtroEntidad.value.trim().toLowerCase();
+            const q       = filtroBuscar.value.trim().toLowerCase();
+
+            return ultimoDetalle.filter(d => {
+                if (fOrigen && (d.origen || '') !== fOrigen) return false;
+                if (fCas && String(d.casillero || '') !== fCas) return false;
+                if (fDoc && !numeroDocumento(d).toLowerCase().includes(fDoc)) return false;
+                if (fEnt) {
+                    const ent = (d.entidad || '').toLowerCase();
+                    const ide = (d.identificacion || '').toLowerCase();
+                    if (!ent.includes(fEnt) && !ide.includes(fEnt)) return false;
+                }
+                if (q) {
+                    const texto = [
+                        numeroDocumento(d), d.entidad || '', d.identificacion || '',
+                        d.concepto || '', d.casillero || '', d.origen || ''
+                    ].join(' ').toLowerCase();
+                    if (!texto.includes(q)) return false;
+                }
+                return true;
             });
+        }
+
+        // Sumas de lo filtrado: total general, número de documentos y desglose por casillero.
+        function renderTotalesDetalle(detalle) {
+            const cont = document.getElementById('detalleTotales');
+            const contCas = document.getElementById('detalleTotalesCasilleros');
+
+            const total = detalle.reduce((a, d) => a + (parseFloat(d.valor) || 0), 0);
+            const documentos = new Set(detalle.map(d => `${d.origen}_${numeroDocumento(d)}`)).size;
+            const hayFiltro = !!(filtroOrigen.value || filtroCasillero.value || filtroDocumento.value.trim() ||
+                                 filtroEntidad.value.trim() || filtroBuscar.value.trim());
+
+            cont.innerHTML = `
+                <div class="dc-stat"><i class="bi bi-files bg-primary bg-opacity-10 text-primary"></i>
+                    <div><div class="dc-stat-value">${documentos.toLocaleString('en-US')}</div><div class="dc-stat-label">Documentos</div></div></div>
+                <div class="dc-stat"><i class="bi bi-list-ol bg-secondary bg-opacity-10 text-secondary"></i>
+                    <div><div class="dc-stat-value">${detalle.length.toLocaleString('en-US')}</div><div class="dc-stat-label">Registros</div></div></div>
+                <div class="dc-stat"><i class="bi bi-cash-stack bg-success bg-opacity-10 text-success"></i>
+                    <div><div class="dc-stat-value">${fmtMoneda(total)}</div><div class="dc-stat-label">Suma ${hayFiltro ? 'filtrada' : 'total'}</div></div></div>
+                ${hayFiltro ? `<span class="badge bg-warning bg-opacity-25 text-warning-emphasis border border-warning border-opacity-25"><i class="bi bi-funnel-fill me-1"></i>Filtro activo — de ${ultimoDetalle.length} registros</span>` : ''}
+            `;
+
+            // Desglose por casillero (siempre sobre lo filtrado)
+            const porCas = {};
+            detalle.forEach(d => {
+                const c = String(d.casillero || '');
+                if (!c) return;
+                if (!porCas[c]) porCas[c] = { suma: 0, n: 0 };
+                porCas[c].suma += parseFloat(d.valor) || 0;
+                porCas[c].n++;
+            });
+            const codigos = Object.keys(porCas).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            if (!codigos.length) { contCas.innerHTML = ''; return; }
+
+            contCas.innerHTML =
+                '<div class="dc-stat-label mb-1">Suma por casillero</div>' +
+                '<div class="d-flex flex-wrap gap-1">' +
+                codigos.map(c => {
+                    const activo = filtroCasillero.value === c ? ' activo' : '';
+                    const desc = CASILLERO_DESC[c] ? CASILLERO_DESC[c] : 'Sin fila en la estructura del formulario';
+                    return `<div class="dc-cas-chip d-inline-flex align-items-center bg-light border rounded px-2 py-1${activo}"
+                                 data-filtro-casillero="${c}" title="${desc.replace(/"/g, '&quot;')} — clic para filtrar por este casillero">
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 me-2">${c}</span>
+                        <span class="fw-bold text-dark">${fmtMoneda(porCas[c].suma)}</span>
+                        <span class="text-muted ms-2" style="font-size:0.65rem;">(${porCas[c].n})</span>
+                    </div>`;
+                }).join('') +
+                '</div>';
+        }
+
+        function aplicarFiltrosDetalle() {
+            const filtrado = filtrarDetalle();
             renderDetalle(filtrado);
+            renderTotalesDetalle(filtrado);
+        }
+        window.aplicarFiltrosDetalle = aplicarFiltrosDetalle;
+
+        [filtroOrigen, filtroCasillero].forEach(el => el.addEventListener('change', aplicarFiltrosDetalle));
+        [filtroDocumento, filtroEntidad, filtroBuscar].forEach(el => el.addEventListener('input', aplicarFiltrosDetalle));
+        document.getElementById('detalleLimpiar').addEventListener('click', () => {
+            limpiarFiltrosDetalle();
+            aplicarFiltrosDetalle();
+        });
+
+        // Los chips del desglose filtran por ese casillero (segundo clic lo quita).
+        document.getElementById('detalleTotalesCasilleros').addEventListener('click', function (e) {
+            const chip = e.target.closest('[data-filtro-casillero]');
+            if (!chip) return;
+            const codigo = chip.getAttribute('data-filtro-casillero');
+            filtroCasillero.value = (filtroCasillero.value === codigo) ? '' : codigo;
+            aplicarFiltrosDetalle();
         });
 
         window.editarCasillero = function(id, casilleroActual) {
@@ -802,7 +1047,9 @@
             tabContent.classList.remove('d-none');
             renderVentas({ layout: data.layout, valores: declaracion.valores_casilleros || {}, total_480_481: data.total_480_481 });
             ultimoDetalle = []; // no hay detalle de documentos al cargar el snapshot guardado
-            document.getElementById('detalleBuscar').value = '';
+            poblarFiltrosDetalle([]);
+            limpiarFiltrosDetalle();
+            renderTotalesDetalle([]);
             document.getElementById('accordionDetalle').innerHTML = '<div class="text-center text-muted py-3">Este es el detalle guardado al declarar. Presione GENERAR para ver el detalle de documentos actual.</div>';
             document.getElementById('btnExportarExcel').classList.remove('d-none');
             yaGenerado = true;

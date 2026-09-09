@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
-etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva
-version: 1.0
+etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, formula, suma de casilleros, casillero en blanco, no calcula
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -32,6 +32,82 @@ empresa. Al crearla se indica el tipo y el periodo:
 5. **Genere el asiento** contable (es un paso aparte).
 6. **Genere el egreso** del pago, eligiendo a quién se paga y con qué concepto.
 
+## Detalle de casilleros: filtrar y ver sumas
+
+La pestaña **Detalle de Casilleros** muestra, documento por documento, a qué
+casillero fue cada valor. Sobre ella hay una barra de filtros que se puede
+combinar libremente:
+
+| Filtro | Qué hace |
+| --- | --- |
+| Tipo de documento | Deja solo facturas de venta, compras, retenciones, notas de crédito… |
+| Casillero | Deja solo los valores que fueron a ese casillero. |
+| Documento | Busca por número (por ejemplo `001-101` o el número completo). |
+| Cliente / Proveedor | Busca por nombre **o por identificación (RUC/cédula)**. |
+| Buscar (todo) | Texto libre sobre número, entidad, concepto, casillero y tipo. |
+
+Debajo de los filtros se muestran las **sumas de lo que está filtrado en ese
+momento**: cantidad de documentos, cantidad de registros y el total, más un
+desglose con la **suma por casillero**. Al hacer clic en uno de esos casilleros
+se filtra por él; un segundo clic quita el filtro. El botón **Limpiar** deja
+todo como al inicio.
+
+Los filtros trabajan sobre lo ya cargado, así que responden al instante y no
+hace falta volver a presionar GENERAR.
+
+## Exportar a Excel
+
+El botón **EXCEL** descarga tres hojas:
+
+- **Resumen 104**: el formulario tal como se ve en pantalla, incluidos los
+  ajustes manuales que tenga puestos en ese momento (casilleros 615, 617, 481,
+  484, 486 y 902), aunque todavía no haya guardado la declaración. Al final, si
+  existen, se listan aparte los **casilleros con valor que no tienen fila en la
+  estructura del formulario**.
+- **Detalle Casilleros**: una fila por documento y casillero, con autofiltro.
+  Al filtrar en Excel, la fila **TOTAL FILTRADO** de abajo se recalcula sola.
+- **Por Casillero**: cuadre del formulario contra los documentos — cuántos
+  documentos aportaron a cada casillero, la suma de esos documentos, el valor
+  del formulario y la diferencia. La columna *Observación* señala los casos a
+  revisar.
+
+### Si en el Excel falta un casillero
+
+Un casillero puede tener valores sincronizados y aun así **no aparecer en el
+formulario** si nadie creó su fila en *Configuración → Casilleros SRI*. El caso
+típico es el **609** (retenciones en la fuente de IVA que le efectuaron): el
+sistema lo usa para calcular el saldo a favor, pero sin su fila no se dibuja en
+pantalla.
+
+Esos casilleros salen igualmente en el Excel: al final de la hoja *Resumen 104*
+y marcados en rojo en la hoja *Por Casillero* con la observación "Sin fila en la
+estructura". Para que aparezcan también en el formulario hay que crear la fila
+correspondiente en la configuración de casilleros.
+
+## Casilleros que suman otros (fórmulas)
+
+En *Configuración → Casilleros SRI* un casillero puede definirse como la suma de
+otros escribiendo una fórmula, por ejemplo `401+402+405`. Se aceptan `+`, `-`,
+`*`, `/` y paréntesis, y también separar los casilleros por coma (`401,402,405`).
+
+Un casillero configurado así puede quedarse en blanco por tres motivos, y desde
+la versión 1.2 el módulo **lo dice en un aviso amarillo** sobre el formulario (y
+en el Excel), en vez de mostrar un cero sin explicación:
+
+- **La fórmula está en una columna que no tiene casillero.** Cada fila tiene tres
+  columnas (Bruto, Neto, Impuesto) con su propio casillero y su propia fórmula.
+  La fórmula de la columna *Bruto* solo alimenta al casillero de la columna
+  *Bruto*: si el casillero está en *Impuesto*, la fórmula hay que escribirla en
+  *Fórmula Impuesto*.
+- **La fila es de tipo "título".** Esas filas se dibujan como un encabezado a
+  todo lo ancho, sin columnas de valor: el resultado se calcula pero no se ve.
+  Hay que cambiarla a tipo *valor*.
+- **La fórmula menciona casilleros que no existen** en la estructura. Esos
+  cuentan como cero; el aviso indica cuáles son.
+
+Las fórmulas pueden apoyarse unas en otras (el 485 usa el 482, que sale del 429):
+el sistema las resuelve en cadena.
+
 ## Saldo a favor
 
 Cuando el periodo termina con **saldo a favor**, el sistema lo arrastra
@@ -53,8 +129,26 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 - **"El tipo de período debe ser mensual o semestral"**: revise el tipo elegido.
 - **Las cifras no coinciden con lo que espera**: compruebe que todas las facturas
   y compras del periodo estén registradas, y que ninguna tenga fecha fuera del
-  periodo.
+  periodo. Para ubicar la diferencia, use la hoja **Por Casillero** del Excel:
+  compara casillero por casillero el formulario contra la suma de los documentos.
+- **En el Excel falta un casillero**: probablemente no tiene fila en
+  *Configuración → Casilleros SRI*. Revise la lista del final de la hoja
+  *Resumen 104*.
+- **Un casillero configurado con fórmula sale en blanco**: lea el aviso amarillo
+  sobre el formulario, que dice exactamente por qué no se aplicó (ver
+  *Casilleros que suman otros*).
 
 ## Historial de cambios
 
+- **1.2** — Aviso cuando una fórmula configurada no se aplica (columna sin
+  casillero, fila de tipo título, casilleros inexistentes o sintaxis inválida);
+  antes el campo salía en blanco sin explicación. Las fórmulas ahora toleran
+  comas como separador y prefijos o adornos alrededor del código, y se resuelven
+  en más pasadas encadenadas. Se agrega la fila del casillero **609**
+  (retenciones de IVA que le efectuaron) a la estructura del formulario.
+- **1.1** — Filtros y sumas en la pestaña *Detalle de Casilleros* (por tipo de
+  documento, casillero, número de documento y cliente/proveedor). El Excel pasa a
+  tres hojas: se agregan el detalle plano con autofiltro y totales, y el cuadre
+  *Por Casillero*; el Resumen 104 exporta los ajustes manuales que estén en
+  pantalla y ya no oculta los casilleros sin fila en la estructura.
 - **1.0** — Versión inicial.

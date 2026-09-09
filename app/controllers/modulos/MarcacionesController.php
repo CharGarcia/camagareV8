@@ -122,12 +122,19 @@ class MarcacionesController extends BaseModuloController
             . '<button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>'
             . '</div>';
 
+        // Las URLs de exportación viajan con la respuesta para que los botones
+        // apunten siempre al mismo recorte que muestra la tabla.
+        $qsExport = 'b=' . urlencode($buscar) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir);
+        $urlModulo = rtrim(BASE_URL, '/') . '/' . self::RUTA_MODULO;
+
         echo json_encode([
             'ok'         => true,
             'rows'       => $rowsHtml,
             'pagination' => $paginationHtml,
             'info'       => "$from-$to/$total",
             'total'      => $total,
+            'pdf_url'    => $urlModulo . '/export-pdf?' . $qsExport,
+            'excel_url'  => $urlModulo . '/export-excel?' . $qsExport,
         ]);
         exit;
     }

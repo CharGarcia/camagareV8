@@ -160,12 +160,28 @@ class ProformaService
     }
 
     /**
+     * Transiciones de estado que además del permiso de actualizar exigen un nivel
+     * mínimo de usuario (2 = administrador, 3 = superadministrador).
+     *
+     * Reabrir una proforma aprobada la vuelve editable y deja obsoleta la aprobación
+     * que el cliente ya vio, así que no es una acción de uso diario: se reserva a
+     * administradores. La clave es "estadoActual>estadoNuevo".
+     */
+    private const NIVEL_MINIMO_TRANSICION = [
+        'aprobada>borrador' => 2,
+    ];
+
+    /**
      * Cambia el estado de una proforma.
      * Transiciones permitidas:
      *   borrador → aprobada | anulada
-     *   aprobada → rechazada | anulada
+     *   aprobada → rechazada | anulada | borrador (reabrir; solo nivel 2 o 3)
+     *
+     * @param int $nivelUsuario Nivel del usuario que ejecuta el cambio (1 usuario,
+     *                          2 administrador, 3 superadministrador). Se valida aquí
+     *                          y no solo en la vista: el endpoint es alcanzable directo.
      */
-    public function cambiarEstado(int $id, string $nuevoEstado, int $idEmpresa, int $idUsuario): void
+    public function cambiarEstado(int $id, string $nuevoEstado, int $idEmpresa, int $idUsuario, int $nivelUsuario = 1): void
     {
         $proforma = $this->repository->getPorId($id);
         if (!$proforma || (int) $proforma['id_empresa'] !== $idEmpresa) {
@@ -175,11 +191,18 @@ class ProformaService
         $estadoActual = $proforma['estado'];
         $permitidas = [
             'borrador' => ['aprobada', 'anulada'],
-            'aprobada' => ['rechazada', 'anulada'],
+            'aprobada' => ['rechazada', 'anulada', 'borrador'],
         ];
 
         if (!isset($permitidas[$estadoActual]) || !in_array($nuevoEstado, $permitidas[$estadoActual], true)) {
             throw new \RuntimeException("No se puede cambiar de '{$estadoActual}' a '{$nuevoEstado}'.");
+        }
+
+        $nivelMinimo = self::NIVEL_MINIMO_TRANSICION["{$estadoActual}>{$nuevoEstado}"] ?? 0;
+        if ($nivelMinimo > 0 && $nivelUsuario < $nivelMinimo) {
+            throw new \RuntimeException(
+                'Solo un administrador o un superadministrador puede regresar una proforma aprobada a borrador.'
+            );
         }
 
         $db = Database::getConnection();
@@ -242,6 +265,111 @@ class ProformaService
             } catch (\Throwable $e) { /* log falla silenciosamente */ }
         }
         return $ok;
+    }
+
+    /**
+     * Duplica una proforma en una NUEVA proforma en borrador y devuelve su id.
+     *
+     * Se copia lo cotizable: cliente, vendedor, vigencia, observaciones, condiciones,
+     * ítems (con sus impuestos) e información adicional. NO se arrastra nada propio del
+     * documento original: el secuencial lo vuelve a asignar crear() (autoritativo del
+     * servidor, con su bloqueo transaccional), la fecha de emisión pasa a ser la de hoy,
+     * el estado vuelve a 'borrador' y quedan fuera el token/aprobación del cliente y la
+     * factura convertida.
+     *
+     * Se permite duplicar en cualquier estado (incluidas anulada y rechazada): el sentido
+     * del botón es "volver a cotizar lo mismo", no reabrir el documento original.
+     */
+    public function duplicar(int $id, int $idEmpresa, int $idUsuario, string $tipoAmbiente = '1'): int
+    {
+        $proforma = $this->repository->getPorId($id);
+        if (!$proforma || (int) $proforma['id_empresa'] !== $idEmpresa) {
+            throw new \RuntimeException('Proforma no encontrada.');
+        }
+
+        // Impuestos de TODAS las líneas en una sola consulta (sin N+1).
+        $detalles  = $this->repository->getDetalles($id);
+        $impuestos = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
+
+        $items = [];
+        foreach ($detalles as $d) {
+            $items[] = [
+                'id_producto'               => $d['id_producto'] ?? null,
+                'id_unidad_medida'          => $d['id_unidad_medida'] ?? null,
+                'codigo_principal'          => $d['codigo_principal'] ?? '',
+                'codigo_auxiliar'           => $d['codigo_auxiliar'] ?? null,
+                'descripcion'               => $d['descripcion'],
+                // En la línea la columna es info_adicional; insertDetalle la recibe como 'adicional'.
+                'adicional'                 => $d['info_adicional'] ?? null,
+                'cantidad'                  => $d['cantidad'],
+                'precio_unitario'           => $d['precio_unitario'],
+                'descuento'                 => $d['descuento'],
+                'precio_total_sin_impuesto' => $d['precio_total_sin_impuesto'],
+                'id_tarifa_iva'             => $d['id_tarifa_iva'] ?? 0,
+                'impuestos'                 => array_map(static fn(array $i): array => [
+                    'codigo_impuesto'   => $i['codigo_impuesto']   ?? '2',
+                    'codigo_porcentaje' => $i['codigo_porcentaje'] ?? '2',
+                    'tarifa'            => (float) ($i['tarifa'] ?? 0),
+                    'base_imponible'    => (float) ($i['base_imponible'] ?? 0),
+                    'valor'             => (float) ($i['valor'] ?? 0),
+                ], $impuestos[(int) $d['id']] ?? []),
+            ];
+        }
+        if (!$items) {
+            throw new \RuntimeException('La proforma no tiene ítems que duplicar.');
+        }
+
+        $adicional = [];
+        foreach ($this->repository->getInfoAdicional($id) as $a) {
+            $adicional[] = ['nombre' => $a['nombre'] ?? '', 'valor' => $a['valor'] ?? ''];
+        }
+
+        $data = [
+            'id_empresa'          => $idEmpresa,
+            'id_usuario'          => $idUsuario,
+            // Misma serie que la original: el secuencial nuevo sale de ese punto de emisión.
+            'id_establecimiento'  => (int) $proforma['id_establecimiento'],
+            'id_punto_emision'    => (int) $proforma['id_punto_emision'],
+            'establecimiento'     => $proforma['establecimiento'],
+            'punto_emision'       => $proforma['punto_emision'],
+            // Solo para pasar la validación de Rules: crear() descarta este valor y asigna
+            // el siguiente secuencial real de la serie.
+            'secuencial'          => $proforma['secuencial'],
+            'tipo_ambiente'       => $tipoAmbiente,
+            'fecha_emision'       => date('Y-m-d'),
+            'id_cliente'          => (int) $proforma['id_cliente'],
+            'id_vendedor'         => $proforma['id_vendedor'] ?? null,
+            'dias_vigencia'       => (int) ($proforma['dias_vigencia'] ?? 15),
+            'observaciones'       => $proforma['observaciones'] ?? null,
+            'condiciones_html'    => $proforma['condiciones_html'] ?? null,
+            'moneda'              => $proforma['moneda'] ?? 'DOLAR',
+            'total_sin_impuestos' => $proforma['total_sin_impuestos'] ?? 0,
+            'total_descuento'     => $proforma['total_descuento'] ?? 0,
+            'total_ice'           => $proforma['total_ice'] ?? 0,
+            'importe_total'       => $proforma['importe_total'] ?? 0,
+            'estado'              => 'borrador',
+            'detalles'            => $items,
+            'info_adicional'      => $adicional,
+        ];
+
+        // crear() abre la transacción, toma el secuencial con su candado y audita el alta.
+        $idNueva = $this->crear($data);
+
+        // Registro adicional para dejar rastro de DE QUÉ proforma salió esta copia.
+        try {
+            $nueva = $this->repository->getPorId($idNueva);
+            $this->log->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'duplicar',
+                'proformas_cabecera',
+                $idNueva,
+                ['id_origen' => $id, 'secuencial' => $proforma['secuencial']],
+                ['secuencial' => $nueva['secuencial'] ?? null]
+            );
+        } catch (\Throwable $e) { /* log falla silenciosamente */ }
+
+        return $idNueva;
     }
 
     /**

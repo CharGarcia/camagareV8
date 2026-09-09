@@ -289,34 +289,49 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                         <span id="fr-sri-badge-estado" class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2">Sin enviar</span>
                                     </div>
                                 </div>
+                                <!-- Columna izquierda -->
                                 <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-key me-1"></i>Clave de Acceso</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="fr-sri-clave-acceso" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- sin clave de acceso -" value="">
-                                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.FR_copiarCampoSri('fr-sri-clave-acceso')" title="Copiar clave de acceso">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label class="small fw-bold text-muted mb-1"><i class="bi bi-building me-1"></i>Tipo de Ambiente</label>
+                                            <input type="text" id="fr-sri-ambiente" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="small fw-bold text-muted mb-1"><i class="bi bi-receipt me-1"></i>Número de Documento</label>
+                                            <input type="text" id="fr-sri-numero-documento" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="000-000-000000000" value="">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="small fw-bold text-muted mb-1"><i class="bi bi-hash me-1"></i>Número de Autorización</label>
+                                            <input type="text" id="fr-sri-autorizacion" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- pendiente -" value="">
+                                        </div>
                                     </div>
                                 </div>
+                                <!-- Columna derecha -->
                                 <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-hash me-1"></i>Número de Autorización</label>
-                                    <input type="text" id="fr-sri-autorizacion" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-building me-1"></i>Tipo de Ambiente</label>
-                                    <input type="text" id="fr-sri-ambiente" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-file-earmark-text me-1"></i>Tipo de Documento</label>
-                                    <input type="text" id="fr-sri-tipo-documento" class="form-control form-control-sm bg-light" readonly value="Factura (ATS 41 - Reembolso)">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-calendar-check me-1"></i>Fecha de Autorización</label>
-                                    <input type="text" id="fr-sri-fecha-autorizacion" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-receipt me-1"></i>Número de Documento</label>
-                                    <input type="text" id="fr-sri-numero-documento" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="000-000-000000000" value="">
+                                    <fieldset class="border border-primary rounded-2 p-2 pt-1 h-100">
+                                        <legend class="float-none w-auto px-2 mb-0 fw-bold text-primary" style="font-size:0.75rem;">
+                                            <i class="bi bi-slash-circle me-1"></i>Datos para anular en el SRI
+                                        </legend>
+                                        <div class="row g-3">
+                                            <div class="col-6">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-file-earmark-text me-1"></i>Tipo de Documento</label>
+                                                <input type="text" id="fr-sri-tipo-documento" class="form-control form-control-sm bg-light" readonly value="Factura (ATS 41 - Reembolso)">
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-calendar-check me-1"></i>Fecha de Autorización</label>
+                                                <input type="text" id="fr-sri-fecha-autorizacion" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-key me-1"></i>Clave de Acceso</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" id="fr-sri-clave-acceso" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- sin clave de acceso -" value="">
+                                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.FR_copiarCampoSri('fr-sri-clave-acceso')" title="Copiar clave de acceso">
+                                                        <i class="bi bi-clipboard"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </fieldset>
                                 </div>
                                 <div class="col-12">
                                     <label class="small fw-bold text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Historial de Envíos</label>

@@ -15,33 +15,45 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
 ?>
 
 <style>
-    .jornadas-scroll { max-height: calc(100dvh - 250px); overflow-y: auto; }
-    .jornadas-scroll thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa; }
+    .jorn-header { flex-shrink: 0; }
+
+    .jornadas-scroll {
+        max-height: calc(100dvh - 240px);
+        overflow-y: auto;
+    }
+
+    .jornadas-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
 </style>
 
 <?= PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig) ?>
 
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+<div class="jorn-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-outline-warning btn-sm px-3 shadow-sm" onclick="jornRequierenRevision()" title="Filtrar jornadas incompletas que requieren revisión">
-            <i class="bi bi-exclamation-triangle me-1"></i> Requieren revisión
+        <button class="btn btn-outline-warning btn-sm px-3" onclick="jornRequierenRevision()" title="Filtrar jornadas incompletas que requieren revisión">
+            <i class="bi bi-exclamation-triangle"></i> Requieren revisión
         </button>
         <?php if ($perm['actualizar']): ?>
-        <button class="btn btn-outline-primary btn-sm px-3 shadow-sm" onclick="abrirRecalcular()"><i class="bi bi-arrow-repeat me-1"></i> Recalcular</button>
+        <button class="btn btn-outline-primary btn-sm px-3" onclick="abrirRecalcular()"><i class="bi bi-arrow-repeat"></i> Recalcular</button>
         <?php endif; ?>
         <?php if ($perm['crear']): ?>
-        <button class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirGenerarNovedades()"><i class="bi bi-journal-plus me-1"></i> Generar Novedades</button>
+        <button class="btn btn-primary btn-sm px-3" onclick="abrirGenerarNovedades()"><i class="bi bi-journal-plus"></i> Generar Novedades</button>
         <?php endif; ?>
     </div>
 </div>
 
-<div class="card cmg-table-card border-0 shadow-sm rounded-3">
+<div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
             <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
             <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
-            <div id="fbBuscadorJORN" style="width: 460px;"></div>
+            <div id="fbBuscadorJORN" style="width: 480px;"></div>
             <input type="hidden" id="buscarJorn" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
@@ -80,13 +92,16 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
                 $columnasTabla = ['empleado'=>'Empleado','fecha'=>'Fecha','entrada'=>'Entrada','salida'=>'Salida','horas'=>'Horas','atraso'=>'Atraso','extra'=>'Extra','estado'=>'Estado'];
                 ?>
                 <?= PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo) ?>
+
+                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                    class="btn btn-outline-danger" title="Descargar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                </a>
+                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                    class="btn btn-outline-success" title="Descargar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                </a>
             </div>
-            <a id="jornPdfUrl" class="btn btn-sm btn-outline-danger" target="_blank" rel="noopener"
-               href="<?= $urlBase ?>/exportPdf?b=<?= urlencode($buscar) ?>&sort=<?= htmlspecialchars($ordenCol) ?>&dir=<?= htmlspecialchars($ordenDir) ?>"
-               title="Exportar a PDF lo que muestran los filtros"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-            <a id="jornExcelUrl" class="btn btn-sm btn-outline-success"
-               href="<?= $urlBase ?>/exportExcel?b=<?= urlencode($buscar) ?>&sort=<?= htmlspecialchars($ordenCol) ?>&dir=<?= htmlspecialchars($ordenDir) ?>"
-               title="Exportar a Excel lo que muestran los filtros"><i class="bi bi-file-earmark-excel"></i> Excel</a>
         </div>
         <div class="d-flex align-items-center gap-3">
             <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?> / <?= $total ?></span>
@@ -98,9 +113,9 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
     </div>
 
     <div class="card-body p-0">
-        <div class="jornadas-scroll">
+        <div class="jornadas-scroll w-100">
             <table class="table table-hover table-sm mb-0 align-middle">
-                <thead class="table-light shadow-sm">
+                <thead class="table-light">
                     <tr>
                         <th class="ps-3 sortable-header" data-sort="empleado" role="button" data-col="empleado">Empleado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="fecha" role="button" data-col="fecha">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -256,20 +271,8 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
 
         window.cambiarPaginaAjax = (p) => cargarListado(p);
 
-        // Los enlaces de PDF/Excel llevan el mismo buscador y orden que la tabla:
-        // se exporta exactamente lo que el usuario está viendo, no todo el módulo.
-        function refrescarUrlsExport() {
-            const b = inputB ? inputB.value.trim() : '';
-            const qs = `?b=${encodeURIComponent(b)}&sort=${encodeURIComponent(currentSort)}&dir=${encodeURIComponent(currentDir)}`;
-            const pdf = document.getElementById('jornPdfUrl');
-            const xls = document.getElementById('jornExcelUrl');
-            if (pdf) pdf.href = `${urlBase}/exportPdf${qs}`;
-            if (xls) xls.href = `${urlBase}/exportExcel${qs}`;
-        }
-
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
-            refrescarUrlsExport();
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
             try {
                 const resp = await fetch(uri); const data = await resp.json();
@@ -278,6 +281,10 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
                     document.getElementById('tbodyJornadas').innerHTML = data.rows;
                     document.getElementById('wrapper-pagination').innerHTML = data.pagination;
                     document.getElementById('paginationInfo').textContent = data.info;
+                    // Los enlaces de PDF/Excel siguen al buscador y al orden vigentes:
+                    // se exporta lo que el usuario está viendo, no todo el módulo.
+                    document.getElementById('btnExportPdf').href = data.pdf_url;
+                    document.getElementById('btnExportExcel').href = data.excel_url;
                     document.querySelectorAll('.sortable-header').forEach(th => {
                         const icon = th.querySelector('i'); if (!icon) return;
                         if (th.dataset.sort === currentSort) icon.className = (currentDir.toLowerCase()==='asc')?'bi bi-sort-down-alt text-primary ms-1':'bi bi-sort-up text-primary ms-1';

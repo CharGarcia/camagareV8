@@ -155,6 +155,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                         onclick="PF.cambiarEstado('anulada')" title="Anular">
                         <i class="bi bi-slash-circle"></i>
                     </button>
+                    <?php if (!empty($puedeReabrir)): ?>
+                    <!-- Reabrir: devuelve una proforma aprobada a borrador para poder
+                         editarla. Solo se pinta para administrador/superadministrador
+                         (nivel >= 2); el servidor vuelve a validarlo. -->
+                    <button id="pf-btn-reabrir" type="button" class="btn btn-outline-secondary btn-sm px-2 d-none"
+                        onclick="PF.cambiarEstado('borrador')" title="Regresar a borrador">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <?php endif; ?>
                     <?php endif; ?>
                 </div>
 

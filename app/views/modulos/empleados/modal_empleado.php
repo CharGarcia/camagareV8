@@ -631,20 +631,27 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                             <span id="empRostroEstado"></span>
                                         </div>
                                         <p class="text-muted small mb-3">Confirma que quien marca es el empleado. Se guarda un vector facial (no una foto). Requiere consentimiento del empleado (LOPDP).</p>
-                                        <button type="button" class="btn btn-outline-info btn-sm" id="empRostroBtnAbrir" onclick="window.empAbrirRostro()"><i class="bi bi-camera me-1"></i><span id="empRostroBtnTxt">Registrar rostro</span></button>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            <button type="button" class="btn btn-outline-info btn-sm" id="empRostroBtnAbrir" onclick="window.empAbrirRostro()"><i class="bi bi-camera me-1"></i><span id="empRostroBtnTxt">Registrar rostro</span></button>
+                                            <!-- Solo con rostro ya registrado: comprueba que el sistema lo
+                                                 reconoce, antes de que el empleado lo descubra en el punto. -->
+                                            <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="empRostroBtnProbar" onclick="window.empProbarRostro()"><i class="bi bi-person-check me-1"></i>Probar reconocimiento</button>
+                                        </div>
                                         <!-- Área de captura inline (sin modal anidado) -->
                                         <div id="empRostroCaptura" class="d-none mt-3">
                                             <div style="position:relative;width:100%;max-width:240px;aspect-ratio:3/4;margin:0 auto;background:#000;border-radius:12px;overflow:hidden;">
                                                 <video id="empRostroVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
                                             </div>
                                             <div id="empRostroMsg" class="small text-muted mt-2" style="min-height:20px;"></div>
-                                            <div class="form-check d-flex align-items-center gap-1 mt-1">
+                                            <div id="empRostroResultado" class="small mt-1 d-none"></div>
+                                            <div class="form-check d-flex align-items-center gap-1 mt-1" id="empRostroConsentWrap">
                                                 <input class="form-check-input" type="checkbox" id="empRostroConsent">
                                                 <label class="form-check-label small" for="empRostroConsent">El empleado autoriza el registro de su rostro (LOPDP).</label>
                                             </div>
                                             <div class="d-flex gap-1 mt-2">
                                                 <button type="button" class="btn btn-info btn-sm text-white" id="empRostroBtnCapturar" onclick="window.empCapturarRostro()"><i class="bi bi-camera me-1"></i>Capturar y guardar</button>
-                                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.empCerrarRostro()">Cancelar</button>
+                                                <button type="button" class="btn btn-secondary btn-sm d-none" id="empRostroBtnComparar" onclick="window.empCompararRostro()"><i class="bi bi-person-check me-1"></i>Comparar ahora</button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.empCerrarRostro()">Cerrar</button>
                                             </div>
                                         </div>
                                     </div>
@@ -753,7 +760,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
     const $ = (id) => document.getElementById(id);
     const swalErr = (m) => window.Swal ? Swal.fire({ icon: 'error', title: 'Error', text: m }) : alert(m);
     let linkActual = null, tokenActual = null, nombreActual = '';
-    let stream = null, modelsReady = false;
+    let stream = null, modelsReady = false, descGuardado = null;
 
     const empId = () => ($('emp_id') ? $('emp_id').value : '');
     const empNombre = () => ($('emp_nombres_apellidos') ? $('emp_nombres_apellidos').value : ($('emp_identificacion') ? $('emp_identificacion').value : 'Empleado'));
@@ -806,6 +813,8 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
             ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"><i class="bi bi-person-badge me-1"></i>Enrolado</span>'
             : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">—</span>';
         $('empRostroBtnTxt').textContent = tiene ? 'Actualizar rostro' : 'Registrar rostro';
+        // Probar solo tiene sentido con un rostro ya guardado contra el cual comparar.
+        $('empRostroBtnProbar').classList.toggle('d-none', !tiene);
     }
 
     window.empCredGenerar = function () {
@@ -847,21 +856,104 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
     };
 
     // ── Rostro (inline) ──
-    window.empAbrirRostro = async function () {
-        const id = empId(); if (!id) { swalErr('Guarda el empleado primero.'); return; }
+    // La misma área de cámara sirve para dos cosas: registrar el rostro y probar
+    // si el sistema lo reconoce. `modoPrueba` decide qué botones se ven.
+    async function empAbrirCamara(modoPrueba) {
         $('empRostroCaptura').classList.remove('d-none');
-        $('empRostroConsent').checked = false;
+        $('empRostroResultado').classList.add('d-none');
+        $('empRostroResultado').innerHTML = '';
+        $('empRostroConsentWrap').classList.toggle('d-none', modoPrueba);
+        $('empRostroBtnCapturar').classList.toggle('d-none', modoPrueba);
+        $('empRostroBtnComparar').classList.toggle('d-none', !modoPrueba);
+        if (!modoPrueba) $('empRostroConsent').checked = false;
+
         $('empRostroMsg').textContent = 'Cargando modelos faciales...';
         try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }); $('empRostroVideo').srcObject = stream; }
-        catch (e) { $('empRostroMsg').textContent = 'No se pudo abrir la cámara.'; return; }
-        try { await window.CASIS_FACE.loadModels(); modelsReady = true; $('empRostroMsg').textContent = 'Listo. Presiona «Capturar y guardar».'; }
-        catch (e) { modelsReady = false; $('empRostroMsg').textContent = 'No se pudieron cargar los modelos faciales (revisa la conexión).'; }
+        catch (e) { $('empRostroMsg').textContent = 'No se pudo abrir la cámara.'; return false; }
+        try {
+            await window.CASIS_FACE.loadModels();
+            modelsReady = true;
+            $('empRostroMsg').textContent = modoPrueba
+                ? 'Mira a la cámara y presiona «Comparar ahora».'
+                : 'Listo. Presiona «Capturar y guardar».';
+        } catch (e) {
+            modelsReady = false;
+            $('empRostroMsg').textContent = 'No se pudieron cargar los modelos faciales (revisa la conexión).';
+        }
+        return modelsReady;
+    }
+
+    window.empAbrirRostro = async function () {
+        const id = empId(); if (!id) { swalErr('Guarda el empleado primero.'); return; }
+        await empAbrirCamara(false);
+    };
+
+    /**
+     * Prueba de reconocimiento: trae el descriptor guardado del empleado y lo
+     * compara, en el navegador, con lo que ve la cámara — exactamente como lo
+     * hará la pantalla de marcación. No guarda nada.
+     */
+    window.empProbarRostro = async function () {
+        const id = empId(); if (!id) { swalErr('Guarda el empleado primero.'); return; }
+        descGuardado = null;
+        try {
+            const r = await fetch(`${urlBase}/descriptorRostroAjax?id=${id}`);
+            const j = await r.json();
+            if (!j.ok) { swalErr(j.error); return; }
+            if (!j.descriptor || !j.descriptor.length) { swalErr('Este empleado todavía no tiene un rostro registrado.'); return; }
+            descGuardado = j.descriptor;
+        } catch (e) { swalErr('Error de red al leer el rostro registrado.'); return; }
+        await empAbrirCamara(true);
+    };
+
+    window.empCompararRostro = async function () {
+        if (!descGuardado) { swalErr('No se pudo leer el rostro registrado.'); return; }
+        if (!modelsReady) { swalErr('Los modelos faciales no están listos.'); return; }
+
+        const btn = $('empRostroBtnComparar'); btn.disabled = true;
+        const res = $('empRostroResultado');
+        res.classList.add('d-none');
+        $('empRostroMsg').textContent = 'Comparando...';
+
+        // Varios intentos: la cámara tarda en enfocar y el primer fotograma casi
+        // nunca sirve — mismo criterio que la pantalla de marcación.
+        let live = null;
+        for (let i = 0; i < 3 && !live; i++) {
+            try { live = await window.CASIS_FACE.descriptor($('empRostroVideo')); } catch (e) { live = null; }
+            if (!live) await new Promise(r => setTimeout(r, 350));
+        }
+
+        $('empRostroMsg').textContent = '';
+        btn.disabled = false;
+        res.classList.remove('d-none');
+
+        if (!live) {
+            res.innerHTML = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">'
+                + '<i class="bi bi-exclamation-triangle me-1"></i>No se detectó ningún rostro</span>'
+                + '<div class="text-muted mt-1">Acércate a la cámara, de frente y con buena luz.</div>';
+            return;
+        }
+
+        const dist = window.CASIS_FACE.distancia(descGuardado, live);
+        const conf = Math.max(0, Math.min(100, Math.round((1 - dist) * 100)));
+        const ok = dist <= window.CASIS_FACE.THRESHOLD;
+
+        res.innerHTML = ok
+            ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">'
+                + '<i class="bi bi-check-circle me-1"></i>Reconocido (' + conf + '% de coincidencia)</span>'
+                + '<div class="text-muted mt-1">El rostro registrado sirve: la marcación no lo marcará como sospechosa.</div>'
+            : '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">'
+                + '<i class="bi bi-x-circle me-1"></i>No coincide (' + conf + '% de coincidencia)</span>'
+                + '<div class="text-muted mt-1">Si es la persona correcta, vuelve a registrar el rostro con mejor luz y sin gorra ni lentes.</div>';
     };
 
     window.empCerrarRostro = function () {
         if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
         $('empRostroCaptura').classList.add('d-none');
         $('empRostroMsg').textContent = '';
+        $('empRostroResultado').classList.add('d-none');
+        $('empRostroResultado').innerHTML = '';
+        descGuardado = null;
     };
 
     window.empCapturarRostro = async function () {

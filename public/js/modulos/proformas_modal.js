@@ -139,6 +139,10 @@
         show('pf-btn-aprobar',   perm().actualizar && estado === 'borrador');
         show('pf-btn-rechazar',  perm().actualizar && estado === 'aprobada');
         show('pf-btn-anular',    perm().actualizar && ['borrador','aprobada'].includes(estado));
+        // Reabrir (aprobada → borrador): solo administrador/superadministrador. El botón
+        // ni siquiera se pinta para el resto (ver modal_proforma.php), así que esto solo
+        // decide cuándo se muestra a quien sí lo tiene.
+        show('pf-btn-reabrir',   perm().actualizar && CFG().puedeReabrir && estado === 'aprobada');
 
         // Footer
         show('pf_btnEliminar', perm().eliminar  && estado !== 'convertida');
@@ -215,7 +219,7 @@
         // Ocultar todos los botones de acción
         ['pf-btn-factura','pf-btn-pedido','pf-btn-recibo','pf-btn-duplicar','pf-vr1',
          'pf-btn-pdf','pf-btn-excel','pf-btn-whatsapp','pf-btn-correo','pf-vr2',
-         'pf-btn-aprobar','pf-btn-rechazar','pf-btn-anular',
+         'pf-btn-aprobar','pf-btn-rechazar','pf-btn-anular','pf-btn-reabrir',
          'pf_btnEliminar','pf_btnGuardar'].forEach(id => {
             const el = $id(id); if (el) el.classList.add('d-none');
         });
@@ -1344,7 +1348,15 @@
                 if (c.aprobacion_cliente_fecha) {
                     const f = _fmtFechaHora(c.aprobacion_cliente_fecha);
                     const com = (c.aprobacion_cliente_comentario || '').trim();
-                    bTexto.innerHTML = `Aprobada por el cliente el <strong>${_esc(f)}</strong>`
+                    // La aprobación del cliente se conserva aunque un administrador reabra
+                    // la proforma; en ese caso el aviso se cuenta en pasado y en gris, para
+                    // no dar a entender que el documento sigue aprobado.
+                    const reabierta = c.estado === 'borrador';
+                    banner.className = 'alert d-none mb-0 rounded-0 py-2 px-3 small border-0 '
+                        + (reabierta ? 'alert-secondary' : 'alert-success');
+                    bTexto.innerHTML = (reabierta
+                            ? `El cliente la aprobó el <strong>${_esc(f)}</strong>, pero la proforma se reabrió para editarla: debe volver a aprobarse`
+                            : `Aprobada por el cliente el <strong>${_esc(f)}</strong>`)
                         + (com ? ` — "<em>${_esc(com)}</em>"` : '');
                     banner.classList.remove('d-none');
                 } else {
@@ -1670,6 +1682,7 @@
                 aprobada:  '¿Aprobar esta proforma?',
                 rechazada: '¿Rechazar esta proforma?',
                 anulada:   '¿Anular esta proforma? Esta acción no se puede deshacer.',
+                borrador:  '¿Regresar esta proforma a borrador? Volverá a ser editable y habrá que aprobarla otra vez; si el cliente ya la había aprobado, esa aprobación queda como historial.',
             };
             if (!(await confirm2(msgs[estado] || `¿Cambiar estado a "${estado}"?`))) return;
 
@@ -1679,7 +1692,13 @@
                 const data = await (await fetch(`${urlBase()}/cambiarEstadoAjax`, { method:'POST', body:fd })).json();
                 if (!data.ok) { toast(data.error || 'Error', 'error'); return; }
                 toast('Estado actualizado');
-                getModal().hide();
+                // Reabrir se hace para EDITAR: en vez de cerrar, se recarga la proforma
+                // en el mismo modal, que ya vuelve desbloqueada y con el botón Guardar.
+                if (estado === 'borrador') {
+                    await _cargarProforma(id);
+                } else {
+                    getModal().hide();
+                }
                 if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
             } catch(e) { console.error(e); toast('Error de conexión', 'error'); }
         },
@@ -2178,10 +2197,45 @@
             }
         },
 
-        duplicar() {
+        /**
+         * Duplica la proforma abierta. El servidor crea la copia en BORRADOR (número
+         * nuevo de la misma serie y fecha de hoy) y el modal se recarga sobre esa copia,
+         * que queda editable para ajustarla antes de aprobarla.
+         */
+        async duplicar() {
             const id = $id('pf_id').value;
             if (!id) return;
-            toast('Duplicar proforma próximamente', 'info');
+
+            const r = await Swal.fire({
+                icon: 'question',
+                title: 'Duplicar proforma',
+                text: 'Se creará una nueva proforma en borrador con el mismo cliente e ítems, con número nuevo y fecha de hoy. ¿Desea continuar?',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, duplicar',
+                cancelButtonText: 'Cancelar',
+                target: document.getElementById('modalProforma') || undefined,
+            });
+            if (!r.isConfirmed) return;
+
+            const btn = $id('pf-btn-duplicar');
+            if (btn) btn.disabled = true;
+            try {
+                const fd = new FormData();
+                fd.append('id', id);
+                const data = await (await fetch(`${urlBase()}/duplicarAjax`, { method: 'POST', body: fd })).json();
+                if (!data.ok) { toast(data.error || 'No se pudo duplicar la proforma', 'error'); return; }
+
+                // Abrir la copia recién creada en el mismo modal (verDetalle deja el
+                // secuencial bloqueado y la barra de acciones al día).
+                await PF.verDetalle(data.id);
+                toast(data.msg || 'Proforma duplicada');
+                if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
         },
 
         agregarFila() {

@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro
-version: 1.3
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -79,6 +79,16 @@ asistencia desde el celular. Se habilita cuando el empleado ya está guardado.
   quien marca es el empleado. Es **opcional** y requiere su consentimiento
   (LOPDP). Sin rostro registrado, la marcación se valida solo con la credencial
   y el GPS.
+- **Probar reconocimiento** aparece una vez registrado el rostro y sirve para
+  comprobarlo **ahí mismo**, con el empleado delante, en vez de que se entere en
+  el punto de servicio de que no lo reconocen. Abre la cámara, compara lo que ve
+  con el rostro guardado y responde:
+  - **Reconocido**, con el porcentaje de coincidencia: el registro sirve.
+  - **No coincide**: si es la persona correcta, vuelva a registrar el rostro con
+    mejor luz, de frente y sin gorra ni lentes.
+  - **No se detectó ningún rostro**: la cámara no ve una cara completa.
+
+  La prueba **no guarda nada** y no genera ninguna marcación: solo compara.
 
 El código distingue mayúsculas de minúsculas; al dictarlo o escribirlo a mano hay
 que respetarlo tal cual, aunque la pantalla de marcación corrige por su cuenta el
@@ -107,6 +117,8 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.4** — Botón *Probar reconocimiento* en la pestaña *Credenciales*: comprueba
+  con la cámara si el sistema reconoce el rostro ya registrado, sin guardar nada.
 - **1.3** — Se documenta la pestaña *Credenciales*. El enlace y el QR personal
   ahora llevan la dirección completa con el dominio; los anteriores no se podían
   abrir al escanearlos desde el celular.

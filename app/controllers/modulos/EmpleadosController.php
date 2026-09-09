@@ -223,6 +223,34 @@ class EmpleadosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Devuelve el descriptor facial guardado del empleado para PROBAR el
+     * reconocimiento desde el panel: la comparación se hace en el navegador
+     * (misma mecánica que la pantalla de marcación), así el supervisor puede
+     * confirmar que el rostro registrado sirve antes de que el empleado se
+     * encuentre con que no lo reconoce en el punto de servicio.
+     */
+    public function descriptorRostroAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpleado = (int) ($_GET['id'] ?? 0);
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        try {
+            if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
+            $bio = $this->biometriaService->getByEmpleado($idEmpleado, $idEmpresa);
+            $desc = !empty($bio['descriptor_facial']) ? json_decode((string) $bio['descriptor_facial'], true) : null;
+            echo json_encode([
+                'ok'         => true,
+                'descriptor' => is_array($desc) ? $desc : null,
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     protected function getRutaModulo(): string
     {
         return self::RUTA_MODULO;

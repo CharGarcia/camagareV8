@@ -200,6 +200,9 @@ window.PF_CONFIG  = {
     decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
     calculo_iva:        '<?= $empresa['calculo_iva_facturacion'] ?? 'linea_linea' ?>',
     storageKey: 'pf_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>',
+    // Regresar una proforma aprobada a borrador: solo administrador (nivel 2) y
+    // superadministrador (nivel 3). El servidor lo vuelve a validar.
+    puedeReabrir: <?= json_encode(!empty($puedeReabrir)) ?>,
     perm: {
         ver:        <?= json_encode(!empty($perm['ver'])) ?>,
         crear:      <?= json_encode(!empty($perm['crear'])) ?>,

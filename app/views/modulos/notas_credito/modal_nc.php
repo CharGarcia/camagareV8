@@ -305,59 +305,71 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                         </ul>
                                     </div>
                                 </div>
-                                <!-- Fila 1: Clave de Acceso + Número de Autorización -->
+                                <!-- Columna izquierda -->
                                 <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-key me-1"></i>Clave de Acceso</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="nc-sri-clave-acceso" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- sin clave de acceso -" value="">
-                                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.NC_copiarCampoSri('nc-sri-clave-acceso')" title="Copiar clave de acceso">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label class="small fw-bold text-muted mb-1"><i class="bi bi-building me-1"></i>Tipo de Ambiente</label>
+                                            <input type="text" id="nc-sri-ambiente" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="small fw-bold text-muted mb-1"><i class="bi bi-broadcast me-1"></i>Tipo de Emisión</label>
+                                            <input type="text" id="nc-sri-tipo-emision" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="small fw-bold text-muted mb-1"><i class="bi bi-receipt me-1"></i>Número de Documento</label>
+                                            <input type="text" id="nc-sri-numero-documento" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="000-000-000000000" value="">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="small fw-bold text-muted mb-1"><i class="bi bi-hash me-1"></i>Número de Autorización</label>
+                                            <input type="text" id="nc-sri-autorizacion" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- pendiente -" value="">
+                                        </div>
                                     </div>
                                 </div>
+                                <!-- Columna derecha -->
                                 <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-hash me-1"></i>Número de Autorización</label>
-                                    <input type="text" id="nc-sri-autorizacion" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <!-- Fila 2: Tipo de Ambiente + Tipo de Emisión + Fecha de Autorización + Tipo de Documento -->
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-building me-1"></i>Tipo de Ambiente</label>
-                                    <input type="text" id="nc-sri-ambiente" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-broadcast me-1"></i>Tipo de Emisión</label>
-                                    <input type="text" id="nc-sri-tipo-emision" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-calendar-check me-1"></i>Fecha de Autorización</label>
-                                    <input type="text" id="nc-sri-fecha-autorizacion" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-file-earmark-text me-1"></i>Tipo de Documento</label>
-                                    <input type="text" id="nc-sri-tipo-documento" class="form-control form-control-sm bg-light" readonly value="Nota de Crédito">
-                                </div>
-                                <!-- Fila 3: Número de Documento + Número de Identificación + Correo del Cliente -->
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-receipt me-1"></i>Número de Documento</label>
-                                    <input type="text" id="nc-sri-numero-documento" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="000-000-000000000" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-person-vcard me-1"></i>Número de Identificación</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="nc-sri-identificacion-cliente" class="form-control form-control-sm bg-light" readonly placeholder="- sin identificación -" value="">
-                                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.NC_copiarCampoSri('nc-sri-identificacion-cliente')" title="Copiar identificación">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-envelope me-1"></i>Correo del Cliente</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="nc-sri-correo-cliente" class="form-control form-control-sm bg-light" readonly placeholder="- sin correo -" value="">
-                                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.NC_copiarCampoSri('nc-sri-correo-cliente')" title="Copiar correo">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
+                                    <fieldset class="border border-primary rounded-2 p-2 pt-1 h-100">
+                                        <legend class="float-none w-auto px-2 mb-0 fw-bold text-primary" style="font-size:0.75rem;">
+                                            <i class="bi bi-slash-circle me-1"></i>Datos para anular en el SRI
+                                        </legend>
+                                        <div class="row g-3">
+                                            <div class="col-6">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-file-earmark-text me-1"></i>Tipo de Documento</label>
+                                                <input type="text" id="nc-sri-tipo-documento" class="form-control form-control-sm bg-light" readonly value="Nota de Crédito">
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-calendar-check me-1"></i>Fecha de Autorización</label>
+                                                <input type="text" id="nc-sri-fecha-autorizacion" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-key me-1"></i>Clave de Acceso</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" id="nc-sri-clave-acceso" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- sin clave de acceso -" value="">
+                                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.NC_copiarCampoSri('nc-sri-clave-acceso')" title="Copiar clave de acceso">
+                                                        <i class="bi bi-clipboard"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-person-vcard me-1"></i>Número de Identificación</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" id="nc-sri-identificacion-cliente" class="form-control form-control-sm bg-light" readonly placeholder="- sin identificación -" value="">
+                                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.NC_copiarCampoSri('nc-sri-identificacion-cliente')" title="Copiar identificación">
+                                                        <i class="bi bi-clipboard"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="small fw-bold text-muted mb-1"><i class="bi bi-envelope me-1"></i>Correo del Cliente</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" id="nc-sri-correo-cliente" class="form-control form-control-sm bg-light" readonly placeholder="- sin correo -" value="">
+                                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.NC_copiarCampoSri('nc-sri-correo-cliente')" title="Copiar correo">
+                                                        <i class="bi bi-clipboard"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </fieldset>
                                 </div>
                                 <!-- Historial de Envíos SRI -->
                                 <div class="col-12">
