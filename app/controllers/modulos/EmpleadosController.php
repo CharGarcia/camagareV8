@@ -124,6 +124,18 @@ class EmpleadosController extends BaseModuloController
     // CREDENCIALES (pestaña Credenciales del modal): QR personal + rostro.
     // ==================================================================
 
+    /**
+     * URL pública completa del enlace personal del empleado (vinculación del celular).
+     * Tiene que ser absoluta (esquema + dominio): el empleado la abre escaneando el QR
+     * de su credencial con la cámara del teléfono, y una ruta relativa como
+     * "/asistencia/app?e=..." ningún lector la puede abrir — el mismo criterio que ya
+     * aplica PuntosServicioController al QR del punto de servicio.
+     */
+    private function urlCredencial(string $token): string
+    {
+        return url_absoluta('asistencia/app?e=' . rawurlencode($token));
+    }
+
     /** Estado de la credencial del empleado (solo lectura, no la crea). */
     public function credencialAjax(): void
     {
@@ -138,7 +150,7 @@ class EmpleadosController extends BaseModuloController
                 'ok'              => true,
                 'tiene_credencial' => $bio !== null,
                 'token'           => $bio['qr_token'] ?? null,
-                'link'            => $bio ? rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($bio['qr_token']) : null,
+                'link'            => $bio ? $this->urlCredencial((string) $bio['qr_token']) : null,
                 'tiene_rostro'    => $bio ? !empty($bio['descriptor_facial']) : false,
                 'consentimiento'  => $bio['consentimiento_at'] ?? null,
             ]);
@@ -161,7 +173,7 @@ class EmpleadosController extends BaseModuloController
             if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
             $bio = $this->biometriaService->enrolar($idEmpleado, $idEmpresa, $idUsuario);
             $token = $bio['qr_token'];
-            echo json_encode(['ok' => true, 'token' => $token, 'link' => rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($token)]);
+            echo json_encode(['ok' => true, 'token' => $token, 'link' => $this->urlCredencial($token)]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -180,7 +192,7 @@ class EmpleadosController extends BaseModuloController
         try {
             if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
             $token = $this->biometriaService->regenerarToken($idEmpleado, $idEmpresa, $idUsuario);
-            echo json_encode(['ok' => true, 'token' => $token, 'link' => rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($token)]);
+            echo json_encode(['ok' => true, 'token' => $token, 'link' => $this->urlCredencial($token)]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

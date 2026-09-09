@@ -65,7 +65,8 @@ class MarcacionRepository extends BaseRepository
         $total = (int) $stTotal->fetchColumn();
 
         $sql = "SELECT m.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion,
-                       p.nombre AS punto_nombre
+                       p.nombre AS punto_nombre, p.radio_m AS punto_radio_m,
+                       p.latitud AS punto_latitud, p.longitud AS punto_longitud
                 {$from}
                 ORDER BY {$orderExpr} {$ordenDir}, m.id DESC";
         if ($perPage > 0) {

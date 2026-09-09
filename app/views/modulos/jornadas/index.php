@@ -81,6 +81,12 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
                 ?>
                 <?= PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo) ?>
             </div>
+            <a id="jornPdfUrl" class="btn btn-sm btn-outline-danger" target="_blank" rel="noopener"
+               href="<?= $urlBase ?>/exportPdf?b=<?= urlencode($buscar) ?>&sort=<?= htmlspecialchars($ordenCol) ?>&dir=<?= htmlspecialchars($ordenDir) ?>"
+               title="Exportar a PDF lo que muestran los filtros"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+            <a id="jornExcelUrl" class="btn btn-sm btn-outline-success"
+               href="<?= $urlBase ?>/exportExcel?b=<?= urlencode($buscar) ?>&sort=<?= htmlspecialchars($ordenCol) ?>&dir=<?= htmlspecialchars($ordenDir) ?>"
+               title="Exportar a Excel lo que muestran los filtros"><i class="bi bi-file-earmark-excel"></i> Excel</a>
         </div>
         <div class="d-flex align-items-center gap-3">
             <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?> / <?= $total ?></span>
@@ -250,8 +256,20 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
 
         window.cambiarPaginaAjax = (p) => cargarListado(p);
 
+        // Los enlaces de PDF/Excel llevan el mismo buscador y orden que la tabla:
+        // se exporta exactamente lo que el usuario está viendo, no todo el módulo.
+        function refrescarUrlsExport() {
+            const b = inputB ? inputB.value.trim() : '';
+            const qs = `?b=${encodeURIComponent(b)}&sort=${encodeURIComponent(currentSort)}&dir=${encodeURIComponent(currentDir)}`;
+            const pdf = document.getElementById('jornPdfUrl');
+            const xls = document.getElementById('jornExcelUrl');
+            if (pdf) pdf.href = `${urlBase}/exportPdf${qs}`;
+            if (xls) xls.href = `${urlBase}/exportExcel${qs}`;
+        }
+
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
+            refrescarUrlsExport();
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
             try {
                 const resp = await fetch(uri); const data = await resp.json();

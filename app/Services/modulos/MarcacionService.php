@@ -25,6 +25,13 @@ class MarcacionService
     /** Ventana anti-doble-marca, en minutos. */
     private const VENTANA_DEDUP_MIN = 1;
 
+    /**
+     * Código de error "la credencial de este teléfono ya no sirve". La pantalla
+     * pública lo usa para borrar el token guardado y volver a pedir identificación,
+     * en vez de dejar al empleado reintentando con una credencial muerta.
+     */
+    public const ERR_CREDENCIAL = 4401;
+
     private MarcacionRepository $repository;
     private BiometriaRepository $bioRepository;
     private AsistenciaPuntoRepository $puntoRepository;
@@ -70,7 +77,11 @@ class MarcacionService
 
         $empleado = $this->bioRepository->getByQrToken($tokenEmpleado);
         if (!$empleado) {
-            throw new Exception('Credencial de empleado no válida o revocada.');
+            throw new Exception(
+                'La credencial guardada en este teléfono ya no es válida: fue regenerada o revocada. '
+                . 'Vuelve a escanear tu QR personal o pide a tu empresa que te lo reenvíe.',
+                self::ERR_CREDENCIAL
+            );
         }
         if (($empleado['empleado_estado'] ?? 'activo') !== 'activo') {
             throw new Exception('El empleado está inactivo.');
@@ -107,16 +118,21 @@ class MarcacionService
         $estado = 'valida';
         $observacion = null;
 
-        if (!empty($punto['exige_gps'])) {
-            if ($lat === null || $lng === null) {
-                throw new Exception('Este punto exige ubicación GPS. Activa la ubicación e inténtalo de nuevo.');
-            }
-            if ($punto['latitud'] !== null && $punto['longitud'] !== null) {
-                $distancia = $this->distanciaMetros($lat, $lng, (float) $punto['latitud'], (float) $punto['longitud']);
-                if ($distancia > (int) $punto['radio_m']) {
-                    $estado = 'sospechosa';
-                    $observacion = 'Fuera de la geocerca: ' . round($distancia) . ' m (radio ' . (int) $punto['radio_m'] . ' m).';
-                }
+        if (!empty($punto['exige_gps']) && ($lat === null || $lng === null)) {
+            throw new Exception('Este punto exige ubicación GPS. Activa la ubicación e inténtalo de nuevo.');
+        }
+
+        // La distancia se calcula SIEMPRE que haya coordenadas de ambos lados: es el dato
+        // que el supervisor mira en la bitácora ("marcó a 33 m del punto"). Antes solo se
+        // calculaba con exige_gps activo, así que en los puntos sin esa exigencia la
+        // columna Distancia salía vacía aunque el celular sí hubiera enviado su ubicación.
+        if ($lat !== null && $lng !== null && $punto['latitud'] !== null && $punto['longitud'] !== null) {
+            $distancia = $this->distanciaMetros($lat, $lng, (float) $punto['latitud'], (float) $punto['longitud']);
+            // Salirse de la geocerca solo marca sospechosa donde el GPS es obligatorio; si
+            // el punto no lo exige, la distancia queda como dato informativo.
+            if (!empty($punto['exige_gps']) && $distancia > (int) $punto['radio_m']) {
+                $estado = 'sospechosa';
+                $observacion = 'Fuera de la geocerca: ' . round($distancia) . ' m (radio ' . (int) $punto['radio_m'] . ' m).';
             }
         }
 
@@ -124,7 +140,11 @@ class MarcacionService
         $confianza = (isset($in['confianza']) && $in['confianza'] !== '') ? (float) $in['confianza'] : null;
         if (!empty($in['face_sospechosa'])) {
             $estado = 'sospechosa';
-            $obsFace = 'El rostro no coincide con el registrado.';
+            // El motivo lo envía la pantalla de marcación: distinguirlos evita que el
+            // supervisor confunda "la cámara no vio ninguna cara" con "no es la persona".
+            $obsFace = (($in['face_motivo'] ?? '') === 'sin_rostro')
+                ? 'No se pudo verificar el rostro: la cámara no detectó ninguna cara.'
+                : 'El rostro no coincide con el registrado.';
             $observacion = $observacion ? ($observacion . ' ' . $obsFace) : $obsFace;
         }
 
@@ -191,6 +211,19 @@ class MarcacionService
         $data['metodo']     = 'manual';
         $data['created_by'] = $idUsuario;
         $data['estado']     = $data['estado'] ?? 'valida';
+
+        // Punto de servicio opcional: sin él la bitácora queda con la columna Punto
+        // vacía y no se puede saber dónde debía estar el empleado. Se valida que el
+        // punto sea de esta empresa (el select viene del navegador).
+        $idPunto = isset($data['id_punto']) && $data['id_punto'] !== '' ? (int) $data['id_punto'] : 0;
+        $data['id_punto'] = null;
+        if ($idPunto > 0) {
+            if (!$this->puntoRepository->findById($idPunto, $idEmpresa)) {
+                throw new Exception('El punto de servicio seleccionado no es válido.');
+            }
+            $data['id_punto'] = $idPunto;
+        }
+
         $this->rules->validate($data);
 
         $this->repository->beginTransaction();

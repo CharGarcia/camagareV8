@@ -119,12 +119,15 @@ class AsistenciaController extends Controller
                 'selfie_path'   => $selfiePath,
                 'confianza'     => $_POST['confianza'] ?? '',
                 'face_sospechosa' => !empty($_POST['face_sospechosa']),
+                'face_motivo'   => trim($_POST['face_motivo'] ?? ''),
                 'dispositivo_id' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 120),
             ]);
 
             echo json_encode(['ok' => true] + $res);
         } catch (\Throwable $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+            // 'codigo' deja que la pantalla distinga una credencial muerta (borrar el
+            // token del teléfono y volver a pedir identificación) de un error cualquiera.
+            echo json_encode(['ok' => false, 'error' => $e->getMessage(), 'codigo' => (int) $e->getCode()]);
         }
         exit;
     }

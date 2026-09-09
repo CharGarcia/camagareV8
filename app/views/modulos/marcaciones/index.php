@@ -4,6 +4,7 @@
 /** @var array $perm */
 /** @var string $rutaModulo */
 /** @var array $rows */
+/** @var string $filasHtml */
 /** @var int $total */
 /** @var int $page */
 /** @var int $totalPages */
@@ -21,8 +22,6 @@ $vistaConfig = $vistaConfig ?? [];
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
-$tipoColor = ['entrada' => 'success', 'salida' => 'danger', 'inicio_break' => 'warning', 'fin_break' => 'info'];
-$estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => 'secondary'];
 ?>
 
 <style>
@@ -86,6 +85,12 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
                 ?>
                 <?= PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo) ?>
             </div>
+            <a id="marcPdfUrl" class="btn btn-sm btn-outline-danger" target="_blank" rel="noopener"
+               href="<?= $urlBase ?>/exportPdf?b=<?= urlencode($buscar) ?>&sort=<?= htmlspecialchars($ordenCol) ?>&dir=<?= htmlspecialchars($ordenDir) ?>"
+               title="Exportar a PDF lo que muestran los filtros"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+            <a id="marcExcelUrl" class="btn btn-sm btn-outline-success"
+               href="<?= $urlBase ?>/exportExcel?b=<?= urlencode($buscar) ?>&sort=<?= htmlspecialchars($ordenCol) ?>&dir=<?= htmlspecialchars($ordenDir) ?>"
+               title="Exportar a Excel lo que muestran los filtros"><i class="bi bi-file-earmark-excel"></i> Excel</a>
         </div>
         <div class="d-flex align-items-center gap-3">
             <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?> / <?= $total ?></span>
@@ -114,30 +119,7 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
                     <?php if (empty($rows)): ?>
                         <tr><td colspan="7" class="text-center py-5 text-muted">No hay marcaciones registradas.</td></tr>
                     <?php else: ?>
-                        <?php foreach ($rows as $row):
-                            $fecha = $row['fecha_hora'] ? date('d-m-Y H:i:s', strtotime((string) $row['fecha_hora'])) : '—';
-                            $tc = $tipoColor[$row['tipo']] ?? 'secondary';
-                            $ec = $estadoColor[$row['estado'] ?? 'valida'] ?? 'secondary';
-                            $dist = $row['distancia_m'] !== null ? (int) $row['distancia_m'] . ' m' : '—';
-                        ?>
-                            <tr>
-                                <td class="ps-3 fw-medium" data-col="empleado"><?= htmlspecialchars((string) ($row['empleado_nombre'] ?? '')) ?></td>
-                                <td data-col="punto" class="small text-muted"><?= htmlspecialchars((string) ($row['punto_nombre'] ?? '—')) ?></td>
-                                <td data-col="fecha"><?= htmlspecialchars($fecha) ?></td>
-                                <td class="text-center" data-col="tipo">
-                                    <span class="badge bg-<?= $tc ?> bg-opacity-10 text-<?= $tc ?> border border-<?= $tc ?> border-opacity-25"><?= htmlspecialchars(ucfirst(str_replace('_', ' ', (string) $row['tipo']))) ?></span>
-                                </td>
-                                <td class="text-center" data-col="distancia"><?= htmlspecialchars($dist) ?></td>
-                                <td class="text-center" data-col="estado">
-                                    <span class="badge bg-<?= $ec ?> bg-opacity-10 text-<?= $ec ?> border border-<?= $ec ?> border-opacity-25"><?= htmlspecialchars(ucfirst((string) ($row['estado'] ?? 'valida'))) ?></span>
-                                </td>
-                                <td class="text-center pe-3">
-                                    <?php if ($perm['eliminar']): ?>
-                                        <button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarMarcacion(<?= (int) $row['id'] ?>)" title="Eliminar"><i class="bi bi-trash"></i></button>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
+                        <?= $filasHtml ?>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -172,6 +154,13 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
                         <option value="inicio_break">Inicio break</option>
                         <option value="fin_break">Fin break</option>
                     </select>
+                </div>
+                <div class="mb-2" id="mm_punto_wrap">
+                    <label class="form-label small fw-bold mb-1">Punto de servicio <span class="text-muted fw-normal">(opcional)</span></label>
+                    <select id="mm_punto" class="form-select form-select-sm">
+                        <option value="">— Sin punto —</option>
+                    </select>
+                    <div class="form-text small">Indica dónde estaba el empleado. Sin punto, la bitácora no puede mostrar ubicación ni distancia.</div>
                 </div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
@@ -209,8 +198,20 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
 
         window.cambiarPaginaAjax = (p) => cargarListado(p);
 
+        // Los enlaces de PDF/Excel llevan el mismo buscador y orden que la tabla:
+        // se exporta exactamente lo que el usuario está viendo, no todo el módulo.
+        function refrescarUrlsExport() {
+            const b = inputB ? inputB.value.trim() : '';
+            const qs = `?b=${encodeURIComponent(b)}&sort=${encodeURIComponent(currentSort)}&dir=${encodeURIComponent(currentDir)}`;
+            const pdf = document.getElementById('marcPdfUrl');
+            const xls = document.getElementById('marcExcelUrl');
+            if (pdf) pdf.href = `${urlBase}/exportPdf${qs}`;
+            if (xls) xls.href = `${urlBase}/exportExcel${qs}`;
+        }
+
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
+            refrescarUrlsExport();
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
             try {
                 const resp = await fetch(uri);
@@ -269,6 +270,7 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
                     if (!j.ok) { if (window.Swal) Swal.fire('Atención', j.error || 'No se pudieron cargar los empleados.', 'warning'); return; }
                     empleadosLista = j.empleados || [];
                     if (!empleadosLista.length) { if (window.Swal) Swal.fire('Atención', 'No hay empleados activos.', 'warning'); return; }
+                    pintarPuntos(j.puntos || []);
                     empleadosCargados = true;
                 } catch (e) { if (window.Swal) Swal.fire('Error', 'Error de red al cargar empleados.', 'error'); return; }
             }
@@ -276,9 +278,23 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
             document.getElementById('mm_empleado').value = '';
             document.getElementById('mm_empleado_texto').value = '';
             document.getElementById('mm_empleado_dropdown').style.display = 'none';
+            const selPunto = document.getElementById('mm_punto');
+            if (selPunto) selPunto.value = '';
             mmInitTypeahead();
             modalManual()?.show();
         };
+
+        // Puntos de servicio de la empresa. Si no hay ninguno configurado se oculta
+        // el campo: ofrecer un select vacío solo confunde.
+        function pintarPuntos(puntos) {
+            const sel = document.getElementById('mm_punto');
+            const wrap = document.getElementById('mm_punto_wrap');
+            if (!sel || !wrap) return;
+            if (!puntos.length) { wrap.style.display = 'none'; return; }
+            wrap.style.display = '';
+            sel.innerHTML = '<option value="">— Sin punto —</option>'
+                + puntos.map(p => `<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
+        }
 
         // Buscador de empleados sobre la lista ya cargada (nombre o cédula), estilo
         // "chip": con selección activa, Backspace/Delete limpia todo de una vez.
@@ -351,6 +367,8 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
                 const fd = new FormData();
                 fd.append('id_empleado', idEmpleado); fd.append('tipo', tipo);
                 fd.append('fecha', fecha); fd.append('hora', hora); fd.append('observacion', obs);
+                const punto = document.getElementById('mm_punto');
+                if (punto && punto.value) fd.append('id_punto', punto.value);
                 const resp = await fetch(`${urlBase}/registrarManualAjax`, { method: 'POST', body: fd });
                 const j = await resp.json();
                 if (j.ok) {

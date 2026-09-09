@@ -290,6 +290,208 @@ class JornadasController extends BaseModuloController
         exit;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // EXPORTACIONES (respetan el buscador y el orden del listado)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Trae el listado completo (sin paginar) con los mismos filtros que la
+     * pantalla, para que el PDF y el Excel salgan con lo que el usuario ve.
+     */
+    private function getListadoParaExport(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data['buscar'] = $buscar;
+        return $data;
+    }
+
+    private function nombreEmpresa(int $idEmpresa): string
+    {
+        try {
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa);
+            return (string) ($empresa['nombre'] ?? '');
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+
+        $data      = $this->getListadoParaExport();
+        $rows      = $data['rows'];
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $headers = ['Empleado', 'Identificación', 'Fecha', 'Punto', 'Entrada', 'Salida', 'Horas', 'Atraso (min)', 'Extra (min)', 'Estado', 'Observación'];
+        $exportData = [];
+        $totHoras = 0.0;
+        $totAtraso = 0;
+        $totExtra = 0;
+        foreach ($rows as $r) {
+            $totHoras  += (float) ($r['horas_trabajadas'] ?? 0);
+            $totAtraso += (int) ($r['atraso_min'] ?? 0);
+            $totExtra  += (int) ($r['extra_min'] ?? 0);
+
+            $exportData[] = [
+                (string) ($r['empleado_nombre'] ?? ''),
+                (string) ($r['empleado_identificacion'] ?? ''),
+                !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '',
+                (string) ($r['punto_nombre'] ?? ''),
+                !empty($r['primera_entrada']) ? date('H:i', strtotime((string) $r['primera_entrada'])) : '',
+                !empty($r['ultima_salida']) ? date('H:i', strtotime((string) $r['ultima_salida'])) : '',
+                (float) ($r['horas_trabajadas'] ?? 0),
+                (int) ($r['atraso_min'] ?? 0),
+                (int) ($r['extra_min'] ?? 0),
+                ucfirst((string) ($r['estado'] ?? '')),
+                (string) ($r['observacion'] ?? ''),
+            ];
+        }
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $info = [];
+            if ($data['buscar'] !== '') {
+                $info['Filtro aplicado'] = $data['buscar'];
+            }
+            $info['Registros'] = (string) count($exportData);
+            $info['Totales']   = number_format($totHoras, 2) . ' h trabajadas · '
+                . $totAtraso . ' min de atraso · ' . $totExtra . ' min extra';
+
+            (new \App\Services\ReportService())->exportToExcel(
+                'Jornadas',
+                $headers,
+                $exportData,
+                'Jornadas',
+                $this->nombreEmpresa($idEmpresa),
+                $info
+            );
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            header('Content-Type: text/html; charset=utf-8');
+            echo 'Error al generar Excel: ' . htmlspecialchars($e->getMessage());
+        }
+        exit;
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+
+        $data      = $this->getListadoParaExport();
+        $rows      = $data['rows'];
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $nombreEmpresa = $this->nombreEmpresa($idEmpresa) ?: 'JORNADAS';
+        $buscar = $data['buscar'];
+
+        $totHoras = 0.0;
+        $totAtraso = 0;
+        $totExtra = 0;
+        foreach ($rows as $r) {
+            $totHoras  += (float) ($r['horas_trabajadas'] ?? 0);
+            $totAtraso += (int) ($r['atraso_min'] ?? 0);
+            $totExtra  += (int) ($r['extra_min'] ?? 0);
+        }
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 7pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 3px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 3px; overflow: hidden; word-wrap: break-word; }
+                .text-center { text-align: center; }
+                .text-end { text-align: right; }
+                .header { text-align: center; margin-bottom: 10px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+                .filtro { font-size: 7pt; color: #666; margin-bottom: 6px; }
+                tfoot td { background: #f8f8f8; font-weight: bold; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Jornadas de asistencia</h2>
+                </div>
+                <div class="filtro">
+                    Generado: <?= date('d-m-Y H:i:s') ?> &nbsp;|&nbsp; Registros: <?= count($rows) ?>
+                    <?= $buscar !== '' ? ' &nbsp;|&nbsp; Filtro: ' . htmlspecialchars($buscar) : '' ?>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 26%">Empleado</th>
+                            <th style="width: 11%">Identificación</th>
+                            <th style="width: 10%">Fecha</th>
+                            <th style="width: 15%">Punto</th>
+                            <th style="width: 8%" class="text-center">Entrada</th>
+                            <th style="width: 8%" class="text-center">Salida</th>
+                            <th style="width: 7%" class="text-end">Horas</th>
+                            <th style="width: 7%" class="text-end">Atraso</th>
+                            <th style="width: 8%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($rows)): ?>
+                            <tr><td colspan="9" class="text-center">No hay jornadas para los filtros aplicados.</td></tr>
+                        <?php else: ?>
+                            <?php foreach ($rows as $r): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars((string) ($r['empleado_nombre'] ?? '')) ?></td>
+                                    <td><?= htmlspecialchars((string) ($r['empleado_identificacion'] ?? '')) ?></td>
+                                    <td><?= !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '-' ?></td>
+                                    <td><?= htmlspecialchars((string) ($r['punto_nombre'] ?? '')) ?></td>
+                                    <td class="text-center"><?= !empty($r['primera_entrada']) ? date('H:i', strtotime((string) $r['primera_entrada'])) : '-' ?></td>
+                                    <td class="text-center"><?= !empty($r['ultima_salida']) ? date('H:i', strtotime((string) $r['ultima_salida'])) : '-' ?></td>
+                                    <td class="text-end"><?= number_format((float) ($r['horas_trabajadas'] ?? 0), 2) ?></td>
+                                    <td class="text-end"><?= (int) ($r['atraso_min'] ?? 0) ?></td>
+                                    <td><?= htmlspecialchars(ucfirst((string) ($r['estado'] ?? ''))) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                    <?php if (!empty($rows)): ?>
+                    <tfoot>
+                        <tr>
+                            <td colspan="6" class="text-end">Totales (<?= count($rows) ?> jornadas) — extra: <?= $totExtra ?> min</td>
+                            <td class="text-end"><?= number_format($totHoras, 2) ?></td>
+                            <td class="text-end"><?= $totAtraso ?></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                    <?php endif; ?>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Jornadas_' . date('Ymd_His') . '.pdf', 'D');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            header('Content-Type: text/html; charset=utf-8');
+            echo 'Error al generar PDF: ' . htmlspecialchars($e->getMessage());
+        }
+        exit;
+    }
+
     /** Genera/actualiza las Novedades del período a partir de las jornadas calculadas. */
     public function generarNovedadesAjax(): void
     {

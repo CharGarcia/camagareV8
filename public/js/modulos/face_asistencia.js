@@ -2,15 +2,31 @@
  * Helper de reconocimiento facial para Control de Asistencia (face-api.js).
  *
  * Requiere que la página cargue antes la librería face-api.js (global `faceapi`).
- * Modelos (~6 MB) desde CDN por defecto; para autoalojar, define antes:
+ * Los modelos (~6.8 MB: tinyFaceDetector, faceLandmark68Net y faceRecognitionNet) están
+ * AUTOALOJADOS en public/models/face y la ruta se deriva del src de este mismo script,
+ * así ninguna vista tiene que configurarla ni el celular depende de un CDN externo.
+ * Para apuntar a otro sitio, define antes de cargar este archivo:
  *   window.CASIS_FACE_MODELS = '<BASE_URL>/models/face';
- * y coloca ahí los pesos de tinyFaceDetector, faceLandmark68Net y faceRecognitionNet.
  * (ver public/models/face/README.txt)
  */
 window.CASIS_FACE = (function () {
     'use strict';
 
-    const MODELS = window.CASIS_FACE_MODELS || 'https://cdn.jsdelivr.net/gh/vladmandic/face-api/model';
+    /**
+     * Carpeta de los pesos autoalojados: se saca del src de este script
+     * (<base>/js/modulos/face_asistencia.js → <base>/models/face) para no depender de
+     * BASE_URL en cada vista. Si el src no se puede leer, cae al CDN público.
+     */
+    function rutaModelos() {
+        try {
+            const src = (document.currentScript && document.currentScript.src) || '';
+            const m = src.match(/^(.*)\/js\/modulos\/face_asistencia\.js(?:[?#].*)?$/);
+            if (m) return m[1] + '/models/face';
+        } catch (e) {}
+        return 'https://cdn.jsdelivr.net/gh/vladmandic/face-api/model';
+    }
+
+    const MODELS = window.CASIS_FACE_MODELS || rutaModelos();
     const THRESHOLD = 0.55; // distancia euclídea máxima para considerar "misma persona"
     let loaded = false;
 
