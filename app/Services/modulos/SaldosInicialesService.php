@@ -821,10 +821,13 @@ class SaldosInicialesService
         if (!$saldo) {
             throw new \RuntimeException('Saldo inicial no encontrado.');
         }
-        // El pendiente cobrable descuenta lo retenido (calculado desde las
-        // retenciones de venta): la parte retenida no se cobra en efectivo.
+        // El pendiente cobrable descuenta lo retenido y las notas de crédito
+        // (ambos calculados al vuelo): esa parte no se cobra en efectivo. Sin la NC
+        // se permitía registrar un cobro por el importe completo del documento y
+        // sobrecobrar justo el valor de la nota.
         $retenido = $this->repo->getRetenidoSaldoCxc($idSaldo, $idEmpresa);
-        $saldoPendiente = (float)$saldo['saldo_pendiente'] - $retenido;
+        $notasCredito = $this->repo->getNcSaldoCxc($idSaldo, $idEmpresa);
+        $saldoPendiente = (float)$saldo['saldo_pendiente'] - $retenido - $notasCredito;
         $monto = (float)$datos['monto'];
         if ($monto <= 0) {
             throw new \RuntimeException('El monto debe ser mayor a 0.');

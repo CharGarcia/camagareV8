@@ -77,6 +77,7 @@ class SaldosInicialesController extends BaseModuloController
             $f['saldo_inicial']   = number_format((float)$f['saldo_inicial'],   2, '.', '');
             $f['monto_cobrado']   = number_format((float)$f['monto_cobrado'],   2, '.', '');
             $f['monto_retenido']  = number_format((float)($f['monto_retenido'] ?? 0), 2, '.', '');
+            $f['monto_nc']        = number_format((float)($f['monto_nc'] ?? 0), 2, '.', '');
             $f['saldo_pendiente'] = number_format((float)$f['saldo_pendiente'], 2, '.', '');
         }
         unset($f);

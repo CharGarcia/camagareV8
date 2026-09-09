@@ -459,12 +459,16 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA', idEmpresa = 0) {
     }
     let f;
     if (origen === 'SALDO_INICIAL') {
-        // Saldo inicial: tomar datos de la fila ya cargada (no hay endpoint de factura)
+        // Saldo inicial: tomar datos de la fila ya cargada (no hay endpoint de factura).
+        // `total_nc` viene del servidor igual que `total_retenido` (el listado lo calcula
+        // con lateralNcSaldoInicial y ya está descontado del saldo); antes se forzaba a 0
+        // y el modal mostraba Nota Crédito 0.00 aunque la NC sí estuviera aplicada.
         const fila = CXC_datos.find(r => r.id == idVenta && r.origen === 'SALDO_INICIAL');
         if (!fila) return;
         f = { numero_factura: fila.numero_factura, cliente_nombre: fila.cliente_nombre,
               importe_total: fila.total, total_cobrado: fila.total_cobrado,
-              total_retenido: fila.total_retenido || 0, total_nc: 0, total_nd: 0, saldo: fila.saldo };
+              total_retenido: fila.total_retenido || 0, total_nc: fila.total_nc || 0,
+              total_nd: 0, saldo: fila.saldo };
     } else {
         // Factura o recibo: obtener datos en tiempo real del servidor
         const infoUrl = origen === 'RECIBO'

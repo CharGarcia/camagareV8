@@ -135,3 +135,62 @@ ORDER BY 1, 2;
 --  · Alguna fila "2." con "OK"  → la NC sí cruza; entonces el 0.00 viene de otra
 --                                parte (avísame con esta salida).
 -- ============================================================================
+
+
+-- ============================================================================
+-- CONSULTA RÁPIDA (sin parámetros): ¿cada NC cruza con alguna factura?
+-- `factura_enlazada` en NULL = esa NC no está descontando en Cuentas por Cobrar.
+-- ============================================================================
+
+-- ¿Cada nota de crédito cruza con alguna factura? (sin parámetros: ejecutar tal cual)
+-- Si `factura_enlazada` sale NULL, esa NC NO está descontando en Cuentas por Cobrar.
+SELECT n.id_empresa,
+       e.establecimiento,
+       n.id                                                           AS id_nc,
+       n.fecha_emision,
+       CONCAT(n.establecimiento,'-',n.punto_emision,'-',n.secuencial) AS nota_credito,
+       n.num_doc_modificado                                           AS apunta_a,
+       n.estado,
+       n.tipo_ambiente                                                AS amb_nc,
+       CAST(e.tipo_ambiente AS VARCHAR(1))                            AS amb_empresa,
+       n.importe_total,
+       c.nombre                                                       AS cliente,
+       (SELECT CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+          FROM ventas_cabecera v
+         WHERE v.id_empresa = n.id_empresa
+           AND v.eliminado  = false
+           AND (CASE WHEN COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '[^0-9]', '', 'g') END) = (CASE WHEN COALESCE(n.num_doc_modificado, '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE(n.num_doc_modificado, ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE(n.num_doc_modificado, ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE(n.num_doc_modificado, ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE(n.num_doc_modificado, ''), '[^0-9]', '', 'g') END)
+         LIMIT 1)                                                     AS factura_enlazada
+FROM notas_credito_cabecera n
+JOIN clientes c ON c.id = n.id_cliente
+JOIN empresas e ON e.id = n.id_empresa
+WHERE n.eliminado = false
+ORDER BY n.id DESC
+LIMIT 30;
+
+
+-- ============================================================================
+-- ¿EXISTE la factura a la que apunta la NC? (cambiar los secuenciales del IN)
+-- ============================================================================
+
+-- ¿Dónde están las facturas 002-101-000007094 y 002-101-000007100?
+-- Busca por SECUENCIAL (7094 / 7100) en TODAS las empresas, incluidas las
+-- eliminadas, para ver si existen con otro establecimiento, otra empresa u otro
+-- estado. Sin parámetros: ejecutar tal cual.
+SELECT v.id_empresa,
+       e.establecimiento                                              AS estab_empresa,
+       v.id                                                           AS id_factura,
+       v.fecha_emision,
+       CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero,
+       (CASE WHEN COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '[^0-9]', '', 'g') END)                                                        AS num_normalizado,
+       v.estado,
+       v.eliminado,
+       v.tipo_ambiente,
+       v.importe_total,
+       c.nombre                                                       AS cliente
+FROM ventas_cabecera v
+JOIN empresas e ON e.id = v.id_empresa
+LEFT JOIN clientes c ON c.id = v.id_cliente
+WHERE regexp_replace(COALESCE(v.secuencial,''), '[^0-9]', '', 'g') <> ''
+  AND CAST(regexp_replace(COALESCE(v.secuencial,''), '[^0-9]', '', 'g') AS BIGINT) IN (7094, 7100)
+ORDER BY v.id_empresa, v.id;

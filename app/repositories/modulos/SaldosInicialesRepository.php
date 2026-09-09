@@ -20,9 +20,13 @@ class SaldosInicialesRepository extends BaseRepository
 
     public function getCxcListado(int $idEmpresa, array $filtros = []): array
     {
-        // Pendiente real = saldo_inicial - cobrado - retenido (retenido calculado
-        // al vuelo desde las retenciones de venta, igual que en cuentas por cobrar).
-        $pendiente = '(s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0))';
+        // Pendiente real = saldo_inicial - cobrado - retenido - notas de crédito.
+        // Lo retenido y las NC se calculan al vuelo, con el MISMO criterio que
+        // CuentasPorCobrarRepository (lateralRetSaldoInicial / lateralNcSaldoInicial):
+        // antes faltaba la NC aquí y el mismo saldo inicial mostraba un pendiente
+        // distinto en cada módulo (Cuentas por Cobrar lo restaba, este listado no).
+        $pendiente = '(s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0))';
+        $aplicado  = '(s.monto_cobrado + COALESCE(ret.retenido, 0) + COALESCE(ncsi.nc_total, 0))';
 
         $where  = 'WHERE s.id_empresa = :id_empresa AND s.eliminado = false';
         $params = [':id_empresa' => $idEmpresa];
@@ -64,10 +68,11 @@ class SaldosInicialesRepository extends BaseRepository
                    s.id_cliente, s.nombre_cliente, s.ruc_cliente, s.observaciones,
                    s.saldo_inicial, s.monto_cobrado,
                    COALESCE(ret.retenido, 0)         AS monto_retenido,
+                   COALESCE(ncsi.nc_total, 0)        AS monto_nc,
                    {$pendiente}                      AS saldo_pendiente,
                    CASE
-                       WHEN {$pendiente} <= 0                         THEN 'PAGADO'
-                       WHEN (s.monto_cobrado + COALESCE(ret.retenido, 0)) > 0 THEN 'PARCIAL'
+                       WHEN {$pendiente} <= 0 THEN 'PAGADO'
+                       WHEN {$aplicado}  > 0  THEN 'PARCIAL'
                        ELSE 'PENDIENTE'
                    END AS estado,
                    CASE WHEN s.fecha_vencimiento IS NOT NULL
@@ -94,6 +99,22 @@ class SaldosInicialesRepository extends BaseRepository
                             = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
                   )
             ) ret ON true
+            LEFT JOIN LATERAL (
+                SELECT SUM(ncc.importe_total) AS nc_total
+                FROM notas_credito_cabecera ncc
+                WHERE ncc.eliminado  = false
+                  AND ncc.estado    != 'anulado'
+                  AND ncc.id_empresa = s.id_empresa
+                  AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
+                      = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ventas_cabecera vc
+                      WHERE vc.id_empresa = s.id_empresa
+                        AND vc.eliminado = false
+                        AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                            = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  )
+            ) ncsi ON true
             $where
             ORDER BY s.fecha_vencimiento ASC NULLS LAST, s.fecha_emision DESC
         ";
@@ -263,14 +284,75 @@ class SaldosInicialesRepository extends BaseRepository
         return (float) $st->fetchColumn();
     }
 
+    /**
+     * Total de notas de crédito (calculado, NO almacenado) que afecta a un saldo
+     * inicial CXC: notas cuyo `num_doc_modificado` coincide con el `nro_documento`
+     * del saldo y que NO corresponden a una factura real (esa NC ya la resta el
+     * listado de facturas). Espejo de getRetenidoSaldoCxc() y mismo criterio que
+     * CuentasPorCobrarRepository::lateralNcSaldoInicial().
+     *
+     * Se usa para el pendiente COBRABLE: la parte cubierta por una nota de crédito
+     * no se cobra en efectivo, igual que la retenida.
+     */
+    public function getNcSaldoCxc(int $idSaldo, int $idEmpresa): float
+    {
+        $st = $this->db->prepare("
+            SELECT COALESCE((
+                SELECT SUM(ncc.importe_total)
+                FROM notas_credito_cabecera ncc
+                WHERE ncc.eliminado  = false
+                  AND ncc.estado    != 'anulado'
+                  AND ncc.id_empresa = s.id_empresa
+                  AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
+                      = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ventas_cabecera vc
+                      WHERE vc.id_empresa = s.id_empresa
+                        AND vc.eliminado = false
+                        AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                            = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  )
+            ), 0)
+            FROM saldos_iniciales_cxc s
+            WHERE s.id = :id AND s.id_empresa = :ie
+        ");
+        $st->execute([':id' => $idSaldo, ':ie' => $idEmpresa]);
+        return (float) $st->fetchColumn();
+    }
+
     public function getHistorialCobrosCxc(int $id, int $idEmpresa): array
     {
         $st = $this->db->prepare("
-            SELECT 'COBRO' AS tipo, ic.id, ic.fecha_emision, ic.numero_ingreso, ic.observaciones,
-                   id2.monto_cobrado,
-                   u.nombre AS usuario_nombre,
+            WITH si AS (
+                SELECT s.id, s.id_empresa, s.id_cliente, s.nro_documento,
+                       regexp_replace(s.nro_documento, '[^0-9]', '', 'g') AS num_dig
+                FROM saldos_iniciales_cxc s
+                WHERE s.id = :id AND s.id_empresa = :id_empresa AND s.eliminado = false
+            ),
+            -- Si ese mismo número existe además como factura real, sus retenciones y
+            -- notas de crédito las lista (y las descuenta) la factura, no el saldo
+            -- inicial. Misma guarda que lateralRetSaldoInicial / lateralNcSaldoInicial
+            -- en CuentasPorCobrarRepository: sin ella el abono se contaría dos veces.
+            es_factura AS (
+                SELECT EXISTS (
+                    SELECT 1 FROM ventas_cabecera vc, si
+                    WHERE vc.id_empresa = si.id_empresa
+                      AND vc.eliminado  = false
+                      AND regexp_replace(CONCAT(vc.establecimiento,'-',vc.punto_emision,'-',vc.secuencial), '[^0-9]', '', 'g') = si.num_dig
+                ) AS hay
+            )
+
+            -- ── Cobros registrados (ingresos) ─────────────────────────────
+            SELECT 'COBRO' AS tipo, 1 AS signo,
+                   ic.id, ic.fecha_emision,
+                   ic.numero_ingreso, ic.numero_ingreso AS numero,
+                   COALESCE(ic.observaciones, '') AS observaciones,
+                   id2.monto_cobrado, id2.monto_cobrado AS monto,
+                   COALESCE(u.nombre, '') AS usuario_nombre,
                    COALESCE(fp.formas, '') AS forma_cobro
-            FROM ingresos_detalle id2
+            FROM si
+            INNER JOIN ingresos_detalle id2 ON id2.tipo_documento = 'SALDO_INICIAL'
+                                           AND id2.id_referencia_documento = si.id
             INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
             LEFT  JOIN usuarios u ON u.id = ic.id_usuario
             -- Las formas de pago se agregan en una sola celda: con un LEFT JOIN
@@ -283,12 +365,54 @@ class SaldosInicialesRepository extends BaseRepository
                         ON efp.id = ip.id_forma_cobro AND efp.id_empresa = ic.id_empresa
                       WHERE ip.id_ingreso = ic.id
                   ) fp ON TRUE
-            WHERE id2.tipo_documento = 'SALDO_INICIAL'
-              AND id2.id_referencia_documento = :id
-              AND ic.id_empresa = :id_empresa
-              AND ic.estado != 'anulado'
-              AND ic.eliminado = false
-            ORDER BY ic.fecha_emision DESC, ic.id DESC
+            WHERE ic.id_empresa = si.id_empresa
+              AND ic.estado    != 'anulado'
+              AND ic.eliminado  = false
+
+            UNION ALL
+
+            -- ── Retenciones aplicadas al saldo inicial ────────────────────
+            SELECT 'RETENCION', 1,
+                   r.id, r.fecha_emision,
+                   CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial),
+                   CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial),
+                   COALESCE(r.periodo_fiscal, ''),
+                   SUM(rd.valor_retenido), SUM(rd.valor_retenido),
+                   COALESCE(u.nombre, ''),
+                   'Retención en la fuente'
+            FROM si
+            INNER JOIN retencion_venta_cabecera r  ON r.id_empresa = si.id_empresa
+                                                  AND r.eliminado  = false
+                                                  AND r.id_venta   IS NULL
+                                                  AND r.id_cliente = si.id_cliente
+            INNER JOIN retencion_venta_detalle  rd ON rd.id_retencion = r.id
+            LEFT  JOIN usuarios                 u  ON u.id = r.created_by
+            WHERE COALESCE(rd.num_doc_sustento, '') <> ''
+              AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g') = si.num_dig
+              AND NOT (SELECT hay FROM es_factura)
+            GROUP BY r.id, r.fecha_emision, r.establecimiento, r.punto_emision,
+                     r.secuencial, r.periodo_fiscal, u.nombre
+
+            UNION ALL
+
+            -- ── Notas de crédito aplicadas al saldo inicial ───────────────
+            SELECT 'NOTA_CREDITO', 1,
+                   n.id, n.fecha_emision,
+                   CONCAT(n.establecimiento,'-',n.punto_emision,'-',n.secuencial),
+                   CONCAT(n.establecimiento,'-',n.punto_emision,'-',n.secuencial),
+                   COALESCE(n.observaciones, ''),
+                   n.importe_total, n.importe_total,
+                   COALESCE(u.nombre, ''),
+                   COALESCE(n.motivo, 'Nota de crédito')
+            FROM si
+            INNER JOIN notas_credito_cabecera n ON n.id_empresa = si.id_empresa
+                                               AND n.eliminado  = false
+                                               AND n.estado    != 'anulado'
+            LEFT  JOIN usuarios u ON u.id = n.id_usuario
+            WHERE regexp_replace(n.num_doc_modificado, '[^0-9]', '', 'g') = si.num_dig
+              AND NOT (SELECT hay FROM es_factura)
+
+            ORDER BY fecha_emision DESC, id DESC
         ");
         $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
