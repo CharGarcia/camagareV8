@@ -12,14 +12,17 @@ use App\Services\LogSistemaService;
 use App\Services\modulos\NovedadService;
 use App\Services\modulos\NovedadImportService;
 use App\Services\modulos\NovedadCargaService;
+use App\Services\modulos\NovedadPlantillaService;
 use App\models\CatalogoNovedades;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class NovedadesController extends BaseModuloController
 {
     private NovedadService $service;
     private const RUTA_MODULO = 'modulos/novedades';
+
+    /** Cargas masivas que muestra la pestaña Historial del modal Importar. */
+    private const HISTORIAL_CARGAS = 10;
 
     public function __construct()
     {
@@ -347,43 +350,36 @@ class NovedadesController extends BaseModuloController
         exit;
     }
 
-    /** Descarga la plantilla Excel para cargar novedades. */
+    /**
+     * Descarga la plantilla Excel para cargar novedades, ya prellenada con el
+     * personal activo de la empresa. El tipo de novedad, el mes y el año vienen por
+     * querystring desde el modal (por defecto: primer tipo del catálogo y período
+     * actual) y se usan para llenar cada fila, incluida la observación
+     * "Tipo - Mes Año", el mismo texto que arma el modal de novedades.
+     */
     public function plantillaExcel(): void
     {
         $this->requireCrear();
-        $ss = new Spreadsheet();
-        $hoja = $ss->getActiveSheet();
-        $hoja->setTitle('Novedades');
-        $headers = ['IDENTIFICACION', 'TIPO', 'VALOR', 'MES', 'ANIO', 'AFECTA_A', 'FECHA', 'OBSERVACION', 'MOTIVO'];
-        $hoja->fromArray($headers, null, 'A1');
-        $hoja->getStyle('A1:I1')->getFont()->setBold(true);
-        // Fila de ejemplo
-        $hoja->fromArray([
-            ['1717136574', 'Otros Ingresos', 50, (int) date('n'), (int) date('Y'), 'rol', date('Y-m-d'), 'Bono de productividad', ''],
-        ], null, 'A2');
-        foreach (range('A', 'I') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
 
-        // Hoja de referencia
-        $ref = $ss->createSheet();
-        $ref->setTitle('Referencia');
-        $ref->fromArray(['TIPOS (usar código o nombre)'], null, 'A1');
-        $ref->getStyle('A1')->getFont()->setBold(true);
-        $fila = 2;
-        foreach (CatalogoNovedades::TIPOS as $t) {
-            $ref->fromArray([$t['codigo'], $t['nombre']], null, 'A' . $fila++);
+        $tipo = trim($_GET['tipo'] ?? '');
+        if (!CatalogoNovedades::esTipoValido($tipo)) {
+            $tipo = (string) CatalogoNovedades::TIPOS[0]['codigo'];
         }
-        $fila++;
-        $ref->fromArray(['AFECTA_A'], null, 'A' . $fila);
-        $ref->getStyle('A' . $fila)->getFont()->setBold(true);
-        $fila++;
-        foreach (CatalogoNovedades::APLICA_EN as $k => $v) $ref->fromArray([$k, $v], null, 'A' . $fila++);
-        $fila++;
-        $ref->fromArray(['MOTIVOS DE SALIDA (solo para Aviso de salida)'], null, 'A' . $fila);
-        $ref->getStyle('A' . $fila)->getFont()->setBold(true);
-        $fila++;
-        foreach (CatalogoNovedades::MOTIVOS_SALIDA as $m) $ref->fromArray([$m['codigo'], $m['nombre']], null, 'A' . $fila++);
-        $ref->getColumnDimension('A')->setWidth(12);
-        $ref->getColumnDimension('B')->setAutoSize(true);
+        $mes = (int) ($_GET['mes'] ?? 0);
+        if ($mes < 1 || $mes > 12) {
+            $mes = (int) date('n');
+        }
+        $anio = (int) ($_GET['anio'] ?? 0);
+        if ($anio < 2000 || $anio > 2100) {
+            $anio = (int) date('Y');
+        }
+        $aplicaEn = trim($_GET['aplica_en'] ?? 'rol');
+        if (!CatalogoNovedades::esAplicaEnValido($aplicaEn)) {
+            $aplicaEn = 'rol';
+        }
+
+        $ss = (new NovedadPlantillaService(new EmpleadoRepository()))
+            ->construir((int) $_SESSION['id_empresa'], $tipo, $mes, $anio, $aplicaEn);
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="plantilla_novedades.xlsx"');
@@ -427,7 +423,7 @@ class NovedadesController extends BaseModuloController
         header('Content-Type: application/json');
 
         try {
-            $cargas = $this->cargaService()->getListado((int) $_SESSION['id_empresa'], 50, $this->usuarioFiltro());
+            $cargas = $this->cargaService()->getListado((int) $_SESSION['id_empresa'], self::HISTORIAL_CARGAS, $this->usuarioFiltro());
             $data = array_map(fn($c) => [
                 'id'             => (int) $c['id'],
                 'fecha'          => $c['created_at'] ? date('d-m-Y H:i:s', strtotime((string) $c['created_at'])) : '',

@@ -71,6 +71,23 @@ class EmpleadoRepository extends BaseRepository
     }
 
     /**
+     * Empleados ACTIVOS de la empresa (id, identificación y nombre), ordenados por
+     * nombre. Lo usa la plantilla Excel de Novedades para venir ya prellenada con
+     * el personal; no aplica el filtro de registros propios, igual que el buscador
+     * de empleados del modal.
+     */
+    public function getActivosBasico(int $idEmpresa): array
+    {
+        $sql = "SELECT id, identificacion, nombres_apellidos
+                  FROM {$this->table}
+                 WHERE id_empresa = :id_empresa AND eliminado = false AND estado = 'activo'
+                 ORDER BY nombres_apellidos ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Crear un nuevo empleado.
      */
     public function create(array $data): int

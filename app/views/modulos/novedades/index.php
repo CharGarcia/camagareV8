@@ -48,6 +48,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 </style>
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard-plus me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
@@ -248,32 +249,104 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <h5 class="modal-title fw-bold"><i class="bi bi-upload me-2 text-primary"></i>Importar Novedades desde Excel</h5>
                 <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="modal-body">
-                <div class="alert alert-info small py-2 mb-3">
-                    Descarga la <a href="<?= $urlBaseNov ?>/plantilla-excel" class="fw-bold">plantilla</a>, complétala y súbela.
-                    Columnas: <b>IDENTIFICACION, TIPO, VALOR, MES, ANIO, AFECTA_A, FECHA, OBSERVACION, MOTIVO</b>.
-                    El <b>TIPO</b> y <b>AFECTA_A</b> pueden ir por código o nombre (ver hoja «Referencia» de la plantilla).
+            <!-- Pestañas del modal -->
+            <div class="d-flex align-items-center bg-light px-3 pt-2">
+                <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsModalImportNov" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active py-2 small fw-bold" id="nov-imp-btn-importar" data-bs-toggle="tab"
+                           href="#nov-imp-pane-importar" data-bs-target="#nov-imp-pane-importar" role="tab">
+                            <i class="bi bi-upload me-1"></i> Importar
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-2 small fw-bold" id="nov-imp-btn-historial" data-bs-toggle="tab"
+                           href="#nov-imp-pane-historial" data-bs-target="#nov-imp-pane-historial" role="tab">
+                            <i class="bi bi-clock-history me-1"></i> Historial
+                        </a>
+                    </li>
+                </ul>
+                <div class="ms-auto pb-1">
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['nov-imp-pane-historial' => 'Historial'], $vistaConfig ?? [], $rutaModulo) ?>
                 </div>
-                <input type="file" id="nov_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
-                <div id="nov_import_result" class="mt-3"></div>
+            </div>
 
-                <hr class="my-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0 fw-bold"><i class="bi bi-clock-history me-1 text-secondary"></i>Cargas realizadas</h6>
-                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" onclick="window.cargarCargasNov()" title="Actualizar">
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </button>
+            <div class="modal-body tab-content">
+                <!-- ── Pestaña: Importar ──────────────────────────────────── -->
+                <div class="tab-pane fade show active" id="nov-imp-pane-importar" role="tabpanel">
+
+                    <!-- Paso 1: los selectores SOLO arman la plantilla que se descarga -->
+                    <div class="border rounded-3 p-3 mb-3 bg-light bg-opacity-50">
+                        <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">1</span> Descargar la plantilla</h6>
+                        <p class="small text-muted mb-2">
+                            Lo que elija aquí son solo <b>sugerencias para crear la plantilla con datos</b>: el archivo
+                            se descarga con todo el personal activo y con estos valores ya escritos en cada fila, para
+                            no tener que llenarlos a mano. Puede cambiarlos dentro del Excel —incluso fila por fila— y,
+                            al importar, manda lo que diga el archivo, no lo que quedó seleccionado aquí.
+                        </p>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label mb-1 small fw-bold text-muted d-block" for="nov_imp_tipo">Tipo de novedad</label>
+                                <select id="nov_imp_tipo" class="form-select form-select-sm shadow-none">
+                                    <?php foreach ($tipos as $t): ?>
+                                        <option value="<?= htmlspecialchars($t['codigo']) ?>"><?= htmlspecialchars($t['nombre']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-1 small fw-bold text-muted d-block" for="nov_imp_mes">Mes</label>
+                                <select id="nov_imp_mes" class="form-select form-select-sm shadow-none">
+                                    <?php foreach ($meses as $n => $nom): ?>
+                                        <option value="<?= (int) $n ?>" <?= (int) $n === (int) date('n') ? 'selected' : '' ?>><?= htmlspecialchars($nom) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label mb-1 small fw-bold text-muted d-block" for="nov_imp_anio">Año</label>
+                                <input type="number" id="nov_imp_anio" class="form-control form-control-sm shadow-none"
+                                       min="2000" max="2100" value="<?= (int) date('Y') ?>">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-1 small fw-bold text-muted d-block" for="nov_imp_aplica">Afecta a</label>
+                                <select id="nov_imp_aplica" class="form-select form-select-sm shadow-none">
+                                    <?php foreach ($aplicaEn as $k => $lbl): ?>
+                                        <option value="<?= htmlspecialchars((string) $k) ?>"><?= htmlspecialchars($lbl) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <a href="<?= $urlBaseNov ?>/plantilla-excel" id="btnPlantillaNov" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-download me-1"></i>Descargar plantilla
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Paso 2: se importa lo que diga el archivo, nada más -->
+                    <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">2</span> Subir la plantilla completada</h6>
+                    <p class="small text-muted mb-2">
+                        Cargue la plantilla en formato Excel con la información necesaria.
+                    </p>
+                    <input type="file" id="nov_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
+                    <div id="nov_import_result" class="mt-3"></div>
                 </div>
-                <div class="small text-muted mb-2">
-                    Una carga se puede eliminar completa mientras <b>ninguna</b> de sus novedades se haya usado
-                    (rol del período pagado, o anticipo/préstamo ya desembolsado por egreso).
+                <!-- ── Pestaña: Historial ─────────────────────────────────── -->
+                <div class="tab-pane fade" id="nov-imp-pane-historial" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div class="small text-muted">
+                            Últimas <b>10</b> cargas. Una carga se puede eliminar completa mientras <b>ninguna</b>
+                            de sus novedades se haya usado (rol del período pagado, o anticipo/préstamo ya
+                            desembolsado por egreso).
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" onclick="window.cargarCargasNov()" title="Actualizar">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <div id="nov_cargas_lista" class="nov-cargas-scroll border rounded-2"></div>
                 </div>
-                <div id="nov_cargas_lista" class="nov-cargas-scroll border rounded-2"></div>
             </div>
             <div class="modal-footer bg-light border-top p-2">
-                <a href="<?= $urlBaseNov ?>/plantilla-excel" class="btn btn-outline-secondary btn-sm me-auto"><i class="bi bi-download me-1"></i>Plantilla</a>
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
-                <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnImportarNov" onclick="window.importarNov()"><i class="bi bi-upload me-1"></i> Importar</button>
+                <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm nov-imp-accion" id="btnImportarNov" onclick="window.importarNov()"><i class="bi bi-upload me-1"></i> Importar</button>
             </div>
         </div>
     </div>
@@ -286,9 +359,46 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         let modalImp = null;
         const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 
+        // ── Plantilla: la URL lleva el tipo y el período elegidos ────────────
+        function urlPlantillaNov() {
+            const tipo = document.getElementById('nov_imp_tipo')?.value || '';
+            const mes = document.getElementById('nov_imp_mes')?.value || '';
+            const anio = document.getElementById('nov_imp_anio')?.value || '';
+            const aplica = document.getElementById('nov_imp_aplica')?.value || 'rol';
+            return `${urlImport}/plantilla-excel?tipo=${encodeURIComponent(tipo)}&mes=${encodeURIComponent(mes)}`
+                + `&anio=${encodeURIComponent(anio)}&aplica_en=${encodeURIComponent(aplica)}`;
+        }
+
+        function refrescarUrlPlantillaNov() {
+            const url = urlPlantillaNov();
+            const btn = document.getElementById('btnPlantillaNov');
+            if (btn) btn.href = url;
+        }
+
+        ['nov_imp_tipo', 'nov_imp_mes', 'nov_imp_anio', 'nov_imp_aplica'].forEach(id => {
+            const el = document.getElementById(id);
+            el?.addEventListener('change', refrescarUrlPlantillaNov);
+            el?.addEventListener('input', refrescarUrlPlantillaNov);
+        });
+
+        // Los botones Plantilla/Importar solo aplican a la pestaña Importar.
+        document.getElementById('nov-imp-btn-historial')?.addEventListener('shown.bs.tab', () => {
+            document.querySelectorAll('.nov-imp-accion').forEach(el => el.classList.add('d-none'));
+        });
+        document.getElementById('nov-imp-btn-importar')?.addEventListener('shown.bs.tab', () => {
+            document.querySelectorAll('.nov-imp-accion').forEach(el => el.classList.remove('d-none'));
+        });
+
         window.abrirImportNov = function () {
             document.getElementById('nov_import_file').value = '';
             document.getElementById('nov_import_result').innerHTML = '';
+            refrescarUrlPlantillaNov();
+            // Siempre se abre en la pestaña Importar.
+            if (typeof bootstrap !== 'undefined') {
+                const btnTab = document.getElementById('nov-imp-btn-importar');
+                if (btnTab && !btnTab.classList.contains('active')) bootstrap.Tab.getOrCreateInstance(btnTab).show();
+            }
+            document.querySelectorAll('.nov-imp-accion').forEach(el => el.classList.remove('d-none'));
             if (!modalImp && typeof bootstrap !== 'undefined') modalImp = new bootstrap.Modal(document.getElementById('modalImportNov'));
             modalImp?.show();
             window.cargarCargasNov();
@@ -391,14 +501,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const json = await resp.json();
                 if (!json.ok) {
                     cont.innerHTML = `<div class="alert alert-danger small py-2 mb-0">${esc(json.error)}</div>`;
-                } else {
-                    let html = `<div class="alert alert-success small py-2 mb-2"><b>${json.creadas}</b> novedad(es) importada(s) de ${json.total}.</div>`;
-                    if (json.errores && json.errores.length) {
-                        html += `<div class="alert alert-warning small py-2 mb-0" style="max-height:220px;overflow:auto;"><b>${json.errores.length} fila(s) con error:</b><ul class="mb-0 mt-1 ps-3">`;
-                        json.errores.forEach(e => { html += `<li>Fila ${e.fila}: ${esc(e.error)}</li>`; });
-                        html += '</ul></div>';
-                    }
+                } else if (json.errores && json.errores.length) {
+                    // Todo o nada: no se registró ninguna fila; hay que corregir y volver a subir.
+                    let html = `<div class="alert alert-danger small py-2 mb-2">
+                            <b>No se importó ninguna novedad.</b> Corrija ${json.errores.length} error(es) de la plantilla
+                            (de ${json.total} fila(s)) y vuelva a subirla.
+                        </div>
+                        <div class="alert alert-warning small py-2 mb-0" style="max-height:220px;overflow:auto;">
+                            <b>Filas con error:</b><ul class="mb-0 mt-1 ps-3">`;
+                    json.errores.forEach(e => { html += `<li>Fila ${e.fila}: ${esc(e.error)}</li>`; });
+                    html += '</ul></div>';
                     cont.innerHTML = html;
+                } else {
+                    const omit = json.omitidas > 0 ? ` <span class="text-muted">(${json.omitidas} fila(s) sin VALOR se omitieron)</span>` : "";
+                    cont.innerHTML = `<div class="alert alert-success small py-2 mb-0"><b>${json.creadas}</b> novedad(es) importada(s) de ${json.total}.${omit}</div>`;
                     window.cargarCargasNov();
                     if (json.creadas > 0) window.dispatchEvent(new CustomEvent('novedadGuardada'));
                 }

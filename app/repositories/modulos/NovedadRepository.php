@@ -427,6 +427,39 @@ class NovedadRepository extends BaseRepository
         $st->execute([':id_carga' => $idCarga, ':id_empresa' => $idEmpresa, ':id_u' => $idUsuario]);
         return $st->rowCount();
     }
+    /**
+     * Claves "idEmpleado|tipoCodigo|mes|anio" de las novedades vigentes de esos
+     * empleados y años, en el ambiente actual de la empresa. La importación la usa
+     * para rechazar filas duplicadas (misma persona, mismo tipo y mismo período)
+     * antes de escribir nada. Una sola consulta para todo el archivo.
+     */
+    public function getClavesExistentes(int $idEmpresa, array $idsEmpleado, array $anios): array
+    {
+        $idsEmpleado = array_values(array_unique(array_filter(array_map('intval', $idsEmpleado))));
+        $anios       = array_values(array_unique(array_filter(array_map('intval', $anios))));
+        if (empty($idsEmpleado) || empty($anios)) {
+            return [];
+        }
+        $inEmp  = implode(',', $idsEmpleado);
+        $inAnio = implode(',', $anios);
+
+        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio
+                  FROM {$this->table}
+                 WHERE id_empresa = :id_empresa AND eliminado = false
+                   AND id_empleado IN ($inEmp) AND periodo_anio IN ($inAnio)
+                   AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+
+        $set = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $clave = ((int) $r['id_empleado']) . '|' . trim((string) $r['tipo_codigo'])
+                . '|' . ((int) $r['periodo_mes']) . '|' . ((int) $r['periodo_anio']);
+            $set[$clave] = true;
+        }
+        return $set;
+    }
+
     /** Resuelve el id de un empleado por su identificación exacta (para importar). */
     public function getIdEmpleadoPorIdentificacion(int $idEmpresa, string $identificacion): ?int
     {

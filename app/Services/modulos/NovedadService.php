@@ -41,6 +41,76 @@ class NovedadService
     public function crear(array $data): int
     {
         $data = $this->normalizar($data);
+        $idEmpresa = (int) $data['id_empresa'];
+        $idUsuario = (int) $data['id_usuario'];
+
+        $this->repository->beginTransaction();
+        try {
+            $id = $this->crearInterno($data);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+        $this->sincronizarRol($idEmpresa, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0, $idUsuario);
+        return $id;
+    }
+
+    /**
+     * Crea VARIAS novedades en UNA sola transacción: o entran todas o no entra
+     * ninguna. Lo usa la importación masiva, que valida el archivo completo antes
+     * de escribir (ver NovedadImportService): si algo falla a mitad, revierte todo
+     * y el usuario corrige la plantilla y la vuelve a subir.
+     *
+     * Devuelve los ids creados. Los roles afectados se regeneran una sola vez por
+     * período, ya fuera de la transacción.
+     */
+    public function crearLote(array $filas, int $idEmpresa, int $idUsuario): array
+    {
+        if (empty($filas)) {
+            return [];
+        }
+
+        $ids = [];
+        $periodos = [];
+
+        $this->repository->beginTransaction();
+        try {
+            foreach ($filas as $i => $data) {
+                $data = $this->normalizar($data);
+                try {
+                    $ids[] = $this->crearInterno($data);
+                } catch (\Throwable $e) {
+                    // El número de fila lo conoce el llamador (clave del array).
+                    throw new Exception('Fila ' . $i . ': ' . $e->getMessage(), 0, $e);
+                }
+                $clave = ($data['aplica_en'] ?? 'rol') . '|' . (int) $data['periodo_anio'] . '|' . (int) $data['periodo_mes'];
+                $periodos[$clave] = [
+                    'aplica_en' => (string) ($data['aplica_en'] ?? 'rol'),
+                    'anio'      => (int) $data['periodo_anio'],
+                    'mes'       => (int) $data['periodo_mes'],
+                ];
+            }
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+
+        foreach ($periodos as $p) {
+            $this->sincronizarRol($idEmpresa, $p['aplica_en'], $p['anio'], $p['mes'], $idUsuario);
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Validación + INSERT + auditoría de UNA novedad, SIN abrir transacción ni
+     * regenerar el rol: eso lo decide el llamador (crear() por registro,
+     * crearLote() para toda una carga). $data ya viene normalizado.
+     */
+    private function crearInterno(array $data): int
+    {
         $this->rules->validate($data);
 
         $idEmpresa = (int) $data['id_empresa'];
@@ -49,17 +119,32 @@ class NovedadService
         // No permitir registrar una novedad sobre un rol ya pagado.
         $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
 
-        $this->repository->beginTransaction();
-        try {
-            $id = $this->repository->create($data);
-            $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR', 'novedades', $id, null, $data);
-            $this->repository->commit();
-        } catch (Exception $e) {
-            $this->repository->rollBack();
-            throw $e;
-        }
-        $this->sincronizarRol($idEmpresa, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0, $idUsuario);
+        $id = $this->repository->create($data);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR', 'novedades', $id, null, $data);
         return $id;
+    }
+
+    /**
+     * Valida una novedad SIN escribir nada: mismas reglas y mismo candado de rol
+     * pagado que crearInterno(). Devuelve el mensaje de error, o null si es válida.
+     * Lo usa la importación para revisar el archivo entero antes de guardar.
+     */
+    public function validarParaCrear(array $data): ?string
+    {
+        try {
+            $data = $this->normalizar($data);
+            $this->rules->validate($data);
+            $this->bloquearSiRolPagado(
+                (int) $data['id_empresa'],
+                $data['id_empleado'] ?? 0,
+                $data['aplica_en'] ?? 'rol',
+                $data['periodo_anio'] ?? 0,
+                $data['periodo_mes'] ?? 0
+            );
+            return null;
+        } catch (\Throwable $e) {
+            return $e->getMessage();
+        }
     }
 
     public function actualizar(int $id, int $idEmpresa, array $data): void
