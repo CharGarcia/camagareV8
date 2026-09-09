@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
 etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, formula, suma de casilleros, casillero en blanco, no calcula
-version: 1.2
+version: 1.3
 orden: 10
 estado: activo
 ---
@@ -31,6 +31,18 @@ empresa. Al crearla se indica el tipo y el periodo:
 4. **Guarde** la declaración.
 5. **Genere el asiento** contable (es un paso aparte).
 6. **Genere el egreso** del pago, eligiendo a quién se paga y con qué concepto.
+
+## Cómo se ve el formulario
+
+El **Resumen 104** se muestra completo, sin recuadro que lo encierre: las
+secciones se suceden una tras otra y quien se desplaza es la página, no una caja
+interna. Antes el formulario vivía apretado en media pantalla con su propio
+scroll.
+
+Para que no se pierdan de vista, el **título, los filtros del periodo, los
+botones (GENERAR, EXCEL, GUARDAR…) y las pestañas quedan fijos** en la parte
+superior mientras se recorre el formulario. El interruptor **Solo valores** sigue
+disponible ahí para esconder las filas en cero.
 
 ## Detalle de casilleros: filtrar y ver sumas
 
@@ -140,6 +152,9 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 
 ## Historial de cambios
 
+- **1.3** — El Resumen 104 se muestra completo, sin la caja de media pantalla que lo
+  encerraba: ahora se desplaza la página. El título, los filtros, los botones y las
+  pestañas quedan fijos arriba. El detalle de casilleros también se extiende libre.
 - **1.2** — Aviso cuando una fórmula configurada no se aplica (columna sin
   casillero, fila de tipo título, casilleros inexistentes o sintaxis inválida);
   antes el campo salía en blanco sin explicación. Las fórmulas ahora toleran

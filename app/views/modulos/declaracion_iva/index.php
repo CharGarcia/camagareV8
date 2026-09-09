@@ -1,5 +1,15 @@
+<?php
+// Esta página tiene título, filtros y pestañas ENCIMA del formulario, así que aplica la
+// excepción de CLAUDE.md §9: el app-shell (que bloquea el scroll del body y asume "título +
+// una sola tabla que llena el alto") queda desactivado y la página scrollea normal. Sin esto,
+// el Resumen 104 tenía que vivir encerrado en una caja de 50vh con scroll propio.
+?>
+<script>document.body.classList.add('cmg-no-app-shell');</script>
+
 <style>
-    .sri-container { background: #fff; border: 1px solid #ccc; padding: 10px; font-family: 'Arial', sans-serif; overflow-y: auto; overflow-x: auto; max-height: 50vh; margin-bottom: 10px; }
+    /* El formulario NO se encierra: se extiende hasta donde llegue y quien scrollea es la
+       página. La barra de control de arriba (título + filtros + pestañas) queda fija. */
+    .sri-container { font-family: 'Arial', sans-serif; margin-bottom: 10px; }
     .sri-section-title { background: #0d6efd; color: #fff; padding: 3px 8px; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; border: 1px solid #0a58ca; border-radius: 3px; }
     .casillero-tag { background: #eee; color: #000; border: 1px solid #999; padding: 0px 4px; font-weight: 700; font-size: 0.65rem; min-width: 30px; display: inline-block; text-align: center; border-radius: 1px; margin-right: 3px; }
     .val-cell { background: #fff; border: 1px solid #bbb; padding: 1px 4px; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; font-size: 0.78rem; flex-grow: 1; min-height: 22px; }
@@ -7,6 +17,21 @@
     .sri-table .row-bold { background-color: #f2f2f2; font-weight: 700; }
     .nav-tabs .nav-link { font-weight: 700; font-size: 0.8rem; color: #555; }
     .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
+
+    /* Barra de control: controles compactos y de la misma altura (los -sm de Bootstrap no
+       rinden igual entre select, input y botón). */
+    #formDeclaracion .form-select,
+    #formDeclaracion .btn { height: 28px; }
+    .cmg-control-card .card-footer .nav-tabs { margin-bottom: -1px; }
+    /* Mientras no se ha generado nada las pestañas están ocultas: el pie de la tarjeta se
+       esconde con ellas para no dejar una franja vacía. */
+    .cmg-control-card .card-footer:has(> .nav-tabs.d-none) { display: none; }
+    /* El panel de las pestañas arranca pegado a la barra de control. */
+    #myTabContent { border: 1px solid #dee2e6; border-top: 0; }
+
+    /* Las secciones del 104 se separan entre sí, ya sin el recuadro que las encerraba. */
+    .sri-section-container + .sri-section-container { margin-top: 1rem; }
+    .sri-table thead th { position: static; background: #f8f9fa; }
 
     /* Filtros y totales de la pestaña "Detalle de Casilleros": altura de controles forzada
        (los -sm de Bootstrap no rinden igual entre select, input e input-group). */
@@ -46,22 +71,18 @@
 <?php endif; ?>
 
 <div class="container-fluid py-2">
-    <!-- Título -->
-    <div class="row mb-1 print-none">
-        <div class="col-12 d-flex justify-content-between align-items-center">
-            <div>
-                <h1 class="h5 mb-0 text-dark fw-bold">Declaración de IVA (form 104 SRI)</h1>
-                <p class="text-muted mb-0 small" style="font-size: 0.7rem;">Detalle de la declaración de IVA</p>
-            </div>
+    <!-- Barra de control fija: título, filtros/acciones y pestañas (CLAUDE.md §9). Se queda
+         pegada bajo el navbar mientras el formulario de abajo scrollea con la página. -->
+    <div class="card shadow-sm border cmg-control-card mb-0 print-none">
+        <div class="card-header bg-white border-bottom py-2 px-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-receipt-cutoff me-2 text-primary"></i>Declaración de IVA (form 104 SRI)</h5>
         </div>
-    </div>
-
-    <!-- Filtros -->
-    <div class="card shadow-sm border-0 mb-3 mt-1 cmg-table-card print-none">
         <div class="card-body p-2 text-start">
-            <form id="formDeclaracion" class="row g-2 align-items-end justify-content-start flex-lg-nowrap">
-                <div class="col-auto">
-                    <label class="form-label fw-bold small text-uppercase text-muted mb-1" style="font-size: 0.6rem;">Período</label>
+            <?php // Flexbox puro con anchos fijos por campo (CLAUDE.md §9): con el grid .row el
+                  // punto de quiebre variaba y los botones saltaban de línea de forma errática. ?>
+            <form id="formDeclaracion" class="d-flex flex-wrap align-items-start gap-2">
+                <div>
+                    <label class="form-label d-block fw-bold small text-uppercase text-muted mb-1" style="font-size: 0.6rem;">Período</label>
                     <div class="btn-group btn-group-sm">
                         <input type="radio" class="btn-check" name="tipo_periodo" id="tipo_mensual" value="mensual" checked>
                         <label class="btn btn-outline-primary fw-bold" for="tipo_mensual">Mensual</label>
@@ -69,23 +90,28 @@
                         <label class="btn btn-outline-primary fw-bold" for="tipo_semestral">Semestral</label>
                     </div>
                 </div>
-                <div class="col-auto">
-                    <label class="form-label fw-bold small text-uppercase text-muted mb-1" style="font-size: 0.6rem;">Año</label>
-                    <select name="anio" class="form-select form-select-sm border-0 bg-light fw-bold" id="anio" style="width: 85px;">
+                <div style="width: 85px;">
+                    <label class="form-label d-block fw-bold small text-uppercase text-muted mb-1" style="font-size: 0.6rem;">Año</label>
+                    <select name="anio" class="form-select form-select-sm border-0 bg-light fw-bold" id="anio">
                         <?php foreach ($anios as $a): ?><option value="<?= $a ?>" <?= $a == $anio ? 'selected' : '' ?>><?= $a ?></option><?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-auto">
-                    <label class="form-label fw-bold small text-uppercase text-muted mb-1" id="labelPeriodo" style="font-size: 0.6rem;">Mes</label>
-                    <select name="periodo" class="form-select form-select-sm border-0 bg-light fw-bold" id="periodo" style="width: 170px;"></select>
+                <div style="width: 170px;">
+                    <label class="form-label d-block fw-bold small text-uppercase text-muted mb-1" id="labelPeriodo" style="font-size: 0.6rem;">Mes</label>
+                    <select name="periodo" class="form-select form-select-sm border-0 bg-light fw-bold" id="periodo"></select>
                 </div>
-                <div class="col-auto pb-1">
-                    <div class="form-check form-switch mb-0 ms-2 text-nowrap" title="Mostrar solo las filas que tengan algún valor">
-                        <input class="form-check-input" type="checkbox" id="checkSoloValores">
-                        <label class="form-check-label fw-bold small text-muted" for="checkSoloValores" style="font-size: 0.7rem;">Solo valores</label>
+                <div>
+                    <label class="form-label d-block fw-bold small text-uppercase text-muted mb-1" style="font-size: 0.6rem;">&nbsp;</label>
+                    <div class="form-check form-switch mb-0 ms-2 text-nowrap d-flex align-items-center" style="height:28px;" title="Mostrar solo las filas que tengan algún valor">
+                        <input class="form-check-input mt-0" type="checkbox" id="checkSoloValores">
+                        <label class="form-check-label fw-bold small text-muted ms-2" for="checkSoloValores" style="font-size: 0.7rem;">Solo valores</label>
                     </div>
                 </div>
-                <div class="col-auto d-flex gap-2 align-items-end flex-wrap">
+                <div>
+                    <?php // Label invisible con d-block: iguala la altura de las etiquetas para que
+                          // los botones arranquen a la misma altura que los selects (CLAUDE.md §9). ?>
+                    <label class="form-label d-block fw-bold small text-uppercase text-muted mb-1" style="font-size: 0.6rem;">&nbsp;</label>
+                    <div class="d-flex flex-wrap align-items-start gap-2">
                     <button type="submit" class="btn btn-primary btn-sm fw-bold py-1 px-3">GENERAR</button>
                     <button type="button" id="btnExportarExcel" class="btn btn-success btn-sm fw-bold py-1 px-3 d-none" onclick="exportarExcel()">
                         <i class="bi bi-file-earmark-excel"></i> EXCEL
@@ -101,23 +127,28 @@
                         <i class="bi bi-cash-coin"></i> GENERAR EGRESO
                     </button>
                     <?php endif; ?>
+                    </div>
                 </div>
             </form>
 
             <div id="avisoDeclarado" class="alert alert-warning py-2 px-3 mt-2 mb-0 d-none text-start small"></div>
         </div>
+
+        <!-- Las pestañas viven en el pie de la barra de control para que sigan visibles
+             mientras se recorre el formulario. -->
+        <div class="card-footer bg-white border-top p-0">
+            <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña d-none px-2 pt-1" id="myTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="resumen-tab" data-bs-toggle="tab" data-bs-target="#resumen" type="button" role="tab">Resumen 104</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="detalle-tab" data-bs-toggle="tab" data-bs-target="#detalle" type="button" role="tab">Detalle de Casilleros</button>
+                </li>
+            </ul>
+        </div>
     </div>
 
-    <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña d-none print-none" id="myTab" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="resumen-tab" data-bs-toggle="tab" data-bs-target="#resumen" type="button" role="tab">Resumen 104</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="detalle-tab" data-bs-toggle="tab" data-bs-target="#detalle" type="button" role="tab">Detalle de Casilleros</button>
-        </li>
-    </ul>
-
-    <div class="tab-content border-top bg-white p-3 d-none" id="myTabContent">
+    <div class="tab-content bg-white p-3 d-none" id="myTabContent">
         <!-- Pestaña 1 -->
         <div class="tab-pane fade show active" id="resumen" role="tabpanel">
             <div id="avisoFormulas" class="alert alert-warning py-2 px-3 mb-2 d-none small"></div>
@@ -171,7 +202,7 @@
                 </div>
             </div>
 
-            <div id="accordionDetalle" class="accordion accordion-flush" style="max-height: 50vh; overflow-y: auto;"></div>
+            <div id="accordionDetalle" class="accordion accordion-flush"></div>
         </div>
     </div>
 </div>
