@@ -194,6 +194,12 @@ class PagoAutomaticoProveedorService
         $numeroCheque = null;
         $fechaCobro   = $fechaEmisionDoc;
 
+        // Nombre real del comprobante (Factura, Nota de Venta, etc.) para la descripción del
+        // detalle: estaba fijo en "Liquidación de Compra" sin importar el tipo real del documento.
+        $stTipoComp = $this->db->prepare("SELECT tipo_comprobante FROM compras_cabecera WHERE id = ?");
+        $stTipoComp->execute([$idCompra]);
+        $nombreComprobante = \App\Helpers\TiposComprobanteCompra::nombre($stTipoComp->fetchColumn() ?: null);
+
         if (($config['tipo_operacion'] ?? null) === 'CHEQUE') {
             $numeroCheque = NumeroCheque::siguiente($egresoRepo->getUltimoNumeroCheque($config['id_forma_pago']));
             if ($numeroCheque === '') {
@@ -228,7 +234,8 @@ class PagoAutomaticoProveedorService
                     'tipo_documento'          => 'COMPRA',
                     'id_referencia_documento' => $idCompra,
                     'numero_documento'        => $numDocCompleto,
-                    'descripcion'             => 'Liquidación de Compra #' . $numDocCompleto,
+                    'fecha_documento'         => $fechaEmisionDoc,
+                    'descripcion'             => $nombreComprobante . ' #' . $numDocCompleto,
                     'monto_documento'         => $montoTotalDocumento,
                     'saldo_anterior'          => $montoAPagar,
                     'monto_pagado'            => $montoAPagar,

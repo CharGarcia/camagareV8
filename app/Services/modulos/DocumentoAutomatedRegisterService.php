@@ -102,7 +102,7 @@ class DocumentoAutomatedRegisterService
             // El XML recibido (sobre de autorización del SRI) se guarda TAL CUAL en detalle_xml.
             $this->xmlOriginal = $xmlString;
 
-            $xml = new SimpleXMLElement($xmlString);
+            $xml = new SimpleXMLElement(self::limpiarXml($xmlString));
 
             $debugMsg = "[" . date('Y-m-d H:i:s') . "] XML Root Detected: " . $xml->getName() . "\n";
             file_put_contents(MVC_ROOT . '/storage/logs/debug_sri.log', $debugMsg, FILE_APPEND);
@@ -111,11 +111,11 @@ class DocumentoAutomatedRegisterService
             // autorización (autorizaciones > autorizacion > comprobante); también se admite el
             // comprobante como hijo directo por compatibilidad.
             if (isset($xml->comprobante)) {
-                $xml = new SimpleXMLElement((string)$xml->comprobante);
+                $xml = new SimpleXMLElement(self::limpiarXml((string)$xml->comprobante));
                 $debugMsg = "[" . date('Y-m-d H:i:s') . "] XML Root After Unwrapped: " . $xml->getName() . "\n";
                 file_put_contents(MVC_ROOT . '/storage/logs/debug_sri.log', $debugMsg, FILE_APPEND);
             } elseif (isset($xml->autorizacion->comprobante)) {
-                $xml = new SimpleXMLElement((string)$xml->autorizacion->comprobante);
+                $xml = new SimpleXMLElement(self::limpiarXml((string)$xml->autorizacion->comprobante));
                 $debugMsg = "[" . date('Y-m-d H:i:s') . "] XML Root After Unwrapped (sobre): " . $xml->getName() . "\n";
                 file_put_contents(MVC_ROOT . '/storage/logs/debug_sri.log', $debugMsg, FILE_APPEND);
             }
@@ -689,8 +689,8 @@ class DocumentoAutomatedRegisterService
                 foreach ($xml->detalles->detalle as $d) {
                     $idDetalle = $this->compraRepo->insertDetalle([
                         'id_compra' => $idCompra,
-                        'codigo_principal' => (string)$d->codigoPrincipal,
-                        'codigo_auxiliar' => (string)$d->codigoAuxiliar,
+                        'codigo_principal' => self::codigoDetalle($d),
+                        'codigo_auxiliar' => self::codigoAuxiliarDetalle($d),
                         'descripcion' => (string)$d->descripcion,
                         'cantidad' => (float)$d->cantidad,
                         'precio_unitario' => (float)$d->precioUnitario,
@@ -892,6 +892,44 @@ class DocumentoAutomatedRegisterService
             return "{$parts[2]}-{$parts[1]}-{$parts[0]}";
         }
         return $fecha;
+    }
+
+    /**
+     * Deja una cadena XML lista para SimpleXMLElement: quita el BOM y cualquier
+     * espacio o salto de línea anterior a la declaración `<?xml ... ?>`.
+     *
+     * Hay emisores que escriben el sobre del SRI como
+     * `<comprobante>\n<![CDATA[<?xml …`, con un salto de línea entre la etiqueta y
+     * el CDATA. Ese salto forma parte del contenido del nodo, así que al desenvolver
+     * el comprobante la cadena ya no empieza por `<?xml` y libxml la rechaza con
+     * "XML declaration allowed only at the start of the document": el archivo entero
+     * se reportaba como ERROR y no se registraba ningún documento.
+     */
+    private static function limpiarXml(string $xml): string
+    {
+        // El charlist incluye los tres bytes del BOM UTF-8 (EF BB BF); un XML válido
+        // nunca empieza con esos bytes salvo que sean justamente el BOM.
+        return trim($xml, "\xEF\xBB\xBF \t\n\r\0\x0B");
+    }
+
+    /**
+     * Código del ítem de una línea de detalle.
+     *
+     * El SRI no usa la misma etiqueta en todos los comprobantes: factura y
+     * liquidación de compra llevan `codigoPrincipal`/`codigoAuxiliar`, mientras que
+     * nota de crédito y guía de remisión llevan `codigoInterno`/`codigoAdicional`.
+     * Sin este alias, el código del producto de una NC se perdía al registrarla.
+     */
+    private static function codigoDetalle(SimpleXMLElement $d): string
+    {
+        $cod = trim((string) ($d->codigoPrincipal ?? ''));
+        return $cod !== '' ? $cod : trim((string) ($d->codigoInterno ?? ''));
+    }
+
+    private static function codigoAuxiliarDetalle(SimpleXMLElement $d): string
+    {
+        $cod = trim((string) ($d->codigoAuxiliar ?? ''));
+        return $cod !== '' ? $cod : trim((string) ($d->codigoAdicional ?? ''));
     }
 
     private function handleLiquidacion(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente, bool $esGastoPersonal = false): array
@@ -1144,7 +1182,7 @@ class DocumentoAutomatedRegisterService
                         'precio_unitario' => (float)$d->precioUnitario,
                         'descuento' => (float)$d->descuento,
                         'precio_total_sin_impuesto' => (float)$d->precioTotalSinImpuesto,
-                        'codigo_principal' => (string)$d->codigoPrincipal
+                        'codigo_principal' => self::codigoDetalle($d)
                     ]);
                     if (isset($d->impuestos->impuesto)) {
                         foreach ($d->impuestos->impuesto as $imp) {

@@ -746,10 +746,14 @@ class ComprasService
                 $fechaAutorizacion = trim($mfa[1]);
             }
             // Quitar el sobre de autorización para quedarnos con el comprobante.
-            if (preg_match('/<comprobante><!\[CDATA\[(.*?)\]\]><\/comprobante>/s', $xmlString, $m)) {
-                $xmlString = $m[1];
+            // Hay emisores que separan el CDATA de la etiqueta con un salto de línea
+            // (`<comprobante>\n<![CDATA[<?xml …`), así que se admiten espacios alrededor
+            // y se recorta el resultado: si la cadena no empieza exactamente por `<?xml`,
+            // libxml la rechaza ("XML declaration allowed only at the start of the document").
+            if (preg_match('/<comprobante>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/comprobante>/s', $xmlString, $m)) {
+                $xmlString = trim($m[1]);
             } elseif (preg_match('/<comprobante>(.*?)<\/comprobante>/s', $xmlString, $m)) {
-                $xmlString = htmlspecialchars_decode($m[1]);
+                $xmlString = trim(htmlspecialchars_decode($m[1]));
             }
         }
 
@@ -830,8 +834,14 @@ class ComprasService
                     ];
                 }
             }
+            // Nota de crédito y guía de remisión usan `codigoInterno` en vez de
+            // `codigoPrincipal`; sin el alias el PDF sale con la columna de código vacía.
+            $codPrincipal = trim((string) ($d->codigoPrincipal ?? ''));
+            if ($codPrincipal === '') {
+                $codPrincipal = trim((string) ($d->codigoInterno ?? ''));
+            }
             $detalles[] = [
-                'codigo_principal'          => (string) ($d->codigoPrincipal ?? ''),
+                'codigo_principal'          => $codPrincipal,
                 'descripcion'               => (string) ($d->descripcion ?? ''),
                 'cantidad'                  => (float) ($d->cantidad ?? 0),
                 'precio_unitario'           => (float) ($d->precioUnitario ?? 0),

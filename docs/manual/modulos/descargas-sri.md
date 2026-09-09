@@ -80,9 +80,19 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   comprobante de retención ese dato es opcional). Ya no bloquea: si el XML no lo
   trae, el sistema toma el código presente en el propio comprobante y, si no hay
   ninguno, asume **01 – Factura**. Puede corregirlo después desde la retención.
+- **Un XML válido se marca como ERROR al subirlo**: ocurría con archivos en los
+  que el emisor deja un salto de línea entre `<comprobante>` y el bloque `CDATA`
+  del sobre de autorización. El lector exigía que el comprobante empezara justo
+  en la declaración `<?xml`, así que descartaba el archivo completo. Ya se
+  admiten esos espacios; vuelva a subir el archivo.
 
 ## Historial de cambios
 
+- **1.5** — La carga de XML acepta sobres de autorización en los que el
+  comprobante va separado de la etiqueta `<comprobante>` por saltos de línea o
+  espacios (antes el archivo se rechazaba entero con estado ERROR). Además, las
+  **notas de crédito** conservan el código del ítem de cada línea, que el SRI
+  nombra `codigoInterno` en vez de `codigoPrincipal`.
 - **1.4** — La tarjeta **Contraseña SRI** queda reservada a administradores y
   superadministradores; los usuarios de nivel 1 ya no la ven ni pueden guardar
   credenciales. Se retiró el botón de "ver clave", que nunca tuvo nada que
