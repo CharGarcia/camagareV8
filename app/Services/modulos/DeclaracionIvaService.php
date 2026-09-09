@@ -387,7 +387,8 @@ class DeclaracionIvaService
             $cambio = false;
             foreach ($formulas as $casilleroObj => $formulaStr) {
                 $desconocidos = [];
-                $resultado = $this->resolverFormula($formulaStr, $sums, $desconocidos);
+                $errorFormula = null;
+                $resultado = $this->resolverFormula($formulaStr, $sums, $desconocidos, $errorFormula);
 
                 if ($resultado === null) {
                     if ($i === 0) {
@@ -395,7 +396,7 @@ class DeclaracionIvaService
                             'casillero'   => (string) $casilleroObj,
                             'descripcion' => '',
                             'formula'     => $formulaStr,
-                            'motivo'      => 'La fórmula no se pudo calcular: revise la sintaxis (solo códigos de casillero y + - * / paréntesis).',
+                            'motivo'      => 'No se pudo calcular. ' . ($errorFormula ?? 'Revise la sintaxis: solo códigos de casillero y + - * / paréntesis.'),
                         ];
                     }
                     continue;
@@ -539,16 +540,21 @@ class DeclaracionIvaService
      * los códigos — si se limpiaban después, un código pegado a una letra no se reconocía y
      * terminaba evaluándose como el número literal 401, dando totales absurdos.
      */
-    private function resolverFormula(string $formula, array $sums, array &$desconocidos = []): ?float
+    private function resolverFormula(string $formula, array $sums, array &$desconocidos = [], ?string &$error = null): ?float
     {
         $desconocidos = [];
+        $error = null;
 
         // Separadores de lista → suma.
         $expr = str_replace([',', ';'], '+', $formula);
 
         // Sanear primero: solo dígitos, operadores, punto decimal y paréntesis.
-        $expr = preg_replace('/[^0-9\+\-\*\/\.\(\)]/', '', $expr);
+        // Los espacios SE CONSERVAN: son separadores. Si se borraran, "401 402" quedaría como el
+        // número 401402 y la fórmula devolvería una barbaridad en silencio en vez de avisar que
+        // faltan operadores.
+        $expr = preg_replace('/[^0-9\+\-\*\/\.\(\)\s]/', ' ', $expr);
         if ($expr === null || trim($expr) === '') {
+            $error = 'La fórmula quedó vacía después de quitar el texto que no es una operación.';
             return null;
         }
 
@@ -565,26 +571,149 @@ class DeclaracionIvaService
         }, $expr);
         $desconocidos = array_values(array_unique($faltantes));
 
-        return $this->evaluarMatematica((string) $expr);
+        return $this->evaluarMatematica((string) $expr, $error);
     }
 
-    /** Evalúa una expresión aritmética ya saneada. null si no es evaluable. */
-    private function evaluarMatematica(string $expr): ?float
+    /**
+     * Evalúa una expresión aritmética (+ - * / y paréntesis) sin usar eval().
+     *
+     * Dividir por cero da 0 en esa operación, no un error: en el F104 los cocientes son
+     * factores de proporcionalidad (563 = ventas con derecho a crédito / total de ventas) o
+     * interruptores del tipo (615/615)*609, y cuando el denominador es cero el resultado
+     * correcto es cero, no "fórmula inválida". Antes esto reventaba con DivisionByZeroError y
+     * se reportaba como un error de sintaxis inexistente.
+     *
+     * Devuelve null solo ante un error real de escritura, con el motivo en $error.
+     */
+    private function evaluarMatematica(string $expr, ?string &$error = null): ?float
     {
+        $error = null;
+
         // Red de seguridad: la expresión ya viene saneada de resolverFormula(), pero este
         // método también protege a cualquier llamador futuro.
-        $expr = preg_replace('/[^0-9\+\-\*\/\.\(\)]/', '', $expr);
-        if ($expr === null || $expr === '') return null;
-
-        try {
-            $result = @eval('return ' . $expr . ';');
-            if ($result === false || !is_numeric($result) || !is_finite((float) $result)) {
-                return null;
-            }
-            return (float) $result;
-        } catch (\Throwable $e) {
+        $expr = preg_replace('/[^0-9\+\-\*\/\.\(\)\s]/', ' ', (string) $expr);
+        if ($expr === null || trim($expr) === '') {
+            $error = 'La fórmula está vacía.';
             return null;
         }
+
+        // Tokenizar: números (con decimales), operadores y paréntesis. El espacio no es un
+        // token, pero sí corta números: "401 402" son dos valores, no el número 401402.
+        $tokens = [];
+        $largo = strlen($expr);
+        for ($i = 0; $i < $largo;) {
+            $c = $expr[$i];
+            if (ctype_space($c)) {
+                $i++;
+                continue;
+            }
+            if (ctype_digit($c) || $c === '.') {
+                $numero = '';
+                while ($i < $largo && (ctype_digit($expr[$i]) || $expr[$i] === '.')) {
+                    $numero .= $expr[$i];
+                    $i++;
+                }
+                if (!is_numeric($numero)) {
+                    $error = 'Número mal escrito en la fórmula: "' . $numero . '".';
+                    return null;
+                }
+                $tokens[] = (float) $numero;
+                continue;
+            }
+            $tokens[] = $c;
+            $i++;
+        }
+
+        $pos = 0;
+        $valor = $this->parseSuma($tokens, $pos, $error);
+        if ($valor === null) {
+            return null;
+        }
+        if ($pos !== count($tokens)) {
+            $error = 'Sobra algo al final de la fórmula (revise los paréntesis y los operadores).';
+            return null;
+        }
+        if (!is_finite($valor)) {
+            $error = 'El resultado de la fórmula no es un número válido.';
+            return null;
+        }
+        return $valor;
+    }
+
+    /** suma := producto (('+'|'-') producto)* */
+    private function parseSuma(array $tokens, int &$pos, ?string &$error): ?float
+    {
+        $valor = $this->parseProducto($tokens, $pos, $error);
+        if ($valor === null) return null;
+
+        while ($pos < count($tokens) && ($tokens[$pos] === '+' || $tokens[$pos] === '-')) {
+            $op = $tokens[$pos];
+            $pos++;
+            $derecha = $this->parseProducto($tokens, $pos, $error);
+            if ($derecha === null) return null;
+            $valor = ($op === '+') ? $valor + $derecha : $valor - $derecha;
+        }
+        return $valor;
+    }
+
+    /** producto := factor (('*'|'/') factor)* — dividir por cero da 0 (ver evaluarMatematica). */
+    private function parseProducto(array $tokens, int &$pos, ?string &$error): ?float
+    {
+        $valor = $this->parseFactor($tokens, $pos, $error);
+        if ($valor === null) return null;
+
+        while ($pos < count($tokens) && ($tokens[$pos] === '*' || $tokens[$pos] === '/')) {
+            $op = $tokens[$pos];
+            $pos++;
+            $derecha = $this->parseFactor($tokens, $pos, $error);
+            if ($derecha === null) return null;
+            if ($op === '*') {
+                $valor = $valor * $derecha;
+            } else {
+                $valor = (abs($derecha) < 1e-12) ? 0.0 : $valor / $derecha;
+            }
+        }
+        return $valor;
+    }
+
+    /** factor := ('+'|'-') factor | '(' suma ')' | número */
+    private function parseFactor(array $tokens, int &$pos, ?string &$error): ?float
+    {
+        if ($pos >= count($tokens)) {
+            $error = 'La fórmula termina esperando un valor (revise el último operador).';
+            return null;
+        }
+
+        $t = $tokens[$pos];
+
+        if ($t === '+' || $t === '-') {
+            $pos++;
+            $valor = $this->parseFactor($tokens, $pos, $error);
+            if ($valor === null) return null;
+            return ($t === '-') ? -$valor : $valor;
+        }
+
+        if ($t === '(') {
+            $pos++;
+            $valor = $this->parseSuma($tokens, $pos, $error);
+            if ($valor === null) return null;
+            if ($pos >= count($tokens) || $tokens[$pos] !== ')') {
+                $error = 'Falta cerrar un paréntesis.';
+                return null;
+            }
+            $pos++;
+            return $valor;
+        }
+
+        if (is_float($t)) {
+            $pos++;
+            return $t;
+        }
+
+        $error = ($t === ')')
+            ? 'Hay un paréntesis de cierre de más.'
+            : 'Falta un valor junto al operador "' . $t . '".';
+        return null;
     }
 
     // ==========================================================================

@@ -27,6 +27,19 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
     /* Ancho del modal: un poco más angosto que modal-xl, pero suficiente para las pestañas */
     #modalEmpleado .modal-dialog { max-width: 1000px; }
 
+    /* Sin barra de scroll vertical visible en NINGUNA pestaña.
+       El modal es `modal-dialog-scrollable`, así que app.css le pone
+       `overflow-y: auto` al .modal-body: al abrir una pestaña más alta que el
+       resto (Credenciales) aparecía la barra y el modal "saltaba" de ancho.
+       Se oculta solo la barra —el contenido se sigue desplazando con la rueda,
+       el teclado o el gesto táctil—, y solo dentro de este modal: la regla
+       global la usan todos los demás. */
+    #modalEmpleado .modal-body {
+        scrollbar-width: none;      /* Firefox */
+        -ms-overflow-style: none;   /* Edge legacy */
+    }
+    #modalEmpleado .modal-body::-webkit-scrollbar { width: 0; height: 0; }
+
     /* Tooltip propio (amarillo). El `title` nativo no se puede colorear.
        El texto se pasa en data-tip; se muestra al pasar el mouse sobre el ícono.
        OJO: el contenedor debe ser un <span>, NO el <i> del ícono: Bootstrap Icons

@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
 etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, formula, suma de casilleros, casillero en blanco, no calcula
-version: 1.3
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -100,11 +100,29 @@ correspondiente en la configuración de casilleros.
 
 En *Configuración → Casilleros SRI* un casillero puede definirse como la suma de
 otros escribiendo una fórmula, por ejemplo `401+402+405`. Se aceptan `+`, `-`,
-`*`, `/` y paréntesis, y también separar los casilleros por coma (`401,402,405`).
+`*`, `/` y **paréntesis**, con la precedencia matemática de siempre, y también
+separar los casilleros por coma (`401,402,405`). Los paréntesis se pueden anidar:
+`((411+412)*2)/419`.
 
-Un casillero configurado así puede quedarse en blanco por tres motivos, y desde
-la versión 1.2 el módulo **lo dice en un aviso amarillo** sobre el formulario (y
-en el Excel), en vez de mostrar un cero sin explicación:
+### Divisiones: el denominador en cero da cero
+
+Cuando una fórmula divide y **el denominador vale cero, el resultado de esa
+división es cero**, no un error. Es lo que corresponde en el formulario:
+
+- Un **factor de proporcionalidad** como
+  `(411+412+420+435+415+416+417+418) / 419` vale cero si no hubo ventas en el
+  periodo (casillero 419 en cero).
+- Un **interruptor** como `(615/615)*609` sirve para arrastrar el 609 solo cuando
+  el 615 tiene saldo; si el 615 está en cero, el casillero queda en cero.
+
+Solo se anula esa división, no el resto: en `411+412/419`, si el 419 es cero, el
+resultado sigue siendo el valor del 411.
+
+### Cuando un casillero con fórmula sale en blanco
+
+Puede quedarse en blanco por cuatro motivos, y el módulo **lo dice en un aviso
+amarillo** sobre el formulario (y en el Excel), en vez de mostrar un cero sin
+explicación:
 
 - **La fórmula está en una columna que no tiene casillero.** Cada fila tiene tres
   columnas (Bruto, Neto, Impuesto) con su propio casillero y su propia fórmula.
@@ -115,7 +133,10 @@ en el Excel), en vez de mostrar un cero sin explicación:
   todo lo ancho, sin columnas de valor: el resultado se calcula pero no se ve.
   Hay que cambiarla a tipo *valor*.
 - **La fórmula menciona casilleros que no existen** en la estructura. Esos
-  cuentan como cero; el aviso indica cuáles son.
+  cuentan como cero; el aviso indica cuáles son. Si el resultado le importa, cree
+  la fila de esos casilleros.
+- **Está mal escrita**: falta cerrar un paréntesis, sobra uno, o hay un operador
+  sin su valor. El aviso dice cuál de esos es el caso.
 
 Las fórmulas pueden apoyarse unas en otras (el 485 usa el 482, que sale del 429):
 el sistema las resuelve en cadena.
@@ -152,6 +173,10 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 
 ## Historial de cambios
 
+- **1.4** — Las fórmulas que dividen ya no fallan cuando el denominador es cero (factores
+  de proporcionalidad como el 563 e interruptores como (615/615)*609): esa división vale
+  cero. El aviso de fórmula no aplicada dice ahora el motivo exacto (paréntesis sin cerrar,
+  operador sin valor…) en vez de un mensaje genérico de sintaxis.
 - **1.3** — El Resumen 104 se muestra completo, sin la caja de media pantalla que lo
   encerraba: ahora se desplaza la página. El título, los filtros, los botones y las
   pestañas quedan fijos arriba. El detalle de casilleros también se extiende libre.

@@ -583,15 +583,76 @@
         // los casilleros con fórmula cuando el usuario edita un casillero "editable"
         // (configurado en /config/sri-casilleros-etiquetas), sin volver a pedir al servidor.
         // ==========================================================================
+        // Evaluador aritmético (+ - * / y paréntesis). Calca DeclaracionIvaService::
+        // evaluarMatematica(): sin eval, y DIVIDIR POR CERO DA 0 en esa operación — en el 104
+        // los cocientes son factores de proporcionalidad (563) o interruptores del tipo
+        // (615/615)*609, y con denominador cero el resultado correcto es cero.
         function evaluarMatematicaJS(expr) {
-            const limpio = String(expr).replace(/[^0-9+\-*/.()]/g, '');
-            if (!limpio) return null;
-            try {
-                const resultado = Function('"use strict"; return (' + limpio + ');')();
-                return typeof resultado === 'number' && isFinite(resultado) ? resultado : null;
-            } catch (e) {
-                return null;
+            const limpio = String(expr).replace(/[^0-9+\-*/.()\s]/g, ' ');
+            if (!limpio.trim()) return null;
+
+            // Tokenizar. El espacio no es token pero sí corta números: "401 402" son dos valores.
+            const tokens = [];
+            for (let i = 0; i < limpio.length;) {
+                const c = limpio[i];
+                if (/\s/.test(c)) { i++; continue; }
+                if (/[0-9.]/.test(c)) {
+                    let num = '';
+                    while (i < limpio.length && /[0-9.]/.test(limpio[i])) { num += limpio[i]; i++; }
+                    const v = parseFloat(num);
+                    if (!isFinite(v)) return null;
+                    tokens.push(v);
+                    continue;
+                }
+                tokens.push(c);
+                i++;
             }
+
+            let pos = 0;
+            const factor = () => {
+                if (pos >= tokens.length) return null;
+                const t = tokens[pos];
+                if (t === '+' || t === '-') {
+                    pos++;
+                    const v = factor();
+                    return v === null ? null : (t === '-' ? -v : v);
+                }
+                if (t === '(') {
+                    pos++;
+                    const v = suma();
+                    if (v === null || tokens[pos] !== ')') return null;
+                    pos++;
+                    return v;
+                }
+                if (typeof t === 'number') { pos++; return t; }
+                return null;
+            };
+            const producto = () => {
+                let v = factor();
+                if (v === null) return null;
+                while (pos < tokens.length && (tokens[pos] === '*' || tokens[pos] === '/')) {
+                    const op = tokens[pos]; pos++;
+                    const d = factor();
+                    if (d === null) return null;
+                    v = (op === '*') ? v * d : (Math.abs(d) < 1e-12 ? 0 : v / d);
+                }
+                return v;
+            };
+            const suma = () => {
+                let v = producto();
+                if (v === null) return null;
+                while (pos < tokens.length && (tokens[pos] === '+' || tokens[pos] === '-')) {
+                    const op = tokens[pos]; pos++;
+                    const d = producto();
+                    if (d === null) return null;
+                    v = (op === '+') ? v + d : v - d;
+                }
+                return v;
+            };
+
+            const valor = suma();
+            if (valor === null || pos !== tokens.length || !isFinite(valor)) return null;
+            return valor;
         }
 
         // Resuelve una fórmula de casilleros. Calca DeclaracionIvaService::resolverFormula():
@@ -599,8 +660,8 @@
         // los códigos, para que un código pegado a una letra ("C401") no acabe evaluándose como
         // el número literal 401.
         function resolverFormulaJS(formula, valores) {
-            let expr = String(formula).replace(/[,;]/g, '+').replace(/[^0-9+\-*/.()]/g, '');
-            if (!expr) return null;
+            let expr = String(formula).replace(/[,;]/g, '+').replace(/[^0-9+\-*/.()\s]/g, ' ');
+            if (!expr.trim()) return null;
             expr = expr.replace(/\b(\d{3})\b/g, (m, cod) => {
                 const v = valores[cod];
                 return '(' + (v === undefined || v === null ? 0 : parseFloat(v) || 0) + ')';
