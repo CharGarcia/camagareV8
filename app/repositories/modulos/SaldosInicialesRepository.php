@@ -266,15 +266,23 @@ class SaldosInicialesRepository extends BaseRepository
     public function getHistorialCobrosCxc(int $id, int $idEmpresa): array
     {
         $st = $this->db->prepare("
-            SELECT ic.id, ic.fecha_emision, ic.numero_ingreso, ic.observaciones,
+            SELECT 'COBRO' AS tipo, ic.id, ic.fecha_emision, ic.numero_ingreso, ic.observaciones,
                    id2.monto_cobrado,
                    u.nombre AS usuario_nombre,
-                   efp.nombre AS forma_cobro
+                   COALESCE(fp.formas, '') AS forma_cobro
             FROM ingresos_detalle id2
             INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
             LEFT  JOIN usuarios u ON u.id = ic.id_usuario
-            LEFT  JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id
-            LEFT  JOIN empresa_formas_pago efp ON efp.id = ip.id_forma_cobro
+            -- Las formas de pago se agregan en una sola celda: con un LEFT JOIN
+            -- directo a ingresos_pagos, un ingreso con dos formas duplicaba la fila
+            -- del cobro y el total del historial lo sumaba dos veces.
+            LEFT  JOIN LATERAL (
+                      SELECT string_agg(DISTINCT efp.nombre, ', ') AS formas
+                      FROM ingresos_pagos ip
+                      JOIN empresa_formas_pago efp
+                        ON efp.id = ip.id_forma_cobro AND efp.id_empresa = ic.id_empresa
+                      WHERE ip.id_ingreso = ic.id
+                  ) fp ON TRUE
             WHERE id2.tipo_documento = 'SALDO_INICIAL'
               AND id2.id_referencia_documento = :id
               AND ic.id_empresa = :id_empresa

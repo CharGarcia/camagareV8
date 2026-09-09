@@ -685,8 +685,10 @@ async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA', idEmp
     const esRecibo = origen === 'RECIBO';
     const prefijo  = esSaldo ? 'Saldo inicial: ' : (esRecibo ? 'Recibo: ' : 'Factura: ');
     document.getElementById('historial-subtitulo').textContent = prefijo + nroFactura;
-    document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Cargando…</td></tr>';
+    document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-muted">Cargando…</td></tr>';
     document.getElementById('historial-total').textContent = '0.00';
+    document.getElementById('historial-cargos').textContent = '0.00';
+    document.getElementById('historial-fila-cargos').hidden = true;
 
     new bootstrap.Modal(document.getElementById('modalHistorial')).show();
 
@@ -705,36 +707,57 @@ async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA', idEmp
         const data = await r.json();
 
         if (!data.ok) {
-            document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error al cargar</td></tr>';
+            document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error al cargar</td></tr>';
             return;
         }
 
         const h = data.historial || [];
         if (!h.length) {
-            document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No hay cobros registrados.</td></tr>';
+            document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No hay movimientos registrados.</td></tr>';
             return;
         }
 
-        let total = 0;
-        let html  = '';
+        let abonos = 0;
+        let cargos = 0;
+        let html   = '';
         for (const c of h) {
-            const m = parseFloat(c.monto_cobrado);
-            total += m;
+            // Compatibilidad: saldos iniciales devuelven el formato antiguo
+            // (numero_ingreso / monto_cobrado, sin tipo ni signo).
+            const tipo  = c.tipo || 'COBRO';
+            const signo = parseInt(c.signo != null ? c.signo : 1) || 1;
+            const m     = parseFloat(c.monto != null ? c.monto : c.monto_cobrado) || 0;
+            const meta  = CXC_HIST_TIPOS[tipo] || CXC_HIST_TIPOS.COBRO;
+
+            if (signo < 0) cargos += m; else abonos += m;
+
             html += `<tr>
+                <td style="font-size:.8rem;"><span class="badge bg-${meta.color} bg-opacity-10 text-${meta.color} border border-${meta.color} border-opacity-25 fw-normal"><i class="bi ${meta.icono} me-1"></i>${meta.etiqueta}</span></td>
                 <td style="font-size:.8rem;">${CXC_fmtFechaHora(c.fecha_emision)}</td>
-                <td style="font-size:.8rem;">${esc(c.numero_ingreso || '')}</td>
+                <td style="font-size:.8rem;">${esc(c.numero || c.numero_ingreso || '')}</td>
                 <td style="font-size:.8rem;">${esc(c.forma_cobro || '—')}</td>
                 <td style="font-size:.8rem;">${esc(c.usuario_nombre || '—')}</td>
-                <td class="text-end fw-semibold text-success" style="font-size:.8rem;">$${CXC_fmt(m)}</td>
+                <td class="text-end fw-semibold text-${signo < 0 ? 'dark' : 'success'}" style="font-size:.8rem;">${signo < 0 ? '+' : ''}$${CXC_fmt(m)}</td>
                 <td style="font-size:.78rem;">${esc(c.observaciones || '')}</td>
             </tr>`;
         }
         document.getElementById('historial-tbody').innerHTML = html;
-        document.getElementById('historial-total').textContent = CXC_fmt(total);
+        document.getElementById('historial-total').textContent = CXC_fmt(abonos);
+        document.getElementById('historial-cargos').textContent = CXC_fmt(cargos);
+        document.getElementById('historial-fila-cargos').hidden = cargos <= 0;
     } catch (e) {
-        document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error de conexión</td></tr>';
+        document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error de conexión</td></tr>';
     }
 }
+
+/* Presentación de cada tipo de movimiento del historial. La nota de débito es un
+   CARGO (suma al saldo), por eso su monto se muestra con "+" y va en su propia
+   línea del pie, fuera del total abonado. */
+const CXC_HIST_TIPOS = {
+    COBRO:        { etiqueta: 'Cobro',           color: 'success', icono: 'bi-cash-coin' },
+    RETENCION:    { etiqueta: 'Retención',       color: 'warning', icono: 'bi-receipt' },
+    NOTA_CREDITO: { etiqueta: 'Nota de crédito', color: 'info',    icono: 'bi-file-earmark-minus' },
+    NOTA_DEBITO:  { etiqueta: 'Nota de débito',  color: 'dark',    icono: 'bi-file-earmark-plus' },
+};
 
 /* ════════════════════════════════════════════════════
    MODAL EMAIL

@@ -738,58 +738,193 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $sql = "
             SELECT
-                ic.id,
-                ic.fecha_emision,
-                ic.numero_ingreso,
-                ic.observaciones,
-                id2.monto_cobrado,
-                u.nombre AS usuario_nombre,
-                efp.nombre AS forma_cobro
+                'COBRO'                        AS tipo,
+                ic.id                          AS id,
+                ic.fecha_emision               AS fecha_emision,
+                ic.numero_ingreso              AS numero,
+                COALESCE(ic.observaciones, '') AS observaciones,
+                id2.monto_cobrado              AS monto,
+                COALESCE(u.nombre, '')         AS usuario_nombre,
+                COALESCE(fp.formas, '')        AS forma_cobro
             FROM ingresos_detalle id2
             INNER JOIN ingresos_cabecera ic  ON ic.id  = id2.id_ingreso
             LEFT  JOIN usuarios          u   ON u.id   = ic.id_usuario
-            LEFT  JOIN ingresos_pagos    ip  ON ip.id_ingreso = ic.id
-            LEFT  JOIN empresa_formas_pago efp ON efp.id = ip.id_forma_cobro
+            " . $this->joinFormasCobro() . "
             WHERE id2.tipo_documento           = 'RECIBO'
               AND id2.id_referencia_documento  = :id_recibo
               AND ic.id_empresa                = :id_empresa
               AND ic.estado                   != 'anulado'
               AND ic.eliminado                 = false
-              AND (efp.id IS NULL OR efp.id_empresa = :id_empresa_fp)
             ORDER BY ic.fecha_emision DESC, ic.id DESC
         ";
 
         $st = $this->db->prepare($sql);
-        $st->execute([':id_recibo' => $idRecibo, ':id_empresa' => $idEmpresa, ':id_empresa_fp' => $idEmpresa]);
+        $st->execute([':id_recibo' => $idRecibo, ':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
-     * Historial de cobros de una factura específica.
+     * Formas de cobro de un ingreso, agregadas en UNA sola celda.
+     *
+     * Antes se hacía con `LEFT JOIN ingresos_pagos` directo: un ingreso pagado con
+     * dos formas (efectivo + transferencia) devolvía DOS filas del mismo cobro, así
+     * que el historial lo listaba duplicado y el total lo sumaba dos veces.
+     */
+    private function joinFormasCobro(): string
+    {
+        return "LEFT JOIN LATERAL (
+                    SELECT string_agg(DISTINCT efp.nombre, ', ') AS formas
+                    FROM ingresos_pagos ip
+                    JOIN empresa_formas_pago efp
+                      ON efp.id = ip.id_forma_cobro AND efp.id_empresa = ic.id_empresa
+                    WHERE ip.id_ingreso = ic.id
+                ) fp ON TRUE";
+    }
+
+    /**
+     * Movimientos que afectan el saldo de una factura: cobros (ingresos),
+     * retenciones en la fuente, notas de crédito (abonos) y notas de débito (cargo).
+     *
+     * Antes solo listaba los ingresos, así que una factura cancelada con una NC o
+     * una retención aparecía como "sin cobros registrados" aunque su saldo ya
+     * estuviera en cero. Las reglas de enlace son EXACTAMENTE las de los CTE que
+     * calculan el saldo (getCteCobrado / getCteRetenido / getCteNC / getCteND):
+     * si un documento no aparece aquí, tampoco está restando en el saldo.
+     *
+     * Columnas comunes: tipo, id, fecha_emision, numero, forma_cobro (detalle),
+     * usuario_nombre, monto, observaciones y `signo` (+1 abono, -1 cargo).
      */
     public function getHistorialCobros(int $idVenta, int $idEmpresa): array
     {
+        $numSus  = AbonosVentaSql::normalizar('rd.num_doc_sustento');
+        $numVc   = AbonosVentaSql::numFactura('vc');
+        $numNc   = AbonosVentaSql::normalizar('n.num_doc_modificado');
+        $ambNota = $this->condAmbiente('n');
+
         $sql = "
+            WITH fact AS (
+                SELECT v.id, v.id_empresa, {$this->numV} AS num_norm
+                FROM ventas_cabecera v
+                WHERE v.id = :id_venta AND v.id_empresa = :id_empresa AND v.eliminado = false
+            )
+
+            -- ── 1. Cobros registrados (ingresos) ──────────────────────────────
             SELECT
-                ic.id,
-                ic.fecha_emision,
-                ic.numero_ingreso,
-                ic.observaciones,
-                id2.monto_cobrado,
-                u.nombre AS usuario_nombre,
-                efp.nombre AS forma_cobro
-            FROM ingresos_detalle id2
-            INNER JOIN ingresos_cabecera ic  ON ic.id  = id2.id_ingreso
-            LEFT  JOIN usuarios          u   ON u.id   = ic.id_usuario
-            LEFT  JOIN ingresos_pagos    ip  ON ip.id_ingreso = ic.id
-            LEFT  JOIN empresa_formas_pago efp ON efp.id = ip.id_forma_cobro
-            WHERE id2.tipo_documento           = 'FACTURA'
-              AND id2.id_referencia_documento  = :id_venta
-              AND ic.id_empresa                = :id_empresa
-              AND ic.estado                   != 'anulado'
-              AND ic.eliminado                 = false
-              AND (efp.id IS NULL OR efp.id_empresa = :id_empresa)
-            ORDER BY ic.fecha_emision DESC, ic.id DESC
+                'COBRO'                        AS tipo,
+                1                              AS signo,
+                ic.id                          AS id,
+                ic.fecha_emision               AS fecha_emision,
+                ic.numero_ingreso              AS numero,
+                COALESCE(fp.formas, '')        AS forma_cobro,
+                COALESCE(u.nombre, '')         AS usuario_nombre,
+                id2.monto_cobrado              AS monto,
+                COALESCE(ic.observaciones, '') AS observaciones
+            FROM fact f
+            INNER JOIN ingresos_detalle  id2 ON id2.tipo_documento          = 'FACTURA'
+                                            AND id2.id_referencia_documento = f.id
+            INNER JOIN ingresos_cabecera ic  ON ic.id = id2.id_ingreso
+            LEFT  JOIN usuarios          u   ON u.id  = ic.id_usuario
+            " . $this->joinFormasCobro() . "
+            WHERE ic.id_empresa = f.id_empresa
+              AND ic.estado    != 'anulado'
+              AND ic.eliminado  = false
+
+            UNION ALL
+
+            -- ── 2a. Retenciones enlazadas por número de documento de sustento ──
+            --     Solo lo retenido en LAS LÍNEAS que apuntan a esta factura: una
+            --     retención electrónica puede sustentar varias.
+            SELECT
+                'RETENCION',
+                1,
+                r.id,
+                r.fecha_emision,
+                CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial),
+                'Retención en la fuente',
+                COALESCE(u.nombre, ''),
+                SUM(rd.valor_retenido),
+                COALESCE(r.periodo_fiscal, '')
+            FROM fact f
+            INNER JOIN retencion_venta_cabecera r  ON r.id_empresa = f.id_empresa AND r.eliminado = false
+            INNER JOIN retencion_venta_detalle  rd ON rd.id_retencion = r.id
+            LEFT  JOIN usuarios                 u  ON u.id = r.created_by
+            WHERE COALESCE(rd.num_doc_sustento, '') <> ''
+              AND {$numSus} = f.num_norm
+            GROUP BY r.id, r.fecha_emision, r.establecimiento, r.punto_emision,
+                     r.secuencial, u.nombre, r.periodo_fiscal
+
+            UNION ALL
+
+            -- ── 2b. Retención registrada DESDE la factura (id_venta) cuyo detalle
+            --     no enlaza ninguna factura por número: cuenta el total de cabecera.
+            SELECT
+                'RETENCION',
+                1,
+                r.id,
+                r.fecha_emision,
+                CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial),
+                'Retención en la fuente',
+                COALESCE(u.nombre, ''),
+                (r.total_renta + r.total_iva + r.total_isd),
+                COALESCE(r.periodo_fiscal, '')
+            FROM fact f
+            INNER JOIN retencion_venta_cabecera r ON r.id_empresa = f.id_empresa
+                                                 AND r.eliminado = false
+                                                 AND r.id_venta  = f.id
+            LEFT  JOIN usuarios u ON u.id = r.created_by
+            WHERE NOT EXISTS (
+                      SELECT 1
+                      FROM retencion_venta_detalle rd
+                      JOIN ventas_cabecera vc ON vc.id_empresa = r.id_empresa
+                                             AND vc.eliminado  = false
+                                             AND {$numVc} = {$numSus}
+                      WHERE rd.id_retencion = r.id
+                        AND COALESCE(rd.num_doc_sustento, '') <> ''
+                  )
+
+            UNION ALL
+
+            -- ── 3. Notas de crédito aplicadas (abono) ─────────────────────────
+            SELECT
+                'NOTA_CREDITO',
+                1,
+                n.id,
+                n.fecha_emision,
+                CONCAT(n.establecimiento,'-',n.punto_emision,'-',n.secuencial),
+                COALESCE(n.motivo, ''),
+                COALESCE(u.nombre, ''),
+                n.importe_total,
+                COALESCE(n.observaciones, '')
+            FROM fact f
+            INNER JOIN notas_credito_cabecera n ON n.id_empresa = f.id_empresa
+            LEFT  JOIN usuarios               u ON u.id = n.id_usuario
+            WHERE n.estado   != 'anulado'
+              AND n.eliminado = false
+              AND (n.tipo_ambiente IS NULL OR {$ambNota})
+              AND {$numNc} = f.num_norm
+
+            UNION ALL
+
+            -- ── 4. Notas de débito (CARGO: suman al saldo, no lo abonan) ──────
+            SELECT
+                'NOTA_DEBITO',
+                -1,
+                n.id,
+                n.fecha_emision,
+                CONCAT(n.establecimiento,'-',n.punto_emision,'-',n.secuencial),
+                'Nota de débito',
+                COALESCE(u.nombre, ''),
+                n.importe_total,
+                COALESCE(n.observaciones, '')
+            FROM fact f
+            INNER JOIN nota_debito_cabecera n ON n.id_empresa = f.id_empresa
+            LEFT  JOIN usuarios             u ON u.id = n.id_usuario
+            WHERE n.estado   != 'anulado'
+              AND n.eliminado = false
+              AND (n.tipo_ambiente IS NULL OR {$ambNota})
+              AND {$numNc} = f.num_norm
+
+            ORDER BY fecha_emision DESC, id DESC
         ";
 
         $st = $this->db->prepare($sql);

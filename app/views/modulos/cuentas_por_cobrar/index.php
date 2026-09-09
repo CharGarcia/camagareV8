@@ -414,26 +414,38 @@
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
                             <tr>
+                                <th>Tipo</th>
                                 <th>Fecha</th>
-                                <th>Nro Ingreso</th>
-                                <th>Forma de Cobro</th>
+                                <th>Documento</th>
+                                <th>Detalle</th>
                                 <th>Usuario</th>
                                 <th class="text-end">Monto</th>
                                 <th>Observaciones</th>
                             </tr>
                         </thead>
                         <tbody id="historial-tbody">
-                            <tr><td colspan="6" class="text-center text-muted">Cargando…</td></tr>
+                            <tr><td colspan="7" class="text-center text-muted">Cargando…</td></tr>
                         </tbody>
                         <tfoot>
+                            <!-- Los cargos (notas de débito) solo se muestran si existen: el JS
+                                 quita el atributo hidden cuando el documento tiene alguna. -->
+                            <tr id="historial-fila-cargos" hidden>
+                                <td colspan="5" class="text-end small text-muted">Cargos (notas de débito):</td>
+                                <td class="text-end text-dark">$<span id="historial-cargos"></span></td>
+                                <td></td>
+                            </tr>
                             <tr class="fw-bold">
-                                <td colspan="4" class="text-end small">Total cobrado:</td>
+                                <td colspan="5" class="text-end small">Total abonado:</td>
                                 <td class="text-end text-success">$<span id="historial-total"></span></td>
                                 <td></td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
+                <p class="text-muted mb-0 mt-2" style="font-size:.72rem;">
+                    Se listan todos los movimientos que afectan el saldo: cobros, retenciones,
+                    notas de crédito (abonan) y notas de débito (cargan).
+                </p>
             </div>
             <div class="modal-footer py-2 px-3">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>

@@ -208,6 +208,28 @@ genera su asiento.
 El recordatorio por **correo** funciona para facturas y recibos; el envío por
 **WhatsApp** está disponible solo para facturas.
 
+## Historial de la factura
+
+El botón del reloj de cada fila abre el **Historial de Cobros**, que lista
+**todos los movimientos que mueven el saldo del documento**, no solo los cobros
+en efectivo o banco:
+
+| Tipo | Qué es | Efecto |
+| --- | --- | --- |
+| Cobro | Ingreso registrado contra el documento | Abona |
+| Retención | Retención en la fuente que le practicó el cliente | Abona |
+| Nota de crédito | Devolución o descuento posterior | Abona |
+| Nota de débito | Cargo adicional al cliente | **Suma** al saldo |
+
+El pie de la tabla muestra el **total abonado**; si el documento tiene notas de
+débito, aparece además una línea con los **cargos**, que no se restan del saldo
+sino que lo aumentan.
+
+Las reglas de enlace son las mismas con las que se calcula el saldo: si una
+retención o una nota de crédito **no aparece aquí, tampoco está descontando** en
+la columna Saldo. Es la forma más rápida de comprobar por qué una factura sigue
+pendiente (ver *Por qué un saldo no cuadra*).
+
 ## Envío masivo de recordatorios por correo
 
 Marque los documentos con el casillero de cada fila (o el casillero **Todos**
@@ -260,11 +282,22 @@ Y dos casos que el reporte **no** descuenta a propósito:
 - **Un cliente aparece debiendo algo que ya pagó**: revise si el ingreso quedó
   aplicado a esa factura concreta.
 - **El saldo es menor de lo esperado**: puede haber notas de crédito aplicadas.
+- **El modal de cobro muestra Nota Crédito 0.00 aunque emití la NC**: la nota no
+  está enlazada a esa factura. Ábra el **Historial de Cobros**: si tampoco
+  aparece ahí, revise en el módulo de Notas de Crédito el **documento
+  modificado** (debe ser el número de la factura), que la NC no esté anulada y
+  que se haya emitido desde el **mismo establecimiento** que la factura.
 - **No veo las facturas de otro vendedor**: sin el permiso de *acceso total*,
   cada usuario ve solo los documentos que él creó.
 
 ## Historial de cambios
 
+- **2.0** — El **Historial de Cobros** deja de listar solo los ingresos: ahora
+  muestra también las **retenciones**, las **notas de crédito** (abonan) y las
+  **notas de débito** (cargan), cada una con su tipo, número y monto, con el
+  total abonado y los cargos separados en el pie. Nueva sección *Historial de la
+  factura*. Además, un ingreso pagado con **varias formas de cobro** ya no
+  aparece repetido ni se suma dos veces en el total.
 - **1.9** — Buscador **Producto** con lista y etiquetas (igual que Cliente) y
   nueva vista **Por producto**: la cartera agrupada por producto con cantidad,
   valor del producto, cobrado y saldo de los documentos, exportable a PDF y
