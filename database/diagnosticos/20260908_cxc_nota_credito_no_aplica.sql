@@ -1,26 +1,41 @@
 -- ============================================================================
 -- ¿Por qué la Nota de Crédito no descuenta en Cuentas por Cobrar?
 --
--- Cuentas por Cobrar enlaza la NC con la factura por el NÚMERO NORMALIZADO a 15
--- dígitos (`num_doc_modificado` de la NC contra EEE-PPP-SSSSSSSSS de la factura),
--- dentro de la MISMA empresa, y exige además: estado <> 'anulado',
--- eliminado = false y un `tipo_ambiente` que coincida con el de la empresa
--- (NULL se tolera). Si el modal "Registrar Cobro" muestra Nota Crédito 0.00,
--- alguna de esas condiciones no se cumple.
+-- NO hay que ejecutar ninguna migración para que el cruce funcione: Cuentas por
+-- Cobrar enlaza la NC con la factura EN LA PROPIA CONSULTA, comparando el número
+-- NORMALIZADO a 15 dígitos (`num_doc_modificado` de la NC contra
+-- EEE-PPP-SSSSSSSSS de la factura), dentro de la MISMA empresa, y exigiendo
+-- además: estado <> 'anulado', eliminado = false y un `tipo_ambiente` que
+-- coincida con el de la empresa (NULL se tolera).
 --
--- Devuelve UNA sola tabla: la factura y TODAS las notas de crédito del cliente,
--- cada una con su veredicto. Es de SOLO LECTURA: no modifica nada.
+-- Si el modal "Registrar Cobro" muestra Nota Crédito 0.00, alguna de esas
+-- condiciones no se cumple. Este script dice cuál, en texto.
 --
--- USO: cambia únicamente las dos líneas de "parametros" y ejecuta todo.
+-- SOLO LECTURA: no modifica ni crea nada.
+-- USO: cambia ÚNICAMENTE el número de factura de la primera línea y ejecuta todo.
+--      El número va tal como aparece en el listado (p. ej. 001-001-000000123).
 -- ============================================================================
 
 WITH parametros AS (
-    SELECT '001-001-000000123'::text AS numero_factura,  -- << número de la factura
-           1::int                    AS id_empresa       -- << id de la empresa activa
+    SELECT '001-001-000000123'::text AS numero_factura   -- << ÚNICO dato a cambiar
 ),
 
--- Establecimientos del mismo RUC: sirve para detectar la NC emitida desde otro
--- establecimiento (no descuenta: el enlace exige la misma empresa).
+-- La factura, buscada por número normalizado en TODAS las empresas.
+-- De aquí sale la empresa dueña: no hay que averiguar ningún id a mano.
+fact AS (
+    SELECT v.id, v.id_empresa, v.id_cliente, v.estado, v.eliminado,
+           v.importe_total, v.tipo_ambiente,
+           (CASE WHEN COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '[^0-9]', '', 'g') END) AS num_norm
+    FROM ventas_cabecera v, parametros p
+    WHERE v.eliminado = false
+      AND (CASE WHEN COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '[^0-9]', '', 'g') END) = (CASE WHEN COALESCE(p.numero_factura, '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE(p.numero_factura, ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE(p.numero_factura, ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE(p.numero_factura, ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE(p.numero_factura, ''), '[^0-9]', '', 'g') END)
+    ORDER BY v.id DESC
+    LIMIT 1
+),
+
+-- Establecimientos del mismo RUC que la empresa dueña de la factura: sirve para
+-- detectar la NC emitida desde OTRO establecimiento (no descuenta: el enlace
+-- exige la misma empresa).
 grupo AS (
     SELECT e2.id,
            COALESCE(e2.establecimiento,'')       AS establecimiento,
@@ -30,20 +45,7 @@ grupo AS (
       ON regexp_replace(COALESCE(e2.ruc,''), '[^0-9]', '', 'g')
        = regexp_replace(COALESCE(e.ruc,''),  '[^0-9]', '', 'g')
      AND e2.eliminado = false
-    WHERE e.id = (SELECT id_empresa FROM parametros)
-      AND regexp_replace(COALESCE(e.ruc,''), '[^0-9]', '', 'g') <> ''
-),
-
--- La factura buscada, con su número ya normalizado a 15 dígitos.
-fact AS (
-    SELECT v.id, v.id_empresa, v.id_cliente, v.estado, v.eliminado,
-           v.importe_total, v.tipo_ambiente,
-           (CASE WHEN COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '[^0-9]', '', 'g') END) AS num_norm
-    FROM ventas_cabecera v, parametros p
-    WHERE v.id_empresa IN (SELECT id FROM grupo)
-      AND v.eliminado = false
-      AND (CASE WHEN COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE((v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ''), '[^0-9]', '', 'g') END) = (CASE WHEN COALESCE(p.numero_factura, '') LIKE '%-%-%' THEN lpad(regexp_replace(split_part(COALESCE(p.numero_factura, ''), '-', 1), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE(p.numero_factura, ''), '-', 2), '[^0-9]', '', 'g'), 3, '0') || lpad(regexp_replace(split_part(COALESCE(p.numero_factura, ''), '-', 3), '[^0-9]', '', 'g'), 9, '0') ELSE regexp_replace(COALESCE(p.numero_factura, ''), '[^0-9]', '', 'g') END)
-    LIMIT 1
+    WHERE e.id = (SELECT id_empresa FROM fact)
 ),
 
 -- Identificación del cliente de la factura (los clientes son por establecimiento:
@@ -53,8 +55,9 @@ cliente AS (
     FROM fact f JOIN clientes c ON c.id = f.id_cliente
 ),
 
--- Todas las notas de crédito de ese cliente en el grupo (no solo las que enlazan):
--- así se ve también la que apunta a la factura con otro formato o en otro ambiente.
+-- TODAS las notas de crédito de ese cliente en el grupo (no solo las que
+-- enlazan): así se ve también la que apunta a la factura con otro formato,
+-- en otro ambiente o desde otro establecimiento.
 candidatas AS (
     SELECT n.id, n.id_empresa, n.fecha_emision, n.estado, n.eliminado,
            n.tipo_ambiente, n.importe_total,
@@ -76,6 +79,7 @@ SELECT '1. FACTURA'                        AS bloque,
        f.eliminado                         AS eliminado,
        COALESCE(f.tipo_ambiente,'(null)')  AS ambiente_doc,
        g.ambiente_empresa                  AS ambiente_empresa,
+       f.id_empresa                        AS id_empresa,
        g.establecimiento                   AS establecimiento,
        f.importe_total                     AS importe,
        CASE WHEN f.estado NOT IN ('autorizado','autorizada')
@@ -94,6 +98,7 @@ SELECT '2. NOTA DE CRÉDITO',
        c.eliminado,
        COALESCE(c.tipo_ambiente,'(null)'),
        g.ambiente_empresa,
+       c.id_empresa,
        g.establecimiento,
        c.importe_total,
        CASE
@@ -104,8 +109,9 @@ SELECT '2. NOTA DE CRÉDITO',
                      || '" (normaliza a ' || c.num_norm_nc || ') y la factura es '
                      || (SELECT num_norm FROM fact) || '.'
            WHEN c.id_empresa <> (SELECT id_empresa FROM fact)
-                THEN 'NO aplica: la NC es del establecimiento ' || g.establecimiento
-                     || ' y la factura es de otro. El enlace exige la misma empresa.'
+                THEN 'NO aplica: la NC se emitió desde el establecimiento ' || g.establecimiento
+                     || ' (empresa ' || c.id_empresa || ') y la factura es de la empresa '
+                     || (SELECT id_empresa FROM fact) || '. El enlace exige la misma empresa.'
            WHEN c.tipo_ambiente IS NOT NULL AND c.tipo_ambiente <> g.ambiente_empresa
                 THEN 'NO aplica: la NC está en ambiente ' || c.tipo_ambiente
                      || ' y la empresa trabaja en ' || g.ambiente_empresa || '.'
@@ -117,13 +123,15 @@ JOIN grupo g ON g.id = c.id_empresa
 ORDER BY 1, 2;
 
 -- ============================================================================
--- Lecturas del resultado
+-- Cómo leer el resultado
 --
---  · Sin ninguna fila         → el número de factura o el id_empresa no existen
---                               (revisa los parámetros; el número va tal cual
---                               aparece en el listado, p. ej. 001-001-000000123).
---  · Solo la fila 1. FACTURA  → ese cliente no tiene notas de crédito en el
---                               grupo: la NC está registrada con otro cliente.
---  · Filas 2 con veredicto    → ahí está el motivo exacto por el que el modal
---    "NO aplica…"               muestra Nota Crédito 0.00.
+--  · Sin ninguna fila          → ese número de factura no existe (o está
+--                                eliminada). Cópielo tal cual del listado.
+--  · Solo la fila 1. FACTURA   → ese cliente no tiene NINGUNA nota de crédito en
+--                                el grupo: la NC quedó registrada con otro
+--                                cliente (revise el cliente de la NC).
+--  · Filas "2." con veredicto  → ahí está el motivo exacto por el que el modal
+--    que empieza en "NO aplica"  muestra Nota Crédito 0.00.
+--  · Alguna fila "2." con "OK"  → la NC sí cruza; entonces el 0.00 viene de otra
+--                                parte (avísame con esta salida).
 -- ============================================================================
