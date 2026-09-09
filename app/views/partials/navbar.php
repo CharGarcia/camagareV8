@@ -132,19 +132,20 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 </script>
 <style>
     
-    /* Agrupación de íconos en móvil. Fichas compactas: con minmax() entran 4 por
-       fila en un móvil normal (antes 3 fijas y mucho más altas) y suben solas a 5
-       en pantallas anchas, sin media queries. */
+    /* Fichas del menú móvil. TODO lo del panel usa este mismo formato —avisos,
+       accesos, ayuda y sesión—: icono arriba y rótulo corto debajo. Con minmax()
+       entran unas 5 por fila en un móvil normal y suben solas en pantallas
+       anchas, sin media queries. */
     .cmg-mobile-icons-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-        gap: 0.5rem;
+        grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        gap: 0.4rem;
         text-align: center;
     }
     .cmg-mobile-icons-grid a {
         background: #f8f9fa;
         border-radius: 0.5rem;
-        padding: 0.45rem 0.25rem;
+        padding: 0.35rem 0.2rem;
         color: var(--bs-primary) !important;
         display: flex;
         flex-direction: column;
@@ -155,13 +156,13 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         overflow: hidden;
     }
     .cmg-mobile-icons-grid a i {
-        font-size: 1.15rem !important;
-        margin-bottom: 0.15rem;
+        font-size: 1rem !important;
+        margin-bottom: 0.1rem;
     }
     /* El rótulo va en una sola línea: con la ficha estrecha, un texto largo
        ("WhatsApp", "Liquida.") partiría en dos y descuadraría el alto de la fila. */
     .cmg-mobile-icons-grid a small {
-        font-size: 0.62rem;
+        font-size: 0.58rem;
         line-height: 1.1;
         max-width: 100%;
         white-space: nowrap;
@@ -169,10 +170,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         text-overflow: ellipsis;
     }
     .cmg-mobile-icons-grid a span.badge {
-        font-size: 0.55rem !important;
-        padding: 0.15em 0.35em;
-        top: 3px !important;
-        right: 3px !important;
+        font-size: 0.5rem !important;
+        padding: 0.12em 0.3em;
+        top: 2px !important;
+        right: 2px !important;
         transform: none !important;
         left: auto !important;
     }
@@ -201,29 +202,25 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         background-color: #e9ecef;
         color: var(--bs-primary);
     }
-    /* Fila de botones rápidos del offcanvas móvil (IA Soporte, POS, Manual, etc.):
-       pueden ser hasta 7 botones con texto — sin flex-wrap se salían del panel. */
-    .cmg-mobile-btns-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-    .cmg-mobile-btns-row > a {
-        flex: 1 1 46%;
-        min-width: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
     /* Grupos del menú móvil: los mismos tipos que la barra de escritorio (alertas,
-       pendientes, mensajes, accesos, ayuda, sistema), pero aquí la división la
-       marca el rótulo de cada grupo en vez de una línea vertical. */
-    .cmg-mobile-grupo { margin-bottom: 1rem; }
+       pendientes, mensajes, accesos, ayuda, sistema). Sin rótulo: los separa una
+       línea, la versión horizontal del divisor de escritorio. Igual que allí, la
+       línea vive DENTRO del grupo para irse con él cuando el grupo se oculta y no
+       dejar nunca una raya suelta; el último grupo (sistema) siempre se ve, así
+       que es el único sin línea. */
+    .cmg-mobile-grupo { margin-bottom: 0.55rem; }
+    .cmg-mobile-grupo::after {
+        content: "";
+        display: block;
+        margin-top: 0.55rem;
+        border-top: 1px solid #dee2e6;
+    }
     .cmg-mobile-grupo:last-child { margin-bottom: 0; }
-    /* Si dentro del grupo no queda nada visible — todos los iconos en d-none, o
-       ningún botón renderizado por permisos — se oculta el grupo entero, rótulo
-       incluido: si no, quedaría un título suelto encima de un hueco vacío. */
-    .cmg-mobile-grupo:not(:has(.cmg-mobile-icons-grid > *:not(.d-none), .cmg-mobile-btns-row > *:not(.d-none))) {
+    .cmg-mobile-grupo:last-child::after { content: none; }
+    /* Si dentro del grupo no queda nada visible — todas las fichas en d-none, o
+       ninguna renderizada por permisos — se oculta el grupo entero: si no,
+       quedaría su línea divisoria flotando sobre un hueco vacío. */
+    .cmg-mobile-grupo:not(:has(.cmg-mobile-icons-grid > *:not(.d-none))) {
         display: none;
     }
     /* Aviso puntual del navbar (lo usa /config al reordenar las tarjetas): mientras
@@ -548,13 +545,12 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
             <!-- Accesos del menú móvil, agrupados por los mismos tipos que la barra de
                  escritorio: alertas > pendientes > mensajes > accesos > ayuda > sistema.
-                 Aquí la división no es una línea vertical sino el rótulo de cada grupo.
-                 Un grupo sin nada visible dentro se oculta entero, rótulo incluido
-                 (ver .cmg-mobile-grupo en el <style> de arriba). -->
+                 Los grupos no llevan rótulo: los separa una línea, igual que la barra
+                 de escritorio. Un grupo sin nada visible dentro se oculta entero, con
+                 su línea (ver .cmg-mobile-grupo en el <style> de arriba). -->
 
             <!-- Grupo 1 · ALERTAS: rechazos del SRI y cosas que se vencen. -->
             <div class="cmg-mobile-grupo">
-                <label class="form-label small fw-bold text-muted mb-2">Alertas</label>
                 <div class="cmg-mobile-icons-grid">
                     <a class="cmg-icon-update cmg-nov-item d-none" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
                         <i class="bi bi-receipt text-danger"></i>
@@ -606,7 +602,6 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
             <!-- Grupo 2 · PENDIENTES: documentos a medias que esperan al usuario. -->
             <div class="cmg-mobile-grupo">
-                <label class="form-label small fw-bold text-muted mb-2">Pendientes</label>
                 <div class="cmg-mobile-icons-grid">
                     <a class="cmg-icon-update pedidos-pendientes-icon d-none" href="<?= $base ?>/modulos/pedidos">
                         <i class="bi bi-cart3"></i>
@@ -653,7 +648,6 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
             <!-- Grupo 3 · MENSAJES Y NOVEDADES: lo que alguien (o el sistema) tiene que decirle al usuario. -->
             <div class="cmg-mobile-grupo">
-                <label class="form-label small fw-bold text-muted mb-2">Mensajes</label>
                 <div class="cmg-mobile-icons-grid">
                     <a class="cmg-icon-update whatsapp-unread-icon d-none" href="<?= $base ?>/modulos/whatsapp-chat">
                         <i class="bi bi-whatsapp"></i>
@@ -675,24 +669,23 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
             <!-- Grupo 4 · ACCESOS: pantallas de trabajo que se abren en pestaña aparte. -->
             <div class="cmg-mobile-grupo">
-                <label class="form-label small fw-bold text-muted mb-2">Accesos rápidos</label>
-                <div class="cmg-mobile-btns-row">
+                <div class="cmg-mobile-icons-grid">
                     <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
-                    <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-primary btn-sm flex-grow-1"
-                       target="_blank" rel="noopener">
-                        <i class="bi bi-robot me-1"></i>IA Soporte
+                    <a href="<?= $base ?>/modulos/ia-soporte" target="_blank" rel="noopener" title="IA Soporte">
+                        <i class="bi bi-robot"></i>
+                        <small>IA</small>
                     </a>
                     <?php endif; ?>
                     <?php if (\App\Helpers\Permisos::puedeVer('modulos/caja-pos')): ?>
-                    <a href="<?= $base ?>/modulos/caja-pos" class="btn btn-outline-primary btn-sm flex-grow-1"
-                       target="_blank" rel="noopener">
-                        <i class="bi bi-cash-coin me-1"></i>Punto de Venta
+                    <a href="<?= $base ?>/modulos/caja-pos" target="_blank" rel="noopener" title="Punto de Venta">
+                        <i class="bi bi-cash-coin"></i>
+                        <small>POS</small>
                     </a>
                     <?php endif; ?>
                     <?php if (\App\Helpers\Permisos::puedeVer('modulos/mesas')): ?>
-                    <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-outline-primary btn-sm flex-grow-1"
-                       target="_blank" rel="noopener">
-                        <i class="fa-solid fa-utensils me-1"></i>Restaurante
+                    <a href="<?= $base ?>/modulos/mesas/tablero" target="_blank" rel="noopener" title="Restaurante">
+                        <i class="fa-solid fa-utensils"></i>
+                        <small>Mesas</small>
                     </a>
                     <?php endif; ?>
                 </div>
@@ -700,31 +693,32 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
             <!-- Grupo 5 · AYUDA -->
             <div class="cmg-mobile-grupo">
-                <label class="form-label small fw-bold text-muted mb-2">Ayuda</label>
-                <div class="cmg-mobile-btns-row">
-                    <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-primary btn-sm flex-grow-1"
-                       target="_blank" rel="noopener">
-                        <i class="bi bi-journal-bookmark-fill me-1"></i>Manual
+                <div class="cmg-mobile-icons-grid">
+                    <a href="<?= htmlspecialchars($urlManual) ?>" target="_blank" rel="noopener" title="Manual del sistema">
+                        <i class="bi bi-journal-bookmark-fill"></i>
+                        <small>Manual</small>
                     </a>
-                    <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-primary btn-sm flex-grow-1"
-                       target="_blank" rel="noopener">
-                        <i class="bi bi-play-btn-fill me-1"></i>Videos
+                    <a href="<?= $base ?>/videos-ayuda" target="_blank" rel="noopener" title="Videos de ayuda">
+                        <i class="bi bi-play-btn-fill"></i>
+                        <small>Videos</small>
                     </a>
                 </div>
             </div>
 
             <!-- Grupo 6 · SISTEMA Y SESIÓN: ajustes, quién soy y salir. -->
             <div class="cmg-mobile-grupo">
-                <label class="form-label small fw-bold text-muted mb-2">Sistema</label>
-                <div class="cmg-mobile-btns-row">
-                    <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm flex-grow-1">
-                        <i class="bi bi-gear-fill me-1"></i>Ajustes
+                <div class="cmg-mobile-icons-grid">
+                    <a href="<?= $base ?>/config" title="Ajustes">
+                        <i class="bi bi-gear-fill"></i>
+                        <small>Ajustes</small>
                     </a>
-                    <a href="<?= $base ?>/perfil" class="btn btn-outline-secondary btn-sm flex-grow-1">
-                        <i class="bi bi-person-fill me-1"></i>Mi perfil
+                    <a href="<?= $base ?>/perfil" title="Mi perfil">
+                        <i class="bi bi-person-fill"></i>
+                        <small>Perfil</small>
                     </a>
-                    <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-danger btn-sm flex-grow-1">
-                        <i class="bi bi-box-arrow-right me-1"></i>Salir
+                    <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" title="Cerrar sesión">
+                        <i class="bi bi-box-arrow-right text-danger"></i>
+                        <small>Salir</small>
                     </a>
                 </div>
             </div>
