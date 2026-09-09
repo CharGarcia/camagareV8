@@ -201,6 +201,52 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    /* Grupos del menú móvil: los mismos tipos que la barra de escritorio (alertas,
+       pendientes, mensajes, accesos, ayuda, sistema), pero aquí la división la
+       marca el rótulo de cada grupo en vez de una línea vertical. */
+    .cmg-mobile-grupo { margin-bottom: 1rem; }
+    .cmg-mobile-grupo:last-child { margin-bottom: 0; }
+    /* Si dentro del grupo no queda nada visible — todos los iconos en d-none, o
+       ningún botón renderizado por permisos — se oculta el grupo entero, rótulo
+       incluido: si no, quedaría un título suelto encima de un hueco vacío. */
+    .cmg-mobile-grupo:not(:has(.cmg-mobile-icons-grid > *:not(.d-none), .cmg-mobile-btns-row > *:not(.d-none))) {
+        display: none;
+    }
+    /* Aviso puntual del navbar (lo usa /config al reordenar las tarjetas): mientras
+       no tenga texto no debe ocupar sitio, o deja un hueco fijo delante de los
+       iconos de alerta — parecía un icono que no llegó a cargar. */
+    #navbar-mensajes:empty { display: none; }
+    /* Acciones del navbar (escritorio) agrupadas por tipo: alertas, pendientes,
+       mensajes, accesos, ayuda y sesión. La separación la pone el gap de cada
+       grupo — ningún icono lleva margen propio — para que los iconos ocultos
+       (d-none) no cambien el ancho de los huecos entre los que sí se ven.
+       Los tres valores de abajo son los únicos que hay que tocar para apretar
+       o soltar la fila. */
+    .cmg-navbar-acciones {
+        --cmg-nav-gap-icono: 0.65rem;  /* entre iconos de un mismo grupo */
+        --cmg-nav-gap-btn:   0.35rem;  /* entre botones de un mismo grupo */
+        --cmg-nav-gap-grupo: 0.5rem;   /* a cada lado de la línea divisoria */
+        column-gap: var(--cmg-nav-gap-grupo);
+    }
+    .cmg-nav-grupo { column-gap: var(--cmg-nav-gap-icono); }
+    .cmg-nav-grupo--btns { column-gap: var(--cmg-nav-gap-btn); }
+
+    /* Línea divisoria entre grupos. Va DENTRO del grupo (::after) a propósito:
+       así se va con él cuando el grupo se oculta y nunca queda una barra suelta
+       al principio o al final de la fila. El último grupo (sistema y sesión)
+       siempre se ve, así que es el único que no lleva línea. */
+    .cmg-nav-grupo::after {
+        content: "";
+        width: 1px;
+        height: var(--cmg-topbar-item-height, 20px); /* mismo alto que los botones */
+        background: rgba(255, 255, 255, 0.3);
+    }
+    .cmg-nav-grupo:last-child::after { content: none; }
+
+    /* Un grupo cuyos elementos estén TODOS ocultos, o que no se haya renderizado
+       por permisos, desaparece entero: si no, seguiría aportando el gap del
+       contenedor y su línea divisoria donde no hay nada. */
+    .cmg-nav-grupo:not(:has(> *:not(.d-none))) { display: none; }
 </style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact position-relative">
     <div class="container-fluid gap-2 align-items-center py-1 d-flex flex-wrap flex-lg-nowrap">
@@ -282,155 +328,186 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             </button>
         </div>
 
-        <!-- 5. Iconos, Usuario, Config, Logout (Desktop: order 5, Mobile: hidden) -->
-        <div class="d-none d-lg-flex flex-row align-items-center gap-2 order-lg-5 ms-lg-3">
-            <span class="navbar-text text-white-50 small me-2" id="navbar-mensajes">&nbsp;</span>
+        <!-- 5. Acciones de escritorio (en móvil van en el offcanvas). Agrupadas por
+             tipo, de izquierda a derecha: alertas > pendientes > mensajes > accesos >
+             ayuda > sistema y sesión. Cada grupo es un flex con su propio gap y los
+             iconos NO llevan margen propio (ver .cmg-nav-grupo en el <style> de arriba):
+             así los iconos ocultos no alteran la separación de los que sí se ven, y un
+             grupo entero sin nada visible desaparece sin dejar hueco. -->
+        <div class="d-none d-lg-flex flex-row align-items-center order-lg-5 ms-lg-3 cmg-navbar-acciones">
+            <span class="navbar-text text-white-50 small" id="navbar-mensajes"></span>
 
-            <!-- Novedad SRI: documentos devueltos / no autorizados / con error (badge de alerta + desglose) -->
-            <div class="dropdown d-none cmg-novedad-sri-wrap me-2">
-                <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Documentos con novedad del SRI">
-                    <i class="bi bi-exclamation-octagon-fill text-warning" style="font-size: 1.1rem;"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger cmg-novedad-sri-total" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            <!-- Grupo 1 · ALERTAS: rechazos del SRI y cosas que se vencen. -->
+            <div class="d-flex align-items-center cmg-nav-grupo">
+
+                <!-- Novedad SRI: documentos devueltos / no autorizados / con error (badge de alerta + desglose) -->
+                <div class="dropdown d-none cmg-novedad-sri-wrap">
+                    <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Documentos con novedad del SRI">
+                        <i class="bi bi-exclamation-octagon-fill text-warning" style="font-size: 1.1rem;"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger cmg-novedad-sri-total" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 270px; z-index: 5065;">
+                        <li><h6 class="dropdown-header text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Documentos con novedad del SRI</h6></li>
+                        <li><hr class="dropdown-divider my-1"></li>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
+                            <span><i class="bi bi-receipt me-2 text-muted"></i>Facturas de venta</span>
+                            <span class="badge bg-danger rounded-pill cmg-nov-badge-facturas">0</span>
+                        </a>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
+                            <span><i class="bi bi-file-earmark-text me-2 text-muted"></i>Liquidaciones de compra</span>
+                            <span class="badge bg-danger rounded-pill cmg-nov-badge-liquidaciones">0</span>
+                        </a>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
+                            <span><i class="bi bi-percent me-2 text-muted"></i>Retenciones de compra</span>
+                            <span class="badge bg-danger rounded-pill cmg-nov-badge-retenciones_compras">0</span>
+                        </a>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
+                            <span><i class="bi bi-file-earmark-minus me-2 text-muted"></i>Notas de crédito</span>
+                            <span class="badge bg-danger rounded-pill cmg-nov-badge-notas_credito">0</span>
+                        </a>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
+                            <span><i class="bi bi-truck me-2 text-muted"></i>Guías de remisión</span>
+                            <span class="badge bg-danger rounded-pill cmg-nov-badge-guias_remision">0</span>
+                        </a>
+                    </ul>
+                </div>
+
+                <!-- Firma electrónica por caducar / caducada (empresa activa) -->
+                <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative d-none cmg-firma-wrap" title="Firma electrónica">
+                    <i class="bi bi-file-earmark-lock-fill" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-firma-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 270px; z-index: 5065;">
-                    <li><h6 class="dropdown-header text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Documentos con novedad del SRI</h6></li>
-                    <li><hr class="dropdown-divider my-1"></li>
-                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
-                        <span><i class="bi bi-receipt me-2 text-muted"></i>Facturas de venta</span>
-                        <span class="badge bg-danger rounded-pill cmg-nov-badge-facturas">0</span>
-                    </a>
-                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
-                        <span><i class="bi bi-file-earmark-text me-2 text-muted"></i>Liquidaciones de compra</span>
-                        <span class="badge bg-danger rounded-pill cmg-nov-badge-liquidaciones">0</span>
-                    </a>
-                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
-                        <span><i class="bi bi-percent me-2 text-muted"></i>Retenciones de compra</span>
-                        <span class="badge bg-danger rounded-pill cmg-nov-badge-retenciones_compras">0</span>
-                    </a>
-                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
-                        <span><i class="bi bi-file-earmark-minus me-2 text-muted"></i>Notas de crédito</span>
-                        <span class="badge bg-danger rounded-pill cmg-nov-badge-notas_credito">0</span>
-                    </a>
-                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
-                        <span><i class="bi bi-truck me-2 text-muted"></i>Guías de remisión</span>
-                        <span class="badge bg-danger rounded-pill cmg-nov-badge-guias_remision">0</span>
-                    </a>
-                </ul>
+
+                <!-- Suscripción del sistema por vencer / vencida (empresa activa) -->
+                <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative d-none cmg-suscripcion-wrap" title="Suscripción del sistema">
+                    <i class="bi bi-shield-exclamation" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscripcion-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+
+                <!-- Suscripciones de clientes por vencer / vencidas (empresa administradora) -->
+                <a href="<?= $base ?>/modulos/suscripciones" class="text-white text-decoration-none position-relative d-none cmg-suscgest-wrap" title="Suscripciones">
+                    <i class="bi bi-arrow-repeat" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscgest-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+
+                <!-- Tareas y obligaciones pendientes / vencidas -->
+                <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative d-none cmg-icon-update tareas-alertas-link" title="Tareas pendientes/vencidas" data-navbar-link="true">
+                    <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
             </div>
 
-            <!-- Suscripción del sistema por vencer / vencida (empresa activa) -->
-            <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative me-2 d-none cmg-suscripcion-wrap" title="Suscripción del sistema">
-                <i class="bi bi-shield-exclamation" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscripcion-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-
-            <!-- Suscripciones de clientes por vencer / vencidas (empresa administradora) -->
-            <a href="<?= $base ?>/modulos/suscripciones" class="text-white text-decoration-none position-relative me-2 d-none cmg-suscgest-wrap" title="Suscripciones">
-                <i class="bi bi-arrow-repeat" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscgest-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-
-            <!-- Firma electrónica por caducar / caducada (empresa activa) -->
-            <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative me-2 d-none cmg-firma-wrap" title="Firma electrónica">
-                <i class="bi bi-file-earmark-lock-fill" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-firma-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-
-            <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update tareas-alertas-link" title="Tareas pendientes/vencidas" data-navbar-link="true">
-                <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/pedidos" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update pedidos-pendientes-icon" title="Pedidos pendientes">
-                <i class="bi bi-cart3" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark pedidos-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/factura-venta" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update facturas-borrador-icon" title="Facturas en borrador">
-                <i class="bi bi-receipt" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark facturas-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/liquidacion-compra" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update liquidaciones-borrador-icon" title="Liquidaciones en borrador">
-                <i class="bi bi-file-earmark-text" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/retenciones_compras" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update retenciones-compras-borrador-icon" title="Retenciones en borrador">
-                <i class="bi bi-percent" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/notas_credito" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update notas-credito-borrador-icon" title="Notas crédito borrador">
-                <i class="bi bi-file-earmark-minus" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark notas-credito-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/guias_remision" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update guias-remision-borrador-icon" title="Guías en borrador">
-                <i class="bi bi-truck" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark guias-remision-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/factura-express-solicitudes" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update factura-express-pendientes-icon" title="Solicitudes Factura Express">
-                <i class="bi bi-qr-code" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark factura-express-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/ordenes-compra" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update ordenes-compra-borrador-icon" title="Órdenes borrador">
-                <i class="bi bi-cart-plus" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/whatsapp-chat" class="text-white text-decoration-none position-relative me-3 d-none cmg-icon-update whatsapp-unread-icon" title="WhatsApp sin leer">
-                <i class="bi bi-whatsapp" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white whatsapp-unread-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="<?= $base ?>/modulos/soporte-chat" class="text-white text-decoration-none position-relative me-3 d-none cmg-icon-update soporte-bandeja-icon" title="Consultas de soporte por atender">
-                <i class="bi bi-headset" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white soporte-bandeja-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-            <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="text-white text-decoration-none position-relative me-3 d-none cmg-submod-nuevos-icon" title="Módulos nuevos asignados">
-                <i class="bi bi-stars" style="font-size: 1.1rem;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success cmg-submod-nuevos-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-            </a>
-
-            <a href="<?= $base ?>/perfil" class="text-white text-decoration-none" style="font-size:0.8rem" title="Mi perfil"><i class="bi bi-person-fill me-1"></i><?= htmlspecialchars($nombre) ?></a>
-            <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
-            <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="IA Soporte"
-               target="_blank" rel="noopener">
-                <i class="bi bi-robot"></i>
-            </a>
-            <?php endif; ?>
-            <?php if (\App\Helpers\Permisos::puedeVer('modulos/caja-pos')): ?>
-            <a href="<?= $base ?>/modulos/caja-pos" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Punto de Venta"
-               target="_blank" rel="noopener">
-                <i class="bi bi-cash-coin"></i>
-            </a>
-            <?php endif; ?>
-            <?php if (\App\Helpers\Permisos::puedeVer('modulos/mesas')): ?>
-            <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Restaurante"
-               target="_blank" rel="noopener">
-                <i class="fa-solid fa-utensils"></i>
-            </a>
-            <?php endif; ?>
-            <!-- Novedades del sistema (solo escritorio): desplegable con las novedades vigentes;
-                 badge = sin leer. Lo llena el JS de partials/novedades_modal.php (oculto hasta
-                 saber si hay novedades). Al elegir una se abre la tarjeta flotante en esa novedad. -->
-            <div class="dropdown d-none cmg-novedades-wrap me-2">
-                <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Novedades del sistema">
-                    <i class="bi bi-megaphone-fill" style="font-size: 1.1rem;"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-novedades-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            <!-- Grupo 2 · PENDIENTES: documentos a medias que esperan al usuario. -->
+            <div class="d-flex align-items-center cmg-nav-grupo">
+                <a href="<?= $base ?>/modulos/pedidos" class="text-white text-decoration-none position-relative d-none cmg-icon-update pedidos-pendientes-icon" title="Pedidos pendientes">
+                    <i class="bi bi-cart3" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark pedidos-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm cmg-novedades-menu" id="cmgNovedadesMenu" style="min-width: 320px; max-width: 380px; z-index: 5065;">
-                    <li><h6 class="dropdown-header"><i class="bi bi-megaphone me-1"></i>Novedades vigentes</h6></li>
-                </ul>
+                <a href="<?= $base ?>/modulos/factura-express-solicitudes" class="text-white text-decoration-none position-relative d-none cmg-icon-update factura-express-pendientes-icon" title="Solicitudes Factura Express">
+                    <i class="bi bi-qr-code" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark factura-express-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/factura-venta" class="text-white text-decoration-none position-relative d-none cmg-icon-update facturas-borrador-icon" title="Facturas en borrador">
+                    <i class="bi bi-receipt" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark facturas-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/notas_credito" class="text-white text-decoration-none position-relative d-none cmg-icon-update notas-credito-borrador-icon" title="Notas crédito borrador">
+                    <i class="bi bi-file-earmark-minus" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark notas-credito-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/guias_remision" class="text-white text-decoration-none position-relative d-none cmg-icon-update guias-remision-borrador-icon" title="Guías en borrador">
+                    <i class="bi bi-truck" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark guias-remision-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/ordenes-compra" class="text-white text-decoration-none position-relative d-none cmg-icon-update ordenes-compra-borrador-icon" title="Órdenes borrador">
+                    <i class="bi bi-cart-plus" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/liquidacion-compra" class="text-white text-decoration-none position-relative d-none cmg-icon-update liquidaciones-borrador-icon" title="Liquidaciones en borrador">
+                    <i class="bi bi-file-earmark-text" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/retenciones_compras" class="text-white text-decoration-none position-relative d-none cmg-icon-update retenciones-compras-borrador-icon" title="Retenciones en borrador">
+                    <i class="bi bi-percent" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
             </div>
-            <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-light btn-sm cmg-navbar-btn"
-               title="Manual del sistema<?= $rutaActualAyuda !== '' ? ' (ayuda de esta pantalla)' : '' ?>"
-               target="_blank" rel="noopener">
-                <i class="bi bi-journal-bookmark-fill"></i>
-            </a>
-            <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Videos de ayuda"
-               target="_blank" rel="noopener">
-                <i class="bi bi-play-btn-fill"></i>
-            </a>
-            <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Ajustes">
-                <i class="bi bi-gear-fill"></i>
-            </a>
-            <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Cerrar sesión">
-                <i class="bi bi-box-arrow-right"></i>
-            </a>
+
+            <!-- Grupo 3 · MENSAJES Y NOVEDADES: lo que alguien (o el sistema) tiene que decirle al usuario. -->
+            <div class="d-flex align-items-center cmg-nav-grupo">
+                <a href="<?= $base ?>/modulos/whatsapp-chat" class="text-white text-decoration-none position-relative d-none cmg-icon-update whatsapp-unread-icon" title="WhatsApp sin leer">
+                    <i class="bi bi-whatsapp" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white whatsapp-unread-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/soporte-chat" class="text-white text-decoration-none position-relative d-none cmg-icon-update soporte-bandeja-icon" title="Consultas de soporte por atender">
+                    <i class="bi bi-headset" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white soporte-bandeja-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+
+                <!-- Novedades del sistema (solo escritorio): desplegable con las novedades vigentes;
+                     badge = sin leer. Lo llena el JS de partials/novedades_modal.php (oculto hasta
+                     saber si hay novedades). Al elegir una se abre la tarjeta flotante en esa novedad. -->
+                <div class="dropdown d-none cmg-novedades-wrap">
+                    <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Novedades del sistema">
+                        <i class="bi bi-megaphone-fill" style="font-size: 1.1rem;"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-novedades-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm cmg-novedades-menu" id="cmgNovedadesMenu" style="min-width: 320px; max-width: 380px; z-index: 5065;">
+                        <li><h6 class="dropdown-header"><i class="bi bi-megaphone me-1"></i>Novedades vigentes</h6></li>
+                    </ul>
+                </div>
+
+                <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="text-white text-decoration-none position-relative d-none cmg-submod-nuevos-icon" title="Módulos nuevos asignados">
+                    <i class="bi bi-stars" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success cmg-submod-nuevos-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+            </div>
+
+            <!-- Grupo 4 · ACCESOS: pantallas de trabajo que se abren en pestaña aparte. -->
+            <div class="d-flex align-items-center cmg-nav-grupo cmg-nav-grupo--btns">
+                <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
+                <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="IA Soporte"
+                   target="_blank" rel="noopener">
+                    <i class="bi bi-robot"></i>
+                </a>
+                <?php endif; ?>
+                <?php if (\App\Helpers\Permisos::puedeVer('modulos/caja-pos')): ?>
+                <a href="<?= $base ?>/modulos/caja-pos" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Punto de Venta"
+                   target="_blank" rel="noopener">
+                    <i class="bi bi-cash-coin"></i>
+                </a>
+                <?php endif; ?>
+                <?php if (\App\Helpers\Permisos::puedeVer('modulos/mesas')): ?>
+                <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Restaurante"
+                   target="_blank" rel="noopener">
+                    <i class="fa-solid fa-utensils"></i>
+                </a>
+                <?php endif; ?>
+            </div>
+
+            <!-- Grupo 5 · AYUDA -->
+            <div class="d-flex align-items-center cmg-nav-grupo cmg-nav-grupo--btns">
+                <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-light btn-sm cmg-navbar-btn"
+                   title="Manual del sistema<?= $rutaActualAyuda !== '' ? ' (ayuda de esta pantalla)' : '' ?>"
+                   target="_blank" rel="noopener">
+                    <i class="bi bi-journal-bookmark-fill"></i>
+                </a>
+                <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Videos de ayuda"
+                   target="_blank" rel="noopener">
+                    <i class="bi bi-play-btn-fill"></i>
+                </a>
+            </div>
+
+            <!-- Grupo 6 · SISTEMA Y SESIÓN: ajustes, quién soy y salir. -->
+            <div class="d-flex align-items-center cmg-nav-grupo cmg-nav-grupo--btns">
+                <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Ajustes">
+                    <i class="bi bi-gear-fill"></i>
+                </a>
+                <a href="<?= $base ?>/perfil" class="text-white text-decoration-none" style="font-size:0.8rem" title="Mi perfil"><i class="bi bi-person-fill me-1"></i><?= htmlspecialchars($nombre) ?></a>
+                <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Cerrar sesión">
+                    <i class="bi bi-box-arrow-right"></i>
+                </a>
+            </div>
         </div>
     </div>
 </nav>
@@ -455,143 +532,187 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 </div>
             </div>
 
-            <label class="form-label small fw-bold text-muted mb-2">Notificaciones y Tareas</label>
-            <div class="cmg-mobile-icons-grid mb-3">
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
-                    <i class="bi bi-receipt text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-facturas">0</span>
-                    <small>Fact. SRI</small>
-                </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
-                    <i class="bi bi-file-earmark-text text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-liquidaciones">0</span>
-                    <small>Liq. SRI</small>
-                </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
-                    <i class="bi bi-percent text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-retenciones_compras">0</span>
-                    <small>Ret. SRI</small>
-                </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
-                    <i class="bi bi-file-earmark-minus text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-notas_credito">0</span>
-                    <small>N/C SRI</small>
-                </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
-                    <i class="bi bi-truck text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
-                    <small>Guía SRI</small>
-                </a>
-                <a class="cmg-suscripcion-wrap d-none" href="<?= $base ?>/modulos/empresa">
-                    <i class="bi bi-shield-exclamation text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscripcion-badge">0</span>
-                    <small>Mi susc.</small>
-                </a>
-                <a class="cmg-suscgest-wrap d-none" href="<?= $base ?>/modulos/suscripciones">
-                    <i class="bi bi-arrow-repeat text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscgest-badge">0</span>
-                    <small>Suscrip.</small>
-                </a>
-                <a class="cmg-firma-wrap d-none" href="<?= $base ?>/modulos/empresa">
-                    <i class="bi bi-file-earmark-lock-fill text-danger"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-firma-badge">0</span>
-                    <small>Firma</small>
-                </a>
-                <a class="cmg-icon-update tareas-alertas-link d-none" href="<?= $base ?>/config/tareas-obligaciones">
-                    <i class="bi bi-bell-fill"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger tareas-alertas-badge">0</span>
-                    <small>Tareas</small>
-                </a>
-                <a class="cmg-icon-update pedidos-pendientes-icon d-none" href="<?= $base ?>/modulos/pedidos">
-                    <i class="bi bi-cart3"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark pedidos-pendientes-badge">0</span>
-                    <small>Pedidos</small>
-                </a>
-                <a class="cmg-icon-update facturas-borrador-icon d-none" href="<?= $base ?>/modulos/factura-venta">
-                    <i class="bi bi-receipt"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark facturas-borrador-badge">0</span>
-                    <small>Facturas</small>
-                </a>
-                <a class="cmg-icon-update liquidaciones-borrador-icon d-none" href="<?= $base ?>/modulos/liquidacion-compra">
-                    <i class="bi bi-file-earmark-text"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge">0</span>
-                    <small>Liquida.</small>
-                </a>
-                <a class="cmg-icon-update retenciones-compras-borrador-icon d-none" href="<?= $base ?>/modulos/retenciones_compras">
-                    <i class="bi bi-percent"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge">0</span>
-                    <small>Reten.</small>
-                </a>
-                <a class="cmg-icon-update notas-credito-borrador-icon d-none" href="<?= $base ?>/modulos/notas_credito">
-                    <i class="bi bi-file-earmark-minus"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark notas-credito-borrador-badge">0</span>
-                    <small>N/C</small>
-                </a>
-                <a class="cmg-icon-update guias-remision-borrador-icon d-none" href="<?= $base ?>/modulos/guias_remision">
-                    <i class="bi bi-truck"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark guias-remision-borrador-badge">0</span>
-                    <small>Guías</small>
-                </a>
-                <a class="cmg-icon-update factura-express-pendientes-icon d-none" href="<?= $base ?>/modulos/factura-express-solicitudes">
-                    <i class="bi bi-qr-code"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark factura-express-pendientes-badge">0</span>
-                    <small>Express</small>
-                </a>
-                <a class="cmg-icon-update ordenes-compra-borrador-icon d-none" href="<?= $base ?>/modulos/ordenes-compra">
-                    <i class="bi bi-cart-plus"></i>
-                    <span class="position-absolute badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge">0</span>
-                    <small>Órdenes</small>
-                </a>
-                <a class="cmg-icon-update whatsapp-unread-icon d-none" href="<?= $base ?>/modulos/whatsapp-chat">
-                    <i class="bi bi-whatsapp"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger text-white whatsapp-unread-badge">0</span>
-                    <small>WhatsApp</small>
-                </a>
-                <a class="cmg-icon-update soporte-bandeja-icon d-none" href="<?= $base ?>/modulos/soporte-chat">
-                    <i class="bi bi-headset"></i>
-                    <span class="position-absolute badge rounded-pill bg-danger text-white soporte-bandeja-badge">0</span>
-                    <small>Soporte</small>
-                </a>
-                <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="cmg-submod-nuevos-icon d-none">
-                    <i class="bi bi-stars"></i>
-                    <span class="position-absolute badge rounded-pill bg-success cmg-submod-nuevos-badge">0</span>
-                    <small>Nuevos</small>
-                </a>
+            <!-- Accesos del menú móvil, agrupados por los mismos tipos que la barra de
+                 escritorio: alertas > pendientes > mensajes > accesos > ayuda > sistema.
+                 Aquí la división no es una línea vertical sino el rótulo de cada grupo.
+                 Un grupo sin nada visible dentro se oculta entero, rótulo incluido
+                 (ver .cmg-mobile-grupo en el <style> de arriba). -->
+
+            <!-- Grupo 1 · ALERTAS: rechazos del SRI y cosas que se vencen. -->
+            <div class="cmg-mobile-grupo">
+                <label class="form-label small fw-bold text-muted mb-2">Alertas</label>
+                <div class="cmg-mobile-icons-grid">
+                    <a class="cmg-icon-update cmg-nov-item d-none" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
+                        <i class="bi bi-receipt text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-facturas">0</span>
+                        <small>Fact. SRI</small>
+                    </a>
+                    <a class="cmg-icon-update cmg-nov-item d-none" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
+                        <i class="bi bi-file-earmark-text text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-liquidaciones">0</span>
+                        <small>Liq. SRI</small>
+                    </a>
+                    <a class="cmg-icon-update cmg-nov-item d-none" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
+                        <i class="bi bi-percent text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-retenciones_compras">0</span>
+                        <small>Ret. SRI</small>
+                    </a>
+                    <a class="cmg-icon-update cmg-nov-item d-none" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
+                        <i class="bi bi-file-earmark-minus text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-notas_credito">0</span>
+                        <small>N/C SRI</small>
+                    </a>
+                    <a class="cmg-icon-update cmg-nov-item d-none" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
+                        <i class="bi bi-truck text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
+                        <small>Guía SRI</small>
+                    </a>
+                    <a class="cmg-firma-wrap d-none" href="<?= $base ?>/modulos/empresa">
+                        <i class="bi bi-file-earmark-lock-fill text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-firma-badge">0</span>
+                        <small>Firma</small>
+                    </a>
+                    <a class="cmg-suscripcion-wrap d-none" href="<?= $base ?>/modulos/empresa">
+                        <i class="bi bi-shield-exclamation text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscripcion-badge">0</span>
+                        <small>Mi susc.</small>
+                    </a>
+                    <a class="cmg-suscgest-wrap d-none" href="<?= $base ?>/modulos/suscripciones">
+                        <i class="bi bi-arrow-repeat text-danger"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscgest-badge">0</span>
+                        <small>Suscrip.</small>
+                    </a>
+                    <a class="cmg-icon-update tareas-alertas-link d-none" href="<?= $base ?>/config/tareas-obligaciones">
+                        <i class="bi bi-bell-fill"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger tareas-alertas-badge">0</span>
+                        <small>Tareas</small>
+                    </a>
+                </div>
             </div>
 
-            <div class="cmg-mobile-btns-row">
-                <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
-                <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-primary btn-sm flex-grow-1"
-                   target="_blank" rel="noopener">
-                    <i class="bi bi-robot me-1"></i>IA Soporte
-                </a>
-                <?php endif; ?>
-                <?php if (\App\Helpers\Permisos::puedeVer('modulos/caja-pos')): ?>
-                <a href="<?= $base ?>/modulos/caja-pos" class="btn btn-outline-primary btn-sm flex-grow-1"
-                   target="_blank" rel="noopener">
-                    <i class="bi bi-cash-coin me-1"></i>Punto de Venta
-                </a>
-                <?php endif; ?>
-                <?php if (\App\Helpers\Permisos::puedeVer('modulos/mesas')): ?>
-                <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-outline-primary btn-sm flex-grow-1"
-                   target="_blank" rel="noopener">
-                    <i class="fa-solid fa-utensils me-1"></i>Restaurante
-                </a>
-                <?php endif; ?>
-                <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-primary btn-sm flex-grow-1"
-                   target="_blank" rel="noopener">
-                    <i class="bi bi-journal-bookmark-fill me-1"></i>Manual
-                </a>
-                <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-primary btn-sm flex-grow-1"
-                   target="_blank" rel="noopener">
-                    <i class="bi bi-play-btn-fill me-1"></i>Videos
-                </a>
-                <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm flex-grow-1">
-                    <i class="bi bi-gear-fill me-1"></i>Ajustes
-                </a>
-                <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-danger btn-sm flex-grow-1">
-                    <i class="bi bi-box-arrow-right me-1"></i>Salir
-                </a>
+            <!-- Grupo 2 · PENDIENTES: documentos a medias que esperan al usuario. -->
+            <div class="cmg-mobile-grupo">
+                <label class="form-label small fw-bold text-muted mb-2">Pendientes</label>
+                <div class="cmg-mobile-icons-grid">
+                    <a class="cmg-icon-update pedidos-pendientes-icon d-none" href="<?= $base ?>/modulos/pedidos">
+                        <i class="bi bi-cart3"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark pedidos-pendientes-badge">0</span>
+                        <small>Pedidos</small>
+                    </a>
+                    <a class="cmg-icon-update factura-express-pendientes-icon d-none" href="<?= $base ?>/modulos/factura-express-solicitudes">
+                        <i class="bi bi-qr-code"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark factura-express-pendientes-badge">0</span>
+                        <small>Express</small>
+                    </a>
+                    <a class="cmg-icon-update facturas-borrador-icon d-none" href="<?= $base ?>/modulos/factura-venta">
+                        <i class="bi bi-receipt"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark facturas-borrador-badge">0</span>
+                        <small>Facturas</small>
+                    </a>
+                    <a class="cmg-icon-update notas-credito-borrador-icon d-none" href="<?= $base ?>/modulos/notas_credito">
+                        <i class="bi bi-file-earmark-minus"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark notas-credito-borrador-badge">0</span>
+                        <small>N/C</small>
+                    </a>
+                    <a class="cmg-icon-update guias-remision-borrador-icon d-none" href="<?= $base ?>/modulos/guias_remision">
+                        <i class="bi bi-truck"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark guias-remision-borrador-badge">0</span>
+                        <small>Guías</small>
+                    </a>
+                    <a class="cmg-icon-update ordenes-compra-borrador-icon d-none" href="<?= $base ?>/modulos/ordenes-compra">
+                        <i class="bi bi-cart-plus"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge">0</span>
+                        <small>Órdenes</small>
+                    </a>
+                    <a class="cmg-icon-update liquidaciones-borrador-icon d-none" href="<?= $base ?>/modulos/liquidacion-compra">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge">0</span>
+                        <small>Liquida.</small>
+                    </a>
+                    <a class="cmg-icon-update retenciones-compras-borrador-icon d-none" href="<?= $base ?>/modulos/retenciones_compras">
+                        <i class="bi bi-percent"></i>
+                        <span class="position-absolute badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge">0</span>
+                        <small>Reten.</small>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Grupo 3 · MENSAJES Y NOVEDADES: lo que alguien (o el sistema) tiene que decirle al usuario. -->
+            <div class="cmg-mobile-grupo">
+                <label class="form-label small fw-bold text-muted mb-2">Mensajes</label>
+                <div class="cmg-mobile-icons-grid">
+                    <a class="cmg-icon-update whatsapp-unread-icon d-none" href="<?= $base ?>/modulos/whatsapp-chat">
+                        <i class="bi bi-whatsapp"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger text-white whatsapp-unread-badge">0</span>
+                        <small>WhatsApp</small>
+                    </a>
+                    <a class="cmg-icon-update soporte-bandeja-icon d-none" href="<?= $base ?>/modulos/soporte-chat">
+                        <i class="bi bi-headset"></i>
+                        <span class="position-absolute badge rounded-pill bg-danger text-white soporte-bandeja-badge">0</span>
+                        <small>Soporte</small>
+                    </a>
+                    <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="cmg-submod-nuevos-icon d-none">
+                        <i class="bi bi-stars"></i>
+                        <span class="position-absolute badge rounded-pill bg-success cmg-submod-nuevos-badge">0</span>
+                        <small>Nuevos</small>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Grupo 4 · ACCESOS: pantallas de trabajo que se abren en pestaña aparte. -->
+            <div class="cmg-mobile-grupo">
+                <label class="form-label small fw-bold text-muted mb-2">Accesos rápidos</label>
+                <div class="cmg-mobile-btns-row">
+                    <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
+                    <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-primary btn-sm flex-grow-1"
+                       target="_blank" rel="noopener">
+                        <i class="bi bi-robot me-1"></i>IA Soporte
+                    </a>
+                    <?php endif; ?>
+                    <?php if (\App\Helpers\Permisos::puedeVer('modulos/caja-pos')): ?>
+                    <a href="<?= $base ?>/modulos/caja-pos" class="btn btn-outline-primary btn-sm flex-grow-1"
+                       target="_blank" rel="noopener">
+                        <i class="bi bi-cash-coin me-1"></i>Punto de Venta
+                    </a>
+                    <?php endif; ?>
+                    <?php if (\App\Helpers\Permisos::puedeVer('modulos/mesas')): ?>
+                    <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-outline-primary btn-sm flex-grow-1"
+                       target="_blank" rel="noopener">
+                        <i class="fa-solid fa-utensils me-1"></i>Restaurante
+                    </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Grupo 5 · AYUDA -->
+            <div class="cmg-mobile-grupo">
+                <label class="form-label small fw-bold text-muted mb-2">Ayuda</label>
+                <div class="cmg-mobile-btns-row">
+                    <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-primary btn-sm flex-grow-1"
+                       target="_blank" rel="noopener">
+                        <i class="bi bi-journal-bookmark-fill me-1"></i>Manual
+                    </a>
+                    <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-primary btn-sm flex-grow-1"
+                       target="_blank" rel="noopener">
+                        <i class="bi bi-play-btn-fill me-1"></i>Videos
+                    </a>
+                </div>
+            </div>
+
+            <!-- Grupo 6 · SISTEMA Y SESIÓN: ajustes, quién soy y salir. -->
+            <div class="cmg-mobile-grupo">
+                <label class="form-label small fw-bold text-muted mb-2">Sistema</label>
+                <div class="cmg-mobile-btns-row">
+                    <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm flex-grow-1">
+                        <i class="bi bi-gear-fill me-1"></i>Ajustes
+                    </a>
+                    <a href="<?= $base ?>/perfil" class="btn btn-outline-secondary btn-sm flex-grow-1">
+                        <i class="bi bi-person-fill me-1"></i>Mi perfil
+                    </a>
+                    <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-danger btn-sm flex-grow-1">
+                        <i class="bi bi-box-arrow-right me-1"></i>Salir
+                    </a>
+                </div>
             </div>
         </div>
 

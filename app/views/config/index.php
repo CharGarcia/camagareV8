@@ -436,7 +436,7 @@ unset($_SESSION['config_msg']);
             .then(function(data) {
                 if (data.ok) {
                     var navbar = document.getElementById('navbar-mensajes');
-                    if (navbar) { navbar.textContent = data.msg; navbar.classList.add('text-success'); setTimeout(function() { navbar.textContent = '\u00A0'; navbar.classList.remove('text-success'); }, 2000); }
+                    if (navbar) { navbar.textContent = data.msg; navbar.classList.add('text-success'); setTimeout(function() { navbar.textContent = ''; navbar.classList.remove('text-success'); }, 2000); }
                 }
             })
             .catch(function() {});
