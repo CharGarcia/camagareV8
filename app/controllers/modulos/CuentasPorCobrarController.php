@@ -551,7 +551,8 @@ class CuentasPorCobrarController extends BaseModuloController
             // el lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
             $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
-            $secRes    = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
+            // Con numeración por fecha de emisión, el cobro numera en el periodo de SU fecha.
+            $secRes    = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos', $fechaCobro ?: date('Y-m-d'));
             $secuencial = $secRes['formateado'];
 
             $codEst  = str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
@@ -763,7 +764,8 @@ class CuentasPorCobrarController extends BaseModuloController
             // el lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
             $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
-            $secRes     = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
+            // Con numeración por fecha de emisión, el cobro numera en el periodo de SU fecha.
+            $secRes     = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos', $fechaCobro ?: date('Y-m-d'));
             $secuencial = $secRes['formateado'];
 
             $codEst = str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
@@ -873,8 +875,11 @@ class CuentasPorCobrarController extends BaseModuloController
             $this->jsonError('Punto de emisión no válido.');
             return;
         }
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
         $secuencialService = new \App\Services\SecuencialService();
-        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos', $fecha);
         $this->jsonSuccess($res);
     }
 

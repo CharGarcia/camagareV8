@@ -194,7 +194,10 @@ class PedidosController extends ApiBaseController
             $this->jsonError('ID_PUNTO_EMISION_REQUERIDO', 'Falta id_punto_emision.', 422);
         }
 
-        $res = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, self::TIPO_DOCUMENTO);
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+        $res = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, self::TIPO_DOCUMENTO, $fecha);
         $this->jsonOk($res);
     }
 

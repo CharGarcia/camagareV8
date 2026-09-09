@@ -746,13 +746,37 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('eg-txt-establecimiento').value = o.dataset.codEst||'';
         document.getElementById('eg-txt-punto').value = o.dataset.codPunto||'';
         if (!id) return;
-        fetch(`${EGR_URL}/getSecuencialAjax?id_punto_emision=${id}`).then(r => r.json()).then(res => {
+        // La fecha viaja siempre: si este tipo está configurado para numerar por fecha de
+        // emisión (Empresa → Secuenciales), el número depende del periodo al que pertenece.
+        // En modo consecutivo el servidor la ignora y devuelve el mismo número de siempre.
+        const fecha = document.getElementById('eg-input-fecha')?.value || '';
+        fetch(`${EGR_URL}/getSecuencialAjax?id_punto_emision=${id}&fecha=${encodeURIComponent(fecha)}`).then(r => r.json()).then(res => {
             // En modo edición (ya existe un ID) NO se recalcula el secuencial:
             // debe conservarse el secuencial original del documento que se está editando.
             if (document.getElementById('eg-input-id')?.value) return;
             if (res.ok) document.getElementById('eg-input-secuencial').value = String(res.secuencial).padStart(9,'0');
         }).catch(console.error);
     }
+
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha de
+    // emisión, cada periodo (año o mes) lleva su propio correlativo. Solo en documentos
+    // nuevos — al editar, el número ya está asignado y no se toca.
+    (function _engancharRecalculoPorFechaEgreso() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('eg-input-fecha');
+            if (!inputFecha) return;
+            inputFecha.addEventListener('change', () => {
+                if (document.getElementById('eg-input-id')?.value) return;
+                const s = document.getElementById('eg-select-punto');
+                if (s && s.value) syncEgresoSecuencial(s.value);
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 
     function sincronizarBotonesConceptoEgreso(id) {
         document.querySelectorAll('.concepto-egreso-btn').forEach(btn => {

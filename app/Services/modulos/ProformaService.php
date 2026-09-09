@@ -55,7 +55,7 @@ class ProformaService
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
         try {
-            $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Proformas');
+            $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Proformas', $data['fecha_emision'] ?? null);
             $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
             $data['secuencial'] = $secuencial;
 
@@ -589,7 +589,7 @@ class ProformaService
         }
 
         try {
-        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Recibos de venta');
+        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Recibos de venta', date('Y-m-d'));
         $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
 
         // ── Mapear detalles con asignación FEFO de lote/caducidad/NUP (igual que factura) ──
@@ -819,10 +819,10 @@ class ProformaService
     /**
      * Obtiene el siguiente secuencial para proformas en un punto de emisión.
      */
-    public function getSiguienteSecuencial(int $idPunto): array
+    public function getSiguienteSecuencial(int $idPunto, ?string $fecha = null): array
     {
         $secService = new SecuencialService();
-        return $secService->obtenerSiguienteSecuencial($idPunto, 'Proformas');
+        return $secService->obtenerSiguienteSecuencial($idPunto, 'Proformas', $fecha);
     }
 
     /**

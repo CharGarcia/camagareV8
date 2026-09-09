@@ -47,6 +47,10 @@ class EmpresaController extends BaseModuloController
         $tiposSecuencialAgrupados = $secRepo->getTiposDocumentoAgrupados();
         $tiposSecuencialSoportados = $secRepo->getTiposDocumentoSoportados();
         $tiposSecuencialConflictos = $secRepo->getMapaConflictosCodDoc();
+        // Tipos que pueden numerar por fecha de emisión (los internos: los electrónicos
+        // quedan fuera). Si la migración del modo todavía no se ejecutó en esta base, la
+        // lista viaja vacía y la vista no ofrece la opción.
+        $tiposSecuencialModoFecha = $secRepo->soportaModoPeriodo() ? $secRepo->getTiposConModoPeriodo() : [];
 
         // Documentos legales (acuerdo de datos + contrato de uso) enviados/aceptados
         // y demás documentos cargados manualmente (RUC, licencia, poder, etc.) para
@@ -67,6 +71,7 @@ class EmpresaController extends BaseModuloController
             'tiposSecuencialAgrupados' => $tiposSecuencialAgrupados,
             'tiposSecuencialSoportados' => $tiposSecuencialSoportados,
             'tiposSecuencialConflictos' => $tiposSecuencialConflictos,
+            'tiposSecuencialModoFecha' => $tiposSecuencialModoFecha,
             'titulo' => 'Configuración de Empresa',
             'id_empresa' => $idEmpresa,
             'empresa' => $data['empresa'],

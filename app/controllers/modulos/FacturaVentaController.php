@@ -383,8 +383,13 @@ class FacturaVentaController extends BaseModuloController
 
         $tipoDoc = $mapTipos[$tipo] ?? 'Facturas de venta';
 
+        // Fecha del documento: solo pesa si ese tipo numera por fecha de emisión (Empresa →
+        // Secuenciales). Aquí importa sobre todo con tipo=ingresos, que es el cobro rápido:
+        // los electrónicos de este mapa numeran siempre de forma consecutiva.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+
         $secuencialService = new \App\Services\SecuencialService();
-        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, $tipoDoc);
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, $tipoDoc, $fecha);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;
@@ -2511,7 +2516,7 @@ class FacturaVentaController extends BaseModuloController
             // obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
             $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
-            $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos');
+            $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos', $data['fecha_emision'] ?? null);
 
             // Calcular saldo anterior
             $stSaldo = $db->prepare(

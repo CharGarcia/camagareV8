@@ -357,7 +357,7 @@
 
     async function retCargarSecuencial(idPunto) {
         if (!idPunto) return;
-        const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}`);
+        const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('ret_fecha_retorno')?.value || '')}`);
         const data = await res.json();
         if (!data.ok) {
             document.getElementById('ret_secuencial').value = '';
@@ -700,4 +700,22 @@
     // Exponer para reset al abrir el modal.
     window.__retResetTabs = retResetTabs;
 })();
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _recalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('ret_fecha_retorno');
+            const selSerie   = document.getElementById('ret_select_serie');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 </script>

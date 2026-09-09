@@ -577,7 +577,10 @@ class TallerController extends BaseModuloController
             echo json_encode(['ok' => false, 'msg' => 'Punto de emisión no válido.']);
             exit;
         }
-        $res = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, self::TIPO_SECUENCIAL);
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+        $res = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, self::TIPO_SECUENCIAL, $fecha);
         echo json_encode(array_merge(['ok' => true], $res));
         exit;
     }

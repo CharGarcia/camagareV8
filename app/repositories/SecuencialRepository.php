@@ -75,6 +75,65 @@ class SecuencialRepository
     private const TIPOS_PUNTO_UNICO = ['Facturas de reembolso'];
 
     /**
+     * Tipos de documento que NO pueden numerar por fecha de emisión (Empresa →
+     * Secuenciales, modo 'por_fecha'): son los que se envían al SRI, es decir los
+     * que tienen su propio XmlXxxService y guardan clave_acceso. Su secuencial
+     * forma parte de esa clave de acceso y la numeración por establecimiento +
+     * punto + codDoc no admite reinicios: reiniciarla cada año o cada mes rompería
+     * la serie declarada ante el SRI.
+     *
+     * El resto de tipos de DOCUMENT_MAP son documentos internos y SÍ pueden elegir
+     * el modo. Se define por exclusión a propósito: un tipo nuevo que se agregue a
+     * DOCUMENT_MAP nace pudiendo numerar por fecha, y solo hay que tocarlo aquí si
+     * llega a ser electrónico.
+     */
+    private const TIPOS_SIN_MODO_PERIODO = [
+        'Facturas de venta',
+        'Facturas de reembolso',
+        'Nota de crédito',
+        'Nota de débito',
+        'Guía de remisión',
+        'Liquidación de compras o servicios',
+        'Retenciones de compras',
+    ];
+
+    /** Modos de numeración admitidos en `empresa_secuencial.modo_numeracion`. */
+    public const MODO_CONSECUTIVO = 'consecutivo';
+    public const MODO_POR_FECHA   = 'por_fecha';
+
+    /** Periodos de reinicio admitidos en `empresa_secuencial.periodo_reinicio`. */
+    public const PERIODO_ANUAL   = 'anual';
+    public const PERIODO_MENSUAL = 'mensual';
+
+    /**
+     * Largo objetivo del secuencial, el mismo formato canónico de siempre
+     * (App\Helpers\SecuencialFormato::LONGITUD).
+     *
+     * En modo 'por_fecha' el número se arma CONCATENANDO el prefijo del periodo y el
+     * correlativo, y el correlativo ocupa lo que sobre de estos 9 dígitos:
+     *     anual   → AAAA   (4) + 5 dígitos →  202600017
+     *     mensual → AAAAMM (6) + 3 dígitos →  202609001
+     * Si un periodo agota esos dígitos, el correlativo NO invade el periodo siguiente:
+     * el número simplemente crece (202609 + 1000 → 2026091000). Por eso se concatena en
+     * vez de sumar — con aritmética, el documento 1000 de septiembre habría caído justo
+     * encima de la numeración de octubre.
+     */
+    private const LONGITUD_SECUENCIAL = 9;
+
+    /**
+     * Techo del modo 'consecutivo' en los tipos que admiten numeración por fecha.
+     *
+     * POR QUÉ EXISTE: un punto que estuvo en modo 'por_fecha' deja números de 9
+     * dígitos con prefijo de periodo (202600017). Si después se vuelve a
+     * 'consecutivo', el generador vería ese 202600017 como el máximo usado y
+     * seguiría desde 202600018 en vez de retomar el 18 que llevaba. Acotando la
+     * búsqueda por debajo de este techo, los dos modos conviven sin pisarse y el
+     * cambio de modo es reversible. Un consecutivo corrido nunca llega a los 100
+     * millones de documentos en una misma serie.
+     */
+    private const TECHO_CONSECUTIVO = 99999999;
+
+    /**
      * Agrupación por área de los tipos de documento soportados (solo para mostrar
      * en la ayuda de la pestaña Secuenciales). Los nombres deben coincidir EXACTO
      * con las claves de DOCUMENT_MAP.
@@ -123,6 +182,81 @@ class SecuencialRepository
             }
         }
         return $mapa;
+    }
+
+    /**
+     * ¿Este tipo de documento puede numerar por fecha de emisión (modo 'por_fecha')?
+     * Falso para los electrónicos, ver TIPOS_SIN_MODO_PERIODO.
+     */
+    public function tipoPermiteModoPeriodo(string $tipoDocumento): bool
+    {
+        return isset(self::DOCUMENT_MAP[$tipoDocumento])
+            && !in_array($tipoDocumento, self::TIPOS_SIN_MODO_PERIODO, true);
+    }
+
+    /**
+     * Tipos de documento que sí ofrecen la opción de numerar por fecha, para que la
+     * pestaña Empresa → Secuenciales sepa en qué filas pintar los selectores sin
+     * duplicar la lista en la vista.
+     *
+     * @return string[]
+     */
+    public function getTiposConModoPeriodo(): array
+    {
+        return array_values(array_filter(
+            array_keys(self::DOCUMENT_MAP),
+            fn(string $t): bool => $this->tipoPermiteModoPeriodo($t)
+        ));
+    }
+
+    /**
+     * Prefijo de periodo (texto) que le corresponde a una fecha de emisión: el año con
+     * 4 dígitos en modo anual (`2026`), y el año más el mes con 2 dígitos en mensual
+     * (`202609`). Es lo que antecede al correlativo.
+     *
+     * Una fecha vacía o ilegible cae en la de hoy: es preferible numerar en el
+     * periodo corriente a dejar al documento sin número.
+     */
+    public function getPrefijoPeriodo(?string $fecha, string $periodo): string
+    {
+        $ts = ($fecha !== null && trim($fecha) !== '') ? strtotime($fecha) : false;
+        if ($ts === false) {
+            $ts = time();
+        }
+
+        return $periodo === self::PERIODO_MENSUAL
+            ? date('Ym', $ts)
+            : date('Y', $ts);
+    }
+
+    /**
+     * Cuántos dígitos le quedan al correlativo después del prefijo, para completar los 9
+     * del formato canónico: 5 en anual, 3 en mensual. Es el ancho con el que se rellena
+     * con ceros, no un tope: un correlativo más grande simplemente ocupa más dígitos.
+     */
+    public function getDigitosCorrelativo(string $prefijo): int
+    {
+        return max(1, self::LONGITUD_SECUENCIAL - strlen($prefijo));
+    }
+
+    /**
+     * Arma el secuencial final concatenando el prefijo del periodo con el correlativo,
+     * rellenado a la izquierda: ('202609', 1) → '202609001'; ('2026', 17) → '202600017'.
+     *
+     * Si el correlativo ya no cabe en los dígitos disponibles, se concatena tal cual y el
+     * número crece (('202609', 1000) → '2026091000') en vez de desbordar sobre el periodo
+     * siguiente. Por eso las columnas `secuencial` admiten más de 9 caracteres
+     * (ver 20260909_secuencial_modo_periodo.sql).
+     */
+    public function componerSecuencialPeriodo(string $prefijo, int $correlativo): string
+    {
+        return $prefijo . str_pad((string) $correlativo, $this->getDigitosCorrelativo($prefijo), '0', STR_PAD_LEFT);
+    }
+
+    /** Techo de la numeración consecutiva en tipos que admiten modo por fecha (ver TECHO_CONSECUTIVO). */
+    public function getTechoConsecutivo(): int
+    {
+        return self::TECHO_CONSECUTIVO;
     }
 
     /** Otros tipos de DOCUMENT_MAP que comparten codDoc SRI con $tipoDocumento (ver FAMILIAS_CODDOC). */
@@ -389,12 +523,51 @@ class SecuencialRepository
     }
 
     /**
-     * Obtiene la configuración del secuencial para un punto de emisión y tipo de documento.
-     * Retorna el secuencial_inicial configurado.
+     * ¿La base ya tiene las columnas de modo de numeración (migración
+     * 20260909_secuencial_modo_periodo.sql)?
+     *
+     * El código puede desplegarse antes de que se ejecute ese script: mientras eso
+     * pase, todo se comporta como siempre (modo consecutivo) en vez de reventar con
+     * "column does not exist". Se consulta una sola vez por petición.
+     */
+    public function soportaModoPeriodo(): bool
+    {
+        static $cache = null;
+
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $sql = "SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND table_name = 'empresa_secuencial'
+                   AND column_name IN ('modo_numeracion', 'periodo_reinicio')";
+
+        try {
+            $cache = ((int) $this->db->query($sql)->fetchColumn()) === 2;
+        } catch (\Throwable) {
+            $cache = false;
+        }
+
+        return $cache;
+    }
+
+    /**
+     * Obtiene la configuración del secuencial para un punto de emisión y tipo de documento:
+     * el secuencial_inicial configurado y cómo debe numerarse (modo y periodo de reinicio).
+     *
+     * Un tipo sin fila configurada, o uno que no admite numeración por fecha (electrónicos,
+     * ver TIPOS_SIN_MODO_PERIODO), siempre sale como 'consecutivo'.
+     *
+     * @return array{id:int|null,secuencial_inicial:int,modo_numeracion:string,periodo_reinicio:string|null}
      */
     public function getConfigSecuencial(int $idPuntoEmision, string $tipoDocumento): array
     {
-        $sql = "SELECT id, COALESCE(secuencial_inicial, 1) AS secuencial_inicial
+        $colsModo = $this->soportaModoPeriodo()
+            ? ", COALESCE(modo_numeracion, '" . self::MODO_CONSECUTIVO . "') AS modo_numeracion, periodo_reinicio"
+            : ", '" . self::MODO_CONSECUTIVO . "' AS modo_numeracion, NULL AS periodo_reinicio";
+
+        $sql = "SELECT id, COALESCE(secuencial_inicial, 1) AS secuencial_inicial {$colsModo}
                 FROM empresa_secuencial
                 WHERE id_punto_emision = :id_punto
                   AND tipo_documento = :tipo
@@ -413,8 +586,29 @@ class SecuencialRepository
             return [
                 'id'                 => null,
                 'secuencial_inicial' => 1,
+                'modo_numeracion'    => self::MODO_CONSECUTIVO,
+                'periodo_reinicio'   => null,
             ];
         }
+
+        // Un tipo electrónico configurado por fecha (dato viejo o tocado a mano en la
+        // base) se ignora aquí: su numeración forma la clave de acceso del SRI.
+        $modo = (string) ($row['modo_numeracion'] ?? self::MODO_CONSECUTIVO);
+        if ($modo === self::MODO_POR_FECHA && !$this->tipoPermiteModoPeriodo($tipoDocumento)) {
+            $modo = self::MODO_CONSECUTIVO;
+        }
+
+        $periodo = $row['periodo_reinicio'] ?? null;
+        if ($modo !== self::MODO_POR_FECHA) {
+            $periodo = null;
+        } elseif ($periodo === null) {
+            // Modo por fecha sin periodo (no debería pasar: hay un CHECK en la base).
+            // Se asume anual antes que dejar al documento sin número.
+            $periodo = self::PERIODO_ANUAL;
+        }
+
+        $row['modo_numeracion']  = $modo;
+        $row['periodo_reinicio'] = $periodo;
 
         return $row;
     }
@@ -498,12 +692,21 @@ class SecuencialRepository
      * en vez de romper la consulta: antes, un solo valor no numérico hacía fallar el CAST y el
      * módulo entero se quedaba sin poder emitir.
      *
+     * $techo acota por arriba el conjunto de números que se consideran "usados", y con él todo
+     * el cálculo. Lo usan los dos modos de numeración (ver SecuencialService):
+     *   - 'por_fecha': $secuencialInicial y $techo delimitan el periodo del documento, de forma
+     *     que el correlativo de septiembre no vea los números de agosto ni los de otro año.
+     *   - 'consecutivo' en tipos que admiten fecha: $techo = TECHO_CONSECUTIVO, para que los
+     *     números con prefijo de periodo que dejó un paso por 'por_fecha' no arrastren la serie.
+     * Sin $techo, el comportamiento es exactamente el de siempre.
+     *
      * @return array{siguiente:int,max_usado:int,total_usados:int,es_gap:bool}
      */
-    public function getSiguienteDisponible(int $idPuntoEmision, string $tipoDocumento, int $secuencialInicial): array
+    public function getSiguienteDisponible(int $idPuntoEmision, string $tipoDocumento, int $secuencialInicial, ?int $techo = null): array
     {
         $map = self::DOCUMENT_MAP[$tipoDocumento] ?? null;
         $inicial = max(1, $secuencialInicial);
+        $techo   = $techo ?? PHP_INT_MAX;
 
         if (!$map || !$this->tableExists($map['tabla'])) {
             return ['siguiente' => $inicial, 'max_usado' => 0, 'total_usados' => 0, 'es_gap' => false];
@@ -522,6 +725,7 @@ class SecuencialRepository
                        AND eliminado = false
                        AND {$colSec} IS NOT NULL
                        AND TRIM({$colSec}) ~ '^[0-9]+$'
+                       AND CAST(TRIM({$colSec}) AS BIGINT) BETWEEN :piso AND :techo
                 )
                 SELECT
                     (SELECT COALESCE(MAX(sec), 0) FROM usados) AS max_usado,
@@ -539,6 +743,8 @@ class SecuencialRepository
         $stmt->execute([
             ':id_punto'      => $idPuntoEmision,
             ':tipo_ambiente' => $this->getTipoAmbiente($idPuntoEmision),
+            ':piso'          => $inicial,
+            ':techo'         => $techo,
             ':ini_libre'     => $inicial,
             ':ini_valor'     => $inicial,
             ':ini_desde'     => $inicial,
@@ -557,6 +763,88 @@ class SecuencialRepository
             'max_usado'    => $maxUsado,
             'total_usados' => $total,
             // Es "hueco" cuando el número cae dentro del rango ya emitido, no al final de la serie.
+            'es_gap'       => $total > 0 && $siguiente < $maxUsado,
+        ];
+    }
+
+    /**
+     * Modo 'por_fecha': siguiente CORRELATIVO dentro del periodo, con las mismas reglas de
+     * huecos que la numeración consecutiva pero mirando solo los documentos de ese periodo.
+     *
+     * Los documentos del periodo se reconocen por el PREFIJO del secuencial (los de
+     * septiembre de 2026 empiezan en '202609'), y el correlativo es lo que va después. Se
+     * compara como texto, no por rango numérico, justamente para que un periodo que agote
+     * sus dígitos crezca hacia afuera en vez de solaparse con el periodo siguiente.
+     *
+     * Los secuenciales no numéricos, y los que no llegan a superar el largo del prefijo,
+     * se ignoran igual que en getSiguienteDisponible().
+     *
+     * @return array{siguiente:int,max_usado:int,total_usados:int,es_gap:bool}
+     */
+    public function getSiguienteCorrelativoPeriodo(int $idPuntoEmision, string $tipoDocumento, string $prefijo, int $correlativoInicial): array
+    {
+        $map     = self::DOCUMENT_MAP[$tipoDocumento] ?? null;
+        $inicial = max(1, $correlativoInicial);
+
+        if (!$map || !$this->tableExists($map['tabla'])) {
+            return ['siguiente' => $inicial, 'max_usado' => 0, 'total_usados' => 0, 'es_gap' => false];
+        }
+
+        $tabla    = $map['tabla'];
+        $colSec   = $map['col_sec'];
+        $colPunto = $map['col_punto'];
+        // Enteros calculados aquí (el largo del prefijo), no datos de fuera: se interpolan.
+        // No pueden ir como parámetro de PDO porque este los envía como TEXTO, y
+        // `SUBSTRING(x FROM '7')` no corta por posición: PostgreSQL lo lee como la variante
+        // de expresión regular y devuelve el patrón encontrado, no el resto de la cadena.
+        $largo    = strlen($prefijo);
+        $desdePos = $largo + 1;
+
+        $sql = "WITH usados AS (
+                    SELECT DISTINCT CAST(SUBSTRING(TRIM({$colSec}) FROM {$desdePos}) AS BIGINT) AS sec
+                      FROM {$tabla}
+                     WHERE {$colPunto} = :id_punto
+                       AND tipo_ambiente = :tipo_ambiente
+                       AND eliminado = false
+                       AND {$colSec} IS NOT NULL
+                       AND TRIM({$colSec}) ~ '^[0-9]+\$'
+                       AND TRIM({$colSec}) LIKE :prefijo
+                       AND LENGTH(TRIM({$colSec})) > {$largo}
+                )
+                SELECT
+                    (SELECT COALESCE(MAX(sec), 0) FROM usados) AS max_usado,
+                    (SELECT COUNT(*)              FROM usados) AS total_usados,
+                    CASE
+                        WHEN NOT EXISTS (SELECT 1 FROM usados WHERE sec = :ini_libre) THEN :ini_valor
+                        ELSE (
+                            SELECT MIN(u.sec + 1) FROM usados u
+                             WHERE u.sec >= :ini_desde
+                               AND NOT EXISTS (SELECT 1 FROM usados v WHERE v.sec = u.sec + 1)
+                        )
+                    END AS siguiente";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id_punto'      => $idPuntoEmision,
+            ':tipo_ambiente' => $this->getTipoAmbiente($idPuntoEmision),
+            ':prefijo'       => $prefijo . '%',
+            ':ini_libre'     => $inicial,
+            ':ini_valor'     => $inicial,
+            ':ini_desde'     => $inicial,
+        ]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $maxUsado  = (int) ($row['max_usado'] ?? 0);
+        $total     = (int) ($row['total_usados'] ?? 0);
+        $siguiente = (int) ($row['siguiente'] ?? 0);
+        if ($siguiente < $inicial) {
+            $siguiente = max($inicial, $maxUsado + 1);
+        }
+
+        return [
+            'siguiente'    => $siguiente,
+            'max_usado'    => $maxUsado,
+            'total_usados' => $total,
             'es_gap'       => $total > 0 && $siguiente < $maxUsado,
         ];
     }
@@ -635,9 +923,13 @@ class SecuencialRepository
      */
     public function getAllConfigByPunto(int $idPuntoEmision): array
     {
-        $sql = "SELECT id, tipo_documento, COALESCE(secuencial_inicial, 1) AS secuencial_inicial
-                FROM empresa_secuencial 
-                WHERE id_punto_emision = :id_punto 
+        $colsModo = $this->soportaModoPeriodo()
+            ? ", COALESCE(modo_numeracion, '" . self::MODO_CONSECUTIVO . "') AS modo_numeracion, periodo_reinicio"
+            : ", '" . self::MODO_CONSECUTIVO . "' AS modo_numeracion, NULL AS periodo_reinicio";
+
+        $sql = "SELECT id, tipo_documento, COALESCE(secuencial_inicial, 1) AS secuencial_inicial {$colsModo}
+                FROM empresa_secuencial
+                WHERE id_punto_emision = :id_punto
                   AND eliminado = false
                 ORDER BY tipo_documento ASC";
 

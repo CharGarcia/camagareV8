@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas
-version: 1.9
+etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.10
 orden: 15
 estado: activo
 ---
@@ -241,7 +241,30 @@ en Facturas de Venta.
   de emisión* antes de emitir.
 - **El cliente no aparece**: regístrelo primero en Clientes, en esta misma empresa.
 
+## Numeración por fecha de emisión
+
+Por defecto el número de estos documentos es un **correlativo corrido** que nunca
+se reinicia (`000000017`). En **Empresa → Secuenciales** se puede configurar, por
+cada punto de emisión, que el correlativo **vuelva a empezar en cada periodo**:
+
+- **Anual** → `202600017` (documento 17 del año 2026)
+- **Mensual** → `202609017` (documento 17 de septiembre de 2026)
+
+Con ese modo activo, **al cambiar la fecha del documento su número se recalcula
+solo**, para que caiga en el periodo correcto. Una vez guardado, el número queda
+fijo aunque después se le cambie la fecha, y los documentos ya emitidos conservan
+siempre el que tenían.
+
+El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuántos
+documentos admite cada periodo) está en el manual de **Empresa**, sección
+*Secuenciales por punto de emisión*.
+
 ## Historial de cambios
+
+- **1.10** — El número del documento puede numerarse **por fecha de emisión**,
+  reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
+  activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue
+  siendo el correlativo corrido de siempre.
 
 - **1.9** — Nueva sub-pestaña **Condiciones** (junto a Vigencia): editor de texto
   con formato para las condiciones adicionales de la cotización. No se imprimen en

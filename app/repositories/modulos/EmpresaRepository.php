@@ -828,21 +828,48 @@ class EmpresaRepository extends BaseModel
         return $usos;
     }
 
-    public function updateSecuencial(int $idPunto, string $tipo, int $numero, int $idEmpresa): bool
+    /**
+     * Fragmento SET / columnas+valores del modo de numeración, para no repetir en cada
+     * consulta el chequeo de si la base ya tiene esas columnas (migración
+     * 20260909_secuencial_modo_periodo.sql). Con $modo null, no se toca nada.
+     *
+     * $modo y $periodo llegan ya normalizados por EmpresaService a una lista cerrada de
+     * valores, así que se interpolan sin riesgo (este repositorio no usa preparadas).
+     *
+     * @return array{set:string,cols:string,vals:string}
+     */
+    private function fragmentoModoSecuencial(?string $modo, ?string $periodo): array
+    {
+        if ($modo === null || !(new \App\repositories\SecuencialRepository())->soportaModoPeriodo()) {
+            return ['set' => '', 'cols' => '', 'vals' => ''];
+        }
+
+        $m = "'" . $this->escape($modo) . "'";
+        $p = $periodo === null ? 'NULL' : "'" . $this->escape($periodo) . "'";
+
+        return [
+            'set'  => ", modo_numeracion = {$m}, periodo_reinicio = {$p}",
+            'cols' => ', modo_numeracion, periodo_reinicio',
+            'vals' => ", {$m}, {$p}",
+        ];
+    }
+
+    public function updateSecuencial(int $idPunto, string $tipo, int $numero, int $idEmpresa, ?string $modo = null, ?string $periodo = null): bool
     {
         $id = (int) $idPunto;
         $t = $this->escape($tipo);
         $n = (int) $numero;
         $idEmp = (int) $idEmpresa;
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        $mod = $this->fragmentoModoSecuencial($modo, $periodo);
 
         $check = $this->query("SELECT id FROM empresa_secuencial WHERE id_punto_emision = {$id} AND tipo_documento = '{$t}' AND id_empresa = {$idEmp} AND eliminado = false");
         if (!empty($check)) {
-            $sql = "UPDATE empresa_secuencial SET secuencial_inicial = {$n}, updated_at = NOW(), updated_by = {$user}
+            $sql = "UPDATE empresa_secuencial SET secuencial_inicial = {$n}{$mod['set']}, updated_at = NOW(), updated_by = {$user}
                     WHERE id_punto_emision = {$id} AND tipo_documento = '{$t}' AND id_empresa = {$idEmp}";
         } else {
-            $sql = "INSERT INTO empresa_secuencial (id_punto_emision, id_empresa, tipo_documento, secuencial_inicial, created_by, updated_by)
-                    VALUES ({$id}, {$idEmp}, '{$t}', {$n}, {$user}, {$user})";
+            $sql = "INSERT INTO empresa_secuencial (id_punto_emision, id_empresa, tipo_documento, secuencial_inicial, created_by, updated_by{$mod['cols']})
+                    VALUES ({$id}, {$idEmp}, '{$t}', {$n}, {$user}, {$user}{$mod['vals']})";
         }
         return $this->execute($sql);
     }
@@ -861,17 +888,23 @@ class EmpresaRepository extends BaseModel
     {
         $id = (int) $idPunto;
         $idEmp = (int) $idEmpresa;
-        $res = $this->query("SELECT id, tipo_documento, COALESCE(secuencial_inicial, 1) AS secuencial_inicial FROM empresa_secuencial WHERE id_punto_emision = {$id} AND id_empresa = {$idEmp} AND eliminado = false ORDER BY tipo_documento ASC");
+        // Mientras la migración del modo de numeración no se haya ejecutado, se devuelven
+        // valores fijos para que la vista siga funcionando igual que antes.
+        $cols = (new \App\repositories\SecuencialRepository())->soportaModoPeriodo()
+            ? "COALESCE(modo_numeracion, 'consecutivo') AS modo_numeracion, periodo_reinicio"
+            : "'consecutivo' AS modo_numeracion, NULL AS periodo_reinicio";
+        $res = $this->query("SELECT id, tipo_documento, COALESCE(secuencial_inicial, 1) AS secuencial_inicial, {$cols} FROM empresa_secuencial WHERE id_punto_emision = {$id} AND id_empresa = {$idEmp} AND eliminado = false ORDER BY tipo_documento ASC");
         return $res ?: [];
     }
 
-    public function updateSecuencialById(int $id, string $tipo, int $numero, int $idEmpresa): bool
+    public function updateSecuencialById(int $id, string $tipo, int $numero, int $idEmpresa, ?string $modo = null, ?string $periodo = null): bool
     {
         $idEmp = (int) $idEmpresa;
         $t = $this->escape($tipo);
         $n = (int) $numero;
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
-        $sql = "UPDATE empresa_secuencial SET tipo_documento = '{$t}', secuencial_inicial = {$n}, updated_at = NOW(), updated_by = {$user} WHERE id = {$id} AND id_empresa = {$idEmp} AND eliminado = false";
+        $mod = $this->fragmentoModoSecuencial($modo, $periodo);
+        $sql = "UPDATE empresa_secuencial SET tipo_documento = '{$t}', secuencial_inicial = {$n}{$mod['set']}, updated_at = NOW(), updated_by = {$user} WHERE id = {$id} AND id_empresa = {$idEmp} AND eliminado = false";
         return $this->execute($sql);
     }
 

@@ -565,6 +565,46 @@ class SaldosInicialesController extends BaseModuloController
     // COBROS Y PAGOS (desde CXC y CXP)
     // ─────────────────────────────────────────────────────────
 
+    /**
+     * Vista previa del siguiente número del movimiento, según su tipo: un cobro de CXC
+     * numera como **Ingreso** y un pago de CXP como **Egreso**. Cada uno lleva su propio
+     * contador —y puede tener su propio modo de numeración— en Empresa → Secuenciales.
+     *
+     * Antes esta consulta se le pedía prestada al endpoint de Cuentas por Cobrar, que
+     * ignora el tipo y siempre responde con el de Ingresos: en un saldo de CXP el modal
+     * mostraba un número que no era el que iba a recibir el egreso. El número definitivo
+     * siempre lo calculó bien SaldosInicialesService al guardar; lo que fallaba era lo
+     * que veía el usuario. Vivir aquí, además, valida los permisos de ESTE módulo y no
+     * los de Cuentas por Cobrar.
+     */
+    public function getSecuencialAjax(): void
+    {
+        $this->requireLeer();
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idPunto   = (int) ($_GET['id_punto_emision'] ?? 0);
+
+        if ($idPunto <= 0) {
+            $this->jsonErr('Punto de emisión no válido.');
+        }
+
+        // Lista blanca: el tipo llega del navegador y decide qué contador se consulta.
+        // Cualquier cosa que no sea CXP se trata como cobro, que es el caso por defecto.
+        $tipoDocumento = (($_GET['tipo'] ?? '') === 'CXP') ? 'Egresos' : 'Ingresos';
+
+        // El punto debe pertenecer a la empresa activa: así no se consulta la serie de otra.
+        if (!(new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa)) {
+            $this->jsonErr('Punto de emisión no válido.');
+        }
+
+        // Fecha del documento: solo pesa si ese tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+
+        $res = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocumento, $fecha);
+        $this->jsonOk($res);
+    }
+
     public function registrarCobroAjax(): void
     {
         $this->requireCrear();

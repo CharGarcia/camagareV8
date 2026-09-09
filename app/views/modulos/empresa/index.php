@@ -1131,6 +1131,22 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
+                                <?php if (!empty($tiposSecuencialModoFecha)): ?>
+                                    <div class="border rounded-3 bg-white p-2 mt-3">
+                                        <div class="fw-bold text-secondary text-uppercase mb-1" style="font-size:0.66rem;letter-spacing:.03em;">Modo de numeración</div>
+                                        <div class="small text-muted" style="font-size:0.76rem;">
+                                            Cada tipo elige cómo se calcula su siguiente número:
+                                            <ul class="mb-1 mt-1 ps-3">
+                                                <li><strong>Consecutivo</strong> (el de siempre): un correlativo corrido que nunca se reinicia — <code>000000017</code>.</li>
+                                                <li><strong>Por fecha de emisión</strong>: el correlativo vuelve a empezar en cada periodo y el periodo va como prefijo, dentro de los mismos 9 dígitos. El año siempre ocupa 4 dígitos y el mes 2; el correlativo se lleva lo que sobra.
+                                                    <em>Anual</em> → <code>2026</code>+<code>00017</code> = <code>202600017</code> (documento 17 del año 2026); <em>Mensual</em> → <code>202609</code>+<code>017</code> = <code>202609017</code> (documento 17 de septiembre de 2026).
+                                                    Eso da 99.999 documentos al año o 999 al mes por punto de emisión; si un periodo se queda corto, el número gana un dígito (<code>2026091000</code>) en vez de invadir el periodo siguiente.</li>
+                                            </ul>
+                                            La opción solo aparece en los documentos <strong>internos</strong>: los que se envían al SRI (facturas, notas de crédito y débito, guías, liquidaciones, retenciones) numeran siempre de forma consecutiva, porque su secuencial forma parte de la clave de acceso.
+                                            <div class="mt-1"><i class="bi bi-exclamation-triangle text-warning me-1"></i>Cambiar el modo solo afecta a los documentos <strong>nuevos</strong>: los ya emitidos conservan su número. Y si se pasa de <em>mensual</em> a <em>anual</em> dentro del mismo año, los números nuevos arrancan por debajo de los ya emitidos (<code>202600001</code> es menor que <code>202609017</code>), aunque nunca se repiten.</div>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                                 <div class="small text-muted mt-3" style="font-size:0.76rem;">
                                     <strong>Cómo crearlos desde aquí:</strong>
                                     <ul class="mb-0 mt-1 ps-3">
@@ -2357,6 +2373,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
+                        ${_secBloqueModo(secId, rawNombre, item.modo_numeracion, item.periodo_reinicio)}
                     `;
                     container.appendChild(div);
                 }
@@ -2369,6 +2386,10 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
     // Tipos de documento soportados por el motor de numeración (fuente: SecuencialRepository::DOCUMENT_MAP).
     const APP_SEC_TIPOS = <?= json_encode(array_values($tiposSecuencialSoportados ?? []), JSON_UNESCAPED_UNICODE) ?>;
+    // Tipos que pueden numerar por fecha de emisión: los internos. Los electrónicos quedan fuera
+    // porque su secuencial forma parte de la clave de acceso del SRI. Llega vacío si la base
+    // todavía no tiene la migración del modo (20260909_secuencial_modo_periodo.sql).
+    const APP_SEC_TIPOS_MODO_FECHA = <?= json_encode(array_values($tiposSecuencialModoFecha ?? []), JSON_UNESCAPED_UNICODE) ?>;
     // Tipos que comparten codDoc SRI (no pueden coexistir en el mismo punto de emisión — ej. Facturas de venta / Facturas de reembolso).
     const APP_SEC_CONFLICTOS_CODDOC = <?= json_encode($tiposSecuencialConflictos ?? [], JSON_UNESCAPED_UNICODE) ?>;
     // Tipos de "un único punto por empresa" (ej. Facturas de reembolso) ya configurados en
@@ -2378,6 +2399,39 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
     function _secEscape(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ¿Este tipo de documento puede numerar por fecha de emisión?
+    function _secPermiteModoFecha(tipo) {
+        return APP_SEC_TIPOS_MODO_FECHA.includes((tipo || '').trim());
+    }
+
+    // Selectores de modo de numeración de una fila. Devuelve cadena vacía en los tipos que no
+    // lo admiten (electrónicos), para que ni siquiera viaje el campo al guardar.
+    function _secBloqueModo(key, tipo, modo, periodo) {
+        if (!_secPermiteModoFecha(tipo)) return '';
+        const porFecha = modo === 'por_fecha';
+        const per = periodo || 'anual';
+        return `
+            <div class="d-flex align-items-center gap-1 mt-1">
+                <select name="secuenciales[${key}][modo]" class="form-select form-select-sm border-0 shadow-sm sec-modo"
+                        style="font-size:0.72rem;" onchange="_secToggleModo(this)"
+                        title="Cómo se calcula el siguiente número de este tipo de documento">
+                    <option value="consecutivo" ${porFecha ? '' : 'selected'}>Consecutivo</option>
+                    <option value="por_fecha" ${porFecha ? 'selected' : ''}>Por fecha de emisión</option>
+                </select>
+                <select name="secuenciales[${key}][periodo]" class="form-select form-select-sm border-0 shadow-sm sec-periodo ${porFecha ? '' : 'd-none'}"
+                        style="font-size:0.72rem;max-width:110px;" title="Cada cuánto vuelve a empezar el correlativo">
+                    <option value="anual" ${per === 'mensual' ? '' : 'selected'}>Anual</option>
+                    <option value="mensual" ${per === 'mensual' ? 'selected' : ''}>Mensual</option>
+                </select>
+            </div>`;
+    }
+
+    // Muestra el periodo solo cuando el modo es "por fecha".
+    function _secToggleModo(sel) {
+        const periodo = sel.parentElement.querySelector('.sec-periodo');
+        if (periodo) periodo.classList.toggle('d-none', sel.value !== 'por_fecha');
     }
 
     // Nombres de secuenciales ya presentes en el punto seleccionado (existentes + nuevos sin guardar).
@@ -2456,6 +2510,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
+            ${_secBloqueModo(newKey, name, 'consecutivo', 'anual')}
         `;
         container.appendChild(div);
         refrescarSelectorTipos();
@@ -2558,6 +2613,26 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         w.querySelector('.sec-btn-editar').classList.remove('d-none');
         w.querySelector('.sec-btn-guardar').classList.add('d-none');
         w.querySelector('.sec-btn-cancelar').classList.add('d-none');
+        _secSyncModoTrasRenombrar(w, newName);
+    }
+
+    // Renombrar el tipo puede cambiar si admite o no numeración por fecha (p. ej. pasar de
+    // "Egresos" a "Nota de crédito"): se repinta el bloque de modo conservando lo elegido,
+    // o se quita del todo si el nuevo nombre es de un documento electrónico.
+    function _secSyncModoTrasRenombrar(wrapper, nombre) {
+        const col = wrapper.closest('.col-md-6');
+        if (!col) return;
+
+        const inputNombre = wrapper.querySelector('.sec-nombre-input');
+        const key = (inputNombre.getAttribute('name').match(/secuenciales\[(.+?)\]/) || [])[1];
+        if (!key) return;
+
+        const bloque  = col.querySelector('.sec-modo')?.parentElement || null;
+        const modo    = col.querySelector('.sec-modo')?.value || 'consecutivo';
+        const periodo = col.querySelector('.sec-periodo')?.value || 'anual';
+
+        if (bloque) bloque.remove();
+        col.insertAdjacentHTML('beforeend', _secBloqueModo(key, nombre, modo, periodo));
     }
 
     function cancelarNombreSec(btn) {

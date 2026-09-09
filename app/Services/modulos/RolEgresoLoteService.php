@@ -126,7 +126,7 @@ class RolEgresoLoteService
                 // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8). Cada empleado sigue siendo
                 // independiente (su propia transacción), tal como espera el resto del método.
                 $db->beginTransaction();
-                $sec = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
+                $sec = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fecha)['secuencial'] ?? 0);
                 $numero = $est . '-' . $pto . '-' . str_pad((string) $sec, 9, '0', STR_PAD_LEFT);
 
                 $pago = ['id_forma_pago' => $idForma, 'monto' => $saldo];

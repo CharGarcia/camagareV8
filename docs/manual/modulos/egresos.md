@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado
-version: 1.8
+etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.9
 orden: 20
 estado: activo
 ---
@@ -211,6 +211,25 @@ Si se elimina un documento, su número queda libre y el sistema lo vuelve a
 ofrecer al siguiente que se cree en esa serie, para que la numeración no
 quede con saltos.
 
+### Numeración por fecha de emisión
+
+Por defecto el número es un **correlativo corrido** que nunca se reinicia
+(`000000017`). En **Empresa → Secuenciales** se puede configurar, para este tipo
+de documento y por cada punto de emisión, que el correlativo **vuelva a empezar
+en cada periodo** según la **fecha de emisión** del documento:
+
+- **Anual** → `202600017` (documento 17 del año 2026)
+- **Mensual** → `202609017` (documento 17 de septiembre de 2026)
+
+Cuando ese modo está activo, **al cambiar la fecha del documento su número se
+recalcula solo**, para que caiga en el periodo correcto. Una vez guardado, el
+número queda fijo aunque después se le cambie la fecha. Los documentos ya
+emitidos conservan siempre el número que tenían.
+
+El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y
+cuántos documentos admite cada periodo) está en el manual de **Empresa**, sección
+*Secuenciales por punto de emisión*.
+
 ## Asiento contable
 
 Cada egreso genera su asiento automáticamente según la configuración contable de
@@ -244,6 +263,11 @@ ve solo los que registró.
   proveedor, que no esté ya pagada y que la compra no fuera anulada.
 
 ## Historial de cambios
+
+- **1.9** — El número del documento puede numerarse **por fecha de emisión**,
+  reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
+  activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue
+  siendo el correlativo corrido de siempre.
 
 - **1.9** — Corregido un caso en que el número seguía repitiéndose pese a la
   corrección anterior: los egresos creados **automáticamente** (pago desde una

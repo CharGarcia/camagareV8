@@ -388,9 +388,13 @@ class EgresosController extends BaseModuloController
 
         $idPunto = (int) ($_GET['id_punto_emision'] ?? 0);
         $tipo    = 'Egresos'; // Map valid definition needed in SecuencialRepository map, assumes same fallback strategy.
+        // Fecha del documento: solo se usa si este tipo está configurado para numerar por
+        // fecha de emisión (Empresa → Secuenciales). El modal la manda al cambiarla, para
+        // que el número que se muestra sea el del periodo correcto.
+        $fecha   = trim($_GET['fecha'] ?? '') ?: null;
 
         $secService = new \App\Services\SecuencialService();
-        $res = $secService->obtenerSiguienteSecuencial($idPunto, $tipo);
+        $res = $secService->obtenerSiguienteSecuencial($idPunto, $tipo, $fecha);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;
@@ -508,7 +512,11 @@ class EgresosController extends BaseModuloController
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
-            $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+            // La fecha se toma del propio documento, no de lo que el navegador haya calculado:
+            // si este tipo numera por fecha de emisión, el periodo del número lo decide el
+            // servidor con el mismo dato que se va a grabar.
+            $secRes = (new \App\Services\SecuencialService())
+                ->obtenerSiguienteSecuencial($idPunto, 'Egresos', $data['fecha_emision'] ?? null);
 
             $data['id_establecimiento'] = $punto['id_establecimiento'] ?: null;
             $data['id_punto_emision']   = $idPunto;

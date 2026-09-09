@@ -466,7 +466,7 @@ class OrdenCarWashService
         }
 
         $tipoDocSec = ($tipo === 'FACTURA') ? 'Facturas de venta' : 'Recibos de venta';
-        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec);
+        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec, date('Y-m-d'));
         $secuencial = $sec['formateado'];
         $numeroDoc  = $estCod . '-' . $puntoCod . '-' . $secuencial;
 

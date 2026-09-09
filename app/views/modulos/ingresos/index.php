@@ -687,7 +687,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             return;
         }
 
-        fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getSecuencialAjax?id_punto_emision=${idPunto}`)
+        // La fecha viaja siempre: si este tipo está configurado para numerar por fecha de
+        // emisión (Empresa → Secuenciales), el número depende del periodo al que pertenece.
+        // En modo consecutivo el servidor la ignora y devuelve el mismo número de siempre.
+        const fecha = document.getElementById('m-input-fecha')?.value || '';
+
+        fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(fecha)}`)
             .then(r => r.json())
             .then(res => {
                 // En modo edición (ya existe un ID) NO se recalcula el secuencial:
@@ -699,6 +704,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             })
             .catch(e => console.error(e));
     }
+
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha de
+    // emisión, cada periodo (año o mes) lleva su propio correlativo. Solo en documentos
+    // nuevos — al editar, el número ya está asignado y no se toca.
+    (function _engancharRecalculoPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('m-input-fecha');
+            if (!inputFecha) return;
+            inputFecha.addEventListener('change', () => {
+                if (document.getElementById('m-input-id')?.value) return;
+                const sel = document.getElementById('m-select-punto');
+                if (sel && sel.value) syncIngresoSecuencial(sel.value);
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 
     function sincronizarBotonesConcepto(id) {
         document.querySelectorAll('.concepto-ingreso-btn').forEach(btn => {

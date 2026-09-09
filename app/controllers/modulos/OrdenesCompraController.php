@@ -214,8 +214,11 @@ class OrdenesCompraController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'Punto de emisión no válido.']);
             exit;
         }
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
         try {
-            $result = $this->service->getSiguienteSecuencial($idPuntoEmision);
+            $result = $this->service->getSiguienteSecuencial($idPuntoEmision, $fecha);
             echo json_encode(['ok' => true, 'secuencial' => $result['formateado']]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

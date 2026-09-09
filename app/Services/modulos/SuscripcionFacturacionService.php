@@ -142,7 +142,7 @@ class SuscripcionFacturacionService
         }
 
         try {
-        $secRes     = $this->secService->obtenerSiguienteSecuencial((int)$estabConfig['id_punto_emision'], $tipoSec);
+        $secRes     = $this->secService->obtenerSiguienteSecuencial((int)$estabConfig['id_punto_emision'], $tipoSec, date('Y-m-d'));
         $secuencial = $secRes['formateado'];
 
         $infoAdicional = [];

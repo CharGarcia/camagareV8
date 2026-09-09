@@ -1040,10 +1040,15 @@ function SI_abrirMovimiento(row, tipo) {
 
 async function SI_cargarSecuencialMov(idPunto) {
     if (!idPunto) { document.getElementById('si-mov-secuencial').value = ''; return; }
+    // El tipo decide qué numeración se consulta: un cobro de CXC es un Ingreso y un pago
+    // de CXP un Egreso, cada uno con su propio contador. Se pregunta al endpoint de ESTE
+    // módulo (antes se usaba el de Cuentas por Cobrar, que siempre respondía Ingresos).
     const tipo = document.getElementById('si-mov-tipo').value;
-    const modulo = tipo === 'CXC' ? 'Ingresos' : 'Egresos';
     try {
-        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_cobrar/getSecuencialAjax?id_punto_emision=${idPunto}&modulo=${modulo}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        // La fecha viaja siempre: si el tipo está configurado para numerar por fecha de
+        // emisión (Empresa → Secuenciales), el número depende del periodo de esa fecha.
+        const fecha = document.getElementById('si-mov-fecha')?.value || '';
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=${encodeURIComponent(tipo)}&fecha=${encodeURIComponent(fecha)}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
         if (d.ok) document.getElementById('si-mov-secuencial').value = d.formateado || '';
     } catch(e) {}
@@ -1394,3 +1399,22 @@ function SI_mostrarImport(d) {
     }
     Swal.fire({ icon: conErrores ? 'warning' : 'success', title: 'Importación', html });
 }
+
+// Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+// de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+// Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+(function _siRecalcularSecuencialPorFecha() {
+    const enganchar = () => {
+        const inputFecha = document.getElementById('si-mov-fecha');
+        const selSerie   = document.getElementById('si-mov-punto');
+        if (!inputFecha || !selSerie) return;
+        inputFecha.addEventListener('change', () => {
+            if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', enganchar);
+    } else {
+        enganchar();
+    }
+})();

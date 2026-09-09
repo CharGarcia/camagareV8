@@ -851,7 +851,7 @@ class SaldosInicialesService
 
         try {
         $secuencialService = new \App\Services\SecuencialService();
-        $secRes     = $secuencialService->obtenerSiguienteSecuencial((int)$datos['id_punto_emision'], 'Ingresos');
+        $secRes     = $secuencialService->obtenerSiguienteSecuencial((int)$datos['id_punto_emision'], 'Ingresos', $datos['fecha_cobro'] ?: date('Y-m-d'));
         $secuencial = $secRes['formateado'];
         $numDoc     = "{$codEst}-{$codPto}-{$secuencial}";
 
@@ -955,7 +955,7 @@ class SaldosInicialesService
 
         try {
         $secuencialService = new \App\Services\SecuencialService();
-        $secRes     = $secuencialService->obtenerSiguienteSecuencial((int)$datos['id_punto_emision'], 'Egresos');
+        $secRes     = $secuencialService->obtenerSiguienteSecuencial((int)$datos['id_punto_emision'], 'Egresos', $datos['fecha_pago'] ?: date('Y-m-d'));
         $secuencial = $secRes['formateado'];
         $numDoc     = "{$codEst}-{$codPto}-{$secuencial}";
 

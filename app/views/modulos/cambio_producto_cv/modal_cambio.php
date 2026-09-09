@@ -429,7 +429,7 @@
 
         inp.placeholder = 'Cargando...';
         try {
-            const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}`);
+            const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('cam_fecha_cambio')?.value || '')}`);
             const data = await res.json();
             if (!data.ok) {
                 camSecuencialConfigurado = false;
@@ -985,4 +985,22 @@
     document.getElementById('cam-tab-asiento-btn')?.addEventListener('shown.bs.tab', camCargarAsiento);
     window.__camResetTabs = camResetTabs;
 })();
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _recalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('cam_fecha_cambio');
+            const selSerie   = document.getElementById('cam_select_serie');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 </script>

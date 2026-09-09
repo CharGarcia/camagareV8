@@ -163,7 +163,10 @@ class ImportacionesController extends BaseModuloController
         $activo = $serie !== null && $serie['activo'];
 
         $secuencialService = new \App\Services\SecuencialService();
-        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Importaciones');
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Importaciones', $fecha);
 
         if (!$activo) {
             $res['detalle'] = $serie ? 'El punto de emisión (o su establecimiento) está inactivo.' : 'El punto de emisión no existe.';

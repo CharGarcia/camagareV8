@@ -557,7 +557,7 @@ async function syncSerie(idPunto) {
     const inputSec = document.getElementById('secuencial');
 
     try {
-        const res = await fetch(`${window.CMG_urlBase}/getSecuencialAjax?id_punto_emision=${idPunto}`);
+        const res = await fetch(`${window.CMG_urlBase}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('fecha_pedido')?.value || '')}`);
         const data = await res.json();
 
         if (data.status && data.formateado) {
@@ -1150,3 +1150,22 @@ document.addEventListener('show.bs.modal', function (event) {
         }, 0);
     }
 });
+
+// Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+// de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+// Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+(function _recalcularSecuencialPorFecha() {
+    const enganchar = () => {
+        const inputFecha = document.getElementById('fecha_pedido');
+        const selSerie   = document.getElementById('id_punto_emision');
+        if (!inputFecha || !selSerie) return;
+        inputFecha.addEventListener('change', () => {
+            if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', enganchar);
+    } else {
+        enganchar();
+    }
+})();

@@ -5,8 +5,8 @@ categoria: Operaciones
 ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
-etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion
-version: 1.6
+etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.7
 orden: 0
 estado: activo
 ---
@@ -258,7 +258,29 @@ ofrece abrir el chat normal para escribirle al cliente, aunque sin adjunto.
 - **La tablet no muestra vehículos**: verifique que la URL tenga el
   `?id_departamento=` correcto y que haya órdenes enviadas a ese departamento.
 
+## Numeración por fecha de emisión
+
+Por defecto el número de estos documentos es un **correlativo corrido** que nunca
+se reinicia (`000000017`). En **Empresa → Secuenciales** se puede configurar, por
+cada punto de emisión, que el correlativo **vuelva a empezar en cada periodo**:
+
+- **Anual** → `202600017` (documento 17 del año 2026)
+- **Mensual** → `202609017` (documento 17 de septiembre de 2026)
+
+Estos documentos no llevan una fecha de emisión editable: se numeran por la fecha
+en que se registran. Los documentos ya emitidos conservan siempre el número que
+tenían.
+
+El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuántos
+documentos admite cada periodo) está en el manual de **Empresa**, sección
+*Secuenciales por punto de emisión*.
+
 ## Historial de cambios
+
+- **1.7** — El número del documento puede numerarse **por fecha de emisión**,
+  reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
+  activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue
+  siendo el correlativo corrido de siempre.
 
 - **1.6** — Al pulsar *Factura* o *Recibo*, el sistema explica qué falta y lleva
   a la pestaña donde se resuelve, en lugar de dejar los botones grises sin dar

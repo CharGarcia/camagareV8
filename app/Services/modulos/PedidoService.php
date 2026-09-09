@@ -75,7 +75,7 @@ class PedidoService {
                     // Secuencial AUTORITATIVO del servidor: se recalcula aquí y NO se confía en el
                     // valor que trae el navegador (readonly / vista previa cargada al abrir el
                     // modal, puede llegar desfasado si el modal quedó abierto un rato).
-                    $secRes = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Pedidos');
+                    $secRes = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Pedidos', $cabecera['fecha_pedido'] ?? null);
                     $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
 
                     if ($this->repository->existeSecuencial($id_empresa, $idPuntoEmision, $secuencial, $tipoAmbiente)) {

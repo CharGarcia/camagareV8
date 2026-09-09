@@ -1135,7 +1135,7 @@ class TallerOrdenService
         }
 
         $tipoDocSec = ($tipo === 'FACTURA') ? 'Facturas de venta' : 'Recibos de venta';
-        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec);
+        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec, date('Y-m-d'));
         if (($sec['configurado'] ?? false) === false) {
             throw new Exception(
                 'Esta serie no tiene configurado el secuencial "' . $tipoDocSec . '". '

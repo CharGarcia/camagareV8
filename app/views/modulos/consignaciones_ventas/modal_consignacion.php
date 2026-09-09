@@ -659,7 +659,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
         
         try {
-            const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getSecuencialAjax?id_punto_emision=${idPunto}`);
+            const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('cons_fecha_emision')?.value || '')}`);
             const data = await resp.json();
             
             if (data.ok) {
@@ -2905,6 +2905,24 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             });
         }
     });
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _recalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('cons_fecha_emision');
+            const selSerie   = document.getElementById('cons_id_punto_emision');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 </script>
 
 <!-- Modal Crear Responsable de Traslado -->

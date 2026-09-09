@@ -228,7 +228,7 @@ class CobroAutomaticoClienteService
         }
 
         try {
-        $resSec = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id_punto'], 'Ingresos');
+        $resSec = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id_punto'], 'Ingresos', $fechaEmisionDoc);
         if (empty($resSec['secuencial'])) {
             throw new \Exception('Error al reservar secuencial correlativo.');
         }

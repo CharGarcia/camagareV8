@@ -1001,7 +1001,7 @@ class ImportacionesService
             throw new \Exception('No se encontraron datos del establecimiento o punto de emisión seleccionado.');
         }
 
-        $secResult = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Importaciones');
+        $secResult = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Importaciones', date('Y-m-d'));
 
         $data['establecimiento'] = $serie['establecimiento'];
         $data['punto_emision']   = $serie['punto_emision'];

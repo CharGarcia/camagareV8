@@ -889,7 +889,7 @@ class DeclaracionIvaService
 
         try {
         $secSvc = new \App\Services\SecuencialService();
-        $sec    = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
+        $sec    = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fecha)['secuencial'] ?? 0);
         $numero = $est . '-' . $pto . '-' . str_pad((string) $sec, 9, '0', STR_PAD_LEFT);
 
         // El monto del egreso lo ingresa el usuario en el modal (precargado con el casillero

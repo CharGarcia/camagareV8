@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/traspasos
 tipo: modulo
 visibilidad: todos
-etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar
-version: 1.1
+etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -63,7 +63,30 @@ quedan ocultos mientras el traspaso es nuevo y no se ha guardado.
 - **"El número de secuencial ya existe"**: cambie el número.
 - **"El periodo contable está cerrado"**: la fecha cae en un mes cerrado.
 
+## Numeración por fecha de emisión
+
+Por defecto el número de estos documentos es un **correlativo corrido** que nunca
+se reinicia (`000000017`). En **Empresa → Secuenciales** se puede configurar, por
+cada punto de emisión, que el correlativo **vuelva a empezar en cada periodo**:
+
+- **Anual** → `202600017` (documento 17 del año 2026)
+- **Mensual** → `202609017` (documento 17 de septiembre de 2026)
+
+Con ese modo activo, **al cambiar la fecha del documento su número se recalcula
+solo**, para que caiga en el periodo correcto. Una vez guardado, el número queda
+fijo aunque después se le cambie la fecha, y los documentos ya emitidos conservan
+siempre el que tenían.
+
+El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuántos
+documentos admite cada periodo) está en el manual de **Empresa**, sección
+*Secuenciales por punto de emisión*.
+
 ## Historial de cambios
+
+- **1.2** — El número del documento puede numerarse **por fecha de emisión**,
+  reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
+  activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue
+  siendo el correlativo corrido de siempre.
 
 - **1.1** — Botón para exportar el comprobante a Excel, junto al de PDF, en la
   barra de acciones superior del modal.

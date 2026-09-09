@@ -173,7 +173,7 @@
             return;
         }
 
-        fetch(`${TRP_URL}/getSecuencialAjax?id_punto_emision=${idPunto}`).then(r => r.json()).then(res => {
+        fetch(`${TRP_URL}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('trp-input-fecha')?.value || '')}`).then(r => r.json()).then(res => {
             if (document.getElementById('trp-input-id')?.value) return; // no recalcular en modo ver
 
             if (res.ok) {
@@ -357,4 +357,23 @@
             });
         });
     };
+})();
+
+// Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+// de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+// Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+(function _recalcularSecuencialPorFecha() {
+    const enganchar = () => {
+        const inputFecha = document.getElementById('trp-input-fecha');
+        const selSerie   = document.getElementById('trp-select-punto');
+        if (!inputFecha || !selSerie) return;
+        inputFecha.addEventListener('change', () => {
+            if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', enganchar);
+    } else {
+        enganchar();
+    }
 })();

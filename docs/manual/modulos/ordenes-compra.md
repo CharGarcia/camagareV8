@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor
-version: 1.10
+etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.11
 orden: 15
 estado: activo
 ---
@@ -253,7 +253,30 @@ Compras (procesar entradas, retención, etc.).
   estado **Enviado**. Si ya está Aprobada o Recibida, no hace falta (ya está
   aprobada); si sigue en Borrador, primero hay que enviarla por correo.
 
+## Numeración por fecha de emisión
+
+Por defecto el número de estos documentos es un **correlativo corrido** que nunca
+se reinicia (`000000017`). En **Empresa → Secuenciales** se puede configurar, por
+cada punto de emisión, que el correlativo **vuelva a empezar en cada periodo**:
+
+- **Anual** → `202600017` (documento 17 del año 2026)
+- **Mensual** → `202609017` (documento 17 de septiembre de 2026)
+
+Con ese modo activo, **al cambiar la fecha del documento su número se recalcula
+solo**, para que caiga en el periodo correcto. Una vez guardado, el número queda
+fijo aunque después se le cambie la fecha, y los documentos ya emitidos conservan
+siempre el que tenían.
+
+El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuántos
+documentos admite cada periodo) está en el manual de **Empresa**, sección
+*Secuenciales por punto de emisión*.
+
 ## Historial de cambios
+
+- **1.11** — El número del documento puede numerarse **por fecha de emisión**,
+  reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
+  activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue
+  siendo el correlativo corrido de siempre.
 
 - **1.10** — Las **notas de cada línea** del detalle ahora sí se guardan (antes
   se escribían y se perdían al guardar, en silencio) y salen impresas en el

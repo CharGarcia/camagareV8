@@ -539,7 +539,7 @@ const PF = (() => {
     }
 
     function _obtenerSecuencial(idPunto) {
-        fetch(`${URL}/getSecuencialAjax?id_punto_emision=${idPunto}`)
+        fetch(`${URL}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('pf_fecha')?.value || '')}`)
             .then(r => r.json())
             .then(res => {
                 if (res.ok && res.formateado) {

@@ -285,7 +285,7 @@ async function ocSyncSerie(idPunto) {
     }
     if (document.getElementById('oc_id').value) return; // edición: no sobreescribir secuencial
     try {
-        const resp = await fetch(`${OC_URL_BASE}/getSiguienteSecuencial?id_punto_emision=${idPunto}`, {
+        const resp = await fetch(`${OC_URL_BASE}/getSiguienteSecuencial?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('oc_fecha_orden')?.value || '')}`, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await resp.json();
@@ -688,4 +688,22 @@ document.addEventListener('click', function(e) {
         lista.classList.add('d-none');
     }
 });
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _recalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('oc_fecha_orden');
+            const selSerie   = document.getElementById('oc_id_punto_emision');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 </script>

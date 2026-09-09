@@ -561,7 +561,7 @@
         if (!idPunto || !opt) { $('faccv_serie').value=''; $('faccv_id_punto_emision').value=''; $('faccv_secuencial').value=''; return; }
         const est = opt.dataset.codEst || '', punto = opt.dataset.codPunto || '';
         $('faccv_serie').value = est + '-' + punto; $('faccv_establecimiento').value = est; $('faccv_punto_emision').value = punto; $('faccv_id_punto_emision').value = idPunto;
-        const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}`);
+        const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('faccv_fecha')?.value || '')}`);
         const data = await res.json();
         if (!data.ok) { $('faccv_secuencial').value=''; Swal.fire('Atención', data.msg || 'No hay secuencial configurado.', 'warning'); return; }
         $('faccv_secuencial').value = data.formateado || String(data.secuencial || '').padStart(9, '0');
@@ -1098,4 +1098,22 @@
         } catch (e) {}
     });
 })();
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _recalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('faccv_fecha');
+            const selSerie   = document.getElementById('faccv_select_serie');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 </script>

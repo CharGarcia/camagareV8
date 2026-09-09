@@ -394,8 +394,11 @@ class CuentasPorPagarController extends BaseModuloController
         if (!$this->repo->getPuntoEmisionPorId($idPunto, $this->empresaLectura())) {
             $this->jsonError('Punto de emisión no válido.');
         }
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
         $secuencialService = new \App\Services\SecuencialService();
-        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fecha);
         $this->jsonSuccess($res);
     }
 

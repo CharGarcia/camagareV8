@@ -139,7 +139,10 @@ class ServicioExternoController extends ApiBaseController
             $this->jsonError('PUNTO_REQUERIDO', 'Punto de emisión no válido.', 422);
         }
 
-        $res = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, self::TIPO_SECUENCIAL);
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+        $res = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, self::TIPO_SECUENCIAL, $fecha);
         $this->jsonOk($res);
     }
 

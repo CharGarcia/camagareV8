@@ -334,7 +334,7 @@ class ConsignacionFacturaService
         if (empty($cfgSec['id'])) {
             throw new Exception('No hay secuencial configurado para "Facturacion consignaciones ventas" en el punto de emisión del documento.');
         }
-        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturacion consignaciones ventas');
+        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturacion consignaciones ventas', date('Y-m-d'));
 
         // Copiar líneas capando cada cantidad al saldo facturable actual.
         $detsSrc  = $this->repository->getDetalles($idDoc, $idEmpresa);

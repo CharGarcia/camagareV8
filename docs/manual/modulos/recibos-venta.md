@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos
-version: 1.4
+etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.5
 orden: 35
 estado: activo
 ---
@@ -61,7 +61,30 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
   recibo es interno.
 - **El stock bajó dos veces**: se emitió recibo *y* factura por la misma entrega.
 
+## Numeración por fecha de emisión
+
+Por defecto el número de estos documentos es un **correlativo corrido** que nunca
+se reinicia (`000000017`). En **Empresa → Secuenciales** se puede configurar, por
+cada punto de emisión, que el correlativo **vuelva a empezar en cada periodo**:
+
+- **Anual** → `202600017` (documento 17 del año 2026)
+- **Mensual** → `202609017` (documento 17 de septiembre de 2026)
+
+Con ese modo activo, **al cambiar la fecha del documento su número se recalcula
+solo**, para que caiga en el periodo correcto. Una vez guardado, el número queda
+fijo aunque después se le cambie la fecha, y los documentos ya emitidos conservan
+siempre el que tenían.
+
+El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuántos
+documentos admite cada periodo) está en el manual de **Empresa**, sección
+*Secuenciales por punto de emisión*.
+
 ## Historial de cambios
+
+- **1.5** — El número del documento puede numerarse **por fecha de emisión**,
+  reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
+  activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue
+  siendo el correlativo corrido de siempre.
 
 - **1.4** — La **tirilla** respeta la *Presentación de los ítems* configurada en
   el módulo Empresa (pestaña Facturación): agrupa las líneas por nombre, lote o

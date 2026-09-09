@@ -400,9 +400,13 @@ class IngresosController extends BaseModuloController
 
         $idPunto = (int) ($_GET['id_punto_emision'] ?? 0);
         $tipo    = 'Ingresos'; // Según DOCUMENT_MAP en SecuencialRepository
+        // Fecha del documento: solo se usa si este tipo está configurado para numerar por
+        // fecha de emisión (Empresa → Secuenciales). El modal la manda al cambiarla, para
+        // que el número que se muestra sea el del periodo correcto.
+        $fecha   = trim($_GET['fecha'] ?? '') ?: null;
 
         $secuencialService = new \App\Services\SecuencialService();
-        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, $tipo);
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, $tipo, $fecha);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;
@@ -538,7 +542,11 @@ class IngresosController extends BaseModuloController
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
-            $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
+            // La fecha se toma del propio documento, no de lo que el navegador haya calculado:
+            // si este tipo numera por fecha de emisión, el periodo del número lo decide el
+            // servidor con el mismo dato que se va a grabar.
+            $secRes = (new \App\Services\SecuencialService())
+                ->obtenerSiguienteSecuencial($idPunto, 'Ingresos', $data['fecha_emision'] ?? null);
 
             $data['id_establecimiento'] = $punto['id_establecimiento'] ?: null;
             $data['id_punto_emision']   = $idPunto;
@@ -745,7 +753,9 @@ class IngresosController extends BaseModuloController
             // realmente evite que dos cobros casi simultáneos calculen el mismo secuencial (CLAUDE.md §8).
             $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
-            $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos');
+            // Con numeración por fecha de emisión, el cobro numera en el periodo de SU fecha
+            // (la del cobro), que no tiene por qué ser la de hoy ni la de la factura.
+            $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos', $data['fecha_emision'] ?? null);
 
             // 4. Calcular saldo anterior = importe_total - cobros previos - retenciones de venta
             //    (mismo criterio que el selector de documentos pendientes).

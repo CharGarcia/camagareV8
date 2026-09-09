@@ -178,7 +178,7 @@ class PagoAutomaticoProveedorService
 
         try {
         $secService = new \App\Services\SecuencialService();
-        $resSec = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+        $resSec = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fechaEmisionDoc);
         if (empty($resSec['secuencial'])) {
             throw new \Exception('Error al reservar secuencial correlativo.');
         }

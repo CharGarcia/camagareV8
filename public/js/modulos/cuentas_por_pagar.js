@@ -536,9 +536,12 @@ async function CXP_cargarSecuencial(idPunto) {
     if (!el) return;
     if (!idPunto) { el.value = ''; return; }
     el.value = '…';
+    // La fecha viaja siempre: si Egresos está configurado para numerar por fecha de emisión
+    // (Empresa → Secuenciales), el número depende del periodo al que pertenece esa fecha.
+    const fecha = document.getElementById('pago-fecha')?.value || '';
     try {
         const r = await fetch(
-            `${BASE_URL}/${RUTA_MODULO_CXP}/getSecuencialAjax?id_punto_emision=${idPunto}${CXP_pagoEmpresa ? '&id_empresa=' + CXP_pagoEmpresa : ''}`,
+            `${BASE_URL}/${RUTA_MODULO_CXP}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(fecha)}${CXP_pagoEmpresa ? '&id_empresa=' + CXP_pagoEmpresa : ''}`,
             { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
         );
         const data = await r.json();
@@ -958,3 +961,22 @@ document.addEventListener('click', function (e) {
             : ''
     });
 });
+
+// Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+// de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+// Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+(function _cxpRecalcularSecuencialPorFecha() {
+    const enganchar = () => {
+        const inputFecha = document.getElementById('pago-fecha');
+        const selSerie   = document.getElementById('pago-punto-emision');
+        if (!inputFecha || !selSerie) return;
+        inputFecha.addEventListener('change', () => {
+            if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', enganchar);
+    } else {
+        enganchar();
+    }
+})();

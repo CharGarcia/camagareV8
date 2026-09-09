@@ -275,7 +275,7 @@
 
         if (inputSec) inputSec.placeholder = 'Cargando...';
         try {
-            const resp = await fetch(`${urlBase()}/getSecuencialAjax?id_punto_emision=${idPunto}`);
+            const resp = await fetch(`${urlBase()}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('pf_fecha')?.value || '')}`);
             const json = await resp.json();
             // Re-chequear tras el await: si mientras esta respuesta viajaba se empezó
             // a cargar una proforma existente (que bloquea y fija su propio secuencial),
@@ -2458,4 +2458,23 @@
     });
 
     window.PF = PF;
+})();
+
+// Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+// de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+// Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+(function _recalcularSecuencialPorFecha() {
+    const enganchar = () => {
+        const inputFecha = document.getElementById('pf_fecha');
+        const selSerie   = document.getElementById('pf_punto');
+        if (!inputFecha || !selSerie) return;
+        inputFecha.addEventListener('change', () => {
+            if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', enganchar);
+    } else {
+        enganchar();
+    }
 })();

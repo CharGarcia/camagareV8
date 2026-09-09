@@ -405,8 +405,11 @@ class ProformasController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'Punto de emisión requerido.']);
             exit;
         }
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
         try {
-            $res = $this->service->getSiguienteSecuencial($idPunto);
+            $res = $this->service->getSiguienteSecuencial($idPunto, $fecha);
             echo json_encode(array_merge(['ok' => true], $res));
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

@@ -445,7 +445,7 @@ class ConciliacionCobrosService
 
         try {
         $secuencialService = new SecuencialService();
-        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
+        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', $linea['fecha_movimiento']);
 
         $observaciones = $this->armarObservacionesConciliacion($linea, $nombreCuenta, $montoCobrar);
 

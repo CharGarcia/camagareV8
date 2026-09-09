@@ -198,7 +198,10 @@ class TraspasosController extends BaseModuloController
         $tipo    = 'Traspasos';
 
         $secService = new \App\Services\SecuencialService();
-        $res = $secService->obtenerSiguienteSecuencial($idPunto, $tipo);
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+        $res = $secService->obtenerSiguienteSecuencial($idPunto, $tipo, $fecha);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;

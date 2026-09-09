@@ -918,19 +918,21 @@ class FacturasVentaController extends ApiBaseController
             $this->jsonError('SIN_PUNTO_EMISION', 'No hay un punto de emisión activo para registrar el cobro.', 422);
         }
 
-        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
-        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
-        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
-        $db->beginTransaction();
-        $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
-        $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
-
         // Fecha del ingreso: la web siempre la pide (campo "Fecha", precargado con
-        // hoy pero editable) — aquí es opcional y por defecto es hoy.
+        // hoy pero editable) — aquí es opcional y por defecto es hoy. Se resuelve ANTES de
+        // pedir el secuencial: con numeración por fecha de emisión, el número que toca
+        // depende del periodo al que pertenece esta fecha.
         $fechaEmisionIngreso = trim((string) ($body['fecha_emision'] ?? ''));
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaEmisionIngreso)) {
             $fechaEmisionIngreso = date('Y-m-d');
         }
+
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        $db->beginTransaction();
+        $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', $fechaEmisionIngreso);
+        $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
 
         // saldo_anterior aquí es el que espera IngresoRules (solo resta cobros ya
         // registrados, igual que registrarCobroRapidoAjax en la web) — no el

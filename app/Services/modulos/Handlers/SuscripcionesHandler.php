@@ -582,7 +582,7 @@ class SuscripcionesHandler extends BaseHandler
 
         try {
         $secuencialService = new SecuencialService();
-        $secRes            = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
+        $secRes            = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', date('Y-m-d'));
         $numeroIngreso      = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT) . '-'
                             . str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT) . '-'
                             . str_pad((string) $secRes['secuencial'], 9, '0', STR_PAD_LEFT);

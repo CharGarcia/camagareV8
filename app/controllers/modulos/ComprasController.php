@@ -1084,21 +1084,24 @@ class ComprasController extends BaseModuloController
             $pto = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
             if (!$pto) throw new \Exception("El punto de emisión no existe o está inactivo.");
             
+            // La fecha se resuelve ANTES de pedir el número: con numeración por fecha de
+            // emisión, el número que toca depende del periodo al que pertenece esa fecha.
+            $fechaEgreso = !empty($post['fecha_emision']) ? $post['fecha_emision'] : date('Y-m-d');
+
             // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el
             // INSERT final (EgresoService::registrar()): el lock de obtenerSiguienteSecuencial()
             // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
             $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
-            $rSec = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+            $rSec = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fechaEgreso);
             $secuencial = (string) ($rSec['formateado'] ?? '');
-            
+
             if (empty($secuencial)) throw new \Exception("Error al reservar correlativo para el Egreso.");
-            
+
             $est = str_pad((string)($pto['estab'] ?? '001'), 3, '0', STR_PAD_LEFT);
             $ptoCod = str_pad((string)($pto['punto'] ?? '001'), 3, '0', STR_PAD_LEFT);
             $numEgreso = "{$est}-{$ptoCod}-{$secuencial}";
-            
-            $fechaEgreso = !empty($post['fecha_emision']) ? $post['fecha_emision'] : date('Y-m-d');
+
             $idConcepto = (int) ($post['id_egreso_concepto'] ?? 0);
             $idFormaPago = (int) ($post['id_forma_pago'] ?? 0);
             $tipoOp = !empty($post['tipo_operacion_bancaria']) ? trim($post['tipo_operacion_bancaria']) : null;

@@ -516,7 +516,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <!-- 1. Fecha -->
                                             <div class="col-md-2">
                                                 <label class="x-small fw-bold text-muted mb-1">Fecha</label>
-                                                <input type="date" class="form-control form-control-sm border-primary border-opacity-10 py-0" style="height: 31px;" name="fecha_emision" value="<?= date('Y-m-d') ?>">
+                                                <input type="date" class="form-control form-control-sm border-primary border-opacity-10 py-0" style="height: 31px;" id="rv-input-fecha" name="fecha_emision" value="<?= date('Y-m-d') ?>">
                                             </div>
                                             <!-- 2. Serie Unificada -->
                                             <div class="col-md-2">
@@ -1846,7 +1846,7 @@ $totalPages = $totalPagesOriginal;
         const inputSec = document.getElementById('m-input-secuencial');
         if (inputSec) inputSec.placeholder = 'Cargando...';
         try {
-            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=factura`);
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=factura&fecha=${encodeURIComponent(document.getElementById('rv-input-fecha')?.value || '')}`);
             const json = await resp.json();
             if (json.ok) {
                 inputSec.value = json.formateado || String(json.secuencial).padStart(9, '0');
@@ -6112,9 +6112,12 @@ $totalPages = $totalPagesOriginal;
         if (!elSec) return;
         if (!idPunto) { elSec.value = ''; return; }
         elSec.value = '…';
+        // La fecha viaja siempre: si Ingresos está configurado para numerar por fecha de
+        // emisión (Empresa → Secuenciales), el número depende del periodo de esa fecha.
+        const fechaCobro = document.getElementById('fvPagoFecha')?.value || '';
         try {
             const resp = await fetch(
-                `${B_URL}/${RUTA_MODULO}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=ingresos`,
+                `${B_URL}/${RUTA_MODULO}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=ingresos&fecha=${encodeURIComponent(fechaCobro)}`,
                 { headers: _fvAjaxHeaders }
             );
             const json = await resp.json();
@@ -6423,6 +6426,42 @@ window.fvCancelarPagoTarjeta = function(ctid) {
             });
     });
 };
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _recalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('rv-input-fecha');
+            const selSerie   = document.getElementById('m-select-puntos');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _rvCobroRecalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('fvPagoFecha');
+            const selSerie   = document.getElementById('fvPagoPuntoEmision');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 </script>
 
 <?php // Fin de index.php ?>

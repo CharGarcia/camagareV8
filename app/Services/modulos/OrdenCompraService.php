@@ -93,10 +93,10 @@ class OrdenCompraService
         return $orden;
     }
 
-    public function getSiguienteSecuencial(int $idPuntoEmision): array
+    public function getSiguienteSecuencial(int $idPuntoEmision, ?string $fecha = null): array
     {
         $secService = new SecuencialService();
-        return $secService->obtenerSiguienteSecuencial($idPuntoEmision, 'Órdenes de compra');
+        return $secService->obtenerSiguienteSecuencial($idPuntoEmision, 'Órdenes de compra', $fecha);
     }
 
     public function crear(array $data, array $items): int
@@ -118,7 +118,7 @@ class OrdenCompraService
 
             // Obtener siguiente secuencial
             $secService = new SecuencialService();
-            $secResult  = $secService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Órdenes de compra');
+            $secResult  = $secService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Órdenes de compra', $data['fecha_orden'] ?? null);
 
             $data['establecimiento'] = $estabData['establecimiento'];
             $data['punto_emision']   = $estabData['punto_emision'];

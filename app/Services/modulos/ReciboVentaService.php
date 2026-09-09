@@ -820,7 +820,7 @@ class ReciboVentaService
 
         // ── Secuencial PROPIO de recibos para el mismo punto de emisión ──
         $sec = (new \App\Services\SecuencialService())
-            ->obtenerSiguienteSecuencial((int)$factura['id_punto_emision'], 'Recibos de venta');
+            ->obtenerSiguienteSecuencial((int)$factura['id_punto_emision'], 'Recibos de venta', $factura['fecha_emision'] ?? date('Y-m-d'));
         $secuencial   = $sec['formateado'];
         $numeroRecibo = ($factura['establecimiento'] ?? '') . '-' . ($factura['punto_emision'] ?? '') . '-' . $secuencial;
 

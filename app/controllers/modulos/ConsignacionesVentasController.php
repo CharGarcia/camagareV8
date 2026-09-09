@@ -860,7 +860,10 @@ class ConsignacionesVentasController extends BaseModuloController
         }
 
         $secuencialService = new \App\Services\SecuencialService();
-        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Consignaciones ventas');
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Consignaciones ventas', $fecha);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;

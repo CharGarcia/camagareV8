@@ -305,8 +305,12 @@ class ComprasController extends ApiBaseController
 
             $idConcepto = $this->resolverConceptoComprasAutomatico($db, $idEmpresa);
 
+            // La fecha se resuelve ANTES de pedir el número: con numeración por fecha de
+            // emisión, el número que toca depende del periodo al que pertenece esa fecha.
+            $fechaEgreso = trim((string) ($body['fecha_emision'] ?? '')) !== '' ? (string) $body['fecha_emision'] : date('Y-m-d');
+
             $secuencialService = new SecuencialService();
-            $rSec = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+            $rSec = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fechaEgreso);
             $secuencial = (string) ($rSec['formateado'] ?? '');
             if ($secuencial === '') {
                 throw new \RuntimeException('Error al reservar correlativo para el Egreso.');

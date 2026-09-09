@@ -585,9 +585,12 @@ async function CXC_cargarSecuencial(idPunto) {
     if (!el) return;
     if (!idPunto) { el.value = ''; return; }
     el.value = '…';
+    // La fecha viaja siempre: si Ingresos está configurado para numerar por fecha de emisión
+    // (Empresa → Secuenciales), el número depende del periodo al que pertenece esa fecha.
+    const fecha = document.getElementById('cobro-fecha')?.value || '';
     try {
         const r = await fetch(
-            `${BASE_URL}/${RUTA_MODULO_CXC}/getSecuencialAjax?id_punto_emision=${idPunto}${CXC_cobroEmpresa ? '&id_empresa=' + CXC_cobroEmpresa : ''}`,
+            `${BASE_URL}/${RUTA_MODULO_CXC}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(fecha)}${CXC_cobroEmpresa ? '&id_empresa=' + CXC_cobroEmpresa : ''}`,
             { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
         );
         const data = await r.json();
@@ -1356,3 +1359,22 @@ document.addEventListener('click', function (e) {
             : ''
     });
 });
+
+// Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+// de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+// Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+(function _cxcRecalcularSecuencialPorFecha() {
+    const enganchar = () => {
+        const inputFecha = document.getElementById('cobro-fecha');
+        const selSerie   = document.getElementById('cobro-punto-emision');
+        if (!inputFecha || !selSerie) return;
+        inputFecha.addEventListener('change', () => {
+            if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', enganchar);
+    } else {
+        enganchar();
+    }
+})();

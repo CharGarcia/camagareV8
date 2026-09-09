@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/saldos-iniciales
 tipo: modulo
 visibilidad: admin
-etiquetas: saldos iniciales, apertura, arranque, migracion, cartera inicial, stock inicial, empezar a usar el sistema
-version: 1.0
+etiquetas: saldos iniciales, apertura, arranque, migracion, cartera inicial, stock inicial, empezar a usar el sistema, numero del cobro, numero del pago, vista previa del numero, secuencial del egreso, secuencial del ingreso
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -77,9 +77,19 @@ muestran siempre el mismo pendiente y el mismo estado.
   inicial tenía una **nota de crédito** aplicada: este listado no la restaba y
   Cuentas por Cobrar sí, así que el mismo documento mostraba dos valores. Ya
   está corregido; ambas pantallas usan el mismo cálculo.
+- **Al registrar un pago, el número que se veía no era el que quedaba**: en los
+  saldos por pagar, la ventana mostraba como vista previa el siguiente número de
+  **Ingresos** en vez del de **Egresos**. El documento siempre se guardó con el
+  número correcto —el que muestra el mensaje al terminar—, pero la vista previa
+  engañaba. Ya está corregido: cada tipo consulta su propia numeración.
 
 ## Historial de cambios
 
+- **1.2** — Al registrar un **pago** de un saldo por pagar, el número que se
+  mostraba antes de guardar era el de la numeración de **Ingresos** y no la de
+  **Egresos**. Solo afectaba a la vista previa —el egreso siempre se guardó con
+  el número que le tocaba—, pero se notaba más desde que cada tipo de documento
+  puede tener su propio **modo de numeración** (ver *Empresa → Secuenciales*).
 - **1.1** — El **Pendiente** de los saldos iniciales por cobrar descuenta también
   las **notas de crédito**, igual que ya hacía con los cobros y las retenciones
   (antes solo lo hacía Cuentas por Cobrar, y las dos pantallas discrepaban). El

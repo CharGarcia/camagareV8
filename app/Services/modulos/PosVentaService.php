@@ -418,7 +418,7 @@ class PosVentaService
 
         try {
         $tipoDocSec = $tipoDocumento === 'FACTURA' ? 'Facturas de venta' : 'Recibos de venta';
-        $sec = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, $tipoDocSec);
+        $sec = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, $tipoDocSec, date('Y-m-d'));
         $secuencial = $sec['formateado'];
         $numeroDoc = $puntoInfo['cod_establecimiento'] . '-' . $puntoInfo['codigo_punto'] . '-' . $secuencial;
 
@@ -692,7 +692,7 @@ class PosVentaService
         }
 
         try {
-        $secIngreso = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Ingresos');
+        $secIngreso = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Ingresos', date('Y-m-d'));
         $secuencialIngreso = $secIngreso['formateado'];
         $numeroIngreso = $puntoInfo['cod_establecimiento'] . '-' . $puntoInfo['codigo_punto'] . '-' . $secuencialIngreso;
 

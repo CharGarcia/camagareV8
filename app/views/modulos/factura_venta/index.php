@@ -7232,9 +7232,12 @@ $totalPages = $totalPagesOriginal;
         if (!elSec) return;
         if (!idPunto) { elSec.value = ''; return; }
         elSec.value = '…';
+        // La fecha viaja siempre: si Ingresos está configurado para numerar por fecha de
+        // emisión (Empresa → Secuenciales), el número depende del periodo de esa fecha.
+        const fechaCobro = document.getElementById('fvPagoFecha')?.value || '';
         try {
             const resp = await fetch(
-                `${B_URL}/${RUTA_MODULO}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=ingresos`,
+                `${B_URL}/${RUTA_MODULO}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=ingresos&fecha=${encodeURIComponent(fechaCobro)}`,
                 { headers: _fvAjaxHeaders }
             );
             const json = await resp.json();
@@ -8049,6 +8052,24 @@ window.fvCancelarPagoNuvei = function(devRef) {
         }
     });
 })();
+    // Cambiar la fecha del documento puede cambiar su número: con numeración por fecha
+    // de emisión (Empresa → Secuenciales), cada periodo lleva su propio correlativo.
+    // Se vuelve a pedir la vista previa disparando el 'change' del selector de serie.
+    (function _fvCobroRecalcularSecuencialPorFecha() {
+        const enganchar = () => {
+            const inputFecha = document.getElementById('fvPagoFecha');
+            const selSerie   = document.getElementById('fvPagoPuntoEmision');
+            if (!inputFecha || !selSerie) return;
+            inputFecha.addEventListener('change', () => {
+                if (selSerie.value) selSerie.dispatchEvent(new Event('change'));
+            });
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enganchar);
+        } else {
+            enganchar();
+        }
+    })();
 </script>
 
 <?php // Fin de index.php ?>

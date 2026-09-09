@@ -113,7 +113,7 @@ class CuentasPorPagarService
 
         try {
         $secuencialService = new SecuencialService();
-        $secRes = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+        $secRes = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fechaPago);
         $secuencial = $secRes['formateado'];
 
         $codEst = str_pad((string) ($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);

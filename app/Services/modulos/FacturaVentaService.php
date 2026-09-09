@@ -111,7 +111,7 @@ class FacturaVentaService
 
         try {
         $secuencialService = new \App\Services\SecuencialService();
-        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
+        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', date('Y-m-d'));
 
         // Saldo anterior (cobros previos)
         $stSaldo = $db->prepare(
@@ -255,7 +255,7 @@ class FacturaVentaService
 
         try {
         $secuencialService = new \App\Services\SecuencialService();
-        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
+        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', date('Y-m-d'));
 
         // Saldo anterior (cobros previos)
         $stSaldo = $db->prepare(

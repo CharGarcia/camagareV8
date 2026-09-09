@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica
-version: 1.22
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
+version: 1.23
 orden: 5
 estado: activo
 ---
@@ -246,6 +246,58 @@ Un documento **eliminado** libera su número: vuelve a estar disponible para el
 siguiente que se emita en esa serie. Un documento **anulado**, en cambio,
 conserva el suyo.
 
+### Modo de numeración: consecutivo o por fecha de emisión
+
+Cada tipo de documento elige **cómo** se calcula su siguiente número. La opción
+está junto al número inicial, en la misma fila del tipo.
+
+| Modo | Qué hace | Cómo se ve el número |
+|---|---|---|
+| **Consecutivo** (el de siempre) | Un correlativo corrido que nunca se reinicia | `000000017` |
+| **Por fecha de emisión — Anual** | El correlativo vuelve a empezar cada año, según la fecha del documento | `202600017` (documento 17 del año 2026) |
+| **Por fecha de emisión — Mensual** | El correlativo vuelve a empezar cada mes | `202609017` (documento 17 de septiembre de 2026) |
+
+En modo **por fecha**, el periodo va como **prefijo** dentro de los mismos nueve
+dígitos de siempre: el **año siempre con 4 dígitos** y, en mensual, el **mes con
+2**. El correlativo se lleva lo que sobra — 5 dígitos en anual, 3 en mensual — así
+que el número sigue siendo único dentro de la serie y nunca se repite entre
+periodos.
+
+Eso da **99.999 documentos al año**, o **999 al mes**, por punto de emisión. Si un
+periodo llegara a quedarse corto, el número **gana un dígito** (`2026091000`) en
+vez de invadir la numeración del periodo siguiente.
+
+Todo lo demás funciona igual: dentro de cada periodo se sigue rellenando el
+primer hueco libre y respetando el número inicial configurado. Lo único que
+cambia es que el sistema **solo mira los documentos de ese mismo periodo** para
+decidir el siguiente número.
+
+**Qué tipos lo permiten.** Solo los documentos **internos**: Ingresos, Egresos,
+Traspasos, Recibos de venta, Proformas, Pedidos, Órdenes de compra,
+Importaciones, Consignaciones (ventas, retornos y facturación), Cambios de
+productos y las órdenes de servicio (car-wash, taller, servicio externo). Los
+que se envían al SRI — facturas, notas de crédito y débito, facturas de
+reembolso, guías de remisión, liquidaciones de compra y retenciones de compra —
+numeran **siempre** de forma consecutiva: su secuencial forma parte de la clave
+de acceso y esa numeración no admite reinicios. En esos tipos la opción ni
+siquiera aparece.
+
+**Al cambiar el modo, tener en cuenta:**
+
+- Solo afecta a los documentos **nuevos**. Los ya emitidos conservan su número.
+- Al cambiar la **fecha** de un documento que se está creando, su número se
+  recalcula solo, para que caiga en el periodo correcto. Una vez guardado, el
+  número queda fijo aunque después se le cambie la fecha.
+- Se puede volver a **Consecutivo** cuando se quiera: la serie retoma donde
+  estaba (si iba por el 17, sigue en el 18), sin arrastrar los números con
+  prefijo de periodo.
+- Al pasar de **mensual** a **anual** dentro del mismo año, los números nuevos
+  arrancan por debajo de los ya emitidos (`202600001` es menor que `202609017`).
+  No se repiten y no hay ningún riesgo de choque, pero durante ese año el listado
+  ordenado por número deja de coincidir con el orden cronológico. De un año al
+  siguiente no pasa: como el año va delante y completo, `202700001` siempre queda
+  por encima de cualquier número de 2026.
+
 - **Agregar un tipo puntual**: el selector **"Agregar Tipo Documento"** solo
   ofrece los tipos que todavía faltan en ese punto, sea un punto nuevo (sin
   ningún secuencial) o uno que ya tiene varios. Sirve para volver a agregar
@@ -304,6 +356,11 @@ de taxis.
   hasta ahora imprimían siempre una línea por ítem aunque el PDF saliera
   agrupado.
 
+- **1.23** — Nueva opción **Modo de numeración** por tipo de documento: además del
+  correlativo corrido de siempre, ahora se puede numerar **por fecha de emisión**,
+  reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Solo
+  para documentos internos; los que se envían al SRI siguen numerando de forma
+  consecutiva.
 - **1.21** — Se explica con ejemplos **cómo se elige el siguiente número** de un
   comprobante: el sistema rellena el primer hueco libre a partir del inicial
   configurado y, si no hay huecos, sigue al mayor emitido. Se aclara qué pasa al

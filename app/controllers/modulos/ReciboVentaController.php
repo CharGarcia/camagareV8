@@ -270,8 +270,12 @@ class ReciboVentaController extends BaseModuloController
         // todo lo demás usa la numeración propia del recibo.
         $tipoDoc = ($tipo === 'ingresos') ? 'Ingresos' : 'Recibos de venta';
 
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha = trim($_GET['fecha'] ?? '') ?: null;
+
         $secuencialService = new \App\Services\SecuencialService();
-        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, $tipoDoc);
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, $tipoDoc, $fecha);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;
@@ -918,7 +922,7 @@ class ReciboVentaController extends BaseModuloController
             // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
             $db->beginTransaction();
             $secuencialService = new \App\Services\SecuencialService();
-            $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos');
+            $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos', $data['fecha_emision'] ?? null);
 
             $stSaldo = $db->prepare(
                 "SELECT COALESCE(SUM(id2.monto_cobrado), 0)

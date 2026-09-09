@@ -307,10 +307,13 @@ class DeclaracionRetencionesController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idPunto = (int) ($_GET['id_punto_emision'] ?? 0);
+        // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
+        // (Empresa → Secuenciales); en modo consecutivo el servidor la ignora.
+        $fecha   = trim($_GET['fecha'] ?? '') ?: null;
 
         try {
             $secService = new \App\Services\SecuencialService();
-            $res = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+            $res = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fecha);
             echo json_encode(array_merge(['ok' => true], $res));
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

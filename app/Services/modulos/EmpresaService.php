@@ -744,14 +744,53 @@ class EmpresaService
         return $this->repository->deletePuntoEmision($idPunto, $idEmpresa);
     }
 
+    /**
+     * Normaliza el modo de numeración que llega del formulario a la pareja
+     * (modo, periodo) que admite la base, según lo que ese tipo de documento pueda hacer.
+     *
+     * Lo que no reconoce cae en 'consecutivo': ni un tipo electrónico ni un valor
+     * inventado deben poder quedar numerando por fecha (ver TIPOS_SIN_MODO_PERIODO).
+     *
+     * @return array{0:string,1:string|null}
+     */
+    private function normalizarModoSecuencial(string $tipo, ?string $modo, ?string $periodo): array
+    {
+        $consecutivo = [\App\repositories\SecuencialRepository::MODO_CONSECUTIVO, null];
+
+        if ($modo !== \App\repositories\SecuencialRepository::MODO_POR_FECHA) {
+            return $consecutivo;
+        }
+
+        if (!$this->secuencialRepository->tipoPermiteModoPeriodo($tipo)) {
+            throw new \Exception(
+                "\"{$tipo}\" no puede numerar por fecha de emisión: es un documento que se envía al SRI y " .
+                "su secuencial forma parte de la clave de acceso, así que su numeración no admite reinicios."
+            );
+        }
+
+        $periodo = in_array($periodo, [
+            \App\repositories\SecuencialRepository::PERIODO_ANUAL,
+            \App\repositories\SecuencialRepository::PERIODO_MENSUAL,
+        ], true) ? $periodo : \App\repositories\SecuencialRepository::PERIODO_ANUAL;
+
+        return [\App\repositories\SecuencialRepository::MODO_POR_FECHA, $periodo];
+    }
+
     public function saveSecuenciales(int $idPunto, array $secuenciales, int $idEmpresa): bool
     {
         foreach ($secuenciales as $key => $data) {
             $nombre = trim($data['nombre'] ?? '');
             $valor  = (int) ($data['valor'] ?? 1);
             if ($nombre === '') continue;
+
+            [$modo, $periodo] = $this->normalizarModoSecuencial(
+                $nombre,
+                isset($data['modo']) ? trim((string) $data['modo']) : null,
+                isset($data['periodo']) ? trim((string) $data['periodo']) : null
+            );
+
             if (is_numeric($key) && (int) $key > 0) {
-                $this->repository->updateSecuencialById((int) $key, $nombre, $valor, $idEmpresa);
+                $this->repository->updateSecuencialById((int) $key, $nombre, $valor, $idEmpresa, $modo, $periodo);
             } else {
                 // Tipo nuevo en este punto: bloquear si comparte codDoc SRI con un tipo
                 // ya configurado aquí (ej. Facturas de venta / Facturas de reembolso son
@@ -775,7 +814,7 @@ class EmpresaService
                     );
                 }
 
-                $this->repository->updateSecuencial($idPunto, $nombre, $valor, $idEmpresa);
+                $this->repository->updateSecuencial($idPunto, $nombre, $valor, $idEmpresa, $modo, $periodo);
             }
         }
         return true;
