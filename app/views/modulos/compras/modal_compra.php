@@ -503,12 +503,13 @@
                               <th class="ps-3">Fecha</th>
                               <th>Nº Egreso</th>
                               <th>Concepto / Forma</th>
-                              <th class="text-end pe-3">Monto</th>
+                              <th class="text-end">Monto</th>
+                              <th class="text-center pe-3" style="width: 40px;"></th>
                             </tr>
                           </thead>
                           <tbody id="pagoTbodyHistorial" class="small" style="font-size: 0.8rem;">
                             <tr>
-                              <td colspan="4" class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando historial...</td>
+                              <td colspan="5" class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando historial...</td>
                             </tr>
                           </tbody>
                         </table>

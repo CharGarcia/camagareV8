@@ -926,12 +926,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                 <th class="ps-3">Fecha</th>
                                                                 <th>Nº Ingreso</th>
                                                                 <th>Concepto / Forma</th>
-                                                                <th class="text-end pe-3">Monto</th>
+                                                                <th class="text-end">Monto</th>
+                                                                <th class="text-center pe-3" style="width: 40px;"></th>
                                                             </tr>
                                                         </thead>
                                                         <tbody id="fvPagoTbodyHistorial" class="small" style="font-size: 0.8rem;">
                                                             <tr>
-                                                                <td colspan="4" class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando historial...</td>
+                                                                <td colspan="5" class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando historial...</td>
                                                             </tr>
                                                         </tbody>
                                                     </table>
@@ -2554,7 +2555,7 @@ $totalPages = $totalPagesOriginal;
     function fvLimpiarTrazabilidad() {
         // Historial de Cobros
         const tbodyPagos = document.getElementById('fvPagoTbodyHistorial');
-        if (tbodyPagos) tbodyPagos.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No se han registrado cobros para esta factura.</td></tr>';
+        if (tbodyPagos) tbodyPagos.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No se han registrado cobros para esta factura.</td></tr>';
 
         const elTotalFact = document.getElementById('fvPagoTotalFactura');
         if (elTotalFact) elTotalFact.textContent = '0.00';
@@ -6792,12 +6793,12 @@ $totalPages = $totalPagesOriginal;
         alertaNueva.classList.remove('d-none');
         alertaPagada.classList.add('d-none');
         cardReg.classList.add('d-none');
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">'
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">'
             + '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...</td></tr>';
 
         if (!idFact) {
             _fvSetTarjetas(0, 0, 0, 0, 0, 0);
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">'
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">'
                 + 'Guarda la factura primero para registrar cobros.</td></tr>';
             return;
         }
@@ -6925,11 +6926,16 @@ $totalPages = $totalPagesOriginal;
                         <td><code class="text-secondary fw-bold">${cob.numero_ingreso || ''}</code></td>
                         <td><div class="fw-medium">${cob.usuario_nombre || '—'}</div>
                             <small class="text-muted" style="font-size:0.65rem;">${cob.formas_cobro || '—'}</small></td>
-                        <td class="text-end fw-bold pe-3">$ ${monto.toFixed(2)}</td>`;
+                        <td class="text-end fw-bold">$ ${monto.toFixed(2)}</td>
+                        <td class="text-center pe-3">
+                            <a href="${B_URL}/modulos/ingresos/pdf?id=${cob.id}" target="_blank" rel="noopener" class="btn btn-link btn-sm p-0 text-danger" title="Ver PDF del ingreso" onclick="event.stopPropagation()">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                            </a>
+                        </td>`;
                     tbody.appendChild(tr);
                 });
             } else {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">'
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">'
                     + 'No hay cobros registrados aún.</td></tr>';
             }
 

@@ -3478,7 +3478,7 @@ window.CMG_cargarPagosTab = async function() {
     alertaNueva.classList.remove('d-none');
     alertaPagada.classList.add('d-none');
     cardRegistro.classList.add('d-none');
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando historial...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando historial...</td></tr>';
 
     if (!idCompra || idCompra === '') {
         // Caso: Compra nueva, no se puede pagar aún
@@ -3486,7 +3486,7 @@ window.CMG_cargarPagosTab = async function() {
         document.getElementById('pagoTotalAbonado').textContent = '0.00';
         document.getElementById('pagoSaldoPendiente').textContent = '0.00';
         document.getElementById('pagoCardNc')?.classList.add('d-none');
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarda la compra para poder registrar pagos internos.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Guarda la compra para poder registrar pagos internos.</td></tr>';
         return;
     }
 
@@ -3578,9 +3578,10 @@ window.CMG_cargarPagosTab = async function() {
 
                 const tr = document.createElement('tr');
                 if (esAnulado) tr.classList.add('table-danger', 'text-decoration-line-through', 'opacity-50');
-                
+
                 const fEmis = eg.fecha_emision ? eg.fecha_emision.slice(0,10).split('-').reverse().join('/') : '—';
-                
+                const baseUrlEgreso = (typeof BASE_URL !== 'undefined' ? BASE_URL : (window.BASE_URL || ''));
+
                 tr.innerHTML = `
                     <td class="ps-3">${fEmis}</td>
                     <td>
@@ -3591,12 +3592,17 @@ window.CMG_cargarPagosTab = async function() {
                         <div class="fw-medium">${_esc(eg.concepto_nombre || '')}</div>
                         <small class="text-muted" style="font-size: 0.65rem;">${_esc(eg.formas_pago || '—')}</small>
                     </td>
-                    <td class="text-end fw-bold pe-3">$ ${montoVal.toFixed(2)}</td>
+                    <td class="text-end fw-bold">$ ${montoVal.toFixed(2)}</td>
+                    <td class="text-center pe-3">
+                        <a href="${baseUrlEgreso}/modulos/egresos/pdf?id=${eg.id_egreso}" target="_blank" rel="noopener" class="btn btn-link btn-sm p-0 text-danger" title="Ver PDF del egreso" onclick="event.stopPropagation()">
+                            <i class="bi bi-file-earmark-pdf"></i>
+                        </a>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No hay egresos ni pagos registrados aún.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No hay egresos ni pagos registrados aún.</td></tr>';
         }
 
         // Obtener y sumar las retenciones vinculadas
@@ -3671,7 +3677,7 @@ window.CMG_cargarPagosTab = async function() {
 
     } catch (e) {
         console.error('Error al renderizar pestaña de pagos:', e);
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-danger">Fallo al cargar detalles: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">Fallo al cargar detalles: ${e.message}</td></tr>`;
     }
 };
 
