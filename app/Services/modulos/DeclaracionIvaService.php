@@ -995,9 +995,7 @@ class DeclaracionIvaService
         $valoresCasilleros['499'] = $liq499;
 
         // Casilleros editables sin columna propia (610-614, 622, 623, 898…): su único lugar de
-        // guardado es este snapshot. Se aplican al final, después de los que sí tienen columna,
-        // y se vuelven a resolver las fórmulas que dependan de ellos (620 = 601-…+610+…).
-        $ajustesExtra = [];
+        // guardado es este snapshot.
         foreach ((array) ($data['ajustes'] ?? []) as $codigo => $valor) {
             $codigo = (string) $codigo;
             if ($valor === '' || $valor === null || !preg_match('/^\d{3}$/', $codigo)) {
@@ -1007,11 +1005,20 @@ class DeclaracionIvaService
                 continue; // esos ya se resolvieron arriba, con su columna propia
             }
             $valoresCasilleros[$codigo] = round((float) $valor, 2);
-            $ajustesExtra[$codigo] = $valoresCasilleros[$codigo];
         }
-        if ($ajustesExtra) {
-            $valoresCasilleros = $this->resolverFormulasEstructura($estructura, $valoresCasilleros);
-        }
+
+        // Se resuelven las fórmulas SIEMPRE, al final: getResumenCompleto() hace lo mismo en su
+        // último paso, así que este es el único modo de que el snapshot guardado sea exactamente
+        // lo que el formulario muestra (y no un valor intermedio anterior a las fórmulas).
+        $valoresCasilleros = $this->resolverFormulasEstructura($estructura, $valoresCasilleros);
+
+        // El egreso se paga por el casillero 902 tal como queda en el formulario. Si el usuario
+        // le configuró una fórmula (p. ej. 902 = (859-898)), esa manda sobre el cálculo interno:
+        // antes la columna total_a_pagar guardaba el neto calculado aquí mientras la pantalla
+        // mostraba el resultado de la fórmula, y el egreso salía por un importe distinto al que
+        // el usuario estaba viendo. Sin fórmula en el 902 nada cambia: el recálculo no lo toca y
+        // sigue mandando el ajuste manual o el neto calculado.
+        $totalAPagar = round((float) ($valoresCasilleros['902'] ?? $totalAPagar), 2);
 
         $toSave = [
             'id_empresa'                   => $idEmpresa,

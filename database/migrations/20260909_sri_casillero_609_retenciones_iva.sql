@@ -26,15 +26,20 @@
 -- Ejecutar completo en pgAdmin (idempotente: no duplica si ya existe).
 -- ============================================================================
 
+-- Columnas que este INSERT necesita, por si la base viene de una versión previa.
+ALTER TABLE sri_casilleros_etiquetas ADD COLUMN IF NOT EXISTS eliminado BOOLEAN DEFAULT FALSE;
+ALTER TABLE sri_casilleros_etiquetas ADD COLUMN IF NOT EXISTS fuente_valor VARCHAR(50) DEFAULT 'documentos';
+ALTER TABLE sri_casilleros_etiquetas ADD COLUMN IF NOT EXISTS editable BOOLEAN NOT NULL DEFAULT FALSE;
+
 INSERT INTO sri_casilleros_etiquetas (
-    seccion, orden, orden_seccion, indent, bold, tipo,
+    seccion, orden, indent, bold, tipo,
     casillero_bruto, formula_bruto,
     casillero_neto,  formula_neto,
     casillero_impuesto, formula_impuesto,
     descripcion, fuente_valor, editable, eliminado
 )
 SELECT
-    '600_CRED', 185, 0, 0, FALSE, 'valor',
+    '600_CRED', 185, 0, FALSE, 'valor',
     '609', '',
     '',    '',
     '',    '',

@@ -38,7 +38,13 @@ class DeclaracionIvaRules
         if (!empty($declaracion['id_egreso'])) {
             throw new Exception('Esta declaración ya tiene un egreso generado.');
         }
-        if ((float) ($declaracion['iva_a_pagar'] ?? 0) <= 0.0) {
+        // Se valida el MISMO importe con el que se va a generar el egreso
+        // (DeclaracionIvaService::generarEgreso usa total_a_pagar, es decir el casillero 902 tal
+        // como queda en el formulario). Validar iva_a_pagar dejaba bloqueado el egreso cuando el
+        // 902 tiene una fórmula que da un valor mayor que el neto calculado internamente.
+        // El fallback a iva_a_pagar cubre las declaraciones guardadas antes de existir la columna.
+        $aPagar = (float) ($declaracion['total_a_pagar'] ?? $declaracion['iva_a_pagar'] ?? 0);
+        if ($aPagar <= 0.0) {
             throw new Exception('Esta declaración no tiene valor a pagar; no se puede generar un egreso.');
         }
     }

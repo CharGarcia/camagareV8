@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
 etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, formula, suma de casilleros, casillero en blanco, no calcula
-version: 1.5
+version: 1.6
 orden: 10
 estado: activo
 ---
@@ -169,6 +169,24 @@ valen cero, que es el caso normal.
 Cualquier casillero que se marque como *editable* en *Configuración → Casilleros
 SRI* se comporta así, sin necesidad de tocar el sistema.
 
+## El importe del egreso
+
+El egreso del pago se genera por el valor del casillero **902 (Total impuesto a
+pagar)** tal como aparece en el formulario. Es decir:
+
+- Si el 902 tiene una fórmula configurada (por ejemplo `902 = (859-898)`), manda
+  el resultado de esa fórmula.
+- Si no tiene fórmula pero usted escribió un valor en el campo, manda ese.
+- Si no hay ni fórmula ni valor escrito, manda el neto que calcula el sistema
+  (IVA en ventas − crédito tributario − retenciones).
+
+En el modal de **Generar Egreso** ese importe llega precargado y todavía se puede
+cambiar a mano, por si hubo un abono previo u otro ajuste.
+
+El asiento contable es distinto: cuadra contra el neto calculado por el sistema,
+porque tiene que cerrar contra las cuentas de IVA en ventas, crédito tributario y
+retenciones.
+
 ## Saldo a favor
 
 Cuando el periodo termina con **saldo a favor**, el sistema lo arrastra
@@ -201,6 +219,10 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 
 ## Historial de cambios
 
+- **1.6** — El egreso se genera por el casillero 902 tal como se ve en el formulario: si el
+  902 tiene fórmula configurada, esa manda sobre el neto calculado internamente. Antes la
+  pantalla mostraba el resultado de la fórmula y el egreso salía por otro importe, y además
+  quedaba bloqueado cuando el neto interno era cero.
 - **1.5** — Se agregan a la estructura los casilleros de ajuste que faltaban (623, 622,
   610 a 614 y 898), con las descripciones del formulario oficial. Ahora cualquier casillero
   marcado como editable se guarda con la declaración y se exporta al Excel, no solo los seis

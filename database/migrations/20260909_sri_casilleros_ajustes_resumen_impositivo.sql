@@ -29,18 +29,23 @@
 -- Ejecutar completo en pgAdmin (idempotente: no duplica si ya existen).
 -- ============================================================================
 
+-- Columnas que estos INSERT necesitan, por si la base viene de una versión previa.
+ALTER TABLE sri_casilleros_etiquetas ADD COLUMN IF NOT EXISTS eliminado BOOLEAN DEFAULT FALSE;
+ALTER TABLE sri_casilleros_etiquetas ADD COLUMN IF NOT EXISTS fuente_valor VARCHAR(50) DEFAULT 'documentos';
+ALTER TABLE sri_casilleros_etiquetas ADD COLUMN IF NOT EXISTS editable BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- Casilleros del RESUMEN IMPOSITIVO, en el orden del formulario oficial.
 INSERT INTO sri_casilleros_etiquetas (
-    seccion, orden, orden_seccion, indent, bold, tipo,
+    seccion, orden, indent, bold, tipo,
     casillero_bruto, formula_bruto, casillero_neto, formula_neto,
     casillero_impuesto, formula_impuesto,
     descripcion, fuente_valor, editable, eliminado
 )
-SELECT ref.seccion, ref.orden - 1, COALESCE(ref.orden_seccion, 0), 1, FALSE, 'valor',
+SELECT ref.seccion, ref.orden - 1, 1, FALSE, 'valor',
        nuevo.codigo, '', '', '', '', '',
        nuevo.descripcion, 'documentos', TRUE, FALSE
 FROM (
-    SELECT seccion, orden, orden_seccion
+    SELECT seccion, orden
     FROM sri_casilleros_etiquetas
     WHERE eliminado = FALSE
       AND '620' IN (COALESCE(casillero_bruto, ''), COALESCE(casillero_neto, ''), COALESCE(casillero_impuesto, ''))
@@ -66,17 +71,17 @@ ORDER BY nuevo.secuencia;
 
 -- Casillero 898: imputación al pago (solo aplica a declaraciones sustitutivas).
 INSERT INTO sri_casilleros_etiquetas (
-    seccion, orden, orden_seccion, indent, bold, tipo,
+    seccion, orden, indent, bold, tipo,
     casillero_bruto, formula_bruto, casillero_neto, formula_neto,
     casillero_impuesto, formula_impuesto,
     descripcion, fuente_valor, editable, eliminado
 )
-SELECT ref.seccion, ref.orden - 1, COALESCE(ref.orden_seccion, 0), 1, FALSE, 'valor',
+SELECT ref.seccion, ref.orden - 1, 1, FALSE, 'valor',
        '898', '', '', '', '', '',
        'Detalle de imputación al pago (para declaraciones sustitutivas): Impuesto',
        'documentos', TRUE, FALSE
 FROM (
-    SELECT seccion, orden, orden_seccion
+    SELECT seccion, orden
     FROM sri_casilleros_etiquetas
     WHERE eliminado = FALSE
       AND '902' IN (COALESCE(casillero_bruto, ''), COALESCE(casillero_neto, ''), COALESCE(casillero_impuesto, ''))
@@ -89,9 +94,32 @@ WHERE NOT EXISTS (
       AND '898' IN (COALESCE(x.casillero_bruto, ''), COALESCE(x.casillero_neto, ''), COALESCE(x.casillero_impuesto, ''))
 );
 
--- Verificación: deben aparecer los 8 casilleros, cada uno una sola vez.
-SELECT casillero_bruto, seccion, orden, editable, descripcion
-FROM sri_casilleros_etiquetas
-WHERE eliminado = FALSE
-  AND casillero_bruto IN ('610', '611', '612', '613', '614', '622', '623', '898')
-ORDER BY seccion, orden, id;
+-- ----------------------------------------------------------------------------
+-- Verificación: los 8 casilleros, existieran antes o se acaben de crear.
+-- "filas" debe ser 1 en todos. Si alguno sale con editable = false es porque ya
+-- tenía su fila creada de antes y esta migración NO la pisa (respeta la
+-- configuración existente): ese campo no se podrá escribir en el formulario
+-- hasta marcarlo, con el UPDATE opcional del final de este archivo.
+-- ----------------------------------------------------------------------------
+SELECT c.codigo,
+       count(e.id)                        AS filas,
+       min(e.seccion)                     AS seccion,
+       min(e.orden)                       AS orden,
+       bool_or(e.editable)                AS editable,
+       min(e.descripcion)                 AS descripcion
+FROM (VALUES ('610'), ('611'), ('612'), ('613'), ('614'), ('622'), ('623'), ('898')) AS c(codigo)
+LEFT JOIN sri_casilleros_etiquetas e
+       ON e.eliminado = FALSE
+      AND c.codigo IN (COALESCE(e.casillero_bruto, ''), COALESCE(e.casillero_neto, ''), COALESCE(e.casillero_impuesto, ''))
+GROUP BY c.codigo
+ORDER BY c.codigo;
+
+-- ----------------------------------------------------------------------------
+-- OPCIONAL — solo si la verificación de arriba muestra alguno con editable = false
+-- y usted quiere poder escribir en él. Descomente y ejecute:
+-- ----------------------------------------------------------------------------
+-- UPDATE sri_casilleros_etiquetas
+--    SET editable = TRUE, updated_at = CURRENT_TIMESTAMP
+--  WHERE eliminado = FALSE
+--    AND editable = FALSE
+--    AND COALESCE(casillero_bruto, '') IN ('610', '611', '612', '613', '614', '622', '623', '898');
