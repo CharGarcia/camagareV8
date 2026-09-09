@@ -132,17 +132,19 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 </script>
 <style>
     
-    /* Agrupación de íconos en móvil */
+    /* Agrupación de íconos en móvil. Fichas compactas: con minmax() entran 4 por
+       fila en un móvil normal (antes 3 fijas y mucho más altas) y suben solas a 5
+       en pantallas anchas, sin media queries. */
     .cmg-mobile-icons-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+        gap: 0.5rem;
         text-align: center;
     }
     .cmg-mobile-icons-grid a {
         background: #f8f9fa;
         border-radius: 0.5rem;
-        padding: 0.75rem;
+        padding: 0.45rem 0.25rem;
         color: var(--bs-primary) !important;
         display: flex;
         flex-direction: column;
@@ -150,15 +152,27 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         text-decoration: none;
         border: 1px solid #dee2e6;
         position: relative;
+        overflow: hidden;
     }
     .cmg-mobile-icons-grid a i {
-        font-size: 1.5rem !important;
-        margin-bottom: 0.25rem;
+        font-size: 1.15rem !important;
+        margin-bottom: 0.15rem;
+    }
+    /* El rótulo va en una sola línea: con la ficha estrecha, un texto largo
+       ("WhatsApp", "Liquida.") partiría en dos y descuadraría el alto de la fila. */
+    .cmg-mobile-icons-grid a small {
+        font-size: 0.62rem;
+        line-height: 1.1;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .cmg-mobile-icons-grid a span.badge {
-        font-size: 0.7rem !important;
-        top: 5px !important;
-        right: 5px !important;
+        font-size: 0.55rem !important;
+        padding: 0.15em 0.35em;
+        top: 3px !important;
+        right: 3px !important;
         transform: none !important;
         left: auto !important;
     }
