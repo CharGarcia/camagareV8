@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa
-version: 1.2
+etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -43,6 +43,11 @@ documento de fondo ya lo tiene seleccionado; cierre la ficha cuando termine.
 | Teléfono, correo | No | Contacto |
 | Parte relacionada | No | Marque si lo es. Afecta a la declaración del anexo |
 | Estado | Sí | Activo o inactivo |
+
+Razón social, nombre comercial y dirección admiten hasta **300 caracteres**, el
+máximo que el SRI permite en un comprobante electrónico. Si un texto llega más
+largo —por ejemplo desde una factura descargada del SRI— se guarda recortado a
+ese largo en lugar de rechazar el registro.
 
 ## Datos de pago
 
@@ -90,10 +95,15 @@ Antes de hacer nada le muestra **cuántos pagos son y por qué monto total**, co
 detalle de los documentos, y pide confirmación.
 
 A diferencia del pago automático en caliente, aquí se paga el **saldo real** de
-cada factura (total − retenciones − notas de crédito + notas de débito), el mismo
-que muestra Cuentas por Pagar. Por eso sí funciona con proveedores a los que se
-les retiene. Quedan fuera las facturas sin saldo y las que no entran en el rango
-de monto configurado; el aviso le dice cuántas son.
+cada factura (total + valores de terceros − retenciones − notas de crédito +
+notas de débito), el mismo que muestra Cuentas por Pagar. Por eso sí funciona con
+proveedores a los que se les retiene. Quedan fuera las facturas sin saldo y las
+que no entran en el rango de monto configurado; el aviso le dice cuántas son.
+
+En las **planillas de luz y agua**, ese saldo incluye los rubros que la
+distribuidora recauda para terceros (bomberos, tasa de basura), que no forman
+parte del importe declarado al SRI pero sí se transfieren. Ver *Planillas de luz
+y agua: valores de terceros* en el manual de Compras.
 
 Cada pago se registra por separado: si uno falla —por ejemplo, porque su período
 contable está cerrado— los demás igual se generan y se le informa cuál falló y por
@@ -198,9 +208,21 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
   crear egresos.
 - **Se generaron menos pagos de los esperados**: el aviso indica cuántas facturas
   quedaron fuera por no tener saldo o por caer fuera del rango de monto.
+- **Una factura del SRI no se registraba por "value too long"**: la dirección o la
+  razón social del emisor venía más larga que el campo. Ya no bloquea la carga;
+  ver *Descargas del SRI → Errores frecuentes*.
 
 ## Historial de cambios
 
+- **1.4** — Razón social, nombre comercial y dirección aceptan hasta 300
+  caracteres (antes 200, 200 y 150). Un texto más largo se recorta en vez de
+  impedir que el proveedor se cree, que era lo que hacía fallar el registro
+  automático de facturas descargadas del SRI.
+- **1.3** — El **pago automático** (tanto el de las descargas del SRI como el
+  botón *Generar pagos pendientes*) ya cubre los **valores de terceros** de las
+  planillas de luz y agua. Antes pagaba solo el importe declarado al SRI y la
+  planilla quedaba con unos centavos pendientes. El **saldo por pagar** del
+  resumen comercial de la ficha se calcula con el mismo criterio.
 - **1.2** — El buscador del listado cubre todas las columnas (incluidas banco,
   tipo de identificación, tipo de empresa, provincia y ciudad), por palabras y sin
   tildes; nuevos filtros `banco:` y `tipo_id:`, y `estado:`/`relacionado:` ya

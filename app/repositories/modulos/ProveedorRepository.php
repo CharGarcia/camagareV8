@@ -340,8 +340,13 @@ class ProveedorRepository extends BaseRepository
                 ),
                 docs AS (
                     -- Facturas de compra
+                    -- total = lo declarado al SRI (base del total comprado); el saldo por
+                    -- pagar suma además total_terceros: los rubros que las planillas de
+                    -- luz/agua recaudan para terceros (bomberos, tasa de basura), fuera del
+                    -- importeTotal pero pagados igual. Mismo criterio que Egresos y CxP.
                     SELECT c.importe_total                                          AS total,
                            c.importe_total
+                             + COALESCE(c.total_terceros, 0)
                              - COALESCE(pg.total_pagado, 0)
                              - COALESCE(rt.total_retenido, 0)
                              - COALESCE(nn.total_nc, 0)
@@ -457,15 +462,19 @@ class ProveedorRepository extends BaseRepository
             ':id_empresa'         => $data['id_empresa'],
             ':id_usuario'         => $data['id_usuario'],
             ':created_by'         => $data['created_by'],
-            ':razon_social'       => $data['razon_social'],
-            ':nombre_comercial'   => $data['nombre_comercial'] ?? null,
+            // Los campos de texto se capan al largo real de su columna: cuando el
+            // proveedor nace de un XML del SRI (registro automático de compras) la
+            // razón social o la dirección pueden venir más largas que la columna y
+            // PostgreSQL abortaría el INSERT con SQLSTATE[22001].
+            ':razon_social'       => $this->caparTexto('razon_social', $data['razon_social']),
+            ':nombre_comercial'   => $this->caparTexto('nombre_comercial', $data['nombre_comercial'] ?? null),
             ':tipo_id_proveedor'  => $data['tipo_id_proveedor'],
-            ':identificacion'     => $data['identificacion'],
-            ':email'              => $data['email'] ?? null,
-            ':direccion'          => $data['direccion'] ?? null,
-            ':provincia'          => $data['provincia'] ?? null,
-            ':ciudad'             => $data['ciudad'] ?? null,
-            ':telefono'           => $data['telefono'] ?? null,
+            ':identificacion'     => $this->caparTexto('identificacion', $data['identificacion']),
+            ':email'              => $this->caparTexto('email', $data['email'] ?? null),
+            ':direccion'          => $this->caparTexto('direccion', $data['direccion'] ?? null),
+            ':provincia'          => $this->caparTexto('provincia', $data['provincia'] ?? null),
+            ':ciudad'             => $this->caparTexto('ciudad', $data['ciudad'] ?? null),
+            ':telefono'           => $this->caparTexto('telefono', $data['telefono'] ?? null),
             ':tipo_empresa'       => $data['tipo_empresa'] ?? null,
             ':plazo'              => $data['plazo'] ?? 0,
             ':unidad_tiempo'      => $data['unidad_tiempo'] ?? 'DIAS',

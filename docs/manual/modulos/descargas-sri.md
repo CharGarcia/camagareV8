@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.1
+version: 1.6
 orden: 50
 estado: activo
 ---
@@ -85,9 +85,22 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   del sobre de autorización. El lector exigía que el comprobante empezara justo
   en la declaración `<?xml`, así que descartaba el archivo completo. Ya se
   admiten esos espacios; vuelva a subir el archivo.
+- **"XML obtenido pero error en registro: value too long for type character
+  varying(150)"**: el comprobante traía un dato más largo de lo que aceptaba la
+  columna donde se guarda —normalmente la **dirección o la razón social del
+  proveedor**, que el SRI admite hasta 300 caracteres. El XML se descargaba bien
+  pero el documento no llegaba a registrarse. Ya no ocurre: el sistema recorta el
+  texto al largo que admite el campo en lugar de rechazar el comprobante
+  completo. Con la actualización de base de datos aplicada, los datos se guardan
+  completos (hasta 300 caracteres); sin ella, la dirección se guarda recortada
+  pero la factura se registra igual.
 
 ## Historial de cambios
 
+- **1.6** — Un comprobante ya no se queda sin registrar porque un dato del emisor
+  (dirección, razón social, nombre comercial o descripción de un ítem) venga más
+  largo de lo que aceptaba el campo: el texto se recorta al largo del campo en
+  vez de rechazar la carga entera. Ver *Errores frecuentes*.
 - **1.5** — La carga de XML acepta sobres de autorización en los que el
   comprobante va separado de la etiqueta `<comprobante>` por saltos de línea o
   espacios (antes el archivo se rechazaba entero con estado ERROR). Además, las

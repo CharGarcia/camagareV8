@@ -871,7 +871,12 @@ class CuentasPorPagarRepository extends BaseRepository
                        p.identificacion      AS proveedor_ruc,
                        COALESCE(p.email,'')  AS proveedor_email,
                        c.fecha_emision,
-                       c.importe_total,
+                       -- Total pagable = importe declarado al SRI + rubros recaudados para
+                       -- terceros (bomberos, tasa de basura de las planillas de servicios
+                       -- basicos), que no van dentro del importeTotal pero si se pagan.
+                       -- Sin sumarlos aqui, el listado ofrece pagar un saldo que la
+                       -- validacion del pago rechaza por superar el saldo del documento.
+                       c.importe_total + COALESCE(c.total_terceros, 0) AS importe_total,
                        CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) AS numero_documento,
                        COALESCE((
                            SELECT SUM(ed.monto_pagado)

@@ -1109,8 +1109,14 @@ class ComprasController extends BaseModuloController
             $tipoOp = !empty($post['tipo_operacion_bancaria']) ? trim($post['tipo_operacion_bancaria']) : null;
             $numDoc = "{$compra['establecimiento_prov']}-{$compra['punto_emision_prov']}-{$compra['secuencial_prov']}";
             
+            // Total real del documento: importe_total es lo declarado al SRI, pero las
+            // planillas de servicios básicos traen además rubros recaudados para terceros
+            // (bomberos, tasa de basura) que no están ahí dentro y sí se pagan. El saldo
+            // por pagar los incluye, igual que en Egresos y Cuentas por Pagar.
+            $totalDocumento = (float)$compra['importe_total'] + (float)($compra['total_terceros'] ?? 0);
+
             // Validar saldo anterior
-            $saldoAnterior = (float)($post['saldo_actual'] ?? $compra['importe_total']);
+            $saldoAnterior = (float)($post['saldo_actual'] ?? $totalDocumento);
             
             $dataEgreso = [
                 'id_empresa'         => $idEmpresa,
@@ -1136,7 +1142,7 @@ class ComprasController extends BaseModuloController
                         'numero_documento'         => $numDoc,
                         'fecha_documento'          => $compra['fecha_emision'] ?? null,
                         'descripcion'              => \App\Helpers\TiposComprobanteCompra::nombre($compra['tipo_comprobante'] ?? null) . " #{$numDoc}",
-                        'monto_documento'          => (float)$compra['importe_total'],
+                        'monto_documento'          => $totalDocumento,
                         'saldo_anterior'           => $saldoAnterior,
                         'monto_pagado'             => $montoPagar,
                         'saldo_actual'             => max(0.0, $saldoAnterior - $montoPagar)

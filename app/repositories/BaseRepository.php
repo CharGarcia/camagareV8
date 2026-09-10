@@ -156,6 +156,68 @@ abstract class BaseRepository
         return $cache[$clave];
     }
 
+    /**
+     * Capa un valor de texto al largo real de la columna VARCHAR donde se va a
+     * guardar.
+     *
+     * PostgreSQL NO trunca solo (MySQL en modo laxo sí): un string más largo que
+     * la columna aborta el INSERT entero con SQLSTATE[22001] "value too long for
+     * type character varying(N)". Cuando el dato viene de un tercero —el XML del
+     * SRI, una migración, un archivo importado— no hay forma de garantizar su
+     * largo, así que el repository lo capa antes de escribir.
+     *
+     * El largo se lee del catálogo (cacheado por proceso, igual que
+     * columnaExiste()) en vez de fijarlo en el código: así el capado sigue al
+     * esquema y no queda desfasado cuando el ALTER que ensancha la columna se
+     * despliega después que este código. Devuelve el valor intacto si la columna
+     * no existe o no tiene límite (text).
+     */
+    public function caparTexto(string $columna, $valor, ?string $tabla = null): ?string
+    {
+        if ($valor === null) {
+            return null;
+        }
+
+        $valor = (string) $valor;
+        if ($valor === '') {
+            return '';
+        }
+
+        $max = $this->longitudMaxima($tabla ?? $this->table, $columna);
+        if ($max === null || mb_strlen($valor) <= $max) {
+            return $valor;
+        }
+        return mb_substr($valor, 0, $max);
+    }
+
+    /**
+     * character_maximum_length de una columna, o null si no aplica (columna de
+     * tipo text, numérica o inexistente). Cacheado por proceso; si el catálogo
+     * no responde devuelve null, con lo que no se capa nada —el comportamiento
+     * de siempre— en vez de recortar por error.
+     */
+    protected function longitudMaxima(string $tabla, string $columna): ?int
+    {
+        static $cache = [];
+        $clave = $tabla . '.' . $columna;
+        if (array_key_exists($clave, $cache)) {
+            return $cache[$clave];
+        }
+
+        try {
+            $st = $this->db->prepare(
+                "SELECT character_maximum_length FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = :t AND column_name = :c"
+            );
+            $st->execute([':t' => $tabla, ':c' => $columna]);
+            $len = $st->fetchColumn();
+            $cache[$clave] = ($len === false || $len === null) ? null : (int) $len;
+        } catch (\Throwable $e) {
+            $cache[$clave] = null;
+        }
+        return $cache[$clave];
+    }
+
     public function getDb(): \PDO
     {
         return $this->db;

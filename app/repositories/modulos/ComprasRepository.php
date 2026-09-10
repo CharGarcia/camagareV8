@@ -966,6 +966,21 @@ class ComprasRepository extends BaseRepository
         );
     }
 
+    /**
+     * Total recaudado por cuenta de terceros de una compra (ver updateTotalTerceros).
+     * Lo consulta el registro automático desde el SRI para pagar el valor real de la
+     * planilla y no solo el importe declarado.
+     */
+    public function getTotalTerceros(int $idCompra): float
+    {
+        $row = $this->query(
+            "SELECT COALESCE(total_terceros, 0) FROM compras_cabecera WHERE id = ?",
+            [$idCompra]
+        )->fetchColumn();
+
+        return $row === false ? 0.0 : (float) $row;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // INSERTS — FACTURA DE REEMBOLSO RECIBIDA
     // ─────────────────────────────────────────────────────────────────────────

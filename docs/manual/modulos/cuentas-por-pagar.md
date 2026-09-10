@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales
-version: 1.5
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente
+version: 1.6
 orden: 50
 estado: activo
 ---
@@ -104,6 +104,11 @@ cada proveedor, y no tres líneas que hay que compensar mentalmente.
 Se registra desde el propio listado. Equivale a crear un egreso: reduce el saldo
 del documento, deja constancia de la forma de pago y genera el asiento contable.
 
+En las **planillas de luz y agua**, el saldo del documento incluye los rubros que
+la distribuidora recauda para terceros (bomberos, tasa de basura): no están
+dentro del importe declarado al SRI, pero sí se pagan. Ver *Planillas de luz y
+agua: valores de terceros* en el manual de Compras.
+
 También queda disponible el **historial de pagos** de cada documento, útil cuando
 una factura se pagó en varias partes.
 
@@ -131,6 +136,10 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.6** — Al **registrar el pago** de una planilla de luz o agua, el saldo que
+  se valida ya incluye los **valores de terceros** (bomberos, tasa de basura). El
+  listado sí los mostraba, pero al guardar el pago se rechazaba el monto por
+  "superar el saldo pendiente"; ahora ambos usan la misma cifra.
 - **1.5** — Consolidado, fase 2: desde la matriz ya se puede **registrar el
   pago** de una factura de compra, liquidación, importación o saldo inicial de
   otra sucursal. El egreso se registra en los libros de la sucursal dueña (sus

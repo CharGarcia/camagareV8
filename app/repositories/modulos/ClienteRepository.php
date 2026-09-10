@@ -421,15 +421,19 @@ class ClienteRepository extends BaseRepository
         $st->execute([
             ':id_empresa'       => $data['id_empresa'],
             ':id_usuario'       => $data['id_usuario'],
-            ':nombre'           => $data['nombre'],
+            // Los campos de texto se capan al largo real de su columna: cuando el
+            // cliente nace de un XML del SRI (registro automático de ventas) el
+            // nombre o la dirección pueden venir más largos que la columna y
+            // PostgreSQL abortaría el INSERT con SQLSTATE[22001].
+            ':nombre'           => $this->caparTexto('nombre', $data['nombre']),
             ':tipo_id'          => $data['tipo_id'],
-            ':identificacion'   => $data['identificacion'],
-            ':telefono'         => $data['telefono'],
-            ':email'            => $data['email'],
-            ':direccion'        => $data['direccion'],
+            ':identificacion'   => $this->caparTexto('identificacion', $data['identificacion']),
+            ':telefono'         => $this->caparTexto('telefono', $data['telefono']),
+            ':email'            => $this->caparTexto('email', $data['email']),
+            ':direccion'        => $this->caparTexto('direccion', $data['direccion']),
             ':plazo'            => $data['plazo'] ?? 0,
-            ':provincia'        => $data['provincia'],
-            ':ciudad'           => $data['ciudad'],
+            ':provincia'        => $this->caparTexto('provincia', $data['provincia']),
+            ':ciudad'           => $this->caparTexto('ciudad', $data['ciudad']),
             ':status'           => $data['status'] ?? 1,
             ':id_vendedor'      => $data['id_vendedor'],
             ':id_forma_pago_sri' => $data['id_forma_pago_sri'] ?? null,

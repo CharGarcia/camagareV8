@@ -457,6 +457,15 @@
                     <h4 class="fw-bold text-warning mb-0">$ <span id="pagoTotalRetencion">0.00</span></h4>
                   </div>
                 </div>
+                <!-- Valores recaudados por cuenta de terceros (planillas de luz/agua:
+                     bomberos, tasa de basura). No están dentro de importe_total pero sí
+                     se pagan, así que suman al saldo. Solo aparece si la planilla los trae. -->
+                <div class="col-6 col-md d-none" id="pagoCardTerceros">
+                  <div class="border rounded-3 p-2 bg-secondary bg-opacity-10 border-secondary border-opacity-25 text-center shadow-sm">
+                    <div class="text-secondary mb-0 fw-semibold" style="font-size: 0.75rem;">Valores de Terceros</div>
+                    <h4 class="fw-bold text-secondary mb-0">$ <span id="pagoTotalTerceros">0.00</span></h4>
+                  </div>
+                </div>
                 <!-- Notas de Crédito (solo compras que las tienen) -->
                 <div class="col-6 col-md d-none" id="pagoCardNc">
                   <div class="border rounded-3 p-2 bg-info bg-opacity-10 border-info border-opacity-25 text-center shadow-sm">

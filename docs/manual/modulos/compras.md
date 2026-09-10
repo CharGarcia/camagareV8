@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica
-version: 2.7
+etiquetas: compras, compra, factura de compra, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
+version: 2.8
 orden: 20
 estado: activo
 ---
@@ -256,11 +256,18 @@ solo y los totaliza aparte. En la compra se ven así:
 | (+) Valores de terceros | 2.41 — bomberos y tasa de basura |
 | **TOTAL A PAGAR** | **69.00** — lo que se transfiere al proveedor |
 
-Ese **total a pagar** es el que usan **Cuentas por Pagar** y el registro de
-**egresos**, así que la planilla se salda por su valor real y no queda un
-descuadre de centavos cada mes. El **subtotal, el IVA y el total** que se
-declaran al SRI (y que alimentan el ATS y la declaración de IVA) no cambian: los
-valores de terceros nunca se suman ahí.
+Ese **total a pagar** es el que usan **todos** los caminos por los que se paga la
+planilla: la pestaña **Pagos** de la propia compra, **Cuentas por Pagar**, el
+módulo de **Egresos** y el **pago automático** configurado en la ficha del
+proveedor. Así la planilla se salda por su valor real y no queda un descuadre de
+centavos cada mes. El **subtotal, el IVA y el total** que se declaran al SRI (y
+que alimentan el ATS y la declaración de IVA) no cambian: los valores de terceros
+nunca se suman ahí.
+
+En la pestaña **Pagos** de la compra, cuando la factura trae estos rubros aparece
+la tarjeta **Valores de Terceros** junto a las de retenciones y notas de crédito,
+y el **saldo pendiente** ya los incluye. Si la tarjeta no aparece, esa factura no
+trae valores de terceros.
 
 El detalle de cada rubro queda en la pestaña **Info Adicional** de la compra, tal
 como lo envió el proveedor, y se imprime en el PDF.
@@ -374,6 +381,14 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.8** — La pestaña **Pagos** de la compra ya toma en cuenta los **valores de
+  terceros** de las planillas de luz y agua: antes el saldo pendiente se calculaba
+  solo con el importe declarado al SRI, así que la planilla quedaba con unos
+  centavos por pagar aunque se hubiera cancelado completa (y el egreso se
+  registraba corto). Ahora aparece la tarjeta *Valores de Terceros* y el saldo los
+  incluye, igual que en Egresos y Cuentas por Pagar. Mismo arreglo en el **pago
+  automático** de la ficha del proveedor y en el pago que se genera solo al
+  descargar la factura del SRI.
 - **2.7** — Nueva pestaña **ATS** en el modal, con dos tarjetas: *Parte
   relacionada* (que estaba abajo, como sub-pestaña del detalle) y *Pago al
   exterior*, nueva — tipo de pago, país, convenio de doble tributación y

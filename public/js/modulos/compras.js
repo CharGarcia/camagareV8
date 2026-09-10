@@ -3612,6 +3612,7 @@ window.CMG_cargarPagosTab = async function() {
         document.getElementById('pagoTotalAbonado').textContent = '0.00';
         document.getElementById('pagoSaldoPendiente').textContent = '0.00';
         document.getElementById('pagoCardNc')?.classList.add('d-none');
+        document.getElementById('pagoCardTerceros')?.classList.add('d-none');
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Guarda la compra para poder registrar pagos internos.</td></tr>';
         return;
     }
@@ -3689,6 +3690,12 @@ window.CMG_cargarPagosTab = async function() {
 
         const compra = res.data;
         const totalFactura = parseFloat(compra.importe_total || 0);
+        // Valores recaudados por cuenta de terceros (contribución bomberos, tasa de
+        // basura de las planillas de servicios básicos). No están dentro de
+        // importe_total —que es el valor declarado al SRI— pero sí se transfieren al
+        // proveedor, así que suman al saldo por pagar, igual que en Egresos y en
+        // Cuentas por Pagar.
+        const totalTerceros = parseFloat(compra.total_terceros || 0) || 0;
         
         // Calcular abonos activos (ignorando los que tengan estado anulado)
         let totalAbonado = 0;
@@ -3752,13 +3759,25 @@ window.CMG_cargarPagosTab = async function() {
         // Notas de crédito que modifican esta compra (restan del saldo).
         const totalNc = parseFloat(compra.total_nc || 0);
 
-        const saldo = Math.max(0, totalFactura - totalAbonado - totalRetenido - totalNc);
+        const saldo = Math.max(0, totalFactura + totalTerceros - totalAbonado - totalRetenido - totalNc);
 
         // Actualizar paneles superiores
         document.getElementById('pagoTotalCompra').textContent = totalFactura.toFixed(2);
         if (document.getElementById('pagoTotalRetencion')) document.getElementById('pagoTotalRetencion').textContent = totalRetenido.toFixed(2);
         document.getElementById('pagoTotalAbonado').textContent = totalAbonado.toFixed(2);
         document.getElementById('pagoSaldoPendiente').textContent = saldo.toFixed(2);
+
+        // Tarjeta de Valores de Terceros (solo si la planilla los trae)
+        const cardTerceros = document.getElementById('pagoCardTerceros');
+        if (cardTerceros) {
+            if (totalTerceros > 0.001) {
+                const lblTer = document.getElementById('pagoTotalTerceros');
+                if (lblTer) lblTer.textContent = totalTerceros.toFixed(2);
+                cardTerceros.classList.remove('d-none');
+            } else {
+                cardTerceros.classList.add('d-none');
+            }
+        }
 
         // Tarjeta de Notas de Crédito (solo si hay)
         const cardNc = document.getElementById('pagoCardNc');

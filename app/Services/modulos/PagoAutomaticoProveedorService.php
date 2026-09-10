@@ -337,11 +337,18 @@ class PagoAutomaticoProveedorService
             SELECT c.id,
                    c.fecha_emision,
                    c.importe_total,
+                   COALESCE(c.total_terceros, 0)        AS total_terceros,
+                   -- Total realmente pagable: importe_total es el valor declarado al SRI;
+                   -- total_terceros son los rubros que las planillas de luz/agua recaudan
+                   -- para terceros (bomberos, tasa de basura), fuera del importeTotal pero
+                   -- pagados en la misma transferencia. Mismo criterio que Egresos y CxP.
+                   c.importe_total + COALESCE(c.total_terceros, 0) AS monto_documento,
                    {$numDocExpr}                        AS numero_documento,
                    COALESCE(rt.total_retenido, 0)       AS total_retenido,
                    COALESCE(nn.total_nc, 0)             AS total_nc,
                    COALESCE(nn.total_nd, 0)             AS total_nd,
                    c.importe_total
+                     + COALESCE(c.total_terceros, 0)
                      - COALESCE(rt.total_retenido, 0)
                      - COALESCE(nn.total_nc, 0)
                      + COALESCE(nn.total_nd, 0)         AS saldo
@@ -448,7 +455,7 @@ class PagoAutomaticoProveedorService
                     $idProveedor,
                     $idEmpresa,
                     $idUsuario,
-                    (float) $c['importe_total'],
+                    (float) $c['monto_documento'],
                     (float) $c['monto_a_pagar'],
                     $numDoc,
                     (string) $c['fecha_emision'],

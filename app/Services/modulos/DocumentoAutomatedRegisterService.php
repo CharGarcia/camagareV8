@@ -355,7 +355,11 @@ class DocumentoAutomatedRegisterService
                 if ($this->esComprapendiente($idCompra)) {
                     $msgEgreso = ' | Pendiente de aprobación: el pago se registrará cuando se apruebe.';
                 } else {
-                    $totalCompra = (float)($info->importeTotal ?? 0);
+                    // El pago cubre el total real de la planilla: el importe declarado al
+                    // SRI más los rubros recaudados para terceros (bomberos, tasa de
+                    // basura), que insertarCompra() ya guardó en total_terceros.
+                    $totalCompra = (float)($info->importeTotal ?? 0)
+                                 + $this->compraRepo->getTotalTerceros($idCompra);
                     $numDoc = (string)$it->estab . '-' . (string)$it->ptoEmi . '-' . (string)$it->secuencial;
                     $fechaEmisionDoc = $this->formatearFecha((string)$info->fechaEmision);
                     $msgEgreso = $this->generarEgresoAutomatico($idCompra, $idProv, $idEmpresa, $idUsuario, $totalCompra, $numDoc, $fechaEmisionDoc);
@@ -853,6 +857,13 @@ class DocumentoAutomatedRegisterService
         // Crear producto básico para que la venta pueda registrarse
         $codigo = !empty($codigoPrincipal) ? $codigoPrincipal : 'SRI-' . substr(md5(uniqid()), 0, 8);
         $nombre = !empty($descripcion) ? $descripcion : 'Producto SRI no mapeado';
+
+        // El SRI admite hasta 300 caracteres en <descripcion>: se capan al largo real
+        // de la columna porque PostgreSQL no trunca solo y un valor largo abortaría el
+        // registro entero del comprobante (SQLSTATE[22001]).
+        $productoRepo = new \App\repositories\modulos\ProductoRepository();
+        $nombre = $productoRepo->caparTexto('nombre', $nombre);
+        $codigo = $productoRepo->caparTexto('codigo', $codigo);
         
         // La tarifa de IVA del producto se resuelve por el codigoPorcentaje del SRI (0/4/5/6/7/8…),
         // NO por la tarifa numérica: así 0% (0), No objeto (6) y Exento (7) —que comparten tarifa 0—
