@@ -6,7 +6,7 @@ ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.2
+version: 1.3
 orden: 46
 estado: activo
 ---
@@ -61,8 +61,21 @@ El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuá
 documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
+## Períodos contables cerrados
+
+Lo que mueve inventario o contabilidad no puede tocar un período ya cerrado.
+Registrarlo (por su fecha de retorno), modificarlo y eliminarlo se rechazan si la
+fecha cae en un mes cerrado.
+
+Al modificar se revisan **las dos fechas** —la nueva y aquella con la que está
+registrado—: mover un documento de un mes cerrado a uno abierto lo alteraría
+igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
+Contables**; reabrir el período permite la operación de inmediato.
+
 ## Historial de cambios
 
+- **1.3** — El módulo respeta ahora el **cierre contable**: no se puede operar
+  sobre un retorno cuyo período esté cerrado. Antes no se comprobaba.
 - **1.2** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
   activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue

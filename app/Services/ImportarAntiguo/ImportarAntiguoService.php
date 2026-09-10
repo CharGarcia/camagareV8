@@ -186,26 +186,42 @@ class ImportarAntiguoService
         return $res;
     }
 
-    /** codDoc => ['tabla' => ..., 'anular' => fn(int $id,int $emp,int $usu)]. Solo tipos con servicio de anulación. */
+    /**
+     * codDoc => ['tabla' => ..., 'anular' => fn(int $id,int $emp,int $usu)]. Solo tipos con servicio de anulación.
+     *
+     * Todos los servicios llevan `omitirValidacionPeriodo`: se está reflejando lo
+     * que ya ocurrió en el sistema anterior —documentos anulados hace meses o
+     * años—, así que un período cerrado no puede impedir dejar el histórico igual
+     * al original. La comprobación sigue viva para lo que se anula desde la
+     * pantalla del módulo (ver App\Traits\PeriodoContableTrait).
+     */
     private function rutasAnulacion(): array
     {
         $log = new LogSistemaService();
         return [
             '01' => ['tabla' => 'ventas_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
-                (new FacturaVentaService(new FacturaVentaRepository(), new FacturaVentaRules(), $log))->anular($id, $e, $u, false);
+                $svc = new FacturaVentaService(new FacturaVentaRepository(), new FacturaVentaRules(), $log);
+                $svc->omitirValidacionPeriodo = true;
+                $svc->anular($id, $e, $u, false);
             }],
             '04' => ['tabla' => 'notas_credito_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
-                (new \App\Services\modulos\NotaCreditoService(new \App\repositories\modulos\NotaCreditoRepository(), new \App\Rules\modulos\NotaCreditoRules(), $log))->anular($id, $e, $u);
+                $svc = new \App\Services\modulos\NotaCreditoService(new \App\repositories\modulos\NotaCreditoRepository(), new \App\Rules\modulos\NotaCreditoRules(), $log);
+                $svc->omitirValidacionPeriodo = true;
+                $svc->anular($id, $e, $u);
             }],
             '06' => ['tabla' => 'guias_remision_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
                 (new \App\Services\modulos\GuiaRemisionService(new \App\repositories\modulos\GuiaRemisionRepository(), new \App\Rules\modulos\GuiaRemisionRules(), $log))->anular($id, $e, $u);
             }],
             '03' => ['tabla' => 'liquidaciones_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
-                (new \App\Services\modulos\LiquidacionCompraService(new \App\repositories\modulos\LiquidacionCompraRepository(), new \App\Rules\modulos\LiquidacionCompraRules(), $log))->anular($id, $e, $u);
+                $svc = new \App\Services\modulos\LiquidacionCompraService(new \App\repositories\modulos\LiquidacionCompraRepository(), new \App\Rules\modulos\LiquidacionCompraRules(), $log);
+                $svc->omitirValidacionPeriodo = true;
+                $svc->anular($id, $e, $u);
             }],
             '07' => ['tabla' => 'retencion_compra_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
-                $rr = new \App\repositories\modulos\RetencionCompraRepository();
-                (new \App\Services\modulos\RetencionCompraService($rr, new \App\Rules\modulos\RetencionCompraRules($rr), $log))->anular($id, $e, $u);
+                $rr  = new \App\repositories\modulos\RetencionCompraRepository();
+                $svc = new \App\Services\modulos\RetencionCompraService($rr, new \App\Rules\modulos\RetencionCompraRules($rr), $log);
+                $svc->omitirValidacionPeriodo = true;
+                $svc->anular($id, $e, $u);
             }],
         ];
     }

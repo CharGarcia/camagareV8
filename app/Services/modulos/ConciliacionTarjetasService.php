@@ -24,6 +24,8 @@ use App\Services\LogSistemaService;
  */
 class ConciliacionTarjetasService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     public function __construct(
         private ConciliacionTarjetasRepository $repository,
         private ConciliacionTarjetasRules $rules,
@@ -514,6 +516,14 @@ class ConciliacionTarjetasService
         $tolerancia = (float) ($config['tolerancia_diferencia'] ?? 0.05);
 
         $this->rules->validarCierre($cabecera, count($cruces), (float) $totales['diferencia'], $tolerancia);
+
+        // El cierre genera el asiento con la fecha de conciliación: si ese mes ya
+        // está cerrado, no cabe.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_conciliacion'] ?? null,
+            $idEmpresa,
+            'No se puede cerrar la conciliación porque el período contable de esa fecha está cerrado.'
+        );
 
         $diagnostico = $this->evaluarContabilidad($cabecera, $idEmpresa, $totales);
 

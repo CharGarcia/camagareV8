@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\RetencionCompraRepository;
+use App\Rules\modulos\RetencionCompraAdvertenciasException;
 use App\Rules\modulos\RetencionCompraRules;
 use App\Services\LogSistemaService;
 use App\Services\ClaveAccesoService;
@@ -13,6 +14,8 @@ use App\core\Database;
 
 class RetencionCompraService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private RetencionCompraRepository $repository;
     private RetencionCompraRules      $rules;
     private LogSistemaService         $logService;
@@ -25,6 +28,51 @@ class RetencionCompraService
         $this->repository = $repository;
         $this->rules      = $rules;
         $this->logService = $logService;
+    }
+
+    /**
+     * Validación previa a escribir: los errores cortan con excepción desde las
+     * Rules y las advertencias cortan aquí mientras el usuario no las confirme
+     * (`confirmar_advertencias`). Una advertencia confirmada queda registrada en
+     * la auditoría junto al documento, para que se sepa qué se aceptó y cuándo.
+     *
+     * @return string[] Advertencias aceptadas por el usuario (vacío si no hubo).
+     */
+    private function validarConNiveles(array $data): array
+    {
+        $advertencias = $this->rules->validar($data);
+
+        if (($data['origen'] ?? '') !== 'electronico') {
+            $this->validarPeriodoContable(
+                $data['fecha_emision'] ?? '',
+                (int) ($data['id_empresa'] ?? 0),
+                'No se puede registrar la retención porque el período contable de esa fecha está cerrado.'
+            );
+        }
+
+        if (!empty($advertencias) && empty($data['confirmar_advertencias'])) {
+            throw new RetencionCompraAdvertenciasException($advertencias);
+        }
+
+        return $advertencias;
+    }
+
+
+    /** Deja constancia en la auditoría de las advertencias que el usuario aceptó. */
+    private function registrarAdvertenciasAceptadas(
+        int $idUsuario,
+        int $idEmpresa,
+        int $idRetencion,
+        array $advertencias
+    ): void {
+        if (empty($advertencias)) {
+            return;
+        }
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa,
+            'CONFIRMAR_ADVERTENCIAS', 'retencion_compra_cabecera', $idRetencion,
+            null, ['advertencias' => $advertencias]
+        );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -63,7 +111,7 @@ class RetencionCompraService
 
     public function crear(array $data): int
     {
-        $this->rules->validar($data);
+        $advertenciasAceptadas = $this->validarConNiveles($data);
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['id_usuario'] ?? 0);
@@ -104,6 +152,7 @@ class RetencionCompraService
                 'CREAR', 'retencion_compra_cabecera', $idRetencion,
                 null, ['total_retenido' => $data['total_retenido'] ?? 0]
             );
+            $this->registrarAdvertenciasAceptadas($idUsuario, $idEmpresa, $idRetencion, $advertenciasAceptadas);
 
             $this->sincronizarCasilleros($idRetencion, $data);
 
@@ -132,7 +181,15 @@ class RetencionCompraService
             throw new \Exception('Solo se pueden modificar retenciones en estado borrador.');
         }
 
-        $this->rules->validar($data);
+        // La fecha que YA tenía la retención, además de la nueva: sacarla de un
+        // período cerrado también lo altera. validarConNiveles() comprueba la nueva.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? '',
+            $idEmpresa,
+            'No se puede modificar la retención porque el período contable en el que está registrada ya está cerrado.'
+        );
+
+        $advertenciasAceptadas = $this->validarConNiveles($data);
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['id_usuario'] ?? 0);
@@ -172,6 +229,7 @@ class RetencionCompraService
                 'MODIFICAR', 'retencion_compra_cabecera', $id,
                 $cabecera, ['total_retenido' => $data['total_retenido'] ?? 0]
             );
+            $this->registrarAdvertenciasAceptadas($idUsuario, $idEmpresa, $id, $advertenciasAceptadas);
 
             $this->sincronizarCasilleros($id, $data);
 
@@ -197,6 +255,14 @@ class RetencionCompraService
         if (($cabecera['estado'] ?? '') === 'anulada') {
             throw new \Exception('La retención ya está anulada.');
         }
+
+        // Anular revierte el asiento contable de la retención: si su período ya está
+        // cerrado, ese movimiento no puede tocarse.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? '',
+            $idEmpresa,
+            'No se puede anular la retención porque su período contable está cerrado.'
+        );
 
         // Verificación SRI (igual que factura de venta): si la retención está autorizada,
         // solo se puede anular internamente cuando el SRI ya NO la reporta como AUTORIZADO,
@@ -266,6 +332,14 @@ class RetencionCompraService
             throw new \Exception('No se puede eliminar una retención autorizada por el SRI.');
         }
 
+        // Igual que al anular: eliminar revierte el asiento y libera el documento de
+        // sustento, y eso no puede hacerse dentro de un período ya cerrado.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? '',
+            $idEmpresa,
+            'No se puede eliminar la retención porque su período contable está cerrado.'
+        );
+
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
@@ -326,6 +400,7 @@ class RetencionCompraService
         $totalGeneral = 0;
         $totalRenta = 0;
         $totalIva = 0;
+        $totalIsd = 0;
 
         if (isset($data['lineas']) && is_array($data['lineas'])) {
             foreach ($data['lineas'] as $i => $linea) {
@@ -336,18 +411,22 @@ class RetencionCompraService
                 $data['lineas'][$i]['valor_retenido'] = $val;
                 $totalGeneral += $val;
 
-                // Agrupar por tipo de impuesto
+                // Agrupar por tipo de impuesto. El ISD llega como 6 (tabla 16 del
+                // SRI) y como 3 en importaciones antiguas; ambos son el mismo.
                 $codImp = strtoupper((string)($linea['codigo_impuesto'] ?? ''));
                 if ($codImp === '1' || $codImp === 'RENTA') {
                     $totalRenta += $val;
                 } elseif ($codImp === '2' || $codImp === 'IVA') {
                     $totalIva += $val;
+                } elseif ($codImp === '6' || $codImp === '3' || $codImp === 'ISD') {
+                    $totalIsd += $val;
                 }
             }
         }
 
         $data['total_retenido_renta'] = round($totalRenta, 2);
         $data['total_retenido_iva']   = round($totalIva, 2);
+        $data['total_retenido_isd']   = round($totalIsd, 2);
         $data['total_retenido']       = round($totalGeneral, 2);
         return $data;
     }

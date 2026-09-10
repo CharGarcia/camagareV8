@@ -14,6 +14,8 @@ use App\core\Database;
 
 class FacturaVentaService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     /** Debe coincidir con FacturaVentaController::TABLA_BLOQUEO. */
     private const TABLA_BLOQUEO = 'ventas_cabecera';
 
@@ -570,6 +572,13 @@ class FacturaVentaService
             throw new \Exception('Solo se pueden modificar facturas en estado borrador.');
         }
 
+        $this->validarPeriodoContableAlModificar(
+            $cabecera['fecha_emision'] ?? null,
+            $data['fecha_emision'] ?? null,
+            (int) $data['id_empresa'],
+            'la factura'
+        );
+
         $this->verificarFacturaLibre($id, (int) $data['id_empresa'], (int) $data['id_usuario']);
 
         $this->validarSecuencial($data, $id);
@@ -841,6 +850,12 @@ class FacturaVentaService
 
     public function crear(array $data): int
     {
+        $this->validarPeriodoContable(
+            $data['fecha_emision'] ?? null,
+            (int) ($data['id_empresa'] ?? 0),
+            'No se puede emitir la factura porque el período contable de esa fecha está cerrado.'
+        );
+
         $this->validarSecuencial($data);
 
         // Tomar tipo_ambiente y tipo_emision desde la configuraciÃ³n de empresa
@@ -1158,6 +1173,14 @@ class FacturaVentaService
             throw new \Exception('La factura ya está anulada.');
         }
 
+        // Anular revierte el asiento, el inventario y los cobros de la factura: si su
+        // período está cerrado, ese movimiento no puede tocarse.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede anular la factura porque su período contable está cerrado.'
+        );
+
         // 1. VERIFICACIÓN SRI: si la factura fue autorizada, solo se puede anular internamente
         //    cuando el SRI YA NO la reporta como AUTORIZADO (es decir, ya se anuló en el SRI).
         //    $verificarSri=false lo usa la anulación en lote de migración (el WS del SRI reporta
@@ -1299,6 +1322,14 @@ class FacturaVentaService
         if ($estadoActual !== 'borrador' && !$esSuperAdmin) {
             throw new \Exception('Solo se pueden eliminar facturas en estado borrador.');
         }
+
+        // Vale también para el superadministrador: eliminar revierte asiento,
+        // inventario y cobros, y un período cerrado no admite ese movimiento.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede eliminar la factura porque su período contable está cerrado.'
+        );
 
         // A propósito, sin verificación contra el SRI aquí (a diferencia de anular()):
         // el caso de uso es borrar del sistema un documento cargado por error/duplicado

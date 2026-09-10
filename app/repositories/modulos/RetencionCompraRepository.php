@@ -436,8 +436,52 @@ class RetencionCompraRepository extends BaseRepository
 
     // ── Insertar cabecera ────────────────────────────────────────
 
+    /**
+     * Desglose del total retenido por impuesto: columna de la cabecera → clave del
+     * arreglo de datos.
+     *
+     * La migración original declaraba total_retenido_renta / total_retenido_iva,
+     * pero el INSERT nunca las escribió y hay instalaciones donde la tabla ni
+     * siquiera las tiene (el ISD, además, nunca tuvo columna). Se resuelven contra
+     * el esquema real para que el módulo funcione igual antes y después de ejecutar
+     * database/migrations/20260909_retencion_compra_totales_por_impuesto.sql.
+     */
+    private const COLUMNAS_TOTALES_IMPUESTO = [
+        'total_retenido_renta' => 'total_retenido_renta',
+        'total_retenido_iva'   => 'total_retenido_iva',
+        'total_retenido_isd'   => 'total_retenido_isd',
+    ];
+
+    private ?array $totalesImpuestoDisponibles = null;
+
+    /** @return string[] Columnas de desglose que existen en la tabla. */
+    private function totalesPorImpuestoDisponibles(): array
+    {
+        if ($this->totalesImpuestoDisponibles === null) {
+            $this->totalesImpuestoDisponibles = array_values(array_filter(
+                array_keys(self::COLUMNAS_TOTALES_IMPUESTO),
+                fn(string $col) => $this->columnaExiste('retencion_compra_cabecera', $col)
+            ));
+        }
+        return $this->totalesImpuestoDisponibles;
+    }
+
+    /** Parámetros (`:tot_<columna>`) con el desglose que la tabla sí admite. */
+    private function paramsTotalesPorImpuesto(array $d): array
+    {
+        $params = [];
+        foreach ($this->totalesPorImpuestoDisponibles() as $col) {
+            $params[':tot_' . $col] = round((float) ($d[self::COLUMNAS_TOTALES_IMPUESTO[$col]] ?? 0), 2);
+        }
+        return $params;
+    }
+
     public function insertCabecera(array $d): int
     {
+        $totales = $this->totalesPorImpuestoDisponibles();
+        $colsTot = $totales ? ', ' . implode(', ', $totales) : '';
+        $valsTot = $totales ? ', :tot_' . implode(', :tot_', $totales) : '';
+
         $sql = "INSERT INTO retencion_compra_cabecera (
                     id_empresa, id_proveedor, id_usuario, id_establecimiento, id_punto_emision,
                     fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso,
@@ -445,7 +489,7 @@ class RetencionCompraRepository extends BaseRepository
                     tipo_doc_sustento, id_compra, id_liquidacion, id_sustento_tributario,
                     num_doc_sustento, fecha_emision_doc_sustento,
                     doc_sustento_subtotal, doc_sustento_iva, doc_sustento_total,
-                    total_retenido, numero_autorizacion,
+                    total_retenido{$colsTot}, numero_autorizacion,
                     estado, detalle_xml, ruc_proveedor_sistema,
                     created_by, updated_by
                 ) VALUES (
@@ -455,13 +499,13 @@ class RetencionCompraRepository extends BaseRepository
                     :tds, :idc, :idl, :ist,
                     :nds, :feds,
                     :dss, :dsi, :dst,
-                    :tr, :na,
+                    :tr{$valsTot}, :na,
                     :est, :dxml, :rps,
                     :cb, :ub
                 ) RETURNING id";
 
         $st = $this->db->prepare($sql);
-        $st->execute([
+        $st->execute($this->paramsTotalesPorImpuesto($d) + [
             ':ie'   => $d['id_empresa'],
             ':ip'   => $d['id_proveedor'],
             ':iu'   => !empty($d['id_usuario']) ? $d['id_usuario'] : null,
@@ -500,6 +544,11 @@ class RetencionCompraRepository extends BaseRepository
 
     public function updateCabecera(int $id, int $idEmpresa, array $d): bool
     {
+        $setTot = '';
+        foreach ($this->totalesPorImpuestoDisponibles() as $col) {
+            $setTot .= "\n                    {$col} = :tot_{$col},";
+        }
+
         $sql = "UPDATE retencion_compra_cabecera SET
                     id_proveedor               = :ip,
                     id_establecimiento         = :iest,
@@ -520,7 +569,7 @@ class RetencionCompraRepository extends BaseRepository
                     doc_sustento_subtotal      = :dss,
                     doc_sustento_iva           = :dsi,
                     doc_sustento_total         = :dst,
-                    total_retenido             = :tr,
+                    total_retenido             = :tr,{$setTot}
                     numero_autorizacion        = :na,
                     estado                     = :est,
                     updated_by                 = :ub,
@@ -528,7 +577,7 @@ class RetencionCompraRepository extends BaseRepository
                 WHERE id = :id AND id_empresa = :ie AND eliminado = false";
 
         $st = $this->db->prepare($sql);
-        $st->execute([
+        $st->execute($this->paramsTotalesPorImpuesto($d) + [
             ':ip'   => $d['id_proveedor'],
             ':iest' => !empty($d['id_establecimiento']) ? $d['id_establecimiento'] : null,
             ':ipt'  => !empty($d['id_punto_emision'])   ? $d['id_punto_emision']   : null,
@@ -879,6 +928,86 @@ class RetencionCompraRepository extends BaseRepository
         $st = $this->db->prepare("SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret FROM retenciones_sri WHERE id = ?");
         $st->execute([$id]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    // ── Datos de apoyo para las validaciones legales (RetencionCompraRules) ──
+
+    /**
+     * Todas las filas del catálogo del SRI que comparten un mismo código de
+     * retención. Un código puede repetirse con porcentajes distintos según la
+     * vigencia (el SRI cambia la tarifa manteniendo el código), así que la
+     * validación necesita el conjunto completo y no una sola fila.
+     */
+    public function getRetencionesSriPorCodigo(string $codigo): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, desde, hasta, status
+               FROM retenciones_sri
+              WHERE TRIM(codigo_ret::text) = TRIM(:c)
+              ORDER BY status DESC, desde"
+        );
+        $st->execute([':c' => $codigo]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Proveedor con los datos que necesitan las validaciones (su identificación,
+     * para compararla con el RUC de la empresa). Filtra por empresa: un id de
+     * otra empresa devuelve null y la retención se rechaza.
+     */
+    public function getProveedorValidacion(int $idProveedor, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, razon_social, identificacion, id_empresa
+               FROM proveedores
+              WHERE id = :id AND id_empresa = :ie AND eliminado = false"
+        );
+        $st->execute([':id' => $idProveedor, ':ie' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** RUC y número de agente de retención de la empresa emisora. */
+    public function getEmpresaValidacion(int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT id, ruc, agente_retencion FROM empresas WHERE id = :ie");
+        $st->execute([':ie' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Dueño y estado del documento vinculado (compra o liquidación), para
+     * comprobar que la retención se emite sobre un documento de ESE proveedor y
+     * de la empresa activa. Devuelve null si el documento no existe en la empresa.
+     */
+    public function getDocumentoVinculadoValidacion(int $idCompra, int $idLiquidacion, int $idEmpresa): ?array
+    {
+        if ($idCompra > 0) {
+            $st = $this->db->prepare(
+                "SELECT c.id, c.id_proveedor, c.estado, c.eliminado, c.tipo_comprobante,
+                        p.razon_social AS proveedor_razon_social,
+                        'compra' AS tipo_documento
+                   FROM compras_cabecera c
+                   LEFT JOIN proveedores p ON p.id = c.id_proveedor
+                  WHERE c.id = :id AND c.id_empresa = :ie"
+            );
+            $st->execute([':id' => $idCompra, ':ie' => $idEmpresa]);
+            return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+
+        if ($idLiquidacion > 0) {
+            $st = $this->db->prepare(
+                "SELECT l.id, l.id_proveedor, l.estado, l.eliminado, '03' AS tipo_comprobante,
+                        p.razon_social AS proveedor_razon_social,
+                        'liquidacion' AS tipo_documento
+                   FROM liquidaciones_cabecera l
+                   LEFT JOIN proveedores p ON p.id = l.id_proveedor
+                  WHERE l.id = :id AND l.id_empresa = :ie"
+            );
+            $st->execute([':id' => $idLiquidacion, ':ie' => $idEmpresa]);
+            return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+
+        return null;
     }
 
     // ── XML en base de datos ──────────────────────────────────────────────────

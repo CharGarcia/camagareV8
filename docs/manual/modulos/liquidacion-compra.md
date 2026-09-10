@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular
-version: 1.2
+version: 1.3
 orden: 40
 estado: activo
 ---
@@ -82,8 +82,28 @@ vuelva a intentarlo.
 - **El SRI rechaza el comprobante**: revise que los datos del proveedor sean
   correctos y que el sustento elegido corresponda al tipo de compra.
 
+## Períodos contables cerrados
+
+Un documento que mueve cartera, inventario o contabilidad no puede tocar un
+período ya cerrado. El sistema lo comprueba en las cuatro operaciones:
+
+| Operación | Qué se comprueba |
+|-----------|------------------|
+| Emitir | Que la fecha de emisión no caiga en un período cerrado |
+| Modificar | La fecha nueva **y** aquella con la que está registrado |
+| Anular | La fecha del documento (anular revierte sus movimientos) |
+| Eliminar | La fecha del documento |
+
+Al modificar se revisan las dos fechas a propósito: mover un documento de un
+mes cerrado a uno abierto lo alteraría igual. Los períodos se abren y se
+cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
+la operación de inmediato.
+
 ## Historial de cambios
 
+- **1.3** — El módulo respeta ahora el **cierre contable**: no se puede emitir,
+  modificar, anular ni eliminar una liquidación cuyo período esté cerrado. Antes no se
+  comprobaba en ninguna de las cuatro operaciones.
 - **1.2** — Se puede eliminar una liquidación en estado borrador desde el formulario (botón Eliminar). Anula su asiento y sus pagos vinculados; bloqueada si tiene retención asociada.
 - **1.1** — Nuevo botón Excel en el documento de la liquidación (junto a PDF y XML).
 - **1.0** — Versión inicial.

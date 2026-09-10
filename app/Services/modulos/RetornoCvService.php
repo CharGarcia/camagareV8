@@ -21,6 +21,8 @@ use PDO;
  */
 class RetornoCvService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private RetornoCvRepository $repository;
     private RetornoCvRules $rules;
     private LogSistemaService $logService;
@@ -65,6 +67,12 @@ class RetornoCvService
     public function crear(array $data): int
     {
         $this->rules->validarCreacion($data);
+
+        $this->validarPeriodoContable(
+            $data["fecha_retorno"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "No se puede registrar el retorno porque el período contable de esa fecha está cerrado."
+        );
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
@@ -221,6 +229,13 @@ class RetornoCvService
         if (!$cab) {
             throw new Exception("Retorno no encontrado.");
         }
+        $this->validarPeriodoContableAlModificar(
+            $cab['fecha_retorno'] ?? null,
+            $data['fecha_retorno'] ?? null,
+            $idEmpresa,
+            'el retorno'
+        );
+
         if (($cab['estado'] ?? '') !== 'Borrador') {
             throw new Exception("Solo se pueden editar retornos en estado Borrador.");
         }
@@ -304,6 +319,13 @@ class RetornoCvService
         if (!$cabecera) {
             throw new Exception("Retorno no encontrado.");
         }
+
+        // Eliminar revierte inventario y anula el asiento del documento.
+        $this->validarPeriodoContable(
+            $cabecera["fecha_retorno"] ?? null,
+            $idEmpresa,
+            "No se puede eliminar el retorno porque su período contable está cerrado."
+        );
 
         $db = Database::getConnection();
         try {

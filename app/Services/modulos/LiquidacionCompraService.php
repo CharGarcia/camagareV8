@@ -10,6 +10,8 @@ use App\Services\LogSistemaService;
 
 class LiquidacionCompraService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private $repository;
     private $rules;
     private $logService;
@@ -24,6 +26,12 @@ class LiquidacionCompraService
     public function crear(array $data): int
     {
         $this->rules->validar($data);
+
+        $this->validarPeriodoContable(
+            $data["fecha_emision"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "No se puede emitir la liquidación porque el período contable de esa fecha está cerrado."
+        );
 
         $empresaConfig = $data['empresa_config'] ?? [];
         $data['tipo_ambiente'] = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
@@ -186,6 +194,13 @@ class LiquidacionCompraService
             throw new \Exception('La liquidación está anulada y no puede editarse.');
         }
 
+        $this->validarPeriodoContableAlModificar(
+            $cabecera['fecha_emision'] ?? null,
+            $data['fecha_emision'] ?? null,
+            (int) ($data['id_empresa'] ?? 0),
+            'la liquidación'
+        );
+
         $this->rules->validar($data);
 
         $empresaConfig = $data['empresa_config'] ?? [];
@@ -272,6 +287,14 @@ class LiquidacionCompraService
             throw new \Exception('La liquidación ya está anulada.');
         }
 
+        // Anular revierte el asiento y el inventario de la liquidación: si su período
+        // está cerrado, ese movimiento no puede tocarse.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede anular la liquidación porque su período contable está cerrado.'
+        );
+
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
@@ -329,6 +352,12 @@ class LiquidacionCompraService
         if ($estadoActual !== '' && $estadoActual !== 'borrador') {
             throw new \Exception('Solo se pueden eliminar liquidaciones en estado borrador.');
         }
+
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede eliminar la liquidación porque su período contable está cerrado.'
+        );
 
         // Retención vinculada: no dejarla huérfana apuntando a un documento borrado.
         // Mismo criterio que ComprasService::eliminar().

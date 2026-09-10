@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro
-version: 1.3
+version: 1.4
 orden: 40
 estado: activo
 ---
@@ -77,8 +77,19 @@ ya no existiera.
 El asiento no se borra: queda en estado **anulado**, así que el rastro se conserva
 y deja de afectar los reportes.
 
-Si la fecha de la retención cae en un **período contable cerrado**, la eliminación
-se rechaza. Reabra el período si realmente necesita eliminarla.
+## Períodos contables cerrados
+
+Una retención mueve la cartera de la factura y genera asiento, así que su fecha no
+puede caer en un período cerrado. Se comprueba al **registrarla**, al
+**modificarla** —tanto la fecha nueva como aquella con la que está registrada— y
+al **eliminarla**.
+
+Los períodos se abren y se cierran en **Contabilidad → Períodos Contables**;
+reabrir el período permite la operación de inmediato.
+
+Las retenciones que llegan **descargadas del SRI** son la excepción: son
+documentos que el cliente ya emitió y se registran tal cual, aunque su mes esté
+cerrado.
 
 ## Errores frecuentes
 
@@ -86,12 +97,16 @@ se rechaza. Reabra el período si realmente necesita eliminarla.
   por ejemplo `07/2026`.
 - **La factura queda con saldo pendiente que nadie va a pagar**: falta registrar
   la retención que le practicó el cliente.
-- **"No se puede registrar el asiento: la fecha ... corresponde a un período
-  contable cerrado"** al eliminar: la eliminación anula el asiento, y eso no se
-  puede hacer en un período cerrado.
+- **"No se puede ... porque su período contable está cerrado"**: la fecha de la
+  retención cae en un mes ya cerrado. Reabra el período en Contabilidad →
+  Períodos Contables si realmente necesita hacer el cambio.
 
 ## Historial de cambios
 
+- **1.4** — El control del **cierre contable** ya no depende del asiento: se
+  comprueba al registrar y al modificar la retención, no solo al eliminarla, y el
+  aviso dice qué operación se rechazó en vez de hablar del asiento. Las retenciones
+  descargadas del SRI quedan exentas: son documentos que el cliente ya emitió.
 - **1.3** — El buscador del código de retención cubre todas las columnas del
   catálogo del SRI (código, concepto, porcentaje, impuesto y código del anexo).
 - **1.2** — Eliminar una retención ahora **anula su asiento contable**. Antes el

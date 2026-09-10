@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
 etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico
-version: 1.1
+version: 1.2
 orden: 21
 estado: activo
 ---
@@ -119,8 +119,21 @@ bajo el submódulo "Factura de Reembolso" (colgado junto a Factura de Venta).
   Contable (especialmente la cuenta puente "Reembolso a Terceros", que no
   tiene una cuenta de respaldo automática).
 
+## Períodos contables cerrados
+
+Lo que mueve inventario o contabilidad no puede tocar un período ya cerrado.
+Emitirla, modificarla, anularla y eliminarla se rechazan si la fecha cae en un
+mes cerrado.
+
+Al modificar se revisan **las dos fechas** —la nueva y aquella con la que está
+registrado—: mover un documento de un mes cerrado a uno abierto lo alteraría
+igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
+Contables**; reabrir el período permite la operación de inmediato.
+
 ## Historial de cambios
 
+- **1.2** — El módulo respeta ahora el **cierre contable**: no se puede operar
+  sobre una factura de reembolso cuyo período esté cerrado. Antes no se comprobaba.
 - **1.0** — Versión inicial: creación, edición, terceros reembolsados
   (vinculados a Compras o manuales), envío al SRI, asiento contable de
   cuenta puente, PDF y correo. Sin WhatsApp e integración simple con

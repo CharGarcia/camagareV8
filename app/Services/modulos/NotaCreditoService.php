@@ -14,6 +14,8 @@ use Exception;
 
 class NotaCreditoService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private $repository;
     private $rules;
     private $logService;
@@ -28,6 +30,12 @@ class NotaCreditoService
     public function crear(array $data): int
     {
         $this->rules->validar($data);
+
+        $this->validarPeriodoContable(
+            $data['fecha_emision'] ?? null,
+            (int) ($data['id_empresa'] ?? 0),
+            'No se puede emitir la nota de crédito porque el período contable de esa fecha está cerrado.'
+        );
 
         // Normalizar espacios en el motivo (texto libre): colapsa espacios dobles y
         // saltos de línea a uno solo, y recorta los extremos.
@@ -223,6 +231,14 @@ class NotaCreditoService
     {
         $this->rules->validar($data);
 
+        $ncActual = $this->repository->getPorId($id);
+        $this->validarPeriodoContableAlModificar(
+            $ncActual['fecha_emision'] ?? null,
+            $data['fecha_emision'] ?? null,
+            (int) ($data['id_empresa'] ?? 0),
+            'la nota de crédito'
+        );
+
         // Normalizar espacios en el motivo (texto libre): colapsa espacios dobles y
         // saltos de línea a uno solo, y recorta los extremos.
         if (!empty($data['motivo'])) {
@@ -387,6 +403,14 @@ class NotaCreditoService
                 throw new Exception("Solo se pueden eliminar Notas de Crédito en estado borrador.");
             }
 
+            // Vale también para el superadministrador: eliminar revierte el asiento y
+            // el inventario, y un período cerrado no admite ese movimiento.
+            $this->validarPeriodoContable(
+                $nc['fecha_emision'] ?? null,
+                $idEmpresa,
+                'No se puede eliminar la nota de crédito porque su período contable está cerrado.'
+            );
+
             // A propósito, sin verificación contra el SRI (a diferencia de FacturaVentaService::
             // anular()): el caso de uso es borrar del sistema un documento cargado por error/
             // duplicado sin intención de anularlo realmente — el registro en el SRI, si existe,
@@ -461,6 +485,14 @@ class NotaCreditoService
             if ($nc['estado'] === 'anulado') {
                 throw new Exception("La Nota de Crédito ya se encuentra anulada.");
             }
+
+            // Anular revierte el asiento y el inventario de la nota: si su período
+            // está cerrado, ese movimiento no puede tocarse.
+            $this->validarPeriodoContable(
+                $nc['fecha_emision'] ?? null,
+                $idEmpresa,
+                'No se puede anular la nota de crédito porque su período contable está cerrado.'
+            );
 
             // Revertir inventario (tolerante: no bloquear la anulación si el
             // stock reintegrado ya fue consumido).

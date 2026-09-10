@@ -10,6 +10,8 @@ use App\core\Database;
 
 class RetencionVentaService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private RetencionVentaRepository $repository;
     private RetencionVentaRules      $rules;
     private LogSistemaService        $logService;
@@ -31,6 +33,16 @@ class RetencionVentaService
     public function crear(array $data): int
     {
         $this->rules->validar($data);
+
+        // Las que llegan por XML del SRI son documentos que el cliente YA emitió: se
+        // registran tal cual, aunque su mes esté cerrado. La captura manual sí se valida.
+        if (($data['origen'] ?? '') !== 'electronico') {
+            $this->validarPeriodoContable(
+                $data['fecha_emision'] ?? null,
+                (int) ($data['id_empresa'] ?? 0),
+                'No se puede registrar la retención porque el período contable de esa fecha está cerrado.'
+            );
+        }
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['id_usuario'] ?? 0);
@@ -106,6 +118,13 @@ class RetencionVentaService
             throw new \Exception('Retención no encontrada.');
         }
 
+        $this->validarPeriodoContableAlModificar(
+            $cabecera['fecha_emision'] ?? null,
+            $data['fecha_emision'] ?? null,
+            $idEmpresa,
+            'la retención'
+        );
+
         $this->rules->validar($data);
 
         // Conservar el ambiente del registro guardado (updateCabecera no lo cambia).
@@ -167,6 +186,14 @@ class RetencionVentaService
         if (!$cabecera) {
             throw new \Exception('Retención no encontrada.');
         }
+
+        // Eliminar revierte el asiento de la retención: si su período está cerrado,
+        // ese movimiento no puede tocarse.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede eliminar la retención porque su período contable está cerrado.'
+        );
 
         $db = Database::getConnection();
         $managed = !$db->inTransaction();

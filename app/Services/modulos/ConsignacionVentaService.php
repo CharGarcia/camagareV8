@@ -15,6 +15,8 @@ use Exception;
 
 class ConsignacionVentaService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     /** Debe coincidir con ConsignacionesVentasController::TABLA_BLOQUEO_PEDIDO. */
     private const TABLA_BLOQUEO_PEDIDO = 'pedidos_cabecera';
 
@@ -109,6 +111,13 @@ class ConsignacionVentaService
     public function crear(array $data): int
     {
         $this->rules->validarCreacion($data);
+
+        $this->validarPeriodoContable(
+            $data["fecha_emision"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "No se puede registrar la consignación porque el período contable de esa fecha está cerrado."
+        );
+
         $db = Database::getConnection();
 
         $idEmpresa = $data['id_empresa'];
@@ -269,6 +278,13 @@ class ConsignacionVentaService
         if ($this->tieneFacturaAsociada($id, $idEmpresa)) {
             throw new Exception("No se puede editar: la consignación tiene una factura asociada.");
         }
+
+        $this->validarPeriodoContableAlModificar(
+            $cabecera['fecha_emision'] ?? null,
+            $data['fecha_emision'] ?? null,
+            $idEmpresa,
+            'la consignación'
+        );
 
         $this->verificarPedidosLibres($data['detalles'] ?? [], $idEmpresa, $idUsuario);
 
@@ -450,6 +466,13 @@ class ConsignacionVentaService
         if (in_array($cabecera['estado'], ['Entregada', 'Facturada'])) {
             throw new Exception("No se puede eliminar una consignación que ya está " . $cabecera['estado'] . ". Se debe realizar un retorno.");
         }
+
+        // Eliminar revierte el inventario entregado y el asiento de reclasificación.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede eliminar la consignación porque su período contable está cerrado.'
+        );
 
         $db = Database::getConnection();
         try {

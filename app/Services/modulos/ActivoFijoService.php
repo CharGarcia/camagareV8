@@ -13,6 +13,8 @@ use App\Services\LogSistemaService;
 
 class ActivoFijoService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     /** Código del concepto de Configuración Contable que resuelve la contrapartida del alta manual. */
     private const CODIGO_CONTRAPARTIDA = 'CONTRAPARTIDAALTAACTIVOFIJO';
 
@@ -186,6 +188,14 @@ class ActivoFijoService
         $data['estado'] = 'activo';
         $data['fecha_inicio_depreciacion'] = $this->calcularInicioDepreciacion((int) $data['id_empresa'], (string) $data['fecha_adquisicion']);
 
+        // El alta genera su asiento con la fecha de adquisición: no puede caer en un
+        // período ya cerrado.
+        $this->validarPeriodoContable(
+            $data['fecha_adquisicion'] ?? null,
+            (int) $data['id_empresa'],
+            'No se puede registrar el activo porque el período contable de esa fecha de adquisición está cerrado.'
+        );
+
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
@@ -229,6 +239,13 @@ class ActivoFijoService
         if (!$activo) {
             throw new \Exception('Activo fijo no encontrado.');
         }
+        $this->validarPeriodoContableAlModificar(
+            $activo['fecha_adquisicion'] ?? null,
+            $data['fecha_adquisicion'] ?? null,
+            $idEmpresa,
+            'el activo fijo'
+        );
+
         // El origen se fija en el alta: no se toma del formulario.
         $data['origen'] = $activo['origen'];
         if ($data['origen'] !== 'manual') {
@@ -274,6 +291,15 @@ class ActivoFijoService
         // Solo bloquea si ya hay depreciaciones contabilizadas; el asiento de ALTA existe
         // desde el registro, así que un activo sin depreciar sí llega hasta acá con asiento.
         $this->rules->validarEliminacion($id);
+
+        // Eliminar anula el asiento de alta: ese movimiento no puede tocar un
+        // período ya cerrado.
+        $activo = $this->repository->getPorId($id, $idEmpresa);
+        $this->validarPeriodoContable(
+            $activo['fecha_adquisicion'] ?? null,
+            $idEmpresa,
+            'No se puede eliminar el activo porque el período contable de su alta está cerrado.'
+        );
 
         $db = \App\core\Database::getConnection();
         $managed = !$db->inTransaction();

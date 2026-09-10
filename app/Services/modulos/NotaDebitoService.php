@@ -14,6 +14,8 @@ use Exception;
 
 class NotaDebitoService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private $repository;
     private $rules;
     private $logService;
@@ -28,6 +30,12 @@ class NotaDebitoService
     public function crear(array $data): int
     {
         $this->rules->validar($data);
+
+        $this->validarPeriodoContable(
+            $data["fecha_emision"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "No se puede emitir la nota de débito porque el período contable de esa fecha está cerrado."
+        );
 
         // Normalizar espacios en la razón de cada motivo (texto libre): colapsa espacios
         // dobles y saltos de línea a uno solo, y recorta los extremos.
@@ -203,6 +211,14 @@ class NotaDebitoService
     {
         $this->rules->validar($data);
 
+        $ndActual = $this->repository->getPorId($id);
+        $this->validarPeriodoContableAlModificar(
+            $ndActual["fecha_emision"] ?? null,
+            $data["fecha_emision"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "la nota de débito"
+        );
+
         // Normalizar espacios en la razón de cada motivo (texto libre): colapsa espacios
         // dobles y saltos de línea a uno solo, y recorta los extremos.
         foreach ($data['motivos'] ?? [] as &$mot) {
@@ -340,6 +356,14 @@ class NotaDebitoService
                 throw new Exception("Solo se pueden eliminar Notas de Débito en estado borrador.");
             }
 
+            // Vale también para el superadministrador: eliminar revierte el asiento y
+            // un período cerrado no admite ese movimiento.
+            $this->validarPeriodoContable(
+                $nd['fecha_emision'] ?? null,
+                $idEmpresa,
+                'No se puede eliminar la nota de débito porque su período contable está cerrado.'
+            );
+
             // A propósito, sin verificación contra el SRI (a diferencia de FacturaVentaService::
             // anular()): el caso de uso es borrar del sistema un documento cargado por error/
             // duplicado sin intención de anularlo realmente — el registro en el SRI, si existe,
@@ -399,6 +423,14 @@ class NotaDebitoService
             if ($nd['estado'] === 'anulado') {
                 throw new Exception("La Nota de Débito ya se encuentra anulada.");
             }
+
+            // Anular revierte el asiento de la nota: si su período está cerrado, ese
+            // movimiento no puede tocarse.
+            $this->validarPeriodoContable(
+                $nd['fecha_emision'] ?? null,
+                $idEmpresa,
+                'No se puede anular la nota de débito porque su período contable está cerrado.'
+            );
 
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
             $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de debito', $id);

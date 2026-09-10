@@ -3402,7 +3402,11 @@ window.CMG_nuevaRetencionDesdeCompra = function() {
     const nombreProv = document.getElementById('mcBuscarProveedor').value;
     const numDoc = document.getElementById('mcNumeroComprobante').value;
     const fechaDoc = document.getElementById('mcFechaEmision').value;
-    
+    // El tipo de documento de sustento tiene que ser el de ESTA compra: si no se
+    // arrastra, la retención sale con el tipo por defecto (01 - Factura) y el
+    // codDocSustento del XML no corresponde al documento retenido.
+    const tipoDoc = document.getElementById('mcTipoComprobante')?.value || '';
+
     const subtotal = modalCompra.dataset.subtotalNeto || '0.00';
     const totalIva = modalCompra.dataset.totalIva || '0.00';
 
@@ -3427,9 +3431,20 @@ window.CMG_nuevaRetencionDesdeCompra = function() {
             
             const elNumDoc = document.getElementById('ret_num_doc_sustento');
             if (elNumDoc) elNumDoc.value = numDoc;
-            
+
             const elFechaDoc = document.getElementById('ret_fecha_emision_doc_sustento');
             if (elFechaDoc) elFechaDoc.value = fechaDoc;
+
+            // Tipo de documento de sustento: solo si el modal de retención admite
+            // ese código (01 factura, 03 liquidación, 05 nota de débito). Con
+            // cualquier otro se deja el que ya trae y el servidor avisa al guardar.
+            const elTipoDoc = document.getElementById('ret_tipo_doc_sustento');
+            if (elTipoDoc && tipoDoc && [...elTipoDoc.options].some(o => o.value === tipoDoc)) {
+                elTipoDoc.value = tipoDoc;
+                if (typeof window.RET_filtrarSustentos === 'function') {
+                    window.RET_filtrarSustentos(tipoDoc);
+                }
+            }
 
             // Totales del documento sustento (desde la compra)
             const elSub = document.getElementById('ret_doc_subtotal');

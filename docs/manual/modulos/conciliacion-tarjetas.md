@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliar tarjetas, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas
-version: 1.0
+version: 1.1
 orden: 66
 estado: activo
 ---
@@ -138,6 +138,19 @@ solo avisa que no generará el asiento.
   conciliación, ya conciliado en otra, o pertenecer a otro usuario si usted no
   tiene acceso total.
 
+## Períodos contables cerrados
+
+Lo que mueve inventario o contabilidad no puede tocar un período ya cerrado.
+Cerrarla se rechaza si la fecha de conciliación cae en un mes cerrado: el cierre
+genera el asiento con esa fecha.
+
+Al modificar se revisan **las dos fechas** —la nueva y aquella con la que está
+registrado—: mover un documento de un mes cerrado a uno abierto lo alteraría
+igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
+Contables**; reabrir el período permite la operación de inmediato.
+
 ## Historial de cambios
 
+- **1.1** — El módulo respeta ahora el **cierre contable**: no se puede operar
+  sobre una conciliación cuyo período esté cerrado. Antes no se comprobaba.
 - **1.0** — Versión inicial.

@@ -26,7 +26,7 @@ class RetencionesComprasController extends BaseModuloController
         $this->repository = new RetencionCompraRepository();
         $this->service    = new RetencionCompraService(
             $this->repository,
-            new RetencionCompraRules(),
+            new RetencionCompraRules($this->repository),
             new LogSistemaService()
         );
     }
@@ -261,6 +261,15 @@ class RetencionesComprasController extends BaseModuloController
             }
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
+        } catch (\App\Rules\modulos\RetencionCompraAdvertenciasException $e) {
+            // Segundo nivel de validación: la retención se puede guardar, pero hay
+            // reparos tributarios que el usuario debe aceptar expresamente. No se
+            // guarda nada hasta que el formulario reenvíe con confirmar_advertencias.
+            echo json_encode([
+                'ok'                    => false,
+                'requiere_confirmacion' => true,
+                'advertencias'          => $e->getAdvertencias(),
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

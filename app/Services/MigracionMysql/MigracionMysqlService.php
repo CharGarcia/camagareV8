@@ -5083,6 +5083,9 @@ class MigracionMysqlService
             new \App\Rules\modulos\FacturaVentaRules(),
             new \App\Services\LogSistemaService()
         );
+        // Se refleja lo que el sistema anterior ya tenía anulado: si el mes de esas
+        // facturas está cerrado, la migración debe poder dejarlo igual al original.
+        $facturaService->omitirValidacionPeriodo = true;
 
         $chk = $pg->prepare("SELECT id, estado FROM ventas_cabecera WHERE id_empresa = :e AND establecimiento = :est AND punto_emision = :pto AND secuencial = :sec AND eliminado = false LIMIT 1");
         $st  = $mysql->query("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");

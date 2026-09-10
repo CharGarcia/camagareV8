@@ -13,6 +13,8 @@ use App\core\Database;
 
 class ImportacionesService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private ImportacionesRepository $repository;
     private ImportacionesRules $rules;
     private LogSistemaService $logService;
@@ -728,6 +730,14 @@ class ImportacionesService
         float $costoTotalNacionalizado,
         bool $viaAprobacion = false
     ): array {
+        // Nacionalizar mueve inventario y genera el asiento de la importación, ambos
+        // con la fecha de nacionalización (hoy): si ese mes ya está cerrado, no cabe.
+        $this->validarPeriodoContable(
+            date('Y-m-d'),
+            $idEmpresa,
+            'No se puede nacionalizar la importación porque el período contable de hoy está cerrado.'
+        );
+
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();

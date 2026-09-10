@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri
-version: 1.6
+etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias
+version: 1.9
 orden: 30
 estado: activo
 ---
@@ -20,14 +20,18 @@ compra que la origina.
 
 ## Cómo se emite
 
-Lo habitual es generarla desde la propia compra: así el documento de sustento y
-los porcentajes del proveedor vienen ya cargados.
+Lo habitual es generarla desde la propia compra: así el proveedor, el documento
+de sustento —con su tipo, número, fecha y totales— vienen ya cargados.
 
 1. Abra la compra y genere la retención.
 2. Revise el **proveedor** y la **fecha de emisión**.
 3. Compruebe el **documento de sustento**: tipo, número y fecha de emisión.
-4. Revise los porcentajes de IVA y de renta.
+4. Elija los códigos de retención de la lista y revise bases y porcentajes.
 5. Guarde y envíe al SRI.
+
+El porcentaje sale del código que elija en la lista del catálogo del SRI y solo se
+puede escribir cuando ese código es de **tarifa variable** (ver *El porcentaje lo
+decide el catálogo*, más abajo).
 
 ## Buscar en el listado
 
@@ -80,14 +84,125 @@ vigencia (Desde / Hasta) se revisa en **Configuración → Retenciones SRI**.
 
 | Campo | Regla |
 |-------|-------|
-| Proveedor | Obligatorio |
-| Fecha de emisión | Obligatoria |
+| Proveedor | Obligatorio, y debe ser un proveedor de la empresa activa |
+| Fecha de emisión | Obligatoria, y no puede ser posterior a hoy |
 | Tipo de documento de sustento | Obligatorio, y debe ser uno de los códigos válidos del SRI |
-| Número del documento de sustento | Obligatorio |
-| Fecha de emisión del documento de sustento | Obligatoria |
+| Número del documento de sustento | Obligatorio, con el formato `000-000-000000000` |
+| Fecha de emisión del documento de sustento | Obligatoria, y no posterior a la de la retención |
+| Período fiscal | Es siempre el mes de la fecha de emisión; se calcula solo |
 
-Los porcentajes se proponen desde la ficha del proveedor, pero se pueden cambiar
-en cada retención.
+## Qué comprueba el sistema al guardar
+
+La comprobación tiene **dos niveles**, porque no todo lo que llama la atención en
+una retención es un error.
+
+### Lo que impide guardar
+
+Son datos que hacen inválido el comprobante —el SRI lo rechazaría— o que dejarían
+un registro inconsistente. Hay que corregirlos:
+
+- El **código de retención no existe** en el catálogo del SRI.
+- El **impuesto no corresponde al código**: por ejemplo, un código de renta
+  marcado como IVA.
+- La **base de la retención de renta supera el subtotal** del documento de
+  sustento.
+- La **base de la retención de IVA supera el IVA** del documento. Es el error
+  más habitual: la retención de IVA se calcula sobre **el IVA**, no sobre el
+  subtotal. En una factura de 200 + 30 de IVA, retener el 70 % significa
+  30 × 70 % = 21, con base 30 —no con base 200—.
+- El **documento de sustento vinculado es de otro proveedor**, está anulado o
+  pertenece a otra empresa. Ocurre al cambiar el proveedor después de haber
+  abierto la retención desde una compra.
+- La retención se emite **a la propia empresa** (el proveedor tiene la misma
+  identificación que quien retiene).
+- El **porcentaje no es el que fija el catálogo** para ese código (ver más abajo).
+
+### La fecha de emisión y el envío al SRI
+
+Dos reglas que conviene entender juntas, porque tiran en direcciones opuestas:
+
+- **Para enviar al SRI, la fecha de emisión debe ser la de hoy.** Si intenta
+  enviar una retención fechada otro día, el envío se detiene antes de salir con
+  el aviso *"la fecha de emisión de la retención (…) debe ser la fecha actual"*.
+  Edite la retención, ponga la fecha de hoy y vuelva a enviar.
+- **El plazo legal es de cinco días hábiles** desde el documento de sustento. Se
+  cuentan de lunes a viernes: sábados y domingos no cuentan. Una factura del
+  viernes se puede retener hasta el viernes siguiente sin aviso.
+
+Puestas juntas significan que **una retención atrasada no se arregla poniéndole
+una fecha pasada**: el SRI no la aceptaría. Lo que corresponde es emitirla con la
+fecha de hoy y aceptar el aviso de plazo, que deja constancia de que se emitió
+fuera de término.
+
+### Períodos contables cerrados
+
+Una retención mueve cartera y genera asiento, así que **ninguna operación puede
+tocar un período cerrado**:
+
+| Operación | Qué se comprueba |
+|-----------|------------------|
+| Emitir | Que la fecha de emisión no caiga en un período cerrado |
+| Modificar | La fecha nueva **y** aquella con la que está registrada |
+| Anular | La fecha de la retención (anular revierte su asiento) |
+| Eliminar | La fecha de la retención |
+
+Al modificar se revisan las dos fechas a propósito: cambiar una retención de un
+mes cerrado a uno abierto lo alteraría igual. Los períodos se abren y se cierran
+en **Contabilidad → Períodos Contables**; reabrir el período permite la operación
+de inmediato.
+
+El mismo control rige en **Compras** al registrar, modificar o eliminar una
+compra.
+
+### Lo que avisa y usted decide
+
+Son criterios tributarios donde el contador puede tener razón. El sistema **no
+guarda nada** hasta que usted los acepte expresamente en el aviso; si continúa,
+queda constancia de lo aceptado junto al registro de la retención.
+
+Cada aviso muestra debajo la **norma en la que se apoya**, para que pueda ir a
+comprobarla en lugar de tener que creerse el mensaje:
+
+| Aviso | Base legal que se muestra |
+|-------|---------------------------|
+| Se emite **fuera del plazo** de cinco días hábiles desde el documento de sustento | Art. 50 de la Ley de Régimen Tributario Interno |
+| El **código no está vigente** a la fecha de emisión | Catálogo de códigos del SRI vigente a esa fecha |
+| La **base de renta es menor a USD 50** | Resolución NAC-DGERCGC14-00787 |
+| Se retiene **solo una parte del IVA**, o se retiene IVA sobre un documento sin IVA | Resolución NAC-DGERCGC20-00000061 |
+| El **tipo de documento no coincide** con el del documento vinculado | — (no es una regla tributaria, sino una discrepancia entre dos datos del sistema) |
+
+La retención fuera de plazo sigue siendo válida: se avisa, pero se puede
+registrar con su fecha real.
+
+Los comprobantes que llegan **descargados del SRI** ya están autorizados: se
+registran tal cual y no pasan por estas comprobaciones.
+
+## El porcentaje lo decide el catálogo
+
+El porcentaje de cada línea no se escribe libremente: lo determina el código que
+elija, según lo que tenga registrado **Configuración → Retenciones SRI**.
+
+| En el catálogo | En la retención |
+|----------------|-----------------|
+| Porcentaje **definido** (1.75 %, 10 %, 70 %…) | Ese es el que se aplica. El campo queda **bloqueado** y el sistema rechaza cualquier otro valor |
+| Porcentaje en **0** | El concepto es de **tarifa variable**: el campo queda abierto y usted escribe el que corresponda al caso, incluido 0 |
+
+Así, el 0 del catálogo cumple dos funciones a la vez:
+
+- **Conceptos que no retienen**: el **332** (*otras compras de bienes y servicios
+  no sujetas a retención*), la compra de inmuebles, el transporte público, los
+  pagos con tarjeta de crédito, los rendimientos financieros exentos. Se dejan en
+  0 y la retención se guarda con total 0.
+- **Conceptos de tarifa variable**: dividendos y pagos al exterior, donde el
+  porcentaje depende del convenio de doble tributación, del beneficiario o de la
+  tabla aplicable. Al estar en 0, el campo permite escribir el que corresponda.
+
+En el catálogo actual hay 28 códigos de 147 en esa situación.
+
+**Si una tarifa cambió**, no se corrige retención por retención: se actualiza el
+código en **Configuración → Retenciones SRI** y desde ahí rige para todas. Y si
+un concepto resulta ser de porcentaje variable pero está registrado con una
+tarifa fija, basta con ponerlo en 0 para poder escribirlo en cada retención.
 
 ## Una sola retención por documento y proveedor
 
@@ -139,8 +254,28 @@ destinatario.
 
 - **"El tipo de documento de sustento no es válido"**: use uno de los códigos
   admitidos por el SRI.
-- **Los porcentajes salen equivocados**: revise las retenciones predeterminadas
-  en la ficha del proveedor.
+- **"La base de la retención de IVA supera el IVA del documento"**: puso el
+  subtotal donde va el IVA. La base de la retención de IVA es el **valor del
+  IVA** de la factura; el porcentaje (30 %, 70 %, 100 %…) se aplica sobre él.
+- **"El código de retención no existe en el catálogo del SRI"**: se escribió a
+  mano un código que no está en Configuración → Retenciones SRI. Elíjalo de la
+  lista, o agréguelo al catálogo si es nuevo. Sin código válido la retención no
+  se puede declarar después en el Formulario 103.
+- **"El documento de sustento vinculado es del proveedor ..."**: la retención se
+  abrió desde una compra y luego se cambió el proveedor. Vuelva a abrirla desde
+  la compra correcta.
+- **"El código X retiene N % y no admite otro porcentaje"**: el porcentaje lo fija
+  el catálogo. Si el que usted necesita es el correcto y el catálogo está
+  desactualizado, corrija el código en Configuración → Retenciones SRI; si el
+  concepto es de tarifa variable, póngalo en 0 allí y el campo se podrá escribir
+  en cada retención.
+- **"La fecha de emisión de la retención … debe ser la fecha actual"** al enviar al
+  SRI: el comprobante quedó fechado otro día. Abra la retención, ponga la fecha de
+  hoy, guarde y vuelva a enviar. Si con eso se pasa del plazo de cinco días hábiles,
+  saldrá el aviso correspondiente: acéptelo, es la forma correcta de registrar una
+  retención atrasada.
+- **No me deja escribir el porcentaje**: el campo se bloquea cuando el código
+  elegido tiene una tarifa definida. Es el comportamiento previsto.
 - **No puedo eliminar la compra**: elimine antes su retención.
 - **"El documento de sustento ... ya está retenido en la retención ..."**: ese
   proveedor ya tiene una retención viva sobre ese mismo documento. El mensaje dice
@@ -160,6 +295,38 @@ destinatario.
 
 ## Historial de cambios
 
+- **1.9** — El envío al SRI ahora comprueba que la **fecha de emisión sea la de hoy**,
+  como ya hacían factura de venta, factura de reembolso y liquidación de compra. Antes
+  la retención salía hacia el SRI con cualquier fecha y era el propio SRI quien la
+  rechazaba. El aviso dice qué fecha tiene y cuál debe tener.
+- **1.8** — El **porcentaje lo decide el catálogo**. Si el código tiene una tarifa
+  definida, el campo queda bloqueado y no se admite otro valor; si está en 0, el
+  concepto es de porcentaje variable —dividendos, pagos al exterior— y se escribe el
+  que corresponda. Con esto se corrige además que los códigos que **no retienen**
+  (el 332 y los otros 27 conceptos informativos del catálogo) se rechazaran al guardar.
+  Una tarifa reformada por el SRI se corrige ahora en Configuración → Retenciones SRI,
+  no retención por retención.
+  Además, cada aviso muestra la **norma en la que se apoya** (artículo de la ley o
+  número de resolución del SRI), para poder revisarla antes de aceptarlo.
+- **1.7** — El módulo comprueba ahora los requisitos de fondo de una retención, en
+  dos niveles: lo que la haría inválida ante el SRI **impide guardar** (código
+  inexistente o de otro impuesto, base mayor que la del documento de sustento —el
+  caso típico: retener el IVA sobre el subtotal—, documento de otro proveedor,
+  retención a la propia empresa, fecha futura, período contable cerrado); lo que
+  es criterio tributario **se avisa y se confirma**, y hasta que se acepta no se
+  guarda nada (fuera del plazo de cinco días hábiles, porcentaje distinto al del
+  catálogo, código no vigente, base de renta bajo USD 50, retención parcial del
+  IVA). Lo aceptado queda registrado junto a la retención.
+  Antes, el plazo de cinco días era un bloqueo que impedía registrar cualquier
+  retención atrasada; ahora se cuenta en días hábiles —como dice la ley— y se
+  puede continuar tras confirmarlo.
+  Al emitir desde una compra se arrastra también el **tipo de documento**: si la
+  compra era una liquidación o una nota de débito, la retención salía marcada
+  como factura.
+  El período fiscal se recalcula siempre desde la fecha de emisión.
+  Además, el módulo respeta ahora el **cierre contable**: no se puede emitir,
+  modificar, anular ni eliminar una retención cuyo período esté cerrado. Antes no
+  se comprobaba en ninguna de las cuatro operaciones.
 - **1.6** — Al enviar al SRI, cuando el servicio del SRI responde algo que no es su
   formato normal (una falla interna, una página de mantenimiento o una respuesta
   vacía), el aviso y el historial SRI quedaban en "devuelta con errores" sin ningún

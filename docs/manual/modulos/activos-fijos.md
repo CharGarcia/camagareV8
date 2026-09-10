@@ -6,7 +6,7 @@ ruta_modulo: modulos/activos-fijos
 tipo: modulo
 visibilidad: todos
 etiquetas: activos fijos, activo, depreciacion, bienes, maquinaria, vehiculos, muebles, vida util, linea recta
-version: 1.0
+version: 1.2
 orden: 60
 estado: activo
 ---
@@ -73,8 +73,21 @@ rechaza. Reabra el período si realmente necesita eliminarlo.
   contable cerrado"** al eliminar: la eliminación anula el asiento de alta, y eso
   no se puede hacer en un período cerrado.
 
+## Períodos contables cerrados
+
+Lo que mueve inventario o contabilidad no puede tocar un período ya cerrado.
+Registrar el activo (por su fecha de adquisición), modificarlo, eliminarlo y
+generar la depreciación mensual se rechazan si la fecha cae en un mes cerrado.
+
+Al modificar se revisan **las dos fechas** —la nueva y aquella con la que está
+registrado—: mover un documento de un mes cerrado a uno abierto lo alteraría
+igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
+Contables**; reabrir el período permite la operación de inmediato.
+
 ## Historial de cambios
 
+- **1.2** — El módulo respeta ahora el **cierre contable**: no se puede operar
+  sobre un activo cuyo período esté cerrado. Antes no se comprobaba.
 - **1.1** — Eliminar un activo fijo ahora **anula su asiento de alta**. Antes ese
   asiento sobrevivía al activo y seguía sumando en el Balance. Efecto secundario
   esperado: ya no se puede eliminar un activo cuya fecha de alta esté en un

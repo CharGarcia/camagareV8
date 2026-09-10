@@ -32,6 +32,8 @@ use Exception;
  */
 class ConsignacionFacturaService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private ConsignacionFacturaRepository $repository;
     private ConsignacionVentaRepository $consignacionRepo;
     private ConsignacionFacturaRules $rules;
@@ -179,6 +181,13 @@ class ConsignacionFacturaService
     public function crear(array $data): int
     {
         $this->rules->validarDocumento($data);
+
+        $this->validarPeriodoContable(
+            $data['fecha_emision'] ?? null,
+            (int) ($data['id_empresa'] ?? 0),
+            'No se puede registrar el documento porque el período contable de esa fecha está cerrado.'
+        );
+
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
 
@@ -243,6 +252,13 @@ class ConsignacionFacturaService
             throw new Exception('Solo se pueden editar documentos en estado Borrador.');
         }
 
+        $this->validarPeriodoContableAlModificar(
+            $doc['fecha_emision'] ?? null,
+            $data['fecha_emision'] ?? null,
+            $idEmpresa,
+            'el documento'
+        );
+
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
@@ -288,6 +304,12 @@ class ConsignacionFacturaService
         if (($doc['estado'] ?? '') === 'facturada') {
             throw new Exception('No se puede eliminar: el documento ya tiene una factura. Anule primero la factura.');
         }
+
+        $this->validarPeriodoContable(
+            $doc['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede eliminar el documento porque su período contable está cerrado.'
+        );
 
         $db = Database::getConnection();
         try {

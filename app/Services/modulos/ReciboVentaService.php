@@ -22,6 +22,8 @@ use App\core\Database;
  */
 class ReciboVentaService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private ReciboVentaRepository $repository;
     private ReciboVentaRules $rules;
     private LogSistemaService $logService;
@@ -278,6 +280,12 @@ class ReciboVentaService
 
     public function crear(array $data): int
     {
+        $this->validarPeriodoContable(
+            $data["fecha_emision"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "No se puede emitir el recibo porque el período contable de esa fecha está cerrado."
+        );
+
         $this->validarSecuencial($data);
 
         $empresaConfig = $data['empresa_config'] ?? [];
@@ -349,6 +357,13 @@ class ReciboVentaService
         if (($cabecera['estado'] ?? '') === 'anulado') {
             throw new \Exception('No se puede modificar un recibo anulado.');
         }
+
+        $this->validarPeriodoContableAlModificar(
+            $cabecera['fecha_emision'] ?? null,
+            $data['fecha_emision'] ?? null,
+            (int) $data['id_empresa'],
+            'el recibo'
+        );
 
         $this->validarSecuencial($data, $id);
 
@@ -501,6 +516,14 @@ class ReciboVentaService
             throw new \Exception('El recibo ya está anulado.');
         }
 
+        // Anular revierte cobros, asiento e inventario del recibo: si su período
+        // está cerrado, ese movimiento no puede tocarse.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede anular el recibo porque su período contable está cerrado.'
+        );
+
         $db = Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) $db->beginTransaction();
@@ -530,6 +553,13 @@ class ReciboVentaService
         if (!$cabecera || (int)$cabecera['id_empresa'] !== $idEmpresa) {
             throw new \Exception('Recibo no encontrado.');
         }
+
+        // Igual que al anular: eliminar revierte cobros, asiento e inventario.
+        $this->validarPeriodoContable(
+            $cabecera['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede eliminar el recibo porque su período contable está cerrado.'
+        );
 
         $db = Database::getConnection();
         $managedTransaction = !$db->inTransaction();

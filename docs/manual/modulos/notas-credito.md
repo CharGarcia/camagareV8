@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri
-version: 1.5
+version: 1.7
 orden: 30
 estado: activo
 ---
@@ -102,8 +102,38 @@ momento (no solo la página visible).
 - **"Solo se pueden editar Notas de Crédito en estado borrador"**: ya fue
   enviada.
 
+## La fecha de emisión y el envío al SRI
+
+Para enviar al SRI, la **fecha de emisión debe ser la de hoy**. Si intenta enviar
+la nota de crédito fechada otro día, el envío se detiene antes de salir —sin gastar
+un intento contra el SRI— con el aviso *"la fecha de emisión de la nota de crédito
+(…) debe ser la fecha actual"*. Ponga la fecha de hoy, guarde y vuelva a enviar.
+
+## Períodos contables cerrados
+
+Un documento que mueve cartera, inventario o contabilidad no puede tocar un
+período ya cerrado. El sistema lo comprueba en las cuatro operaciones:
+
+| Operación | Qué se comprueba |
+|-----------|------------------|
+| Emitir | Que la fecha de emisión no caiga en un período cerrado |
+| Modificar | La fecha nueva **y** aquella con la que está registrado |
+| Anular | La fecha del documento (anular revierte sus movimientos) |
+| Eliminar | La fecha del documento |
+
+Al modificar se revisan las dos fechas a propósito: mover un documento de un
+mes cerrado a uno abierto lo alteraría igual. Los períodos se abren y se
+cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
+la operación de inmediato.
+
 ## Historial de cambios
 
+- **1.7** — El envío al SRI comprueba ahora que la **fecha de emisión sea la de
+  hoy**, como ya hacían factura de venta y liquidación de compra. Antes el documento
+  salía con cualquier fecha y era el propio SRI quien lo rechazaba.
+- **1.6** — El módulo respeta ahora el **cierre contable**: no se puede emitir,
+  modificar, anular ni eliminar una nota de crédito cuyo período esté cerrado. Antes no se
+  comprobaba en ninguna de las cuatro operaciones.
 - **1.5** — Corregido el botón **Nueva Nota de Crédito**: después de enviar una
   nota al SRI, al crear la siguiente el modal conservaba datos de la anterior
   (estado *Autorizado*, botón **Guardar** deshabilitado, botones de Anular y

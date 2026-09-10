@@ -19,6 +19,8 @@ use App\Services\LogSistemaService;
  */
 class ActivoFijoDepreciacionService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     public function __construct(
         private ActivoFijoRepository $activoRepository,
         private ActivoFijoLoteRepository $loteRepository,
@@ -85,6 +87,14 @@ class ActivoFijoDepreciacionService
         if ($this->loteRepository->existsLote($idEmpresa, $anio, $mes)) {
             throw new \Exception("La depreciación de $mesNombre $anio ya fue generada.");
         }
+
+        // El lote asienta la depreciación con fecha del último día del mes: si ese
+        // mes ya está cerrado, el asiento no cabe y el lote no debe generarse.
+        $this->validarPeriodoContable(
+            date('Y-m-t', mktime(0, 0, 0, $mes, 1, $anio)),
+            $idEmpresa,
+            "No se puede generar la depreciación de $mesNombre $anio porque ese período contable está cerrado."
+        );
 
         $activos = $this->activoRepository->getActivosDepreciables($idEmpresa, $anio, $mes);
         if (empty($activos)) {

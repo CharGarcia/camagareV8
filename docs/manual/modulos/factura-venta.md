@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos
-version: 2.2
+version: 2.3
 orden: 20
 estado: activo
 ---
@@ -140,8 +140,28 @@ y asiento contable) según la configuración de la empresa.
   `ABC1234` sin espacios ni guiones). La placa sale en el XML (tag `<placa>`) y en el
   PDF (casilla *Placa / Matrícula*). Ficha Técnica SRI v2.34, Anexo 25.
 
+## Períodos contables cerrados
+
+Un documento que mueve cartera, inventario o contabilidad no puede tocar un
+período ya cerrado. El sistema lo comprueba en las cuatro operaciones:
+
+| Operación | Qué se comprueba |
+|-----------|------------------|
+| Emitir | Que la fecha de emisión no caiga en un período cerrado |
+| Modificar | La fecha nueva **y** aquella con la que está registrado |
+| Anular | La fecha del documento (anular revierte sus movimientos) |
+| Eliminar | La fecha del documento |
+
+Al modificar se revisan las dos fechas a propósito: mover un documento de un
+mes cerrado a uno abierto lo alteraría igual. Los períodos se abren y se
+cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
+la operación de inmediato.
+
 ## Historial de cambios
 
+- **2.3** — El módulo respeta ahora el **cierre contable**: no se puede emitir,
+  modificar, anular ni eliminar una factura cuyo período esté cerrado. Antes no se
+  comprobaba en ninguna de las cuatro operaciones.
 - **2.2** — La **tirilla** respeta la *Presentación de los ítems* configurada en
   el módulo Empresa (pestaña Facturación): agrupa las líneas por **nombre**
   —opción nueva, junta el mismo producto sin importar lote ni NUP—, por lote o

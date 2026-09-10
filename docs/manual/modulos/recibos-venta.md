@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.5
+version: 1.6
 orden: 35
 estado: activo
 ---
@@ -79,8 +79,28 @@ El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuá
 documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
+## Períodos contables cerrados
+
+Un documento que mueve cartera, inventario o contabilidad no puede tocar un
+período ya cerrado. El sistema lo comprueba en las cuatro operaciones:
+
+| Operación | Qué se comprueba |
+|-----------|------------------|
+| Emitir | Que la fecha de emisión no caiga en un período cerrado |
+| Modificar | La fecha nueva **y** aquella con la que está registrado |
+| Anular | La fecha del documento (anular revierte sus movimientos) |
+| Eliminar | La fecha del documento |
+
+Al modificar se revisan las dos fechas a propósito: mover un documento de un
+mes cerrado a uno abierto lo alteraría igual. Los períodos se abren y se
+cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
+la operación de inmediato.
+
 ## Historial de cambios
 
+- **1.6** — El módulo respeta ahora el **cierre contable**: no se puede emitir,
+  modificar, anular ni eliminar un recibo cuyo período esté cerrado. Antes no se
+  comprobaba en ninguna de las cuatro operaciones.
 - **1.5** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
   activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue

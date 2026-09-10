@@ -573,7 +573,7 @@ class SriEnvioService
             $repo    = new \App\repositories\modulos\RetencionCompraRepository();
             $service = new \App\Services\modulos\RetencionCompraService(
                 $repo,
-                new \App\Rules\modulos\RetencionCompraRules(),
+                new \App\Rules\modulos\RetencionCompraRules($repo),
                 new \App\Services\LogSistemaService()
             );
             $cab = $repo->getPorIdSri($idRetencion, $idEmpresa);
@@ -613,6 +613,19 @@ class SriEnvioService
         );
         if ($preCheck !== null) {
             return $preCheck;
+        }
+
+        // El SRI exige que la fecha de emisión sea la fecha actual del día del envío
+        // (mismo control que factura de venta, reembolso, liquidación y retención).
+        $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
+        $hoy          = (new \DateTime())->format('Y-m-d');
+        if ($fechaEmision !== $hoy) {
+            $fechaFmt = (new \DateTime($cabecera['fecha_emision']))->format('d-m-Y');
+            throw new \RuntimeException(
+                "No se puede enviar al SRI: la fecha de emisión de la nota de crédito ({$fechaFmt}) " .
+                "debe ser la fecha actual ({$hoy}). " .
+                "Edite la nota de crédito y actualice la fecha de emisión a hoy antes de enviar."
+            );
         }
 
         $detalles = $repo->getDetalles($idNC);
@@ -809,6 +822,19 @@ class SriEnvioService
             return $preCheck;
         }
 
+        // El SRI exige que la fecha de emisión sea la fecha actual del día del envío
+        // (mismo control que factura de venta, reembolso, liquidación y retención).
+        $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
+        $hoy          = (new \DateTime())->format('Y-m-d');
+        if ($fechaEmision !== $hoy) {
+            $fechaFmt = (new \DateTime($cabecera['fecha_emision']))->format('d-m-Y');
+            throw new \RuntimeException(
+                "No se puede enviar al SRI: la fecha de emisión de la nota de débito ({$fechaFmt}) " .
+                "debe ser la fecha actual ({$hoy}). " .
+                "Edite la nota de débito y actualice la fecha de emisión a hoy antes de enviar."
+            );
+        }
+
         $motivos   = $repo->getMotivos($idND);
         $impuestos = $repo->getImpuestos($idND);
         $pagos     = $repo->getPagos($idND);
@@ -1002,6 +1028,19 @@ class SriEnvioService
         );
         if ($preCheck !== null) {
             return $preCheck;
+        }
+
+        // El SRI exige que la fecha de emisión sea la fecha actual del día del envío
+        // (mismo control que factura de venta, factura de reembolso y liquidación).
+        $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
+        $hoy          = (new \DateTime())->format('Y-m-d');
+        if ($fechaEmision !== $hoy) {
+            $fechaFmt = (new \DateTime($cabecera['fecha_emision']))->format('d-m-Y');
+            throw new \RuntimeException(
+                "No se puede enviar al SRI: la fecha de emisión de la retención ({$fechaFmt}) " .
+                "debe ser la fecha actual ({$hoy}). " .
+                "Edite la retención y actualice la fecha de emisión a hoy antes de enviar."
+            );
         }
 
         $lineas = $repo->getDetalle($idRetencion);

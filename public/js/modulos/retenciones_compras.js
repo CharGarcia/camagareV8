@@ -63,6 +63,13 @@
 
 
 
+        // Totales del documento sustento escritos a mano: se marcan para que el
+        // autollenado desde las líneas no los pise (ver autollenarDocSustento).
+        ['ret_doc_subtotal', 'ret_doc_iva'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', () => { el.dataset.editado = '1'; });
+        });
+
         // Buscar input
         const buscarEl = document.getElementById('buscarRet');
         if (buscarEl) {
@@ -178,7 +185,13 @@
             const lineas = resp.lineas || [];
 
             cargarCabecera(cab);
-            lineasData = lineas.map(l => ({ ...l }));
+            // `sri_porcentaje` es la tarifa del catálogo (viene del JOIN de getDetalle):
+            // si está definida, el porcentaje de esa línea no se puede cambiar. Sin
+            // enlace al catálogo queda editable y el servidor lo comprueba al guardar.
+            lineasData = lineas.map(l => ({
+                ...l,
+                porcentaje_fijo: parseFloat(l.sri_porcentaje || 0) > 0,
+            }));
             renderLineas();
             calcTotales();
 
@@ -210,6 +223,12 @@
             mostrarAlerta('Debe agregar al menos una línea de retención.', 'warning');
             return;
         }
+
+        // El período fiscal es el mes de la fecha de emisión y el servidor lo exige
+        // así. Se recalcula aquí porque el campo es readonly: si viene desfasado de
+        // una retención antigua, el usuario no tendría cómo corregirlo a mano.
+        window.RET_actualizarPeriodoFiscal(document.getElementById('ret_fecha_emision')?.value || '');
+
         const payload = recopilarFormulario();
 
         if (!payload.id_proveedor) {
@@ -230,21 +249,16 @@
             return;
         }
 
-        // Validar diferencia de fechas (máximo 5 días y no anterior)
+        // La retención no puede ser anterior a su documento: eso el SRI lo rechaza y
+        // no hay nada que confirmar. El plazo de emisión, en cambio, ya no se
+        // comprueba aquí: lo evalúa el servidor en días hábiles y llega como
+        // advertencia a confirmar (ver el bloque requiere_confirmacion más abajo).
         if (payload.fecha_emision && payload.fecha_emision_doc_sustento) {
             const fRet = new Date(payload.fecha_emision + 'T00:00:00');
             const fDoc = new Date(payload.fecha_emision_doc_sustento + 'T00:00:00');
-            
+
             if (fRet < fDoc) {
                 mostrarAlerta('La fecha de la retención no puede ser anterior a la del documento retenido.', 'warning');
-                document.getElementById('ret_fecha_emision_doc_sustento')?.focus();
-                return;
-            }
-
-            const diffTime = fRet - fDoc;
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays > 5) {
-                mostrarAlerta('La retención debe emitirse máximo 5 días después de la fecha de emisión de la compra.', 'warning');
                 document.getElementById('ret_fecha_emision_doc_sustento')?.focus();
                 return;
             }
@@ -268,12 +282,21 @@
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...'; }
 
         try {
-            const res  = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'data=' + encodeURIComponent(JSON.stringify(payload)),
-            });
-            const data = await res.json();
+            let data = await enviarRetencion(url, payload);
+
+            // Segundo nivel de validación: la retención es guardable, pero el
+            // servidor encontró reparos tributarios (plazo de emisión, porcentaje
+            // fuera del catálogo, base bajo el mínimo…). No se guardó nada: se
+            // reenvía solo si el usuario los acepta uno a uno en el diálogo.
+            if (!data.ok && data.requiere_confirmacion) {
+                const aceptado = await confirmarAdvertencias(data.advertencias || []);
+                if (!aceptado) {
+                    mostrarAlerta('La retención no se guardó.', 'warning');
+                    return;
+                }
+                data = await enviarRetencion(url, { ...payload, confirmar_advertencias: 1 });
+            }
+
             if (data.ok) {
                 mostrarAlerta(data.mensaje, 'success');
                 const idPrevio   = parseInt(retIdActual) || 0;
@@ -295,7 +318,9 @@
                     window.RET_abrirModal({ dataset: { row: JSON.stringify({ id: idGuardado }) } });
                 }
             } else {
-                mostrarAlerta(data.mensaje || 'Error al guardar.', 'danger');
+                // Los errores de validación pueden traer varios reparos encadenados:
+                // en un toast de tres segundos no se alcanzan a leer.
+                mostrarError(data.mensaje || 'Error al guardar.');
             }
         } catch (e) {
             mostrarAlerta('Error de red al guardar.', 'danger');
@@ -585,6 +610,7 @@
             base_imponible:     baseSugerida,
             porcentaje_retener: '',
             valor_retenido:     0,
+            porcentaje_fijo:    false,
         });
         renderLineas();
         const tbody = document.getElementById('ret_lineas_body');
@@ -603,6 +629,14 @@
     window.RET_onLineCambio = (idx, campo, valor) => {
         if (!lineasData[idx]) return;
         lineasData[idx][campo] = valor;
+
+        // Reescribir el código o el concepto a mano deshace la elección del catálogo:
+        // el porcentaje vuelve a ser editable hasta que se elija otro código de la
+        // lista, que es quien decide si la tarifa es fija o variable.
+        if (campo === 'codigo_retencion' || campo === 'concepto') {
+            lineasData[idx].porcentaje_fijo  = false;
+            lineasData[idx].id_retencion_sri = '';
+        }
 
         // El catálogo SRI se puede buscar desde cualquiera de las tres columnas
         // (código, concepto o porcentaje); el backend busca en todas las columnas.
@@ -756,6 +790,10 @@
                 lineasData[idx].porcentaje_retener = item.porcentaje_ret;
                 lineasData[idx].codigo_impuesto    = item.impuesto_ret;
                 lineasData[idx].id_retencion_sri   = item.id;
+                // El catálogo manda: con una tarifa definida el porcentaje queda fijo;
+                // con 0 el concepto es de porcentaje variable (dividendos, pagos al
+                // exterior según convenio) y se escribe el que corresponda al caso.
+                lineasData[idx].porcentaje_fijo    = parseFloat(item.porcentaje_ret || 0) > 0;
                 
                 // Sugerir base imponible si existe contexto de compra
                 const formEl = document.getElementById('formRetencion');
@@ -874,11 +912,15 @@
                        oninput="window.RET_onLineCambio(${i},'base_imponible',this.value)"
                        onblur="this.value = parseFloat(this.value || 0).toFixed(2)">
             </td>
-            <!-- % Retención -->
+            <!-- % Retención. Con una tarifa definida en el catálogo el campo queda
+                 bloqueado; con 0 (concepto de porcentaje variable) se puede escribir.
+                 Mientras no haya código elegido sigue editable, porque desde aquí
+                 también se busca en el catálogo por porcentaje. -->
             <td class="p-0">
-                <input type="number" class="form-control form-control-sm border-0 bg-transparent text-center"
+                <input type="number" class="form-control form-control-sm border-0 text-center${l.porcentaje_fijo ? ' bg-light text-muted' : ' bg-transparent'}"
                        style="padding:0 4px;height:28px;font-size:0.78rem;" placeholder="0" step="0.01" min="0" max="100"
                        value="${l.porcentaje_retener}"
+                       ${l.porcentaje_fijo ? 'readonly title="Lo fija el catálogo del SRI para este código. Para cambiarlo, edite el código en Configuración → Retenciones SRI."' : ''}
                        oninput="window.RET_onLineCambio(${i},'porcentaje_retener',this.value)"
                        onfocus="window.RET_buscarCodigoSri(${i},'porcentaje')">
             </td>
@@ -949,10 +991,14 @@
             else if (cod === '2' || cod === 'IVA') iva += base;
         });
 
+        // Lo que el usuario escribió a mano no se toca: son los totales REALES de la
+        // factura y es contra ellos que el servidor comprueba que la base de IVA sea
+        // el IVA del documento y no su subtotal. Si se sobrescribieran en cada
+        // tecleo, esa comprobación no tendría contra qué contrastar.
         const elSub = document.getElementById('ret_doc_subtotal');
         const elIva = document.getElementById('ret_doc_iva');
-        if (elSub) elSub.value = subtotal > 0 ? subtotal.toFixed(2) : '';
-        if (elIva) elIva.value = iva > 0 ? iva.toFixed(2) : '';
+        if (elSub && elSub.dataset.editado !== '1') elSub.value = subtotal > 0 ? subtotal.toFixed(2) : '';
+        if (elIva && elIva.dataset.editado !== '1') elIva.value = iva > 0 ? iva.toFixed(2) : '';
         if (typeof window.RET_calcTotalSustento === 'function') window.RET_calcTotalSustento();
     }
 
@@ -1064,6 +1110,16 @@
         set('ret_doc_subtotal', cab.doc_sustento_subtotal != null ? cab.doc_sustento_subtotal : '');
         set('ret_doc_iva',      cab.doc_sustento_iva      != null ? cab.doc_sustento_iva      : '');
         set('ret_doc_total',    cab.doc_sustento_total    != null ? cab.doc_sustento_total    : '');
+
+        // Los totales guardados son los del documento real: cuentan como escritos a
+        // mano para que el autollenado desde las líneas no los reemplace al editar.
+        [['ret_doc_subtotal', cab.doc_sustento_subtotal], ['ret_doc_iva', cab.doc_sustento_iva]]
+            .forEach(([id, valor]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (parseFloat(valor || 0) > 0) el.dataset.editado = '1';
+                else delete el.dataset.editado;
+            });
         // Filtrar sustento según el tipo de documento y seleccionar el guardado
         window.RET_filtrarSustentos(cab.tipo_doc_sustento || '01', cab.id_sustento_tributario || null);
         set('ret_observaciones', cab.observaciones || '');
@@ -1371,6 +1427,14 @@
         if (elIdComp) elIdComp.value = '';
         const elIdLiq = document.getElementById('ret_id_liquidacion');
         if (elIdLiq) elIdLiq.value = '';
+
+        // El documento sustento de la retención anterior ya no aplica: sin esto, sus
+        // totales quedarían marcados como escritos a mano y no se autollenarían.
+        ['ret_doc_subtotal', 'ret_doc_iva'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) delete el.dataset.editado;
+        });
+
         renderLineas();
 
         // Limpiar búsquedas
@@ -1427,6 +1491,76 @@
             return result.isConfirmed;
         }
         return confirm(titulo + '\n' + texto);
+    }
+
+    /**
+     * Error al guardar. Un mensaje corto va como toast, igual que siempre; uno
+     * largo —varios reparos de validación encadenados— va en un diálogo que
+     * espera al usuario, porque en tres segundos no se alcanza a leer.
+     */
+    function mostrarError(mensaje) {
+        if (typeof Swal === 'undefined' || String(mensaje).length <= 90) {
+            mostrarAlerta(mensaje, 'danger');
+            return;
+        }
+        Swal.fire({
+            icon: 'error',
+            title: 'No se pudo guardar la retención',
+            html: `<div class="text-start small">${escHtml(mensaje)}</div>`,
+            confirmButtonText: 'Entendido',
+            width: '38rem',
+        });
+    }
+
+    /** POST del formulario de retención; devuelve la respuesta ya decodificada. */
+    async function enviarRetencion(url, payload) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'data=' + encodeURIComponent(JSON.stringify(payload)),
+        });
+        return await res.json();
+    }
+
+    /**
+     * Diálogo de los reparos tributarios que el servidor devolvió. La retención NO
+     * se guardó: hasta que el usuario acepte expresamente, no se reenvía nada. El
+     * botón por defecto es Cancelar, para que aceptar sea un acto deliberado.
+     */
+    async function confirmarAdvertencias(advertencias) {
+        // Cada advertencia trae {texto, base_legal}: la norma que la sustenta se
+        // muestra debajo, en gris, para que el usuario pueda ir a comprobarla en
+        // lugar de tener que creerse el aviso.
+        const items = (advertencias || []).map(a => (typeof a === 'string' ? { texto: a } : (a || {})));
+
+        const lista = items.map(a => `<li class="mb-2">${escHtml(a.texto || '')}`
+            + (a.base_legal
+                ? `<div class="text-muted fst-italic mt-1" style="font-size:.78rem;line-height:1.3;">
+                     <i class="bi bi-journal-text me-1"></i>${escHtml(a.base_legal)}</div>`
+                : '')
+            + '</li>').join('');
+
+        if (typeof Swal === 'undefined') {
+            return confirm('Revise antes de emitir:\n\n'
+                + items.map(a => '• ' + (a.texto || '') + (a.base_legal ? '\n  ' + a.base_legal : '')).join('\n')
+                + '\n\n¿Emitir la retención de todos modos?');
+        }
+
+        const result = await Swal.fire({
+            icon: 'warning',
+            title: 'Revise antes de emitir',
+            html: `<ul class="text-start small mb-0 ps-3">${lista}</ul>`
+                + '<p class="text-muted small mt-3 mb-0">La retención no se ha guardado todavía. '
+                + 'Si continúa, quedará constancia en la auditoría de lo que aceptó.</p>',
+            showCancelButton: true,
+            focusCancel: true,
+            confirmButtonText: 'Emitir de todos modos',
+            cancelButtonText: 'Corregir',
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            width: '38rem',
+        });
+        return result.isConfirmed;
     }
 
     function busquedaPredictiva(inputId, dropId, url, onSelect) {

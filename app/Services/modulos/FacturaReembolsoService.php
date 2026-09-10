@@ -13,6 +13,8 @@ use Exception;
 
 class FacturaReembolsoService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private FacturaReembolsoRepository $repository;
     private FacturaReembolsoRules $rules;
     private LogSistemaService $logService;
@@ -66,6 +68,12 @@ class FacturaReembolsoService
     {
         $this->rules->validar($data);
         $this->validarSecuencial($data);
+
+        $this->validarPeriodoContable(
+            $data["fecha_emision"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "No se puede emitir la factura de reembolso porque el período contable de esa fecha está cerrado."
+        );
 
         $totales = $this->calcularTotalesReembolso($data['terceros']);
         $data    = array_merge($data, $totales);
@@ -149,6 +157,13 @@ class FacturaReembolsoService
         if (($original['estado'] ?? '') !== 'borrador') {
             throw new Exception('Solo se pueden modificar facturas de reembolso en estado borrador.');
         }
+
+        $this->validarPeriodoContableAlModificar(
+            $original["fecha_emision"] ?? null,
+            $data["fecha_emision"] ?? null,
+            (int) $data["id_empresa"],
+            "la factura de reembolso"
+        );
 
         $this->rules->validar($data);
         $this->validarSecuencial($data, $id);
@@ -334,6 +349,12 @@ class FacturaReembolsoService
                 throw new Exception('Solo se pueden eliminar facturas de reembolso en estado borrador.');
             }
 
+            $this->validarPeriodoContable(
+                $fr['fecha_emision'] ?? null,
+                $idEmpresa,
+                'No se puede eliminar la factura de reembolso porque su período contable está cerrado.'
+            );
+
             $this->repository->eliminarLogico($id, $idUsuario);
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'factura_reembolso_cabecera', $id, $fr, null);
@@ -358,6 +379,13 @@ class FacturaReembolsoService
             if (($fr['estado'] ?? '') === 'anulado') {
                 throw new Exception('La factura de reembolso ya está anulada.');
             }
+
+            // Anular revierte su asiento: no puede tocar un período ya cerrado.
+            $this->validarPeriodoContable(
+                $fr['fecha_emision'] ?? null,
+                $idEmpresa,
+                'No se puede anular la factura de reembolso porque su período contable está cerrado.'
+            );
 
             $idAsiento = (int) ($fr['id_asiento_contable'] ?? 0);
             if ($idAsiento > 0) {

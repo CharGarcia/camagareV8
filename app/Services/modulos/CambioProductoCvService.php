@@ -24,6 +24,8 @@ use Exception;
  */
 class CambioProductoCvService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     /** Tipo de documento en empresa_secuencial / SecuencialRepository::DOCUMENT_MAP. */
     private const TIPO_SECUENCIAL = 'Cambios de productos';
 
@@ -73,6 +75,12 @@ class CambioProductoCvService
     public function crear(array $data): int
     {
         $this->rules->validarCreacion($data);
+
+        $this->validarPeriodoContable(
+            $data["fecha_cambio"] ?? null,
+            (int) ($data["id_empresa"] ?? 0),
+            "No se puede registrar el cambio porque el período contable de esa fecha está cerrado."
+        );
         $this->rules->validarNumeracion($data);
 
         $idEmpresa = (int) $data['id_empresa'];
@@ -270,6 +278,13 @@ class CambioProductoCvService
         if (!$cab) {
             throw new Exception("Cambio no encontrado.");
         }
+        $this->validarPeriodoContableAlModificar(
+            $cab['fecha_cambio'] ?? null,
+            $data['fecha_cambio'] ?? null,
+            $idEmpresa,
+            'el cambio'
+        );
+
         if (($cab['estado'] ?? '') !== 'Borrador') {
             throw new Exception("Solo se pueden editar cambios en estado Borrador.");
         }
@@ -314,6 +329,13 @@ class CambioProductoCvService
         if (!$cabecera) {
             throw new Exception("Cambio no encontrado.");
         }
+
+        // Eliminar revierte inventario y anula el asiento del documento.
+        $this->validarPeriodoContable(
+            $cabecera["fecha_cambio"] ?? null,
+            $idEmpresa,
+            "No se puede eliminar el cambio porque su período contable está cerrado."
+        );
 
         $db = Database::getConnection();
         try {
