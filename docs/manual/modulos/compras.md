@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica
-version: 2.6
+version: 2.7
 orden: 20
 estado: activo
 ---
@@ -74,6 +74,41 @@ tipo.
 
 En una **factura de reembolso recibida** el sustento queda fijo en *08 - Valor
 pagado para solicitar Reembolso de Gasto (intermediario)* y no se puede cambiar.
+
+## Pestaña ATS
+
+La pestaña **ATS** del modal reúne los datos que no cambian la compra en sí,
+pero sí cómo se reporta en el anexo transaccional. Tiene dos tarjetas:
+
+**Parte relacionada.** Se marca cuando la transacción es con una parte
+relacionada. Se activa sola al elegir un proveedor que ya está registrado como
+tal en su ficha.
+
+**Pago al exterior.** El anexo pide, en **cada** compra, si el pago se hizo
+dentro o fuera del país:
+
+| Campo | Cuándo se llena |
+|---|---|
+| Tipo de pago | Siempre. Arranca en *pago local* |
+| País donde se efectuó el pago | Solo si es pago al exterior |
+| Aplica convenio de doble tributación | Solo si es pago al exterior |
+| Sujeto a retención según norma legal | Solo si es pago al exterior |
+
+Si elige **pago al exterior**, los tres campos siguientes son obligatorios: sin
+ellos el SRI rechaza el anexo. Con pago local quedan deshabilitados y el anexo
+los reporta como "NA". Un aviso en el nombre de la pestaña señala lo que falta.
+
+El sistema propone *pago al exterior* cuando elige un **comprobante emitido en
+el Exterior (15)** o un proveedor con **pasaporte o identificación del
+exterior** — pero la decisión final es suya, puede cambiarla.
+
+Las compras registradas antes de que existiera esta pestaña quedaron como
+**pago local**, que es lo que el anexo venía reportando. Si alguna era un pago
+al exterior, ábrala y corríjala: el anexo avisa cuando encuentra un comprobante
+del exterior declarado como pago local.
+
+Como el resto de pestañas del modal, la pestaña ATS se puede ocultar por
+usuario desde el ícono de configuración de pestañas.
 
 ## Formas de pago SRI (no confundir con Pagos)
 
@@ -339,6 +374,13 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.7** — Nueva pestaña **ATS** en el modal, con dos tarjetas: *Parte
+  relacionada* (que estaba abajo, como sub-pestaña del detalle) y *Pago al
+  exterior*, nueva — tipo de pago, país, convenio de doble tributación y
+  sujeción a retención. Estos últimos son datos que el anexo transaccional exige
+  en cada compra y que hasta ahora se reportaban siempre como pago local, lo que
+  hacía que el SRI rechazara los comprobantes emitidos en el exterior. Las
+  compras ya registradas quedan como pago local, igual que antes.
 - **2.6** — El asiento automático tolera más centavos de redondeo en facturas con muchas líneas: 1 centavo por línea con IVA (mínimo 3), llevados a la cuenta de Ajuste por redondeo. Si aun así no cuadra, el mensaje pide revisar subtotal, IVA e importe total de la compra.
 - **2.5** — La pestaña **Asiento contable** ahora solo aparece si el usuario tiene acceso a Contabilidad → Asientos Contables, y con permiso de modificar permite corregir el asiento y guardarlo desde el propio modal, validando que siga cuadrando con el total de la compra. Un asiento corregido a mano deja de regenerarse al reguardar la compra; se vuelve al automático con **Restaurar automático**.
 

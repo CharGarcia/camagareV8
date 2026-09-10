@@ -68,6 +68,8 @@ class AtsRepository extends BaseRepository
                        c.parte_relacionada,
                        c.documento_modificado,
                        c.cod_doc_reembolso,
+                       c.pago_loc_ext, c.cod_pais_pago,
+                       c.aplic_conv_dob_trib, c.pag_ext_suj_ret_nor_leg,
                        p.tipo_id_proveedor,
                        p.identificacion AS prov_identificacion,
                        p.razon_social   AS prov_razon_social,
@@ -121,6 +123,12 @@ class AtsRepository extends BaseRepository
                        l.importe_total,
                        false AS parte_relacionada,
                        NULL  AS documento_modificado,
+                       -- Las liquidaciones de compra las emite la propia empresa en
+                       -- Ecuador: el pago siempre es local, no hay campos que leer.
+                       '01'  AS pago_loc_ext,
+                       NULL  AS cod_pais_pago,
+                       NULL  AS aplic_conv_dob_trib,
+                       NULL  AS pag_ext_suj_ret_nor_leg,
                        p.tipo_id_proveedor,
                        p.identificacion AS prov_identificacion,
                        p.razon_social   AS prov_razon_social,
@@ -384,6 +392,41 @@ class AtsRepository extends BaseRepository
                   AND rc.eliminado = false
                   AND rc.id_venta IN ({$inList})";
         return $this->query($sql, $params)->fetchAll();
+    }
+
+    /**
+     * Catálogo global de sustentos tributarios: código → tipos de comprobante en
+     * los que el SRI lo admite (columna `sustento_tributario.tipo_comprobante`).
+     *
+     * Es un catálogo GLOBAL del sistema (sin `id_empresa`), por lo que no se
+     * filtra por empresa. Lo usan el Service (para no asumir un sustento que el
+     * SRI rechaza cuando la compra no lo tiene registrado) y el validador (para
+     * detectar combinaciones sustento/comprobante inválidas antes de cargar).
+     *
+     * @return array<string, string[]>  ['01' => ['01','03','04',…], …]
+     */
+    public function getSustentosPermitidos(): array
+    {
+        $sql = "SELECT codigo, tipo_comprobante
+                FROM sustento_tributario
+                WHERE status = 1";
+        $out = [];
+        foreach ($this->query($sql)->fetchAll() as $r) {
+            $cod = trim((string) $r['codigo']);
+            if ($cod === '') {
+                continue;
+            }
+            $tipos = [];
+            foreach (explode(',', (string) $r['tipo_comprobante']) as $t) {
+                $t = trim($t);
+                if ($t !== '') {
+                    $tipos[] = strlen($t) < 2 ? str_pad($t, 2, '0', STR_PAD_LEFT) : $t;
+                }
+            }
+            $out[str_pad($cod, 2, '0', STR_PAD_LEFT)] = $tipos;
+        }
+        ksort($out);
+        return $out;
     }
 
     /** Códigos de establecimiento activos del RUC (para ventasEstablecimiento). */

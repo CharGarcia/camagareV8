@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\models\IdentificadorCompradorVendedor;
 use App\repositories\modulos\AlumnoRepository;
 use App\Rules\modulos\AlumnoRules;
 use App\Services\LogSistemaService;
@@ -167,5 +168,22 @@ class AlumnoService
     public function getPuntosEmisionParaSelect(int $idEmpresa): array
     {
         return $this->repository->getPuntosEmisionParaSelect($idEmpresa);
+    }
+
+    /**
+     * Tipos de identificación que se ofrecen en el modal del alumno: del
+     * catálogo global de identificadores de comprador, solo los que aplican a
+     * una persona natural (ver AlumnoRules::TIPOS_IDENTIFICACION). El catálogo
+     * es global, así que no se filtra por empresa.
+     */
+    public function getTiposIdentificacionParaSelect(): array
+    {
+        $todos = (new IdentificadorCompradorVendedor())->getAll('codigo', 'ASC');
+
+        return array_values(array_filter($todos, fn($r) =>
+            (int)($r['tipo'] ?? 0) === IdentificadorCompradorVendedor::TIPO_COMPRADOR
+            && (int)($r['status'] ?? 1) === 1
+            && in_array((string)($r['codigo'] ?? ''), AlumnoRules::TIPOS_IDENTIFICACION, true)
+        ));
     }
 }

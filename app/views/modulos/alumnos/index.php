@@ -42,13 +42,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <div class="d-flex align-items-center gap-2">
             <div class="input-group input-group-sm" style="width: 260px;">
                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="buscarAlumno" class="form-control border-start-0 ps-0 shadow-none" placeholder="Buscar alumno, código o representante..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+                <input type="text" id="buscarAlumno" class="form-control border-start-0 ps-0 shadow-none" placeholder="Buscar alumno o representante..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
             </div>
             <div class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombres'          => 'Alumno',
-                    'codigo_alumno'    => 'Código',
                     'campus'           => 'Campus',
                     'nivel'            => 'Nivel/Curso',
                     'representante'    => 'Representante',
@@ -77,7 +76,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <thead class="table-light shadow-sm">
                     <tr>
                         <th class="ps-3 sortable-header" data-sort="nombres" data-col="nombres" role="button">Alumno <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th data-col="codigo_alumno" class="sortable-header" data-sort="codigo_alumno" role="button">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th data-col="campus" class="sortable-header" data-sort="campus" role="button">Campus <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th data-col="nivel" class="sortable-header" data-sort="nivel" role="button">Nivel/Curso <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th data-col="representante" class="sortable-header" data-sort="representante" role="button">Representante <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -98,7 +96,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         ?>
                             <tr class="alumno-row" onclick="abrirModalAlumnoEditar(this)" data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
                                 <td class="ps-3 fw-bold"><?= htmlspecialchars(trim(($row['apellidos'] ?? '') . ' ' . ($row['nombres'] ?? ''))) ?></td>
-                                <td class="text-muted small"><?= htmlspecialchars((string)($row['codigo_alumno'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($row['campus_actual_nombre'] ?? '—')) ?></td>
                                 <td><?= htmlspecialchars((string)($row['nivel_actual_nombre'] ?? '—')) ?></td>
                                 <td class="small"><?= htmlspecialchars((string)($row['representante_nombre'] ?? '—')) ?></td>

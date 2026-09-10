@@ -35,9 +35,9 @@ class AtsExcelService
     /**
      * @return array{ok:bool, mensaje?:string, nombre?:string, ruta?:string}
      */
-    public function generar(int $idEmpresa, string $mes, string $anio, bool $semestral, int $idUsuario = 0): array
+    public function generar(int $idEmpresa, string $mes, string $anio, bool $semestral, int $idUsuario = 0, bool $incluirVentas = true): array
     {
-        $datos = $this->ats->recopilar($idEmpresa, $mes, $anio, $semestral, $idUsuario);
+        $datos = $this->ats->recopilar($idEmpresa, $mes, $anio, $semestral, $idUsuario, $incluirVentas);
         if (!$datos['ok']) {
             return ['ok' => false, 'mensaje' => $datos['mensaje'] ?? 'No se pudo recopilar la información.'];
         }
@@ -52,9 +52,13 @@ class AtsExcelService
         $hojaRet->setTitle('Retenciones');
         $this->llenarRetenciones($hojaRet, $datos['retenciones']);
 
-        $hojaVentas = $book->createSheet();
-        $hojaVentas->setTitle('Ventas');
-        $this->llenarVentas($hojaVentas, $datos['ventas'] ?? []);
+        // La hoja de ventas solo se crea si el anexo se generó con el módulo de
+        // ventas; si no, una hoja vacía haría pensar que no hubo ventas en el mes.
+        if (!empty($datos['incluye_ventas'])) {
+            $hojaVentas = $book->createSheet();
+            $hojaVentas->setTitle('Ventas');
+            $this->llenarVentas($hojaVentas, $datos['ventas'] ?? []);
+        }
 
         $hojaAnul = $book->createSheet();
         $hojaAnul->setTitle('Anulados');
@@ -358,12 +362,16 @@ class AtsExcelService
             $vTot['comp']  += (int) $v['numeroComprobantes'];
         }
 
+        // Sin el módulo de ventas los totales serían todos 0.00 y se leerían como
+        // "no hubo ventas en el mes", que no es lo que pasó: se dice explícitamente.
+        $conVentas = !empty($datos['incluye_ventas']);
+
         $r += 1;
-        $h->setCellValue("A{$r}", 'TOTALES DE VENTAS');
+        $h->setCellValue("A{$r}", $conVentas ? 'TOTALES DE VENTAS' : 'VENTAS (no incluidas en este anexo)');
         $h->getStyle("A{$r}")->getFont()->setBold(true);
         $h->getStyle("A{$r}:B{$r}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB(self::GRIS);
         $r++;
-        $totVentas = [
+        $totVentas = $conVentas ? [
             ['Nº de clientes (registros de venta)', count($ventas), false],
             ['Nº de comprobantes emitidos', $vTot['comp'], false],
             ['Base No Objeto de IVA', $vTot['noGra'], true],
@@ -374,6 +382,10 @@ class AtsExcelService
             ['IVA que le retuvieron', $vTot['retIva'], true],
             ['Renta que le retuvieron', $vTot['retRenta'], true],
             ['Total Ventas (totalVentas del ATS)', $vTot['noGra'] + $vTot['b0'] + $vTot['grav'], true],
+            ['Comprobantes anulados', count($anulados), false],
+        ] : [
+            ['El anexo se generó sin el módulo de ventas', '', false],
+            ['Total Ventas (totalVentas del ATS)', 0, true],
             ['Comprobantes anulados', count($anulados), false],
         ];
         foreach ($totVentas as [$k, $v, $money]) {

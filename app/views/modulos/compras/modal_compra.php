@@ -70,6 +70,7 @@
             <?php if (\App\Helpers\Permisos::puedeVer('modulos/ordenes-compra')): ?>
             <li class="nav-item"><a class="nav-link" id="tab_orden_compra" data-bs-toggle="tab" data-bs-target="#tabOrdenCompra" href="#tabOrdenCompra" role="tab"><i class="bi bi-cart3 me-1"></i>Orden de Compra<span id="oc-tab-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 d-none">1</span></a></li>
             <?php endif; ?>
+            <li class="nav-item"><a class="nav-link" id="tab_ats" data-bs-toggle="tab" data-bs-target="#tabAts" href="#tabAts" role="tab"><i class="bi bi-clipboard-data me-1"></i>ATS<span id="mcBadgePagoExterior" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 d-none">!</span></a></li>
             <li class="nav-item d-none" id="tab-relacionados-li"><a class="nav-link" id="tab-relacionados-tab" data-bs-toggle="tab" data-bs-target="#tabRelacionados" href="#tabRelacionados" role="tab"><i class="bi bi-link-45deg me-1"></i><span id="tab-relacionados-label">Documento Relacionado</span></a></li>
             <li class="nav-item d-none" id="tab-reembolso-li"><a class="nav-link" id="tab-reembolso-tab" data-bs-toggle="tab" data-bs-target="#tabReembolso" href="#tabReembolso" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Detalle de Reembolso</a></li>
           </ul>
@@ -80,6 +81,7 @@
               'tabInventario'   => 'Inventario',
               'tabRetenciones'  => 'Retenciones',
               'tabOrdenCompra'  => 'Orden de Compra',
+              'tabAts'          => 'ATS',
             ];
             // La pestaña del asiento solo es configurable si el usuario la ve.
             if (\App\Helpers\AsientoPestana::puedeVer()) {
@@ -289,9 +291,6 @@
                   <li class="nav-item">
                     <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-observaciones" type="button">Observaciones</button>
                   </li>
-                  <li class="nav-item">
-                    <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-relacionada" type="button">Parte relacionada</button>
-                  </li>
                 </ul>
                 <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height: 120px;">
                   <!-- Información Adicional: campos libres nombre/valor, equivalente al
@@ -365,15 +364,6 @@
                     </div>
                   </div>
                   <!-- Parte relacionada -->
-                  <div class="tab-pane fade" id="mc-subtab-relacionada" role="tabpanel">
-                    <div class="p-2">
-                      <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="mcParteRelacionada">
-                        <label class="form-check-label small fw-semibold" for="mcParteRelacionada">Parte relacionada</label>
-                      </div>
-                      <div class="x-small text-muted mt-1">Marque si la transacción es con una parte relacionada (informativo para el ATS).</div>
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -834,6 +824,89 @@
                Si el documento es una compra (factura) → muestra sus notas de
                crédito. Si es una nota de crédito → muestra la factura que modifica.
           ════════════════════════════════════════ -->
+          <!-- ════════════════════════════════════════
+               TAB: ATS
+               Datos que no afectan al documento en sí, sino a cómo se reporta
+               la compra en el Anexo Transaccional Simplificado.
+          ════════════════════════════════════════ -->
+          <div class="tab-pane fade" id="tabAts" role="tabpanel">
+            <div class="p-3">
+              <div class="row g-3">
+
+                <!-- Parte relacionada -->
+                <div class="col-md-5">
+                  <div class="card h-100 shadow-sm">
+                    <div class="card-header bg-white border-bottom py-2 px-3">
+                      <h6 class="mb-0 small fw-bold"><i class="bi bi-people me-2 text-primary"></i>Parte relacionada</h6>
+                    </div>
+                    <div class="card-body p-3">
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="mcParteRelacionada">
+                        <label class="form-check-label small fw-semibold" for="mcParteRelacionada">La transacción es con una parte relacionada</label>
+                      </div>
+                      <div class="x-small text-muted mt-2">
+                        Se marca sola al elegir un proveedor que ya está registrado como parte
+                        relacionada en su ficha.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Pago al exterior: bloque <pagoExterior> del ATS. Solo se llena
+                     cuando el pago se hizo fuera del país; con pago local el anexo
+                     reporta "NA" en los tres campos dependientes. -->
+                <div class="col-md-7">
+                  <div class="card h-100 shadow-sm">
+                    <div class="card-header bg-white border-bottom py-2 px-3">
+                      <h6 class="mb-0 small fw-bold"><i class="bi bi-globe-americas me-2 text-success"></i>Pago al exterior</h6>
+                    </div>
+                    <div class="card-body p-3">
+                      <div class="row g-2">
+                        <div class="col-md-5">
+                          <label for="mcPagoLocExt" class="form-label small fw-bold d-block mb-1">Tipo de pago</label>
+                          <select class="form-select form-select-sm" id="mcPagoLocExt">
+                            <option value="01">01 - Pago local</option>
+                            <option value="02">02 - Pago al exterior</option>
+                          </select>
+                        </div>
+                        <div class="col-md-7">
+                          <label for="mcCodPaisPago" class="form-label small fw-bold d-block mb-1">País donde se efectuó el pago</label>
+                          <select class="form-select form-select-sm" id="mcCodPaisPago" disabled>
+                            <option value="">-- Seleccione --</option>
+                            <?php foreach (($paisesSri ?? []) as $codPais => $nombrePais): ?>
+                              <option value="<?= htmlspecialchars((string) $codPais) ?>"><?= htmlspecialchars($codPais . ' - ' . $nombrePais) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                        </div>
+                        <div class="col-md-6">
+                          <label for="mcAplicConvDobTrib" class="form-label small fw-bold d-block mb-1">Aplica convenio de doble tributación</label>
+                          <select class="form-select form-select-sm" id="mcAplicConvDobTrib" disabled>
+                            <option value="">-- Seleccione --</option>
+                            <option value="SI">SI</option>
+                            <option value="NO">NO</option>
+                          </select>
+                        </div>
+                        <div class="col-md-6">
+                          <label for="mcPagExtSujRetNorLeg" class="form-label small fw-bold d-block mb-1">Sujeto a retención según norma legal</label>
+                          <select class="form-select form-select-sm" id="mcPagExtSujRetNorLeg" disabled>
+                            <option value="">-- Seleccione --</option>
+                            <option value="SI">SI</option>
+                            <option value="NO">NO</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="x-small text-muted mt-2">
+                        Un comprobante emitido en el exterior (tipo 15) es siempre un pago al exterior:
+                        el SRI rechaza el anexo si se declara como pago local.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
           <div class="tab-pane fade" id="tabRelacionados" role="tabpanel">
             <div class="p-3">
               <div id="mc-relacionados-info" class="small text-muted mb-2"></div>

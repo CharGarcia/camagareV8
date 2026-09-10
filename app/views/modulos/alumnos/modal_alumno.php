@@ -48,16 +48,16 @@ $permClientes = $permClientes ?? [];
                 <!-- Barra de Acciones Superior -->
                 <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
                     <?php if (!empty($permClientes['crear'])): ?>
-                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i> Nuevo cliente</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
                     <?php endif; ?>
                     <?php if (!empty($permCampus['crear']) || !empty($permNiveles['crear'])): ?>
                         <div class="vr mx-1"></div>
                     <?php endif; ?>
                     <?php if (!empty($permCampus['crear'])): ?>
-                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalCampusCrear()" title="Registrar nuevo campus"><i class="bi bi-geo-alt fs-6"></i> Nuevo campus</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalCampusCrear()" title="Registrar nuevo campus"><i class="bi bi-geo-alt fs-6"></i></button>
                     <?php endif; ?>
                     <?php if (!empty($permNiveles['crear'])): ?>
-                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalNivelCrear()" title="Registrar nuevo nivel/curso"><i class="bi bi-mortarboard fs-6"></i> Nuevo nivel/curso</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalNivelCrear()" title="Registrar nuevo nivel/curso"><i class="bi bi-mortarboard fs-6"></i></button>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
@@ -90,10 +90,6 @@ $permClientes = $permClientes ?? [];
                                 </div>
                                 <div class="col-md-9">
                                     <div class="row g-3">
-                                        <div class="col-md-4">
-                                            <label class="form-label small fw-bold text-muted mb-1">Código de alumno</label>
-                                            <input type="text" class="form-control form-control-sm shadow-none" name="codigo_alumno" id="alu_codigo" maxlength="30" placeholder="Autogenerado si se deja vacío">
-                                        </div>
                                         <div class="col-md-4">
                                             <label class="form-label small fw-bold text-muted mb-1">Nombres *</label>
                                             <input type="text" class="form-control form-control-sm shadow-none" name="nombres" id="alu_nombres" required maxlength="150">
@@ -354,5 +350,10 @@ $permClientes = $permClientes ?? [];
 <?php include MVC_APP . '/views/modulos/alumnos_campus/modal_campus.php'; ?>
 <?php include MVC_APP . '/views/modulos/alumnos_niveles/modal_nivel.php'; ?>
 <?php include MVC_APP . '/views/modulos/clientes/modal_cliente.php'; ?>
+<!-- clientes_modal.js NO lo carga modal_cliente.php (es compartido por varios
+     módulos): cada vista que incluye el modal debe cargarlo, igual que
+     factura_venta/index.php. Sin esto abrirModalClienteCrear() no existe y el
+     botón de nuevo cliente de la barra de acciones no hace nada. -->
+<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
 
 <script src="<?= BASE_URL ?>/js/modulos/alumnos_modal.js?v=<?= time() ?>"></script>

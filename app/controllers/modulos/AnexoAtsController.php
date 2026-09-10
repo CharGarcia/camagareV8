@@ -71,13 +71,18 @@ class AnexoAtsController extends BaseModuloController
         $mes       = trim($_POST['mes'] ?? '');
         $anio      = trim($_POST['anio'] ?? '');
         $semestral = !empty($_POST['semestral']) && in_array((string) $_POST['semestral'], ['1', 'true', 'on'], true);
+        // Reportar ventas es opcional: hay contribuyentes que presentan el anexo
+        // solo con compras y retenciones. Por defecto se incluyen (comportamiento
+        // histórico); el formulario manda '0' cuando el usuario las desactiva.
+        $incluirVentas = !isset($_POST['ventas'])
+            || in_array((string) $_POST['ventas'], ['1', 'true', 'on'], true);
 
         if ($mes === '' || $anio === '') {
             $this->json(['ok' => false, 'mensaje' => 'Seleccione mes y año.'], 422);
         }
 
         try {
-            $res = $this->service->generar($idEmpresa, $idUsuario, $mes, $anio, $semestral);
+            $res = $this->service->generar($idEmpresa, $idUsuario, $mes, $anio, $semestral, $incluirVentas);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'mensaje' => 'Error al generar el anexo: ' . $e->getMessage()], 500);
@@ -90,11 +95,14 @@ class AnexoAtsController extends BaseModuloController
         $ruta    = rtrim(BASE_URL, '/') . '/' . $this->getRutaModulo();
         $urlBase = $ruta . '/descargar?archivo=';
         $urlExcel = $ruta . '/excel?mes=' . urlencode($mes) . '&anio=' . urlencode($anio)
-                  . '&semestral=' . ($semestral ? '1' : '0');
+                  . '&semestral=' . ($semestral ? '1' : '0')
+                  . '&ventas=' . ($incluirVentas ? '1' : '0');
         $this->json([
             'ok'           => true,
             'registros'    => $res['registros'],
             'ambiente'     => ($res['ambiente'] ?? '1') === '2' ? 'Producción' : 'Pruebas',
+            'incluye_ventas' => (bool) ($res['incluye_ventas'] ?? true),
+            'ventas'         => (int) ($res['ventas'] ?? 0),
             'xml'          => $res['nombre_xml'],
             'url_xml'      => $urlBase . urlencode($res['nombre_xml']),
             'zip'          => $res['nombre_zip'],
@@ -115,6 +123,8 @@ class AnexoAtsController extends BaseModuloController
         $mes       = trim($_GET['mes'] ?? '');
         $anio      = trim($_GET['anio'] ?? '');
         $semestral = !empty($_GET['semestral']) && in_array((string) $_GET['semestral'], ['1', 'true', 'on'], true);
+        $incluirVentas = !isset($_GET['ventas'])
+            || in_array((string) $_GET['ventas'], ['1', 'true', 'on'], true);
 
         if ($mes === '' || $anio === '') {
             http_response_code(422);
@@ -123,7 +133,7 @@ class AnexoAtsController extends BaseModuloController
         }
 
         try {
-            $res = $this->excel->generar($idEmpresa, $mes, $anio, $semestral, $idUsuario);
+            $res = $this->excel->generar($idEmpresa, $mes, $anio, $semestral, $idUsuario, $incluirVentas);
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar el Excel: ' . $e->getMessage();

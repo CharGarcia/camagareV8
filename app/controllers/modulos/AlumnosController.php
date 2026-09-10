@@ -121,7 +121,6 @@ class AlumnosController extends BaseModuloController
                 $dataAttr = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 echo '<tr class="alumno-row" role="button" tabindex="0" data-row=\'' . $dataAttr . '\' onclick="abrirModalAlumnoEditar(this)">
                         <td class="ps-3 fw-bold" data-col="nombres">' . htmlspecialchars(trim(($r['apellidos'] ?? '') . ' ' . ($r['nombres'] ?? ''))) . '</td>
-                        <td data-col="codigo_alumno" class="text-muted small">' . htmlspecialchars($r['codigo_alumno'] ?? '') . '</td>
                         <td data-col="campus">' . htmlspecialchars($r['campus_actual_nombre'] ?? '—') . '</td>
                         <td data-col="nivel">' . htmlspecialchars($r['nivel_actual_nombre'] ?? '—') . '</td>
                         <td data-col="representante" class="small">' . htmlspecialchars($r['representante_nombre'] ?? '—') . '</td>
@@ -296,9 +295,9 @@ class AlumnosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
         try {
-            $modelTipos = new \App\models\IdentificadorCompradorVendedor();
-            $todos = $modelTipos->getAll('codigo', 'ASC');
-            $tiposId = array_values(array_filter($todos, fn($r) => (int)($r['tipo'] ?? 0) === 1 && (int)($r['status'] ?? 1) === 1));
+            // Solo cédula y pasaporte: el alumno es una persona natural.
+            // El filtro vive en el Service/Rules, no aquí (CLAUDE.md §3).
+            $tiposId = $this->service->getTiposIdentificacionParaSelect();
 
             $puntosEmision = $this->service->getPuntosEmisionParaSelect($idEmpresa);
 
@@ -457,7 +456,6 @@ class AlumnosController extends BaseModuloController
         }
 
         return [
-            'codigo_alumno'                => trim($_POST['codigo_alumno'] ?? ''),
             'nombres'                      => trim($_POST['nombres'] ?? ''),
             'apellidos'                    => trim($_POST['apellidos'] ?? ''),
             'tipo_identificacion'          => trim($_POST['tipo_identificacion'] ?? ''),
@@ -523,19 +521,17 @@ class AlumnosController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 25%">Alumno</th>
-                            <th style="width: 15%">Código</th>
-                            <th style="width: 15%">Campus</th>
-                            <th style="width: 15%">Nivel</th>
-                            <th style="width: 20%">Representante</th>
-                            <th style="width: 10%">Estado</th>
+                            <th style="width: 30%">Alumno</th>
+                            <th style="width: 18%">Campus</th>
+                            <th style="width: 18%">Nivel</th>
+                            <th style="width: 22%">Representante</th>
+                            <th style="width: 12%">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($rows as $r): ?>
                             <tr>
                                 <td><?= htmlspecialchars(trim(($r['apellidos'] ?? '') . ' ' . ($r['nombres'] ?? ''))) ?></td>
-                                <td><?= htmlspecialchars((string)($r['codigo_alumno'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['campus_actual_nombre'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['nivel_actual_nombre'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['representante_nombre'] ?? '')) ?></td>
@@ -583,12 +579,11 @@ class AlumnosController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Alumno', 'Código', 'Identificación', 'Campus', 'Nivel/Curso', 'Representante', 'Matrícula', 'Estado'];
+            $headers = ['Alumno', 'Identificación', 'Campus', 'Nivel/Curso', 'Representante', 'Matrícula', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
                     trim(($r['apellidos'] ?? '') . ' ' . ($r['nombres'] ?? '')),
-                    (string)($r['codigo_alumno'] ?? ''),
                     (string)($r['numero_identificacion'] ?? ''),
                     (string)($r['campus_actual_nombre'] ?? ''),
                     (string)($r['nivel_actual_nombre'] ?? ''),

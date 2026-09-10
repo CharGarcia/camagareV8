@@ -32,7 +32,42 @@ class AtsService
         '01' => '01', '02' => '02', '03' => '03',
     ];
 
+    /**
+     * Mapeo clientes.tipo_id (BD) → tpIdCliente ATS (venta: 04 RUC, 05 Cédula,
+     * 06 Pasaporte, 07 Consumidor final).
+     *
+     * `clientes.tipo_id` guarda el catálogo del SRI para el COMPRADOR, que además
+     * de esos cuatro tiene 08 (identificación del exterior); el ATS no reconoce
+     * el 08 y esas ventas se reportan como pasaporte (06). Los códigos 01/02/03
+     * aparecen en fichas migradas (son del catálogo del EMISOR) y se traducen a
+     * su equivalente. Sin esta traducción el código salía tal cual al XML y el
+     * SRI rechazaba con "El TIPO DE IDENTIFICACIÓN DEL CLIENTE en Ventas no es
+     * válido, no corresponde a los definidos en las tablas".
+     */
+    private const MAP_TP_ID_CLIENTE = [
+        '04' => '04', '05' => '05', '06' => '06', '07' => '07', '08' => '06',
+        '01' => '04', '02' => '05', '03' => '06',
+    ];
+
     private EmpresaRepository $empresaRepo;
+
+    /**
+     * Catálogo `código de sustento → tipos de comprobante permitidos`, cargado
+     * al recopilar. Evita asumir un sustento que el SRI rechaza para el tipo de
+     * comprobante del documento (ver resolverSustento()).
+     *
+     * @var array<string, string[]>
+     */
+    private array $sustentoTipos = [];
+
+    /**
+     * Documentos del período que no tenían sustento tributario registrado, por
+     * tipo de comprobante. Se convierten en advertencias para que el usuario
+     * complete el dato en el módulo Compras.
+     *
+     * @var array<string, array<string, array{serie:string, asumido:string}>>
+     */
+    private array $sinSustento = [];
 
     public function __construct(
         private AtsRepository $repo,
@@ -47,15 +82,16 @@ class AtsService
     /**
      * Genera el anexo del período indicado.
      *
-     * @param string $mes        '01'..'12' (06/12 actúan como semestre si $semestral)
-     * @param string $anio       'YYYY'
-     * @param bool   $semestral  Régimen RIMPE semestral
+     * @param string $mes            '01'..'12' (06/12 actúan como semestre si $semestral)
+     * @param string $anio           'YYYY'
+     * @param bool   $semestral      Régimen RIMPE semestral
+     * @param bool   $incluirVentas  Reportar el módulo de ventas (ver recopilar())
      * @return array{ok:bool, mensaje?:string, registros?:int, nombre_xml?:string,
      *               ruta_xml?:string, nombre_zip?:string, ruta_zip?:string}
      */
-    public function generar(int $idEmpresa, int $idUsuario, string $mes, string $anio, bool $semestral): array
+    public function generar(int $idEmpresa, int $idUsuario, string $mes, string $anio, bool $semestral, bool $incluirVentas = true): array
     {
-        $datos = $this->recopilar($idEmpresa, $mes, $anio, $semestral, $idUsuario);
+        $datos = $this->recopilar($idEmpresa, $mes, $anio, $semestral, $idUsuario, $incluirVentas);
         if (!$datos['ok']) {
             return ['ok' => false, 'mensaje' => $datos['mensaje']];
         }
@@ -73,8 +109,10 @@ class AtsService
             $datos['anulados']
         );
 
-        // Validación previa (reglas de la ficha técnica + XSD opcional)
-        $validacion = $this->validator->validar($contenido);
+        // Validación previa (reglas de la ficha técnica + XSD opcional). Se le pasa
+        // el catálogo de sustentos para que detecte combinaciones sustento/tipo de
+        // comprobante que el SRI rechaza.
+        $validacion = $this->validator->validar($contenido, $this->sustentoTipos);
 
         // Persistir XML + ZIP
         $dir = $this->dirSalida($idEmpresa);
@@ -95,19 +133,24 @@ class AtsService
             'ats',
             null,
             null,
-            ['periodo' => $mes . '/' . $anio, 'semestral' => $semestral, 'ambiente' => $ambiente, 'registros' => count($documentos)]
+            ['periodo' => $mes . '/' . $anio, 'semestral' => $semestral, 'ambiente' => $ambiente,
+             'registros' => count($documentos), 'ventas' => $incluirVentas]
         );
 
         return [
-            'ok'           => true,
-            'registros'    => count($documentos),
-            'ambiente'     => $ambiente,
-            'nombre_xml'   => $nombreXml,
-            'ruta_xml'     => $rutaXml,
-            'nombre_zip'   => is_file($rutaZip) ? $nombreZip : null,
-            'ruta_zip'     => is_file($rutaZip) ? $rutaZip : null,
-            'errores'      => $validacion['errores'],
-            'advertencias' => $validacion['advertencias'],
+            'ok'             => true,
+            'registros'      => count($documentos),
+            'ambiente'       => $ambiente,
+            'incluye_ventas' => $incluirVentas,
+            'ventas'         => count($datos['ventas']),
+            'nombre_xml'     => $nombreXml,
+            'ruta_xml'       => $rutaXml,
+            'nombre_zip'     => is_file($rutaZip) ? $nombreZip : null,
+            'ruta_zip'       => is_file($rutaZip) ? $rutaZip : null,
+            'errores'        => $validacion['errores'],
+            // Las advertencias del validador (sobre el XML) se suman a las de la
+            // recopilación (sobre los datos de origen: p. ej. compras sin sustento).
+            'advertencias'   => array_merge($datos['advertencias'] ?? [], $validacion['advertencias']),
         ];
     }
 
@@ -115,10 +158,16 @@ class AtsService
      * Recopila y normaliza todos los datos del período (sin escribir archivos).
      * Reutilizado por la generación del XML y por la exportación a Excel.
      *
+     * @param bool $incluirVentas Cuando es false se omite el MÓDULO DE VENTAS del
+     *        anexo: el detalle por cliente, el resumen por establecimiento y el
+     *        total de ventas del informante (que queda en 0.00). No afecta a los
+     *        comprobantes anulados, que en la ficha del SRI son un módulo aparte.
+     *        Quién está obligado a reportar ventas depende del contribuyente; la
+     *        decisión es del usuario, aquí solo se respeta.
      * @return array{ok:bool, mensaje?:string, mes?:string, anio?:string,
      *               periodo?:string, informante?:array, documentos?:array, retenciones?:array}
      */
-    public function recopilar(int $idEmpresa, string $mes, string $anio, bool $semestral, int $idUsuario = 0): array
+    public function recopilar(int $idEmpresa, string $mes, string $anio, bool $semestral, int $idUsuario = 0, bool $incluirVentas = true): array
     {
         $mes  = str_pad((string) ((int) $mes), 2, '0', STR_PAD_LEFT);
         $anio = (string) ((int) $anio);
@@ -127,6 +176,10 @@ class AtsService
         if ($informante === null) {
             return ['ok' => false, 'mensaje' => 'No se encontró la empresa activa.'];
         }
+
+        // Catálogo de sustentos (global): se carga una vez por recopilación.
+        $this->sustentoTipos = $this->repo->getSustentosPermitidos();
+        $this->sinSustento   = [];
 
         // El ATS se presenta por RUC completo, no por establecimiento: se consolidan todas las
         // filas de `empresas` con el mismo RUC a las que el usuario tenga acceso. Los queries de
@@ -247,13 +300,17 @@ class AtsService
             }
 
             // ── VENTAS (agrupadas por cliente + tipoComprobante + tipoEmisión) ──
-            $ventasRaw = $this->filtrarDuplicados($this->repo->getVentas($idEmp, $desde, $hasta), 'clave_acceso', $clavesVistas, $omitidosPorDuplicado);
+            // Se omiten por completo cuando el usuario genera el anexo sin el
+            // módulo de ventas: ni se consultan.
+            $ventasRaw = $incluirVentas
+                ? $this->filtrarDuplicados($this->repo->getVentas($idEmp, $desde, $hasta), 'clave_acceso', $clavesVistas, $omitidosPorDuplicado)
+                : [];
             $idsVenta  = array_column($ventasRaw, 'id');
             $retVenta  = $this->indexarRetVenta($this->repo->getRetencionesVenta($idEmp, $idsVenta));
             $pagoVenta = $this->indexarPagos($this->repo->getFormasPago('ventas_pagos', 'id_venta', $idsVenta));
 
             foreach ($ventasRaw as $v) {
-            $tpId = str_pad((string) $v['cli_tipo_id'], 2, '0', STR_PAD_LEFT);
+            $tpId = $this->tpIdClienteAts($v['cli_tipo_id'], (string) $v['cli_identificacion']);
             $idCli = $tpId === '07' ? '9999999999999' : (string) $v['cli_identificacion'];
             $tipoEm = !empty($v['clave_acceso']) ? 'E' : 'F';
             $key = $tpId . '|' . $idCli . '|18|' . $tipoEm;
@@ -306,9 +363,11 @@ class AtsService
 
             // ── VENTAS: Facturas de Reembolso emitidas (tipoComprobante ATS = 41) ──
             // Se reportan aparte (fila propia por cliente), nunca mezcladas con el 18.
-            $reembolsoRaw = $this->filtrarDuplicados($this->repo->getVentasReembolso($idEmp, $desde, $hasta), 'clave_acceso', $clavesVistas, $omitidosPorDuplicado);
+            $reembolsoRaw = $incluirVentas
+                ? $this->filtrarDuplicados($this->repo->getVentasReembolso($idEmp, $desde, $hasta), 'clave_acceso', $clavesVistas, $omitidosPorDuplicado)
+                : [];
             foreach ($reembolsoRaw as $v) {
-            $tpId = str_pad((string) $v['cli_tipo_id'], 2, '0', STR_PAD_LEFT);
+            $tpId = $this->tpIdClienteAts($v['cli_tipo_id'], (string) $v['cli_identificacion']);
             $idCli = $tpId === '07' ? '9999999999999' : (string) $v['cli_identificacion'];
             $tipoEm = !empty($v['clave_acceso']) ? 'E' : 'F';
             $key = $tpId . '|' . $idCli . '|41|' . $tipoEm;
@@ -427,10 +486,43 @@ class AtsService
             'ventas'             => $ventas,
             'ventas_estab'       => $ventasEstab,
             'anulados'           => $anulados,
+            // Avisos sobre los datos de origen (no sobre el XML): documentos a los
+            // que les falta un dato que el ATS tuvo que asumir.
+            'advertencias'       => $this->advertenciasDatos(),
+            'incluye_ventas'     => $incluirVentas,
             // Info de la consolidación por RUC (para avisar en el Excel/UI, no forma parte del XML).
             'empresas_grupo'     => count($idsGrupo),
             'duplicados_omitidos'=> $omitidosPorDuplicado,
         ];
+    }
+
+    /**
+     * Advertencias sobre los datos de origen del período. Hoy solo cubre los
+     * documentos sin código de sustento tributario: se agrupan por tipo de
+     * comprobante para no llenar la pantalla con una línea por documento.
+     *
+     * @return string[]
+     */
+    private function advertenciasDatos(): array
+    {
+        $out = [];
+        ksort($this->sinSustento);
+        foreach ($this->sinSustento as $tipoComp => $filas) {
+            $filas   = array_values($filas);
+            $series  = array_column($filas, 'serie');
+            sort($series);
+            $muestra = array_slice($series, 0, 5);
+            $out[] = sprintf(
+                'Compras: %d comprobante(s) tipo %s sin código de sustento tributario registrado; '
+                . 'se reportaron con el código %s. Complételo en el módulo Compras. Ejemplo(s): %s%s',
+                count($filas),
+                $tipoComp,
+                $filas[0]['asumido'],
+                implode(', ', $muestra),
+                count($series) > count($muestra) ? ', …' : ''
+            );
+        }
+        return $out;
     }
 
     /**
@@ -566,11 +658,17 @@ class AtsService
             }
         }
 
-        // Pasaporte en liquidación / nota de venta
+        // Proveedor identificado con pasaporte / identificación del exterior
+        // (tpIdProv = 03): el SRI exige SIEMPRE el tipo de proveedor y su razón o
+        // denominación social, sea cual sea el tipo de comprobante. Antes solo se
+        // emitían en liquidaciones de compra (03), y una factura del exterior
+        // (tipo 15) se rechazaba con "No se ha especificado el TIPO DE PROVEEDOR
+        // de la compra, cuando el proveedor es un sujeto con PASAPORTE" y "debe
+        // indicar la razón o denominación social del proveedor".
         $tipoProv = null;
         $denoProv = null;
-        if ($tpIdProv === '03' && $tipoComp === '03') {
-            $tipoProv = str_pad((string) (int) $doc['prov_tipo_empresa'], 2, '0', STR_PAD_LEFT);
+        if ($tpIdProv === '03') {
+            $tipoProv = $this->tipoProvAts($doc['prov_tipo_empresa'] ?? null);
             $denoProv = $this->limpiar(mb_strtoupper((string) $doc['prov_razon_social'], 'UTF-8'));
         }
 
@@ -583,7 +681,7 @@ class AtsService
             '_proveedor'       => (string) $doc['prov_razon_social'],
             '_importeTotal'    => (float) $doc['importe_total'],
 
-            'codSustento'      => str_pad((string) ($doc['cod_sustento'] ?? '01'), 2, '0', STR_PAD_LEFT),
+            'codSustento'      => $this->resolverSustento($doc, $tipoComp, "{$estab}-{$pto}-{$sec}"),
             'tpIdProv'         => $tpIdProv,
             'idProv'           => (string) $doc['prov_identificacion'],
             'tipoComprobante'  => $tipoComp,
@@ -608,6 +706,7 @@ class AtsService
             'valRetServ50'     => $this->money($iva['50']),
             'valorRetServicios'=> $this->money($iva['70']),
             'valRetServ100'    => $this->money($iva['100']),
+            'pagoExterior'     => $this->pagoExterior($doc),
             'formasDePago'     => $this->formasDePago($doc, $pagos, $tipoComp),
             'air'              => $air,
             'retencionDoc'     => $retDoc,
@@ -653,6 +752,123 @@ class AtsService
             $idx[(int) $f['id_compra']][] = $f;
         }
         return $idx;
+    }
+
+    /**
+     * tpIdCliente del ATS a partir de `clientes.tipo_id` (ver MAP_TP_ID_CLIENTE).
+     * Si el código no está en el catálogo — fichas antiguas o importadas con un
+     * valor fuera de tabla — se deduce de la identificación en lugar de copiarlo
+     * tal cual al XML: 13 dígitos = RUC (04), 10 dígitos = cédula (05) y
+     * cualquier otro formato = pasaporte / identificación del exterior (06).
+     */
+    private function tpIdClienteAts($tipoId, string $identificacion): string
+    {
+        $tp = str_pad(trim((string) $tipoId), 2, '0', STR_PAD_LEFT);
+        if (isset(self::MAP_TP_ID_CLIENTE[$tp])) {
+            return self::MAP_TP_ID_CLIENTE[$tp];
+        }
+
+        $id = trim($identificacion);
+        if ($id === '9999999999999') {
+            return '07';
+        }
+        if (ctype_digit($id)) {
+            if (strlen($id) === 13) {
+                return '04';
+            }
+            if (strlen($id) === 10) {
+                return '05';
+            }
+        }
+        return '06';
+    }
+
+    /**
+     * tipoProv del ATS: 01 persona natural, 02 sociedad. Se deriva de
+     * `proveedores.tipo_empresa` (1 PN, 2 PN obligada a llevar contabilidad,
+     * 3 sociedad, 4 contribuyente especial, 5 sector público). Antes se emitía
+     * el id de esa tabla con relleno de ceros, así que una sociedad salía como
+     * '03' — un código que no existe en la tabla del SRI.
+     */
+    private function tipoProvAts($tipoEmpresa): string
+    {
+        return in_array((int) $tipoEmpresa, [3, 4, 5], true) ? '02' : '01';
+    }
+
+    /**
+     * codSustento del documento. El sustento tributario es una decisión contable:
+     * se reporta el que tenga registrado la compra. Cuando el documento no lo
+     * tiene (compras cargadas desde el XML del SRI o migradas), se asume uno que
+     * el SRI ADMITA para ese tipo de comprobante y se deja constancia en las
+     * advertencias. Antes se asumía siempre '01', que el SRI rechaza en los tipos
+     * donde no aplica: "El CÓDIGO DE SUSTENTO TRIBUTARIO reportado [01] no es
+     * permitido para COMPRAS con comprobantes de TIPO [15]".
+     */
+    private function resolverSustento(array $doc, string $tipoComp, string $serie): string
+    {
+        $cod = trim((string) ($doc['cod_sustento'] ?? ''));
+        if ($cod !== '') {
+            return str_pad($cod, 2, '0', STR_PAD_LEFT);
+        }
+
+        $asumido = $this->sustentoPorDefecto($tipoComp);
+        // Indexado por serie: una compra con varios terceros reembolsados se mapea
+        // una vez por tercero y no debe contarse varias veces en el aviso.
+        $this->sinSustento[$tipoComp][$serie] = ['serie' => $serie, 'asumido' => $asumido];
+        return $asumido;
+    }
+
+    /**
+     * Primer código de sustento que el catálogo admite para ese tipo de
+     * comprobante, prefiriendo '01' (crédito tributario de IVA) cuando aplica.
+     * Si el catálogo no se pudo cargar, mantiene el '01' histórico.
+     */
+    private function sustentoPorDefecto(string $tipoComp): string
+    {
+        $candidatos = [];
+        foreach ($this->sustentoTipos as $cod => $tipos) {
+            if (in_array($tipoComp, $tipos, true)) {
+                $candidatos[] = $cod;
+            }
+        }
+        if ($candidatos === [] || in_array('01', $candidatos, true)) {
+            return '01';
+        }
+        sort($candidatos);
+        return $candidatos[0];
+    }
+
+    /**
+     * Bloque <pagoExterior>: pago local (01) o al exterior (02) con el país, el
+     * convenio de doble tributación y la sujeción a retención. Los tres últimos
+     * se reportan como "NA" cuando el pago es local, que es como el SRI espera
+     * un bloque de pago nacional.
+     *
+     * Los datos se capturan en la pestaña "Pago al exterior" del módulo Compras.
+     * Un documento anterior a esos campos (o una liquidación de compra) llega sin
+     * ellos y se reporta como pago local, igual que antes.
+     *
+     * @return array{pagoLocExt:string, paisEfecPago:string,
+     *               aplicConvDobTrib:string, pagExtSujRetNorLeg:string}
+     */
+    private function pagoExterior(array $doc): array
+    {
+        $esExterior = (string) ($doc['pago_loc_ext'] ?? '01') === '02';
+        if (!$esExterior) {
+            return [
+                'pagoLocExt'         => '01',
+                'paisEfecPago'       => 'NA',
+                'aplicConvDobTrib'   => 'NA',
+                'pagExtSujRetNorLeg' => 'NA',
+            ];
+        }
+
+        return [
+            'pagoLocExt'         => '02',
+            'paisEfecPago'       => trim((string) ($doc['cod_pais_pago'] ?? '')) ?: 'NA',
+            'aplicConvDobTrib'   => trim((string) ($doc['aplic_conv_dob_trib'] ?? '')) ?: 'NA',
+            'pagExtSujRetNorLeg' => trim((string) ($doc['pag_ext_suj_ret_nor_leg'] ?? '')) ?: 'NA',
+        ];
     }
 
     private function parteRel(array $doc): string

@@ -22,9 +22,26 @@ class AtsValidatorService
     private const SUSTENTOS = ['00','01','02','03','04','05','06','07','08','09','10','11','12','13','14','15'];
     private const TP_ID_PROV = ['01','02','03'];
 
-    /** @return array{errores: string[], advertencias: string[]} */
-    public function validar(string $xml): array
+    /** Tipos de proveedor del ATS cuando la identificación es pasaporte: 01 natural, 02 sociedad. */
+    private const TIPO_PROV = ['01','02'];
+
+    /**
+     * Catálogo `código de sustento → tipos de comprobante permitidos` de la tabla
+     * `sustento_tributario`, inyectado por AtsService. Vacío = no se comprueba la
+     * combinación (el resto de reglas sigue aplicándose igual).
+     *
+     * @var array<string, string[]>
+     */
+    private array $sustentoTipos = [];
+
+    /**
+     * @param array<string, string[]> $sustentoTipos Ver AtsRepository::getSustentosPermitidos()
+     * @return array{errores: string[], advertencias: string[]}
+     */
+    public function validar(string $xml, array $sustentoTipos = []): array
     {
+        $this->sustentoTipos = $sustentoTipos;
+
         $errores = [];
         $advertencias = [];
 
@@ -103,11 +120,25 @@ class AtsValidatorService
             if (!$d instanceof DOMElement) {
                 continue;
             }
-            $p = "Compra #{$i}";
+            // Identificar la compra como lo hace el mensaje del SRI (serie +
+            // proveedor + tipo), no por su posición en el archivo: así el usuario
+            // sabe qué documento abrir en el módulo Compras.
+            $idProv   = $this->texto($d, 'idProv');
+            $tipoComp = $this->texto($d, 'tipoComprobante');
+            $serie    = $this->texto($d, 'establecimiento') . '-'
+                      . $this->texto($d, 'puntoEmision') . '-'
+                      . $this->texto($d, 'secuencial');
+            $p = "Compra {$serie} (prov. {$idProv}, tipo {$tipoComp})";
 
             $cod = $this->texto($d, 'codSustento');
             if (!in_array($cod, self::SUSTENTOS, true)) {
                 $err[] = "{$p}: codSustento '{$cod}' no es válido (Tabla 5).";
+            } elseif ($this->sustentoTipos !== []
+                && isset($this->sustentoTipos[$cod])
+                && $tipoComp !== ''
+                && !in_array($tipoComp, $this->sustentoTipos[$cod], true)) {
+                $err[] = "{$p}: el código de sustento tributario {$cod} no está permitido para comprobantes "
+                       . "tipo {$tipoComp}. Corrija el sustento del documento en el módulo Compras.";
             }
 
             $tp = $this->texto($d, 'tpIdProv');
@@ -115,7 +146,6 @@ class AtsValidatorService
                 $err[] = "{$p}: tpIdProv debe ser 01, 02 o 03 (actual: '{$tp}').";
             }
 
-            $idProv = $this->texto($d, 'idProv');
             if ($tp === '01' && !preg_match('/^\d{13}$/', $idProv)) {
                 $err[] = "{$p}: idProv (RUC) debe tener 13 dígitos.";
             } elseif ($tp === '02' && !preg_match('/^\d{10}$/', $idProv)) {
@@ -124,7 +154,22 @@ class AtsValidatorService
                 $err[] = "{$p}: idProv es obligatorio.";
             }
 
-            $tipoComp = $this->texto($d, 'tipoComprobante');
+            // Proveedor con pasaporte / identificación del exterior: el SRI exige
+            // tipo de proveedor y razón o denominación social (obligatoria desde
+            // mayo de 2016), sea cual sea el tipo de comprobante.
+            if ($tp === '03') {
+                $tipoProv = $this->texto($d, 'tipoProv');
+                if (!in_array($tipoProv, self::TIPO_PROV, true)) {
+                    $err[] = "{$p}: falta el tipo de proveedor (tipoProv 01 persona natural / 02 sociedad), "
+                           . "obligatorio cuando el proveedor se identifica con pasaporte. Complete el tipo "
+                           . "de empresa en la ficha del proveedor.";
+                }
+                if ($this->texto($d, 'denoProv') === '') {
+                    $err[] = "{$p}: falta la razón o denominación social del proveedor (denoProv), "
+                           . "obligatoria desde mayo de 2016 para proveedores con pasaporte.";
+                }
+            }
+
             if (!preg_match('/^\d{2,3}$/', $tipoComp)) {
                 $err[] = "{$p}: tipoComprobante inválido (actual: '{$tipoComp}').";
             }
@@ -183,9 +228,7 @@ class AtsValidatorService
                 $adv[] = "{$p}: montoIva mayor a 0 pero baseImpGrav es 0.00; verifique las tarifas.";
             }
 
-            if ($this->hijo($d, 'pagoExterior') === null) {
-                $err[] = "{$p}: falta el bloque <pagoExterior>.";
-            }
+            $this->validarPagoExterior($d, $p, $tipoComp, $err, $adv);
 
             // air / detalleAir
             $air = $this->hijo($d, 'air');
@@ -215,6 +258,46 @@ class AtsValidatorService
         }
     }
 
+    /**
+     * Bloque <pagoExterior>. Con pago local (01) los otros tres campos van en
+     * "NA"; con pago al exterior (02) el SRI exige el país y las dos respuestas
+     * SI/NO. Un comprobante emitido en el exterior (tipo 15) declarado como pago
+     * local se avisa, pero no se marca como error: quien decide es el contador.
+     */
+    private function validarPagoExterior(DOMElement $d, string $p, string $tipoComp, array &$err, array &$adv): void
+    {
+        $pe = $this->hijo($d, 'pagoExterior');
+        if ($pe === null) {
+            $err[] = "{$p}: falta el bloque <pagoExterior>.";
+            return;
+        }
+
+        $tipoPago = $this->texto($pe, 'pagoLocExt');
+        if (!in_array($tipoPago, ['01', '02'], true)) {
+            $err[] = "{$p}: pagoLocExt debe ser 01 (pago local) o 02 (pago al exterior), actual: '{$tipoPago}'.";
+            return;
+        }
+
+        if ($tipoPago === '01') {
+            if ($tipoComp === '15') {
+                $adv[] = "{$p}: es un comprobante emitido en el exterior declarado como pago local. "
+                       . "Revise la pestaña \"ATS\" del documento en Compras.";
+            }
+            return;
+        }
+
+        $pais = $this->texto($pe, 'paisEfecPago');
+        if ($pais === '' || $pais === 'NA') {
+            $err[] = "{$p}: en un pago al exterior hay que indicar el país donde se efectuó el pago.";
+        }
+        foreach (['aplicConvDobTrib' => 'el convenio de doble tributación',
+                  'pagExtSujRetNorLeg' => 'la sujeción a retención según la norma legal'] as $campo => $texto) {
+            if (!in_array($this->texto($pe, $campo), ['SI', 'NO'], true)) {
+                $err[] = "{$p}: en un pago al exterior hay que indicar {$texto} (SI o NO).";
+            }
+        }
+    }
+
     // ── Ventas ───────────────────────────────────────────────────────────────
 
     private function validarVentas(DOMDocument $dom, array &$err): void
@@ -225,14 +308,28 @@ class AtsValidatorService
             if (!$d instanceof DOMElement) {
                 continue;
             }
-            $p = "Venta #{$i}";
+            $tp    = $this->texto($d, 'tpIdCliente');
+            $idCli = $this->texto($d, 'idCliente');
+            $p = "Venta a {$idCli} (tipo id. {$tp}, comprobante " . $this->texto($d, 'tipoComprobante') . ')';
 
-            $tp = $this->texto($d, 'tpIdCliente');
             if (!in_array($tp, ['04', '05', '06', '07'], true)) {
-                $err[] = "{$p}: tpIdCliente debe ser 04, 05, 06 o 07 (actual: '{$tp}').";
+                $err[] = "{$p}: el tipo de identificación del cliente '{$tp}' no es válido en Ventas; "
+                       . "el ATS solo admite 04 (RUC), 05 (cédula), 06 (pasaporte) y 07 (consumidor final). "
+                       . "Corrija el tipo de identificación en la ficha del cliente.";
             }
-            if ($this->texto($d, 'idCliente') === '') {
+            if ($idCli === '') {
                 $err[] = "{$p}: idCliente es obligatorio.";
+            }
+            // Cliente con pasaporte / identificación del exterior: el SRI exige tipo
+            // de cliente y su denominación.
+            if ($tp === '06') {
+                if (!in_array($this->texto($d, 'tipoCliente'), self::TIPO_PROV, true)) {
+                    $err[] = "{$p}: falta el tipo de cliente (01 persona natural / 02 sociedad), "
+                           . "obligatorio cuando el cliente se identifica con pasaporte.";
+                }
+                if ($this->texto($d, 'denoCli') === '') {
+                    $err[] = "{$p}: falta la razón o denominación social del cliente (denoCli).";
+                }
             }
             if (!in_array($this->texto($d, 'tipoEmision'), ['E', 'F'], true)) {
                 $err[] = "{$p}: tipoEmision debe ser E (electrónica) o F (física).";

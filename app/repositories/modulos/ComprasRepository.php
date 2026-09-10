@@ -655,11 +655,14 @@ class ComprasRepository extends BaseRepository
                     total_sin_impuestos, total_descuento, importe_total, propina,
                     autorizacion_desde, autorizacion_hasta, fecha_caducidad,
                     tipo_registro, deducible, documento_modificado, motivo,
-                    observaciones, estado, created_by, updated_by, id_usuario, tipo_ambiente
+                    observaciones, estado, created_by, updated_by, id_usuario,
+                    pago_loc_ext, cod_pais_pago, aplic_conv_dob_trib, pag_ext_suj_ret_nor_leg,
+                    tipo_ambiente
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
                     (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                 ) RETURNING id";
 
@@ -696,6 +699,7 @@ class ComprasRepository extends BaseRepository
             (int)   $data['id_usuario'], // created_by
             (int)   $data['id_usuario'], // updated_by
             (int)   $data['id_usuario'], // id_usuario
+            ...array_values($this->paramsPagoExterior($data)),
             (int)   $data['id_empresa'], // → subconsulta tipo_ambiente
         ];
 
@@ -733,6 +737,10 @@ class ComprasRepository extends BaseRepository
                     documento_modificado    = ?,
                     motivo                  = ?,
                     observaciones           = ?,
+                    pago_loc_ext            = ?,
+                    cod_pais_pago           = ?,
+                    aplic_conv_dob_trib     = ?,
+                    pag_ext_suj_ret_nor_leg = ?,
                     updated_by              = ?,
                     updated_at              = NOW()
                 WHERE id = ? AND id_empresa = ? AND eliminado = false";
@@ -762,12 +770,37 @@ class ComprasRepository extends BaseRepository
             $data['documento_modificado'] ?? null,
             $data['motivo'] ?? null,
             $data['observaciones'] ?? null,
+            ...array_values($this->paramsPagoExterior($data)),
             (int)   $data['id_usuario'],
             $id,
             (int)   $data['id_empresa'],
         ];
 
         $this->query($sql, $params);
+    }
+
+    /**
+     * Bloque <pagoExterior> del ATS, en el orden en que lo esperan el INSERT y
+     * el UPDATE de la cabecera.
+     *
+     * Cuando el pago es local ('01') los otros tres campos se guardan en NULL:
+     * el ATS los reporta como "NA" y dejarlos con un valor sobrante confundiría
+     * al leerlos. Un `$data` sin estas claves (cargas automáticas desde el XML
+     * del SRI, que nunca son pagos al exterior) cae en pago local.
+     *
+     * @return array{pago_loc_ext:string, cod_pais_pago:?string,
+     *               aplic_conv_dob_trib:?string, pag_ext_suj_ret_nor_leg:?string}
+     */
+    private function paramsPagoExterior(array $data): array
+    {
+        $esExterior = ($data['pago_loc_ext'] ?? '01') === '02';
+
+        return [
+            'pago_loc_ext'            => $esExterior ? '02' : '01',
+            'cod_pais_pago'           => $esExterior ? (($data['cod_pais_pago'] ?? '') ?: null) : null,
+            'aplic_conv_dob_trib'     => $esExterior ? (($data['aplic_conv_dob_trib'] ?? '') ?: null) : null,
+            'pag_ext_suj_ret_nor_leg' => $esExterior ? (($data['pag_ext_suj_ret_nor_leg'] ?? '') ?: null) : null,
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ class AlumnoRepository extends BaseRepository
         }
 
         if ($buscar !== '') {
-            $whereSql .= " AND (a.nombres ILIKE :b OR a.apellidos ILIKE :b OR a.numero_identificacion ILIKE :b OR a.codigo_alumno ILIKE :b OR cli.nombre ILIKE :b)";
+            $whereSql .= " AND (a.nombres ILIKE :b OR a.apellidos ILIKE :b OR a.numero_identificacion ILIKE :b OR cli.nombre ILIKE :b)";
             $params[':b'] = '%' . $buscar . '%';
         }
 
@@ -54,7 +54,6 @@ class AlumnoRepository extends BaseRepository
         $cols = [
             'nombres'      => 'a.nombres',
             'apellidos'    => 'a.apellidos',
-            'codigo_alumno'=> 'a.codigo_alumno',
             'campus'       => 'camp.nombre',
             'nivel'        => 'niv.nombre',
             'estado_academico' => 'a.estado_academico',
@@ -90,13 +89,13 @@ class AlumnoRepository extends BaseRepository
     public function create(array $data): int
     {
         $sql = "INSERT INTO {$this->table} (
-                    id_empresa, codigo_alumno, nombres, apellidos, tipo_identificacion, numero_identificacion,
+                    id_empresa, nombres, apellidos, tipo_identificacion, numero_identificacion,
                     fecha_nacimiento, sexo, nacionalidad, foto_ruta, estado_academico,
                     id_cliente, relacion_representante, id_punto_emision,
                     tipo_sangre, alergias_condiciones, contacto_emergencia_nombre, contacto_emergencia_telefono,
                     observaciones, created_by, updated_by
                 ) VALUES (
-                    :id_empresa, :codigo_alumno, :nombres, :apellidos, :tipo_identificacion, :numero_identificacion,
+                    :id_empresa, :nombres, :apellidos, :tipo_identificacion, :numero_identificacion,
                     :fecha_nacimiento, :sexo, :nacionalidad, :foto_ruta, :estado_academico,
                     :id_cliente, :relacion_representante, :id_punto_emision,
                     :tipo_sangre, :alergias_condiciones, :contacto_emergencia_nombre, :contacto_emergencia_telefono,
@@ -110,7 +109,7 @@ class AlumnoRepository extends BaseRepository
     public function update(int $id, int $idEmpresa, array $data): bool
     {
         $sql = "UPDATE {$this->table} SET
-                    codigo_alumno = :codigo_alumno, nombres = :nombres, apellidos = :apellidos,
+                    nombres = :nombres, apellidos = :apellidos,
                     tipo_identificacion = :tipo_identificacion, numero_identificacion = :numero_identificacion,
                     fecha_nacimiento = :fecha_nacimiento, sexo = :sexo, nacionalidad = :nacionalidad,
                     foto_ruta = :foto_ruta, estado_academico = :estado_academico,
@@ -130,7 +129,6 @@ class AlumnoRepository extends BaseRepository
     {
         return [
             ':id_empresa'                   => $data['id_empresa'],
-            ':codigo_alumno'                => $data['codigo_alumno'] !== '' ? $data['codigo_alumno'] : null,
             ':nombres'                      => $data['nombres'],
             ':apellidos'                    => $data['apellidos'],
             ':tipo_identificacion'          => $data['tipo_identificacion'] !== '' ? $data['tipo_identificacion'] : null,

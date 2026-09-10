@@ -199,6 +199,8 @@ class ComprasController extends BaseModuloController
             // Catálogo completo: solo para poder reconstruir la etiqueta de una
             // compra ya registrada cuyo tipo no esté en la lista acotada.
             'tiposComprobanteTodos' => (new \App\models\ComprobanteAutorizado())->getAll(),
+            // Tabla de países del SRI para el bloque <pagoExterior> del ATS.
+            'paisesSri'          => \App\Helpers\CatalogoPaisesSri::ordenados(),
             'unidadesMedida'     => (new \App\repositories\modulos\UnidadesMedidaRepository())->getActive($idEmpresa),
             'bodegas'            => (new \App\repositories\modulos\BodegaRepository())->getBodegasPermitidas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']),
             'fullWidth'          => true,
@@ -234,7 +236,7 @@ class ComprasController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-cart fs-3 d-block mb-2"></i>No se encontraron compras.</td></tr>';
+            echo '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-cart fs-3 d-block mb-2"></i>No se encontraron compras.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $rowData     = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');

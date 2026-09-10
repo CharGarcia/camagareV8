@@ -6,7 +6,7 @@ ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
 etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, horario, pensión, pension
-version: 1.0
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -38,8 +38,8 @@ perder el historial de los anteriores.
   alumno (el alumno se factura a nombre de ese cliente).
 - Los catálogos de **Campus** (`modulos/alumnos-campus`) y **Niveles/Cursos**
   (`modulos/alumnos-niveles`) se pueden crear sobre la marcha desde el mismo
-  modal del alumno (botón **+** junto a cada selector), no es necesario
-  precargarlos.
+  modal del alumno, con los botones de la barra de acciones superior
+  (íconos de sede y birrete), no es necesario precargarlos.
 - Si se quiere fijar una serie de facturación preferida, debe existir un
   **Punto de Emisión** configurado en `/config` para la empresa.
 
@@ -52,8 +52,10 @@ perder el historial de los anteriores.
    relación con el alumno y, opcionalmente, la serie de facturación preferida.
 4. En **Matrícula**, presionar **Matricular / agregar período** y elegir
    campus, nivel/curso, año lectivo y fecha de ingreso. Si el campus o el
-   nivel no existen todavía, se crean al vuelo con el botón **+** sin salir
-   del formulario del alumno.
+   nivel no existen todavía, se crean al vuelo desde los botones de la barra
+   de acciones superior del modal, sin salir del formulario del alumno. Esos
+   botones se muestran solo con su ícono: al pasar el puntero sobre cada uno
+   aparece qué hace (registrar nuevo cliente, campus o nivel/curso).
 5. Completar, si aplica, **Horario**, **Salud** y **Servicios y Productos**
    (los productos que se le facturarán de forma recurrente).
 6. Guardar. Una vez guardado el alumno, se habilita la pestaña
@@ -67,8 +69,7 @@ perder el historial de los anteriores.
 | Campo | Obligatorio | Qué significa |
 |-------|-------------|---------------|
 | Nombres / Apellidos | Sí | Nombre completo del alumno. |
-| Código de alumno | No | Identificador interno; si se deja vacío no se asigna automáticamente. |
-| Tipo / Número de identificación | No | Cédula, pasaporte u otro documento propio del alumno (no el del representante). |
+| Tipo / Número de identificación | No | Documento propio del alumno (no el del representante). El tipo solo ofrece **Cédula** o **Pasaporte**, porque el alumno es siempre una persona natural; RUC, consumidor final e identificación del exterior quedan para el representante, que es un Cliente. La cédula se valida a 10 dígitos y el pasaporte admite hasta 20 caracteres. |
 | Fecha de nacimiento / Sexo / Nacionalidad | No | Datos personales del alumno. |
 | Estado académico | Sí | Activo, retirado, egresado o suspendido. No reemplaza a la eliminación lógica del registro. |
 | Cliente / Representante | Sí | Cliente ya existente a cuyo nombre se factura al alumno. |
@@ -130,6 +131,19 @@ aunque normalmente se gestionan desde el propio modal de Alumno.
 
 ## Historial de cambios
 
+- **1.1** — Los botones de la barra de acciones superior del modal (nuevo
+  cliente, nuevo campus, nuevo nivel/curso) pasan a mostrarse solo con su
+  ícono, sin texto, igual que el modal de Facturas de Venta. La descripción
+  de cada botón queda en su tooltip. Se corrigió además el botón de **nuevo
+  cliente**, que no abría la ficha de cliente: ahora se comporta igual que en
+  Facturas de Venta y, al guardar, el cliente creado queda seleccionado como
+  representante del alumno. El selector de **tipo de identificación** del
+  alumno pasa a ofrecer solo **Cédula** y **Pasaporte**. Se elimina el campo
+  **Código de alumno**: ya no aparece en el formulario, ni como columna del
+  listado, ni en las exportaciones a PDF y Excel, y el buscador dejó de
+  considerarlo. Nunca se asignaba de forma automática, así que en la práctica
+  quedaba vacío; los alumnos se identifican por sus apellidos y nombres, su
+  número de identificación o su representante.
 - **1.0** — Versión inicial: datos generales, representante/facturación,
   matrícula por períodos, horario individual, salud y emergencia, servicios
   y productos predeterminados, y documentos adjuntos. Catálogos de Campus y

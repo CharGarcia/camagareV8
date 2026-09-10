@@ -158,7 +158,9 @@ class XmlAtsService
         $this->add($dom, $n, 'idProv', $d['idProv']);
         $this->add($dom, $n, 'tipoComprobante', $d['tipoComprobante']);
 
-        // Solo para compra con pasaporte (tpIdProv = 03) en liquidaciones/notas de venta
+        // Obligatorios cuando el proveedor se identifica con pasaporte o
+        // identificación del exterior (tpIdProv = 03), en cualquier tipo de
+        // comprobante — no solo en liquidaciones de compra.
         if (!empty($d['tipoProv'])) {
             $this->add($dom, $n, 'tipoProv', $d['tipoProv']);
             $this->add($dom, $n, 'denoProv', $d['denoProv']);
@@ -188,12 +190,14 @@ class XmlAtsService
         // bloque *Reemb (cuando aplica) se emite más adelante, junto a docModificado.
         $this->add($dom, $n, 'totbasesImpReemb', empty($d['reembolso']) ? '0.00' : $d['reembolso']['totbasesImpReemb']);
 
-        // pagoExterior (obligatorio; pago local por defecto)
+        // pagoExterior (bloque obligatorio; AtsService lo resuelve a pago local
+        // con "NA" cuando la compra no está marcada como pago al exterior)
+        $pago = $d['pagoExterior'] ?? [];
         $pe = $dom->createElement('pagoExterior');
-        $this->add($dom, $pe, 'pagoLocExt', '01');
-        $this->add($dom, $pe, 'paisEfecPago', 'NA');
-        $this->add($dom, $pe, 'aplicConvDobTrib', 'NA');
-        $this->add($dom, $pe, 'pagExtSujRetNorLeg', 'NA');
+        $this->add($dom, $pe, 'pagoLocExt', $pago['pagoLocExt'] ?? '01');
+        $this->add($dom, $pe, 'paisEfecPago', $pago['paisEfecPago'] ?? 'NA');
+        $this->add($dom, $pe, 'aplicConvDobTrib', $pago['aplicConvDobTrib'] ?? 'NA');
+        $this->add($dom, $pe, 'pagExtSujRetNorLeg', $pago['pagExtSujRetNorLeg'] ?? 'NA');
         $n->appendChild($pe);
 
         // Orden de bloques: en notas de débito (05) la forma de pago va primero;

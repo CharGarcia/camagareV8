@@ -485,7 +485,6 @@
             idAlumnoActual = d.id;
 
             document.getElementById('alu_id').value = d.id;
-            document.getElementById('alu_codigo').value = d.codigo_alumno || '';
             document.getElementById('alu_nombres').value = d.nombres || '';
             document.getElementById('alu_apellidos').value = d.apellidos || '';
             document.getElementById('alu_tipo_id').value = d.tipo_identificacion || '';

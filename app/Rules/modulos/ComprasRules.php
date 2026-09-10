@@ -7,6 +7,34 @@ namespace App\Rules\modulos;
 class ComprasRules
 {
     /**
+     * Bloque <pagoExterior> del ATS. Solo se valida cuando el usuario marcó la
+     * compra como pago al exterior: en ese caso el SRI exige los tres datos
+     * (país, convenio de doble tributación y sujeción a retención). Si el pago
+     * es local no hay nada que pedir — el anexo los reporta como "NA".
+     */
+    private function validarPagoExterior(array $data): void
+    {
+        if (($data['pago_loc_ext'] ?? '01') !== '02') {
+            return;
+        }
+
+        $pais = trim((string) ($data['cod_pais_pago'] ?? ''));
+        if ($pais === '') {
+            throw new \Exception('Indique el país donde se efectuó el pago al exterior.');
+        }
+        if (!\App\Helpers\CatalogoPaisesSri::existe($pais)) {
+            throw new \Exception('El país del pago al exterior no corresponde a la tabla de países del SRI.');
+        }
+
+        if (!in_array((string) ($data['aplic_conv_dob_trib'] ?? ''), ['SI', 'NO'], true)) {
+            throw new \Exception('Indique si al pago al exterior se le aplica convenio de doble tributación.');
+        }
+        if (!in_array((string) ($data['pag_ext_suj_ret_nor_leg'] ?? ''), ['SI', 'NO'], true)) {
+            throw new \Exception('Indique si el pago al exterior está sujeto a retención según la norma legal.');
+        }
+    }
+
+    /**
      * Valida los datos de una compra antes de guardar.
      */
     public function validar(array $data): void
@@ -89,6 +117,8 @@ class ComprasRules
                 throw new \Exception('La fecha de caducidad es obligatoria.');
             }
         }
+
+        $this->validarPagoExterior($data);
 
         // Al menos un ítem
         if (empty($data['detalles']) || !is_array($data['detalles']) || count($data['detalles']) === 0) {

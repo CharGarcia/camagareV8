@@ -9,6 +9,7 @@
   const mesSel      = document.getElementById('ats-mes');
   const semestWrap  = document.getElementById('ats-semestral-wrap');
   const semestChk   = document.getElementById('ats-semestral');
+  const ventasChk   = document.getElementById('ats-ventas');
   const btn         = document.getElementById('ats-generar');
   const resultado   = document.getElementById('ats-resultado');
 
@@ -55,6 +56,7 @@
     fd.append('mes', mesSel.value);
     fd.append('anio', document.getElementById('ats-anio').value);
     fd.append('semestral', semestChk.checked ? '1' : '0');
+    fd.append('ventas', ventasChk.checked ? '1' : '0');
 
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando...';
@@ -80,13 +82,19 @@
           ? ' <span class="badge ' + (j.ambiente === 'Producción' ? 'bg-danger' : 'bg-secondary') +
             '">Ambiente: ' + j.ambiente + '</span>'
           : '';
+        // Qué módulos entraron: el de ventas es opcional y conviene que quede a la
+        // vista, para que nadie presente sin ventas sin darse cuenta (ni al revés).
+        var detalleVentas = j.incluye_ventas === false
+          ? ' <span class="badge bg-warning text-dark">Sin módulo de ventas</span>'
+          : ' y <strong>' + (j.ventas || 0) + '</strong> de ventas';
+
         if (errores.length === 0) {
           html += '<div><i class="fas fa-check-circle text-success me-1"></i> Anexo generado con <strong>' +
-                  (j.registros || 0) + '</strong> registro(s) de compras.' + ambienteBadge +
+                  (j.registros || 0) + '</strong> registro(s) de compras' + detalleVentas + '.' + ambienteBadge +
                   ' <span class="text-success">Validación sin errores.</span></div>';
         } else {
           html += '<div><i class="fas fa-exclamation-triangle text-danger me-1"></i> Anexo generado con <strong>' +
-                  (j.registros || 0) + '</strong> registro(s).' + ambienteBadge +
+                  (j.registros || 0) + '</strong> registro(s) de compras' + detalleVentas + '.' + ambienteBadge +
                   ' La validación encontró <strong>' + errores.length + '</strong> error(es). Corrija antes de cargar al SRI.</div>';
         }
         html += '<div class="d-flex gap-2 flex-wrap">';

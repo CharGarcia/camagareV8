@@ -7,8 +7,16 @@ use Exception;
 
 class AlumnoRules
 {
-    private const CEDULA = '05';
-    private const PASAPORTE = '06';
+    public const CEDULA = '05';
+    public const PASAPORTE = '06';
+
+    /**
+     * El alumno es siempre una persona natural: solo cédula o pasaporte del
+     * catálogo global identificador_comprador_vendedor. No aplica RUC (04),
+     * consumidor final (07) ni identificación del exterior (08); esos sí valen
+     * para el representante, que es un Cliente y se registra en su propio modal.
+     */
+    public const TIPOS_IDENTIFICACION = [self::CEDULA, self::PASAPORTE];
 
     public function validar(array $data): void
     {
@@ -24,6 +32,9 @@ class AlumnoRules
 
         $tipoId = trim($data['tipo_identificacion'] ?? '');
         $identificacion = trim($data['numero_identificacion'] ?? '');
+        if ($tipoId !== '' && !in_array($tipoId, self::TIPOS_IDENTIFICACION, true)) {
+            throw new Exception('El tipo de identificación del alumno solo puede ser cédula o pasaporte.');
+        }
         if ($tipoId !== '' && $identificacion !== '') {
             if ($tipoId === self::CEDULA && !preg_match('/^[0-9]{10}$/', $identificacion)) {
                 throw new Exception('La cédula del alumno debe tener exactamente 10 dígitos numéricos.');

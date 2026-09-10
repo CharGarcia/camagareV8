@@ -275,6 +275,9 @@ function CMG_poblarModal(d) {
     // Cargar sustentos filtrados y seleccionar el actual
     CMG_cargarSustentos(d.tipo_comprobante, d.id_sustento_tributario);
 
+    // Pago al exterior (bloque <pagoExterior> del ATS)
+    mcCargarPagoExterior(d);
+
 
     
     // Detalles
@@ -787,6 +790,9 @@ function CMG_resetModal() {
     document.getElementById('tab-reembolso-li')?.classList.add('d-none');
     mcAplicarBloqueoSustento(false);
 
+    // Pago al exterior: compra nueva arranca como pago local
+    mcCargarPagoExterior({});
+
     // Ir a primera pestaña
     const tabDetalle = document.getElementById('tab-detalle-tab') || document.getElementById('tab_compra');
     if (tabDetalle) {
@@ -851,7 +857,100 @@ document.getElementById('mcTipoComprobante').addEventListener('change', function
     // Mostrar/ocultar campos de modificación (04 = Nota de Crédito, 05 = Nota de Débito)
     const esModificativo = ['04', '05'].includes(val);
     document.getElementById('mcDivModificados').classList.toggle('d-none', !esModificativo);
+
+    // 15 = comprobante emitido en el exterior: el pago es al exterior por definición
+    if (val === '15' && document.getElementById('mcPagoLocExt').value !== '02') {
+        document.getElementById('mcPagoLocExt').value = '02';
+    }
+    mcSincronizarPagoExterior();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGO AL EXTERIOR — bloque <pagoExterior> del ATS
+//
+// El SRI exige los cuatro datos en cada compra. Con pago local (01) los otros
+// tres se reportan como "NA" y aquí quedan deshabilitados; con pago al exterior
+// (02) son obligatorios y ComprasRules los verifica en el servidor.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Habilita los campos dependientes y avisa si falta algo por llenar. */
+function mcSincronizarPagoExterior() {
+    const esExterior = document.getElementById('mcPagoLocExt').value === '02';
+    const campos = ['mcCodPaisPago', 'mcAplicConvDobTrib', 'mcPagExtSujRetNorLeg']
+        .map(id => document.getElementById(id));
+
+    campos.forEach(el => {
+        el.disabled = !esExterior;
+        if (!esExterior) el.value = '';
+    });
+
+    // Badge en la pestaña: pago al exterior con algún dato pendiente, o un
+    // comprobante del exterior declarado como pago local.
+    const tipo = document.getElementById('mcTipoComprobante').value;
+    const incompleto = esExterior ? campos.some(el => !el.value) : tipo === '15';
+    document.getElementById('mcBadgePagoExterior')?.classList.toggle('d-none', !incompleto);
+}
+
+['mcPagoLocExt', 'mcCodPaisPago', 'mcAplicConvDobTrib', 'mcPagExtSujRetNorLeg'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', mcSincronizarPagoExterior);
+});
+
+/** Vuelca en el formulario el pago al exterior de una compra (o lo limpia). */
+function mcCargarPagoExterior(d) {
+    document.getElementById('mcPagoLocExt').value           = d.pago_loc_ext === '02' ? '02' : '01';
+    document.getElementById('mcCodPaisPago').value          = d.cod_pais_pago || '';
+    document.getElementById('mcAplicConvDobTrib').value     = d.aplic_conv_dob_trib || '';
+    document.getElementById('mcPagExtSujRetNorLeg').value   = d.pag_ext_suj_ret_nor_leg || '';
+    mcSincronizarPagoExterior();
+}
+
+/**
+ * Avisa antes de enviar si el pago al exterior está incompleto (ComprasRules lo
+ * rechaza igual en el servidor; esto ahorra el viaje y abre la pestaña ATS).
+ * Devuelve false si hay que corregir algo.
+ */
+function mcValidarPagoExterior() {
+    if (document.getElementById('mcPagoLocExt').value !== '02') return true;
+
+    const faltantes = [
+        ['mcCodPaisPago',        'el país donde se efectuó el pago'],
+        ['mcAplicConvDobTrib',   'si aplica convenio de doble tributación'],
+        ['mcPagExtSujRetNorLeg', 'si está sujeto a retención según la norma legal'],
+    ].filter(([id]) => !document.getElementById(id).value).map(([, texto]) => texto);
+
+    if (!faltantes.length) return true;
+
+    // La pestaña ATS es ocultable por preferencia del usuario; si la escondió, el
+    // panel también está oculto por CSS y no le serviría de nada abrirla.
+    const tabAts = document.querySelector('[data-bs-target="#tabAts"]');
+    const ocultaPorPreferencia = tabAts && getComputedStyle(tabAts).display === 'none';
+
+    Swal.fire({
+        icon: 'warning',
+        title: 'Pago al exterior',
+        html: `La compra está marcada como <b>pago al exterior</b>. Falta indicar ${faltantes.join(', ')}.` +
+              (ocultaPorPreferencia
+                  ? '<br>Muestre la pestaña <b>ATS</b> desde el ícono de configuración de pestañas para completarlo.'
+                  : '<br>Complételo en la pestaña <b>ATS</b>.')
+    });
+
+    if (!ocultaPorPreferencia && tabAts && window.bootstrap) {
+        bootstrap.Tab.getOrCreateInstance(tabAts).show();
+        document.getElementById('mcCodPaisPago').focus();
+    }
+    return false;
+}
+
+/** Campos del pago al exterior para el payload de guardado. */
+function mcRecolectarPagoExterior() {
+    const esExterior = document.getElementById('mcPagoLocExt').value === '02';
+    return {
+        pago_loc_ext:            esExterior ? '02' : '01',
+        cod_pais_pago:           esExterior ? document.getElementById('mcCodPaisPago').value : '',
+        aplic_conv_dob_trib:     esExterior ? document.getElementById('mcAplicConvDobTrib').value : '',
+        pag_ext_suj_ret_nor_leg: esExterior ? document.getElementById('mcPagExtSujRetNorLeg').value : '',
+    };
+}
 
 // Máscara para documento modificado
 document.getElementById('mcDocumentoModificado').addEventListener('input', function(e) {
@@ -1000,6 +1099,13 @@ window.CMG_seleccionarProveedor = function(p) {
     if (diasCredito) diasCredito.value = p.plazo || 0;
     if (plazoSRI)    plazoSRI.value    = (p.unidad_tiempo || 'DIAS').toLowerCase();
     if (relacionada) relacionada.checked = (p.relacionado === true || p.relacionado === 'true' || p.relacionado === 't');
+
+    // Proveedor con pasaporte (06) o identificación del exterior (08): sugerir
+    // pago al exterior, salvo que el usuario ya lo haya definido en esta compra.
+    if (['06', '08'].includes(p.tipo_id) && document.getElementById('mcPagoLocExt').value !== '02') {
+        document.getElementById('mcPagoLocExt').value = '02';
+    }
+    mcSincronizarPagoExterior();
 
     document.getElementById('mcTipoComprobante').focus();
 };
@@ -1866,6 +1972,8 @@ window.CMG_guardar = async function() {
         return;
     }
 
+    if (!mcValidarPagoExterior()) return;
+
     const payload = {
         id: id || undefined,
         id_proveedor: document.getElementById('mcIdProveedor').value,
@@ -1887,6 +1995,7 @@ window.CMG_guardar = async function() {
         fecha_registro: document.getElementById('mcFechaRegistro').value,
         parte_relacionada: document.getElementById('mcParteRelacionada').checked,
         observaciones: document.getElementById('mcObservaciones').value,
+        ...mcRecolectarPagoExterior(),
         propina: parseFloat(document.getElementById('mcInputPropina').value || 0),
         detalles, pagos, retenciones: [],
         adicionales: mcRecolectarInfoAdicional()
@@ -2045,6 +2154,7 @@ function mcCapturarEstado() {
     estado.fecha_emision = document.getElementById('mcFechaEmision')?.value || '';
     estado.fecha_registro = document.getElementById('mcFechaRegistro')?.value || '';
     estado.parte_relacionada = document.getElementById('mcParteRelacionada')?.checked || false;
+    estado.pago_exterior = mcRecolectarPagoExterior();
     estado.observaciones = document.getElementById('mcObservaciones')?.value || '';
     estado.propina = document.getElementById('mcInputPropina')?.value || '0.00';
 
@@ -2159,6 +2269,7 @@ async function mcEjecutarRestauracion(estado) {
     if (estado.fecha_emision) document.getElementById('mcFechaEmision').value = estado.fecha_emision;
     if (estado.fecha_registro) document.getElementById('mcFechaRegistro').value = estado.fecha_registro;
     if (document.getElementById('mcParteRelacionada')) document.getElementById('mcParteRelacionada').checked = estado.parte_relacionada;
+    mcCargarPagoExterior(estado.pago_exterior || {});
     document.getElementById('mcObservaciones').value = estado.observaciones || '';
     if (document.getElementById('mcInputPropina')) document.getElementById('mcInputPropina').value = estado.propina || '0.00';
     

@@ -40,7 +40,7 @@ $mesActual = date('m');
           </select>
         </div>
 
-        <div class="col-12 col-md-3">
+        <div class="col-12 col-md-2">
           <label class="form-label fw-semibold">Año</label>
           <select class="form-select" name="anio" id="ats-anio">
             <?php for ($a = $anioActual; $a >= $anioActual - 5; $a--): ?>
@@ -49,11 +49,24 @@ $mesActual = date('m');
           </select>
         </div>
 
-        <div class="col-12 col-md-4" id="ats-semestral-wrap" style="display:none;">
+        <!-- Reportar ventas es opcional: hay contribuyentes que presentan el anexo
+             solo con compras, liquidaciones y retenciones. -->
+        <div class="col-12 col-md-3">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" value="1" id="ats-ventas" name="ventas" checked>
+            <label class="form-check-label" for="ats-ventas">
+              Incluir el módulo de ventas
+              <i class="fas fa-circle-info text-muted ms-1"
+                 title="Desactívelo para generar el anexo solo con compras, liquidaciones y retenciones. Los comprobantes anulados se reportan igual."></i>
+            </label>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-2" id="ats-semestral-wrap" style="display:none;">
           <div class="form-check mt-4">
             <input class="form-check-input" type="checkbox" value="1" id="ats-semestral" name="semestral">
             <label class="form-check-label" for="ats-semestral">
-              Declarar semestral (régimen RIMPE)
+              Declarar semestral (RIMPE)
             </label>
           </div>
         </div>
